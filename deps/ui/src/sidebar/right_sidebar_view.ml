@@ -196,8 +196,8 @@ let breadcrumb crumbs =
   match crumbs with
   | [] -> spacer ~key:"bc-empty" []
   | first :: rest ->
-      row ~key:"bc" ~style_class:"breadcrumb" ~cross:`center
-        ~data_attrs:[ ("style", "margin:0;text-align:left") ]
+      row ~key:"bc" ~style_class:"breadcrumb" ~cross:`center ~margin:0
+        ~data_attrs:[ ("style", "text-align:left") ]
         (Ui_components.with_props
            [ Ui_components.Prop.opacity 0.7
            ; Ui_components.Prop.hover_opacity 1. ]
@@ -425,17 +425,19 @@ let help_pane st =
               ; icon_ ~size:18 ic ] ] ]
   in
   let section key title items =
-    [ text ~key:("hpt-" ^ key) ~style_class:"ls-hp-title"
+    [ Ui_components.with_props [Ui_components.Prop.display `block]
+      (text ~key:("hpt-" ^ key) ~style_class:"ls-hp-title"
         ~font_size:"16px" ~line_height:"24px" ~font_weight:700
         ~foreground:"var(--ls-primary-text-color)"
-        ~data_attrs:[ ("style", "display:block;margin:16px 0 4px") ]
-        ~value:title []
+        ~margin:0 ~margin_top:16 ~margin_bottom:4
+        ~value:title [])
     ; box ~key:("hpu-" ^ key) ~style_class:"ls-hp-list"
         ~data_attrs:[ ("style", "display:block;margin-left:19.2px") ]
         items ]
   in
-  box ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
-    ~data_attrs:[ ("style", "display:block;margin:4px 0 0 8px") ]
+  Ui_components.with_props [Ui_components.Prop.display `block]
+  (box ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
+    ~margin:0 ~margin_top:4 ~margin_left:8
     (section "usage" (t "help/usage-title")
        [ icon_item ~key:"li-shortcuts" (t "help.shortcuts/label")
            "command"
@@ -467,7 +469,7 @@ let help_pane st =
         [ ext_item ~key:"li-privacy" (t "help/privacy")
             "https://blog.logseq.com/privacy-policy/"
         ; ext_item ~key:"li-terms" (t "help/terms")
-            "https://blog.logseq.com/terms/" ])
+            "https://blog.logseq.com/terms/" ]))
 
 (* Both shells use one retained trigger and the same menu geometry. *)
 let help_trigger ~on_press () =
@@ -678,19 +680,19 @@ let item_body st idx (it : Sidebar_state.item) =
   | "search" ->
       (* cljs build-sidebar-item :search mounts a cmdk-block, not the
          page-inner block tree *)
-      box ~key:("body-" ^ it.key)
+      Ui_components.with_props [Ui_components.Prop.padding_top 8]
+      (box ~key:("body-" ^ it.key)
         ~accessibility_identifier:("sidebar-panel-content-" ^ n)
         ~style_class:
           ("sidebar-panel-content"
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
-        ~data_attrs:[ ("style", "padding-top:8px") ]
         [ box ~key:("cmdkb-" ^ it.key)
             ~style_class:"cp__cmdk__block rounded-md"
             [ (fun context parent ->
                 Cmdk_view.sidebar
                   ~services:(Cmdk_host.services ~host:(Lui_ui.host context) ())
                   ~query:it.title context parent) ]
-        ]
+        ])
   | "shortcut-settings" ->
       column ~key:("body-" ^ it.key)
         ~accessibility_identifier:("sidebar-panel-content-" ^ n)
@@ -699,34 +701,34 @@ let item_body st idx (it : Sidebar_state.item) =
   | "help" ->
       (* cljs :help items mount onboarding/help directly in
          .sidebar-panel-content — no page-inner/blocks wrap *)
-      box ~key:("body-" ^ it.key)
+      Ui_components.with_props [Ui_components.Prop.padding_top 8]
+      (box ~key:("body-" ^ it.key)
         ~accessibility_identifier:("sidebar-panel-content-" ^ n)
         ~style_class:
           ("sidebar-panel-content"
            ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
         ~padding_horizontal:8
-        ~data_attrs:[ ("style", "padding-top:8px") ]
-        [ help_pane st ]
+        [ help_pane st ])
   | _ ->
-  box ~key:("body-" ^ it.key)
+  Ui_components.with_props [Ui_components.Prop.padding_top 8]
+  (box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)
     ~style_class:
       ("sidebar-panel-content"
        ^ (if it.Sidebar_state.collapsed then " hidden" else " initial"))
-    ~data_attrs:[ ("style", "padding-top:8px") ]
     ?padding_horizontal:
       (match it.Sidebar_state.kind with
        | "search" | "shortcut-settings" -> None
        | _ -> Some 8)
-    [ column ~key:("wrap-" ^ it.key) ~grow:1.
+    [ Ui_components.with_props [Ui_components.Prop.position `relative]
+      (column ~key:("wrap-" ^ it.key) ~grow:1.
         ~style_class:"page cp__page-inner-wrap"
-        ~data_attrs:
-          [ ("style", "position:relative;margin:0 12px 20px") ]
+        ~margin:0 ~margin_horizontal:12 ~margin_bottom:20
         [ Ui_components.with_props
-            [ Ui_components.Prop.position `relative ]
+            [ Ui_components.Prop.position `relative
+            ; Ui_components.Prop.padding_bottom 64 ]
             (column ~key:("inner-" ^ it.key) ~gap:16
-               ~style_class:"page-inner"
-            ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
+               ~style_class:"page-inner" ~margin_bottom:0
             (sidebar_props_row st it
              @ object_tabs_host it
              @ [ Ui_components.with_props [Ui_components.Prop.overflow `hidden]
@@ -756,8 +758,8 @@ let item_body st idx (it : Sidebar_state.item) =
                    [ Page.references_view ~page_uuid:uuid
                        ~has_refs:(it.linked_refs <> []) () ]
                | _ -> [])))
-        ]
-    ]
+        ])
+    ])
 
 
 let sidebar_item st idx (it : Sidebar_state.item) =

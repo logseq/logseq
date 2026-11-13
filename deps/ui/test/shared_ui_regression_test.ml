@@ -663,6 +663,47 @@ let native_property_plugin_scroll_owners ~registry =
      ({P.profile_os=P.AndroidOS;P.profile_host=P.KotlinHost},false);
      ({P.profile_os=P.MacOS;P.profile_host=P.NshHost},true)]
 
+let plugin_control_layout_ownership ~registry ~profile =
+  let previous_flush = !Runtime.app_flush in
+  let controls=ref None in
+  let session=S.mount ~registry ~profile ~initial:() ~reducer:(fun () () -> ())
+    ~view:(fun context _ _ ->
+      let search=Signal.state context.Lui_ui.ui_scheduler "" in
+      let category=Signal.state context.Lui_ui.ui_scheduler "plugins" in
+      controls:=Some (search,category);
+      Plugins_view.control_tabs ~key:"plugin-controls-layout"
+        ~search_st:search ~cat_st:category ~nums:(Some (3,2))) () in
+  Fun.protect ~finally:(fun () -> Runtime.app_flush:=previous_flush;
+      ignore (Lui_app.dispose session.S.app)) (fun () ->
+    Runtime.app_flush:=(fun () -> S.flush session);
+    let row ()=List.find (fun node -> class_has node "control-tabs") (nodes session) in
+    let input ()=List.find (fun node ->
+      List.mem node.M.kind ["input";"search-field";"text-field"]) (nodes session) in
+    let row_id=(row ()).M.id and input_id=(input ()).M.id in
+    let search,category=Option.get !controls in
+    let expect () =
+      check "Plugin control padding belongs to the retained typed layout owner"
+        ((row ()).M.id=row_id
+         && Hashtbl.find_opt (row ()).M.props "padding-bottom"=Some (P.IntValue 12));
+      check "Plugin control layout keeps the existing search input owner"
+        ((input ()).M.id=input_id);
+      check "Plugin control spacing no longer depends on inline DOM CSS"
+        (not (Hashtbl.mem (row ()).M.props "data-attrs")) in
+    expect ();
+    S.text_changed session input_id "retained plugin query";
+    S.flush session;
+    check "Plugin search still updates its original state through the real input handler"
+      (Runtime.signal_get search="retained plugin query");
+    expect ();
+    let themes=List.find (fun node -> button_label node=
+      Some (Printf.sprintf "%s (%d)" (I18n.t "nav/themes") 2)) (nodes session) in
+    S.toggle session themes.M.id true;
+    S.flush session;
+    check "Plugin category toggling retains the search draft and layout owner"
+      (Runtime.signal_get category="themes"
+       && Runtime.signal_get search="retained plugin query");
+    expect ())
+
 let native_header_menu_inputs () =
   let page = Option.get (Decode.page_of_summary
     (Wire.Map [Wire.kw "block/uuid", Wire.Uuid "native-more-page";
@@ -1147,6 +1188,17 @@ let right_sidebar_block_clipping ~registry ~profile =
       let initial=(clipped ()).M.id in
       let check_contents expected =
         let surface=clipped () in
+        let body=List.find (fun node -> class_has node "sidebar-panel-content") (nodes session) in
+        let wrap=List.find (fun node -> class_has node "cp__page-inner-wrap") (nodes session) in
+        let inner=List.find (fun node -> class_has node "page-inner") (nodes session) in
+        check "Right sidebar spacing stays on its original auto-sized body and page owners"
+          (Hashtbl.find_opt body.M.props "padding-top"=Some (P.IntValue 8)
+           && not (Hashtbl.mem body.M.props "height")
+           && M.string_prop wrap "position"=Some "relative"
+           && Hashtbl.find_opt wrap.M.props "margin-horizontal"=Some (P.IntValue 12)
+           && Hashtbl.find_opt wrap.M.props "margin-bottom"=Some (P.IntValue 20)
+           && Hashtbl.find_opt inner.M.props "padding-bottom"=Some (P.IntValue 64)
+           && Hashtbl.find_opt inner.M.props "margin-bottom"=Some (P.IntValue 0));
         check "Right sidebar projects its existing blocks clipping through typed overflow"
           (M.string_prop surface "overflow"=Some "hidden");
         check "Right sidebar clipping remains on the same auto-sized document owner"
@@ -1557,6 +1609,7 @@ let run_views ~registry ~profile ~finish =
   graph_menu_trigger_ownership ~registry;
   routed_link_ownership ~registry;
   native_property_plugin_scroll_owners ~registry;
+  plugin_control_layout_ownership ~registry ~profile;
   native_header_menu_inputs ();
   standalone_inline_groups ~registry;
   selectable_block_motion ~registry;

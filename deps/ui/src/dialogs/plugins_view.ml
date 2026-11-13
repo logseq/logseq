@@ -73,10 +73,10 @@ let control_tabs ~key ~search_st ~cat_st ~nums =
          ~icon:ic ~label:caption [])
   in
   Ui_components.with_props
-    [ Ui_components.Prop.position `relative ]
+    [ Ui_components.Prop.position `relative
+    ; Ui_components.Prop.padding_bottom 12 ]
     (row ~key:(key ^ "-ctls") ~style_class:"control-tabs"
        ~main:`space_between ~cross:`center
-       ~data_attrs:[ "style", "padding-bottom: 12px" ]
        [ row ~key:(key ^ "-l") ~style_class:"l" ~cross:`center ~gap:8
            [ category_tabs ~key ~nums cat_st ]
        ; row ~key:(key ^ "-r") ~style_class:"r" ~cross:`center ~gap:8
@@ -154,9 +154,9 @@ let market_card ~stats ~search_st pkg =
                   ~background:"var(--lx-gray-03, hsl(var(--muted)))"
                   [ thumb ] ]))
     ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
-        ([ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+        ([ Ui_components.with_props [Ui_components.Prop.padding_top 6]
+             (row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
              ~main:`space_between
-             ~data_attrs:[ "style", "padding-top: 6px" ]
              [ Ui_components.with_props
                  [ Ui_components.Prop.font_size "1.25rem"
                  ; Ui_components.Prop.font_weight 700 ]
@@ -177,7 +177,7 @@ let market_card ~stats ~search_st pkg =
                    else
                      [ link ~key:"gh-a" ~url:(gh_repo_url repo)
                          ~target:`blank ~icon:(`app "brand-github")
-                         ~label:"GitHub" [] ])) ]
+                         ~label:"GitHub" [] ])) ])
          ; Ui_components.with_props
              [ Ui_components.Prop.opacity 0.7 ]
              (paragraph ~key:"desc" ~style_class:"desc"
@@ -185,10 +185,10 @@ let market_card ~stats ~search_st pkg =
                 ~value:(jstr pkg "description") [])
          ; box ~key:"flag-meta"
              [ Ui_components.with_props
-                 [ Ui_components.Prop.font_size "0.75rem" ]
+                 [ Ui_components.Prop.font_size "0.75rem"
+                 ; Ui_components.Prop.padding_right 8 ]
                  (row ~style_class:"ls-pl-meta"
                     ~main:`space_between
-                    ~data_attrs:[ "style", "padding-right: 8px" ]
                     [ (* cljs: clicking the author searches "@author" *)
                       text ~key:"a" ~value:(jstr pkg "author")
                         ~on_press:(fun _ ->
@@ -199,8 +199,7 @@ let market_card ~stats ~search_st pkg =
          ]
          @
          [ row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
-             ~cross:`center
-             ~data_attrs:[ "style", "margin-top: 6px" ]
+             ~cross:`center ~margin_top:6
              [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
                  ((* cljs card-ctls-of-market .l: stars + total downloads
                      from stats.json *)
@@ -310,9 +309,9 @@ let installed_card (pl : Js.Json.t) =
     ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
         [ Ui_components.with_props
             [ Ui_components.Prop.font_size "1.25rem"
-            ; Ui_components.Prop.font_weight 700 ]
+            ; Ui_components.Prop.font_weight 700
+            ; Ui_components.Prop.padding_top 6 ]
             (row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
-               ~data_attrs:[ "style", "padding-top: 6px" ]
                [ text ~key:"t" ~style_class:"l link-block" ~value:name
                    ~on_press:open_readme []
                ; Ui_components.with_props
@@ -326,14 +325,13 @@ let installed_card (pl : Js.Json.t) =
                ~font_size:"0.75rem" ~value:desc [])
         ; box ~key:"flag"
             [ Ui_components.with_props
-                [ Ui_components.Prop.font_size "0.75rem" ]
+                [ Ui_components.Prop.font_size "0.75rem"
+                ; Ui_components.Prop.padding_right 8 ]
                 (row ~style_class:"ls-pl-meta" ~main:`space_between
-                   ~data_attrs:[ "style", "padding-right: 8px" ]
                    [ text ~key:"a" ~value:(jstr web_pkg "author") []
                    ; text ~key:"i" ~value:("ID: " ^ pid) [] ]) ]
         ; row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
-            ~cross:`center
-            ~data_attrs:[ "style", "margin-top: 6px" ]
+            ~cross:`center ~margin_top:6
             [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:4
                 [ box ~key:"de"
                     [ icon ~key:"g" ~name:(`app "settings") []
@@ -730,10 +728,10 @@ let item_button pid key s =
 let code_mode_wrap owner pid code_mode =
   let content = json_pretty (Plugin_host.plugin_settings_json pid) in
   let code_txt = Signal.state owner content in
-  column ~key:"cmw" ~style_class:"code-mode-wrap" ~gap:4
-    ~data_attrs:
-      [ ( "style"
-        , "padding: 4px 4px 4px 12px; margin: 0 0 32px -4px" ) ]
+  Ui_components.with_props
+    [ Ui_components.Prop.padding_left 12 ]
+  (column ~key:"cmw" ~style_class:"code-mode-wrap" ~gap:4
+    ~padding:4 ~margin:0 ~margin_bottom:32 ~margin_left:(-4)
     [ Ui_components.with_props
         [ Ui_components.Prop.font_family "var(--ls-font-family-code, monospace)" ]
         (textarea ~key:"ta" ~style_class:"form-input ls-mono"
@@ -761,7 +759,7 @@ let code_mode_wrap owner pid code_mode =
                        ]))
             []
         ]
-    ]
+    ])
 
 (* cljs settings-container: rows dispatch on :type; unknown ->
    :plugin/setting-not-handled *)
@@ -812,11 +810,12 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                     ~value:(t "plugin/no-settings-schema") [] ]
               else
                 [ Ui_components.with_props
-                    [ Ui_components.Prop.opacity 0.9 ]
+                    [ Ui_components.Prop.opacity 0.9
+                    ; Ui_components.Prop.padding_top 4
+                    ; Ui_components.Prop.padding_horizontal 8
+                    ; Ui_components.Prop.padding_bottom 0 ]
                     (heading ~key:"id" ~level:2 ~style_class:"ls-pl-id"
                        ~font_size:"1.25rem"
-                       ~data_attrs:
-                         [ "style", "padding: 4px 8px 0" ]
                        ~value:("ID: " ^ pid) [])
                 ; Ui_components.with_props
                     [ ( Ui_components.Prop.min_height_viewport 0.3 )

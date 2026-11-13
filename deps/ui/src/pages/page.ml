@@ -771,10 +771,10 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
          data-level/data-virtuoso-scroller so the visibility sync and
          dnd/drag paths can find the scroller boundary; rows are
          .ls-virt-row[data-index] > .ls-block *)
-      [ box ~key:"blw-virt" ~style_class:"blocks-list-wrap"
+      [ Ui_components.with_props [Ui_components.Prop.position `relative]
+        (box ~key:"blw-virt" ~style_class:"blocks-list-wrap"
           ~data_attrs:
-            [ ("data-level", "0"); ("data-virtuoso-scroller", "true")
-            ; ("style", "position:relative") ]
+            [ ("data-level", "0"); ("data-virtuoso-scroller", "true") ]
           [ Virt_list.list ~key_of:Tree.block_key
               ~estimate_size:(fun _ -> 32.) ~initial_rows:48
               (* cljs virtuoso overscan 254px + increase-viewport-by
@@ -793,12 +793,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
                 | _ -> None)
               ~pin_sig:(fun () ->
                 if S.ready () then Some (S.editing_sig ()) else None)
-              ~render:(Tree.block_row ~library ~scope ~virtualize) items ] ]
+              ~render:(Tree.block_row ~library ~scope ~virtualize) items ]) ]
     else
-      [ box ~key:"blw" ~style_class:"blocks-list-wrap"
-          ~data_attrs:
-            [ ("data-level", "0"); ("style", "position:relative") ]
-          (List.map (Tree.block_row ~library ~scope ~virtualize) blocks) ]
+      [ Ui_components.with_props [Ui_components.Prop.position `relative]
+        (box ~key:"blw" ~style_class:"blocks-list-wrap"
+          ~data_attrs:[ ("data-level", "0") ]
+          (List.map (Tree.block_row ~library ~scope ~virtualize) blocks)) ]
   in
   (* cljs page-root-virtual-list: .blocks-container.flex-1[containerid]
      wraps the .blocks-list-wrap block list; journal-page's
@@ -1092,11 +1092,11 @@ let journal_item_sig (ms : Model.t Signal.signal)
                     (* cljs plain-block-list emits no .blocks-list-wrap
                        on empty pages *)
                     [ Lui_elements.if_ ~test:nonempty
-                        (box ~key:"blw"
+                        (Ui_components.with_props [Ui_components.Prop.position `relative]
+                         (box ~key:"blw"
                            ~style_class:"blocks-list-wrap"
                            ~data_attrs:
-                             [ ("data-level", "0")
-                             ; ("style", "position:relative") ]
+                             [ ("data-level", "0") ]
                            [ Lazy_children.lazy_rows ~source:blocks_sig
                                ~active_key:(Some (Logseq_el.own ctx
                                  (Signal.map (function
@@ -1106,7 +1106,7 @@ let journal_item_sig (ms : Model.t Signal.signal)
                                ~estimate_height:(fun b ->
                                  32. +. Tree.estimate_children_height b)
                                ~mount:(Tree.block_row_sig ~scope:"main")
-                           ])
+                           ]))
                     ; (* cljs journal-page mounts add-button inside
                          .page-blocks-inner per day *)
                       Add_button.el ~puuid:key

@@ -23,6 +23,50 @@ page/popup/sidebar producers. Explicit non-NSH overflow-auto styles, Web-only
 input/scroll effects and other spacing declarations are unchanged and are not
 counted as solved by this migration.
 
+## Page, sidebar and plugin owners project exact authored layout through typed props
+
+Twenty existing constructor sites now express their already-authored integer
+spacing or relative positioning through the canonical layout channel. Page and
+journal block-list wrappers retain their keys and `data-level`/virtual-scroller
+markers while receiving typed relative positioning. Right-sidebar bodies keep
+their 8pt top inset; the existing page wrapper keeps 12pt horizontal and 20pt
+bottom margins, and its inner owner keeps 64pt bottom padding. Help headings,
+the Help root and breadcrumb retain their original exact integer margins.
+
+Plugin controls, card headers/metadata/actions and the settings identifier use
+their authored 12pt/6pt/8pt/4pt spacing on the same nodes. The JSON settings editor
+keeps 4pt padding with a 12pt leading override, 32pt bottom margin and -4pt leading
+margin. Its existing text state, textarea, Reset/Save handlers and source remain
+unchanged. No new native view, fixed height, new API or wire field is introduced.
+Web and mobile receive the same authored values through the existing typed props.
+
+For example, `data_attrs:["style", "padding-top:8px"]` becomes
+`Ui_components.with_props [Ui_components.Prop.padding_top 8] existing_view`.
+The wrapper applies properties to the existing owner; it does not add a node.
+Non-layout metadata and explicitly Web-only branches retain their contracts.
+
+This is a bounded migration, not completion of the native layout-carrier gate.
+The following exact source declarations still require a faithful API/owner
+decision and must not be silently rounded, removed or translated to viewport
+coordinates merely to pass preflight:
+
+- Page breadcrumb `max-width:100%`, six other page/journal percentage-size
+  constructor sites, title-caret theme-dependent `calc(...)` top positioning,
+  title-control `0.125rem` padding, and title content's axis-specific
+  `overflow-x:visible`. Current dimensions/margins are integer points;
+  container-relative frames have a distinct container-sizing contract and are
+  not a generic parent-percentage replacement.
+- Three Help-item constructors use `display:list-item`/circle markers, and
+  their parent has a 19.2px leading margin. The canonical display vocabulary
+  has no list-item value and integer margins cannot represent 19.2 exactly.
+- The installed-plugin menu uses `top:100%`; a fixed point offset does not
+  express its parent-relative placement.
+
+The page `overflow:hidden` sites are covered by the shared clipping migration
+above. The separately prepared actual-target preflight rejects unresolved
+literal layout carriers; integrating it remains pending while those authored
+requirements are migrated. This change adds no exemption or bypass.
+
 ## Native ordinary code uses the master's 1024pt maximum viewport
 
 The NSH `logseq-codemirror` factory now constrains the existing native Editor to
