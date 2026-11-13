@@ -1698,6 +1698,73 @@ let native_point_property_scroll () =
       (property owner Lui_protocol.MaxHeight=Some (Lui_protocol.IntValue 0)
        && property popup Lui_protocol.AvailableHeight=Some (Lui_protocol.FloatValue 0.)))
 
+let native_sidebar_scroll_basis () =
+  let previous_sidebar = !Sidebar_state.st_ref
+  and previous_model_signal = !Sidebar_state.model_signal
+  and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush
+  and previous_lp_context = !Sidebar_state.lp_ctx in
+  Fun.protect ~finally:(fun () ->
+    Sidebar_state.st_ref:=previous_sidebar;Sidebar_state.model_signal:=previous_model_signal;
+    Sidebar_state.lp_ctx:=previous_lp_context;Runtime.read_model:=previous_model;
+    Runtime.app_flush:=previous_flush) (fun () ->
+    List.iter (fun (os,host) ->
+      let pages=List.init 36 (fun index -> Option.get (Decode.page_of_summary (Wire.Map
+        [Wire.Keyword "block/uuid",Wire.Uuid (Printf.sprintf "sidebar-basis-%02d" index);
+         Wire.Keyword "block/title",Wire.String (Printf.sprintf "Sidebar basis %02d" index)]))) in
+      let model={Model.initial with repo=Some "sidebar-basis";
+        repos=["sidebar-basis"];left_sidebar_open=true;right_sidebar_open=true} in
+      let state_ref=ref None in
+      let registry=Lui_extension.registry () in
+      Logseq_el.register_all registry;Logseq_codemirror.register registry;Logseq_editor.register registry;
+      let backend : Lui_protocol.backend={backend_profile=Lui_protocol.profile os host;
+        apply_batch=(fun _ -> true)} in
+      let app=Lui_app.create_with_extensions backend registry model (fun model (_ : Action.t) -> model)
+        (fun context model _ ->
+          let state value=Signal.state context.Lui_ui.ui_scheduler value in
+          let sidebar : Sidebar_state.t={favorites=state pages;home_page=state None;
+            favorite_drop=state None;recents=state [];nav_checked=state ["flashcards";"all-pages"];
+            nav_tag_titles=state [];items=state [];open_menu=state "";groups_collapsed=state [];
+            left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.} in
+          state_ref:=Some sidebar;Sidebar_state.st_ref:=Some sidebar;
+          Sidebar_state.model_signal:=Some model;
+          Lui_elements.row ~height:560
+            [Chrome.left_sidebar_inner ~titlebar:true model;Right_sidebar_view.inner sidebar]) in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+        Runtime.read_model:=(fun () -> Lui_app.model app);
+        Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+        ignore (Lui_app.start app);ignore (Lui_app.flush app);
+        let runtime=Lui_app.runtime app in
+        let property node name=Lui_protocol.Property_map.find_opt name
+          (Hashtbl.find runtime.Lui_runtime.runtime_properties node) in
+        let find name expected=Hashtbl.fold (fun node props result ->
+          if Lui_protocol.Property_map.find_opt name props=Some (Lui_protocol.StringValue expected)
+          then Some node else result) runtime.Lui_runtime.runtime_properties None |> Option.get in
+        let left=find Lui_protocol.AccessibilityIdentifier "left-sidebar-scroll"
+        and right=find Lui_protocol.StyleClass "cp__right-sidebar-scrollable" in
+        let expected_height=if host=Lui_protocol.NshHost then Some (Lui_protocol.IntValue 0) else None in
+        List.iter (fun node ->
+          check "native sidebar viewport uses a zero content basis; other backend sizing is unchanged"
+            (property node Lui_protocol.HeightValue=expected_height);
+          check "sidebar viewport keeps its remaining-space grow and zero minimum"
+            (property node Lui_protocol.GrowValue=Some (Lui_protocol.FloatValue 1.)
+             && property node Lui_protocol.MinHeight=Some (Lui_protocol.IntValue 0))) [left;right];
+        let graph=find Lui_protocol.AccessibilityIdentifier "graphs-selector-trigger" in
+        check "finite sidebar scrolling preserves the graph control's authored height"
+          (property graph Lui_protocol.HeightValue=Some (Lui_protocol.IntValue 32));
+        let titlebar=find Lui_protocol.AccessibilityIdentifier "left-sidebar-titlebar-band" in
+        check "the existing titlebar minimum remains protected"
+          (property titlebar Lui_protocol.MinHeight=Some (Lui_protocol.IntValue 48));
+        let sidebar=Option.get !state_ref in
+        List.iter (fun favorites ->
+          Runtime.signal_set sidebar.Sidebar_state.favorites favorites;
+          ignore (Lui_app.flush app);
+          check "emptying and repopulating Favorites retains both actual scroll owners"
+            (find Lui_protocol.AccessibilityIdentifier "left-sidebar-scroll"=left
+             && find Lui_protocol.StyleClass "cp__right-sidebar-scrollable"=right)) [[];pages])))
+      [Lui_protocol.MacOS,Lui_protocol.NshHost;Lui_protocol.IOS,Lui_protocol.SwiftUIHost;
+       Lui_protocol.AndroidOS,Lui_protocol.KotlinHost;Lui_protocol.WebOS,Lui_protocol.WebHost])
+
 let native_wide_reading_column () =
   let previous_settings= !Settings_state.st and previous_sidebar= !Sidebar_state.st_ref
   and previous_sidebar_model= !Sidebar_state.model_signal
@@ -3147,6 +3214,7 @@ let () =
   native_cmdk_controlled_input ();
   native_click_producers ();
   native_point_property_scroll ();
+  native_sidebar_scroll_basis ();
   native_wide_reading_column ();
   native_code_toolbar_retention ();
   native_code_copy_live_buffer ();
