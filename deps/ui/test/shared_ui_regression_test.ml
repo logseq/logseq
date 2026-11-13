@@ -2148,6 +2148,7 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
   Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
   ignore (Lui_app.start app);ignore (Lui_app.flush app);
   let statuses=Hashtbl.create 4 and batches=ref [] and reads=ref [] and retire_read=ref false in
+  let numbering=Hashtbl.create 4 and number_batches=ref [] and replace_selection_on_read=ref false in
   let reset ()=Hashtbl.clear statuses;
     Hashtbl.add statuses "cycle-z" 1;Hashtbl.add statuses "cycle-a" 2;Hashtbl.add statuses "cycle-m" 3;
     batches:=[];reads:=[] in
@@ -2170,11 +2171,17 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
         let ids=List.filter_map (fun request -> Option.bind (W.get request "id") W.as_uuid) (W.elems requests) in
         reads:=(repo,ids)::!reads;
         if !retire_read then model:={!model with Model.repo=Some "cycle-destination"};
-        W.Array (List.map (fun uuid -> W.Map [W.kw "block",W.Map
-          ([W.kw "block/uuid",W.Uuid uuid] @ match Hashtbl.find_opt statuses uuid with
-           | Some id -> [W.kw "logseq.property/status",W.Map [W.kw "db/id",W.Int id;
-               W.kw "db/ident",W.Keyword ("logseq.property/status." ^ List.nth ["todo";"doing";"done"] (id-1))]]
-           | None -> [])]) ids)
+        if !replace_selection_on_read then E.set (fun state ->
+          {state with E.selected=E.String_set.singleton "cycle-none"});
+        W.Array (List.rev_map (fun uuid -> W.Map [W.kw "block",W.Map
+          ([W.kw "block/uuid",W.Uuid uuid]
+           @ (match Hashtbl.find_opt statuses uuid with
+             | Some id -> [W.kw "logseq.property/status",W.Map [W.kw "db/id",W.Int id;
+                 W.kw "db/ident",W.Keyword ("logseq.property/status." ^ List.nth ["todo";"doing";"done"] (id-1))]]
+             | None -> [])
+           @ (match Hashtbl.find_opt numbering uuid with
+             | Some value -> [W.kw "logseq.property/order-list-type",W.String value]
+             | None -> []))]) ids)
     | "thread-api/get-latest-journals",_ ->
         W.Array [W.Map [W.kw "block/uuid",W.Uuid "cycle-page";
           W.kw "block/title",W.String "Cycle fixture";W.kw "block/journal-day",W.Int 20261113]]
@@ -2183,6 +2190,26 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
         W.Array (List.mapi (fun index ident -> W.Map
           [W.kw "db/id",W.Int (index+1);W.kw "db/ident",W.Keyword ("logseq.property/status." ^ ident)])
           ["todo";"doing";"done"])
+    | "thread-api/apply-outliner-ops",[W.String repo;ops;opts]
+      when W.get opts "outliner-op"=Some (W.Keyword "toggle-numbered-list") ->
+        check "number-list batch carries one graph-owned before/after history pair"
+          (repo="cycle-origin" && Option.is_some (W.get opts "undo-redo/editor-info")
+            && Option.is_some (W.get opts "undo-redo/editor-info-after"));
+        let targets,value=match W.elems ops with
+          | [operation] -> (match W.elems operation with
+            | [W.Keyword "batch-set-property";arguments] -> (match W.elems arguments with
+              | [targets;W.Keyword "logseq.property/order-list-type";W.String "number";W.Map []] ->
+                  List.map (fun uuid -> Option.get (W.as_uuid uuid)) (W.elems targets),Some "number"
+              | _ -> failwith "invalid numbered-list batch-set arguments")
+            | [W.Keyword "batch-remove-property";arguments] -> (match W.elems arguments with
+              | [targets;W.Keyword "logseq.property/order-list-type"] ->
+                  List.map (fun uuid -> Option.get (W.as_uuid uuid)) (W.elems targets),None
+              | _ -> failwith "invalid numbered-list batch-remove arguments")
+            | _ -> failwith "number-list command must use the property batch API")
+          | _ -> failwith "number-list command must write exactly one batch operation" in
+        List.iter (fun uuid -> match value with Some value -> Hashtbl.replace numbering uuid value
+          | None -> Hashtbl.remove numbering uuid) targets;
+        number_batches:=(targets,value)::!number_batches;W.Map [W.kw "result",W.Nil]
     | "thread-api/apply-outliner-ops",[W.String repo;ops;opts] ->
         check "one cycle transaction keeps its originating graph and history operation"
           (repo="cycle-origin" && W.get opts "outliner-op"=Some (W.Keyword "cycle-todos"));
@@ -2281,10 +2308,62 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
         after ()
       with error -> cleanup ();raise error) in
   let palette ()=Cmdk_state.dispatch_id "editor/cycle-todo" in
-  let context uuid=
+  let context ?(command="cycle-todo") uuid=
     let popup=Popups_state.make (Lui_app.runtime app).Lui_runtime.runtime_scheduler in
     Popups_state.open_cm popup ~ax:0. ~atop:0. ~abot:0. ~block_id:uuid ~multi:true;
-    Popups_state.run_cm_item popup "cycle-todo" in
+    Popups_state.run_cm_item popup command in
+  let numbered_routes finish =
+    retire_read:=false;model:={!model with Model.repo=Some "cycle-origin"};
+    let palette ()=Cmdk_state.dispatch_id "editor/toggle-number-list" in
+    let context uuid=context ~command:"toggle-numbered-list" uuid in
+    let ordered=["cycle-z";"cycle-a";"cycle-m"] in
+    let run command targets value after =
+      number_batches:=[];reads:=[];command ();
+      settle (fun () -> try
+        check "number-list route reads the captured document order exactly once"
+          (!reads=["cycle-origin",targets]);
+        check "number-list route persists one whole-selection property batch"
+          (!number_batches=[targets,value]);
+        after ()
+      with error -> cleanup ();raise error) in
+    Hashtbl.clear numbering;
+    Hashtbl.add numbering "cycle-a" "number";
+    select ordered;
+    run palette ordered None (fun () ->
+      check "mixed numbered selection clears every target rather than inverting individually"
+        (List.for_all (fun uuid -> not (Hashtbl.mem numbering uuid)) ordered);
+      (* The fresh response is intentionally reversed; input order must win. *)
+      replace_selection_on_read:=true;
+      run palette ordered (Some "number") (fun () ->
+        replace_selection_on_read:=false;
+        check "a newer selection cannot redirect the captured numbered-list write"
+          (not (Hashtbl.mem numbering "cycle-none"));
+        select ordered;
+        run (fun () -> context "cycle-a") ordered None (fun () ->
+          Hashtbl.replace numbering "cycle-z" "bullet";
+          run (fun () -> context "cycle-a") ordered (Some "number") (fun () ->
+            check "a non-number own list type is not mistaken for numbered state"
+              (List.for_all (fun uuid -> Hashtbl.find_opt numbering uuid=Some "number") ordered);
+            select ["cycle-z";"cycle-a"];
+            run (fun () -> context "cycle-none") ["cycle-none"] (Some "number") (fun () ->
+              check "an outside clicked target does not change the selected numbered blocks"
+                (Hashtbl.find_opt numbering "cycle-z"=Some "number"
+                 && Hashtbl.find_opt numbering "cycle-a"=Some "number");
+              select [];
+              let editing=E.mk_editing ~uuid:"cycle-m" ~buffer:"unsaved numbered draft"
+                ~scope:"main" ~base:"saved" () in
+              E.set (fun state -> {state with E.editing=Some editing});ignore (Lui_app.flush app);
+              run palette ["cycle-m"] None (fun () ->
+                check "property-only numbering keeps the actual dirty editor and caret owner"
+                  (match E.editing () with Some current -> current.epoch==editing.epoch
+                    && current.buffer="unsaved numbered draft" | None -> false);
+                select ordered;
+                number_batches:=[];reads:=[];retire_read:=true;palette ();
+                settle (fun () -> try
+                  check "a graph switch after number-list read refuses the entire batch"
+                    (!reads=["cycle-origin",ordered] && !number_batches=[]);
+                  finish ()
+                with error -> cleanup ();raise error))))))) in
   let multi=["cycle-z",Some 2;"cycle-a",Some 3;"cycle-m",None] in
   select ["cycle-z";"cycle-a";"cycle-m"];
   run palette multi (fun () ->
@@ -2307,7 +2386,7 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
             try
               check "a graph switch after the captured read prevents every status mutation"
                 (List.length !reads=1 && !batches=[]);
-              cleanup ();done_ ()
+              numbered_routes (fun () -> cleanup ();done_ ())
             with error -> cleanup ();raise error))))))
 
 (* END portable exposed-cycle fixture. *)
