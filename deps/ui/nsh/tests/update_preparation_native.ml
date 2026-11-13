@@ -2486,16 +2486,22 @@ let native_click_producers () =
   and previous_host = !Host.host_op
   and previous_model = !Runtime.read_model
   and previous_flush = !Runtime.app_flush
-  and previous_reply = !Comments_ops.reply_focus_request in
+  and previous_reply = !Comments_ops.reply_focus_request
+  and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_sources = !Editor_state.extra_sources and previous_settings = !Settings_state.st in
   let key = ref None and requests = ref [] and activated = ref 0 in
   let initial=Model.initial in
   Runtime.read_model:=(fun () -> initial);
   Comments_ops.reply_focus_request:=None;
+  Editor_state.st:=None;Editor_state.field_sigs_opt:=None;Editor_state.extra_sources:=[];
+  Settings_state.st:=None;
   let backend : Lui_protocol.backend = {
     backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch=(fun _ -> true)} in
   let app=Lui_app.create backend initial (fun model (_ : Action.t) -> model)
-    (fun _ _ _ -> Lui_elements.column
+    (fun context _ _ ->
+      Editor_state.ensure context;
+      Lui_elements.column
       [ Lui_elements.column ~accessibility_identifier:"area-native-click-comments"
           [Comments_view.add_box ~scope:"main" "native-click-comments"]
       ; Views_popup.menu_level ~pid:987 ~cls:""
@@ -2506,7 +2512,9 @@ let native_click_producers () =
     Dom_ext.doc_elements_provider:=previous_provider;
     Dom_ext.subtree_elements_provider:=previous_subtree;
     Host.host_op:=previous_host;Runtime.read_model:=previous_model;
-    Runtime.app_flush:=previous_flush;Comments_ops.reply_focus_request:=previous_reply) (fun () ->
+    Runtime.app_flush:=previous_flush;Comments_ops.reply_focus_request:=previous_reply;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Editor_state.extra_sources:=previous_sources;Settings_state.st:=previous_settings) (fun () ->
     Native_embed.current_app:=Some app;
     Runtime.read_model:=(fun () -> Lui_app.model app);
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
@@ -2517,7 +2525,19 @@ let native_click_producers () =
       requests:=(String.sub payload 0 boundary,
         String.sub payload (boundary+1) (String.length payload-boundary-1))::!requests);
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    Comments_ops.reply_focus_request:=Some ("","native-click-comments");
     Comments_ops.reveal "native-click-comments";
+    check "native reply activation claims the existing request before queuing its controller click"
+      (!Comments_ops.reply_focus_request=None);
+    let reply=List.find_map (fun (operation,payload) -> if operation="click" then
+      Some Yojson.Safe.Util.(Yojson.Safe.from_string payload |> member "ref" |> member "node-id" |> to_int)
+      else None) !requests |> Option.get in
+    (* The native click is still deferred. A later real appearance event must
+       leave that exact canonical controller alive until the click executes. *)
+    ignore (Lui_app.dispatch_event app (Lui_protocol.Appear reply));
+    ignore (Lui_app.flush app);
+    check "late placeholder appearance does not retire the queued native click owner"
+      (Hashtbl.mem (Lui_app.runtime app).Lui_runtime.mounted_nodes reply);
     let handle=Option.get !key in
     List.iter (fun key -> handle (Ui_dom_native.ev_of
       (Js.Json.object_list ["key",Js.Json.string key]))) ["ArrowDown";"Enter"];

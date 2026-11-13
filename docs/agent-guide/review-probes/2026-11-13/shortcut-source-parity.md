@@ -82,7 +82,7 @@ state and composition rather than just a command ID.
 | PDF configured keys | Four PDF defaults remain in keymap data, but `Editor_keys.chord_table` excludes `pdf`; native publication excludes it too. `native/pdf.ml`, the Rust PDF extension and PDFKit mount have no App handler for these configured IDs. Existing toolbar actions/PDFKit platform shortcuts do not implement the configured Alt-P/N/X/F route. | Actual PDF focused/nonfocused previous/next/close/find, custom bindings and reader focus restoration, independently on each supported OS. |
 | Cards native delivery | `Cards_state.on_keydown:513–540` implements S and 1–4 with phase/composition/editing guards via explicit default IDs. Those five IDs have defaults but no `items_json` rows; the native keymap publisher consequently never subscribes their modal keys. Shared handler coverage cannot establish native delivery; incidental globally bound S is not a complete 1–4 path. | Real card modal, native S and all ratings, wrong-phase suppression, input focus and custom bindings. Reuse one modal owner, not an always-global digit map. |
 | Missing theme/plugin key rows | `ui/select-theme-color` (T I) and `ui/goto-plugins` (T P) retain defaults and CmdK branches but have no current keymap item rows. Both the global chord matcher and native publication enumerate item rows, so these default sequences are not published through their actual command route. | Real T I/T P with eligible desktop capability; preserve explicit unavailable plugin-runtime behavior. |
-| Editing context regressions | Master `editor/add-comment` is in editing and nonediting groups; current catalog records only nonediting, and the Ctrl-Space fallback is only in `Editor_keys.on_normal_key:816`. Master `ui/toggle-contents` is global-prevent-default, current only nonediting. Their global matcher/native publisher therefore suppress these commands while an editor owns focus. | Dirty editor Ctrl-Space and Alt-Shift-C, retained source/caret, and normal/select-mode counterpart; do not clear editing just to make the shortcut work. |
+| Editing context regressions | Master `editor/add-comment` is in editing and nonediting groups; current catalog records only nonediting, and the Ctrl-Space fallback is only in `Editor_keys.on_normal_key:816`. Master `ui/toggle-contents` is global-prevent-default, current only nonediting. Their global matcher/native publisher therefore suppress these commands while an editor owns focus. | Editing Ctrl-Space must save the captured block and hand off to the comment reply; Alt-Shift-C must retain its dirty editor. Verify the normal/select-mode counterpart independently. |
 | YouTube timestamp command | `Cmdk_state.editor_action:1438` forwards the ID through native `Cmdk_host.editor_command:342–344` to `Editor_keys.dispatch_command`. That function has no timestamp case and ends in `\| _ -> ()`. Thus the exposed command route does not insert a timestamp. | Owned playable media plus editing caret, persisted insertion; explicit unavailable behavior where no valid timestamp source exists. |
 | Number-list selection transaction | Master `handler/events.cljs:318–334` resolves the selected blocks and chooses a batch helper when there is more than one. Native `Cmdk_host:360–361` iterates `toggle_own_list` per UUID (Web twin does too). Selection-menu low-level route targets one UUID. This is still an active batch/history parity gap; inspection is not a fix. | Selected mixed/all-numbered blocks, one history action, outside-click target, editing fallback and fresh persisted state. |
 | Plugin/theme/runtime commands | Plugin dashboard and theme search have command routes. `native/plugin_host.ml` explicitly has no LSPluginCore sandbox and reports unavailable for runtime operations. Unbound plugin-install entries are omitted. Exposing a dashboard is not plugin runtime parity. | Separate supported package/theme UI from unavailable runtime commands and verify honest capability handling. |
@@ -353,3 +353,26 @@ listeners, keymap storage/cache and process-local publication state. They remain
 unexecuted here. They do not qualify actual card grading data, physical input,
 or every configurable global/modal prefix collision; document listener ordering
 is unchanged. The original 145-row snapshot above remains historical.
+
+## Actual comment handoff corrects the earlier evidence assumption
+
+Frozen master `handler/comments.cljs:132–161` saves and clears an editing block
+before opening its comment thread; a blank edit becomes a Comments area in
+place. It then reveals/focuses the reply and clears selection/action-bar state.
+The earlier portable key test substitutes the downstream comment capability,
+so its retained source/epoch assertion proves only that routing captures the
+correct dirty target before the capability handoff. It does not establish the
+product's subsequent focus or edit lifecycle. The actual AppKit comment case
+must require saved block source followed by the authentic reply editor, rather
+than retaining the original block editor. Contents retains its different
+existing editor-preservation requirement.
+
+The first actual AppKit comment run at App ea84879595 failed with `native click
+target is missing or retired` after creating a visible comment draft. This
+remains an authentic failure. Shared `Comments_view.add_box` already consumes
+the pending reply request on placeholder appearance; `Comments_ops.reveal`
+also queued a click without claiming that request. The candidate claims it
+before queuing the click, preventing the appearance callback from independently
+retiring that target. The native producer regression verifies that exact owner
+survives an appearance event while activation is deferred. No actual native
+rerun was performed during preparation; the failed run is not relabeled passed.

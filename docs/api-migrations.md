@@ -1,5 +1,23 @@
 # API migrations
 
+## Comment reply requests claim one native activation owner
+
+`Comments_ops.reveal` now consumes its existing reply-focus request before
+queuing a placeholder's native click, just as it already did before focusing an
+existing reply input. The placeholder's `on_appear` callback can no longer also
+consume that request, open the reply and retire the very controller whose native
+click is pending. Missing or retired native click targets still fail at the
+existing boundary; no identifier fallback, deferred re-resolution or suppressed
+backend error is added.
+
+Callers and the reply request shape are unchanged. For example, requesting a
+thread while its reply placeholder mounts now yields one reply activation;
+a later appearance event leaves the captured placeholder alive until that
+activation is delivered. The actual native producer fixture queues the real
+click, dispatches the subscribed appearance event before delivery and verifies
+the exact controller's identity survives. This is lifecycle/producer coverage;
+actual AppKit reply focus remains a separate release test.
+
 ## Node property choices retain their async graph owner
 
 Choosing an existing Node/Page/Class/Asset/Property reference in a value picker
@@ -176,8 +194,10 @@ which admits both an active block editor and normal block selection while
 excluding unrelated text controls. Previously its nonediting-only catalog row
 prevented the editing entry from reaching the existing comment capability.
 `ui/toggle-contents` (Alt-Shift-C) now uses global-prevent-default, matching the
-master desktop behavior in both editing and nonediting contexts. Both commands
-retain the current dirty editor rather than exiting editing to satisfy a gate.
+master desktop behavior in both editing and nonediting contexts. The shortcut-routing seam does not clear editing merely to satisfy a gate.
+Contents preserves the current editor. Comment creation subsequently follows
+master's different product handoff: save the block, clear block editing, reveal
+the comment thread and focus its reply editor.
 
 No binding strings, configured shortcut storage, command IDs, service signatures
 or native wire fields change. Existing user key overrides keep their keys and
@@ -191,7 +211,7 @@ application admission guards remain on the same event path.
 
 The maintained marked portable command fixture exercises the real key entry
 and target-specific CmdK services with observed downstream capabilities. It
-checks both contexts, dirty-editor identity, unrelated text-control ownership,
+checks both contexts, pre-capability captured dirty-editor identity, unrelated text-control ownership,
 composition, palette ownership, empty targets and exactly-once dispatch. This
 is source/semantic regression coverage pending target execution; physical
 native delivery and persisted comment/readiness UI require a separate owned

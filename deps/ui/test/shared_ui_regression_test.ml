@@ -2128,7 +2128,7 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
     check "normal-only theme and plugin sequences do not run inside a dirty editor"
       (!shortcut_appearance=0 && !shortcut_plugins=0);
     check "editing Alt-Shift-C reaches the existing Contents capability" (!shortcut_contents=1);
-    check "both editing shortcuts preserve the dirty editor and its exact epoch"
+    check "key routing retains the captured dirty editor before the observed capability handoff"
       (match E.editing () with Some current -> current.epoch==editing.epoch
         && current.buffer="shortcut dirty draft" | None -> false);
     let base=Ui_services.dom_body () in

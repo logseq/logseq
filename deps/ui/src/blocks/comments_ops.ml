@@ -48,9 +48,13 @@ let reveal uuid =
       area.Ui_services.scroll_into_view_nearest ();
       (match area.query ".ls-comment-add textarea" with
        | Some input ->
-           reply_focus_request := None;
+           ignore (take_reply_focus_request uuid);
            input.Ui_services.focus ()
-       | None -> Option.iter (fun placeholder -> placeholder.Ui_services.click ())
+       | None -> Option.iter (fun placeholder ->
+           (* Claim before native activation: the placeholder's own appearance
+              callback must not also open and retire this queued click target. *)
+           ignore (take_reply_focus_request uuid);
+           placeholder.Ui_services.click ())
            (area.query ".ls-comment-reply-placeholder"))
 
 let reveal_if_requested uuid =
