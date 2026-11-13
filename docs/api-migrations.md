@@ -36,6 +36,39 @@ target archives and runner without Dune changes. These source regressions await
 root execution; they are not
 native paint, hardware input or real database undo evidence.
 
+## NSH right-sidebar document clips to its existing paint bounds
+
+The existing `rs-items` Column beneath the right-sidebar Scroll now sets typed
+`overflow=hidden` on NSH only. It retains its intrinsic height, 150pt bottom
+padding, 8pt horizontal padding, 4pt leading margin, keyed cards and callbacks.
+The Scroll remains the sole vertical viewport; individual cards and Help bodies
+receive no new clipping or size constraint. Web, Apple/iOS and Android keep their
+previous document properties. No public constructor or wire/event change.
+
+Frozen master's `.sidebar-item-list.scrollbar-spacing` is the scrolling owner;
+its `overflow-y:auto` already establishes clipped content. The native projection
+splits that owner into an existing Scroll viewport and intrinsic Column. AppKit
+Stack views already clip this Column's paint. The typed prop also stops clipped
+layout overflow from incorrectly extending the surrounding Scroll range, using
+the existing NSH `Clip` semantics without changing automatic minimum sizing.
+
+The actual Help gate previously scrolled Terms above its viewport. Public
+Renderer replay of the complete captured Help plus Contents tree with native
+CoreText metrics reported 1240pt content for a 1098pt document. Applying only this
+Column prop preserved every frame, all fourteen Help actions and five headings,
+and reduced content extent to 1098pt. The precise internal Taffy overflow producer
+remains unproven; this is an application owner projection, not an SDK fix. Card
+clipping, which also changed that diagnostic extent, remains diagnostic only.
+
+Shared actual-sidebar producer regressions cover NSH and the maintained Web,
+Apple/iOS and Android profiles through row refresh, long titles and collapse /
+expand, checking document/Scroll identities, all rows and original spacing.
+Existing custom native sidebar documents can likewise use their existing
+intrinsic Column with ``Ui_components.Prop.overflow `hidden`` while retaining the
+same single Scroll. Do not replace a content-dependent height with a viewport
+cap. Fresh release, unchanged native Help end/return and the existing 36-row
+sidebar gate remain required before claiming this paint/scroll fix qualified.
+
 ## Command-palette result gutters use the retained typed Column
 
 `Ui_components.cmdk_item_row` now declares its existing symmetric 2pt gutter

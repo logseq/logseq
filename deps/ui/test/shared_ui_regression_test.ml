@@ -1398,11 +1398,16 @@ let right_sidebar_block_clipping ~registry ~profile =
           | _ -> acc in
         List.fold_left (fun acc child -> rows child acc) acc (M.children session.S.tree node.M.id) in
       let initial=(clipped ()).M.id in
+      let document ()=List.find (fun node -> class_has node "sidebar-item-list") (nodes session) in
+      let scroll ()=List.find (fun node -> class_has node "cp__right-sidebar-scrollable") (nodes session) in
+      let document_id=(document ()).M.id and scroll_id=(scroll ()).M.id in
       let header ()=List.find (fun node -> M.string_prop node "accessibility-identifier"=
         Some "sidebar-panel-header-0") (nodes session) in
       let header_id=(header ()).M.id in
       let check_contents expected =
         let surface=clipped () in
+        let document=document () and scroll=scroll () in
+        let card=List.find (fun node -> class_has node "sidebar-item") (nodes session) in
         let body=List.find (fun node -> class_has node "sidebar-panel-content") (nodes session) in
         let wrap=List.find (fun node -> class_has node "cp__page-inner-wrap") (nodes session) in
         let inner=List.find (fun node -> class_has node "page-inner") (nodes session) in
@@ -1424,6 +1429,22 @@ let right_sidebar_block_clipping ~registry ~profile =
           (not (List.exists (String.starts_with ~prefix:"style\x1f") carriers));
         check "The clipped document retains every actual producer block row"
           (List.length (rows surface [])=expected);
+        check "Only NSH projects the existing sidebar document's clipped paint bounds into layout"
+          (M.string_prop document "overflow"=
+           (if profile.P.profile_host=P.NshHost then Some "hidden" else None));
+        check "The same intrinsic sidebar document retains its spacing and every row under its sole viewport"
+          (document.M.id=document_id && document.M.kind="column"
+           && scroll.M.id=scroll_id && scroll.M.kind="scroll"
+           && M.string_prop scroll "orientation"=Some "vertical"
+           && List.map (fun node -> node.M.id) (M.children session.S.tree scroll.M.id)=[document_id]
+           && Hashtbl.find_opt document.M.props "padding-bottom"=Some (P.IntValue 150)
+           && Hashtbl.find_opt document.M.props "padding-horizontal"=Some (P.IntValue 8)
+           && Hashtbl.find_opt document.M.props "margin-left"=Some (P.IntValue 4)
+           && not (List.exists (Hashtbl.mem document.M.props) ["height";"min-height";"max-height"])
+           && List.length (rows document [])=expected);
+        check "Document clipping does not add clipping or dimensions to individual sidebar cards"
+          (M.string_prop card "overflow"=None
+           && not (Hashtbl.mem card.M.props "height"));
         check "The sidebar title keeps master's leading alignment on its original header button"
           (let title=header () in title.M.kind="button" && title.M.id=header_id
            && M.string_prop title "main"=Some "start"
@@ -2192,7 +2213,11 @@ let run_views ~registry ~profile ~finish =
   sidebar_help_native_rows ~registry;
   sidebar_favorite_rows ~registry ~profile;
   selection_toolbar_surface ~registry ~profile;
-  right_sidebar_block_clipping ~registry ~profile;
+  List.iter (fun profile -> right_sidebar_block_clipping ~registry ~profile)
+    [{P.profile_os=P.WebOS;profile_host=P.WebHost};
+     {P.profile_os=P.MacOS;profile_host=P.NshHost};
+     {P.profile_os=P.IOS;profile_host=P.SwiftUIHost};
+     {P.profile_os=P.AndroidOS;profile_host=P.KotlinHost}];
   popup_layout_carriers ~registry ~profile;
   popup_icon_shrink_backend_policy ~registry;
   shared_block_clipping ~registry ~profile;
