@@ -259,3 +259,109 @@ and color changes at the icon-list end, with visible target bounds inside the
 test host for input delivery and is interaction evidence, not an additional
 standalone memory sample. No new compiler, application launch or test was run
 to transcribe this report.
+
+
+## Bounded ordinary-code viewport: executed release measurements (2026-11-13)
+
+This is a separate large-code workload, not an Emoji/Icon picker sample. The
+standalone release and actual native OCaml library were measured on macOS 27.2,
+arm64 Mac18,5 with 24 GiB RAM, at App
+`c756ec5ffa07a7e8636066cf0c9517dc29763700`, LUI
+`93712b51ab40d7c5882fed1501568a55ab6722ba` and NSH
+`adc186db7213f3ccd1eacaa836cc721e9779fd14`. Both Rust and OCaml profiles were
+release. Each case used a fresh private profile, one startup-created journal,
+one ordinary worker-inserted Markdown code fence and exactly one owned worker.
+The full source was verified in the canonical extension and persisted entity.
+
+The previous ordinary Editor used `min_rows=Some(1)` without a maximum height.
+A 1,000-line, 22,994-byte document reached 206.8 MiB frontend footprint after
+idle. The 100,000-line case failed its unchanged 15-second agent-response
+bound. A read-only diagnostic of that still-live child at 28.165 seconds after
+launch measured 3.8 GiB frontend footprint and a 4.0 GiB lifetime peak; the
+subsequent one-second OS sample recorded 4.1 GiB while it continued allocating.
+Its engine was reconciling native Editor row views and styles. These are failed
+workload diagnostics, not completed publication/idle measurements. Owned cleanup
+succeeded; no user's graph or installed application was used.
+
+Frozen master `29fd2edd015e12963742b985ce6d2311c074e09b` already specifies
+`.CodeMirror { height:auto; max-height:1024px }` in
+`src/main/frontend/extensions/code.css`, with an explicit uncapped `calc`
+exception. The corrected factory applies that maximum to the same NSH Editor.
+It keeps the native document, internal scrolling, visible-row window and Undo;
+it adds no alternative editor or virtualizer. The separate public Headless
+fixture passed 1k/100k full-document end-paste/Undo, bounded native witnesses,
+short natural height and retained language/calc transitions. All nine extension
+tests, formatting and strict all-target release Clippy passed. The broader
+81-case Rust library run remains red: 80 passed and the unchanged natural-date
+`next friday 8pm` parity assertion failed.
+
+The root-owned standalone recorder then completed both cases without forced GC,
+focus injection or offset mutation. The independent maintained CLI verified the
+receipt and captured the first viewport; both PNGs were inspected. The initial
+fixture attempt held a persistent agent connection while opening an independent
+CLI connection. The transport serves one client at a time, so that fixture-only
+contention was corrected by closing each read client before invoking the CLI.
+The response deadline and application assertions were retained. The failed
+connection attempt and the subsequent failed unbounded document runs remain in
+the ignored evidence directories.
+
+The table preserves rounded `vmmap -summary` physical-footprint observations as
+MiB. They are not RSS, virtual size or exact live-object bytes. Frontend and
+worker samples are sequential, not a de-duplicated simultaneous system total.
+
+| Lines / source bytes | Phase | Frontend MiB | Frontend lifetime peak MiB | Worker MiB | Worker lifetime peak MiB |
+| --- | --- | ---: | ---: | ---: | ---: |
+| 1,000 / 22,994 | baseline-10s-after-launch | 94.6 | 94.9 | 39.7 | 39.9 |
+| 1,000 / 22,994 | long-code-ready | 110.9 | 111.0 | 44.1 | 44.3 |
+| 1,000 / 22,994 | long-code-idle-10s | 116.8 | 127.2 | 43.2 | 44.3 |
+| 100,000 / 2,499,994 | baseline-10s-after-launch | 95.2 | 95.5 | 39.3 | 39.4 |
+| 100,000 / 2,499,994 | long-code-ready | 167.9 | 168.0 | 268.4 | 268.6 |
+| 100,000 / 2,499,994 | long-code-idle-10s | 170.6 | 178.7 | 135.0 | 268.6 |
+
+The baseline frontend samples began 10.136 and 10.135 seconds after launch.
+Worker insertion through canonical source publication took approximately 576 ms
+for 1k and 2,151 ms for 100k; the latter source contains 2,499,994 bytes. These
+are complete worker/application publication observations, not native frame or
+paint latency. The first-viewport PNG occurs between ready and idle samples;
+its allocations are included in the later footprints. Both cases retained 266
+canonical nodes, which alone does not prove bounded native row rendering.
+
+Read-only OCaml counters are reported separately below. Major heap capacity and
+the current domain's 16 MiB minor limit are already included in process memory,
+must not be added to footprint, and do not establish live heap or all-domain
+allocation. The worker's natural collection/compaction counter changed during
+100k insertion; the recorder never requested a collection or compaction.
+
+| Lines | Phase | Frontend major capacity bytes | Worker major capacity bytes | Current-domain minor limit bytes, each process |
+| --- | --- | ---: | ---: | ---: |
+| 1,000 | baseline-10s-after-launch | 6,301,768 | 9,796,704 | 16,777,216 |
+| 1,000 | long-code-ready | 6,301,768 | 9,536,152 | 16,777,216 |
+| 1,000 | long-code-idle-10s | 6,301,768 | 9,536,152 | 16,777,216 |
+| 100,000 | baseline-10s-after-launch | 6,242,760 | 9,829,472 | 16,777,216 |
+| 100,000 | long-code-ready | 41,261,656 | 34,703,416 | 16,777,216 |
+| 100,000 | long-code-idle-10s | 28,612,440 | 5,644,576 | 16,777,216 |
+
+These two short sessions establish completed source publication and first-line
+paint after the height correction. Standalone last-line paint, native wheel
+reachability, frame-time distributions, sustained edits/leak freedom, IME,
+other OSes and the deliberately uncapped calc workload remain separate gates.
+The ignored recorder is
+`deps/ui/_build/nsh-native-code-memory/measure.py`; commands and errors are in
+`/tmp/logseq-current-release-code-memory-client-fixed.log`,
+`/tmp/logseq-current-release-code-memory-timeout-diagnostic.log` and
+`/tmp/logseq-bounded-release-code-memory.log`.
+
+Each completed evidence directory retains source/artifact hashes, the verified
+release receipt, per-process raw vmmap, frontend GC and worker health/GC,
+readiness/ownership/cleanup records, CLI replies and first-viewport PNG. Digests:
+
+| Ignored evidence directory | File | SHA-256 |
+| --- | --- | --- |
+| `long-code-1000-6ddss26p` | `measurements.json` | `aaffa1ed15f7e327098881834b1bfe2dfdde158d19a8efd6f8f423d4f404d1d0` |
+| `long-code-1000-6ddss26p` | `sources.json` | `a2c5e93a5022e13df53a7856ef0f0e907b0679ceff3a6e2e31334b2109547333` |
+| `long-code-1000-6ddss26p` | `source-build-receipt.json` | `1826d61a85cf743428db435a4a0a0c9231541be85aa2a4549360fb70842a9f19` |
+| `long-code-1000-6ddss26p` | `complete.json` | `140d60bcd43a391bbcdb5270bd5a60a6cbf40f9862b08d5bb3aa93c8c6405178` |
+| `long-code-100000-cauchz1m` | `measurements.json` | `d63f345751da6b5a371cb2cd2892a9e40ff0bdbf72adb9378e173a3031d59edb` |
+| `long-code-100000-cauchz1m` | `sources.json` | `d0dccc6c2a2c68ec0e091e9688eb44240a59b477de780dba7e2ef871adb213f3` |
+| `long-code-100000-cauchz1m` | `source-build-receipt.json` | `1826d61a85cf743428db435a4a0a0c9231541be85aa2a4549360fb70842a9f19` |
+| `long-code-100000-cauchz1m` | `complete.json` | `140d60bcd43a391bbcdb5270bd5a60a6cbf40f9862b08d5bb3aa93c8c6405178` |

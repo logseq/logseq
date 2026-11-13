@@ -482,3 +482,79 @@ Primary references: [interim](https://docs.rs/interim/0.2.2/interim/),
 [chrono-node-rs](https://docs.rs/chrono-node-rs/0.1.0/chrono_node/),
 [rustling-ontology](https://github.com/sonos/rustling-ontology), and
 [Jiff timezone API](https://docs.rs/jiff/0.2.38/jiff/tz/struct.TimeZone.html).
+
+
+### Executed native selection, sidebar and early-layout checks (2026-11-13)
+
+The comparison remains frozen master
+`29fd2edd015e12963742b985ce6d2311c074e09b`; Graph View is the only excluded
+product surface. These observations close bounded cases, not overall UX,
+IME/accessibility, hardware-input or cross-platform acceptance.
+
+At App `caaf226a8df8deb7118e8ca2427904f22b170397` with LUI
+`93712b51ab40d7c5882fed1501568a55ab6722ba`, the actual AppKit range fixture
+passed in 16.2 seconds. A real B content press and Escape established the
+nonediting anchor; native Shift+Down/Up reversed across it in both directions.
+Dragging selected B, the second selected root, moved A and B after C in source
+order with the original UUIDs, parents and titles. A subsequent outside-window
+release did not replay the destination. The prior failure was a stable action-bar
+popover key whose anchor changed from B to A. The corrected key follows scope
+and anchor, retaining the owner while that anchor stays the same. Both the
+range and post-drop PNGs were inspected. Evidence:
+`/tmp/logseq-reanchored-selection-native-range.log`, private
+`logseq-native-block.Mw41bX/`. Nested/cross-container and held-Alt dragging are
+separate gates.
+
+At App `c756ec5ffa07a7e8636066cf0c9517dc29763700` with that same LUI pin, the
+actual short-window right-sidebar native wheel fixture passed in 24.6 seconds.
+All 36 ordinary persisted Contents blocks remained unchanged. The last row was
+initially below the viewport at y1004, then visible at y350 at the native end;
+returning restored the first row to y164. Both end and returned PNGs were
+inspected; the body no longer became blank. No backend error was reported.
+Evidence: `/tmp/logseq-typed-clipping-native-right-sidebar.log`, private
+`logseq-native-right-sidebar-shrink.86bUnM/`.
+
+Diagnosis used the actual App Core snapshot and an independent public Renderer
+replay of all 1329 primitive nodes, original compiled theme/icon payloads and
+bundled fonts. It reproduced content extent 1424pt against 1118pt of descendant
+frames; earlier synthetic/Spacer/grow/Overlay-only hypotheses did not reproduce
+or clear it. The App already authored `overflow:hidden` on the block owner in
+Web-only `data_attrs`. Projecting that same clipping as a typed property alone
+reported 1118pt, kept the 960pt card and all children, and then passed the actual
+native end/return fixture above. No fixed height, offset setter or SDK change
+was introduced. The deeper source of the unclipped descendant overflow remains
+unresolved; this is a faithful application clipping correction.
+
+The completed standalone 1k/100k code measurements and exact-revision evidence
+are recorded in `deps/ui/nsh/RELEASE_MEMORY.md`. The missing ordinary-code
+1024px maximum from master allowed a 100k native Editor to grow beyond 3.8GiB;
+the corrected same-Editor viewport completed the case near 170.6MiB frontend
+footprint after idle, with a separately sampled 135.0MiB worker. First-viewport
+paint was inspected. Last-line native paint and sustained-session behavior are
+not inferred from canonical source presence or node counts.
+
+A separate actual-target layout-carrier detector, candidate
+`2c0d9ddd8e8e1dd56f410dcafca619e732db4c40`, passed all 41 existing/new native
+compile/preflight regressions, including dynamic required text plus known bad
+layout, aliases, Web-only host pruning, metadata/custom variables and raw-markup
+positives. Its exact CMT extraction against the actual c756 native archives
+rejected 91 constructor sites with source locations. Those are actual-target
+static diagnostics, not 91 reproduced UI failures. The lexical 160-site source
+inventory includes other targets and adapters and is not substituted for that
+count. The detector is pending integration while exact typed migrations and
+unrepresentable unit/percent/alignment contracts are resolved; no exemption or
+CSS compatibility lowering was added. Evidence:
+`/tmp/logseq-inline-layout-guard-native-tests.log`,
+`/tmp/logseq-inline-layout-target-inventory.log`, private
+`logseq-inline-layout-cmt.o9q69ge0/`.
+
+Published LUI 93712b51 completed ordinary CI and all eight desktop CI jobs,
+including real Windows OCaml DLL integration/packaged launch and macOS/Linux
+whole-app package/upgrade fixtures (desktop run 43350603246). These are LUI
+fixtures, not proof that actual installed Logseq upgrades have passed. Actual
+Logseq workflow 43357554443 passed its source/environment setup and was building
+its two release versions at this observation. Its preceding run failed because
+ocaml/setup-ocaml creates the checkout-local `_opam` build tree; adding the
+root-scoped build-artifact ignore preserved strict tracked/untracked source
+validation and the rerun reached the real build. The application remains a
+draft with the natural-date parity failure and broader acceptance work open.
