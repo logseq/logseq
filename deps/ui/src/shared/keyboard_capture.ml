@@ -3,6 +3,22 @@ let owner : (Ui_services.ev -> unit) option ref = ref None
 let installed = ref false
 let active () = Option.is_some !owner
 
+(* Select workflows suspend application shortcuts without consuming the keys
+   owned by their fields, clipboard, navigation or native dismissal. Each
+   mounted scope releases only its own suspension, including nested selects. *)
+let shortcut_owners : unit ref list ref = ref []
+let shortcut_epoch = ref 0
+let shortcuts_suspended () = !shortcut_owners <> []
+let shortcut_revision () = !shortcut_epoch
+
+let suspend_shortcuts ~scope =
+  let token = ref () in
+  shortcut_owners := token :: !shortcut_owners;
+  incr shortcut_epoch;
+  Signal.on_dispose scope (fun () ->
+      shortcut_owners := List.filter (fun current -> current != token) !shortcut_owners;
+      incr shortcut_epoch)
+
 let dispatch ev =
   match !owner with
   | None -> ()

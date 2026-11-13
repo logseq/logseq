@@ -94,7 +94,7 @@ let () =
     | None -> true)
 
 let last_native_keymap :
-    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool * bool * bool) option ref = ref None
+    ((Model.t, Action.t) Lui_app.reducer_app * int * bool * bool * bool * bool * bool * bool) option ref = ref None
 
 (* A palette view is immutable. Idle drains must not flatten its complete
    result groups just to re-read the highlighted item's copy context. *)
@@ -131,6 +131,7 @@ let native_cards_open app =
   | None -> false
 
 let native_keymap_bindings ~cards =
+  if Keyboard_capture.shortcuts_suspended () then [] else
   let add scope command items =
     match Keymap_data.effective_shortcut command with
     | Commands_data.Binds sequences ->
@@ -157,13 +158,17 @@ let () = publish_native_keymap := (fun () ->
                   = Lui_protocol.NshHost ->
       let revision = Keymap_data.revision () in
       let palette, copy_reference = native_palette_context () in
+      let suspended = Keyboard_capture.shortcuts_suspended () in
+      let palette = palette && not suspended in
+      let copy_reference = copy_reference && not suspended in
       let capture = Keyboard_capture.active () in
       let cards = native_cards_open app in
-      let block_selection = Editor_state.editing () = None && Editor_state.selection_active () in
+      let block_selection = not suspended && Editor_state.editing () = None && Editor_state.selection_active () in
       let unchanged = match !last_native_keymap with
-        | Some (owner, previous, p, c, copy, selection, previous_cards) ->
+        | Some (owner, previous, p, c, copy, selection, previous_cards, previous_suspended) ->
             owner == app && previous = revision && p = palette && c = capture
             && copy = copy_reference && selection = block_selection && previous_cards = cards
+            && previous_suspended = suspended
         | None -> false in
       if not unchanged then begin
         let bindings = native_keymap_bindings ~cards in
@@ -172,7 +177,7 @@ let () = publish_native_keymap := (fun () ->
                    "capture", `Bool capture; "palette-copy-reference", `Bool copy_reference;
                    "block-selection", `Bool block_selection;
                    "bindings", `List bindings]));
-        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection, cards)
+        last_native_keymap := Some (app, revision, palette, capture, copy_reference, block_selection, cards, suspended)
       end
   | Some _ | None -> ())
 

@@ -481,6 +481,88 @@ mod tests {
         .to_string()
     }
 
+    fn property_keys_snapshot(active: bool) -> String {
+        let mut value: Value = serde_json::from_str(&snapshot("mod+k", 1)).unwrap();
+        if active {
+            value["bindings"].as_array_mut().unwrap().push(json!({
+                "stroke":"mod+p","command":"editor/add-property","scope":"global-prevent-default"
+            }));
+        } else {
+            value["bindings"] = json!([]);
+        }
+        value.to_string()
+    }
+
+    #[component]
+    fn PropertyKeyboardProbe() -> impl IntoElement {
+        let observed = engine_context::<Observed>().unwrap();
+        let keyboard = GlobalKeyboard::mount();
+        let bridge = observed.0.clone();
+        keyboard.send.set(Some(Rc::new(move |value| bridge.lock().unwrap().push(value))));
+        keyboard.replace(&property_keys_snapshot(true)).unwrap();
+        let popup = signal(false);
+        let value = signal(String::new());
+        let local = observed.0.clone();
+        let canceled = observed.0.clone();
+        view().child(nsh_base::button().on_press(move || {
+            // This is the existing wire snapshot emitted while the real
+            // Properties selector owns application shortcut admission.
+            keyboard.replace(&property_keys_snapshot(false)).unwrap();
+            popup.set(true);
+        }).child(text("Open property keys")))
+        .child(when(popup, move || {
+            let submit = local.clone();
+            let canceled = canceled.clone();
+            overlay().on_cancel(move || {
+                canceled.lock().unwrap().push(json!({"owner":"property-cancel"}));
+                popup.set(false);
+                keyboard.replace(&property_keys_snapshot(true)).unwrap();
+            }).child(view().flex_col()
+                .child(input().label("Property local field")
+                    .value(move || value.get())
+                    .on_change(move |text: &str| value.set(text.to_owned()))
+                    .on_submit(move |text: &str| {
+                        submit.lock().unwrap().push(json!({"owner":"property-submit","text":text}));
+                    }))
+                .child(nsh_base::button().on_press(|| {}).child(text("Property local focus"))))
+        }))
+    }
+
+    #[test]
+    fn property_snapshot_retires_native_bindings_without_stealing_local_field_or_cancel() {
+        let observed = Observed(Arc::new(Mutex::new(Vec::new())));
+        let mut config = EngineConfig::new(Root::of::<PropertyKeyboardProbe>());
+        config.context = EngineContext::default().with(observed.clone());
+        config.environment.os = nsh_core::platform::Os::MacOs;
+        let mut app = Headless::start(config).unwrap();
+        app.first_render().unwrap();
+        app.press_key("meta+k").unwrap();
+        assert_eq!(observed.0.lock().unwrap().len(), 1);
+        app.press("Open property keys").unwrap();
+        app.press_key("meta+k").unwrap();
+        app.press_key("t").unwrap();
+        app.press_key("l").unwrap();
+        assert_eq!(observed.0.lock().unwrap().len(), 1, "retired bindings cannot consume a popup's keys");
+        app.type_text("label:Property local field", "local").unwrap();
+        for key in ["meta+k", "meta+p", "meta+c", "meta+v", "meta+z"] {
+            app.press_key(key).unwrap();
+        }
+        assert_eq!(observed.0.lock().unwrap().len(), 1, "field and clipboard keys must not reach the app bridge");
+        app.press_key("t").unwrap();
+        app.press_key("enter").unwrap();
+        assert_eq!(app.screen().input_text("label:Property local field").unwrap(), Some("localt"));
+        assert_eq!(observed.0.lock().unwrap()[1], json!({"owner":"property-submit","text":"localt"}));
+        app.press("Property local focus").unwrap();
+        app.press_key("escape").unwrap();
+        assert_eq!(observed.0.lock().unwrap()[2], json!({"owner":"property-cancel"}));
+        app.press_key("meta+k").unwrap();
+        app.press_key("meta+p").unwrap();
+        let events = observed.0.lock().unwrap();
+        assert_eq!(events.len(), 5, "the final owner restores each application binding once");
+        assert_eq!(events[3]["key"], json!("k"));
+        assert_eq!(events[4]["key"], json!("p"));
+    }
+
     #[component]
     fn CardsKeyboardProbe() -> impl IntoElement {
         let observed = engine_context::<Observed>().unwrap();

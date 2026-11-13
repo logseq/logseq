@@ -2391,6 +2391,107 @@ let cycle_routes ~check ~profile ~install_worker ~settle ~done_ =
 
 (* END portable exposed-cycle fixture. *)
 
+let property_shortcut_ownership ~registry ~profile =
+  let previous_editor = !Editor_state.st
+  and previous_palette = !Cmdk_state.latest_st
+  and previous_flush = !Runtime.app_flush
+  and previous_shortcuts = !Keymap_data.user_shortcuts
+  and previous_revision = !Keymap_data.shortcut_revision
+  and previous_cache = !Keymap_data.cached_items
+  and previous_sequence = !Editor_keys.chord_seq
+  and previous_admission = !Editor_keys.chord_admission in
+  let sessions = ref [] in
+  let mount view =
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model) ~view:(fun _ _ _ -> view) () in
+    sessions := session :: !sessions;
+    session in
+  let dispose session =
+    sessions := List.filter (fun current -> current != session) !sessions;
+    S.dispose session in
+  Fun.protect ~finally:(fun () ->
+    List.iter S.dispose !sessions;
+    Editor_state.st := previous_editor; Cmdk_state.latest_st := previous_palette;
+    Runtime.app_flush := previous_flush;
+    Keymap_data.user_shortcuts := previous_shortcuts;
+    Keymap_data.shortcut_revision := previous_revision; Keymap_data.cached_items := previous_cache;
+    Editor_keys.chord_seq := previous_sequence; Editor_keys.chord_admission := previous_admission)
+    (fun () ->
+      check "property shortcut fixture starts without another selector owner"
+        (not (Keyboard_capture.shortcuts_suspended ()));
+      Editor_state.st := None; Cmdk_state.latest_st := None;
+      Runtime.app_flush := (fun () -> ());
+      Keymap_data.user_shortcuts := Keymap_data.Command_map.empty;
+      incr Keymap_data.shortcut_revision; Keymap_data.cached_items := None;
+      let key ?(meta=false) ?(shift=false) ?(composing=false) value =
+        let prevented = ref false and stopped = ref false in
+        let event : Ui_services.ev =
+          { x=0.;y=0.;shift;meta;ctrl=false;alt=false;composing;key=Some value;key_char=None;
+            buttons=0;button=0;repeat=false;movement_x=0.;movement_y=0.;default_prevented=false;
+            target=None;touches=[];detail=(fun _ -> None);detail_json=(fun _ -> None);
+            clipboard_get=(fun _ -> "");clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+            clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+            prevent_default=(fun () -> prevented:=true);stop_propagation=(fun () -> ());
+            stop_immediate=(fun () -> stopped:=true) } in
+        event,prevented,stopped in
+      let press ?meta ?shift ?composing value =
+        let event,prevented,stopped = key ?meta ?shift ?composing value in
+        Editor_keys.on_global_key event; Editor_keys.on_keydown event;
+        !prevented,!stopped in
+      Editor_keys.chord_seq := [];
+      ignore (press "t");
+      check "a browse prefix is armed before a property workflow opens" (!Editor_keys.chord_seq=["t"]);
+      let chosen = ref [] and dismissed = ref 0 in
+      let selector label = Ui_components.dialog ~text:label
+        ~on_dismiss:(fun _ -> incr dismissed)
+        [Properties_select.view ~placeholder:label
+          [Properties_select.item "Alpha" (fun () -> chosen:="Alpha"::!chosen);
+           Properties_select.item "Beta" (fun () -> chosen:="Beta"::!chosen)]] in
+      let first = mount (selector "First property owner") in
+      List.iter (fun (meta,shift,value) ->
+        check ("a mounted property owner yields local key " ^ value)
+          (press ~meta ~shift value = (false,false)))
+        [true,false,"p";true,false,"k";true,false,"z";true,false,"c";
+         true,false,"v";false,false,"Enter";false,false,"Escape";
+         false,false,"ArrowDown";false,false,"t";false,false,"g";
+         false,false,"p";false,false,"c"];
+      check "suspending shortcuts clears an armed application prefix" (!Editor_keys.chord_seq=[]);
+      let input = List.find (fun node -> node.M.kind="text-field") (nodes first) in
+      S.text_changed first input.M.id "Beta";
+      S.dispatch first (P.NavigateNext input.M.id);
+      S.submit first input.M.id;
+      check "property input, navigation and Enter retain their actual local handlers" (!chosen=["Beta"]);
+      let dialog = List.find (fun node -> node.M.kind="dialog") (nodes first) in
+      S.dismiss first dialog.M.id;
+      check "property Escape dismissal retains its local event handler" (!dismissed=1);
+      let second = mount (selector "Replacement property owner") in
+      dispose first;
+      check "retiring an older property scope cannot release a replacement owner"
+        (Keyboard_capture.shortcuts_suspended () && press ~meta:true "k"=(false,false));
+      let unrelated = mount (Lui_elements.box []) in
+      dispose unrelated;
+      check "disposing a scope without ownership leaves property admission suspended"
+        (Keyboard_capture.shortcuts_suspended ());
+      let recorded = ref 0 in
+      let recorder = mount (fun context parent ->
+        Keyboard_capture.acquire ~scope:context.Lui_ui.ui_scope (fun _ -> incr recorded);
+        Lui_elements.box [] context parent) in
+      let event,prevented,stopped = key ~meta:true "k" in
+      Keyboard_capture.dispatch event;
+      check "exclusive recording still owns keys over a suspended property workflow"
+        (!recorded=1 && !prevented && !stopped);
+      dispose recorder;
+      check "retiring the recorder does not release the property owner"
+        (not (Keyboard_capture.active ()) && Keyboard_capture.shortcuts_suspended ());
+      dispose second;
+      check "closing the final property owner restores application admission"
+        (not (Keyboard_capture.shortcuts_suspended ()));
+      check "a prefix from before the workflow cannot replay after dismissal" (press "l"=(false,false));
+      ignore (press "t");
+      check "a fresh sequence works after the final property owner closes" (press "l"=(true,true));
+      ignore (press ~composing:true "t");
+      check "composition cannot arm a delayed application prefix" (!Editor_keys.chord_seq=[]))
+
 let run_views ~registry ~profile ~finish =
   let finish () =
     let rec settle count callback =
@@ -2401,6 +2502,9 @@ let run_views ~registry ~profile ~finish =
       ~install_worker:(fun handler -> ignore (Fake_worker.install handler))
       ~settle:(settle 25) ~done_:finish in
   code_language_caption ~registry ~profile;
+  List.iter (fun profile -> property_shortcut_ownership ~registry ~profile)
+    [P.profile P.WebOS P.WebHost; P.profile P.MacOS P.NshHost;
+     P.profile P.IOS P.SwiftUIHost; P.profile P.AndroidOS P.KotlinHost];
   cmdk_row_gutter_ownership ~registry ~profile;
   published_chrome_palette ~registry ~profile;
   table_column_ownership ~registry ~profile;

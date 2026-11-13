@@ -623,6 +623,7 @@ let current_chords () =
 
 let chord_seq : string list ref = ref []
 let chord_ms : float ref = ref 0.
+let chord_admission = ref (-1)
 
 (* Closure KeyboardShortcutHandler SEQUENCE_TIMEOUT *)
 let chord_window_ms = 1000.
@@ -688,7 +689,13 @@ let palette_open () =
   | None -> false
 
 let on_global_key ev =
-  if ev.Ui_services.default_prevented || input_composing ev
+  let admission = Keyboard_capture.shortcut_revision () in
+  if !chord_admission <> admission then begin
+    chord_seq := [];
+    chord_admission := admission
+  end;
+  if Keyboard_capture.shortcuts_suspended ()
+     || ev.Ui_services.default_prevented || input_composing ev
      || closest ".pswp" ev.Ui_services.target <> None
      || control_owned_key ev
   then chord_seq := []
@@ -1568,6 +1575,7 @@ let consume_drag_click () =
 
 let on_keydown ev =
   if Ui_services.env_native_drag () && ev_key ev = "Escape" then drag_cancel ();
+  if Keyboard_capture.shortcuts_suspended () then () else
   let control = non_editor_control_target ev.Ui_services.target in
   if blocked_default ~control ev then begin
     ev.Ui_services.prevent_default ();

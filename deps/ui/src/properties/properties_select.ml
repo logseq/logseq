@@ -76,6 +76,7 @@ type sel_state =
 let view ~placeholder ?(compact = false) ?(show_empty_result = true) ?(new_case_sensitive = false) ?new_option ?selected_keys ?(on_enter_text = None)
     ?(on_search = None) items : t =
  fun context parent ->
+  Keyboard_capture.suspend_shortcuts ~scope:context.Lui_ui.ui_scope;
   let sched = context.Lui_ui.ui_scheduler in
   let st = Signal.state sched { q = ""; searched = None; active = 0; scroll_token = 0 } in
   let request = Ui_effect.request () in

@@ -641,14 +641,16 @@ let with_phase d render : t =
   render (Signal.value phase) context parent
 
 let dialog_content ?compact_width ~phase d : t =
-  reactive (fun p ->
+ fun context parent ->
+  Keyboard_capture.suspend_shortcuts ~scope:context.Lui_ui.ui_scope;
+  (reactive (fun p ->
     column ~gap:0 ?width:(if date_phase p then None else match p with
       | Type_select _ -> None | _ -> compact_width)
       [match p with
        | Prop_select -> prop_select_view d
        | Type_select name -> type_select_view d name
        | Node_tags prop -> node_tags_view d prop
-       | Value_edit prop -> value_edit_view d prop]) phase
+       | Value_edit prop -> value_edit_view d prop]) phase) context parent
 
 (* A point-positioned rich dialog needs its own native viewport. The content
    stays unbounded inside the Scroll, while the surface retains placement. *)

@@ -488,3 +488,30 @@ selected/outside context targets, a dirty editor and graph retirement. They
 assert one batch operation and existing before/after history metadata. No
 physical keyboard/pointer Undo/Redo or native UI pass is implied by this source
 change; those acceptance gates remain outstanding until execution evidence.
+
+## Properties selector shortcut ownership correction
+
+Source review against frozen master found an independent admission gap:
+`components/select.cljs:128` and `components/property/dialog.cljs:24` disable
+application shortcut handlers for their mounted workflow, but the current
+shared `Properties_select.view` and `Properties_dialog.dialog_content` had no
+equivalent owner. Cmd/Ctrl-P could replace a property chooser; Cmd/Ctrl-K could
+open Search over it. Native `When::Auto` does not reserve either key for a
+focused field, so an OCaml-only target check would still consume the native
+keystroke before its local owner could use it.
+
+The correction adds scope-owned suspension to the existing keyboard-owner
+module. Only mounted selector/dialog content acquires it, including native
+closed-value popovers that do not use the declarative view-overlay stack.
+Disposal releases that scope's token; nested replacement scopes retain their
+ownership. Both the OCaml entry gate and native binding publication share this
+admission; no DOM lookup, overlay registry, listener or SDK payload is added.
+An admission epoch retires pre-workflow global and Cards chord prefixes.
+
+Authored regressions cover shared Web/NSH/Apple/Android recording profiles,
+real mounted scope retirement, local input/navigation/submit/dismiss callbacks,
+exclusive recording coexistence, the actual native queued-key/publication
+entry and NSH provider binding retirement/restoration with local
+submit/cancel. Headless clipboard chords prove absence of application bridge
+interception; they do not simulate the platform text engine's clipboard edit.
+No compiler, test or native process was run in the source-review worktree.

@@ -392,6 +392,74 @@ let sparse_feedback_materializes_while_held_through_actual_ffi () =
     check "fixture releases only its matching settled preparation"
       (Update_admission.finish_release gate "8"))
 
+let native_property_shortcut_publication () =
+  let prior_app = !Native_embed.current_app and prior_last = !Native_embed.last_native_keymap
+  and prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
+  and prior_editor = !Editor_state.st and prior_palette = !Cmdk_state.latest_st
+  and prior_sequence = !Editor_keys.chord_seq and prior_admission = !Editor_keys.chord_admission
+  and prior_capture = Hashtbl.find_opt Platform.capture_listeners "keydown" in
+  let backend : Lui_protocol.backend = {
+    backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
+    apply_batch=(fun _ -> true)} in
+  let chosen=ref [] in
+  let app=Lui_app.create backend Model.initial
+    (fun model -> function Action.Navigate_to route -> {model with Model.route=route} | _ -> model)
+    (fun _ model _ -> let open Lui_elements in reactive (fun model ->
+     if model.Model.route=Model.All_pages then
+       Ui_components.dialog ~text:"Property keyboard fixture"
+         ~on_dismiss:(fun _ -> ())
+         [Properties_select.view ~placeholder:"Property keyboard fixture"
+           [Properties_select.item "Alpha" (fun () -> chosen:="Alpha"::!chosen);
+            Properties_select.item "Beta" (fun () -> chosen:="Beta"::!chosen)]]
+     else box []) model) in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose app);Native_embed.current_app:=prior_app;
+    Native_embed.last_native_keymap:=prior_last;Runtime.read_model:=prior_model;
+    Runtime.app_flush:=prior_flush;Editor_state.st:=prior_editor;Cmdk_state.latest_st:=prior_palette;
+    Editor_keys.chord_seq:=prior_sequence;Editor_keys.chord_admission:=prior_admission;
+    (match prior_capture with None -> Hashtbl.remove Platform.capture_listeners "keydown"
+     | Some listeners -> Hashtbl.replace Platform.capture_listeners "keydown" listeners)) (fun () ->
+    Native_embed.current_app:=Some app;Editor_state.st:=None;Cmdk_state.latest_st:=None;
+    Runtime.read_model:=(fun () -> Lui_app.model app);
+    Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
+    Hashtbl.remove Platform.capture_listeners "keydown";
+    Ui_services.dom_on_document_event ~capture:true "keydown" Editor_keys.on_global_key;
+    ignore (Lui_app.start app);ignore (Lui_app.flush app);
+    let publish () = !(Native_embed.publish_native_keymap) () in
+    let suspended expected =
+      publish ();
+      check "native publication follows the actual mounted property scope"
+        (match !Native_embed.last_native_keymap with
+         | Some (owner,_,_,_,_,_,_,active) -> owner==app && active=expected
+         | None -> false);
+      check "native application binding retirement and restoration share OCaml admission"
+        ((Native_embed.native_keymap_bindings ~cards:false=[]) = expected) in
+    let key ?(meta=false) value =
+      Native_embed.platform_event ("native-key\n" ^ Js.Json.stringify (Js.Json.object_list
+        ["key",Js.Json.string value;"metaKey",Js.Json.boolean meta;"ctrlKey",Js.Json.boolean false;
+         "shiftKey",Js.Json.boolean false;"altKey",Js.Json.boolean false;
+         "isComposing",Js.Json.boolean false;"repeat",Js.Json.boolean false]));
+      ignore (Native_embed.pump ()); !Platform.default_prevented in
+    suspended false;
+    Editor_keys.chord_seq:=[];ignore (key "t");
+    check "native fixture arms the real browse sequence before opening" (!Editor_keys.chord_seq=["t"]);
+    ignore (Lui_app.send app (Action.Navigate_to Model.All_pages));ignore (Lui_app.flush app);
+    suspended true;
+    List.iter (fun value -> check ("queued native command yields to mounted property input: " ^ value)
+      (not (key ~meta:true value))) ["k";"p";"z";"c";"v"];
+    let runtime=Lui_app.runtime app in
+    let field=Hashtbl.fold (fun node kind found ->
+      if kind=Lui_protocol.TextField then Some node else found)
+      runtime.Lui_runtime.mounted_nodes None |> Option.get in
+    ignore (Native_embed.text_changed field "Beta");
+    ignore (Native_embed.navigate_next field);ignore (Native_embed.submit field);
+    check "actual native field input, arrows and submit keep their selected result" (!chosen=["Beta"]);
+    ignore (Lui_app.send app (Action.Navigate_to Model.Journals));ignore (Lui_app.flush app);
+    suspended false;
+    check "native dismissal does not replay its pre-open prefix" (not (key "l"));
+    ignore (key "t");
+    check "fresh native browse sequences dispatch after property scope disposal" (key "l"))
+
 let native_cards_shortcut_publication () =
   let prior_app = !Native_embed.current_app and prior_last = !Native_embed.last_native_keymap
   and prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
@@ -448,7 +516,7 @@ let native_cards_shortcut_publication () =
     let expect_publication label cards =
       !(Native_embed.publish_native_keymap) ();
       check label (match !Native_embed.last_native_keymap with
-        | Some (owner,_,_,_,_,_,active) -> owner==app && active=cards | None -> false) in
+        | Some (owner,_,_,_,_,_,active,_) -> owner==app && active=cards | None -> false) in
     check "closed cards have no native modal subscriptions"
       (List.for_all (fun id -> strings "stroke" id=[]) Cards_state.shortcut_ids);
     Cards_state.open_modal state None;
@@ -1104,7 +1172,7 @@ let native_block_click_mounts_shared_editor () =
     let expect_selection_keymap label expected =
       !(Native_embed.publish_native_keymap) ();
       check label (match !Native_embed.last_native_keymap with
-        | Some (owner, _, _, _, _, selection, _) -> owner == app && selection = expected
+        | Some (owner, _, _, _, _, selection, _, _) -> owner == app && selection = expected
         | None -> false) in
     let node = Hashtbl.fold (fun id props found ->
       if Lui_protocol.Property_map.find_opt Lui_protocol.AccessibilityIdentifier props
@@ -3816,6 +3884,7 @@ let () =
   native_file_request_lifetimes ();
   native_entry_admission ();
   editor_keyboard_capture_order ();
+  native_property_shortcut_publication ();
   native_cards_shortcut_publication ();
   native_worker_admission ();
   native_worker_update_identity ();

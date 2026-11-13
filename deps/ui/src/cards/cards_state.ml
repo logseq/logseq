@@ -381,6 +381,7 @@ let shortcut_ids =
   ["cards/toggle-answers"; "cards/again"; "cards/hard"; "cards/good"; "cards/easy"]
 
 let card_keys = Keymap_data.chord ()
+let card_key_admission = ref (-1)
 
 let close st =
   Keymap_data.reset_chord card_keys;
@@ -519,10 +520,16 @@ let advance_phase st =
 (* cljs shortcut.handler/cards: s toggles answers, 1-4 click the
    rating buttons (visible when next-phase = :init) *)
 let on_keydown ev st =
+  let admission = Keyboard_capture.shortcut_revision () in
+  if !card_key_admission <> admission then begin
+    Keymap_data.reset_chord card_keys;
+    card_key_admission := admission
+  end;
   let editing = Editor_state.editing () <> None
     || Option.fold ~none:false ~some:(fun target -> target.Ui_services.closest
          "input, textarea, select, [contenteditable]" <> None) ev.Ui_services.target in
-  if editing || ev.Ui_services.composing || not (Runtime.signal_get st.open_)
+  if Keyboard_capture.shortcuts_suspended ()
+     || editing || ev.Ui_services.composing || not (Runtime.signal_get st.open_)
   then Keymap_data.reset_chord card_keys
   else if not ev.Ui_services.default_prevented then
     let matched = Keymap_data.match_event card_keys

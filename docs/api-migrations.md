@@ -63,6 +63,34 @@ recording-DOM lifecycle, including repeated activation, unrelated refresh/drag
 and stale-owner refusal. Actual AppKit wheel, Help/shortcut navigation and
 paint qualification remain a separate release gate.
 
+## Properties workflows own their local keyboard interaction
+
+Mounted Properties dialogs and shared property selectors now suspend application
+shortcuts for their scope, matching frozen master's `use-disable-all-shortcuts!`
+admission. For example, Cmd/Ctrl-P and Cmd/Ctrl-K inside an open property chooser
+no longer replace the chooser or open Search over it. The same owner covers
+native closed-value selectors, node selectors and property type/value phases.
+Trigger buttons and unrelated popovers do not suspend shortcuts.
+
+Fields retain text entry, selection, native clipboard/undo, navigation, submit
+and local dismissal. Exclusive shortcut recording still takes precedence.
+Nested or replacement selectors release only their own mounted scope; application
+shortcuts return after the final owner closes. A sequence begun before a
+workflow opens must be started again after it closes.
+
+The native publisher retires application bindings using the existing empty
+binding list, including palette/selection-derived keys, and restores them on
+owner disposal. The OCaml event gate independently refuses queued application
+shortcuts without preventing local defaults. The wire shape, configured key
+strings and LUI constructors are unchanged. Downstream callers require no API
+migration: continue using `Properties_select.view` or the existing property
+workflow openers; do not add application shortcut interception to their fields.
+
+Source regressions cover mounted shared selectors on recording backend profiles,
+scope replacement and recorder coexistence, actual native keyboard entry and
+publication, and NSH provider binding retirement/local submit/cancel.
+These regressions are authored here; execution is recorded separately.
+
 ## Card answer keys stop when the answer control is absent
 
 The Cards answer shortcut (default S, or its configured replacement) now
