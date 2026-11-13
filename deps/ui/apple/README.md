@@ -147,7 +147,9 @@ the public icon registry. Images load asynchronously from graph assets,
 bundled resources, HTTP(S) or base64 data URIs, then answer pending dimension
 queries. Audio/video use AVKit; iframe embeds use an isolated WKWebView with
 native external-link handling. Raw tables use a horizontally scrollable
-SwiftUI grid. Native scroll requests still require a mounted scroll container.
+SwiftUI grid. Scroll requests use the public retained-node scroll APIs and
+wait for their native viewport probes through frame reports. Requests keep
+absolute positioning before a later reveal and discard recycled node targets.
 Unsupported presentation mutations and raw SVG/canvas widgets return a
 structured `platform-error` and log `UNSUPPORTED`.
 

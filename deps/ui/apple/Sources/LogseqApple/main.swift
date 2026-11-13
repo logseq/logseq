@@ -76,6 +76,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
             self.services.frames = frames
             self.services.perform {
                 try self.services.editorGeometry.flush()
+                self.services.scrolling.flush()
                 try self.services.flushImageSizes()
                 try self.input?.afterFrame()
             }

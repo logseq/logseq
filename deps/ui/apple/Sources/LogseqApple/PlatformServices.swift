@@ -34,6 +34,7 @@ final class PlatformServices {
     @ObservationIgnored private(set) var parents: [Int: Int] = [:]
     @ObservationIgnored private(set) var children: [Int: [Int]] = [:]
     @ObservationIgnored lazy var editorGeometry = EditorGeometry(services: self)
+    @ObservationIgnored lazy var scrolling = NativeScrolling(services: self)
     @ObservationIgnored var decodedImageSizes: [Int: CGSize] = [:]
     @ObservationIgnored var pendingImageSizes: [Int: UInt64] = [:]
     @ObservationIgnored private var menuActions: [MenuAction] = []
@@ -66,6 +67,7 @@ final class PlatformServices {
     // This mirror contains host presentation metadata only; OCaml owns documents.
     func resetPresentation() {
         editorGeometry.clear()
+        scrolling.clear()
         decodedImageSizes.removeAll(); pendingImageSizes.removeAll()
         nodes.removeAll(); parents.removeAll(); children.removeAll(); views.removeAll(); frames.removeAll(); incarnations.removeAll()
         editors.removeAll(); focusIntents.removeAll()
@@ -161,7 +163,7 @@ final class PlatformServices {
     func rect(_ id: Int) -> CGRect? {
         if let view = views[id]?.value, let content = window?.contentView, view.window != nil {
             let r = view.convert(view.bounds, to: content)
-            return CGRect(x: r.minX, y: content.bounds.height - r.maxY, width: r.width, height: r.height)
+            return CGRect(x: r.minX, y: content.isFlipped ? r.minY : content.bounds.height - r.maxY, width: r.width, height: r.height)
         }
         return frames[id]
     }
@@ -381,11 +383,10 @@ final class PlatformServices {
             else { throw HostError("Node is not a native text control") }
         case "set-scroll-top":
             let top: Double = try required(request, "top")
-            guard let scroll = target as? NSScrollView ?? target?.enclosingScrollView else { throw HostError("Native scroll container is unavailable") }
-            scroll.contentView.scroll(to: NSPoint(x: scroll.contentView.bounds.minX, y: top)); scroll.reflectScrolledClipView(scroll.contentView)
+            guard top.isFinite, nodes[id]?["kind"] as? String == "scroll" else { throw HostError("set-scroll-top requires a scroll node and finite offset") }
+            scrolling.request(id, top: top)
         case "scroll-into-view", "scroll-to-node", "scroll-row-into-view":
-            guard let target else { throw HostError("Native scroll target is unavailable") }
-            target.scrollToVisible(target.bounds)
+            scrolling.request(id, scroller: resolve(request["scroller"]))
         case "natural-size":
             if let size = decodedImageSizes[id] ?? backend?.naturalImageSize(nodeID: id) ?? (target as? NSImageView)?.image?.size {
                 try reply("node-natural-size", ["nodeId": id, "width": size.width, "height": size.height])
