@@ -1,5 +1,34 @@
 # API migrations
 
+## Unclosed inline delimiters reuse their parse-owned suffix search
+
+The existing `Render_inline` matcher now routes hash-page references, image
+separators and closes, HTML closes and date closes through the same
+`substring_finder` already owned by each parse/token scan. A failed suffix
+search is reused for later opener positions rather than rescanning the
+remaining document for every unclosed opener. No global cache, source rewrite,
+escaping change, nesting change, constructor, wire or event change is added.
+
+The shared editor regression checks 10000 repeated unclosed openers per family
+remain exactly one Plain run with unchanged bytes and metadata. It also checks
+that the actual matcher routes a bounded number of delimiter requests per
+opener through its supplied finder, verifies cached found/missing search
+boundaries and parse isolation, and compares cached token offsets/specifications
+against raw searches on closed, malformed, escaped and nested examples.
+Request counters are not character-visit measurements or UI latency results.
+Ordinary `parse`, `plain_text`, `match_tokens` and editor callers need no
+migration. Direct callers of the internal matcher helpers `try_hash`,
+`try_image`, `try_lt`, `try_date` or `try_html_tag` must now supply the same
+scan-owned `~find` argument already required by `try_match` / `try_bracket`:
+
+```ocaml
+let find = Render_inline.substring_finder source in
+Render_inline.try_image ~find source offset
+```
+
+Retain that finder only for its immutable source and scan; do not share it with
+a replacement source or another parse.
+
 ## Adjacent editor plain runs merge with linear copying
 
 `Edit_runs.merge_plains` now buffers each contiguous same-class Plain group

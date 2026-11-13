@@ -1413,9 +1413,9 @@ let rec parse ?(refs = []) ?(self = "") s =
 and try_match ~find ~refs ~self s i : (t * int * run_spec) option =
   match s.[i] with
   | '[' -> try_bracket ~find ~refs ~self s i
-  | '#' -> try_hash ~refs ~self s i
+  | '#' -> try_hash ~find ~refs ~self s i
   | '(' -> try_paren s i
-  | '!' -> try_image s i
+  | '!' -> try_image ~find s i
   | '`' -> try_code s i
   | '*' -> try_star ~refs ~self s i
   | '_' -> try_uscore ~refs ~self s i
@@ -1424,7 +1424,7 @@ and try_match ~find ~refs ~self s i : (t * int * run_spec) option =
   | '=' -> try_eq ~refs ~self s i
   | '$' -> try_math s i
   | '{' -> try_macro ~refs ~self s i
-  | '<' -> try_lt ~refs ~self s i
+  | '<' -> try_lt ~find ~refs ~self s i
   | ':' -> try_emoji s i
   | 'h' -> try_url s i
   | '\n' -> Some (text ~value:"\n" [], 1, Rs_plain)
@@ -1667,9 +1667,9 @@ and try_hiccup ~refs ~self s i =
 (* #[[page]] / #tag *)
 
 (* #[[page]] / #tag *)
-and try_hash ~refs ~self s i =
+and try_hash ~find ~refs ~self s i =
   if Str_util.starts_at s i "#[[" then
-    match find_sub s (i + 3) "]]" with
+    match find (i + 3) "]]" with
     | j when j > i + 3 ->
         let inner = sub s (i + 3) (j - i - 3) in
         Some
@@ -1723,11 +1723,11 @@ and try_paren s i =
   None
 
 (* ![alt](src) *)
-and try_image s i =
+and try_image ~find s i =
   if Str_util.starts_at s i "![" then
-    match find_sub s (i + 2) "](" with
+    match find (i + 2) "](" with
     | j when j >= i + 2 -> (
-        match find_sub s (j + 2) ")" with
+        match find (j + 2) ")" with
         | k when k > j + 2 ->
             let alt = sub s (i + 2) (j - i - 2) in
             let src = sub s (j + 2) (k - j - 2) in
@@ -1862,11 +1862,11 @@ and try_macro ~refs ~self s i =
   else None
 
 (* <tag>x</tag> / <day> / <br> *)
-and try_lt ~refs ~self s i =
-  match try_date s i with
+and try_lt ~find ~refs ~self s i =
+  match try_date ~find s i with
   | Some hit -> Some hit
   | None -> (
-      match try_html_tag ~refs ~self s i with
+      match try_html_tag ~find ~refs ~self s i with
       | Some hit -> Some hit
       | None ->
           if Str_util.starts_at s i "<br>" then
@@ -1876,14 +1876,14 @@ and try_lt ~refs ~self s i =
           else None)
 
 (* <2026-09-27 Sun ...> — date starting with a digit *)
-and try_date s i =
+and try_date ~find s i =
   if i + 10 < String.length s
      && is_digit s.[i + 1] && is_digit s.[i + 2] && is_digit s.[i + 3]
      && is_digit s.[i + 4] && s.[i + 5] = '-' && is_digit s.[i + 6]
      && is_digit s.[i + 7] && s.[i + 8] = '-' && is_digit s.[i + 9]
      && is_digit s.[i + 10]
   then
-    match find_sub s (i + 10) ">" with
+    match find (i + 10) ">" with
     | j when j > i + 10 ->
         Some
           ( timestamp_text_el ~literal:(sub s i (j + 1 - i))
@@ -1893,7 +1893,7 @@ and try_date s i =
   else None
 
 (* <u>x</u> <ins>x</ins> etc — small whitelist *)
-and try_html_tag ~refs ~self s i =
+and try_html_tag ~find ~refs ~self s i =
   let open_tags =
     [ "u"; "ins"; "del"; "s"; "mark"; "b"; "i"; "em"; "strong"; "code"
     ; "sup"; "sub"; "small"; "kbd" ]
@@ -1902,7 +1902,7 @@ and try_html_tag ~refs ~self s i =
     let open_len = String.length t + 2 in
     if Str_util.starts_at s i ("<" ^ t ^ ">") then
       let close = "</" ^ t ^ ">" in
-      match find_sub s (i + open_len) close with
+      match find (i + open_len) close with
       | j when j >= i + open_len ->
           let inner = sub s (i + open_len) (j - i - open_len) in
           let dom_tag = match t with "ins" -> "u" | "s" -> "del" | x -> x in

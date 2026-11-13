@@ -133,6 +133,77 @@ let test_plain_merge () =
   check "unmerged singleton retains its original record"
     (match R.merge_plains [singleton] with [r] -> r == singleton | _ -> false)
 
+(* Route repeated failed delimiters through the actual parse-owned finder.
+   Counts describe matcher search requests, not hidden character-visit timing. *)
+let test_unclosed_inline_search () =
+  let repeated count chunk =
+    let buffer = Buffer.create (count * String.length chunk) in
+    for _ = 1 to count do Buffer.add_string buffer chunk done;
+    Buffer.contents buffer in
+  List.iter (fun (label, chunk, expected_patterns) ->
+    let count = 512 in
+    let source = repeated count chunk in
+    let cached = Render_inline.substring_finder source in
+    let requests = Hashtbl.create 4 in
+    let find offset pattern =
+      Hashtbl.replace requests pattern
+        (1 + Option.value (Hashtbl.find_opt requests pattern) ~default:0);
+      cached offset pattern in
+    for i = 0 to count - 1 do
+      check (label ^ " unmatched opener remains literal")
+        (match Render_inline.try_match ~find ~refs:[] ~self:"" source
+           (i * String.length chunk) with None -> true | Some _ -> false)
+    done;
+    List.iter (fun pattern ->
+      eqi (label ^ " routes each delimiter request through the owned finder") count
+        (Option.value (Hashtbl.find_opt requests pattern) ~default:0)) expected_patterns;
+    eqi (label ^ " has a bounded number of routed patterns")
+      (List.length expected_patterns) (Hashtbl.length requests);
+    let large = repeated 10000 chunk in
+    check (label ^ " adversarial source keeps exactly one byte-exact Plain run")
+      (match R.runs large with
+       | [run] -> run.R.kind = R.Plain && run.start_off = 0
+           && run.end_off = String.length large && run.text = large
+           && run.reveal = (0, String.length large) && run.cls = "" && run.display = ""
+       | _ -> false))
+    ["hash reference", "#[[missing ", ["]]"]
+    ; "image separator", "![missing ", ["]("]
+    ; "image close", "![x](missing ", ["]("; ")"]
+    ; "HTML close", "<u>missing ", ["</u>"]
+    ; "date close", "<2026-11-13 missing ", [">"]];
+  (* Cache hits must preserve found-position boundaries, earlier queries,
+     independent needles and independent parse ownership. *)
+  let source = "x]] y]]" in
+  let find = Render_inline.substring_finder source in
+  List.iter (fun offset ->
+    eqi "cached delimiter result matches a fresh search at every boundary"
+      (Render_inline.find_sub source offset "]]") (find offset "]]"))
+    [0; 1; 2; 3; 5; 6; 7; 0; 3];
+  eqi "failed needle does not hide another delimiter" (-1) (find 0 "absent");
+  eqi "other needle retains its own result" 5 (find 3 "]]");
+  eqi "a separate parse does not inherit a previous failed search" 0
+    ((Render_inline.substring_finder "absent") 0 "absent");
+  (* Compare token offsets and specifications against uncached searches.
+     Closures are deliberately excluded; matching does not mount views. *)
+  List.iter (fun source ->
+    let raw offset pattern = Render_inline.find_sub source offset pattern in
+    let rec scan offset acc =
+      if offset >= String.length source then List.rev acc else
+      match Render_inline.try_match ~find:raw ~refs:[] ~self:"" source offset with
+      | None -> scan (offset + 1) acc
+      | Some (_, length, tok_spec) ->
+          scan (offset + length)
+            ({Render_inline.tok_start=offset; tok_stop=offset + length; tok_spec} :: acc) in
+    check "cached matching preserves raw token offsets and specs"
+      (Render_inline.match_tokens source = scan 0 []);
+    check_runs "cached nested/escaped inline source" source)
+    ["#[[one]] #[[]] #[[two]] tail"
+    ; "![a](x.png) ![](y.pdf) ![broken]( tail"
+    ; "<u>a <b>b</b> c</u> <ins>x</ins> <s>y</s> <br>"
+    ; "\\![a](x.png) \\#[[tag]] \\<u>x</u>"
+    ; "<2026-11-13 Fri> then <2026-11-14 Sat>"
+    ; "<u>unclosed <b>closed</b> <u>still unclosed"]
+
 (* ---------- reveal ---------- *)
 
 let test_reveal () =
@@ -424,6 +495,7 @@ let test_wrap_affinity () =
   check "ordinary movement resets affinity" (moved.M.caret_affinity = M.Downstream)
 
 let run () =
+  test_unclosed_inline_search ();
   test_plain_merge ();
   test_wrap_affinity ();
   test_source_replacement ();
