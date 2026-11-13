@@ -167,3 +167,95 @@ retaining artifact identity, process identities, OS counters, GC counters and
 actual mounted-cell counts. Until then, report the values above as historical
 controls and leave the integrated release and picker memory improvement
 unqualified.
+
+## Standalone Release picker measurement — November 13, 2026
+
+This later measurement is separate from the historical November 12 controls
+above and the earlier standalone table linked at the start of this report.
+Those observations and their artifact identities remain unchanged. The new
+session measured the actual published Rust-only executable and its release
+OCaml library, not a mixed development UI host or the NSH TSX test driver.
+
+The exact measured sources were:
+
+- App: `2f96a1d94d54ad87cfad99a13b4ce8a149919034`.
+- LUI: `f29b2473621f7a07293bbf884f135d22126d4928`.
+- NSH: `adc186db7213f3ccd1eacaa836cc721e9779fd14`.
+- Rust and OCaml build profiles: `release`.
+- Executable SHA-256:
+  `4a9e6e479eb7edeb4c6ed638b59375ef20c7f51c4ef8013157b6279910578b8b`.
+- OCaml library SHA-256:
+  `723fdc1b53a01e60612e41ce9b62fae1e1cf8efe56d2327f2e128becfdcb9324`.
+- DB-worker SHA-256:
+  `5404762a8ccd9b5987c0ab00fc8455000e428f0ac652a5e55166b20ec0ba1b50`.
+
+The recorder verified the actual release receipt and exact source revisions,
+launched the standalone executable with private startup-preflight storage and
+credentials, and checked the frontend and worker against that owned session.
+It sampled `vmmap -summary` physical footprint for frontend PID 25853 and its
+single owned worker PID 25888. The baseline frontend sample began 10.015 seconds
+after launch; the separately collected worker sample began at 10.858 seconds.
+The decimal values below preserve `vmmap`'s rounded `M` observations as MiB;
+they are not exact-byte OS counters, RSS, virtual address space or live OCaml
+allocation measurements.
+
+| Phase | Frontend footprint, MiB | Frontend lifetime peak, MiB | Worker footprint, MiB | Worker lifetime peak, MiB | Mounted picker rows / cells | Full source items / rows |
+| --- | ---: | ---: | ---: | ---: | --- | --- |
+| Baseline, ten seconds after launch | 94.8 | 95.1 | 39.5 | 39.7 | 0 / 0 | Picker closed |
+| Emojis, first visit | 120.6 | 121.6 | 39.6 | 39.7 | 15 / 135 | 1,870 / 208 |
+| Icons, first visit | 127.8 | 128.1 | 39.6 | 39.7 | 15 / 135 | 6,200 / 689 |
+| Emojis, second visit | 127.3 | 129.9 | 39.6 | 39.7 | 15 / 135 | 1,870 / 208 |
+| Icons, second visit | 128.5 | 129.9 | 39.6 | 39.7 | 15 / 135 | 6,200 / 689 |
+
+The independently sampled process footprints sum to approximately 134.3 MiB
+at baseline and 168.1 MiB at the last sample. These sums are not a simultaneous,
+de-duplicated system memory measurement. Every open-picker observation retained
+the full dataset while materializing only indices 0–14, with a parent-bounded
+virtual viewport. Canonical picker node counts were respectively 320, 321, 320
+and 321. This bounds materialization at these sampled positions; it is not a
+measurement of scrolling or of every possible picker state.
+
+The read-only frontend `gc-stats` and worker `/healthz` diagnostics reported
+8-byte words. Major capacity and the current query domain's minor limit are
+reported separately below. They are included within process memory, must not
+be added to physical footprint, and do not count live object bytes or all
+domains' minor heaps. The worker values were identical at all five phases.
+
+| Phase | Frontend major capacity, bytes | Worker major capacity, bytes | Frontend current-domain minor limit, bytes | Worker current-domain minor limit, bytes |
+| --- | ---: | ---: | ---: | ---: |
+| Baseline | 6,301,704 | 9,763,936 | 16,777,216 | 16,777,216 |
+| Emojis, first visit | 11,067,416 | 9,763,936 | 16,777,216 | 16,777,216 |
+| Icons, first visit | 10,286,408 | 9,763,936 | 16,777,216 | 16,777,216 |
+| Emojis, second visit | 14,966,616 | 9,763,936 | 16,777,216 | 16,777,216 |
+| Icons, second visit | 9,391,248 | 9,763,936 | 16,777,216 | 16,777,216 |
+
+Only two Emoji/Icon tab cycles were recorded, using existing native-controller
+presses. There were no screenshots, forced collections or compaction requests;
+all reported compaction counters were zero. This short default-Demo session
+does not establish long-term leak freedom, populated-graph memory, physical
+hardware input or native wheel delivery. The installed user app was not used.
+The recorder's final `complete.json` reports all five phases completed, no
+error and no cleanup or freshness errors.
+
+The ignored evidence directory is
+`deps/ui/_build/nsh-picker-final-memory/release-revisions-kf4x5_az/`.
+It retains the verified `source-build-receipt.json`, source/artifact hashes,
+per-process raw vmmap reports, frontend GC samples, worker health/GC samples,
+canonical trees, ownership and cleanup records. Evidence digests:
+
+| File | SHA-256 |
+| --- | --- |
+| `measurements.json` | `49c9e7c2259f8f75ef7a6679c0dc539b0adb2fb8a28c1b2bfdb759bf3f99f205` |
+| `sources.json` | `47da5165f802530f1948afe2637b1847651e31efd872882083d838a5a29057c1` |
+| `source-build-receipt.json` | `a7aaeccf164d7e3559f975b8dd42b50961ef5ddb45cf3465a74fefc10f0dfac0` |
+| `complete.json` | `1ebb391b4282f6169e1f414ed713b5e2698550e76fa92d24e5affb99f7dd0ca2` |
+
+Separately, the actual AppKit picker state-change gate at this same application
+checkpoint passed: `/tmp/logseq-intrinsic-owner-native-picker-states.log`,
+private evidence `logseq-picker-wheel.BEAhra`. Its public native-wheel scenario
+checks end-of-list tab switches, short and empty filters followed by clearing,
+and color changes at the icon-list end, with visible target bounds inside the
+328-point picker viewport and no backend diagnostic. It uses the mixed native
+test host for input delivery and is interaction evidence, not an additional
+standalone memory sample. No new compiler, application launch or test was run
+to transcribe this report.
