@@ -399,3 +399,16 @@ That failure is not a complete pass: the corrected native scenario must prove
 that the new editor belongs to the real comment area and uses native typing,
 while keeping backend errors fatal. The earlier fixture expectation is
 corrected to match master rather than deleting the failure condition.
+
+## Card answer-key availability correction
+
+Master `extensions/srs/handler.cljs` implements S by clicking only the rendered
+card-answers control. The current handler previously called advance_phase even
+when rating controls had replaced that button, allowing a second S to hide the
+answer. The candidate shares `answer_button_available` between the actual
+Cards_view condition and keyboard handler, also requiring a current card.
+Default/configured keys keep the full cloze sequence and stop at show-answer;
+explicit button/advance APIs and all native publication remain unchanged.
+Actual native-archive regressions check these phases and a subsequent real
+rating-operation batch. Private AppKit cases must independently demonstrate
+second-S stability and persisted ratings before that boundary is qualified.

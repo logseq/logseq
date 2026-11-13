@@ -214,7 +214,7 @@ let rec card_view st b phase =
       (row ~key:"actions" ~style_class:"ls-card-actions"
         ~margin_top:32 ~main:`center ~cross:`start
         ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
-        [ (if np = "show-cloze" || np = "show-answer" then
+        [ (if Cards_state.answer_button_available ~cloze phase then
              (* cljs card-answers is a compact secondary sm button with
                 a kbd shortcut hint — no accent fill/border *)
              Ui_components.button ~key:"answers" ~accessibility_identifier:"card-answers"

@@ -395,6 +395,9 @@ let sparse_feedback_materializes_while_held_through_actual_ffi () =
 let native_cards_shortcut_publication () =
   let prior_app = !Native_embed.current_app and prior_last = !Native_embed.last_native_keymap
   and prior_model = !Runtime.read_model and prior_flush = !Runtime.app_flush
+  and prior_worker = !Runtime.worker and prior_due_count = !Cards_state.Due_count.st
+  and prior_save = !Outliner_ops.pending_save and prior_save_ready = !Outliner_ops.pending_save_ready
+  and prior_save_timer = !Outliner_ops.save_timer
   and prior_cards = !Cards_state.st_ref and prior_editor = !Editor_state.st
   and prior_palette = !Cmdk_state.latest_st
   and prior_palette_cache = !Native_embed.last_native_palette_view and prior_cloze = !Render_inline.cloze_reveal_all
@@ -407,7 +410,8 @@ let native_cards_shortcut_publication () =
   let backend : Lui_protocol.backend = {
     backend_profile=Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.NshHost;
     apply_batch=(fun _ -> true)} in
-  Cards_state.st_ref:=None;Editor_state.st:=None;Cmdk_state.latest_st:=None;
+  Cards_state.st_ref:=None;Editor_state.st:=None;Cmdk_state.latest_st:=None;Cards_state.Due_count.st:=None;
+  Outliner_ops.pending_save:=None;Outliner_ops.pending_save_ready:=None;Outliner_ops.save_timer:=0;
   Keymap_data.user_shortcuts:=Keymap_data.Command_map.empty;
   incr Keymap_data.shortcut_revision;Keymap_data.cached_items:=None;
   let app=Lui_app.create backend Model.initial (fun model (_ : Action.t) -> model)
@@ -415,6 +419,9 @@ let native_cards_shortcut_publication () =
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose app);Native_embed.current_app:=prior_app;
     Native_embed.last_native_keymap:=prior_last;Runtime.read_model:=prior_model;Runtime.app_flush:=prior_flush;
+    Runtime.worker:=prior_worker;Cards_state.Due_count.st:=prior_due_count;
+    Outliner_ops.pending_save:=prior_save;Outliner_ops.pending_save_ready:=prior_save_ready;
+    Outliner_ops.save_timer:=prior_save_timer;
     Cards_state.st_ref:=prior_cards;Editor_state.st:=prior_editor;Cmdk_state.latest_st:=prior_palette;
     Native_embed.last_native_palette_view:=prior_palette_cache;
     Render_inline.cloze_reveal_all:=prior_cloze;
@@ -457,13 +464,17 @@ let native_cards_shortcut_publication () =
     expect_publication "configured modal shortcuts republish from their existing revision" true;
     check "modal publication uses configured keys instead of hardcoded S"
       (strings "stroke" "cards/toggle-answers"=["alt+q"]);
-    let key ?(composing=false) ?(prevented=false) ?target key =
-      {Ui_services.x=0.;y=0.;shift=false;meta=false;ctrl=false;alt=true;composing;
+    let key ?(composing=false) ?(prevented=false) ?(alt=true) ?target key =
+      {Ui_services.x=0.;y=0.;shift=false;meta=false;ctrl=false;alt;composing;
        key=Some key;key_char=None;buttons=0;button=0;repeat=false;movement_x=0.;movement_y=0.;
        default_prevented=prevented;target;touches=[];detail=(fun _ -> None);detail_json=(fun _ -> None);
        clipboard_get=(fun _ -> "");clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
        clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
        prevent_default=(fun () -> ());stop_propagation=(fun () -> ());stop_immediate=(fun () -> ())} in
+    let question={ (Model.empty_block ~uuid:"45678901-1234-4abc-8def-000000000001"
+      ~title:"Native card question" ~is_page:false) with
+      Model.block_db_id=Some 701;block_tag_idents=["logseq.class/Card"] } in
+    Runtime.signal_set state.Cards_state.cur (Some question);
     Cards_state.on_keydown (key ~composing:true "q") state;
     Cards_state.on_keydown (key ~prevented:true "q") state;
     check "composition and earlier capture suppress the actual modal handler"
@@ -471,11 +482,71 @@ let native_cards_shortcut_publication () =
     Cards_state.on_keydown (key "q") state;
     check "published configured key reaches the real card phase handler"
       (Runtime.signal_get state.Cards_state.phase="show-answer");
+    Cards_state.on_keydown (key "q") state;
+    check "a repeated configured answer key cannot hide the displayed answer"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
     let base=Ui_services.dom_body () in
     let rec input={base with editable=(fun () -> true);closest=(fun _ -> Some input)} in
     Cards_state.on_keydown (key ~target:input "q") state;
     check "a separate input keeps its key rather than advancing the card"
       (Runtime.signal_get state.Cards_state.phase="show-answer");
+    Keymap_data.save_shortcut "cards/toggle-answers" None;
+    Cards_state.set_phase state "init";
+    let s=key ~alt:false "s" in
+    Cards_state.on_keydown s state;
+    check "actual default S advances a question to its answer"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
+    Cards_state.on_keydown s state;
+    check "second S leaves the actual answer and rating phase unchanged"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
+    Runtime.signal_set state.Cards_state.cur
+      (Some {question with Model.block_title="Native {{cloze hidden}} card"});
+    Cards_state.set_phase state "init";
+    Cards_state.on_keydown s state;
+    check "cloze S preserves the intermediate show-cloze step"
+      (Runtime.signal_get state.Cards_state.phase="show-cloze");
+    Cards_state.on_keydown s state;
+    check "next cloze S reveals the full answer"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
+    Cards_state.on_keydown s state;
+    check "third cloze S cannot cycle the rating phase back to init"
+      (Runtime.signal_get state.Cards_state.phase="show-answer");
+    let writes=ref [] in
+    let card_uuid=Option.get question.Model.block_uuid in
+    let worker : Worker_client.t={invoke_fn=(fun name args ->
+      match name,args with
+      | "thread-api/pull",[Wire.String "cards-key-fixture";Wire.String _;Wire.Int 701] ->
+          Js.Promise.resolve (Wire.Map [Wire.kw "block/uuid",Wire.Uuid card_uuid;
+            Wire.kw "block/created-at",Wire.Int64 (Int64.of_float (Ui_services.time_now ()))])
+      | "thread-api/apply-outliner-ops",[Wire.String "cards-key-fixture";operations;_] ->
+          writes:=operations::!writes;Js.Promise.resolve (Wire.Map [Wire.kw "result",Wire.Nil])
+      | _ -> failwith ("Unexpected actual card shortcut request: " ^ name));
+      on_message=(fun _ _ -> ());dead=Js.Promise.liveness ();
+      capture_restore_fn=(fun () -> fun () -> Js.Promise.resolve ())} in
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "cards-key-fixture"});
+    Runtime.worker:=Some worker;
+    Runtime.signal_set state.Cards_state.cards [701];Runtime.signal_set state.Cards_state.pos 0;
+    Cards_state.on_keydown (key ~alt:false "3") state;Host.drain ();
+    check "rating after the repeated answer key still writes both actual FSRS properties once"
+      (match !writes with
+       | [operations] -> (match Wire.elems operations with
+        | [state_op;due_op] -> (match Wire.elems state_op,Wire.elems due_op with
+         | [Wire.Keyword "set-block-property";state_args],[Wire.Keyword "set-block-property";due_args] ->
+             (match Wire.elems state_args,Wire.elems due_args with
+              | [Wire.Uuid uuid;Wire.Keyword "logseq.property.fsrs/state";fsrs],
+                [Wire.Uuid due_uuid;Wire.Keyword "logseq.property.fsrs/due";_] ->
+                  uuid=card_uuid && due_uuid=card_uuid
+                  && Wire.get fsrs "logseq/last-rating"=Some (Wire.Keyword "good")
+                  && Wire.as_int (Option.get (Wire.get fsrs "reps"))=Some 1
+              | _ -> false)
+         | _ -> false) | _ -> false) | _ -> false);
+    check "rated card advances only through the existing grading completion"
+      (Runtime.signal_get state.Cards_state.pos=1 && not (Runtime.signal_get state.Cards_state.grading));
+    Runtime.read_model:=(fun () -> Lui_app.model app);Runtime.worker:=prior_worker;
+    Runtime.signal_set state.Cards_state.cur None;Cards_state.set_phase state "init";
+    Cards_state.on_keydown s state;
+    check "an empty or finished Cards view has no answer control for S"
+      (Runtime.signal_get state.Cards_state.phase="init");
     Keymap_data.save_shortcut "cards/again" (Some Keymap_data.Disabled);
     check "disabled card key is absent from native subscriptions" (strings "stroke" "cards/again"=[]);
     Cards_state.close state;

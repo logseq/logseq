@@ -502,6 +502,11 @@ let next_phase cloze phase =
   | "show-cloze" -> if cloze then "show-answer" else "init"
   | _ -> "init"
 
+let answer_button_available ~cloze phase =
+  match next_phase cloze phase with
+  | "show-cloze" | "show-answer" -> true
+  | _ -> false
+
 let cur_has_cloze st =
   match Runtime.signal_get st.cur with
   | Some b -> has_cloze b.Model.block_title
@@ -525,7 +530,12 @@ let on_keydown ev st =
     let consume () = ev.Ui_services.prevent_default (); ev.Ui_services.stop_immediate () in
     match matched with
     | Keymap_data.No_match when ev.Ui_services.key = Some "Escape" -> consume (); close st
-    | Keymap_data.Command "cards/toggle-answers" -> consume (); advance_phase st
+    | Keymap_data.Command "cards/toggle-answers" ->
+        consume ();
+        (match Runtime.signal_get st.cur with
+         | Some block when answer_button_available ~cloze:(has_cloze block.Model.block_title)
+             (Runtime.signal_get st.phase) -> advance_phase st
+         | _ -> ())
     | Keymap_data.Command command ->
         consume ();
         let np =

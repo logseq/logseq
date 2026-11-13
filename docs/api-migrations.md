@@ -1,5 +1,29 @@
 # API migrations
 
+## Card answer keys stop when the answer control is absent
+
+The Cards answer shortcut (default S, or its configured replacement) now
+advances only while a current card has the same answer-control availability
+used by `Cards_view`. A plain question advances to its answer once. A cloze
+question retains both steps: init to show-cloze, then show-answer. Once rating
+controls replace the answer control, another S leaves the answer/rating phase
+unchanged. Empty and finished views also ignore answer advancement.
+
+This matches frozen master's keyboard handler, which clicks only an existing
+`card-answers` control. The explicit answer button and `advance_phase` API keep
+their existing behavior; only the keyboard event admission is corrected. Key
+strings, configured bindings, native publication, modal/input/composition and
+application admission behavior do not change. No caller migration is needed.
+For example, pressing S,S on an ordinary question now leaves it ready for 1–4,
+instead of hiding the answer again. Cloze S,S still reveals the full answer.
+
+The native-archive regression uses actual `Cards_state.on_keydown` for default
+and configured keys, both cloze stages, repeated answer keys and empty views.
+It then drives the actual rating path against a worker boundary and verifies
+one batch containing state/due writes with Good and reps=1. This semantic
+boundary is separate from the private real-worker AppKit rating fixture; no
+physical/native persistence pass is claimed by the source change.
+
 ## Comment shortcuts save and hand off to their real reply owner
 
 `Comments_ops.ensure_for` now reuses `Editor_actions.after_pending_input` to
