@@ -239,3 +239,11 @@ CAMLprim value caml_logseq_test_ordered_callbacks_finish(value unit) {
   if (ordered_message_error) caml_failwith("Bridge order capture exceeded its bounded storage");
   CAMLreturn(result);
 }
+
+CAMLprim value caml_logseq_test_ordered_pump(value unit) {
+  CAMLparam1(unit);
+  caml_enter_blocking_section();
+  int32_t accepted = lui_ocaml_pump();
+  caml_leave_blocking_section();
+  CAMLreturn(Val_int(accepted));
+}

@@ -2766,6 +2766,7 @@ let native_click_producers () =
     check "native click producers do not also dispatch duplicate semantic presses" (!activated=0))
 
 external bridge_order_start : unit -> unit = "caml_logseq_test_ordered_callbacks_start"
+external bridge_order_pump : unit -> int = "caml_logseq_test_ordered_pump"
 external bridge_order_without_patch : unit -> unit = "caml_logseq_test_ordered_callbacks_without_patch"
 external bridge_order_finish : unit -> string list = "caml_logseq_test_ordered_callbacks_finish"
 
@@ -2786,7 +2787,9 @@ let native_platform_message_order () =
       stage:=Some step;
       Lui_elements.column
         [Lui_elements.button ~accessibility_identifier:"order-trigger"
-          ~on_press:(fun _ ->
+          ~on_press:(fun _ -> Host.enqueue (fun () ->
+            (* Async comment publication runs outside the dispatch transaction.
+               The real pump owns each completed flush before its request. *)
             let app=Option.get !app_ref in
             Signal.set step 1;ignore (Lui_app.flush app);
             let runtime=Lui_app.runtime app in
@@ -2799,7 +2802,7 @@ let native_platform_message_order () =
             Host.dom_op "click" (Printf.sprintf "{\"ref\":{\"node-id\":%d}}" node);
             Signal.set step 2;ignore (Lui_app.flush app);
             !Platform.host_request ("dom-op\n" ^ payload);
-            Signal.set step 3;ignore (Lui_app.flush app)) [];
+            Signal.set step 3;ignore (Lui_app.flush app))) [];
          reactive (fun visible -> if not visible then Lui_elements.box [] else
            Lui_elements.button ~accessibility_identifier:"order-child"
              ~text:(reactive string_of_int (Signal.value step)) [])
@@ -2828,6 +2831,10 @@ let native_platform_message_order () =
     bridge_order_start ();capture:=true;
     check "real C press entry accepts the publication-order fixture"
       (bridge_press_modifiers (Option.get !trigger) 0=1);
+    check "press only queues the async workflow before its event transaction ends"
+      (!child=None && Runtime.signal_get (Option.get !stage)=0);
+    check "real C pump completes the queued publication workflow"
+      (bridge_order_pump ()=1);
     let messages=bridge_order_finish () in capture:=false;
     check "both platform channels keep completed patches before requests and final response patches"
       (List.map (fun message -> message.[0]) messages=['P';'R';'P';'R';'P']);
