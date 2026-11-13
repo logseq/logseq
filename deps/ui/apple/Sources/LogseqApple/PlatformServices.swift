@@ -122,7 +122,17 @@ final class PlatformServices {
         return nodes.keys.sorted().first { nodes[$0]?["accessibility-identifier"] as? String == name && name != nil }
     }
     func node(at point: NSPoint) -> Int? {
-        frames.filter { $0.value.contains(point) }.min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?.key
+        let hits = frames.filter { $0.value.contains(point) }
+        // A containing descendant wins even when it overflows a shorter parent.
+        var ancestors = Set<Int>()
+        for node in hits.keys {
+            var parent = parents[node]
+            while let current = parent, ancestors.insert(current).inserted {
+                parent = parents[current]
+            }
+        }
+        return hits.lazy.filter { !ancestors.contains($0.key) }
+            .min { $0.value.width * $0.value.height < $1.value.width * $1.value.height }?.key
     }
     func node(for view: NSView) -> Int? {
         var candidate: NSView? = view

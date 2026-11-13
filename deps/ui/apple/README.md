@@ -85,8 +85,10 @@ uses ad-hoc signing, and runs `codesign --verify --deep --strict`. Move or remov
 the previous output before packaging again. Distribution signing and
 notarization are separate release steps.
 
-Set `LOGSEQ_DUMP=1` for layout diagnostics: document clicks log retained node
-frames and mounted native scroll metrics without including document text.
+Set `LOGSEQ_DUMP=1` for layout diagnostics: document mouse events log the
+incoming generation, target ancestry, containing node frames, Core default
+prevention and first-responder class, alongside mounted native scroll metrics.
+These diagnostics do not include document text.
 For a disposable graph, set `LOGSEQ_APPLE_TRACE_PATCHES=/absolute/path/patches.jsonl`
 to capture every raw patch callback in order. Each launch starts a new trace;
 the trace includes document content and should only be shared after inspection.
@@ -140,6 +142,9 @@ measures those controls and publishes their actual leading inset to OCaml.
 
 `InputRouter` preserves document pointer/mouse ordering, button state,
 default-prevention, focus loss and retained-node incarnation checks. Physical
+document targets prefer containing descendants over their ancestors, including
+children whose layout overflows a shorter parent. Unrelated containing
+candidates retain the existing minimum-area comparison. Physical
 key codes follow DOM naming independently of the active keyboard layout.
 Native Edit-menu clipboard commands enter the same document handlers before
 falling through to the first responder. Graph View and Page Graph View are

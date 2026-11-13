@@ -19,7 +19,31 @@ final class InputRouter {
     init(services: PlatformServices) { self.services = services }
 
     private func send(_ name: String, _ payload: [String: Any]) throws -> Bool {
-        try services.runtime?.document(name, payload) ?? false
+        let tracing = (name == "mousedown" || name == "mouseup" || name == "click")
+            && ProcessInfo.processInfo.environment["LOGSEQ_DUMP"] == "1"
+        var trace = tracing ? payload : [:]
+        if tracing {
+            trace["generation"] = services.backend?.generation
+            var ancestors: [Int] = []
+            var ancestor = payload["nodeId"] as? Int
+            while let node = ancestor { ancestors.append(node); ancestor = services.parents[node] }
+            trace["ancestors"] = ancestors
+            if let x = payload["clientX"] as? CGFloat, let y = payload["clientY"] as? CGFloat {
+                trace["candidates"] = services.frames.filter { $0.value.contains(CGPoint(x: x, y: y)) }
+                    .map { id, rect -> [String: Any] in ["id": id, "x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height] }
+            }
+        }
+        let prevented = try services.runtime?.document(name, payload) ?? false
+        if tracing {
+            trace["event"] = name
+            trace["prevented"] = prevented
+            trace["generation-after"] = services.backend?.generation
+            if let responder = services.window?.firstResponder {
+                trace["responder"] = String(describing: type(of: responder))
+            }
+            NSLog("Logseq Apple document input: %@", try jsonString(trace))
+        }
+        return prevented
     }
     private func keyboardTarget(in window: NSWindow? = nil) -> Int? {
         let responder = (window ?? services.window)?.firstResponder as? NSView
