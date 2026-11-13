@@ -393,18 +393,40 @@ let item_header st idx (it : Sidebar_state.item) =
    flat sequence of p.mt-4.mb-1 > b section titles and ul lists of
    li > a rows (circle markers). Links point at external docs; the
    first li is an action opening the shortcut-settings pane. *)
-let help_pane st =
+let help_pane st : t =
+ fun context parent ->
+  let native = Lui_ui.host context = P.NshHost in
+  let native_item ~key ?icon:icon_name ~on_press label =
+    Ui_components.with_props
+      [ Ui_components.Prop.font_size "0.875rem"
+      ; Ui_components.Prop.line_height "1.25rem"
+      ; Ui_components.Prop.font_weight 400
+      ; Ui_components.Prop.accessibility_label label
+      ; Ui_components.Prop.hover_background "var(--lx-nav-active)" ]
+      (list_item ~key ~style_class:"ls-help-native-item"
+         ~accessibility_identifier:("sidebar-help-" ^ key)
+         ~text:label ?icon:(Option.map Icons.name_ref icon_name)
+         ~icon_placement:`trailing
+         ~min_height:Ui_components.nav_item_height ~min_width:0
+         ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
+         ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
+         ~on_press [])
+  in
   let item_style =
     "display:list-item;list-style:circle;font-size:16px;\
      line-height:24px;margin-top:4px"
   in
   let ext_item ~key label url =
-    box ~key ~style_class:"ls-hp-item"
+    if native then native_item ~key label
+      ~on_press:(fun _ -> Ui_services.env_open_url url)
+    else box ~key ~style_class:"ls-hp-item"
       ~data_attrs:[ ("style", item_style) ]
       [ link ~url ~target:`blank ~text:label [] ]
   in
   let icon_item ~key label ic =
-    box ~key ~style_class:"ls-hp-item"
+    if native then native_item ~key ~icon:ic label
+      ~on_press:(fun _ -> Sidebar_state.open_sticky_item st "shortcut-settings")
+    else box ~key ~style_class:"ls-hp-item"
       ~data_attrs:[ ("style", item_style) ]
       [ Ui_components.button ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
           ~height:24 ~padding:0 ~main:`start ~cross:`center ~gap:4
@@ -417,7 +439,9 @@ let help_pane st =
       ]
   in
   let icon_ext_item ~key label ic url =
-    box ~key ~style_class:"ls-hp-item"
+    if native then native_item ~key ~icon:ic label
+      ~on_press:(fun _ -> Ui_services.env_open_url url)
+    else box ~key ~style_class:"ls-hp-item"
       ~data_attrs:[ ("style", item_style) ]
       [ link ~url ~target:`blank
           [ row ~cross:`center ~gap:4
@@ -425,7 +449,13 @@ let help_pane st =
               ; icon_ ~size:18 ic ] ] ]
   in
   let section key title items =
-    [ Ui_components.with_props [Ui_components.Prop.display `block]
+    if native then
+      [ heading ~key:("hpt-" ^ key) ~level:3 ~style_class:"ls-help-native-heading"
+          ~font_size:"16px" ~line_height:"24px" ~font_weight:700
+          ~foreground:"var(--ls-primary-text-color)"
+          ~margin_top:16 ~margin_bottom:4 ~value:title []
+      ; column ~key:("hpu-" ^ key) items ]
+    else [ Ui_components.with_props [Ui_components.Prop.display `block]
       (text ~key:("hpt-" ^ key) ~style_class:"ls-hp-title"
         ~font_size:"16px" ~line_height:"24px" ~font_weight:700
         ~foreground:"var(--ls-primary-text-color)"
@@ -435,10 +465,16 @@ let help_pane st =
         ~data_attrs:[ ("style", "display:block;margin-left:19.2px") ]
         items ]
   in
-  Ui_components.with_props [Ui_components.Prop.display `block]
-  (box ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
-    ~margin:0 ~margin_top:4 ~margin_left:8
-    (section "usage" (t "help/usage-title")
+  let root children =
+    if native then
+      column ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs ls-help-native"
+        ~margin_top:4 ~margin_left:8 children
+    else
+      Ui_components.with_props [Ui_components.Prop.display `block]
+        (box ~key:"help-docs" ~style_class:"help cp__sidebar-help-docs"
+          ~margin:0 ~margin_top:4 ~margin_left:8 children)
+  in
+  (root (section "usage" (t "help/usage-title")
        [ icon_item ~key:"li-shortcuts" (t "help.shortcuts/label")
            "command"
        ; ext_item ~key:"li-docs" (t "help/docs")
@@ -469,7 +505,7 @@ let help_pane st =
         [ ext_item ~key:"li-privacy" (t "help/privacy")
             "https://blog.logseq.com/privacy-policy/"
         ; ext_item ~key:"li-terms" (t "help/terms")
-            "https://blog.logseq.com/terms/" ]))
+            "https://blog.logseq.com/terms/" ])) context parent
 
 (* Both shells use one retained trigger and the same menu geometry. *)
 let help_trigger ~on_press () =

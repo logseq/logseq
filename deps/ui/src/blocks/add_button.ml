@@ -61,10 +61,14 @@ let el ?puuid ~(flags : 'a -> (bool * bool) Signal.signal) : t =
                         box ~key:"bab-bc" ~style_class:"bullet-container"
                           ~main:`center ~cross:`center ~width:16 ~height:16
                           ~corner_radius:8
-                          [ box ~key:"bab-b" ~style_class:"bullet"
+                          [ Ui_components.with_props
+                              (if Lui_ui.host context = Lui_protocol.NshHost then
+                                 [Ui_components.Prop.overflow `hidden]
+                               else [])
+                            (box ~key:"bab-b" ~style_class:"bullet"
                               ~transition:"transform 0.2s" ~width:6 ~height:6
                               ~corner_radius:999 ~opacity:1.
                               ~background:
                                 "var(--lx-gray-09, var(--ls-block-bullet-color))"
-                              [] ] ]) ] ])))
+                              []) ] ]) ] ])))
       context parent

@@ -1460,6 +1460,20 @@ let shared_block_clipping ~registry ~profile =
             (M.string_prop clipped "data-attrs"=None)
         in
         verify 2;
+        let bullets=List.filter (fun node -> class_has node "bullet") (nodes session) in
+        let block_bullets=List.filter (fun node ->
+          let attrs=P.data_attrs_decode (Option.value (M.string_prop node "data-attrs") ~default:"") in
+          match List.assoc_opt "data-blockid" attrs with
+          | Some uuid -> List.exists (fun block -> block.Model.block_uuid=Some uuid) blocks
+          | None -> false) bullets in
+        check (producer ^ " clips only the native childless bullet paint to its authored circle")
+          (List.length block_bullets=2 && List.for_all (fun node ->
+            Hashtbl.find_opt node.M.props "width"=Some (P.IntValue 6)
+            && Hashtbl.find_opt node.M.props "height"=Some (P.IntValue 6)
+            && Hashtbl.find_opt node.M.props "corner-radius"=Some (P.IntValue 999)
+            && M.children session.S.tree node.M.id=[]
+            && M.string_prop node "overflow"=
+              (if profile.P.profile_host=P.NshHost then Some "hidden" else None)) bullets);
         let contents=List.filter (fun node -> class_has node "block-content-wrapper"
           && Hashtbl.find_opt node.M.props "grow"=Some (P.FloatValue 1.)) (nodes session) in
         check (producer ^ " keeps block content selectable and its authored overflow visible")
@@ -1819,6 +1833,8 @@ let run_views ~registry ~profile ~finish =
   popup_layout_carriers ~registry ~profile;
   popup_icon_shrink_backend_policy ~registry;
   shared_block_clipping ~registry ~profile;
+  if profile.P.profile_host<>P.NshHost then
+    shared_block_clipping ~registry ~profile:{P.profile_os=P.MacOS;profile_host=P.NshHost};
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
   find_in_page_submit ~registry;

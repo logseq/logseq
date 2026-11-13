@@ -1,5 +1,21 @@
 # API migrations
 
+## NSH outliner bullet paint clips to its existing circular bounds
+
+The childless 6pt outliner and add-block bullet Boxes now use typed
+`overflow=hidden` only on NSH. Their existing 999pt radius, opacity, colors,
+dimensions and keys remain; the
+surrounding pointer/drag control is unchanged. Web, Apple/iOS and Android keep
+their previous properties. No constructor, wire field or event contract changes.
+
+A private actual AppKit matrix reproduced square cached-display paint at 6pt
+for both direct Core and LUI Renderer while the native layer already reported
+the correct 3pt radius. The same 6pt visual with clipping painted circularly.
+This projection confines only the childless visual, with no descendant, shadow
+or focus ring to clip. Downstream custom bullet controls should preserve their
+input owner and apply paint clipping to the inner visual rather than the
+larger hit target. Actual application paint remains separately qualified.
+
 ## Secondary chrome and inline references use their exact typed layout
 
 Dialog and Settings headings now apply their authored zero margin through the
@@ -3179,3 +3195,9 @@ The shared outliner, autocomplete, preview, reference-filter and flashcard produ
 This is not a CSS compatibility parser or a new LUI API. Remaining rem, percentage maximum, AlignSelf and transform requirements are recorded in `docs/agent-guide/review-probes/2026-11-13/popup-tree-typed-layout-carriers.md`. They remain explicit migration gaps; downstream callers must preserve their units and owner semantics rather than replace them with guessed pixels or host-guard away required native behavior. Explicit typed shrink remains a Web/NSH capability; this application batch does not change maintained Apple, Android or Web backend APIs.
 
 The shrink projection is explicitly scoped to WebHost/NshHost, using the existing typed float adapter with no value on SwiftUIHost/KotlinHost/GenericHost. These profiles reject explicit shrink, and retain their prior native behavior. The original `user-select:text` style carrier remains unchanged; only its adjacent overflow declaration is migrated. No new typed/inherited selection or drag policy is introduced by this application change.
+
+### NSH sidebar Help uses native actionable rows
+
+Only NSH renders sidebar Help with five semantic headings and fourteen ListItem action owners, using the existing native Button lowering and application navigation density. It keeps all thirteen external URLs, localized labels, the shortcut-settings action, trailing icons and original item keys. The existing sidebar Scroll remains the sole scroll owner. Web, Apple/iOS and Android retain the original Help tree and marker styling.
+
+Native rows use a 32px minimum, existing navigation typography and semantic colors, with growing height for content. This intentionally replaces master's circle markers and 19.2px indent on NSH; no guessed fractional geometry is substituted. Downstream Help content should reuse the producer's existing row action and outer Scroll rather than add nested links, buttons or scroll containers. See `docs/agent-guide/review-probes/2026-11-13/native-help-list-rows.md` for ownership, retained behavior and qualification limits.

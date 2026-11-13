@@ -381,6 +381,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                           if S.String_set.mem uuid selected then
                             "selected bullet"
                           else "bullet")
+                        (Ui_components.with_props
+                           (if Lui_ui.host ctx = Lui_protocol.NshHost then
+                              [Ui_components.Prop.overflow `hidden]
+                            else [])
                         (box ~key:("b-" ^ uuid)
                            ~transition:"transform 0.2s"
                            ~width:6 ~height:6 ~corner_radius:999
@@ -390,7 +394,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                            ~background:"var(--lx-gray-08, var(--ls-block-bullet-color))"
                            ~data_attrs:
                              [ ("data-blockid", uuid) ]
-                     []))
+                     [])))
             ])
         ]
     ]
