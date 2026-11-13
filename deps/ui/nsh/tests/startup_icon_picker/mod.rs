@@ -216,6 +216,64 @@ impl Choice {
     }
 }
 
+fn native_choice_layout(app: &Headless, selector: &str) -> Vec<String> {
+    let native = app.screen().layout_nodes();
+    let Some(target) = native
+        .iter()
+        .find(|node| node.test_id.as_deref() == selector.strip_prefix("id:"))
+    else {
+        return vec![format!("exact native choice {selector} is absent")];
+    };
+    let mut result = vec![format!("target={target:#?}")];
+    let mut parent = target.parent;
+    for _ in 0..24 {
+        let Some(node) = native.iter().find(|node| node.id == parent) else {
+            break;
+        };
+        result.push(format!("ancestor={node:#?}"));
+        if node.parent == node.id {
+            break;
+        }
+        parent = node.parent;
+    }
+    // Styled native Buttons can carry presses on a child of the canonical
+    // test-id host. Keep that real controller subtree as well as its clip chain.
+    for node in native
+        .iter()
+        .filter(|node| node.parent == target.id)
+        .take(12)
+    {
+        result.push(format!("direct-child={node:#?}"));
+    }
+    result
+}
+
+fn choice_failure(
+    app: &Headless,
+    agent: &Agent,
+    tab: &str,
+    expected: &Choice,
+    target: &str,
+) -> String {
+    let canonical = match agent.tree() {
+        Ok(tree) => serde_json::json!({
+            "generation":tree.get("generation"),
+            "backendError":tree.get("backend_error"),
+            "pickerMounted":picker(&tree).is_ok(),
+            "journalIconButtons":nodes(&tree).into_iter().filter(|node| class(node,"ls-page-icon-btn")).collect::<Vec<_>>(),
+            "target":nodes(&tree).into_iter().find(|node| selector(node).as_deref()==Ok(target)),
+        }),
+        Err(error) => serde_json::json!({"agentError":error}),
+    };
+    // Read-only production worker observation only after failure: no extra
+    // pre-press RPC can hide a canonical/native publication race.
+    let persisted = super::startup_rows::persisted_journal_icon();
+    format!(
+        "Picker choice failure: tab={tab}, expected={expected:?}, controller={target}, canonical={canonical}, persisted={persisted:?}, native={:#?}",
+        native_choice_layout(app, target)
+    )
+}
+
 fn bounded(app: &Headless, tree: &Value, tab: &str) -> Result<(), String> {
     let body = picker(tree)?;
     let cells = cells(body, tab).len();
@@ -457,8 +515,22 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
             .copied()
             .ok_or("final picker row has no item")?;
         let expected = Choice::from_cell(last, tab)?;
+        let chosen_cell = last.clone();
         let last = selector(last)?;
-        app.press(&last)?;
+        // This uses only the already-observed tree/screen. Do not add a wait,
+        // alternate controller or pre-press worker query to qualify selection.
+        eprintln!(
+            "BEGIN actual {tab} final choice: expected={expected:?}, controller={last}, generation={:?}, canonical={chosen_cell}, native={:#?}",
+            tree.get("generation"),
+            native_choice_layout(app, &last)
+        );
+        app.press(&last).map_err(|error| {
+            format!(
+                "{error}\n{}",
+                choice_failure(app, &agent, tab, &expected, &last)
+            )
+        })?;
+        eprintln!("DONE actual {tab} final choice controller: {last}");
         let failure = RefCell::new(None);
         wait_for_chrome(
             app,
@@ -471,7 +543,13 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
                     true
                 }
             },
-        )?;
+        )
+        .map_err(|error| {
+            format!(
+                "{error}\n{}",
+                choice_failure(app, &agent, tab, &expected, &last)
+            )
+        })?;
         if let Some(error) = failure.into_inner() {
             return Err(error);
         }
@@ -485,7 +563,13 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
                     .into_iter()
                     .any(|node| node.test_id.as_deref() == retired_picker.strip_prefix("id:"))
             },
-        )?;
+        )
+        .map_err(|error| {
+            format!(
+                "{error}\n{}",
+                choice_failure(app, &agent, tab, &expected, &last)
+            )
+        })?;
         let failure = RefCell::new(None);
         wait_for_chrome(
             app,
@@ -500,7 +584,13 @@ pub(super) fn qualify(app: &mut Headless) -> Result<(), String> {
                     true
                 }
             },
-        )?;
+        )
+        .map_err(|error| {
+            format!(
+                "{error}\n{}",
+                choice_failure(app, &agent, tab, &expected, &last)
+            )
+        })?;
         if let Some(error) = failure.into_inner() {
             return Err(error);
         }
