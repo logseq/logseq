@@ -25,7 +25,7 @@ env:
   # Qualify the authored PR head, not GitHub's temporary merge commit. Manual
   # dispatch captures the selected ref's immutable event SHA in the same owner.
   QUALIFICATION_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-  LUI_REF: fb9146338f93c5fab0892f699e9a3bc9e176d193
+  LUI_REF: f29b2473621f7a07293bbf884f135d22126d4928
   RUSTUP_TOOLCHAIN: 1.97.0
   CARGO_BUILD_JOBS: 2
   CARGO_PROFILE_RELEASE_STRIP: none
