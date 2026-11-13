@@ -192,6 +192,7 @@ let preview_images (_items : Wire.t list) : unit = ()
 (* minimal asset render — the asset extension tag carries the block
    uuid + stored file path so the Swift renderer can resolve it *)
 let block_view uuid (b : Model.block) : Lui_elements.t =
+ fun context parent ->
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let is_pdf = ext = "pdf" in
   (* TODO(component): the logseq-div extension element + its
@@ -217,8 +218,25 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            | Some url when url <> "" -> url
            | _ -> asset_source file
          in
-         Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source ~alt:file
-           ~max_height:800 []) ]
+         let media_tag =
+           if Lui_ui.host context <> Lui_protocol.SwiftUIHost then None
+           else
+             match ext with
+             | "mp3" | "ogg" | "mpeg" | "wav" | "m4a" | "flac"
+             | "wma" | "aac" -> Some "audio"
+             | "webm" when Str_util.starts_with b.Model.block_title "Audio-" ->
+                 Some "audio"
+             | "mp4" | "webm" | "mov" | "flv" | "avi" | "mkv" ->
+                 Some "video"
+             | _ -> None
+         in
+         match media_tag with
+         | Some tag ->
+             Logseq_el.el ~key:("asset-" ^ tag ^ "-" ^ uuid) ~tag
+               ~attrs:[ ("src", source); ("controls", "") ] []
+         | None ->
+             Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source
+               ~alt:file ~max_height:800 []) ] context parent
 
 let content_view = block_view
 
