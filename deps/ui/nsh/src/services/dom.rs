@@ -63,17 +63,16 @@ fn resolve(reference: &Value, renderer: &Renderer) -> Result<Option<Arc<Node>>, 
         .and_then(|id| renderer.find_by_identifier(id)))
 }
 async fn target(
-    reference: &Value,
-    known: Option<(u64, u64)>,
+    captured: Option<(u64, u64)>,
     renderer: &Renderer,
 ) -> Result<Option<Target>, String> {
-    let resolved = if let Some((id, incarnation)) = known {
+    // None records absence when the request was captured, not permission to
+    // resolve an identifier after later patches create a different owner.
+    let resolved = captured.and_then(|(id, incarnation)| {
         renderer
             .node_snapshot(id)
             .filter(|node| node.incarnation == incarnation)
-    } else {
-        resolve(reference, renderer)?
-    };
+    });
     let Some(node) = resolved else {
         return Ok(None);
     };
@@ -264,16 +263,16 @@ async fn scroll_row(
     row: (u64, u64),
     renderer: &Renderer,
 ) -> Result<Vec<PlatformEvent>, String> {
-    let scroller = target(&Value::Null, Some(scroller), renderer)
+    let scroller = target(Some(scroller), renderer)
         .await?
         .ok_or("row scroll owner is missing, retired or unmounted")?;
-    let row = target(&Value::Null, Some(row), renderer)
+    let row = target(Some(row), renderer)
         .await?
         .ok_or("row scroll target is missing, retired or unmounted")?;
     scroll_owner(&scroller.node, &row.node, renderer)?;
     let heading = if let Some(node) = group_heading(&row.node, renderer) {
         Some(
-            target(&Value::Null, Some((node.id, node.incarnation)), renderer)
+            target(Some((node.id, node.incarnation)), renderer)
                 .await?
                 .ok_or("row scroll group heading retired or unmounted")?,
         )
@@ -361,6 +360,7 @@ async fn scroll_row(
 
 /// An owned request deferred until its creating patches reach the native commit.
 /// Existing targets retain their incarnation even if their identifier is renamed.
+/// Missing generic targets stay absent; only EditorOwner permits row-owned mounting.
 pub enum CapturedRequest {
     Click {
         node: (u64, u64),
@@ -506,7 +506,7 @@ async fn handle_inner(
     } else {
         None
     };
-    let target = target(&reference, known, renderer).await?;
+    let target = target(known, renderer).await?;
     if operation == "measure-node" {
         let measurement = if let Some(target) = &target {
             target.reference.measure().await
@@ -593,14 +593,6 @@ mod tests {
     #[component]
     fn NativeDOM() -> impl IntoElement {
         let renderer = Renderer::new(|_, _| {});
-        let before_mount = Rc::new(RefCell::new(Some(
-            capture(
-                "measure-node",
-                r##"{"ref":{"#ref":"measured","measurement-id":71}}"##,
-                &renderer,
-            )
-            .unwrap(),
-        )));
         renderer
             .apply(patch(
                 1,
@@ -612,6 +604,14 @@ mod tests {
             ))
             .unwrap();
         renderer.set_root(1).unwrap();
+        let before_mount = Rc::new(RefCell::new(Some(
+            capture(
+                "measure-node",
+                r##"{"ref":{"#ref":"measured","measurement-id":71}}"##,
+                &renderer,
+            )
+            .unwrap(),
+        )));
         let status = signal("Waiting".to_owned());
         let measuring = renderer.clone();
         let retiring = renderer.clone();
@@ -703,6 +703,110 @@ mod tests {
         app.wait_for("Measured current").unwrap();
         app.press("Measure retired").unwrap();
         app.wait_for("Retired measurement rejected").unwrap();
+    }
+
+    #[component]
+    fn CapturedDOMOwners() -> impl IntoElement {
+        use lui_nsh::app::ServiceResponse;
+
+        let renderer = Renderer::new(|_, _| {});
+        renderer.apply(patch(1, json!([
+            {"op":"create-node","id":1,"kind":"column"},
+            {"op":"create-node","id":2,"kind":"box"},
+            {"op":"set-prop","id":2,"property":"accessibility-identifier","value":"reused"},
+            {"op":"insert-child","parent":1,"child":2,"index":0},
+            {"op":"create-node","id":3,"kind":"box"},
+            {"op":"set-prop","id":3,"property":"accessibility-identifier","value":"retired"},
+            {"op":"insert-child","parent":1,"child":3,"index":1},
+            {"op":"create-node","id":6,"kind":"box"},
+            {"op":"set-prop","id":6,"property":"accessibility-identifier","value":"retained"},
+            {"op":"set-prop","id":6,"property":"width","value":240},
+            {"op":"set-prop","id":6,"property":"height","value":40},
+            {"op":"insert-child","parent":1,"child":6,"index":2}
+        ]))).unwrap();
+        renderer.set_root(1).unwrap();
+        let mut deferred = Vec::new();
+        for (reference, expected) in [
+            (json!({"#ref":"created-later"}), None),
+            (json!({"node-id":4}), None),
+            (json!({"#ref":"reused"}), None),
+            (json!({"#ref":"retired"}), None),
+            (json!({"#ref":"retained"}), Some(6)),
+        ] {
+            let payload = json!({"ref":reference}).to_string();
+            let captured = capture("measure-node", &payload, &renderer).unwrap();
+            let measuring = renderer.clone();
+            deferred.push((
+                reference,
+                expected,
+                ServiceResponse::AfterCommit(Box::pin(async move {
+                    execute(captured, &measuring).await
+                })),
+            ));
+        }
+        let missing_select =
+            capture("select", r##"{"ref":{"#ref":"created-later"}}"##, &renderer).unwrap();
+        renderer.apply(patch(2, json!([
+            {"op":"remove-child","parent":1,"child":2},
+            {"op":"drop-node","id":2},
+            {"op":"create-node","id":2,"kind":"box"},
+            {"op":"set-prop","id":2,"property":"accessibility-identifier","value":"reused"},
+            {"op":"insert-child","parent":1,"child":2,"index":0},
+            {"op":"remove-child","parent":1,"child":3},
+            {"op":"drop-node","id":3},
+            {"op":"create-node","id":5,"kind":"box"},
+            {"op":"set-prop","id":5,"property":"accessibility-identifier","value":"retired"},
+            {"op":"insert-child","parent":1,"child":5,"index":1},
+            {"op":"create-node","id":4,"kind":"box"},
+            {"op":"set-prop","id":4,"property":"accessibility-identifier","value":"created-later"},
+            {"op":"set-prop","id":4,"property":"width","value":500},
+            {"op":"set-prop","id":4,"property":"height","value":40},
+            {"op":"insert-child","parent":1,"child":4,"index":3},
+            {"op":"set-prop","id":6,"property":"accessibility-identifier","value":"renamed"}
+        ]))).unwrap();
+        let status = signal("Waiting for captured DOM owners".to_owned());
+        let executing = renderer.clone();
+        spawn(async move {
+            // Match the public desktop pump's AfterCommit ordering: all later
+            // canonical patches exist before the native commit is acknowledged.
+            lui_nsh::app::wait_for_commit().await.unwrap();
+            for (reference, expected, response) in deferred {
+                let ServiceResponse::AfterCommit(future) = response else {
+                    panic!("DOM measurement must be deferred until commit")
+                };
+                let events = future.await.unwrap();
+                assert_eq!(events.len(), 1);
+                assert_eq!(events[0].operation, "node-rect");
+                let value: Value = serde_json::from_str(&events[0].payload).unwrap();
+                assert_eq!(value["ref"], reference);
+                if let Some(id) = expected {
+                    assert_eq!(value["nodeId"], id);
+                    assert_eq!(value["rect"]["width"], 240.0);
+                } else {
+                    assert!(value["rect"].is_null(), "captured owner changed: {value}");
+                    assert!(value.get("nodeId").is_none());
+                }
+            }
+            // An absent generic command remains the normal empty result. It
+            // must not select the newly mounted Box (which is not an Input).
+            assert!(
+                execute(missing_select, &executing)
+                    .await
+                    .unwrap()
+                    .is_empty()
+            );
+            status.set("Captured DOM owners preserved".into());
+        });
+        view()
+            .child(renderer.element())
+            .child(text(move || status.get()))
+    }
+
+    #[test]
+    fn after_commit_missing_targets_do_not_adopt_created_or_reused_identifiers() {
+        let mut app = Headless::start(EngineConfig::new(Root::of::<CapturedDOMOwners>())).unwrap();
+        app.wait_for("id:created-later").unwrap();
+        app.wait_for("Captured DOM owners preserved").unwrap();
     }
 
     #[component]

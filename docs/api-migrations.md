@@ -1,5 +1,26 @@
 # API migrations
 
+## NSH generic DOM requests retain absence across commit
+
+Generic native DOM services now resolve their canonical target exactly once,
+when the host captures the request. A missing target remains absent through
+`AfterCommit`: for example, `measure-node` for `{"#ref":"search"}` captured
+before the canonical search field exists returns its correlated `rect:null`
+reply even if a later patch creates that identifier before native commit.
+Other supported generic commands retain their existing empty-result behavior
+for a missing target. Retired/replaced owners cannot redirect a pending request;
+a retained owner remains valid if its identifier is renamed.
+
+Callers must publish the canonical owner before issuing its generic focus,
+selection, scrolling or measurement request. Native mounting and layout may
+still finish at commit; an existing canonical owner does not need to have a
+native view yet. Do not use a missing identifier as a request to adopt a future
+node. Intentional late block-editor creation continues through the existing
+`set-input-focus` / editor-geometry route: `EditorOwner` captures the existing
+block row and admits only its own later editor while that row remains current.
+No wire shape or constructor changes are required. Web and maintained mobile
+hosts are unchanged.
+
 ## NSH sidebar content fills the remaining viewport
 
 The left Favorites/Recent viewport and the right panel viewport now use typed
