@@ -123,3 +123,82 @@ jobs:
 
       - name: CSS build
         run: pnpm gulp:build
+
+  macos:
+    name: Apple host build (macOS)
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: System deps
+        run: brew install pkg-config gmp libffi
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+          cache-dependency-path: |
+            pnpm-lock.yaml
+            deps/db-worker/pnpm-lock.yaml
+            deps/ui/pnpm-lock.yaml
+
+      - name: Set up OCaml
+        uses: ocaml/setup-ocaml@v3
+        with:
+          ocaml-compiler: ${{ env.OCAML_VERSION }}
+          dune-cache: true
+
+      - name: Checkout lui at pinned revision
+        id: lui
+        run: |
+          lui_ref=$(sed -n 's/.*lui\.git#\([0-9a-f]\{40\}\).*/\1/p' deps/ui/scripts/install-opam-deps.sh | head -1)
+          test -n "$lui_ref"
+          git clone --no-checkout https://github.com/logseq/lui.git "$RUNNER_TEMP/lui"
+          git -C "$RUNNER_TEMP/lui" checkout "$lui_ref"
+          echo "commit=$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
+
+      - name: Restore opam switch cache
+        id: opam-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.opam
+            _opam
+          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
+          restore-keys: |
+            ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-
+
+      - name: Root pnpm deps
+        run: pnpm install --frozen-lockfile
+        env:
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
+
+      - name: opam deps (db-worker + ui)
+        run: |
+          (cd deps/db-worker && sh scripts/install-opam-deps.sh)
+          (cd deps/ui && sh scripts/install-opam-deps.sh)
+          opam install -y uri
+          opam list --pinned
+
+      - name: Save opam switch cache
+        uses: actions/cache/save@v4
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.opam
+            _opam
+          key: ${{ steps.opam-cache.outputs.cache-primary-key }}
+
+      - name: JS deps (db-worker, ui)
+        run: |
+          pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
+          pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
+
+      - name: Build Apple host
+        run: bash deps/ui/apple/build.sh

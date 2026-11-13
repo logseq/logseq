@@ -50,6 +50,26 @@ Native services compile source links to the worker's canonical codec and
 native Regexp implementation. Checkouts must preserve these symbolic links;
 Windows checkout and packaging behavior still require platform validation.
 
+## macOS desktop (SwiftUI host)
+
+`apple/` is a SwiftPM executable host that embeds the OCaml app through
+`liblogseq_ui.dylib` and renders it with `LUIAppleBackend` (SwiftUI,
+`NavigationSplitView` sidebar, native titlebar). Windows and Linux keep the
+Electron path; this host targets macOS only.
+
+```sh
+pnpm ui:apple:build    # dylib + db-worker + resources + swift release binary
+pnpm ui:apple:run      # build then launch
+pnpm ui:apple:package  # logseq-apple.app bundle (dylibbundler + ad-hoc sign)
+```
+
+The Swift and OCaml sides must pin the same LUI revision: `Package.swift`'s
+`revision` must equal the pin in `scripts/install-opam-deps.sh`, and
+`build.sh` refuses to build otherwise. Run disposable graphs against
+`LOGSEQ_ROOT_DIR`/`LOGSEQ_UI_STATE_DIR`; see `apple/README.md` for the
+packaging and diagnostics (`LOGSEQ_DUMP`, `LOGSEQ_APPLE_TRACE_PATCHES`)
+details.
+
 ## Web
 
 ```sh
