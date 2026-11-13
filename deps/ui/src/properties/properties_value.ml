@@ -456,22 +456,27 @@ let create_node prop text =
     ; W.Map [ W.Keyword "class?", W.Bool class_
             ; W.Keyword "tags", W.Array (List.map (fun uuid -> W.Uuid uuid) tags) ] ]
 
-let new_node ctx row ~close text =
-  ignore
+let new_node ctx row ~owned ~retire ~close text =
+  let refuse () = retire (); Js.Promise.resolve () in
+  if not (owned ()) then retire () else ignore
     (let* res =
        create_node (D.row_prop row) text
      in
+     if not (owned ()) then refuse () else
      match D.create_result_uuid res with
        | Some uuid -> (
+           let origin = Runtime.capture_reload_origin () in
            let* id = D.db_id_of_uuid uuid in
+           if not (owned ()
+             && Option.fold ~none:false ~some:Runtime.reload_origin_current origin)
+           then refuse () else
            match id with
            | Some id ->
                let ident =
                  D.row_ident row |> Option.value ~default:"" in
                let* _ = D.set_block_property ~block_uuid:ctx.block_uuid
                  ~ident ~value:(W.Int id) in
-               ctx.refresh ();
-               close ();
+               if owned () then (ctx.refresh (); close ()) else retire ();
                Js.Promise.resolve ()
            | None -> Js.Promise.resolve ())
        | None -> Js.Promise.resolve ())
@@ -1404,11 +1409,19 @@ let node_view ?(jump_target = true) ctx row : t =
   let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   let activate () =
     let repo = Runtime.repo () and worker = !Runtime.worker in
+    let route = Runtime.route () in
     open_value_picker anchor_id
            (fun ~alive ~close context' parent' ->
            let owned () = alive () && Runtime.repo () = repo
-             && !Runtime.worker == worker && not (Ui_services.env_publishing ()) in
+             && !Runtime.worker == worker && Runtime.route () = route
+             && not (Ui_services.env_publishing ()) in
            let retire () = close (); Js.Promise.resolve () in
+           if not (owned ()) then (
+             (* The anchor may resolve after its trigger's graph has retired.
+                Let its own key finish registration before removing it. *)
+             ignore (let* () = Js.Promise.resolve () in retire ());
+             (column []) context' parent')
+           else
            let selected = Signal.state context'.Lui_ui.ui_scheduler [] in
            let block = D.uuid_ref ctx.block_uuid in
            let prop = D.row_prop row in
@@ -1435,20 +1448,30 @@ let node_view ?(jump_target = true) ctx row : t =
                else close ();
                Js.Promise.resolve ())
            in
-           let initial, on_search =
+           let initial_items, search =
              node_items_source ~block ~prop ~on_pick
            in
+           let retire_items () = close (); Js.Promise.resolve [] in
+           let deliver task =
+             let* items = task in
+             if owned () then Js.Promise.resolve items else retire_items () in
            let initial =
              let* current = D.entity_by_uuid ctx.block_uuid in
+             if not (owned ()) then retire_items () else
              let* keys = reference_keys (Option.value (D.getf (D.untag current) ident) ~default:W.Nil) in
-             if alive () then Runtime.signal_set selected keys;
-             initial
+             if not (owned ()) then retire_items () else (
+               Runtime.signal_set selected keys;
+               deliver initial_items)
+           in
+           let on_search query =
+             if owned () then deliver (search query) else retire_items ()
            in
            (picker_content ~selected_keys:(Signal.value selected)
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
               ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
-                Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
+                Some (new_node ctx row ~owned ~retire:close
+                  ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
              context' parent') in
   (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate

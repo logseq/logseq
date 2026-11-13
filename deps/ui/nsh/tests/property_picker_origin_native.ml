@@ -28,7 +28,9 @@ let run ~check () =
       let ident = "fixture/owned-node" in
       let already_selected = retirement="current-remove" || retirement="graph-remove" in
       let model = ref {Model.initial with repo=Some "picker-origin"} in
-      let pending = ref None and holding = ref false
+      let initial_boundary = String.starts_with ~prefix:"initial-" boundary in
+      let creation_boundary = List.mem boundary ["create";"created-id";"new-dispatch"] in
+      let pending = ref None and holding = ref initial_boundary
       and writes = ref [] and reads = ref [] in
       let choice = W.Map [W.kw "db/id",W.Int 92;
         W.kw "block/uuid",W.Uuid "23456789-1234-4abc-8def-000000000778";
@@ -37,24 +39,45 @@ let run ~check () =
         W.kw ident,W.Set [W.Keyword "fixture/prior-node"]] in
       let prior = W.Map [W.kw "db/id",W.Int (if already_selected then 92 else 93);
         W.kw "db/ident",W.Keyword "fixture/prior-node"] in
+      let created_uuid = "23456789-1234-4abc-8def-000000000779" in
+      let reply kind value =
+        if !holding && boundary=kind then begin
+          let promise,resolve,_ = Js.Promise.pending () in
+          check "one actual picker read owns the pending reply" (!pending=None);
+          pending := Some (fun () -> resolve value);
+          promise
+        end else Js.Promise.resolve value in
       let handler method_ args =
         match method_,args with
         | "thread-api/get-property-node-selector-data",[W.String repo;_] ->
             reads := (repo,"choices") :: !reads;
-            Js.Promise.resolve (W.Map [W.kw "initial-choices",W.Array [choice]])
+            reply "initial-choices" (W.Map [W.kw "initial-choices",W.Array [choice]])
         | "thread-api/entity",[W.String repo;reference] ->
             let kind,value = if reference=D.uuid_ref uuid then "block",block
               else "reference",prior in
             reads := (repo,kind) :: !reads;
-            if !holding && boundary=kind then begin
-              let promise,resolve,_ = Js.Promise.pending () in
-              check "one actual picker read owns the pending reply" (!pending=None);
-              pending := Some (fun () -> resolve value);
-              promise
-            end else Js.Promise.resolve value
+            reply (if initial_boundary then "initial-" ^ kind else kind) value
+        | "thread-api/search-blocks",[W.String repo;W.String query;_] ->
+            reads := (repo,"search") :: !reads;
+            let result = if query="second" then
+                W.Map [W.kw "db/id",W.Int 95;
+                  W.kw "block/uuid",W.Uuid "23456789-1234-4abc-8def-000000000780";
+                  W.kw "block/title",W.String "Second node option"]
+              else choice in
+            reply (if boundary="search-superseded" then boundary else "search")
+              (W.Array (if creation_boundary then [] else [result]))
+        | "thread-api/get-case-page",[W.String repo;W.Uuid value] when value=created_uuid ->
+            reads := (repo,"created-id") :: !reads;
+            reply "created-id" (W.Map [W.kw "db/id",W.Int 94])
         | "thread-api/apply-outliner-ops",[W.String repo;operations;_] ->
             writes := (repo,operations) :: !writes;
-            Js.Promise.resolve (W.Map [W.kw "result",W.Nil])
+            (match W.elems operations with
+             | [operation] when (match W.elems operation with W.Keyword "create-page"::_ -> true | _ -> false) ->
+                 (* The accepted create can publish a same-graph refresh before
+                    its reply; a valid creation must still attach its result. *)
+                 model := {!model with Model.context_revision=(!model).Model.context_revision+1};
+                 reply "create" (W.Map [W.kw "result",W.Array [W.String "New node";W.Uuid created_uuid]])
+             | _ -> Js.Promise.resolve (W.Map [W.kw "result",W.Nil]))
         | "thread-api/get-latest-journals",_ -> Js.Promise.resolve (W.Array [])
         | _ -> Js.Promise.resolve W.Nil in
       let make_worker () : Worker_client.t =
@@ -110,15 +133,28 @@ let run ~check () =
             if boundary="measurement" then deferred_geometry := Some reply else reply ()
           end else previous_host operation payload);
         let settle () = Host.drain (); ignore (Lui_app.flush app) in
+        let has_text value = Hashtbl.fold (fun _ properties found ->
+          found || P.Property_map.find_opt P.TextValue properties=Some (P.StringValue value))
+          runtime.Lui_runtime.runtime_properties false in
+        let retire_context () = match retirement with
+          | "graph" | "graph-remove" | "replacement" ->
+              model := {!model with Model.repo=Some "picker-destination";
+                context_revision=(!model).Model.context_revision+1}
+          | "worker" -> Runtime.worker := Some (make_worker ())
+          | "route" -> model := {!model with Model.route=Model.Page "Another page";
+              context_revision=(!model).Model.context_revision+1}
+          | "dismiss" -> Properties_state.close_all_view_overlays ();settle ()
+          | "current" | "current-remove" -> ()
+          | _ -> failwith "Unknown picker retirement fixture" in
+        let release_pending () =
+          let release = Option.get !pending in pending := None; holding := false;
+          release (); settle () in
         let timer_before = !Host.timer_next in
         ignore (Native_embed.press trigger); settle ();
         if boundary="measurement" then begin
           check "the actual trigger awaits native measurement before popup mount"
             (Option.is_some !deferred_geometry && not (Properties_state.view_overlay_open ()));
-          (match retirement with
-           | "graph" -> model := {!model with Model.repo=Some "picker-destination";context_revision=1}
-           | "worker" -> Runtime.worker := Some (make_worker ())
-           | _ -> failwith "Unknown pre-mount picker retirement");
+          retire_context ();
           (Option.get !deferred_geometry) ();
           (* Run only the actual retry scheduled by this trigger. It remains a
              real production callback; no replacement timer service is installed. *)
@@ -127,56 +163,126 @@ let run ~check () =
             if id>timer_before then id::ids else ids) Host.timers [] in
           Mutex.unlock Host.timers_lock;
           check "one actual native-measurement retry belongs to this trigger" (List.length retries=1);
-          Host.run_timer (List.hd retries) (); settle ()
-        end;
-        let option = find P.TextValue "Origin node option" in
-        check "the actual node option is mounted in the retained picker"
-          (Hashtbl.find runtime.Lui_runtime.mounted_nodes option=P.ListItem
-           && Properties_state.view_overlay_open ());
-        reads := []; holding := true;
-        ignore (Native_embed.press option); settle ();
-        if boundary="measurement" then
-          check "a late-mounted option cannot adopt the graph or worker active at measurement completion"
-            (!pending=None && !writes=[] && !reads=[] && not (Properties_state.view_overlay_open ()))
-        else begin
-        check "actual option activation reaches the requested async read boundary"
-          (Option.is_some !pending && !writes=[]);
-        (match retirement with
-         | "graph" | "graph-remove" ->
-             model := {!model with Model.repo=Some "picker-destination";context_revision=1}
-         | "worker" -> Runtime.worker := Some (make_worker ())
-         | "route" -> model := {!model with Model.route=Model.Page "Another page";context_revision=1}
-         | "dismiss" -> Properties_state.close_all_view_overlays ();settle ()
-         | "replacement" ->
-             model := {!model with Model.repo=Some "picker-destination";context_revision=1};
-             Properties_state.close_all_view_overlays ();settle ();
-             holding := false;
-             ignore (Native_embed.press trigger);settle ();
-             check "a fresh destination chooser has its own option owner"
-               (find P.TextValue "Origin node option"<>option
-                && Properties_state.view_overlay_open ())
-         | "current" | "current-remove" -> ()
-         | _ -> failwith "Unknown picker retirement fixture");
-        let before_reply_reads = !reads in
-        let release = Option.get !pending in pending := None; holding := false;
-        release (); settle ();
-        if retirement="current" || retirement="current-remove" then begin
-          let operation = if already_selected then "delete-property-value" else "set-block-property" in
-          check "a current actual node choice writes exactly its original graph and owner"
-            (!writes=["picker-origin",W.Array [W.Array [W.Keyword operation;
-              W.Array [W.Uuid uuid;W.Keyword ident;W.Int 92]]]]);
-          check "a current many-node picker remains mounted after its write"
-            (Properties_state.view_overlay_open ())
+          Host.run_timer (List.hd retries) (); settle ();
+          check "late popup mounting retires before starting initial work or adopting a destination"
+            (!writes=[] && !reads=[] && not (has_text "Origin node option")
+             && not (Properties_state.view_overlay_open ()))
+        end else if initial_boundary then begin
+          check "the actual popup holds the requested initial read before showing options"
+            (Option.is_some !pending && not (has_text "Origin node option") && !writes=[]);
+          retire_context ();
+          let before_reply_reads = !reads in
+          release_pending ();
+          if retirement="current" then
+            check "current initial choices preserve their real payload and chooser"
+              (has_text "Origin node option" && Properties_state.view_overlay_open () && !writes=[])
+          else
+            check "retired initial replies cannot read a new graph or publish options"
+              (!reads=before_reply_reads && !writes=[] && not (has_text "Origin node option")
+               && not (Properties_state.view_overlay_open ()))
         end else begin
-          check "a retired node choice cannot mutate either graph"
-            (!writes=[] && !reads=before_reply_reads);
-          check "a retired async reply cannot close or adopt a replacement chooser"
-            (Properties_state.view_overlay_open ()=(retirement="replacement"))
-        end
+          let option = find P.TextValue "Origin node option" in
+          check "the actual node option is mounted in the retained picker"
+            (Hashtbl.find runtime.Lui_runtime.mounted_nodes option=P.ListItem
+             && Properties_state.view_overlay_open ());
+          reads := []; holding := true;
+          if List.mem boundary ["search";"search-dispatch";"search-superseded"]
+             || creation_boundary then begin
+            let field = Hashtbl.fold (fun node kind found ->
+              if kind=P.TextField then Some node else found)
+              runtime.Lui_runtime.mounted_nodes None |> Option.get in
+            if boundary="search-dispatch" then retire_context ();
+            ignore (Native_embed.text_changed field (if creation_boundary then "New node" else "search"));
+            settle ();
+            if boundary="search-dispatch" then
+              check "a retired picker refuses a new actual search before invoking its worker"
+                (!reads=[] && !writes=[] && not (Properties_state.view_overlay_open ()))
+            else if boundary="search" || boundary="search-superseded" then begin
+              check "the real input reaches its held search request" (Option.is_some !pending && !writes=[]);
+              if boundary="search-superseded" then begin
+                holding := false;
+                ignore (Native_embed.text_changed field "second");settle ()
+              end;
+              retire_context ();
+              let before_reply_reads = !reads in
+              release_pending ();
+              if boundary="search-superseded" then
+                check "the selector's existing query fence rejects a superseded real input reply"
+                  (has_text "Second node option" && not (has_text "Origin node option")
+                   && Properties_state.view_overlay_open () && !writes=[])
+              else if retirement="current" then
+                check "a current search result reaches the existing selector"
+                  (has_text "Origin node option" && Properties_state.view_overlay_open ())
+              else
+                check "a retired search result cannot publish or start destination work"
+                  (!reads=before_reply_reads && !writes=[] && not (has_text "Origin node option")
+                   && not (Properties_state.view_overlay_open ()))
+            end else begin
+              let create = find P.TextValue (I18n.t1 "select/new-option" "New node") in
+              if boundary="new-dispatch" then retire_context ();
+              let before_create_reads = !reads in
+              ignore (Native_embed.press create); settle ();
+              if boundary="new-dispatch" then
+                check "an old New option cannot dispatch creation into the destination graph"
+                  (!writes=[] && !reads=before_create_reads && not (Properties_state.view_overlay_open ()))
+              else begin
+                check "the actual New option owns one accepted create before its held reply"
+                  (Option.is_some !pending && List.length !writes=1
+                   && List.for_all (fun (repo,_) -> repo="picker-origin") !writes);
+                retire_context ();
+                let accepted = !writes and before_reply_reads = !reads in
+                release_pending ();
+                if retirement="current" then begin
+                  check "same-graph create refreshes retain the valid lookup and attachment"
+                    ((!model).Model.context_revision=1 && List.length !writes=2
+                     && List.hd !writes=("picker-origin",W.Array [W.Array [W.Keyword "set-block-property";
+                       W.Array [W.Uuid uuid;W.Keyword ident;W.Int 94]]])
+                     && Properties_state.view_overlay_open ())
+                end else
+                  check "retirement after accepted creation cannot look up or attach in a new owner"
+                    (!writes=accepted && !reads=before_reply_reads
+                     && not (Properties_state.view_overlay_open ()))
+              end
+            end
+          end else begin
+            ignore (Native_embed.press option); settle ();
+            check "actual option activation reaches the requested async read boundary"
+              (Option.is_some !pending && !writes=[]);
+            retire_context ();
+            if retirement="replacement" then begin
+              Properties_state.close_all_view_overlays ();settle ();
+              holding := false;
+              ignore (Native_embed.press trigger);settle ();
+              check "a fresh destination chooser has its own option owner"
+                (find P.TextValue "Origin node option"<>option
+                 && Properties_state.view_overlay_open ())
+            end;
+            let before_reply_reads = !reads in
+            release_pending ();
+            if retirement="current" || retirement="current-remove" then begin
+              let operation = if already_selected then "delete-property-value" else "set-block-property" in
+              check "a current actual node choice writes exactly its original graph and owner"
+                (!writes=["picker-origin",W.Array [W.Array [W.Keyword operation;
+                  W.Array [W.Uuid uuid;W.Keyword ident;W.Int 92]]]]);
+              check "a current many-node picker remains mounted after its write"
+                (Properties_state.view_overlay_open ())
+            end else begin
+              check "a retired node choice cannot mutate either graph"
+                (!writes=[] && !reads=before_reply_reads);
+              check "a retired async reply cannot close or adopt a replacement chooser"
+                (Properties_state.view_overlay_open ()=(retirement="replacement"))
+            end
+          end
         end))
       ["block","current";"reference","current";"reference","current-remove";
        "block","graph";"reference","graph";
        "block","worker";"reference","worker";
        "block","route";"reference","dismiss";"block","replacement";
-       "reference","graph-remove";"measurement","graph";"measurement","worker"];
+       "reference","graph-remove";"measurement","graph";"measurement","worker";
+       "initial-choices","current";"initial-choices","graph";"initial-choices","route";
+       "initial-block","current";"initial-block","graph";
+       "initial-reference","current";"initial-reference","worker";
+       "search","current";"search","graph";"search-dispatch","graph";"search-superseded","current";
+       "create","current";"create","graph";"create","worker";"create","route";
+       "created-id","current";"created-id","graph";"created-id","route";"new-dispatch","graph"];
     print_endline "PASS native property node picker async graph and owner retirement")

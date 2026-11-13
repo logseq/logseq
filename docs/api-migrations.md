@@ -22,19 +22,42 @@ ownership/refresh policy. Current choices still re-read their actual stored
 references, toggle many-valued choices with the same set/delete payloads, and
 keep a many-valued picker open after success.
 
-There is no source or wire migration for downstream applications. This change
-does not claim to qualify the separate new-node creation, initial result or
-search-result asynchronous paths. The actual native admission fixture opens
-the real value Button and selects its real ListItem, delays each worker read,
-then tests current add/remove, graph/worker/route retirement, dismissal and
-replacement ownership. Separate pre-mount cases hold the real anchor response,
-change graph/worker, deliver that response and explicitly drive only the
-trigger's existing native-measurement retry before choosing the actual option.
-This proves that late popup mounting cannot recapture the destination owner;
-it does not measure an elapsed native timer. The fixture uses the existing
-target archives and runner without Dune changes. These source regressions await
-root execution; they are not
-native paint, hardware input or real database undo evidence.
+The same popup's initial and search work now uses that graph/worker/scope/route
+owner. An obsolete native-anchor completion closes its own popup key on the next
+Promise turn, after registration, without issuing initial reads. Initial block
+and reference reads check ownership before requesting the next stage; result
+delivery and new searches likewise retire the old popup instead of publishing
+into another graph. The existing `Properties_select` request ticket still owns
+query supersession; no second search epoch or result cache is added. Same-graph
+refreshes preserve these owners and their valid results.
+
+The node cell's `New option` action also checks ownership before creation,
+after creation and after resolving the new entity ID, before attaching it to
+the original block. Creation is already an accepted write: retirement cannot
+roll it back, but prevents subsequent lookup/attachment in another owner. A
+same-graph refresh caused by that accepted creation is valid. The action
+captures a fresh reload origin around its later ID lookup, rather than rejecting
+its own creation's revision change. The internal helper's only node-cell caller
+now supplies its existing owner predicate and its real teardown separately
+from the successful many-choice close policy:
+
+```ocaml
+new_node ctx row ~owned ~retire:close
+  ~close:(if many then (fun () -> ()) else close) title
+```
+
+There is no public application or wire migration. The separate property-dialog
+creation workflow is not changed or qualified by this node-cell correction.
+The actual native admission fixture opens the real value Button, input and
+ListItem, delays each read/creation stage, then tests valid add/remove and
+creation, graph/worker/route retirement, dismissal, replacement and superseded
+query ownership. Its valid creation advances the same graph's revision before
+returning, so an overstrict pre-creation revision fence cannot pass. Pre-mount
+cases hold the real anchor response and drive only the trigger's existing retry
+after retiring its owner; they do not measure an elapsed native timer. The
+fixture uses the existing target archives and runner without Dune changes.
+These source regressions await root execution; they are not native paint,
+hardware input or real database undo evidence.
 
 ## NSH right-sidebar document clips to its existing paint bounds
 
