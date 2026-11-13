@@ -297,12 +297,20 @@ let grouped_table_selection ~registry ~profile =
           data = Views_wire.VGrouped
             [ { gv = Wire.Nil; grows = ["b"; "a"] }
             ; { gv = Wire.Nil; grows = ["c"; "b"] } ] };
-        Lui_elements.column
-          [ Views_table.grouped_table inst ~rows:["b"; "a"]
-          ; Views_table.grouped_table inst ~rows:["c"; "b"] ]) () in
+        Views_table.render_table inst (V.get inst)) () in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
     (fun () ->
       let inst = Option.get !instance in
+      let wrapper ()=List.find (fun node ->
+        M.string_prop node "data-attrs"=
+          Some "style\x1fborder-top:1px solid hsl(var(--border))") (nodes session) in
+      let wrapper_id=(wrapper ()).M.id in
+      let expect_layout ()=
+        check "Grouped table selection keeps its existing typed partition inset owner"
+          ((wrapper ()).M.id=wrapper_id
+           && Hashtbl.find_opt (wrapper ()).M.props "padding-top"=Some (P.IntValue 8)
+           && not (Hashtbl.mem (wrapper ()).M.props "height")) in
+      expect_layout ();
       let headers = List.filter
           (fun node -> M.string_prop node "accessibility-identifier" =
             Some "header-checkbox") (nodes session) in
@@ -320,7 +328,8 @@ let grouped_table_selection ~registry ~profile =
       V.update inst (fun state -> { state with
         V.selected = V.Sset.of_list ["a"; "b"; "c"; "stale"] });
       check "Bulk actions use current row order once, without stale selections"
-        (Views_table.selected_uuids inst = ["b"; "a"; "c"]))
+        (Views_table.selected_uuids inst = ["b"; "a"; "c"]);
+      expect_layout ())
 
 let table_range_selection () =
   let module V = Views_state in

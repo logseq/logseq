@@ -1,5 +1,36 @@
 # API migrations
 
+## Group partitions, property areas and editor controls use typed exact spacing
+
+The four grouped List/Table partition producers now apply their authored 8pt top
+padding to the existing Column through `Ui_components.Prop.padding_top`. Their
+existing border style, grouping, pagination and selection owners are retained.
+For example, the previous inline `padding-top:8px` is now
+`Ui_components.with_props [Ui_components.Prop.padding_top 8] existing_column`.
+The grouped selection regression mounts the actual table partition producer and
+keeps its auto-sized owner through select/clear/bulk-selection updates.
+
+Both empty and populated block property-area branches apply their authored 45pt
+leading inset to the same existing Column; class-property explanatory text uses
+its authored 20pt leading margin. Editor calendar controls use the existing
+typed 8pt top and 4pt bottom margins. The repeat panel applies its authored 8pt
+leading padding through the typed channel. Existing model sources, callbacks,
+keys, text state and Web/mobile APIs remain unchanged. There is no additional
+layout node, fixed height, new constructor parameter or wire field.
+
+This clears nine of the fourteen literal constructor layout diagnostics in
+these three modules. Five still need a faithful owner/API decision: the class
+heading and bidirectional title's `display:flex;width:100%`, the bidirectional
+area's `width:100%`, the calendar's `max-width:100%`, and the repeat panel's
+explicit `box-sizing:border-box`. Native NSH's underlying default is border-box,
+but that alone does not establish a generic Web/Apple/Android projection rule;
+the explicit declaration remains until its portable contract is resolved.
+Axis-specific borders remain in their existing style carriers, not replaced by
+an all-edge border with different behavior. The separate natural-language
+calendar input helper also still authors `margin-top:0.5rem`; integer-point
+spacing cannot preserve an unknown root-font-dependent value by rounding it.
+No native layout-carrier diagnostic is disabled or exempted by this migration.
+
 ## Shared page and preview blocks project the same clipping contract
 
 The static `Page.blocks_inner`, signal-driven `Page.blocks_area` and

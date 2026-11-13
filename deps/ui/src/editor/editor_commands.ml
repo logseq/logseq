@@ -639,8 +639,7 @@ let time_input ps : t =
     []
 
 let time_row ps : t =
-  row ~key:"time" ~cross:`center ~gap:8
-    ~data_attrs:[ ("style", "margin-top: 8px") ]
+  row ~key:"time" ~cross:`center ~gap:8 ~margin_top:8
     [ time_input ps
     ; Ui_components.with_props
         [ Ui_components.Prop.font_size "0.8125rem"
@@ -722,15 +721,16 @@ let repeat_panel ps : t =
                   "logseq.property.repeat/checked-property" (W.Int id) ])
     | _ -> ()
   in
-  Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
+  Ui_components.with_props
+    [ Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.padding_left 8 ]
     (column ~key:"rpt" ~gap:16 ~width:256
        ~data_attrs:
          [ ( "style"
-           , "box-sizing: border-box; padding-left: 8px; border-left: 1px \
+           , "box-sizing: border-box; border-left: 1px \
               solid var(--lx-popover-border, var(--ls-border-color, \
               #e5e5e5))" ) ]
-       [ row ~key:"head" ~cross:`center ~gap:4
-           ~data_attrs:[ ("style", "margin-bottom: 4px") ]
+       [ row ~key:"head" ~cross:`center ~gap:4 ~margin_bottom:4
            [ Ui_components.with_props
                [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "1" ]
                (* no [role="checkbox"]: the web focus layer strips [role]

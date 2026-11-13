@@ -443,13 +443,13 @@ let block_area ~scope ~uuid : t =
             (* reactive branch roots must keep identical props: set-prop
                diffs on stack kind (gap/style-class) are unsupported
                on native and abort the whole reconcile *)
-            column ~gap:2 ~style_class:"ls-block-content-indent"
-              ~data_attrs:[ ("style", "padding-left:45px") ] []
+            Ui_components.with_props [Ui_components.Prop.padding_left 45]
+              (column ~gap:2 ~style_class:"ls-block-content-indent" [])
           else
             let ctx = block_ctx ~owner_key:(scope ^ ":panel:" ^ key) uuid key in
-            column ~gap:2
+            Ui_components.with_props [Ui_components.Prop.padding_left 45]
+            (column ~gap:2
               ~style_class:"ls-block-content-indent"
-              ~data_attrs:[ ("style", "padding-left:45px") ]
               [ column ~key:("parea-" ^ uuid)
                   ~accessibility_identifier:uuid
                   ~style_class:"ls-properties-area ls-block-properties"
@@ -460,7 +460,7 @@ let block_area ~scope ~uuid : t =
                         (can_toggle_hidden ctx ~below_rows:d.below)
                       d
                   ]
-              ])
+              ]))
        (Signal.value st))
       context parent
   in
@@ -719,10 +719,10 @@ let class_section (ctx : V.ctx) ~owner_title (class_rows : W.t list) : t =
                   ]
                 []
             ]
-        ; text ~value:(I18n.t "class/tag-properties-desc")
+        ; text ~value:(I18n.t "class/tag-properties-desc") ~margin_left:20
             ~foreground:
               "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
-            ~data_attrs:[ ("style", "margin-left:20px") ] []
+            []
         ])
     ; column ~gap:4 
         (List.map (panel_row ctx ~owner_is_tag:true ~owner_title ~reorder_rows:class_rows)
