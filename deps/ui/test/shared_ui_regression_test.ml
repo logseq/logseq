@@ -1112,6 +1112,62 @@ let sidebar_favorite_rows ~registry ~profile =
        && (find "sidebar-page-actions").M.id=button.M.id);
     ignore (Lui_app.dispose session.S.app))
 
+let right_sidebar_block_clipping ~registry ~profile =
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    let blocks=List.init 36 (fun index ->
+      Model.empty_block ~uuid:(Printf.sprintf "sidebar-clipping-%02d" index)
+        ~title:(Printf.sprintf "Sidebar clipping row %02d" index) ~is_page:false) in
+    let model={Model.initial with repo=None;page_blocks=blocks} in
+    Runtime.read_model:=(fun () -> model);
+    let item : Sidebar_state.item =
+      {key="clipping";kind="contents";uuid=None;title="Contents";icon=None;
+       breadcrumb=[];blocks;linked_refs=[];page_ref=None;page=None;
+       props_collapsed=true;collapsed=false} in
+    let mounted=ref None in
+    let session=S.mount ~registry ~profile ~initial:model ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let state value=Signal.state context.Lui_ui.ui_scheduler value in
+        let sidebar : Sidebar_state.t=
+          {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];
+           nav_checked=state [];nav_tag_titles=state [];items=state [item];open_menu=state "";
+           groups_collapsed=state [];left_width=state 246.;right_fraction=state 0.4;
+           viewport_w=state 1280.} in
+        mounted:=Some sidebar;
+        Right_sidebar_view.inner sidebar) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      Runtime.app_flush:=(fun () -> S.flush session);
+      let clipped ()=List.find (fun node -> class_has node "ls-page-blocks") (nodes session) in
+      let rec rows node acc =
+        let acc=match M.string_prop node "accessibility-identifier" with
+          | Some id when String.starts_with ~prefix:"ls-block-sidebar-clipping-" id -> id::acc
+          | _ -> acc in
+        List.fold_left (fun acc child -> rows child acc) acc (M.children session.S.tree node.M.id) in
+      let initial=(clipped ()).M.id in
+      let check_contents expected =
+        let surface=clipped () in
+        check "Right sidebar projects its existing blocks clipping through typed overflow"
+          (M.string_prop surface "overflow"=Some "hidden");
+        check "Right sidebar clipping remains on the same auto-sized document owner"
+          (surface.M.id=initial && not (Hashtbl.mem surface.M.props "height"));
+        let carriers=String.split_on_char '\x1e'
+          (Option.value (M.string_prop surface "data-attrs") ~default:"") in
+        check "Right sidebar clipping does not depend on a Web-only style carrier"
+          (not (List.exists (String.starts_with ~prefix:"style\x1f") carriers));
+        check "The clipped document retains every actual producer block row"
+          (List.length (rows surface [])=expected);
+        check "The canonical inner document retains its existing sidebar context marker"
+          (List.exists (fun node -> class_has node "page-blocks-inner"
+             && M.string_prop node "data-attrs"=Some "data-cid\x1fsidebar") (nodes session))
+      in
+      check_contents 36;
+      let sidebar=Option.get !mounted in
+      List.iter (fun next ->
+        Runtime.signal_set sidebar.Sidebar_state.items [{item with blocks=next}];
+        S.flush session;check_contents (List.length next))
+        [List.filteri (fun index _ -> index<18) blocks;blocks]))
+
 let table_column_ownership ~registry ~profile =
   let module V = Views_state in
   let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
@@ -1437,6 +1493,7 @@ let run_views ~registry ~profile ~finish =
   table_column_ownership ~registry ~profile;
   table_title_completion ~registry ~profile;
   sidebar_favorite_rows ~registry ~profile;
+  right_sidebar_block_clipping ~registry ~profile;
   native_view_type_menu ~registry;
   gallery_remote_cover_policy ~registry;
   find_in_page_submit ~registry;
