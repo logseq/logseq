@@ -489,7 +489,7 @@ let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
     (with_props
        [ Prop.font_size "var(--lx-text-row)"; Prop.line_height "1.25rem" ]
        (column ~key ~gap:2 ~cross:`stretch ~padding_vertical:6
-          ~padding_horizontal:12 ~corner_radius:8
+          ~padding_horizontal:12 ~margin_horizontal:2 ~corner_radius:8
           ~data_attrs_signal ~background_signal children))
 
 (* Breadcrumb header inside an item row — 32px left inset, small light

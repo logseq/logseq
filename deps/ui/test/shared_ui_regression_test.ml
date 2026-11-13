@@ -1802,6 +1802,60 @@ let code_language_caption ~registry ~profile =
          && M.string_prop editor "lang"=Some caption)))
     ["clj","clojure";"plaintext","plaintext";"custom-mode","custom-mode"]
 
+let cmdk_row_gutter_ownership ~registry ~profile =
+  let previous_services = !Cmdk_state.services_ref in
+  let presses = ref 0 and item_state = ref None and palette_state = ref None in
+  let services = {(Cmdk_host.services ()) with
+    repo=(fun () -> None);commands=(fun () -> []);hook_app=(fun _ -> ());
+    toggle_left_sidebar=(fun () -> incr presses)} in
+  let item : Cmdk_state.item =
+    {ikey="gutter-result";idx=3;gid=G_commands;ititle="Palette result";
+     info=None;header=None;iicon=None;inline_icon=None;isc="";ibadge=No_badge;
+     act=Run "ui/toggle-left-sidebar";ihl=false;imouse=false;iq=""} in
+  let session=S.mount ~registry ~profile ~initial:() ~reducer:(fun () () -> ())
+    ~view:(fun context _ _ ->
+      let st=Cmdk_state.make ~register:false context.Lui_ui.ui_scheduler services in
+      let value=Signal.state context.Lui_ui.ui_scheduler item in
+      palette_state:=Some st;item_state:=Some value;
+      Cmdk_state.set st {Cmdk_state.initial_view with open_=true;persist=false};
+      Cmdk_view.item_row services st (Signal.value value)) () in
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose session.S.app);
+    Cmdk_state.services_ref:=previous_services) (fun () ->
+    let attrs node=P.data_attrs_decode
+      (Option.value (M.string_prop node "data-attrs") ~default:"") in
+    let result ()=List.find (fun node ->
+      List.assoc_opt "data-cmdk-item" (attrs node)=Some "true") (nodes session) in
+    let original=(result ()).M.id in
+    let verify label =
+      let node=result () in
+      check (label ^ " retains the actual command result owner") (node.M.id=original);
+      check (label ^ " projects exact positive symmetric gutters")
+        (node.M.kind="column"
+         && Hashtbl.find_opt node.M.props "margin-horizontal"=Some (P.IntValue 2));
+      check (label ^ " keeps click/index hooks without a layout style carrier")
+        (List.assoc_opt "data-item-index" (attrs node)=Some "3"
+         && List.assoc_opt "data-item-key" (attrs node)=Some "gutter-result"
+         && not (List.mem_assoc "style" (attrs node))) in
+    verify "initial palette row";
+    Runtime.signal_set (Option.get !item_state) {item with ihl=true};
+    S.flush session;
+    verify "keyboard-highlighted palette row";
+    check "keyboard highlight updates the retained data owner"
+      (List.assoc_opt "data-kb-highlighted" (attrs (result ()))=Some "true");
+    Runtime.signal_set (Option.get !item_state)
+      {item with ititle="Updated palette result";ihl=true;imouse=true};
+    S.flush session;
+    verify "pointer-highlighted changed palette row";
+    check "pointer mode updates hooks without remounting the row"
+      (List.assoc_opt "data-hoverable" (attrs (result ()))=Some "true"
+       && not (List.mem_assoc "data-kb-highlighted" (attrs (result ()))));
+    check "the retained palette result renders its latest source"
+      (List.exists (fun node -> M.string_prop node "text"=Some "Updated palette result") (nodes session));
+    S.press session original;
+    check "the retained gutter owner dispatches its real command once"
+      (!presses=1 && not (Cmdk_state.get (Option.get !palette_state)).open_))
+
 let published_chrome_palette ~registry ~profile =
   let session=S.mount ~registry ~profile ~initial:"" ~reducer:(fun value () -> value)
     ~view:(fun _ input _ -> Lui_elements.column
@@ -2070,6 +2124,7 @@ let run_views ~registry ~profile ~finish =
       ~install_worker:(fun handler -> ignore (Fake_worker.install handler))
       ~settle:(settle 25) ~done_:finish in
   code_language_caption ~registry ~profile;
+  cmdk_row_gutter_ownership ~registry ~profile;
   published_chrome_palette ~registry ~profile;
   table_column_ownership ~registry ~profile;
   table_title_completion ~registry ~profile;

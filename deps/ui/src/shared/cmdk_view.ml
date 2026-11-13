@@ -382,9 +382,6 @@ let wrapper_attrs (it : S.item) =
 
 let row_data_attrs (it : S.item) =
   [ ("data-cmdk-item", "true")
-  ; (* cljs [data-cmdk-item]{margin-inline:2px} — no typed margin prop,
-       so it lands through the documented data-attrs style pair *)
-    ("style", "margin-left: 2px; margin-right: 2px")
   ; ("data-item-index", string_of_int it.S.idx)
   ; ("data-item-key", it.S.ikey)
   ; ( "data-highlighted"

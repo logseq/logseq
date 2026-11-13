@@ -1,5 +1,24 @@
 # API migrations
 
+## Command-palette result gutters use the retained typed Column
+
+`Ui_components.cmdk_item_row` now declares its existing symmetric 2pt gutter
+through `Column.margin_horizontal=2`. `Cmdk_view.row_data_attrs` retains only
+semantic click/index/highlight hooks; its former dynamic CSS margins are
+removed. Web keeps the same authored two positive 2px margins. NSH and the
+maintained Apple/Android backends receive the equivalent canonical positive
+margins rather than an ignored layout string. No rem, percentage, negative
+margin, container-size or default-policy conversion is involved.
+
+The row key, parent, input/search state, highlight signals and command dispatch
+are unchanged. Existing shared producer coverage mounts the actual item row,
+replays keyboard highlight, pointer highlight and changed result text, checks
+the same row and metadata hooks, then presses that retained owner and verifies
+one command dispatch plus palette dismissal. This is constructor/projection
+coverage, not a new native screenshot or hardware-input qualification.
+Downstream users of `cmdk_item_row` should no longer add the same horizontal
+margins through a `style` data attribute. No LUI constructor or wire API changes.
+
 ## Unclosed inline delimiters reuse their parse-owned suffix search
 
 The existing `Render_inline` matcher now routes hash-page references, image
