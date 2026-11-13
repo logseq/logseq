@@ -1154,13 +1154,24 @@ let sidebar_favorite_rows ~registry ~profile =
     ignore (Lui_app.dispose session.S.app))
 
 let right_sidebar_block_clipping ~registry ~profile =
-  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush in
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_editor = !Editor_state.st
+  and previous_fields = !Editor_state.field_sigs_opt
+  and previous_sources = !Editor_state.extra_sources
+  and previous_popups = !Popups_state.active
+  and previous_settings = !Settings_state.st in
   Fun.protect ~finally:(fun () ->
-    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Popups_state.active:=previous_popups;
+    Editor_state.extra_sources:=previous_sources;Settings_state.st:=previous_settings) (fun () ->
+    Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
+    Popups_state.active:=None;
+    Editor_state.extra_sources:=[];Settings_state.st:=None;
     let blocks=List.init 36 (fun index ->
       Model.empty_block ~uuid:(Printf.sprintf "sidebar-clipping-%02d" index)
         ~title:(Printf.sprintf "Sidebar clipping row %02d" index) ~is_page:false) in
-    let model={Model.initial with repo=None;page_blocks=blocks} in
+    let model={Model.initial with repo=None} in
     Runtime.read_model:=(fun () -> model);
     let item : Sidebar_state.item =
       {key="clipping";kind="contents";uuid=None;title="Contents";icon=None;
@@ -1221,9 +1232,17 @@ let right_sidebar_block_clipping ~registry ~profile =
         [List.filteri (fun index _ -> index<18) blocks;blocks]))
 
 let shared_block_clipping ~registry ~profile =
-  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush in
+  let previous_model = !Runtime.read_model and previous_flush = !Runtime.app_flush
+  and previous_editor = !Editor_state.st
+  and previous_fields = !Editor_state.field_sigs_opt
+  and previous_sources = !Editor_state.extra_sources
+  and previous_popups = !Popups_state.active
+  and previous_settings = !Settings_state.st in
   Fun.protect ~finally:(fun () ->
-    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush) (fun () ->
+    Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+    Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Popups_state.active:=previous_popups;
+    Editor_state.extra_sources:=previous_sources;Settings_state.st:=previous_settings) (fun () ->
     let blocks=List.init 2 (fun index ->
       Model.empty_block ~uuid:(Printf.sprintf "family-clipping-%d" index)
         ~title:(Printf.sprintf "Family clipping row %d" index) ~is_page:false) in
@@ -1231,11 +1250,14 @@ let shared_block_clipping ~registry ~profile =
       [Wire.kw "block/uuid",Wire.Uuid "family-clipping-page";
        Wire.kw "block/title",Wire.String "Clipping page"])) in
     let page={page with Model.page_blocks=blocks} in
-    let model={Model.initial with repo=None;page_blocks=blocks;route_page=Some page} in
+    let model={Model.initial with repo=None;route_page=Some page} in
     List.iter (fun producer ->
+      Editor_state.st:=None;Editor_state.field_sigs_opt:=None;
+      Popups_state.active:=None;
+      Editor_state.extra_sources:=[];Settings_state.st:=None;
       Runtime.read_model:=(fun () -> model);
       let session=S.mount ~registry ~profile ~initial:model
-        ~reducer:(fun model blocks -> {model with Model.page_blocks=blocks;
+      ~reducer:(fun model blocks -> {model with
           route_page=Option.map (fun page -> {page with Model.page_blocks=blocks}) model.Model.route_page})
         ~view:(fun context ms _ -> match producer with
           | "static" -> Page.blocks_inner ~scope:"family-clipping" blocks
