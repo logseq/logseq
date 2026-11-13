@@ -1,5 +1,26 @@
 # API migrations
 
+## Adjacent editor plain runs merge with linear copying
+
+`Edit_runs.merge_plains` now buffers each contiguous same-class Plain group
+and materializes its combined text once. Plain/Delim/Atomic boundaries,
+class equality, byte-offset adjacency and every first-run metadata field
+(including `reveal` and `display`) retain their existing semantics; only the
+merged `end_off` and `text` change, as before. Singleton records are retained.
+No public signature, wire, event, focus or downstream migration changes.
+
+An actual 100000-line native code focus sample identified repeated `(^)`
+allocations in this shared editor path, rather than native Editor row layout.
+The native application regression records merge-only allocated bytes and CPU
+seconds for 1000 and 100000 prepared runs, checks a linear allocation budget,
+and also creates the real editing model from both complete sources. Corpus
+construction, validation and model parsing are excluded from merge timings.
+These counters are not standalone application memory or UI latency results;
+a fresh native input run remains required to qualify responsiveness. After the
+actual native archives have been rebuilt, the existing allocation/FFI driver is
+`python3 deps/ui/nsh/run_update_preparation_native.py` from the repository root;
+its `plain-run-merge` records separate merge-only allocation and CPU counters.
+
 ## Sidebar card titles use leading alignment
 
 The existing right-sidebar header Button now declares `main=start`, matching

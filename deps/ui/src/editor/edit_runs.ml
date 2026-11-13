@@ -89,21 +89,31 @@ let rec seg (acc : run list) sb lo hi ~cls : run list =
    like a <2026-01-01> timestamp between plain gaps) — cosmetic only,
    byte coverage is unchanged. *)
 let merge_plains (rs : run list) : run list =
+  let finish (first : run) end_off = function
+    | None -> first
+    | Some text -> { first with end_off; text = Buffer.contents text }
+  in
+  let rec collect acc (first : run) end_off text = function
+    | (r : run) :: tl
+      when first.kind = Plain && r.kind = Plain
+           && first.cls = r.cls && end_off = r.start_off ->
+        (* Allocate only for a real merge, and copy the growing group once
+           instead of concatenating its entire prefix for each token. *)
+        let text = match text with
+          | Some text -> text
+          | None ->
+              let text = Buffer.create (String.length first.text) in
+              Buffer.add_string text first.text;
+              text in
+        Buffer.add_string text r.text;
+        collect acc first r.end_off (Some text) tl
+    | r :: tl ->
+        collect (finish first end_off text :: acc) r r.end_off None tl
+    | [] -> List.rev (finish first end_off text :: acc)
+  in
   match rs with
   | [] -> []
-  | r0 :: tl ->
-      let acc, last =
-        List.fold_left
-          (fun (acc, (last : run)) (r : run) ->
-            match last.kind, r.kind with
-            | Plain, Plain
-              when last.cls = r.cls && last.end_off = r.start_off ->
-                (acc, { last with end_off = r.end_off
-                                ; text = last.text ^ r.text })
-            | _ -> (last :: acc, r))
-          ([], r0) tl
-      in
-      List.rev (last :: acc)
+  | first :: tl -> collect [] first first.end_off None tl
 
 let runs s : run list =
   (* one O(n) conversion up front; every slice/extraction below is

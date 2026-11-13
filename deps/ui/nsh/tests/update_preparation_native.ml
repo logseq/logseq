@@ -7,6 +7,39 @@ let refused operation f =
   | exception Update_admission.Refused refusal ->
       check "typed admission refusal names the path" (refusal.operation = operation)
 
+(* The source and token fixture are prepared outside the measured merge.
+   Allocation bounds reject repeated growing-prefix copies without depending
+   on wall-clock speed, GC scheduling, or an NSH development host. *)
+let native_plain_run_merge () =
+  let chunk = "let x = 1234567890; plain\n" in
+  let width = String.length chunk in
+  List.iter (fun count ->
+    let input = List.init count (fun i ->
+      {Edit_runs.start_off=i * width; end_off=(i + 1) * width; kind=Edit_runs.Plain;
+       text=chunk; reveal=(i * width, (i + 1) * width); display=""; cls=""}) in
+    Gc.full_major ();
+    let before = Gc.allocated_bytes () and started = Sys.time () in
+    let merged = Edit_runs.merge_plains input in
+    let elapsed = Sys.time () -. started in
+    let allocated = Gc.allocated_bytes () -. before in
+    check "adjacent plain merging has a linear allocation budget"
+      (allocated <= 64. *. float_of_int (count * (width + 1)));
+    check "large merge preserves the first run's metadata and complete source"
+      (match merged with
+       | [run] -> run.Edit_runs.start_off = 0 && run.end_off = count * width
+           && run.kind = Edit_runs.Plain && run.reveal = (0, width)
+           && run.display = "" && run.cls = ""
+           && run.text = String.concat "" (List.map (fun (r : Edit_runs.run) -> r.text) input)
+       | _ -> false);
+    Printf.printf "plain-run-merge count=%d source_bytes=%d allocated_bytes=%.0f cpu_seconds=%.6f\n%!"
+      count (count * width) allocated elapsed;
+    (* Exercise the real tokenizer/model route as well as its isolated merge. *)
+    let source = match merged with [run] -> run.Edit_runs.text | _ -> assert false in
+    let model = Edit_model.create source in
+    check "large native editing model preserves every source byte"
+      (model.Edit_model.source = source && Edit_runs.recompose model.runs = source))
+    [1000; 100000]
+
 let native_entry_admission () =
   let presses = ref 0 and documents = ref 0 in
   let backend : Lui_protocol.backend = {
@@ -3277,6 +3310,7 @@ let () =
     Ui_dom_native.ops.Ui_services.emit_json name payload)} in
   let () = Platform.install_ui_services ~paints_caret:true ~nsh_updates:true ~assert_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files in
+  native_plain_run_merge ();
   native_updater_state_events ();
   Update_worker_coordinator_native.run ();
   Editor_clipboard_native.run ();

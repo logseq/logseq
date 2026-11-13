@@ -91,6 +91,48 @@ let test_run_kinds () =
    | rs -> check "code inner literal" false;
            Js.log ("got: " ^ show_runs rs))
 
+(* Keep a small reference implementation to check every field, including
+   the first run's deliberately unchanged reveal and display metadata. *)
+let test_plain_merge () =
+  let reference = function
+    | [] -> []
+    | first :: tail ->
+        let acc, last = List.fold_left (fun (acc, (last : R.run)) (r : R.run) ->
+          match last.kind, r.kind with
+          | R.Plain, R.Plain when last.cls = r.cls && last.end_off = r.start_off ->
+              acc, {last with end_off=r.end_off; text=last.text ^ r.text}
+          | _ -> last :: acc, r) ([], first) tail in
+        List.rev (last :: acc) in
+  let make kind start_off end_off text cls : R.run =
+    {kind; start_off; end_off; text; cls;
+     reveal=(start_off + 3, end_off + 7); display="first metadata"} in
+  let cases =
+    [ []
+    ; [make R.Plain 0 1 "a" ""]
+    ; [make R.Plain 0 1 "a" ""; make R.Plain 1 7 "中文" "";
+       make R.Plain 7 8 "b" ""]
+    ; [make R.Plain 0 1 "a" ""; make R.Plain 2 3 "b" ""]
+    ; [make R.Plain 0 1 "a" "x"; make R.Plain 1 2 "b" "y"]
+    ; [make R.Plain 0 1 "a" ""; make R.Delim 1 2 "*" "";
+       make R.Plain 2 3 "b" ""; make R.Atomic 3 4 "x" ""]
+    ; [make R.Plain 0 0 "" ""; make R.Plain 0 1 "a" "";
+       make R.Plain 1 1 "" ""]
+    ] in
+  List.iteri (fun i input ->
+    check (Printf.sprintf "plain merge preserves all fields %d" i)
+      (R.merge_plains input = reference input)) cases;
+  for seed = 0 to 63 do
+    let input = List.init 40 (fun i ->
+      let kind = match (i + seed) mod 11 with 0 -> R.Atomic | 1 -> R.Delim | _ -> R.Plain in
+      let start_off = i * 4 + (if (i + seed) mod 13 = 0 then 1 else 0) in
+      make kind start_off (i * 4 + 4) "text" (if (i + seed) mod 7 = 0 then "bold" else "")) in
+    check (Printf.sprintf "plain merge mixed boundary replay %d" seed)
+      (R.merge_plains input = reference input)
+  done;
+  let singleton = make R.Plain 0 1 "a" "" in
+  check "unmerged singleton retains its original record"
+    (match R.merge_plains [singleton] with [r] -> r == singleton | _ -> false)
+
 (* ---------- reveal ---------- *)
 
 let test_reveal () =
@@ -382,6 +424,7 @@ let test_wrap_affinity () =
   check "ordinary movement resets affinity" (moved.M.caret_affinity = M.Downstream)
 
 let run () =
+  test_plain_merge ();
   test_wrap_affinity ();
   test_source_replacement ();
   test_double_click ();
