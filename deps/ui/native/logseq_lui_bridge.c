@@ -84,6 +84,41 @@ CAMLprim value caml_logseq_worker_process_id_retained(value child_process) {
 #endif
 }
 
+/* Encoded *_exn results are not OCaml values. Decode before a caller can
+   register the payload as a GC root; the struct makes raw-root assignments a
+   C type error. Every payload is either an ordinary value or a decoded exn. */
+typedef struct {
+  value payload;
+  int raised;
+} bridge_callback_result;
+
+static bridge_callback_result decode_callback(value encoded) {
+  int raised = Is_exception_result(encoded);
+  return (bridge_callback_result){
+    raised ? Extract_exception(encoded) : encoded, raised};
+}
+static bridge_callback_result bridge_callback1(value closure, value arg) {
+  return decode_callback(caml_callback_exn(closure, arg));
+}
+static bridge_callback_result bridge_callback2(value closure, value a, value b) {
+  return decode_callback(caml_callback2_exn(closure, a, b));
+}
+static bridge_callback_result bridge_callback3(value closure, value a, value b,
+                                               value c) {
+  return decode_callback(caml_callback3_exn(closure, a, b, c));
+}
+static bridge_callback_result bridge_callbackN(value closure, int count,
+                                               value args[]) {
+  return decode_callback(caml_callbackN_exn(closure, count, args));
+}
+
+/* Keep later calls, including future helpers using the familiar names, typed.
+   Only the four wrappers above may receive the unsafe encoded result. */
+#define caml_callback_exn bridge_callback1
+#define caml_callback2_exn bridge_callback2
+#define caml_callback3_exn bridge_callback3
+#define caml_callbackN_exn bridge_callbackN
+
 /* Read-only editor state; the caller copies the borrowed UTF-8 buffer. */
 LUI_EXPORT int32_t lui_ocaml_editor_snapshot_utf8(
     const char *block_id, int32_t length,
@@ -97,8 +132,9 @@ LUI_EXPORT int32_t lui_ocaml_editor_snapshot_utf8(
     CAMLparam0();
     CAMLlocal2(id, snapshot);
     id = caml_alloc_initialized_string(length, block_id);
-    snapshot = caml_callback_exn(*handler, id);
-    if (!Is_exception_result(snapshot)) {
+    bridge_callback_result outcome = bridge_callback1(*handler, id);
+    snapshot = outcome.payload;
+    if (!outcome.raised) {
       receive(String_val(snapshot), (int32_t)caml_string_length(snapshot));
       result = 1;
     }
@@ -162,20 +198,19 @@ static void report_ocaml_exception_value(const char *where, value exception) {
   CAMLreturn0;
 }
 
-static void report_ocaml_exception(const char *where, value result) {
-  report_ocaml_exception_value(where, Extract_exception(result));
-}
-
-static int emit_patch(const char *where, value result) {
-  if (Is_exception_result(result)) {
-    report_ocaml_exception(where, result);
-    return 0;
+static int emit_patch(const char *where, bridge_callback_result outcome) {
+  CAMLparam0();
+  CAMLlocal1(result);
+  result = outcome.payload;
+  if (outcome.raised) {
+    report_ocaml_exception_value(where, result);
+    CAMLreturnT(int, 0);
   }
   const char *json = String_val(result);
   if (patch_callback != NULL && json[0] != '\0') {
     patch_callback(json);
   }
-  return 1;
+  CAMLreturnT(int, 1);
 }
 
 /* Reuse LUI's semantic protocol and publish every ordered batch before reply. */
@@ -190,10 +225,12 @@ LUI_EXPORT int32_t lui_ocaml_agent_utf8(const char *request, int32_t length,
     CAMLparam0();
     CAMLlocal2(payload, result);
     payload = caml_alloc_initialized_string(length, request);
-    result = caml_callback_exn(*handler, payload);
-    if (Is_exception_result(result))
-      report_ocaml_exception("lui_ocaml_agent", result);
-    else if (emit_patch("lui_ocaml_agent", Field(result, 1))) {
+    bridge_callback_result outcome = bridge_callback1(*handler, payload);
+    result = outcome.payload;
+    if (outcome.raised)
+      report_ocaml_exception_value("lui_ocaml_agent", result);
+    else if (emit_patch("lui_ocaml_agent",
+                       (bridge_callback_result){Field(result, 1), 0})) {
       reply(String_val(Field(result, 0)));
       accepted = 1;
     }
@@ -247,11 +284,11 @@ LUI_EXPORT int32_t lui_ocaml_start(lui_patch_callback callback,
     return 0;
   }
   CAMLparam0();
-  CAMLlocal2(payload_value, result);
+  CAMLlocal1(payload_value);
   payload_value = copy_bytes(payload_data, payload_length);
-  result = caml_callback3_exn(*initialize, Val_long(platform_code),
-                            Val_long(host_code), payload_value);
-  accepted = emit_patch("lui_ocaml_init", result);
+  accepted = emit_patch("lui_ocaml_init",
+      bridge_callback3(*initialize, Val_long(platform_code),
+                       Val_long(host_code), payload_value));
   CAMLdrop;
   caml_enter_blocking_section();
   return accepted;
@@ -288,7 +325,7 @@ static int dispatch_long(const char *name, int64_t node) {
   caml_leave_blocking_section();
   const value *dispatch = caml_named_value(name);
   if (dispatch != NULL) {
-    result = emit_patch(name, caml_callback_exn(*dispatch, Val_long(node)));
+    result = emit_patch(name, bridge_callback1(*dispatch, Val_long(node)));
   }
   caml_enter_blocking_section();
   return result;
@@ -308,7 +345,7 @@ LUI_EXPORT int32_t lui_ocaml_press_ex(int64_t node, int32_t modifiers) {
   const value *dispatch = caml_named_value("lui_ocaml_press_ex");
   if (dispatch != NULL) {
     result = emit_patch("lui_ocaml_press_ex",
-        caml_callback2_exn(*dispatch, Val_long(node), Val_int(modifiers)));
+        bridge_callback2(*dispatch, Val_long(node), Val_int(modifiers)));
   }
   caml_enter_blocking_section();
   return result;
@@ -326,11 +363,10 @@ static int dispatch_bytes(const char *name, int64_t node,
   const value *dispatch = caml_named_value(name);
   if (dispatch != NULL) {
     CAMLparam0();
-    CAMLlocal2(text_value, callback_result);
+    CAMLlocal1(text_value);
     text_value = copy_bytes(text, length);
-    callback_result =
-        caml_callback2_exn(*dispatch, Val_long(node), text_value);
-    result = emit_patch(name, callback_result);
+    result = emit_patch(name,
+        bridge_callback2(*dispatch, Val_long(node), text_value));
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -375,15 +411,13 @@ static int dispatch_pointer_detail(const char *name, int64_t node,
   if (dispatch != NULL) {
     CAMLparam0();
     CAMLlocalN(argv, 6);
-    CAMLlocal1(callback_result);
     argv[0] = Val_long(node);
     argv[1] = caml_copy_double(x);
     argv[2] = caml_copy_double(y);
     argv[3] = Val_long(modifiers);
     argv[4] = Val_long(button);
     argv[5] = copy_bytes(target_class != NULL ? target_class : "", class_length);
-    callback_result = caml_callbackN_exn(*dispatch, 6, argv);
-    result = emit_patch(name, callback_result);
+    result = emit_patch(name, bridge_callbackN(*dispatch, 6, argv));
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -427,7 +461,7 @@ LUI_EXPORT int32_t lui_ocaml_focus_within_changed(int64_t node, int32_t within) 
   const value *dispatch = caml_named_value("lui_ocaml_focus_within_changed");
   if (dispatch != NULL) {
     result = emit_patch("lui_ocaml_focus_within_changed",
-                        caml_callback2_exn(*dispatch, Val_long(node),
+                        bridge_callback2(*dispatch, Val_long(node),
                                            Val_bool(within != 0)));
   }
   caml_enter_blocking_section();
@@ -440,7 +474,7 @@ LUI_EXPORT int32_t lui_ocaml_toggle_changed(int64_t node, int32_t checked) {
   const value *dispatch = caml_named_value("lui_ocaml_toggle_changed");
   if (dispatch != NULL) {
     result = emit_patch("lui_ocaml_toggle_changed",
-                        caml_callback2_exn(*dispatch, Val_long(node),
+                        bridge_callback2(*dispatch, Val_long(node),
                                            Val_bool(checked)));
   }
   caml_enter_blocking_section();
@@ -454,7 +488,7 @@ LUI_EXPORT int32_t lui_ocaml_toggle_changed_detail(int64_t node,
   const value *dispatch = caml_named_value("lui_ocaml_toggle_changed_detail");
   if (dispatch != NULL) {
     result = emit_patch("lui_ocaml_toggle_changed_detail",
-                        caml_callback3_exn(*dispatch, Val_long(node),
+                        bridge_callback3(*dispatch, Val_long(node),
                                            Val_bool(checked), Val_long(modifiers)));
   }
   caml_enter_blocking_section();
@@ -485,11 +519,10 @@ LUI_EXPORT int32_t lui_ocaml_navigation_key_utf8(int64_t node,
   const value *dispatch = caml_named_value("lui_ocaml_navigation_key");
   if (dispatch != NULL) {
     CAMLparam0();
-    CAMLlocal2(text, callback_result);
+    CAMLlocal1(text);
     text = copy_bytes(key, length);
-    callback_result = caml_callback3_exn(*dispatch, Val_long(node), text,
-                                         Val_bool(shift));
-    result = emit_patch("lui_ocaml_navigation_key", callback_result);
+    result = emit_patch("lui_ocaml_navigation_key",
+        bridge_callback3(*dispatch, Val_long(node), text, Val_bool(shift)));
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -503,7 +536,7 @@ LUI_EXPORT int32_t lui_ocaml_scroll_edges(int64_t node,
   const value *dispatch = caml_named_value("lui_ocaml_scroll_edges");
   if (dispatch != NULL)
     result = emit_patch("lui_ocaml_scroll_edges",
-      caml_callback3_exn(*dispatch, Val_long(node),
+      bridge_callback3(*dispatch, Val_long(node),
                           Val_bool(at_start), Val_bool(at_end)));
   caml_enter_blocking_section();
   return result;
@@ -516,7 +549,7 @@ LUI_EXPORT int32_t lui_ocaml_slider_changed(int64_t node,
   const value *dispatch = caml_named_value("lui_ocaml_slider_changed");
   if (dispatch != NULL) {
     result = emit_patch("lui_ocaml_slider_changed",
-                        caml_callback2_exn(*dispatch, Val_long(node),
+                        bridge_callback2(*dispatch, Val_long(node),
                                            caml_copy_double(fraction)));
   }
   caml_enter_blocking_section();
@@ -530,11 +563,10 @@ LUI_EXPORT int32_t lui_ocaml_scroll_completed(int64_t node, int64_t token,
   const value *dispatch = caml_named_value("lui_ocaml_scroll_completed");
   if (dispatch != NULL && outcome != NULL) {
     CAMLparam0();
-    CAMLlocal2(outcome_value, callback_result);
+    CAMLlocal1(outcome_value);
     outcome_value = caml_copy_string(outcome);
-    callback_result = caml_callback3_exn(*dispatch, Val_long(node),
-                                         Val_long(token), outcome_value);
-    result = emit_patch("lui_ocaml_scroll_completed", callback_result);
+    result = emit_patch("lui_ocaml_scroll_completed",
+        bridge_callback3(*dispatch, Val_long(node), Val_long(token), outcome_value));
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -548,7 +580,7 @@ LUI_EXPORT int32_t lui_ocaml_visible_range(int64_t node, int64_t first,
   const value *dispatch = caml_named_value("lui_ocaml_visible_range");
   if (dispatch != NULL) {
     result = emit_patch("lui_ocaml_visible_range",
-                        caml_callback3_exn(*dispatch, Val_long(node),
+                        bridge_callback3(*dispatch, Val_long(node),
                                            Val_long(first), Val_long(last)));
   }
   caml_enter_blocking_section();
@@ -571,7 +603,7 @@ LUI_EXPORT int32_t lui_ocaml_virtual_window(int64_t node, int64_t generation,
   const value *dispatch = caml_named_value("lui_ocaml_virtual_window");
   if (dispatch != NULL) {
     CAMLparam0();
-    CAMLlocal3(list, cell, result);
+    CAMLlocal2(list, cell);
     CAMLlocalN(arguments, 5);
     list = Val_emptylist;
     for (int32_t index = count; index > 0; index--) {
@@ -585,8 +617,8 @@ LUI_EXPORT int32_t lui_ocaml_virtual_window(int64_t node, int64_t generation,
     arguments[2] = Val_long(first);
     arguments[3] = Val_long(last);
     arguments[4] = list;
-    result = caml_callbackN_exn(*dispatch, 5, arguments);
-    accepted = emit_patch("lui_ocaml_virtual_window", result);
+    accepted = emit_patch("lui_ocaml_virtual_window",
+        bridge_callbackN(*dispatch, 5, arguments));
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -615,13 +647,13 @@ LUI_EXPORT int32_t lui_ocaml_extension_event_utf8(int64_t node,
   const value *dispatch = caml_named_value("lui_ocaml_extension_event");
   if (dispatch != NULL) {
     CAMLparam0();
-    CAMLlocal4(identifier_value, name_value, values_value, callback_result);
+    CAMLlocal3(identifier_value, name_value, values_value);
     identifier_value = copy_bytes(identifier, identifier_length);
     name_value = copy_bytes(name, name_length);
     values_value = copy_bytes(values, values_length);
     value arguments[] = { Val_long(node), identifier_value, name_value, values_value };
-    callback_result = caml_callbackN_exn(*dispatch, 4, arguments);
-    result = emit_patch("lui_ocaml_extension_event", callback_result);
+    result = emit_patch("lui_ocaml_extension_event",
+        bridge_callbackN(*dispatch, 4, arguments));
     CAMLdrop;
   }
   caml_enter_blocking_section();
@@ -648,7 +680,7 @@ LUI_EXPORT int32_t lui_ocaml_pump(void) {
   const value *pump = caml_named_value("lui_ocaml_pump");
   if (pump != NULL) {
     result = emit_patch("lui_ocaml_pump",
-                        caml_callback_exn(*pump, Val_unit));
+                        bridge_callback1(*pump, Val_unit));
   }
   caml_enter_blocking_section();
   return result;
@@ -666,9 +698,9 @@ LUI_EXPORT int32_t lui_ocaml_platform_event(const char *data,
     payload_value = copy_bytes(data, length);
     /* An encoded exceptional value is not a valid GC root. Decode it
        immediately, before registering it or doing diagnostic work. */
-    value outcome = caml_callback_exn(*handler, payload_value);
-    if (Is_exception_result(outcome)) {
-      exception = Extract_exception(outcome);
+    bridge_callback_result outcome = bridge_callback1(*handler, payload_value);
+    if (outcome.raised) {
+      exception = outcome.payload;
       report_ocaml_exception_value("lui_ocaml_platform_event", exception);
     } else {
       result = 1;
@@ -690,10 +722,12 @@ LUI_EXPORT int32_t lui_ocaml_document_event_utf8(const char *data,
     CAMLparam0();
     CAMLlocal2(payload, result);
     payload = copy_bytes(data, length);
-    result = caml_callback_exn(*handler, payload);
-    if (Is_exception_result(result))
-      report_ocaml_exception("lui_ocaml_document_event", result);
-    else if (emit_patch("lui_ocaml_document_event", Field(result, 1)))
+    bridge_callback_result outcome = bridge_callback1(*handler, payload);
+    result = outcome.payload;
+    if (outcome.raised)
+      report_ocaml_exception_value("lui_ocaml_document_event", result);
+    else if (emit_patch("lui_ocaml_document_event",
+                       (bridge_callback_result){Field(result, 1), 0}))
       accepted = Bool_val(Field(result, 0)) ? 2 : 1;
     CAMLdrop;
   }
@@ -707,7 +741,7 @@ LUI_EXPORT int32_t lui_ocaml_stop(void) {
   const value *dispose = caml_named_value("lui_ocaml_dispose");
   if (dispose != NULL) {
     result = emit_patch("lui_ocaml_dispose",
-                        caml_callback_exn(*dispose, Val_unit));
+                        bridge_callback1(*dispose, Val_unit));
   }
   caml_enter_blocking_section();
   return result;
@@ -718,12 +752,12 @@ LUI_EXPORT int64_t lui_ocaml_root_node(void) {
   caml_leave_blocking_section();
   const value *root = caml_named_value("lui_ocaml_root_node");
   if (root != NULL) {
-    value result = caml_callback_exn(*root, Val_unit);
+    bridge_callback_result result = bridge_callback1(*root, Val_unit);
     /* The OCaml side returns a plain tagged int — Long_val, not
        Int64_val (which would dereference the immediate as a custom
        block pointer and segfault). */
-    if (!Is_exception_result(result) && Is_long(result))
-      node = Long_val(result);
+    if (!result.raised && Is_long(result.payload))
+      node = Long_val(result.payload);
   }
   caml_enter_blocking_section();
   return node;

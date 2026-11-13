@@ -21,6 +21,27 @@ block row and admits only its own later editor while that row remains current.
 No wire shape or constructor changes are required. Web and maintained mobile
 hosts are unchanged.
 
+## Native callback outcomes are decoded before GC rooting
+
+The application C bridge now uses a private typed callback outcome for every
+OCaml callback arity. The unsafe exceptional encoding from `caml_callback*_exn`
+is decoded without allocation before a payload enters any `CAMLlocal` root.
+Patch, document, agent, snapshot, input and sparse-feedback entries retain their
+existing exported signatures, return codes, exception diagnostics and successful
+patch/reply ordering. Downstream hosts require no migration.
+
+Within this bridge translation unit, the familiar `caml_callback*_exn` names
+also resolve to the typed outcome wrappers. Code such as
+`root = caml_callback_exn(closure, argument)` is now a mandatory C type error;
+bridge maintainers must test the outcome's `raised` field and root its decoded
+`payload`, or pass the outcome to the existing private `emit_patch` helper.
+The existing primitive-signature gate includes rejected root assignments for
+all four callback arities. The existing native FFI fixture covers throwing and
+subsequently successful real entries, checks the actual registered roots during
+diagnostics and performs full-major collection while those decoded roots live.
+These regressions require native qualification; source preparation alone is not
+a passing result.
+
 ## NSH sidebar content fills the remaining viewport
 
 The left Favorites/Recent viewport and the right panel viewport now use typed

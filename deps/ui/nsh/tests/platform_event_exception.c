@@ -2,7 +2,100 @@
    state as the native Rust owner. The callback remains real OCaml code. */
 /* Include the actual implementation once so test-only callback installation
    can access its private callback slots without adding a production API. */
+#include <caml/mlvalues.h>
+#include <caml/printexc.h>
+static char *check_exception_roots(value exception);
+#define caml_format_exception check_exception_roots
 #include "../../native/logseq_lui_bridge.c"
+#undef caml_format_exception
+
+static int check_roots_enabled;
+static int exception_root_checks;
+static int invalid_exception_roots;
+static int exception_collections;
+
+/* Inspect real registered roots at the reporting boundary, then collect while
+   that boundary is live. Detect unsafe old code before asking GC to visit it. */
+static char *check_exception_roots(value exception) {
+  CAMLparam1(exception);
+  if (check_roots_enabled) {
+    int invalid = 0;
+    exception_root_checks++;
+    for (struct caml__roots_block *block = CAML_LOCAL_ROOTS;
+         block != NULL; block = block->next) {
+      for (intnat table = 0; table < block->ntables; table++) {
+        for (intnat item = 0; item < block->nitems; item++) {
+          if (Is_exception_result(block->tables[table][item])) invalid++;
+        }
+      }
+    }
+    invalid_exception_roots += invalid;
+    if (invalid != 0)
+      CAMLreturnT(char *, caml_stat_strdup_noexc("invalid encoded exception root"));
+    const value *collect = caml_named_value("logseq_test_exception_collect");
+    if (collect != NULL) {
+      bridge_callback_result result = bridge_callback1(*collect, Val_unit);
+      if (!result.raised) exception_collections++;
+    }
+  }
+  CAMLreturnT(char *, caml_format_exception(exception));
+}
+
+CAMLprim value caml_logseq_test_exception_roots(value enabled) {
+  CAMLparam1(enabled);
+  check_roots_enabled = Bool_val(enabled);
+  if (check_roots_enabled) {
+    exception_root_checks = 0;
+    invalid_exception_roots = 0;
+    exception_collections = 0;
+  }
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value caml_logseq_test_exception_root_counts(value unit) {
+  CAMLparam1(unit);
+  CAMLlocal1(result);
+  result = caml_alloc_tuple(3);
+  Store_field(result, 0, Val_int(exception_root_checks));
+  Store_field(result, 1, Val_int(invalid_exception_roots));
+  Store_field(result, 2, Val_int(exception_collections));
+  CAMLreturn(result);
+}
+
+static void discard_patch(const char *json) { (void)json; }
+static void discard_snapshot(const char *data, int32_t length) {
+  (void)data;
+  (void)length;
+}
+
+/* Real public entries, with only their existing private startup bit scoped for
+   this already-running OCaml executable. No application initialization runs. */
+CAMLprim value caml_logseq_test_callback_family(value family) {
+  CAMLparam1(family);
+  int previous_started = runtime_started;
+  int selected = Int_val(family);
+  int32_t accepted = 0;
+  int64_t pins[] = {1, 2};
+  runtime_started = 1;
+  caml_enter_blocking_section();
+  switch (selected) {
+    case 0: accepted = lui_ocaml_start(patch_callback, wakeup_callback,
+      platform_request_callback, 0, 6, "{}", 2); break;
+    case 1: accepted = lui_ocaml_agent_utf8("{}", 2, discard_patch); break;
+    case 2: accepted = lui_ocaml_editor_snapshot_utf8("block", 5, discard_snapshot); break;
+    case 3: accepted = lui_ocaml_text_changed_utf8(1, "text", 4); break;
+    case 4: accepted = lui_ocaml_pointer_down_utf8(1, 2., 3., 0, 0, "cell", 4); break;
+    case 5: accepted = lui_ocaml_navigation_key_utf8(1, "Home", 4, 0); break;
+    case 6: accepted = lui_ocaml_scroll_completed(1, 1, "finished"); break;
+    case 7: accepted = lui_ocaml_virtual_window(1, 1, 0, 2, pins, 2); break;
+    case 8: accepted = lui_ocaml_extension_event_utf8(1, "identifier", 10, "event", 5, "{}", 2); break;
+    case 9: accepted = lui_ocaml_document_event_utf8("event\n{}", 8); break;
+    case 10: accepted = lui_ocaml_press(1); break;
+  }
+  caml_leave_blocking_section();
+  runtime_started = previous_started;
+  CAMLreturn(Val_int(accepted));
+}
 
 /* A void host callback may leave any register value behind. Reproduce the
    crashing encoded value deterministically, without casting function types or

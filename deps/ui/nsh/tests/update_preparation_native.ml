@@ -1166,6 +1166,10 @@ external bridge_press_modifiers : int -> int -> int = "caml_logseq_test_press_mo
 
 external bridge_focus_within : int -> bool -> int = "caml_logseq_test_focus_within"
 
+external bridge_exception_roots : bool -> unit = "caml_logseq_test_exception_roots"
+external bridge_exception_root_counts : unit -> int * int * int = "caml_logseq_test_exception_root_counts"
+external bridge_callback_family : int -> int = "caml_logseq_test_callback_family"
+
 let native_alt_reference_drop_actions () =
   let module S = Editor_state in
   let prior_model = !Runtime.read_model and prior_worker = !Runtime.worker
@@ -1399,6 +1403,77 @@ let native_platform_exception_reporting () =
     Callback.register "lui_ocaml_platform_event" Native_embed.Ffi.platform_event;
     check "actual platform handler preserves its original rejection after OCaml logging"
       (bridge_platform_event "window-titlebar\n{}"=0))
+
+let native_callback_exception_roots () =
+  let previous_control = Gc.get () in
+  let raising = ref true and calls = ref 0 and collections = ref 0 in
+  let run () =
+    incr calls;
+    let allocated = Array.init 64 (fun i -> String.make 128 (Char.chr (65+i mod 26))) in
+    Gc.minor ();
+    ignore (Sys.opaque_identity allocated);
+    if !raising then failwith "bridge-callback-family-regression" in
+  let cases =
+    [ "initialize",0,
+      (fun () -> Callback.register "lui_ocaml_init" (fun (_ : int) (_ : int) (_ : string) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_init" Native_embed.Ffi.initialize)
+    ; "agent",1,
+      (fun () -> Callback.register "lui_ocaml_agent" (fun (_ : string) -> run (); "reply","[]")),
+      (fun () -> Callback.register "lui_ocaml_agent" Native_embed.Ffi.agent)
+    ; "editor snapshot",2,
+      (fun () -> Callback.register "lui_ocaml_editor_snapshot" (fun (_ : string) -> run (); "null")),
+      (fun () -> Callback.register "lui_ocaml_editor_snapshot" Native_embed.Ffi.editor_snapshot)
+    ; "text",3,
+      (fun () -> Callback.register "lui_ocaml_text_changed" (fun (_ : int) (_ : string) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_text_changed" Native_embed.Ffi.text_changed)
+    ; "pointer detail",4,
+      (fun () -> Callback.register "lui_ocaml_pointer_down"
+        (fun (_ : int) (_ : float) (_ : float) (_ : int) (_ : int) (_ : string) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_pointer_down" Native_embed.Ffi.pointer_down)
+    ; "navigation",5,
+      (fun () -> Callback.register "lui_ocaml_navigation_key"
+        (fun (_ : int) (_ : string) (_ : bool) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_navigation_key" Native_embed.Ffi.navigation_key)
+    ; "scroll completion",6,
+      (fun () -> Callback.register "lui_ocaml_scroll_completed"
+        (fun (_ : int) (_ : int) (_ : string) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_scroll_completed" Native_embed.Ffi.scroll_completed)
+    ; "virtual window",7,
+      (fun () -> Callback.register "lui_ocaml_virtual_window"
+        (fun (_ : int) (_ : int) (_ : int) (_ : int) (pins : int list) ->
+          check "virtual-window FFI keeps the real ordered pin list" (pins=[1;2]);run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_virtual_window" Native_embed.Ffi.virtual_window)
+    ; "extension",8,
+      (fun () -> Callback.register "lui_ocaml_extension_event"
+        (fun (_ : int) (_ : string) (_ : string) (_ : string) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_extension_event" Native_embed.Ffi.extension_event)
+    ; "document",9,
+      (fun () -> Callback.register "lui_ocaml_document_event" (fun (_ : string) -> run (); true,"[]")),
+      (fun () -> Callback.register "lui_ocaml_document_event" Native_embed.Ffi.document_event)
+    ; "ordinary dispatch",10,
+      (fun () -> Callback.register "lui_ocaml_press" (fun (_ : int) -> run (); "[]")),
+      (fun () -> Callback.register "lui_ocaml_press" Native_embed.Ffi.press) ] in
+  Fun.protect ~finally:(fun () ->
+    bridge_exception_roots false;
+    List.iter (fun (_,_,_,restore) -> restore ()) cases;
+    Gc.set previous_control) (fun () ->
+    Callback.register "logseq_test_exception_collect" (fun () -> incr collections;Gc.full_major ());
+    Gc.set {previous_control with minor_heap_size=4096};
+    bridge_exception_roots true;
+    List.iter (fun (label,family,install,_) ->
+      install ();
+      raising:=true;
+      check ("actual " ^ label ^ " ABI reports its callback exception")
+        (bridge_callback_family family=0);
+      Gc.full_major ();
+      raising:=false;
+      check ("actual " ^ label ^ " ABI remains callable after exception and GC")
+        (bridge_callback_family family=(if family=9 then 2 else 1))) cases;
+    let checked,invalid,collected=bridge_exception_root_counts () in
+    check "every reporting callback family exposes only decoded roots during diagnostics"
+      (checked=List.length cases-1 && invalid=0);
+    check "real full-major GC runs at every live reporting boundary"
+      (collected=checked && !collections=checked && !calls=2*List.length cases))
 
 let native_updater_state_events () =
   Host.drain ();
@@ -3208,6 +3283,7 @@ let () =
   Native_assets_native.run ();
   Native_assets_native.render_asset_kinds ();
   native_platform_exception_reporting ();
+  native_callback_exception_roots ();
   native_primitive_unit_results ();
   native_alt_mask_through_actual_ffi ();
   native_focus_within_through_actual_ffi ();

@@ -33,6 +33,21 @@ class NativePrimitiveSignatures(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     validate(ui=ui, bridge=bridge)
 
+    def test_callback_results_cannot_be_assigned_to_ocaml_roots(self):
+        ui = Path(__file__).resolve().parent.parent
+        source = (ui / "native/logseq_lui_bridge.c").read_text(encoding="utf-8")
+        for callback in ("caml_callback_exn(Val_unit, Val_unit)",
+                         "caml_callback2_exn(Val_unit, Val_unit, Val_unit)",
+                         "caml_callback3_exn(Val_unit, Val_unit, Val_unit, Val_unit)",
+                         "caml_callbackN_exn(Val_unit, 0, NULL)"):
+            with self.subTest(callback=callback), tempfile.TemporaryDirectory() as temporary:
+                bridge = Path(temporary) / "invalid_callback_root.c"
+                bridge.write_text(source + "\nvoid invalid_callback_root(void) {\n"
+                    "  CAMLparam0();\n  CAMLlocal1(root);\n  root = " + callback + ";\n"
+                    "  CAMLreturn0;\n}\n", encoding="utf-8")
+                with self.assertRaises(subprocess.CalledProcessError):
+                    validate(ui=ui, bridge=bridge)
+
 
 if __name__ == "__main__":
     unittest.main()
