@@ -1,5 +1,17 @@
 # API migrations
 
+## Code blocks keep one visible language caption
+
+The separate `.extensions__code-lang` node inside a fenced code editor is now
+hidden through the existing typed display property. Frozen master and the Web
+stylesheet already hide that node; native hosts previously displayed it beside
+the Editor while the language selector showed the same caption above it. The
+language selector remains the visible, enabled action. The hidden node keeps
+its existing key and text, and the code extension retains its UUID, source role,
+language and value. No editor remount, selection/history change, constructor or
+wire change is introduced. Toolbar hover/placement remains a separate native
+qualification requirement.
+
 ## The native application forwards container focus-within events
 
 The actual Logseq OCaml bridge now exports the existing LUI

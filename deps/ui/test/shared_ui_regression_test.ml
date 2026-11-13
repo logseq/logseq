@@ -1281,6 +1281,38 @@ let table_title_completion ~registry ~profile =
     !capture ();
     check "Disposing the originating title owner retires its focus callback" (!focuses=1))
 
+let code_language_caption ~registry ~profile =
+  List.iter (fun (stored,caption) ->
+    let source="Code language caption sentinel" in
+    let session=S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ -> Render.code_block ~self:"code-caption-owner" stored source) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      let rec visible_text node acc =
+        if M.string_prop node "display"=Some "none" then acc
+        else
+          let acc=match M.string_prop node "text" with
+            | Some value -> value :: acc | None -> acc in
+          List.fold_left (fun acc child -> visible_text child acc) acc
+            (M.children session.S.tree node.M.id) in
+      let root=Hashtbl.find session.S.tree.M.nodes (S.root_node session) in
+      let captions=List.filter ((=) caption) (visible_text root []) in
+      check "Code blocks expose one visible language caption through the existing selector"
+        (List.length captions=1);
+      let selector=List.find (fun node ->
+        M.string_prop node "accessibility-identifier"=Some "code-language-code-caption-owner")
+        (nodes session) in
+      check "Hiding the duplicate badge leaves the actual language action enabled"
+        (M.string_prop selector "text"=Some caption
+         && Hashtbl.find_opt selector.M.props "press-enabled"=Some (P.BoolValue true));
+      let editor=List.find (fun node -> node.M.kind="extension:logseq-codemirror") (nodes session) in
+      check "Code caption presentation preserves the editor source and identity contract"
+        (M.string_prop editor "value"=Some source
+         && M.string_prop editor "uuid"=Some "code-caption-owner"
+         && M.string_prop editor "source-role"=Some "block"
+         && M.string_prop editor "lang"=Some caption)))
+    ["clj","clojure";"plaintext","plaintext";"custom-mode","custom-mode"]
+
 let published_chrome_palette ~registry ~profile =
   let session=S.mount ~registry ~profile ~initial:"" ~reducer:(fun value () -> value)
     ~view:(fun _ input _ -> Lui_elements.column
@@ -1400,6 +1432,7 @@ let calendar_invalid_input ~registry ~profile ~finish =
   in next [false;true]
 
 let run_views ~registry ~profile ~finish =
+  code_language_caption ~registry ~profile;
   published_chrome_palette ~registry ~profile;
   table_column_ownership ~registry ~profile;
   table_title_completion ~registry ~profile;

@@ -230,9 +230,10 @@ let code_block ?(self = "") ?(extra = []) lang code =
         [ code_block_actions ~self lang
         ; row ~key:"ec" ~grow:1.0 ~style_class:"extensions__code"
             ([ (if lang <> "" && not calc then
-                 text ~key:"lang"
-                   ~style_class:"extensions__code-lang"
-                   ~value:(String.lowercase_ascii lang) []
+                 Ui_components.with_props [Ui_components.Prop.display `none]
+                   (text ~key:"lang"
+                      ~style_class:"extensions__code-lang"
+                      ~value:(String.lowercase_ascii lang) [])
                else Logseq_el.fragment [])
              ; row ~key:"ce" ~grow:1.0 ~style_class:"code-editor"
                  [ (* logseq-codemirror block role: the adapter emits the
