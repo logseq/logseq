@@ -615,12 +615,15 @@
 
                              :else
                              insert-new-block-aux!)]
-             (-> (p/let [insert-result (insert-fn config block'' value)
-                         _ (first insert-result)]
-                   (clear-when-saved!))
-                 (p/catch (fn [error]
-                            (clear-pending-new-block!)
-                            (throw error)))))))))))
+             (editor-common-handler/<enqueue-command!
+              (state/get-current-repo)
+              (fn []
+                (-> (p/let [insert-result (insert-fn config block'' value)
+                            _ (first insert-result)]
+                      (clear-when-saved!))
+                    (p/catch (fn [error]
+                               (clear-pending-new-block!)
+                               (throw error)))))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -3160,7 +3163,7 @@
         (do
           (util/stop e)
           (notification/show! (t :page.validation/name-no-hash) :warning))
-        (pending-new-block?)
+        (and (pending-new-block?) (not (or ctrlKey metaKey)))
         (do
           (when (= 1 (count (str key)))
             (append-pending-new-block-text! key))
