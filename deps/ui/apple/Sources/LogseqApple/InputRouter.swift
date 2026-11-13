@@ -12,6 +12,9 @@ final class InputRouter {
     private var pressPrevented = false
     private var captured: (node: Int, incarnation: UInt64)?
     private var lastPointer: (point: NSPoint, modifiers: Int, button: Int, targetClass: String)?
+    private struct EditorDrag { let node: Int; let incarnation: UInt64; let block: String; let double: Bool }
+    private var editorDrag: EditorDrag?
+    private var editorPoint: (owner: EditorDrag, point: CGPoint, extend: Bool, double: Bool)?
 
     init(services: PlatformServices) { self.services = services }
 
@@ -25,7 +28,9 @@ final class InputRouter {
         return services.node(for: view)
     }
     private func pointer(_ name: String, listener: Int?) throws {
-        guard let listener, services.incarnations[listener] != nil, let detail = lastPointer else { return }
+        guard services.runtime?.started == true, !services.closed,
+              let listener, services.supportsPointer(listener, event: name),
+              services.incarnations[listener] != nil, let detail = lastPointer else { return }
         try services.runtime?.pointer(name, listener, detail.point.x, detail.point.y, detail.modifiers, detail.button, detail.targetClass)
         try services.runtime?.drain()
         services.runtime?.schedulePump()
@@ -35,6 +40,7 @@ final class InputRouter {
         return captured.node
     }
     func backendEvent(_ event: LUIEvent) throws {
+        guard services.runtime?.started == true, !services.closed else { return }
         // SwiftUI taps have no position. Supply the real event monitor's
         // detail, preserving keyboard/accessibility activation as reported.
         let mouseTypes: Set<NSEvent.EventType> = [.leftMouseDown, .leftMouseUp, .rightMouseDown, .rightMouseUp, .otherMouseDown, .otherMouseUp]
@@ -50,6 +56,44 @@ final class InputRouter {
             }
         }
         try services.runtime?.dispatch(event)
+    }
+
+    // The one-point input sink is never a hit target. Its real retained
+    // block-editor ancestor owns selection over the committed rich text.
+    private func editorPointer(_ event: NSEvent, target: Int?, point: CGPoint) throws -> Bool {
+        if event.type == .leftMouseDown {
+            editorDrag = nil; editorPoint = nil
+            var root = target
+            while let id = root, !services.styleClass(id).split(separator: " ").contains("block-editor") { root = services.parents[id] }
+            guard let root else { return false }
+            for (id, properties) in services.nodes where properties["identifier"] as? String == "logseq-editor" {
+                var ancestor = services.parents[id]
+                while let parent = ancestor, parent != root { ancestor = services.parents[parent] }
+                if ancestor == root, let block = properties["block-id"] as? String, let incarnation = services.incarnations[id] {
+                    editorDrag = EditorDrag(node: id, incarnation: incarnation, block: block, double: event.clickCount == 2)
+                    break
+                }
+            }
+        }
+        guard let owner = editorDrag else { return false }
+        guard services.incarnations[owner.node] == owner.incarnation else { editorDrag = nil; editorPoint = nil; return false }
+        let down = event.type == .leftMouseDown
+        editorPoint = (owner, point, !down || event.modifierFlags.contains(.shift), owner.double && event.type != .leftMouseDragged)
+        if event.type == .leftMouseUp { editorDrag = nil }
+        try afterFrame()
+        return true
+    }
+
+    func afterFrame() throws {
+        guard let pending = editorPoint else { return }
+        guard services.incarnations[pending.owner.node] == pending.owner.incarnation,
+              services.runtime?.started == true, !services.closed else { editorPoint = nil; return }
+        guard let layout = try services.editorGeometry.layout(pending.owner.block), let offset = layout.offset(at: pending.point) else { return }
+        editorPoint = nil
+        var values: [String: Any] = ["offset": offset]
+        if !pending.double { values["extend"] = pending.extend }
+        try services.runtime?.extensionEvent(node: pending.owner.node, identifier: "logseq-editor", name: pending.double ? "dblclick" : "pointer", values: values)
+        services.requestEditorFocus(pending.owner.block, true)
     }
 
     func capture(_ event: NSEvent) throws -> Bool {
@@ -90,6 +134,7 @@ final class InputRouter {
             if !pointer { taken = try send("mousedown", payload) }
             if event.type == .rightMouseDown { taken = try send("contextmenu", payload) || taken }
             pressPrevented = taken
+            if !taken, event.type == .leftMouseDown, try editorPointer(event, target: target, point: point) { return true }
             if !taken, let listener = services.pointerTarget(target) {
                 if services.capturesPointer(listener), let incarnation = services.incarnations[listener] { captured = (listener, incarnation) }
                 try self.pointer("pointer_down", listener: listener)
@@ -107,6 +152,10 @@ final class InputRouter {
             var taken = try send("pointerup", payload)
             if preventMouse & bit == 0 { taken = try send("mouseup", payload) || taken }
             preventMouse &= ~bit
+            if !taken, event.type == .leftMouseUp, try editorPointer(event, target: target, point: point) {
+                pressed = nil; captured = nil; pressPrevented = false
+                return true
+            }
             if !taken, !pressPrevented { try self.pointer("pointer_up", listener: capturedTarget() ?? services.pointerTarget(target)) }
             else { try self.pointer("pointer_cancel", listener: capturedTarget()) }
             captured = nil
@@ -126,7 +175,8 @@ final class InputRouter {
             payload["buttons"] = buttons
             var taken = try send("pointermove", payload)
             if preventMouse == 0 { taken = try send("mousemove", payload) || taken }
-            if !taken { try self.pointer("pointer_move", listener: capturedTarget() ?? services.pointerTarget(target)) }
+            if !taken, event.type == .leftMouseDragged, try editorPointer(event, target: target, point: point) { return true }
+            if !taken { try self.pointer("pointer_move", listener: capturedTarget() ?? services.pointerTarget(target, event: "pointer_move")) }
             return taken
         case .scrollWheel:
             payload["buttons"] = buttons
@@ -142,6 +192,7 @@ final class InputRouter {
         try pointer("pointer_cancel", listener: capturedTarget())
         buttons = 0; preventMouse = 0; pressed = nil; pressPrevented = false
         captured = nil; lastPointer = nil
+        editorDrag = nil; editorPoint = nil
         _ = try send("blur", [:])
     }
 

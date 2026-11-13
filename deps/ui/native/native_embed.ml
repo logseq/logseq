@@ -427,6 +427,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   let registry = Lui_extension.registry () in
   Logseq_el.register_all registry;
   Logseq_codemirror.register registry;
+  Logseq_katex.register registry;
   Logseq_editor.register registry;
   let app =
     Lui_app.create_with_extensions backend registry Model.initial

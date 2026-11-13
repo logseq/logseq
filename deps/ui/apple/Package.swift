@@ -6,11 +6,11 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.executable(name: "logseq-apple", targets: ["LogseqApple"])],
     dependencies: [
-        .package(url: "https://github.com/logseq/lui.git", revision: "2475de1e9fecf3c987b3d07617699dd90c21ec73")
+        .package(url: "https://github.com/logseq/lui.git", revision: "7c48bef76077f01d5663773738936a5ee83fc59a")
     ],
     targets: [
         .executableTarget(name: "LogseqApple", dependencies: [
             .product(name: "LUIAppleBackendStatic", package: "lui")
-        ], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Security")])
+        ], linkerSettings: [.linkedFramework("AppKit"), .linkedFramework("Security"), .linkedFramework("PDFKit"), .linkedFramework("WebKit")])
     ]
 )

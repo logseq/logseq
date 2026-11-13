@@ -151,6 +151,8 @@ final class NativeRuntime {
     }
 
     func document(_ name: String, _ payload: [String: Any]) throws -> Bool {
+        // AppKit delivers final blur/responder callbacks during teardown.
+        guard started else { return false }
         let envelope = name + "\n" + (try jsonString(payload))
         let result = envelope.withCString { function("document_event_utf8", BytesCall.self)($0, Int32(envelope.utf8.count)) }
         try check(result, "document \(name)")

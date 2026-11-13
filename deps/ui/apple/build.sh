@@ -27,6 +27,12 @@ cp "$ui_root/assets/"*.json "$resources/"
 cp "$ui_root/assets/fonts/"*.ttf "$resources/fonts/"
 cp -R "$repo_root/resources/img/." "$resources/img/"
 cp "$repo_root/resources/dicts/"*.edn "$resources/dicts/"
+mkdir -p "$resources/katex"
+cp "$repo_root/node_modules/katex/dist/katex.min.js" "$resources/katex/"
+cp "$repo_root/node_modules/katex/dist/contrib/mhchem.min.js" "$resources/katex/"
+cp "$repo_root/node_modules/katex/dist/katex.min.css" "$resources/katex/"
+cp "$repo_root/node_modules/katex/LICENSE" "$resources/katex/"
+cp -R "$repo_root/node_modules/katex/dist/fonts" "$resources/katex/"
 swift build --package-path "$host_root" -c release >&2
 swift_bin=$(swift build --package-path "$host_root" -c release --show-bin-path)
 install -m 755 "$swift_bin/logseq-apple" "$output/logseq-apple"

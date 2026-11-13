@@ -341,7 +341,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     split ~key:"left-split" ~grow:1. ~gap:0
       ~value:(reactive
         (fun (m : Model.t) width right viewport ->
-          if m.left_sidebar_open then width /. available m right viewport else 0.)
+          if m.left_sidebar_open then width /. available m right viewport else 0.0001)
         ms (Signal.value st.Sidebar_state.left_width)
         (Signal.value st.Sidebar_state.right_fraction)
         (Signal.value st.Sidebar_state.viewport_w))

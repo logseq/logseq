@@ -32,7 +32,8 @@ let with_editor_font elem : t =
      ~value:(reactive
        (fun _ ->
          let font = Settings_state.current_editor_font () in
-         Settings_state.editor_font_family font.ftype)
+         Settings_state.editor_font_family
+           ~apple:(Lui_ui.host ctx = Lui_protocol.SwiftUIHost) font.ftype)
        (Settings_state.signal ())) elem) ctx parent
 
 

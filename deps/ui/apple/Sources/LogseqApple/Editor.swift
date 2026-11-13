@@ -47,7 +47,8 @@ final class NativeEditorInput: NSTextView {
     override func draw(_ dirtyRect: NSRect) {}
 
     func send(_ name: String, _ values: [String: LUIExtensionValue] = [:]) {
-        guard let context = extensionContext, let incarnation,
+        guard services?.closed == false, services?.runtime?.started == true,
+              let context = extensionContext, let incarnation,
               services?.incarnations[context.nodeID] == incarnation else { return }
         services?.perform { try context.emit(name: name, values: values) }
     }
@@ -113,6 +114,16 @@ final class NativeEditorInput: NSTextView {
     }
     override func cut(_ sender: Any?) { copy(sender); send("delete", ["kind": .string("selection")]); synchronize() }
     override func selectAll(_ sender: Any?) { send("key", ["key": .string("a"), "meta": .bool(true)]) }
+
+    override func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
+        guard let services, let window, let content = window.contentView,
+              let byte = sourceByteOffset(string, utf16: min(range.location, string.utf16.count)),
+              let layout = try? services.editorGeometry.layout(block),
+              let caret = try? layout.caret(byte) else { return super.firstRect(forCharacterRange: range, actualRange: actualRange) }
+        actualRange?.pointee = NSRange(location: range.location, length: 0)
+        let rect = content.isFlipped ? caret : CGRect(x: caret.minX, y: content.bounds.height - caret.maxY, width: max(caret.width, 1), height: caret.height)
+        return window.convertToScreen(content.convert(rect, to: nil))
+    }
 }
 
 @MainActor

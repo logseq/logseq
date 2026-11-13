@@ -68,8 +68,17 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let backend = try LUIAppleBackend(extensionRegistry: logseqExtensions(services))
         self.backend?.onEvent = nil
         self.backend = backend
+        services.backend = backend
+        try services.installApplicationIcons()
         backend.frameReportingEnabled = true
-        backend.onFramesReport = { [weak self] frames in self?.services.frames = frames }
+        backend.onFramesReport = { [weak self] frames in
+            guard let self, !self.services.closed else { return }
+            self.services.frames = frames
+            self.services.perform {
+                try self.services.editorGeometry.flush()
+                try self.input?.afterFrame()
+            }
+        }
         backend.onEvent = { [weak self] event in self?.services.perform { try self?.input?.backendEvent(event) } }
     }
     func apply(_ json: String, snapshot: Bool) throws {
@@ -82,9 +91,6 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
             let restoreFocus = try focusedBlock.flatMap { block in
                 try runtime?.snapshot(block: block) == nil ? nil : block
             }
-            // The pinned Apple backend predates applySnapshot. A new retained
-            // tree accepts the authoritative snapshot's repeated generation.
-            try makeBackend()
             hostedRoot = nil
             services.resetPresentation()
             if let restoreFocus { services.focusIntents[restoreFocus] = true }
@@ -92,8 +98,10 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let rawBatches = try rawPatchBatches(json)
         guard rawBatches.count == batches.count else { throw HostError("Patch batch boundary mismatch") }
         do {
-            for (raw, batch) in zip(rawBatches, batches) {
-                try backend?.apply(json: raw); services.applied(batch)
+            for (index, entry) in zip(rawBatches, batches).enumerated() {
+                if snapshot && index == 0 { try backend?.applySnapshot(json: entry.0) }
+                else { try backend?.apply(json: entry.0) }
+                try services.applied(entry.1)
             }
         } catch {
             NSLog("Logseq Apple backend refused patch (snapshot=%@): %@", String(snapshot), String(describing: error))
@@ -119,8 +127,14 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let mode = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? "dark" : "light"
         try runtime?.send("appearance", ["dark": mode == "dark"])
     }
-    func windowDidResize(_ notification: Notification) { services.perform { try publishWindow() } }
-    func windowDidResignKey(_ notification: Notification) { services.perform { try input?.blur() } }
+    func windowDidResize(_ notification: Notification) {
+        guard runtime?.started == true, !services.closed else { return }
+        services.perform { try publishWindow() }
+    }
+    func windowDidResignKey(_ notification: Notification) {
+        guard runtime?.started == true, !services.closed else { return }
+        services.perform { try input?.blur() }
+    }
     func windowShouldClose(_ sender: NSWindow) -> Bool {
         if closeReady { return true }
         requestClose(); return false
@@ -136,6 +150,8 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationWillTerminate(_ notification: Notification) {
+        window?.delegate = nil
+        backend?.onEvent = nil
         if let monitor { NSEvent.removeMonitor(monitor) }
         if let appearanceObserver { DistributedNotificationCenter.default().removeObserver(appearanceObserver) }
         services.close()

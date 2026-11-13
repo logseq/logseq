@@ -1,7 +1,8 @@
 # Logseq Apple desktop host
 
 This macOS 14+ SwiftUI/AppKit executable hosts the native OCaml application
-through the LUI Apple backend. It does not embed a web view or a Go runtime.
+through the LUI Apple backend. PDF annotations use PDFKit; an isolated WebKit
+widget renders the repository's bundled KaTeX and chemistry extension.
 
 ## Build
 
@@ -91,8 +92,8 @@ with the macOS/SwiftUI profile, queues callbacks, and drains them on the main
 actor. OCaml wakeups schedule `lui_ocaml_pump`; timers remain OCaml-owned. The
 pinned bridge does not export the newer LUI runtime-clock API. Incremental JSON
 batch arrays are applied in order. A refused runtime call requests an
-authoritative resync and rebuilds the retained backend from that snapshot (the
-pinned package predates `applySnapshot`). Refusal of recovery is fatal.
+authoritative resync and applies it with `applySnapshot`, preserving the backend
+and restoring the active editor's focus. Refusal of recovery is fatal.
 Batch JSON is passed to LUI without reserialization; decoded host metadata is
 kept separately. Recovery retires incremental batches from the previous epoch.
 
@@ -102,6 +103,20 @@ editors are registered as LUI Apple extensions with the same schema fingerprints
 as OCaml. The rich editor is an input conduit: OCaml owns source, selection,
 undo and composition state. UTF-16 selection offsets are converted to UTF-8
 model offsets at the boundary.
+
+`EditorGeometry` projects the actual committed text runs onto OCaml's source
+spans, including hidden delimiters, atomic decorations and line-end landing
+text. Measurements wait for a committed frame and reject retired nodes and
+superseded source. The same geometry drives pointer selection and the native
+IME candidate window. Host view registries are excluded from Observation to
+avoid a layout/update feedback loop.
+
+`PDFWorkspace` loads graph assets or remote PDFs, renders the OCaml annotation
+model, and emits the existing PDF events for text/area highlights, colors,
+deletion, reference links, navigation and persisted page/scale state. Area
+snapshots are saved under the active graph's asset directory. `Math` renders
+KaTeX in a nonpersistent WebKit instance with bundled fonts, `trust:false`,
+network access blocked by CSP, and stale document-size reports discarded.
 
 `PlatformServices` implements the request envelope `name + "\n" + payload`,
 native menus, clipboard, URL opening, keychain, resource context, UI state,
@@ -124,18 +139,16 @@ Native Edit-menu clipboard commands enter the same document handlers before
 falling through to the first responder. Graph View and Page Graph View are
 outside this host's current acceptance scope.
 
-## Remaining backend capabilities
+## Backend capabilities and validation
 
-The exact pinned LUI package does not expose dynamic SVG icon registration or
-committed per-run glyph geometry. These operations return a structured
-`platform-error` and log `UNSUPPORTED`: app-icons; caret-rect; selection-rects;
-offset-at; line-ranges; scroll-height; and rich DOM presentation mutations
-without a native control. Media/embedded SVG raw-element rendering also reports
-unsupported capabilities. Natural image dimensions currently require a mounted
-native image view. Raw HTML extensions render native containers and controls;
-they do not implement a browser's entire HTML/CSS layout engine.
+The paired LUI package exposes icon registration, image dimensions, snapshots
+and committed text geometry. Bundled Tabler icons and custom `app-icons` use
+the public icon registry. Native scroll requests still require a mounted
+scroll container. Unsupported presentation mutations and raw media/SVG/canvas
+widgets return a structured `platform-error` and log `UNSUPPORTED`.
 
-Accurate geometry must come from the text actually drawn by the backend;
-reconstructing a second TextKit layout from source would produce incorrect
-caret and pointer positions. These remaining operations need the coordinated
-LUI Apple APIs before this host has full editing/rendering parity.
+Build and package validation do not establish interaction parity. Acceptance
+requires the real macOS host with isolated graph/UI state, including journal
+editing, commands, properties, non-edit selection, dragging, shortcuts, PDF,
+math, sidebar collapse and clean save/quit. Graph View and Page Graph View are
+excluded.

@@ -10,28 +10,33 @@ import UniformTypeIdentifiers
 @MainActor
 @Observable
 final class PlatformServices {
-    weak var window: NSWindow?
-    var runtime: NativeRuntime?
-    var views: [Int: WeakView] = [:]
-    var frames: [Int: CGRect] = [:]
-    var editors: [String: WeakView] = [:]
+    @ObservationIgnored weak var window: NSWindow?
+    @ObservationIgnored weak var backend: LUIAppleBackend?
+    @ObservationIgnored var runtime: NativeRuntime?
+    // Native view registration and layout reports must not invalidate SwiftUI
+    // while NSViewRepresentable is mounting or updating those same views.
+    @ObservationIgnored var views: [Int: WeakView] = [:]
+    @ObservationIgnored var frames: [Int: CGRect] = [:]
+    @ObservationIgnored var editors: [String: WeakView] = [:]
     var focusIntents: [String: Bool] = [:]
     var uiState: [String: Any] = [:]
     var snapshots: [String: [String: String]] = [:]
     var graphContext: [String: String] = [:]
-    var onCloseReady: ((Bool) -> Void)?
-    var onError: ((Error) -> Void)?
-    var onEditCommand: ((String) -> Void)?
+    @ObservationIgnored var onCloseReady: ((Bool) -> Void)?
+    @ObservationIgnored var onError: ((Error) -> Void)?
+    @ObservationIgnored var onEditCommand: ((String) -> Void)?
     private(set) var incarnations: [Int: UInt64] = [:]
-    private var nextIncarnation: UInt64 = 0
+    @ObservationIgnored private var nextIncarnation: UInt64 = 0
     var performanceVisible = false
     var performanceText = ""
-    private var gaps: Set<String> = []
-    private var nodes: [Int: [String: Any]] = [:]
-    private var parents: [Int: Int] = [:]
-    private var menuActions: [MenuAction] = []
-    private var panels: [NSSavePanel] = []
-    private(set) var closed = false
+    @ObservationIgnored private var gaps: Set<String> = []
+    @ObservationIgnored private(set) var nodes: [Int: [String: Any]] = [:]
+    @ObservationIgnored private(set) var parents: [Int: Int] = [:]
+    @ObservationIgnored private(set) var children: [Int: [Int]] = [:]
+    @ObservationIgnored lazy var editorGeometry = EditorGeometry(services: self)
+    @ObservationIgnored private var menuActions: [MenuAction] = []
+    @ObservationIgnored private var panels: [NSSavePanel] = []
+    @ObservationIgnored private(set) var closed = false
 
     func object(_ text: String) throws -> [String: Any] {
         guard let data = text.data(using: .utf8), let value = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { throw HostError("Expected JSON object") }
@@ -58,10 +63,11 @@ final class PlatformServices {
 
     // This mirror contains host presentation metadata only; OCaml owns documents.
     func resetPresentation() {
-        nodes.removeAll(); parents.removeAll(); views.removeAll(); frames.removeAll(); incarnations.removeAll()
+        editorGeometry.clear()
+        nodes.removeAll(); parents.removeAll(); children.removeAll(); views.removeAll(); frames.removeAll(); incarnations.removeAll()
         editors.removeAll(); focusIntents.removeAll()
     }
-    func applied(_ batch: [String: Any]) {
+    func applied(_ batch: [String: Any]) throws {
         for op in batch["ops"] as? [[String: Any]] ?? [] {
             let id = op["id"] as? Int ?? 0
             switch op["op"] as? String {
@@ -75,10 +81,21 @@ final class PlatformServices {
                 while let dead = pending.popLast() {
                     pending.append(contentsOf: parents.compactMap { $0.value == dead ? $0.key : nil })
                     nodes.removeValue(forKey: dead); parents.removeValue(forKey: dead); incarnations.removeValue(forKey: dead)
+                    children.removeValue(forKey: dead)
                     views.removeValue(forKey: dead); frames.removeValue(forKey: dead)
                 }
-            case "insert-child", "move-child": if let child = op["child"] as? Int, let parent = op["parent"] as? Int { parents[child] = parent }
-            case "remove-child": if let child = op["child"] as? Int { parents.removeValue(forKey: child) }
+                for parent in children.keys { children[parent]?.removeAll { nodes[$0] == nil } }
+            case "insert-child", "move-child":
+                if let child = op["child"] as? Int, let parent = op["parent"] as? Int, let index = op["index"] as? Int {
+                    if let old = parents[child] { children[old]?.removeAll { $0 == child } }
+                    var ordered = children[parent] ?? []
+                    guard index >= 0, index <= ordered.count else { throw HostError("Invalid retained child position") }
+                    ordered.insert(child, at: index); children[parent] = ordered; parents[child] = parent
+                }
+            case "remove-child":
+                if let child = op["child"] as? Int {
+                    if let parent = parents.removeValue(forKey: child) { children[parent]?.removeAll { $0 == child } }
+                }
             default: break
             }
         }
@@ -103,12 +120,21 @@ final class PlatformServices {
         let rect = view.convert(view.bounds, to: content)
         return node(at: NSPoint(x: rect.midX, y: content.isFlipped ? rect.midY : content.bounds.height - rect.midY))
     }
-    func pointerTarget(_ id: Int?) -> Int? {
+    func supportsPointer(_ id: Int, event: String) -> Bool {
+        guard let kind = nodes[id]?["kind"] as? String else { return false }
+        switch event {
+        case "pointer_move", "pointer_cancel": return ["row", "box"].contains(kind)
+        case "context_menu_press": return ["button", "toggle-button", "toggle", "radio", "slider", "number-stepper", "text-field", "secure-field", "input", "search-field", "textarea", "checkbox", "switch-control", "select", "combobox", "menu-item", "list-item", "accordion", "text", "table-cell"].contains(kind)
+        default: return ["button", "column", "row", "box", "radio", "select", "combobox", "menu-item", "list-item", "text", "table-cell", "timeline-item", "file-image", "bottom-tab", "swipe-action"].contains(kind)
+        }
+    }
+    func pointerTarget(_ id: Int?, event: String = "pointer_down") -> Int? {
         var candidate = id
         var listener: Int?
         while let node = candidate, let metadata = nodes[node] {
             if metadata["enabled"] as? Bool == false || metadata["inert"] as? Bool == true { return nil }
-            if listener == nil, metadata["pointer-enabled"] as? Bool == true { listener = node }
+            if listener == nil, metadata["pointer-enabled"] as? Bool == true,
+               supportsPointer(node, event: event) { listener = node }
             candidate = parents[node]
         }
         return listener
@@ -173,10 +199,11 @@ final class PlatformServices {
             case "open-url":
                 guard !payload.contains(where: { $0 == "\r" || $0 == "\n" || $0 == "\0" }), let url = URL(string: payload), url.scheme != nil, NSWorkspace.shared.open(url) else { throw HostError("Could not open external URL") }
             case "app-icons":
-                let icons = try object(payload)
-                guard icons.values.allSatisfy({ $0 is String }) else { throw HostError("Invalid application icons") }
-                // The pinned backend has an immutable appIcons registry.
-                unsupported(name, "Dynamic SVG icon registration requires an LUI Apple registry API")
+                guard let icons = try object(payload) as? [String: String] else { throw HostError("Invalid application icons") }
+                guard let backend else { throw HostError("Application icon backend is unavailable") }
+                for (name, svg) in icons {
+                    try backend.registerIcon(name: "app:" + name, svg: Data(svg.utf8))
+                }
             case "native-performance-toggle":
                 guard try object(payload).isEmpty else { throw HostError("Performance toggle requires an empty object") }
                 performanceVisible.toggle()
@@ -319,7 +346,7 @@ final class PlatformServices {
             return
         }
         if ["caret-rect", "selection-rects", "offset-at", "line-ranges", "scroll-height"].contains(op) {
-            unsupported(op, "Committed rich-text glyph geometry is not exposed by the pinned LUI Apple backend")
+            try editorGeometry.request(op, request)
             return
         }
         let id = resolve(request[op == "scroll-row-into-view" ? "row" : "ref"])
@@ -359,8 +386,9 @@ final class PlatformServices {
             guard let target else { throw HostError("Native scroll target is unavailable") }
             target.scrollToVisible(target.bounds)
         case "natural-size":
-            guard let image = (target as? NSImageView)?.image else { throw HostError("Decoded image dimensions are unavailable") }
-            try reply("node-natural-size", ["nodeId": id, "width": image.size.width, "height": image.size.height])
+            if let size = backend?.naturalImageSize(nodeID: id) ?? (target as? NSImageView)?.image?.size {
+                try reply("node-natural-size", ["nodeId": id, "width": size.width, "height": size.height])
+            }
         case "click":
             if let button = target as? NSButton { button.performClick(nil) }
             else { _ = try runtime?.document("click", ["nodeId": id]) }

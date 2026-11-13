@@ -36,7 +36,7 @@ func logseqExtensions(_ services: PlatformServices) throws -> LUIAppleExtensionR
     }
     let rawProps = fields("attrs events text style-class accessibility-identifier orientation flex-wrap padding padding-top padding-right padding-bottom padding-left padding-horizontal padding-vertical margin margin-top margin-right margin-bottom margin-left margin-horizontal margin-vertical width height min-width min-height max-width max-height gap row-gap column-gap background shadow display main cross")
         + fields("font-size font-weight line-height letter-spacing opacity corner-radius", "float")
-    let children = rawTags.map { "logseq-" + $0 } + ["logseq-codemirror"]
+    let children = rawTags.map { "logseq-" + $0 } + ["logseq-codemirror", "logseq-katex"]
     for tag in rawTags {
         try register("logseq-" + tag, true, children, rawProps, [dom]) { context in
             AnyView(RawElement(context: context, tag: tag, services: services))
@@ -57,6 +57,9 @@ func logseqExtensions(_ services: PlatformServices) throws -> LUIAppleExtensionR
     }
     try register("logseq-codemirror", false, [], fields("uuid lang value source-role style-class accessibility-identifier") + fields("read-only", "bool"), [EventSchema(name: "cm-event", fields: fields("name", "string", true) + fields("value key"))]) { context in
         AnyView(CodeEditor(context: context, services: services).frame(minHeight: 80))
+    }
+    try register("logseq-katex", false, [], fields("tex", "string", true) + fields("display inline", "bool") + fields("style-class accessibility-identifier"), []) { context in
+        AnyView(NativeMath(context: context, services: services).id(services.incarnations[context.nodeID]))
     }
     return registry
 }
@@ -98,7 +101,8 @@ struct RawElement: View {
         case "img":
             if let image = services.image(context) { Image(nsImage: image).resizable().scaledToFit() }
             else { Text(context.string("text") ?? "").onAppear { services.unsupported("image", "Image source could not be decoded") } }
-        case "video", "audio", "iframe", "canvas", "pdf", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "use", "ellipse":
+        case "pdf": PDFWorkspace(context: context, services: services).id(services.incarnations[context.nodeID])
+        case "video", "audio", "iframe", "canvas", "svg", "path", "circle", "rect", "line", "polyline", "polygon", "g", "defs", "use", "ellipse":
             Text("[\(tag)]").onAppear { services.unsupported("logseq-\(tag)", "Native extension rendering is unavailable") }
         default:
             if context.string("display") == "none" { EmptyView() }

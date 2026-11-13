@@ -122,6 +122,28 @@ let attrs_of_view (v : view) : (string * string) list =
   ; "automenu", bool_str (Pdf_state.auto_open_ctx ())
   ; "hl_mode", bool_str !Pdf_state.highlight_mode
   ; "area_mode", bool_str !Pdf_state.area_mode
+  ; "labels", J.stringify (J.object_list
+      (List.map (fun (key, value) -> key, J.string value)
+        [ "close", I18n.t "ui/close"
+        ; "delete", I18n.t "ui/delete"
+        ; "zoom-in", I18n.t "pdf/zoom-in"
+        ; "zoom-out", I18n.t "pdf/zoom-out"
+        ; "auto-fit", I18n.t "pdf/auto-fit"
+        ; "highlight", I18n.t "pdf/highlight-selection"
+        ; "hl_mode", I18n.t "pdf/highlight-mode"
+        ; "area_mode", I18n.t "pdf/area-highlight-mode"
+        ; "copy-ref", I18n.t "pdf/copy-ref"
+        ; "linked-ref", I18n.t "pdf/linked-ref"
+        ; "annotations", I18n.t "pdf/annotations-page"
+        ; "dashed", I18n.t "pdf/toggle-dashed"
+        ; "colored", I18n.t "pdf/hl-block-colored"
+        ; "automenu", I18n.t "pdf/auto-open-context-menu"
+        ; "yellow", I18n.t "color/yellow"
+        ; "red", I18n.t "color/red"
+        ; "green", I18n.t "color/green"
+        ; "blue", I18n.t "color/blue"
+        ; "purple", I18n.t "color/purple"
+        ]))
   ]
 
 (* ---------- event payload parsing ---------- *)
