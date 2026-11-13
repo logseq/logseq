@@ -593,3 +593,50 @@ assertion is relaxed. Shared semantic Dismiss callbacks and a provider test
 that first moves focus to a button do not qualify focused-field native Escape.
 IME, physical hardware, OS clipboard editing and other desktop OSes remain
 separate acceptance gates.
+
+## Focused-field Properties cancellation passes the unchanged native gate
+
+At App `83ca11909bba85f23907c17d96eeca62dc3c9d00`, LUI advances to qualified
+`12c5ef7f6e1d61dc4d16b004d24249c7c48ecc40`; NSH remains at
+`adc186db7213f3ccd1eacaa836cc721e9779fd14`. The optional canonical field
+Dismiss callback is now supplied by every actual property-selector owner,
+including dialog phases, node/closed-value/repeat pickers and schema menus.
+Each callback captures its own workflow closer; no application Escape binding,
+new SDK behavior or focus helper is used.
+
+The original actual AppKit Properties fixture passed unchanged in **24.0
+seconds**: Mod-P autofocus/query, repeated Mod-P/Mod-K retaining the same
+workflow and input, native z/Backspace focus continuity, Down/Enter committing
+alpha=false to A alone, reopen/query, one Escape closing the nonempty workflow,
+and restored Mod-K followed by Search's own two-Escape policy. Final generation
+88 has no workflow, palette, editor or backend error; roots remain unchanged
+and beta is absent. Evidence: `/tmp/logseq-native-property-shortcuts-local-dismiss.log`,
+private `logseq-native-property-shortcuts.tWsnWT`. Cleanup has no errors and
+pre/post/cleanup Release receipt checks passed. The original test SHA-256 is
+`fa860a048ae77e388cab2d1bb7c185b62f3f88a5690af6a5c0fd052c6e101050`.
+The frozen observer exposes no screenshot operation, so no PNG is claimed.
+
+The complete shared runner passed **19,813 checks / 0 failures** and actual
+native archive admission passed, including local dialog field cancellation,
+reopen/stale-field refusal and node-picker cancellation. The typed API probe
+accepts existing calls and the event callback, and rejects boolean/string
+callbacks at compilation. All seven NSH keyboard-provider tests passed. The
+new listener case initially expected native typing to replace an existing
+`query` prefix; it now correctly requires `querynonempty query` to remain
+unchanged after cancellation. Its controller-boundary test name no longer
+implies a native blur/OS delivery assertion.
+
+Fresh Release startup passed in 17.52 seconds with all 13 workers durably
+closed/absent after one shutdown each. All **34 actual native style/constructor
+checks** passed in 114.916 seconds, including removed ListItem gap compiler
+rejection and valid alignment/spacing. These native compilation cases and the
+callback/primitive suites are now selected explicitly in desktop CI; a new CI
+execution is still required. Logs: `/tmp/logseq-property-local-dismiss-{shared-tests,native-admission,api-tests}.log`,
+`/tmp/logseq-property-local-dismiss-provider-corrected.log`,
+`/tmp/logseq-property-dismiss-final-release-build.{stdout,log}`, and
+`/tmp/logseq-qualified-constructor-native-tests.log`.
+
+The earlier native Properties failure remains recorded above. This closes its
+specific focused-field Escape gate, not full Properties UX, clipboard/IME,
+hardware input, every shortcut or all desktop OS qualification. The installed
+user application and its worker were not changed.
