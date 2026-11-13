@@ -106,8 +106,7 @@ let node_title_el ~key ~query (it : S.ac_item) : t =
    non-db-tag popups, empty when the node has no icon *)
 let node_icon_slot ~key (it : S.ac_item) : t =
   row ~key ~style_class:"ls-ac-node-icon" ~cross:`center ~height:20
-    ~opacity:0.5 ~margin_right:4
-    ~data_attrs:[ ("style", "flex-shrink:0") ]
+    ~opacity:0.5 ~margin_right:4 ~shrink:0.
     (match it.S.ai_node_icon with
      | Some (icn, true) ->
          [ row ~key:"cp" ~style_class:"icon-cp-container"
@@ -355,10 +354,10 @@ let ac_inner (st : S.t) : t =
          (Signal.value st.S.vs))
   in
   let node =
-    scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
+    Ui_components.with_props [ Ui_components.Prop.position `relative ]
+    (scroll ~key:"ac-inner" ~accessibility_identifier:"ui__ac-inner"
       ~style_class:"hide-scrollbar"
-      ~data_attrs:
-        [ ("style", "position:relative;-webkit-overflow-scrolling:touch") ]
+      ~data_attrs:[ ("style", "-webkit-overflow-scrolling:touch") ]
       [ column ~key:"ac-col" ~accessibility_identifier:"ui__ac-items"
           [ keyed ~source:units_sig ~key:unit_key ~cmp:Stdlib.compare
               ~mount:(fun u_sig ->
@@ -375,7 +374,7 @@ let ac_inner (st : S.t) : t =
                      ~foreground:"hsl(var(--popover-foreground) / 0.2)"
                      ~value:(Option.value ~default:"" g.g_hdr)
                      []
-                   :: List.map row g.g_items)) ] ]
+                   :: List.map row g.g_items)) ] ])
       context parent
   in
   ignore (Ui_parts.standard_kind context node);
@@ -505,9 +504,8 @@ let ac_popover (st : S.t) : t =
                    [ Ui_components.Prop.font_size "0.875rem"
                    ; Ui_components.Prop.line_height "20px" ]
                    (row ~key:"ac-hint" ~style_class:"ls-tag-search-hint"
-                      ~cross:`center ~gap:8 ~opacity:0.5
-                      ~data_attrs:
-                        [ ("style", "margin:8px 0;padding:0 0.25rem") ]
+                      ~cross:`center ~gap:8 ~opacity:0.5 ~margin_vertical:8
+                      ~data_attrs:[ ("style", "padding:0 0.25rem") ]
                    [ (* shui/shortcut "mod+enter" → combo glow container;
                         a row, not text — native text elements only lay
                         out text-kind children *)
@@ -1096,22 +1094,23 @@ let pv_popover (st : S.t) (p : S.pv) : t =
         ~style_class:"ui__popover-content ls-preview-popup"
         ~data_attrs:[ ("style", "padding-left:1.5rem") ]
         ~on_dismiss:(fun _ -> close_pv st)
-    [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
+    [ Ui_components.with_props [ Ui_components.Prop.padding_bottom 64 ]
+      (box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
         ~min_width:200 ~padding:8
         ~data_attrs:
           [ ("tabindex", "-1")
           ; ( "style"
             , "margin-left:-1.25rem;padding-left:1.75rem;\
-               padding-bottom:64px;text-align:left;font-weight:500" ) ]
+               text-align:left;font-weight:500" ) ]
         [ box ~key:"pvp" ~style_class:"page"
             [ box ~key:"pvt"
                 ~style_class:"ls-page-title content title"
                 ~accessibility_identifier:"page title"
                 [ box ~key:"pvtc"
                     ~style_class:"ls-page-title-container"
-                    [ box ~key:"pvtcw"
+                    [ Ui_components.with_props [ Ui_components.Prop.position `relative ]
+                      (box ~key:"pvtcw"
                         ~style_class:"block-content-wrapper"
-                        ~data_attrs:[ ("style", "position:relative") ]
                         ~on_pointer_enter:(fun _ ->
                           Signal.set hover true;
                           Runtime.flush ())
@@ -1125,7 +1124,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                          @ (match p.S.pv_page with
                             | Some page ->
                                 [ Properties_area.title_actions ~hover page ]
-                            | None -> []))
+                            | None -> [])))
                     ]
                 ]
             ; Ui_components.with_props [Ui_components.Prop.overflow `hidden]
@@ -1149,7 +1148,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                        ])
                 ])
             ]
-        ]]))
+        ])]))
     context parent
 
 let pv_dyn (st : S.t) : t =

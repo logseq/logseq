@@ -3141,3 +3141,9 @@ Ui_components.search_row ~key:"filter" ~placeholder ~text_signal:query
 
 This correction matches frozen master's query-first Escape behavior; it does
 not add grid arrow navigation or change global overlay/key handling.
+
+### Popup and outliner layout properties use their retained typed owners
+
+The shared outliner, autocomplete, preview, reference-filter and flashcard producers now project already-authored point-valued layout through canonical properties instead of relying on the Web `data_attrs` style carrier. Examples include `row ~shrink:0.`, ``Ui_components.Prop.position `relative``, and `Ui_components.Prop.padding_bottom 64` on the existing preview document Box. Keys, child structure, handlers, identity and authored sizes remain unchanged; NSH now receives these existing requirements. The preview's bottom padding overrides its uniform padding exactly as its former inline declaration did.
+
+This is not a CSS compatibility parser or a new LUI API. Remaining rem, percentage maximum, AlignSelf and transform requirements are recorded in `docs/agent-guide/review-probes/2026-11-13/popup-tree-typed-layout-carriers.md`. They remain explicit migration gaps; downstream callers must preserve their units and owner semantics rather than replace them with guessed pixels or host-guard away required native behavior. Explicit typed shrink remains a Web/NSH capability; this application batch does not change maintained Apple, Android or Web backend APIs.

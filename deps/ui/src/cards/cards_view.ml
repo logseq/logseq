@@ -207,8 +207,8 @@ let rec card_view st b phase =
             ]
         ]
     ; row ~key:"actions" ~style_class:"ls-card-actions"
-        ~margin_top:32 ~main:`center ~cross:`start
-        ~data_attrs:[ ("style", "padding-bottom:0.5rem;flex-shrink:0") ]
+        ~margin_top:32 ~main:`center ~cross:`start ~shrink:0.
+        ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
         [ (if np = "show-cloze" || np = "show-answer" then
              (* cljs card-answers is a compact secondary sm button with
                 a kbd shortcut hint — no accent fill/border *)

@@ -1222,8 +1222,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
             in
             if refs = [] then D.nothing
             else
-              row ~cross:`center ~gap:8 ~width:500 ~max_width:500
-                ~data_attrs:[ ("style", "flex-wrap:wrap") ]
+              row ~cross:`center ~gap:8 ~width:500 ~max_width:500 ~flex_wrap:`wrap
                 (List.map (fun (t, n) -> ref_button t (Some n)) refs))
           (Signal.value query) (sig_of inst) (Signal.value counts)
       in
