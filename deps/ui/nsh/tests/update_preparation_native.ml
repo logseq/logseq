@@ -1712,7 +1712,11 @@ let native_sidebar_scroll_basis () =
       let pages=List.init 36 (fun index -> Option.get (Decode.page_of_summary (Wire.Map
         [Wire.Keyword "block/uuid",Wire.Uuid (Printf.sprintf "sidebar-basis-%02d" index);
          Wire.Keyword "block/title",Wire.String (Printf.sprintf "Sidebar basis %02d" index)]))) in
-      let model={Model.initial with repo=Some "sidebar-basis";
+      (* This producer-only fixture has no attached database. A repo-less
+         model is the legitimate graph-selection state; in particular the
+         mounted Cards badge must not query an unstarted worker. Real loaded
+         graph geometry is qualified by the separate populated native case. *)
+      let model={Model.initial with repo=None;
         repos=["sidebar-basis"];left_sidebar_open=true;right_sidebar_open=true} in
       let state_ref=ref None in
       let registry=Lui_extension.registry () in
