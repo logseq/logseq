@@ -263,7 +263,7 @@ fn short_code_grows_naturally_and_calc_removes_the_cap_without_replacing_history
     let (short, _) = start(false, false);
     let short_height = editor_height(&short);
     assert!(
-        short_height >= 20.0 && short_height < 1024.0,
+        (20.0..1024.0).contains(&short_height),
         "min_rows keeps one editable row; max-height must not become fixed height"
     );
     drop(short);
