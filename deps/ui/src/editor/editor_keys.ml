@@ -855,7 +855,7 @@ let on_normal_key ev =
       A.indent_or_outdent ~indent:(not shift)
   | "Enter" when mods ev ->
       ev.Ui_services.prevent_default ();
-      List.iter Editor_commands.cycle_todo (A.selected_uuids ())
+      Editor_commands.cycle_todos (A.selected_uuids ())
   | "Enter" when shift && selected () ->
       (* cljs shift+enter = open-selected-blocks-in-sidebar *)
       ev.Ui_services.prevent_default ();

@@ -1413,8 +1413,11 @@ let editor_action st cid : (unit -> unit) option =
       Some (first_target (fun u -> st.svs.Svs.set_collapsed u true))
   | "editor/toggle-open-blocks" -> Some (fun () -> st.svs.Svs.toggle_open_blocks ())
   | "editor/cycle-todo" ->
-      Some
-        (fun () -> st.svs.Svs.cycle_todo (target_uuids st))
+      Some (fun () ->
+        let targets=match st.svs.Svs.selected_uuids () with
+          | [] -> Option.to_list (st.svs.Svs.editing_uuid ())
+          | targets -> targets in
+        st.svs.Svs.cycle_todo targets)
   | "editor/undo" -> Some (fun () -> st.svs.Svs.undo ())
   | "editor/redo" -> Some (fun () -> st.svs.Svs.redo ())
   | "editor/quick-add" -> Some (fun () -> st.svs.Svs.quick_add ())

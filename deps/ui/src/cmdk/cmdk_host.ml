@@ -345,7 +345,7 @@ let services ?(host = Lui_protocol.WebHost) : unit -> Svs.t =
   ; toggle_collapse = Editor_actions.toggle_collapse
   ; set_collapsed = Editor_actions.set_collapsed
   ; toggle_open_blocks = Editor_actions.toggle_open_blocks
-  ; cycle_todo = (fun _ -> ignore (Editor_cmds.run ~command:"cycle-todo" ~block:None ~value:None))
+  ; cycle_todo = Editor_commands.cycle_todos
   ; undo = Editor_actions.undo
   ; redo = Editor_actions.redo
   ; quick_add = Editor_actions.quick_add

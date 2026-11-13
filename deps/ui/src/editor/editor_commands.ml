@@ -1431,87 +1431,59 @@ let set_closed_prop ~caret uuid ident title =
    todo -> doing -> done -> cleared -> todo. Editing buffer is
    untouched — the property write goes through apply_and_refresh and the
    open editor resync keeps typed-but-unsaved text. *)
-let cycle_todo uuid =
-  let next_ident = function
-    | "logseq.property/status.todo" -> Some "logseq.property/status.doing"
-    | "logseq.property/status.doing" -> Some "logseq.property/status.done"
-    | "logseq.property/status.done" -> None
-    | _ -> Some "logseq.property/status.todo"
-  in
-  let row_ident e =
-    Properties_data.getk (Properties_data.untag e) "db/ident"
-  in
-  let row_id e =
-    Properties_data.geti (Properties_data.untag e) "db/id"
-  in
-  match (Runtime.model ()).Model.repo with
-  | None -> ()
-  | Some repo ->
+let cycle_todos uuids =
+  let seen=Hashtbl.create 16 in
+  let uuids=List.filter (fun uuid ->
+    if Hashtbl.mem seen uuid then false else (Hashtbl.add seen uuid ();true)) uuids in
+  match (Runtime.model ()).Model.repo,uuids with
+  | _,[] | None,_ -> ()
+  | Some repo,_ when not (Ui_services.env_publishing ()) ->
+      let worker= !Runtime.worker and origin=Runtime.capture_reload_origin () in
+      let current ()=Runtime.repo ()=repo && !Runtime.worker==worker
+        && Option.fold ~none:false ~some:Runtime.reload_origin_current origin
+        && not (Ui_services.env_publishing ()) in
       ignore
-        (let* w =
-          Runtime.invoke2 "thread-api/get-blocks" (W.String repo)
-            (W.Array
-               [ W.Map
-                   [ (W.String "id", W.Uuid uuid)
-                   ; ( W.String "opts"
-                     , W.Map [ (W.Keyword "children?", W.Bool false) ] )
-                   ]
-               ])
-        in
-        let blk =
-          match Wire.elems w with
-          | [ pair ] -> (
-              match W.get pair "block" with
-              | Some b -> b
-              | None -> (
-                  match Wire.elems pair with
-                  | [ _; b ] -> b
-                  | _ -> W.Nil))
-          | _ -> W.Nil
-        in
-        let cur_id =
-          match W.get blk "logseq.property/status" with
-          | Some v -> Properties_data.entity_id_of v
-          | None -> None
-        in
-        let* rows_w =
-          Properties_data.closed_values
-            (W.Keyword "logseq.property/status")
-        in
-        let rows = Wire.elems rows_w in
-        let ident_of id =
-          List.find_map
-            (fun e ->
-              if row_id e = Some id then row_ident e
-              else None)
-            rows
-        and id_of ident =
-          List.find_map
-            (fun e ->
-              if row_ident e = Some ident then row_id e
-              else None)
-            rows
-        in
-        (match next_ident
-                 (Option.value
-                    (Option.bind cur_id ident_of)
-                    ~default:"")
-         with
-         | Some ni -> (
-             match id_of ni with
-             | Some id ->
-                 ignore
-                   (Ops.apply_and_refresh
-                      [ Ops.batch_set_property [ uuid ]
-                          "logseq.property/status"
-                          (W.Int id) ~entity_id:true ])
-             | None -> ())
-         | None ->
-             ignore
-               (Ops.apply_and_refresh
-                  [ Ops.remove_block_property uuid
-                      "logseq.property/status" ]));
-        Js.Promise.resolve ())
+        (let* w=Runtime.invoke2 "thread-api/get-blocks" (W.String repo)
+          (W.Array (List.map (fun uuid -> W.Map
+            [W.String "id",W.Uuid uuid;
+             W.String "opts",W.Map [W.Keyword "children?",W.Bool false]]) uuids)) in
+        if not (current ()) then Js.Promise.resolve () else
+        let blocks=Hashtbl.create (List.length uuids) in
+        List.iter (fun pair ->
+          let block=match W.get pair "block" with
+            | Some block -> block
+            | None -> (match W.elems pair with [_;block] -> block | _ -> W.Nil) in
+          match W.map_get_uuid block "block/uuid" with
+          | Some uuid when Hashtbl.mem seen uuid -> Hashtbl.replace blocks uuid block
+          | _ -> ()) (W.elems w);
+        if Hashtbl.length blocks=0 then Js.Promise.resolve () else
+        let* rows=Runtime.invoke2 "thread-api/get-property-closed-values"
+          (W.String repo) (W.Keyword "logseq.property/status") in
+        if not (current ()) then Js.Promise.resolve () else
+        let identities=Hashtbl.create 4 and values=Hashtbl.create 4 in
+        List.iter (fun row ->
+          let row=Properties_data.untag row in
+          match Properties_data.geti row "db/id",Properties_data.getk row "db/ident" with
+          | Some id,Some ident -> Hashtbl.replace identities id ident;Hashtbl.replace values ident id
+          | _ -> ()) (W.elems rows);
+        let next = function
+          | Some "logseq.property/status.todo" -> Some "logseq.property/status.doing"
+          | Some "logseq.property/status.doing" -> Some "logseq.property/status.done"
+          | Some "logseq.property/status.done" -> None
+          | _ -> Some "logseq.property/status.todo" in
+        let ops=List.filter_map (fun uuid ->
+          Option.bind (Hashtbl.find_opt blocks uuid) (fun block ->
+            let status=Option.bind (W.get block "logseq.property/status") Properties_data.entity_id_of in
+            match next (Option.bind status (Hashtbl.find_opt identities)) with
+            | None -> Some (Ops.remove_block_property uuid "logseq.property/status")
+            | Some ident -> Option.map (fun id ->
+                Ops.batch_set_property [uuid] "logseq.property/status" (W.Int id) ~entity_id:true)
+                (Hashtbl.find_opt values ident))) uuids in
+        if ops=[] then Js.Promise.resolve ()
+        else Ops.apply_and_refresh ~opts:(Ops.op_opts "cycle-todos") ops)
+  | Some _,_ -> ()
+
+let cycle_todo uuid = cycle_todos [uuid]
 
 (* toggle this block's own logseq.property/order-list-type *)
 let toggle_own_list uuid caret =
@@ -1625,6 +1597,14 @@ let on_command (ev : Ui_services.ev) =
   if S.ready () then
     match detail_str ev "command" with
     | None -> ()
+    | Some "cycle-todo" ->
+        let selected=Editor_state.selected () in
+        let targets=match detail_str ev "block" with
+          | Some uuid when not (Editor_state.String_set.mem uuid selected) -> [uuid]
+          | _ -> (match Editor_actions.selected_uuids () with
+              | [] -> Option.to_list (Editor_state.editing_uuid ())
+              | targets -> targets) in
+        cycle_todos targets
     | Some command -> (
         match detail_str ev "block" with
         | Some uuid -> (
