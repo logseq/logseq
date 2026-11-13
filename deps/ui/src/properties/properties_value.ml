@@ -188,6 +188,8 @@ let save_text_value ctx row new_title =
 let commit_or_cancel ctx row value =
   let ident = D.row_ident row |> Option.value ~default:"" in
   match D.row_type row with
+  | "number" when String.trim value = String.trim (scalar_source row).source_text -> ()
+  | "string" when value = (scalar_source row).source_text -> ()
   | "number" -> (
       if String.trim value = "" then
         ignore (let* _ = D.remove_block_property ~block_uuid:ctx.block_uuid ~ident in

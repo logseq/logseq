@@ -1103,7 +1103,7 @@ let test_property_blank_submit () =
   Properties_value.commit_or_cancel prop_ctx
     (prop_row ~ident:"user.property/single" ~ty:"default" ()) "";
   Properties_value.commit_or_cancel prop_ctx
-    (prop_row ~ident:"user.property/num" ~ty:"number" ()) "";
+    (prop_row ~ident:"user.property/num" ~ty:"number" ~value:(W.Int 137) ()) "";
   after 8 (fun () ->
       let new_ops = List.drop base !ops_log in
       let serialized =
@@ -1141,6 +1141,8 @@ let test_property_commits () =
   (* string + text writes String *)
   Properties_value.commit_or_cancel prop_ctx
     (prop_row ~ident:"user.property/str" ~ty:"string" ()) "abc";
+  Properties_value.commit_or_cancel prop_ctx
+    (prop_row ~ident:"user.property/str-spaces" ~ty:"string" ~value:(W.String "abc") ()) " abc ";
   after 8 (fun () ->
       check "number text commits Float 12.5"
         (List.exists
@@ -1153,7 +1155,35 @@ let test_property_commits () =
            (function
              | [ _; W.Keyword "user.property/str"; W.String "abc" ] -> true
              | _ -> false)
+           (ops_named "set-block-property"));
+      check "string comparison preserves a meaningful whitespace change"
+        (List.exists
+           (function
+             | [_; W.Keyword "user.property/str-spaces"; W.String " abc "] -> true
+             | _ -> false)
            (ops_named "set-block-property")))
+
+let test_property_unchanged_commits () =
+  (* Master single-string-input compares the exact source string; the
+     number input compares trimmed text before dispatching a transaction. *)
+  List.iteri (fun index (ty, value, input) ->
+    Properties_value.commit_or_cancel prop_ctx
+      (prop_row ~ident:("user.property/unchanged-" ^ string_of_int index)
+         ~ty ~value ()) input)
+    ["string",W.String "original","original";
+     "string",W.String "  original  ","  original  ";
+     "number",W.Int 137,"137";
+     "number",W.Int 137," 137 ";
+     "string",W.Nil,"";
+     "number",W.Nil,""];
+  after 8 (fun () ->
+    check "unchanged scalar submit neither sets nor removes a property"
+      (not (List.exists (fun operation ->
+        List.exists (function
+          | W.Keyword ident -> String.starts_with ~prefix:"user.property/unchanged-" ident
+          | _ -> false) (match W.elems operation with
+            | [_;args] -> W.elems args
+            | _ -> [])) !ops_log)))
 
 (* ================================================================
    G. Sidebar nav — cljs components/sidebar.cljs: the left nav lists
@@ -1348,6 +1378,7 @@ let run ~finish =
   (* F. properties *)
   test_property_blank_submit ();
   test_property_commits ();
+  test_property_unchanged_commits ();
   (* G. sidebar *)
   test_sidebar_nav ();
   after 30 (fun () ->

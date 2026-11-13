@@ -2606,6 +2606,17 @@ let native_scalar_string_dismissal () =
         (Lui_protocol.Property_map.find_opt Lui_protocol.DismissEnabled (props initial_field)
           =(if cancelable then Some (Lui_protocol.BoolValue true) else None));
       if host=Lui_protocol.NshHost then begin
+        let before= !writes in
+        ignore (Native_embed.submit initial_field);
+        Host.drain ();
+        check "submitting an unchanged native scalar exits without a property transaction"
+          (!writes=before && !Properties_value.active_editor=None);
+        let button=Hashtbl.fold (fun node node_props found ->
+          if Lui_protocol.Property_map.find_opt Lui_protocol.StyleClass node_props
+            =Some (Lui_protocol.StringValue "pv-scalar") then Some node else found)
+          runtime.Lui_runtime.runtime_properties None |> Option.get in
+        ignore (Native_embed.press button);
+        let initial_field=field () in
         ignore (Native_embed.text_changed initial_field (if kind="number" then "246" else "changed"));
         let before= !writes and before_refresh= !refreshes in
         if cancelable then begin

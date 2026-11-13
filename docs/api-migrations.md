@@ -19,6 +19,27 @@ coverage, not a new native screenshot or hardware-input qualification.
 Downstream users of `cmdk_item_row` should no longer add the same horizontal
 margins through a `style` data attribute. No LUI constructor or wire API changes.
 
+## Unchanged scalar property commits do not write
+
+Submitting or blurring an unchanged String or Number property still closes its
+inline editor, but no longer sends a property transaction or starts the
+transaction's refresh chain. This matches the frozen master implementation's
+`single-string-input` and `single-number-input` in
+`src/main/frontend/components/property/value.cljs`: strings compare exact source
+text, while numbers compare trimmed source/input text. For example, a Number
+value `137` submitted as `"137"` or `" 137 "` writes nothing. A String `"abc"`
+submitted as `" abc "` remains a change and preserves those spaces.
+
+Submitting an already absent empty String or Number also writes nothing.
+Clearing a populated property still uses its existing remove operation, and
+changed values retain their current operation payloads. Text/URL value-block
+editing, cancellation, retained editor identity, wire contracts and backend
+signatures are unchanged. There is no downstream source migration. The native
+admission regression submits the actual controlled field before changing it;
+the maintained shared parity suite also covers trimmed numbers, exact strings,
+absent values and clearing a populated Number. These are source regressions
+awaiting execution by the integration owner, not native paint or undo evidence.
+
 ## Unclosed inline delimiters reuse their parse-owned suffix search
 
 The existing `Render_inline` matcher now routes hash-page references, image
