@@ -78,11 +78,16 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         guard let data = json.data(using: .utf8), let batches = try JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { throw HostError("Runtime patch callback must be a batch array") }
         if snapshot {
+            let focusedBlock = (window?.firstResponder as? NativeEditorInput)?.block
+            let restoreFocus = try focusedBlock.flatMap { block in
+                try runtime?.snapshot(block: block) == nil ? nil : block
+            }
             // The pinned Apple backend predates applySnapshot. A new retained
             // tree accepts the authoritative snapshot's repeated generation.
             try makeBackend()
             hostedRoot = nil
             services.resetPresentation()
+            if let restoreFocus { services.focusIntents[restoreFocus] = true }
         }
         let rawBatches = try rawPatchBatches(json)
         guard rawBatches.count == batches.count else { throw HostError("Patch batch boundary mismatch") }

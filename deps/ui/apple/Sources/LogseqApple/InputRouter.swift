@@ -107,7 +107,7 @@ final class InputRouter {
             var taken = try send("pointerup", payload)
             if preventMouse & bit == 0 { taken = try send("mouseup", payload) || taken }
             preventMouse &= ~bit
-            if !taken { try self.pointer("pointer_up", listener: capturedTarget() ?? services.pointerTarget(target)) }
+            if !taken, !pressPrevented { try self.pointer("pointer_up", listener: capturedTarget() ?? services.pointerTarget(target)) }
             else { try self.pointer("pointer_cancel", listener: capturedTarget()) }
             captured = nil
             if event.type == .leftMouseUp {
@@ -148,6 +148,19 @@ final class InputRouter {
     func command(_ name: String) throws {
         var payload: [String: Any] = ["nativeCommand": name]
         payload["nodeId"] = keyboardTarget()
+        if name == "undo" || name == "redo" || name == "selectAll" {
+            let key = name == "selectAll" ? "a" : "z"
+            payload["key"] = key; payload["code"] = name == "selectAll" ? "KeyA" : "KeyZ"
+            payload["metaKey"] = true; payload["shiftKey"] = name == "redo"
+            if try send("keydown", payload) { return }
+            if let editor = services.window?.firstResponder as? NativeEditorInput {
+                editor.send("key", ["key": .string(key), "meta": .bool(true), "shift": .bool(name == "redo")])
+                editor.synchronize()
+                return
+            }
+            NSApp.sendAction(NSSelectorFromString(name + ":"), to: nil, from: nil)
+            return
+        }
         if name == "paste" {
             var clipboard: [String: String] = [:]
             if let text = NSPasteboard.general.string(forType: .string) { clipboard["text/plain"] = text }

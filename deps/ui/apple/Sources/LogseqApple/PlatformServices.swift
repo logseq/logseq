@@ -300,12 +300,10 @@ final class PlatformServices {
         let file = submenu("File"); system(file, "Close", #selector(NSWindow.performClose(_:)), "w")
         let edit = submenu("Edit")
         for (title, selector, key) in [("Undo", "undo:", "z"), ("Redo", "redo:", "Z"), ("Cut", "cut:", "x"), ("Copy", "copy:", "c"), ("Paste", "paste:", "v"), ("Select All", "selectAll:", "a")] {
-            if ["cut:", "copy:", "paste:"].contains(selector) {
-                let action = MenuAction { [weak self] in self?.onEditCommand?(String(selector.dropLast())) }
-                menuActions.append(action)
-                let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: key)
-                item.target = action; edit.addItem(item)
-            } else { system(edit, title, NSSelectorFromString(selector), key) }
+            let action = MenuAction { [weak self] in self?.onEditCommand?(String(selector.dropLast())) }
+            menuActions.append(action)
+            let item = NSMenuItem(title: title, action: #selector(MenuAction.run), keyEquivalent: key)
+            item.target = action; edit.addItem(item)
         }
         let view = submenu("View"); command(view, "Reload", "reload", "r"); view.addItem(.separator()); command(view, sidebar, "toggle-left-sidebar")
         let windows = submenu("Window"); system(windows, "Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"); system(windows, "Zoom", #selector(NSWindow.performZoom(_:)))
