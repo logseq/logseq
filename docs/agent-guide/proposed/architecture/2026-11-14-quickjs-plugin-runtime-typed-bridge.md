@@ -13,9 +13,11 @@ The runtime boundary must carry typed values and closed application operations,
 not JavaScript source strings evaluated by the UI. Installing an engine alone
 does not supply a plugin scheduler, permissions, or a portable UI API.
 
-Status: exploring; awaiting answers to the final Questions section. This ADR
-does not approve implementation or changes to Dune, mobile, Host, or SDK files.
-It precedes a separate, reviewable implementation proposal.
+Status: proposed. The user approved the ADR review choices on 2026-11-14
+with the response "Approve". This records the architectural direction, not
+implementation completion. A separate concrete implementation proposal
+remains the next review gate; no runtime, Dune, mobile, Host, or SDK file changes
+are included in this ADR.
 
 Source baseline: `refactor/lui` at
 `c7aad13d80c4c4e837dd73a9723dd230163153fd`.
@@ -51,7 +53,8 @@ and editor mutations remain owned by shared OCaml/LUI code.
 
 The user-selected constraints are fixed: no new WebView, no mobile changes,
 no Host/SDK edits in the first implementation, and a separate branch and PR
-based on `refactor/lui`. The remaining choices require explicit review.
+based on `refactor/lui`. Engine/build/scope/migration boundaries were approved;
+the concrete implementation details remain subject to review.
 
 The intended portability model is:
 
@@ -72,6 +75,23 @@ not enable marketplace installation, wire application startup, replace the
 legacy SDK, implement WASM, or claim mobile support. A native driver must run
 real QuickJS and the real shared broker. Merely compiling an OCaml interface,
 mocking the engine, or executing `qjs` as a subprocess is not sufficient.
+
+## Review outcome
+
+The user's "Approve" answered the four review questions:
+
+1. Use upstream Bellard QuickJS `2026-06-04`, matching the existing mobile
+   source pin, as the initial dependency candidate, rather than switching
+   to QuickJS-NG or JavaScriptCore.
+2. Permit two new Dune files for the later native library and focused driver;
+   leave existing Dune files and application startup unchanged in that slice.
+3. Limit the first slice to an internal native bridge with
+   `Get_editing_context` and typed `Insert_text` / `Show_date_picker` /
+   `Exit_editing` results. Actual popup/DB/SDK/startup and Web/WASM wiring are
+   deferred to separately reviewed scope.
+4. Require explicit migration, without legacy DOM/WebView fallback or a
+   promise of unchanged old SDK bundles. Select an application-owned
+   `api-migrations` location before future public behavior changes.
 
 ## Candidate module and dependency boundaries
 
@@ -193,12 +213,13 @@ a JS handler, or dispatch arbitrary DOM event names. The broker must not import
 Actual popup/application wiring is a separately approved change, not part of
 the first engine-only compilation proof.
 
-## Build and dependency approval required
+## Build and dependency boundary
 
 This ADR changes no Dune file. Portable modules in `src/contracts/` and
 `src/shared/` can use existing automatic module discovery. **A real native C
 embedding cannot be honestly delivered under a blanket prohibition on every
-new or changed Dune stanza.** The proposed minimum exception is:
+new or changed Dune stanza.** The approved minimum exception for the subsequent
+implementation proposal is:
 
 1. Add `deps/ui/quickjs/dune` for a native-only `logseq_plugin_quickjs` library
    and its foreign stubs.
@@ -237,7 +258,7 @@ Before an implementation changes a public API, default, error or callback
 behavior, record compatibility and concrete migration examples in an
 `api-migrations` document. This baseline has no `docs/api-migrations.md` or
 `deps/ui/docs/api-migrations.md`; nominate the application-owned location in
-the implementation proposal rather than creating it during exploration.
+the implementation proposal rather than creating it in this ADR-only change.
 If a later change touches LUI's public contract, its own
 `docs/api-migrations.md` must also be updated in the LUI repository. This ADR
 requires no LUI schema or wire change.
@@ -269,6 +290,24 @@ requires no LUI schema or wire change.
   remain application risks; a dedicated thread does not isolate crashes.
   Desktop process isolation and the mobile trust/distribution policy require
   separate review. Interpreter/no-JIT execution does not settle iOS store rules.
+
+## Follow-up decisions reserved for the implementation proposal
+
+- Package/module format, loader restrictions, assets and source integrity;
+  native/WASM pin alignment, including whether a wrapper such as
+  `quickjs-emscripten` can supply the selected engine version.
+- Exact request/result declarations, native ownership and scheduler ABI,
+  pending-job fairness, callback lifetime and numeric/text limits. Runtime,
+  stack, heap, wall-time and pending-call budgets need explicit defaults.
+- Capability and consent design for network, storage, crypto, file pickers,
+  timers and subscriptions. These are host services, not automatic QuickJS
+  globals or first-slice permissions.
+- Typed UI v1 scope and toolbar/slash/settings/custom-renderer registration,
+  including disposal on unload and an error/migration policy for legacy
+  renderer methods that currently return success without doing work.
+- Desktop process isolation, iOS background suspension/resume, Android
+  lifecycle/resource limits and store/distribution constraints. Native
+  embedding alone settles none of these.
 
 ## Alternatives considered
 
@@ -307,29 +346,11 @@ an explicit version, maintenance/security review and native/WASM compatibility
 decision. The current mobile pin is upstream QuickJS, so switching forks would
 not be justified merely by the existing mobile code.
 
-## Follow-up decisions reserved for the implementation proposal
-
-- Package/module format, loader restrictions, assets and source integrity;
-  native/WASM pin alignment, including whether a wrapper such as
-  `quickjs-emscripten` can supply the selected engine version.
-- Exact request/result declarations, native ownership and scheduler ABI,
-  pending-job fairness, callback lifetime and numeric/text limits. Runtime,
-  stack, heap, wall-time and pending-call budgets need explicit defaults.
-- Capability and consent design for network, storage, crypto, file pickers,
-  timers and subscriptions. These are host services, not automatic QuickJS
-  globals or first-slice permissions.
-- Typed UI v1 scope and toolbar/slash/settings/custom-renderer registration,
-  including disposal on unload and an error/migration policy for legacy
-  renderer methods that currently return success without doing work.
-- Desktop process isolation, iOS background suspension/resume, Android
-  lifecycle/resource limits and store/distribution constraints. Native
-  embedding alone settles none of these.
-
 ## Acceptance criteria
 
-- This ADR changes only its own Markdown file, remains `exploring`, validates
-  with `spec-dev-tool`, and is reviewed before a separate implementation
-  proposal or lifecycle transition.
+- This ADR changes only its own Markdown file, records the review answers,
+  transitions to `proposed` with `spec-dev-tool`, and validates before the
+  separate concrete implementation proposal is submitted for approval.
 - A later approved first slice must compile real OCaml contracts, the shared
   broker, the runtime adapter and C stubs, and link an executable against the
   pinned QuickJS engine. No source-only review or JS-only check substitutes
@@ -363,22 +384,6 @@ not be justified merely by the existing mobile code.
 - Resource/time budgets and thread model require measurement. No runtime
   performance, Apple execution, WASM conformance or mobile build was validated
   by this documentation-only change.
-- The minimum real embedding requires explicit Dune approval. If that approval
-  is withheld, stop at the typed contract design; do not advertise a compiled
-  QuickJS runtime or disguise the missing integration.
-
-## Questions
-
-1. Approve upstream Bellard QuickJS `2026-06-04`, matching the existing mobile
-   source pin, as the initial dependency candidate rather than selecting
-   QuickJS-NG or JavaScriptCore now?
-2. Approve the two new Dune files for a native-only library and focused native
-   driver, while leaving existing Dune files and application startup unchanged
-   in the first slice?
-3. Approve the first slice as an internal native bridge with
-   `Get_editing_context` and typed `Insert_text` / `Show_date_picker` /
-   `Exit_editing` results, with actual popup/DB/SDK/application startup and
-   Web/WASM wiring deferred to separately reviewed scope?
-4. Approve the explicit migration policy: no legacy DOM/WebView fallback, no
-   promise of unchanged old SDK bundles, and an application-owned
-   `api-migrations` location selected before future public behavior changes?
+- Dune approval covers only the two new files for the native proof. Further
+  build exceptions or application startup changes require new approval;
+  do not advertise missing application integration as already working.
