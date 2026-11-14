@@ -107,7 +107,7 @@ let capture ~id =
     | Wire.Nil -> Ok None
     | _ -> Result.map Option.some (entity (checked_json convert wire))
   in
-  let lookup convert identity =
+  let lookup_with convert identity =
     match snapshot.Model.repo with
     | None -> immediate (fun () -> Ok None)
     | Some repo ->
@@ -116,8 +116,11 @@ let capture ~id =
           | Uuid value | Page_name value -> Js.Json.string value
         in
         await (fun () -> Sdk_util.get_entity_json_for_repo repo key)
-          (entity_result convert)
+          (fun wire -> match wire with
+            | Wire.Nil -> Ok None
+            | _ -> Result.map Option.some (convert wire))
   in
+  let lookup convert = lookup_with (fun wire -> entity (checked_json convert wire)) in
   let sibling_block direction identity =
     let reference = match identity with
       | Entity_id value -> Some (Wire.Int value)
@@ -133,6 +136,92 @@ let capture ~id =
         await (fun () -> Runtime.invoke3 "thread-api/get-block-sibling"
           (Wire.String repo) key (Wire.kw relation))
           (entity_result Sdk_convert.json_of_wire)
+  in
+  let block_tree identity =
+    match identity, snapshot.Model.repo with
+    | Page_name _, _ -> immediate (fun () -> Error Invalid_request)
+    | _, None -> immediate (fun () -> Ok None)
+    | _, Some repo ->
+        Ui_task.bind (lookup Sdk_convert.json_of_wire identity) (function
+          | Error error -> Ui_task.resolve (Error error)
+          | Ok None -> Ui_task.resolve (Ok None)
+          | Ok (Some root) ->
+              let json = reply_value (Block (Some root)) in
+              let uuid = match Json.get "uuid" json with
+                | Some (Json.String uuid) -> uuid
+                | _ -> invalid_arg "Block is missing its UUID" in
+              await (fun () -> Runtime.invoke3 "thread-api/get-page-blocks-tree"
+                (Wire.String repo) (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) (Wire.Map []))
+                (fun wire ->
+                  let tree = checked_json Sdk_convert.json_of_wire wire in
+                  let children = match tree with
+                    | Json.Array [|node|] when Json.get "uuid" node = Some (Json.String uuid) ->
+                        (match Json.get "children" node with
+                         | Some (Json.Array _ as children) -> children
+                         | None -> Json.Array [||]
+                         | _ -> raise (Rejected Runtime_failure))
+                    | Json.Array _ -> tree
+                    | _ -> raise (Rejected Runtime_failure) in
+                  match json with
+                  | Json.Object fields -> Result.map Option.some
+                      (entity (Json.Object (("children", children) :: List.remove_assoc "children" fields)))
+                  | _ -> Error Runtime_failure))
+  in
+  let page_linked_references identity =
+    match snapshot.Model.repo with
+    | None -> immediate (fun () -> Ok None)
+    | Some repo ->
+        Ui_task.bind (lookup_with (fun wire -> match Wire.map_get_int wire "db/id" with
+          | Some id -> Ok id | None -> Error Runtime_failure) identity) (function
+          | Error error -> Ui_task.resolve (Error error)
+          | Ok None -> Ui_task.resolve (Ok None)
+          | Ok (Some target_id) ->
+              let references = await (fun () -> Runtime.invoke2 "thread-api/get-block-refs"
+                (Wire.String repo) (Wire.Int target_id)) (fun wire ->
+                  check_wire wire;
+                  match wire with
+                  | Wire.Array blocks | Wire.List blocks -> Ok blocks
+                  | _ -> Error Runtime_failure) in
+              Ui_task.bind references (function
+                | Error error -> Ui_task.resolve (Error error)
+                | Ok blocks ->
+                    let groups = Hashtbl.create 16 in
+                    let page_ids = ref [] in
+                    let page_id block = match Wire.get block "block/page" with
+                      | Some (Wire.Int id) -> Some id
+                      | Some (Wire.Map _ as page) -> Wire.map_get_int page "db/id"
+                      | _ when Option.is_some (Wire.get block "block/name") -> Wire.map_get_int block "db/id"
+                      | _ -> None in
+                    let grouped = List.for_all (fun block -> match page_id block with
+                      | None -> false
+                      | Some id ->
+                          if not (Hashtbl.mem groups id) then page_ids := id :: !page_ids;
+                          let existing = Option.value ~default:[] (Hashtbl.find_opt groups id) in
+                          Hashtbl.replace groups id (block :: existing);
+                          true) blocks in
+                    if not grouped then Ui_task.resolve (Error Runtime_failure)
+                    else if blocks = [] then Ui_task.resolve (Ok (Some []))
+                    else
+                      let page_ids = List.rev !page_ids in
+                      await (fun () ->
+                        Promise_ext.(let* pages = Sdk_util.get_many_for_repo repo
+                          (List.map (fun id -> Wire.Int id) page_ids) in
+                        Js.Promise.resolve (Wire.Array (List.map (function
+                          | Some page -> page
+                          | None -> invalid_arg "Missing reference page") pages)))) (fun wire ->
+                          let pages = Wire.elems wire in
+                          let result = List.map2 (fun id page ->
+                            if Wire.map_get_int page "db/id" <> Some id then raise (Rejected Runtime_failure);
+                            let page = match entity (checked_json Sdk_convert.result_json_of_wire page) with
+                              | Ok page -> page | Error error -> raise (Rejected error) in
+                            let blocks = List.rev (Hashtbl.find groups id) |> List.map (fun block ->
+                              match entity (checked_json Sdk_convert.json_of_wire block) with
+                              | Ok block -> block | Error error -> raise (Rejected error)) in
+                            page, blocks) page_ids pages in
+                          let reply = Page_linked_references (Some result) in
+                          match validate_value (reply_value reply) with
+                          | Ok () -> Ok (Some result)
+                          | Error error -> Error error)))
   in
   let current_block () =
     match editing, selected with
@@ -192,7 +281,9 @@ let capture ~id =
     current_block;
     current_page;
     get_block = lookup Sdk_convert.json_of_wire;
+    get_block_tree = block_tree;
     get_page = lookup Sdk_convert.result_json_of_wire;
+    page_linked_references;
     sibling_block;
     query;
     log = (fun level text -> immediate (fun () ->
