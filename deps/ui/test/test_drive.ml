@@ -400,6 +400,87 @@ let test_key_leaks () =
   Stub_dom.keydown "Escape";
   flush ()
 
+(* Master keeps extending the range after the selection toolbar gains focus.
+   Only its buttons lend Shift+Up/Down back to the selected block container. *)
+let test_selection_bar_arrows () =
+  let module E = Editor_state in
+  let saved_editor = E.value () in
+  let saved_model = Lui_app.model (s ()).S.app in
+  let saved_reader = !Runtime.read_model in
+  let saved_focus = !E.pending_focus in
+  let document = Stub_dom.rec_r (Stub_dom.document ()) in
+  let saved_listeners = document.listeners in
+  Fun.protect
+    ~finally:(fun () ->
+      document.listeners <- saved_listeners;
+      send (Action.Navigate_to saved_model.Model.route);
+      Option.iter (fun p -> send (Action.Page_loaded p)) saved_model.Model.route_page;
+      E.set (fun _ -> saved_editor);
+      E.pending_focus := saved_focus;
+      Runtime.read_model := saved_reader)
+    (fun () ->
+      Ui_services.dom_on_document_event ~capture:false "keydown" Editor_keys.on_keydown;
+      Runtime.read_model := (fun () -> Lui_app.model (s ()).S.app);
+      send (Action.Navigate_to (Model.Page "p"));
+      send (Action.Page_loaded (page
+        [block "alpha" "Alpha"; block "beta" "Beta";
+         block "gamma" "Gamma"; block "delta" "Delta"]));
+      E.pending_focus := None;
+      E.set (fun st -> { st with E.editing = None });
+      Editor_actions.select_single_in ~scope:"main" "delta";
+      let bar = Web_dom.create_element "div" in
+      Web_dom.el_set_class bar "selection-action-bar";
+      let button = Web_dom.create_element "button" in
+      Web_dom.el_append_child bar button;
+      let ordinary = Web_dom.create_element "button" in
+      let input = Web_dom.create_element "input" in
+      Web_dom.el_append_child bar input;
+      let press ?(shift = true) target key =
+        Stub_dom.fire_on target "keydown" ~fields:
+          ["key", Js.Json.string key; "shiftKey", Js.Json.boolean shift;
+           "altKey", Js.Json.boolean false; "metaKey", Js.Json.boolean false;
+           "ctrlKey", Js.Json.boolean false];
+        flush ()
+      in
+      let selected expected =
+        E.String_set.equal (E.selected ()) (E.String_set.of_list expected)
+        && E.anchor () = Some "delta" && E.selection_scope () = "main"
+        && E.editing () = None
+      in
+      press (Stub_dom.document ()) "ArrowUp";
+      check "document Shift+Up selects Gamma and Delta"
+        (selected ["gamma"; "delta"]);
+      check "selection action bar is mounted after the first arrow"
+        (find_where (fun n -> n.M.kind = "popover" && has_tok n "selection-action-bar") <> []);
+      List.iter (fun (key, expected) ->
+        press button key;
+        check ("toolbar " ^ key ^ " changes the range with its original anchor")
+          (selected expected))
+        ["ArrowUp", ["beta"; "gamma"; "delta"];
+         "ArrowUp", ["alpha"; "beta"; "gamma"; "delta"];
+         "ArrowDown", ["beta"; "gamma"; "delta"];
+         "ArrowDown", ["gamma"; "delta"]];
+      List.iter (fun (name, target, shift, key) ->
+        press ~shift target key;
+        check (name ^ " retains control ownership") (selected ["gamma"; "delta"]))
+        ["ordinary button Shift+Up", ordinary, true, "ArrowUp";
+         "toolbar plain Up", button, false, "ArrowUp";
+         "toolbar Enter", button, false, "Enter";
+         "toolbar input Shift+Up", input, true, "ArrowUp"];
+      E.set (fun st -> { st with E.action_bar = false });
+      press button "ArrowUp";
+      check "hidden toolbar does not own selection arrows" (selected ["gamma"; "delta"]);
+      Editor_actions.clear_selection ();
+      press button "ArrowUp";
+      check "toolbar arrows do not create a selection"
+        (E.String_set.is_empty (E.selected ()) && E.editing () = None);
+      let editing = E.mk_editing ~uuid:"delta" ~scope:"main"
+        ~buffer:"Delta" ~base:"Delta" () in
+      E.set (fun st -> { st with E.editing = Some editing });
+      press button "ArrowUp";
+      check "toolbar arrows do not change an active editor"
+        (E.String_set.is_empty (E.selected ()) && E.editing () = Some editing))
+
 (* ---------------- left sidebar (state-driven) ---------------- *)
 
 let sidebar_st () = Sidebar_state.ensure (Option.get !ms_ref)
@@ -2416,6 +2497,7 @@ let run ~finish =
     (Ui_dom_web.ev_of (Js.Json.object_ (Js.Dict.fromList [ "target", target ])));
   test_cmdk ();
   test_key_leaks ();
+  test_selection_bar_arrows ();
   test_left_sidebar ();
   test_right_sidebar ();
   test_context_menu ();

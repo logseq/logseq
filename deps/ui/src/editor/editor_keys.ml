@@ -37,9 +37,23 @@ let non_editor_control_target target =
             [role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio']"
            target <> None)
 
+(* Master keeps the range shortcuts active when its selection toolbar has
+   button focus. Other controls and toolbar activation keys stay local. *)
+let selection_bar_arrow ev =
+  ev.Ui_services.shift && not (mods ev || ev.Ui_services.alt)
+  && (ev_key ev = "ArrowUp" || ev_key ev = "ArrowDown")
+  && S.ready () && S.editing () = None && S.selection_active ()
+  && (S.value ()).S.action_bar
+  && not (is_editable_target ev.Ui_services.target)
+  && closest "button" ev.Ui_services.target <> None
+  && closest ".selection-action-bar" ev.Ui_services.target <> None
+
+let control_target ev =
+  non_editor_control_target ev.Ui_services.target && not (selection_bar_arrow ev)
+
 let control_owned_key ev =
   not (mods ev || ev.Ui_services.alt)
-  && non_editor_control_target ev.Ui_services.target
+  && control_target ev
   && (match ev_key ev with
       | "Enter" | " " | "Tab" | "Escape" | "Backspace" | "Delete"
       | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
@@ -730,7 +744,7 @@ let on_global_key ev =
             is_editable_target (ev.Ui_services.target)
             || S.editing () <> None
           in
-          let control = non_editor_control_target ev.Ui_services.target in
+          let control = control_target ev in
           let tbl = List.filter (fun (_, cid) -> chord_may_run ~target:ev.Ui_services.target ~control editing cid) tbl in
           let tbl = if palette_open () then
               List.filter (fun (_, cid) -> cid = "go/search" || cid = "command-palette/toggle") tbl
@@ -1609,7 +1623,7 @@ let consume_drag_click () =
 
 let on_keydown ev =
   if Ui_services.env_native_drag () && ev_key ev = "Escape" then drag_cancel ();
-  let control = non_editor_control_target ev.Ui_services.target in
+  let control = control_target ev in
   if blocked_default ~control ev then begin
     ev.Ui_services.prevent_default ();
     ev.Ui_services.stop_immediate ()
