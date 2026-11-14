@@ -3014,6 +3014,9 @@ let run_views ~registry ~profile ~finish =
     ; editor_command = (fun cid -> routed_commands := cid :: !routed_commands)
     ; extend_selection = (fun _ -> incr legacy_selection)
     ; move_selection_focus = (fun _ -> incr legacy_selection)
+    ; move_blocks_vert = (fun _ -> incr legacy_selection)
+    ; toggle_collapse = (fun _ -> incr legacy_selection)
+    ; set_collapsed = (fun _ _ -> incr legacy_selection)
     }
   in
   let search = mount (fun ms -> Cmdk_view.render ~services ms) in
@@ -3049,10 +3052,12 @@ let run_views ~registry ~profile ~finish =
   List.iter (fun cid ->
     let previous = !routed_commands in
     Option.iter (fun run -> run ()) (Cmdk_state.editor_action footer_st cid);
-    check ("Selection command delegates to the mode-aware editor: " ^ cid)
+    check ("Editor command delegates to mode-aware dispatch: " ^ cid)
       (!routed_commands=cid :: previous && !legacy_selection=0))
     ["editor/select-up";"editor/select-down";
-     "editor/select-block-up";"editor/select-block-down"];
+     "editor/select-block-up";"editor/select-block-down";
+     "editor/move-block-up";"editor/move-block-down";
+     "editor/collapse-block-children";"editor/expand-block-children";"editor/toggle-block-children"];
   let item index action : Cmdk_state.item =
     { ikey = string_of_int index; idx = index; gid = G_nodes;
       ititle = "Footer result"; info = None; header = None; iicon = None; inline_icon = None;

@@ -1343,6 +1343,14 @@ let dispatch_command cid =
            A.set_collapsed ~scope uuid false;
            Ui_services.timers_later ~ms:100 start
        | _ -> start ())
+  | Some editing, ("editor/move-block-up" | "editor/move-block-down")
+    when S.is_draft editing -> ()
+  | editing, ("editor/move-block-up" | "editor/move-block-down") ->
+      let uuid = Option.map (fun editing -> editing.S.uuid) editing in
+      A.move_blocks_up_down ?uuid (cid = "editor/move-block-up")
+  | _, ("editor/collapse-block-children" | "editor/expand-block-children") ->
+      A.collapse_expand ~collapse:(cid = "editor/collapse-block-children") ()
+  | _, "editor/toggle-block-children" -> A.toggle_children_collapse ()
   | editing, ("editor/select-up" | "editor/select-down") ->
       let up = cid = "editor/select-up" in
       (match editing with

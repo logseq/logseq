@@ -1374,8 +1374,6 @@ let editor_action st cid : (unit -> unit) option =
   match cid with
   | "editor/indent" -> Some (fun () -> st.svs.Svs.indent true)
   | "editor/outdent" -> Some (fun () -> st.svs.Svs.indent false)
-  | "editor/move-block-up" -> Some (fun () -> st.svs.Svs.move_blocks_vert true)
-  | "editor/move-block-down" -> Some (fun () -> st.svs.Svs.move_blocks_vert false)
   | "editor/delete-selection" -> Some (fun () -> st.svs.Svs.delete_selection ())
   | "editor/select-all-blocks" -> Some (fun () -> st.svs.Svs.select_all ())
   | "editor/select-parent" ->
@@ -1388,12 +1386,6 @@ let editor_action st cid : (unit -> unit) option =
       Some st.svs.Svs.open_selected_block
   | "editor/open-selected-blocks-in-sidebar" ->
       Some (fun () -> st.svs.Svs.sidebar_open_uuids (target_uuids st))
-  | "editor/toggle-block-children" ->
-      Some (first_target st.svs.Svs.toggle_collapse)
-  | "editor/expand-block-children" ->
-      Some (first_target (fun u -> st.svs.Svs.set_collapsed u false))
-  | "editor/collapse-block-children" ->
-      Some (first_target (fun u -> st.svs.Svs.set_collapsed u true))
   | "editor/toggle-open-blocks" -> Some (fun () -> st.svs.Svs.toggle_open_blocks ())
   | "editor/cycle-todo" ->
       Some
@@ -1408,6 +1400,9 @@ let editor_action st cid : (unit -> unit) option =
   | "editor/up" | "editor/down" | "editor/left" | "editor/right"
   | "editor/select-up" | "editor/select-down"
   | "editor/select-block-up" | "editor/select-block-down"
+  | "editor/move-block-up" | "editor/move-block-down"
+  | "editor/collapse-block-children" | "editor/expand-block-children"
+  | "editor/toggle-block-children"
   | "editor/jump" | "editor/copy-page-url" | "window/close"
   | "editor/insert-link" | "editor/new-block" | "editor/new-line"
   | "editor/backspace" | "editor/delete" | "editor/escape-editing"
