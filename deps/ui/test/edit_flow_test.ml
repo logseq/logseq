@@ -819,6 +819,58 @@ let test_exit_waits_for_save (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_enter_edit_origin (h : host) =
+  let saved = h.snapshot () in
+  let generation = !Runtime.load_gen in
+  let rec run index = function
+    | [] -> Js.Promise.resolve ()
+    | (name, change_origin, accept) :: rest ->
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        let ref_uuid = Printf.sprintf "cf8930ea-8c00-40d0-a000-%012d" index in
+        let requested = ref false in
+        let release = ref (fun () -> ()) in
+        let metadata = Js.Promise.make (fun ~resolve ~reject:_ ->
+            release := (fun () -> resolve (W.Map
+                [ W.Keyword "block/title", W.String "Converted Target"
+                ; W.Keyword "block/name", W.String "converted-target" ]) [@u])) in
+        let worker = Option.get !Runtime.worker in
+        Runtime.worker := Some { worker with Worker_client.invoke_fn =
+          (fun method_name args ->
+            match method_name, args with
+            | "thread-api/pull",
+              [ _; _; W.Array [ W.Keyword "block/uuid"; W.Uuid uuid ] ]
+              when uuid = ref_uuid -> requested := true; metadata
+            | _ -> worker.Worker_client.invoke_fn method_name args) };
+        stage_page h [ Test_check.block "entry-block" ("[[" ^ ref_uuid ^ "]]") ];
+        A.enter_edit ~scope:"main" "entry-block" (-1);
+        let* () = h.wait_ms 25 in
+        check ("edit entry awaits title conversion: " ^ name)
+          (!requested && S.editing () = None);
+        change_origin ();
+        !release ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("edit entry publishes only to its originating load: " ^ name)
+          (if accept then match S.editing () with
+            | Some e -> e.S.uuid = "entry-block" && e.S.scope = "main"
+                && e.S.model.EM.source = "[[Converted Target]]"
+                && e.S.model.EM.caret = String.length "[[Converted Target]]"
+            | None -> false
+           else S.editing () = None && !S.pending_focus = None);
+        reset_editor ();
+        Runtime.load_gen := generation;
+        h.restore saved;
+        run (index + 1) rest
+  in
+  run 0
+    [ "current", (fun () -> ()), true
+    ; "route round trip", (fun () ->
+          let current = h.snapshot () in
+          h.restore { current with Model.route = Model.Page "other-entry-page" };
+          h.restore current), false
+    ; "same-route reload", (fun () -> incr Runtime.load_gen), false ]
+
 let test_exit_after_navigation (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "saved" ];
@@ -1498,6 +1550,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
   let* () = test_exit_waits_for_save h in
+  let* () = test_enter_edit_origin h in
   let* () = test_exit_after_navigation h in
   let* () = test_navigation_retires_dirty_editor h in
   let* () = test_history_after_navigation h in

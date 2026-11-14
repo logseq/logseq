@@ -669,9 +669,15 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
           (* stored titles are id-ref form; the edit buffer shows page names
              (cljs id-ref->title-ref) *)
           let restore = S.editing () in
+          let origin = Runtime.capture_reload_origin () in
+          let current () =
+            match origin with
+            | Some origin -> Runtime.reload_origin_current origin
+            | None -> false
+          in
           let p =
             (let* buffer = Ops.title_on_entry uuid (display_title uuid) in
-            if context = (Runtime.repo (), Runtime.route ()) then (
+            if current () then (
             (* Resolve the end position after title/reference conversion. *)
             let caret = if caret = -1 then String.length buffer else caret in
             (if Lazy.force perf_keys then
@@ -690,6 +696,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             ignore (Ui_services.timers_timeout apply_focus 0));
             Js.Promise.resolve ()) in
           run_structure ~restore p (fun () ->
+              if current () then
               match S.editing () with
               | Some e when e.S.uuid = uuid && e.S.scope = scope ->
                   (match !S.pending_focus with
