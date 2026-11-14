@@ -1,5 +1,54 @@
 # Plugin API Migrations
 
+## QuickJS scalar property-set alias
+
+The DOM-free `Editor.setBlockProperty(identity, key, value)` is a scalar-only
+alias of the existing upsert request: wire 14, raw arity 3. It adds no host
+operation. Rebundle plugins with the matching QuickJS SDK to use the new alias.
+
+The method takes exactly three required public arguments and returns
+`Promise<void>`; successful fulfillment is `undefined`, not a block, boolean,
+changed-key count or the internal null acknowledgement. Any fourth argument,
+including `undefined`, `{}` or legacy reset/entity options, is `Unsupported`
+before host submission. Existing `upsertBlockProperty` options are unchanged:
+`reset`/`entityId` may be omitted or false; true remains unsupported.
+
+Values are finite numbers, strings and booleans; `0`, `false` and `""` are values,
+not removal signals. `null` and nonfinite numbers are `Invalid_request`; bounded
+plain arrays/objects are `Unsupported`. Omitted/undefined values are not given a
+default. Keys are case-sensitive ASCII leaf names of 1–64 bytes using letters,
+digits, `_` or `-`, not qualified property identifiers. The host supplies the
+trusted `plugin.property.<plugin-id>/<key>` namespace and existing schema guards.
+
+This is a single-key merge: omitted properties are preserved. It does not reset
+or replace a property map. For removal use `removeBlockProperty`, or the existing
+explicit-null property patch when that is the intended operation. `updateBlock`
+still preserves omitted properties and accepts explicit-null removal, but also
+replaces content; do not supply an empty content string merely to remove a
+property. The existing plural set/patch contracts are not changed by this alias.
+
+Within an approved command invocation with host-granted `graph_write`:
+
+```ts
+await logseq.Editor.setBlockProperty(blockUuid, 'score', 0)
+await logseq.Editor.setBlockProperty(blockUuid, 'done', false)
+await logseq.Editor.setBlockProperty(blockUuid, 'label', '')
+await logseq.Editor.removeBlockProperty(blockUuid, 'score')
+```
+
+When porting a legacy four-argument setter, remove an options bag only if it was
+not providing required reset/entity behavior. There is no equivalent reset or
+entity-valued mode here; do not emulate replacement with a read-modify-write
+snapshot or a loop of setters. Do not branch on the setter result. A separate
+read, if needed, requires its own graph-read authority.
+
+The alias reuses the existing `graph_write`, captured command/session/invocation,
+namespace, schema, freshness, cancellation and guarded outliner path. It grants
+no read capability and adds no worker endpoint, raw transaction authority,
+persisted-schema migration or platform host. Cancellation after dispatch is not
+rollback, and separate calls are not atomic; never retry an unknown write outcome
+automatically. Native evidence does not establish Web/WASM or mobile support.
+
 ## QuickJS property patches and plain-block creation
 
 The DOM-free `Editor` adds `setBlockProperties`, `patchBlockProperties`,
