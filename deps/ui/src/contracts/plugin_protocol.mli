@@ -11,8 +11,24 @@ type program
 
 type identity = Entity_id of int | Uuid of string | Page_name of string
 type sibling_direction = Previous_sibling | Next_sibling
+type insertion_position = First_child | Last_child | Before | After
+type insert_options
+type property_key
+type property_value = Text_value of string | Number_value of float | Checkbox_value of bool
+type property_patch = (property_key * property_value option) list
+type move_position = Move_before | Move_after | Move_into
+type mutation =
+  | Insert_block of identity * string * insert_options
+  | Update_block of identity * string * property_patch
+  | Upsert_block_property of identity * property_key * property_value
+  | Remove_block_property of identity * property_key
+  | Remove_block of identity
+  | Move_block of identity * identity * move_position
+  | Create_page of string * string option
+  | Rename_page of identity * string
+  | Delete_page of identity
 type log_level = Log_debug | Log_info | Log_warn | Log_error
-type capability = Editor_read | Editor_command | Graph_read | Db_query
+type capability = Editor_read | Editor_command | Graph_read | Db_query | Graph_write
 type request =
   | Get_editing_context
   | Get_plugin_info
@@ -30,6 +46,10 @@ type request =
   | Get_page_properties of identity
   | Get_today_page
   | Get_all_pages
+  | Get_block_properties of identity
+  | Get_page_blocks_tree of identity
+  | Get_block_children of identity
+  | Mutate of mutation
   | Datascript_query of query
   | Log of log_level * string
   | Register_editor_command of command_descriptor * callback_id
@@ -47,6 +67,10 @@ type reply =
   | Page_properties of Json.t
   | Logged
   | Editor_command_registered
+  | Properties of Json.t
+  | Mutation_applied
+  | Blocks of entity list
+  | Page_renamed
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type error =
   | Invalid_request
@@ -86,6 +110,11 @@ val query_inputs : query -> Json.t array
 val property_ident : string -> (property_ident, error) result
 val property_ident_value : property_ident -> string
 val decode_request : operation:int -> Json.t -> (request, error) result
+val insert_options : Json.t -> (insert_options, error) result
+val insertion_position : insert_options -> insertion_position
+val custom_uuid : insert_options -> string option
+val property_key : string -> (property_key, error) result
+val property_key_value : property_key -> string
 val reply_value : reply -> Json.t
 val program : action list -> (program, error) result
 val decode_program : Json.t -> (program, error) result

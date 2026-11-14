@@ -318,12 +318,12 @@ let command_pending () =
       ~some:(fun plugin -> Plugin_runner.invoking plugin.runner) !slot)
     command_plugins false
 
-let invoke_command handle services reads =
+let invoke_command ?writes handle services reads =
   match command_instance handle with
   | None -> Ui_task.resolve (Error Plugin_protocol.Cancelled)
   | Some plugin ->
       let key = Plugin_protocol.command_key (Plugin_protocol.command_metadata handle) in
-      let invocation = Plugin_runner.invoke plugin.runner ~key services reads in
+      let invocation = Plugin_runner.invoke ?writes plugin.runner ~key services reads in
       Ui_task.create ~cancel:(fun () ->
         Ui_task.cancel invocation;
         if not (Plugin_runner.current plugin.runner) then unload_command_plugin plugin)

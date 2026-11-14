@@ -362,9 +362,87 @@ let get_many_for_repo origin_repo ids =
 
 let get_many ids = get_many_for_repo (repo ()) ids
 
+(* db-property/property-value-content: (or :block/title
+   :logseq.property/value) — ref-value content for readable maps *)
+let property_value_content (v : Wire.t) =
+  match Wire.get v "block/title" with
+  | Some t -> t
+  | None -> (
+      match Wire.get v "logseq.property/value" with
+      | Some x -> x
+      | None -> v)
+
+(* db-property-util/get-property-value: numbers stay raw; entity maps
+   deref to their content *)
+let get_property_value (v : Wire.t) =
+  match v with
+  | Wire.Int _ | Wire.Int64 _ | Wire.Float _ -> v
+  | other -> property_value_content other
+
+(* readable-properties: keys -> ":" prefixed ident strings; values —
+   set -> set of contents; sequential -> map get-property-value;
+   map -> property-value-content; scalar -> raw *)
+let readable_properties (props : (Wire.t * Wire.t) list) : Wire.t =
+  Wire.Map
+    (List.map
+       (fun (k, v) ->
+         let ks =
+           match k with
+           | Wire.Keyword s -> ":" ^ s
+           | Wire.String s -> s
+           | other -> (
+               match other with
+               | _ -> Sdk_convert.wire_to_string other)
+         in
+         let v' =
+           match v with
+           | Wire.Set xs -> Wire.Set (List.map property_value_content xs)
+           | Wire.Array xs -> Wire.Array (List.map get_property_value xs)
+           | Wire.List xs -> Wire.List (List.map get_property_value xs)
+           | Wire.Map _ -> get_property_value v
+           | _ -> v
+         in
+         (Wire.String ks, v'))
+       props)
+
+(* get-all-block-properties: own block/properties merged over class
+   default properties (own keys win) *)
+let all_block_properties_for_repo origin_repo db_id props =
+  match db_id with
+  | None -> Js.Promise.resolve props
+  | Some id ->
+      let* defaults =
+        Runtime.invoke2 "thread-api/get-block-class-default-properties"
+          (Wire.String origin_repo)
+          (Wire.Int id)
+      in
+      let merged =
+        match defaults, props with
+        | Wire.Map dvs, Wire.Map kvs ->
+            let own_keys =
+              List.filter_map
+                (fun (k, _) ->
+                  match k with
+                  | Wire.Keyword s | Wire.String s -> Some s
+                  | _ -> None)
+                kvs
+            in
+            Wire.Map
+              (List.filter
+                 (fun (k, _) ->
+                   match k with
+                   | Wire.Keyword s | Wire.String s ->
+                       not (List.mem s own_keys)
+                   | _ -> true)
+                 dvs
+              @ kvs)
+        | _ -> props
+      in
+      Js.Promise.resolve merged
+
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
    Response is {result: <last op result>, ...} — unwrap it. *)
-let apply_ops_for_repo origin_repo ops opts =
+let apply_ops_for_repo ?(before_commit = fun () -> ()) ?(refresh = true) origin_repo ops opts =
   let context_revision =
     let entry_model = Runtime.model () in
     if entry_model.Model.repo = Some origin_repo then
@@ -377,6 +455,7 @@ let apply_ops_for_repo origin_repo ops opts =
     && context_revision = Some fresh_model.Model.context_revision
   in
   let* ops = resolve_title_refs_for_repo origin_repo ops in
+  before_commit ();
   let* w =
     Runtime.invoke3 "thread-api/apply-outliner-ops"
       (Wire.String origin_repo)
@@ -392,12 +471,12 @@ let apply_ops_for_repo origin_repo ops opts =
      refresh before resolving so callers observe applied
      state (matches cljs' reactive frontend db) *)
   let* () =
-    if context_is_current () then
+    if refresh && context_is_current () then
       Subs_state.promise_of_task (Runtime.hooks.refresh_property_areas ())
     else resolved ()
   in
   let* () =
-    if context_is_current () then
+    if refresh && context_is_current () then
       Subs_state.promise_of_task (Runtime.hooks.refresh_after_ops ())
     else resolved ()
   in

@@ -642,7 +642,8 @@ let filter_slash q items =
   let fields = if U.current_lang () = "zh-CN" then
       fields @ [fun it -> Fuzzy.hanzi_initials it.ai_label] else fields in
   let fs =
-    Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
+    if q = "" then items
+    else Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
   in
 
   (match fs with [] -> [ slash_fallback () ] | _ -> fs)
@@ -2352,6 +2353,7 @@ type command_ticket =
   ; ticket_execute : unsupported:(unit -> unit) -> configured_step list -> unit Js.Promise.t
   ; ticket_services : Plugin_broker.services
   ; ticket_reads : Plugin_broker.read_services
+  ; ticket_writes : Plugin_broker.write_services
   ; ticket_handle : Plugin_protocol.command_handle
   ; ticket_at_start : bool
   ; mutable ticket_consumed : bool
@@ -2369,11 +2371,11 @@ let prepare_command t ac handle =
       (match prepare_configured ~lease t ac with
       | None -> Error Plugin_protocol.Stale_context
       | Some (current, execute) ->
-          let services, reads = Plugin_read_services.capture ~id:(Plugin_protocol.command_plugin handle) in
+          let services, reads, writes = Plugin_read_services.capture_editor ~id:(Plugin_protocol.command_plugin handle) in
           let services = {services with Plugin_broker.current =
             (fun () -> current () && services.current ())} in
           Ok {ticket_current=current; ticket_execute=execute;
-              ticket_services=services; ticket_reads=reads; ticket_handle=handle;
+              ticket_services=services; ticket_reads=reads; ticket_writes=writes; ticket_handle=handle;
               ticket_at_start=ac.tpos = 0; ticket_consumed=false})
   | Some _ | None -> Error Plugin_protocol.Invalid_request
 
@@ -2397,7 +2399,7 @@ let execute_command ticket program =
 
 let invoke_command ticket =
   if ticket.ticket_consumed then Ui_task.resolve (Error Plugin_protocol.Cancelled) else
-  let invocation = Plugin_host.invoke_command ticket.ticket_handle
+  let invocation = Plugin_host.invoke_command ~writes:ticket.ticket_writes ticket.ticket_handle
       ticket.ticket_services ticket.ticket_reads in
   let completion = Ui_task.bind invocation (function
     | Error error -> ticket.ticket_consumed <- true; Ui_task.resolve (Error error)
@@ -2790,6 +2792,22 @@ let icon_of_cmd = function
   | "dev/show-block-ast" -> "code"
   | _ -> ""
 
+let selection_can_comment ~scope =
+  Editor_state.selection_scope () = scope
+  && (let selected = Editor_state.selected () in
+      let rec any_target ~parent = function
+        | [] -> false
+        | (b : Model.block) :: rest ->
+            (Option.fold ~none:false
+               ~some:(fun uuid -> Editor_state.String_set.mem uuid selected)
+               b.block_uuid
+             && Comments_ops.comment_target_block_p ~parent b)
+            || any_target ~parent:(Some b) (Editor_state.children_of b)
+            || any_target ~parent rest
+      in
+      any_target ~parent:None (Editor_state.blocks_in_scope scope))
+;;
+
 let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
@@ -2797,14 +2815,20 @@ let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
       if multi then multi_entries ?allow_cut ?allow_delete ()
       else block_entries () @ dev_entries ()
     in
-    if flashcards_enabled () then base
+    let available =
+      if not multi || selection_can_comment ~scope then base
+      else List.filter
+          (function Ci_item (_, _, "add-comment") -> false | _ -> true)
+          base
+    in
+    if flashcards_enabled () then available
     else
       List.filter
         (fun e ->
           match e with
           | Ci_item (_, _, action) -> action <> "make-flashcard"
           | _ -> true)
-        base
+        available
   in
   close_ac t;
   let flip = anchor_above atop abot in

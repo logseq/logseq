@@ -1,7 +1,7 @@
 let portable_commands () : Plugin_protocol.command_handle list = []
 let command_pending () = false
 let command_current (_ : Plugin_protocol.command_handle) = false
-let invoke_command (_ : Plugin_protocol.command_handle)
+let invoke_command ?writes:(_ : Plugin_broker.write_services option) (_ : Plugin_protocol.command_handle)
     (_ : Plugin_broker.services) (_ : Plugin_broker.read_services) =
   Ui_task.resolve (Error Plugin_protocol.Unsupported)
 

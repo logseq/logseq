@@ -161,7 +161,8 @@ LUI_EXPORT int32_t lui_ocaml_start(lui_patch_callback callback,
 
   const value *initialize = caml_named_value("lui_ocaml_init");
   if (initialize == NULL ||
-      caml_named_value("lui_ocaml_virtual_window") == NULL) {
+      caml_named_value("lui_ocaml_virtual_window") == NULL ||
+      caml_named_value("lui_ocaml_virtual_retention_utf8") == NULL) {
     caml_enter_blocking_section();
     return 0;
   }
@@ -480,6 +481,35 @@ LUI_EXPORT int32_t lui_ocaml_virtual_window(
     arguments[4] = list;
     result = caml_callbackN_exn(*callback, 5, arguments);
     accepted = emit_patch("lui_ocaml_virtual_window", result);
+  }
+  CAMLdrop;
+  caml_enter_blocking_section();
+  return accepted;
+}
+
+LUI_EXPORT int32_t lui_ocaml_virtual_viewport_version(void) {
+#if defined(__APPLE__)
+  return 1;
+#else
+  return 0;
+#endif
+}
+
+LUI_EXPORT int32_t lui_ocaml_virtual_retention_utf8(
+    int64_t owner, int64_t ticket, const char *receipt, int32_t length) {
+  if (!runtime_started || owner <= 0 || owner > Max_long ||
+      ticket <= 0 || ticket > Max_long || receipt == NULL || length < 0)
+    return 0;
+  int32_t accepted = 0;
+  caml_leave_blocking_section();
+  CAMLparam0();
+  CAMLlocal2(receipt_value, result);
+  const value *callback = caml_named_value("lui_ocaml_virtual_retention_utf8");
+  if (callback != NULL) {
+    receipt_value = copy_bytes(receipt, length);
+    result = caml_callback3_exn(*callback, Val_long(owner), Val_long(ticket),
+                              receipt_value);
+    accepted = emit_patch("lui_ocaml_virtual_retention_utf8", result);
   }
   CAMLdrop;
   caml_enter_blocking_section();
