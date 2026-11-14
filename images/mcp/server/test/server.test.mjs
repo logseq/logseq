@@ -97,6 +97,16 @@ test("lists the expected tools", async () => {
   });
 });
 
+test("list_remote_graphs works before any graph is downloaded", async () => {
+  await withClient(async (client) => {
+    const result = await call(client, "list_remote_graphs");
+    assert.equal(result.isError, false);
+    assert.equal(result.data.graphs[0]["graph-name"], "notes");
+    const local = await call(client, "list_local_graphs");
+    assert.deepEqual(local.data, []);
+  });
+});
+
 test("graph tools require open_graph first", async () => {
   await withClient(async (client) => {
     const result = await call(client, "show", { graph: "notes", page: "Home" });
