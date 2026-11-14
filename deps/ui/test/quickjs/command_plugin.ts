@@ -178,7 +178,25 @@ void logseq.ready(async () => {
         throw new Error('Update round trip')
       }
       await logseq.Editor.upsertBlockProperty(created.uuid, 'portable-score', 3)
-      await logseq.Editor.upsertBlockProperty(created.uuid, 'portable-score', 4)
+      const acknowledgement = await logseq.Editor.setBlockProperty(
+        created.uuid,
+        'portable-score',
+        4
+      )
+      if (acknowledgement !== undefined)
+        throw new Error('Scalar set must discard the internal acknowledgement')
+      let refused = false
+      try {
+        await Reflect.apply(logseq.Editor.setBlockProperty, logseq.Editor, [
+          created.uuid,
+          'portable-score',
+          5,
+          { reset: true },
+        ])
+      } catch (error) {
+        refused = error instanceof Error && error.message === 'Unsupported'
+      }
+      if (!refused) throw new Error('Scalar set must reject legacy options')
       const properties = await logseq.Editor.getBlockProperties(created.id)
       if (properties?.[':plugin.property.command-probe/portable-score'] !== 4) {
         throw new Error('Property round trip')

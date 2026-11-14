@@ -87,6 +87,7 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `Editor.insertBlock(identity, content, opts?)`            | `graph_write`               | Insert one block during a command invocation                                                  |
 | `Editor.updateBlock(identity, content, opts?)`            | `graph_write`               | Replace a nonediting block title and patch plugin-owned properties                            |
 | `Editor.upsertBlockProperty(identity, key, value, opts?)` | `graph_write`               | Plugin-owned scalar property                                                                  |
+| `Editor.setBlockProperty(identity, key, value)`           | `graph_write`               | Scalar-only upsert alias; three arguments and no-value acknowledgement                        |
 | `Editor.removeBlockProperty(identity, key)`               | `graph_write`               | Remove a plugin-owned property value                                                          |
 | `Editor.removeBlock(identity)`                            | `graph_write`               | Remove a nonediting block subtree through the outliner                                        |
 | `Editor.moveBlock(source, target, opts?)`                 | `graph_write`               | Move before, after, or into a target                                                          |
@@ -171,6 +172,10 @@ properties. Use `getPage` with `graph_read` for the full page entity.
   number/checkbox/default properties. Existing incompatible types or cardinality
   are `Unsupported`; this slice does not change schemas. Upsert options
   `reset`/`entityId` may be omitted or false; true is `Unsupported`.
+- `setBlockProperty(identity, key, value)` shares upsert's scalar/key policy and
+  existing wire 14, but accepts no fourth argument (including legacy options).
+  Extra arguments are `Unsupported`; its acknowledgement resolves to `undefined`.
+  It does not require graph reads or add another mutation path.
 
 All calls use the existing runtime/value budgets. The broker validates grants
 before entering the service. Application services capture the graph and editor

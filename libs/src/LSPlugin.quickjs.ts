@@ -314,6 +314,18 @@ function content(value: string): string {
   return data(value) as string
 }
 
+function propertyValue(value: unknown): PropertyValue {
+  const copy = data(value)
+  if (copy === null) failure('Invalid_request')
+  if (
+    typeof copy !== 'string' &&
+    typeof copy !== 'number' &&
+    typeof copy !== 'boolean'
+  )
+    failure('Unsupported')
+  return copy
+}
+
 function emptyOptions(
   value: unknown,
   unsupported: string[],
@@ -567,11 +579,7 @@ export const logseq = surface({
       if (Object.keys(patch).length > 32) failure('Resource_limit')
       for (const [name, value] of Object.entries(patch)) {
         propertyKey(name)
-        if (
-          value !== null &&
-          !['string', 'number', 'boolean'].includes(typeof value)
-        )
-          failure('Unsupported')
+        if (value !== null) propertyValue(value)
       }
       return call((host) =>
         host.updateBlock(
@@ -589,16 +597,20 @@ export const logseq = surface({
     ) {
       const target = identity(value),
         name = propertyKey(key),
-        copy = data(property)
-      if (copy === null) failure('Invalid_request')
-      if (
-        typeof copy !== 'string' &&
-        typeof copy !== 'number' &&
-        typeof copy !== 'boolean'
-      )
-        failure('Unsupported')
+        copy = propertyValue(property)
       emptyOptions(opts, ['reset', 'entityId'], true)
       return call((host) => host.upsertBlockProperty(target, name, copy))
+    },
+    async setBlockProperty(
+      value: Identity,
+      key: string,
+      property: PropertyValue
+    ): Promise<void> {
+      if (arguments.length > 3) failure('Unsupported')
+      const target = identity(value),
+        name = propertyKey(key),
+        copy = propertyValue(property)
+      await call((host) => host.upsertBlockProperty(target, name, copy))
     },
     removeBlockProperty(value: Identity, key: string) {
       const target = identity(value),

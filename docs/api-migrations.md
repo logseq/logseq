@@ -1,5 +1,29 @@
 # Plugin API Migrations
 
+## QuickJS scalar property-set alias
+
+The DOM-free `Editor.setBlockProperty(identity, key, value)` is a scalar-only
+alias of the existing upsert request (wire 14, raw arity 3), not a new host
+operation. It accepts finite numbers, strings and booleans, preserves all omitted
+properties, and returns `Promise<void>` with an undefined acknowledgement.
+`null` is `Invalid_request`; complex values are `Unsupported`. Keys remain in
+the trusted session plugin's `plugin.property.<plugin-id>/<key>` namespace.
+
+This narrower method has exactly three public arguments. An additional argument,
+including legacy reset/entity options, is `Unsupported`; existing
+`upsertBlockProperty` options remain unchanged. Update, upsert and the alias share
+the same scalar validation. `updateBlock` still accepts explicit-null property
+removal and does not resubmit omitted properties.
+
+```ts
+await logseq.Editor.setBlockProperty(blockUuid, 'score', 0)
+await logseq.Editor.updateBlock(blockUuid, '', { properties: { score: null } })
+```
+
+The alias reuses the existing `graph_write`, captured invocation, namespace,
+schema and outliner guards. It grants no read capability and introduces no new
+wire allocation, worker endpoint, transaction authority or cross-call atomicity.
+
 ## QuickJS editor API v1
 
 The DOM-free editor surface now includes `getBlockProperties`, `insertBlock`,
