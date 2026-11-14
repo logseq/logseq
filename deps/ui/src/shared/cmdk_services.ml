@@ -45,6 +45,7 @@ type handlers =
   { key : key_ev -> key_answer
   ; click : click_ev -> unit
   ; mousemove : move_ev -> unit
+  ; composition : bool -> unit
   }
 
 (* Portable Commands_data.cmd — labels arrive already host-decorated
@@ -106,6 +107,7 @@ type t =
   ; send_navigate : nav_target -> unit
   ; resolve_route : unit -> unit
   ; scroll_to_top : unit -> unit
+  ; jump_to_anchor : string -> unit
     (* -- document ------------------------------------------------------ *)
   ; set_input_value : string -> unit (* .cp__cmdk-search-input *)
   ; focus_search_input : unit -> unit
@@ -113,6 +115,7 @@ type t =
                                          until the modal input mounts *)
   ; scroll_row_index : int -> unit (* scroll [data-item-index=n] inside
                                       the scroller into view *)
+  ; reset_search_scroll : unit -> unit
   ; set_timeout : (unit -> unit) -> int -> unit
   ; install_listeners : Signal.scope -> handlers -> unit
   ; toast : string -> string -> unit
@@ -123,6 +126,9 @@ type t =
       -> 'a list -> string -> 'a list
   ; commands : unit -> cmd list
   ; plugin_commands : unit -> cmd list
+  ; installed_themes : unit -> Wire.t list
+  ; selected_theme_url : unit -> string option
+  ; select_theme : Wire.t -> unit
   ; exec_palette_command : string -> unit
   ; hook_app : string -> unit
     (* -- editor state ----------------------------------------------------- *)

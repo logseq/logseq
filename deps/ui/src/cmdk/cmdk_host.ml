@@ -130,6 +130,7 @@ let services : unit -> Svs.t =
       (fun target -> Runtime.send (Action.Navigate_to (route_of_target target)))
   ; resolve_route = Router.resolve
   ; scroll_to_top = Router.scroll_to_top
+  ; jump_to_anchor = Router.jump_to_anchor
   ; set_input_value =
       (fun v ->
         match D.query_selector ".cp__cmdk-search-input" with
@@ -148,7 +149,7 @@ let services : unit -> Svs.t =
               D.el_focus el;
               if q <> "" then (
                 D.el_set_value el q;
-                D.el_set_selection_range el 0 (String.length q))
+                D.el_select_text el)
           | None ->
               if tries > 0 then D.set_timeout (fun () -> go (tries - 1)) 20
         in
@@ -164,6 +165,10 @@ let services : unit -> Svs.t =
             | Some row -> D.scroll_row_into_view ~scroller ~row
             | None -> ())
         | None -> ())
+  ; reset_search_scroll =
+      (fun () -> match Ui_services.dom_query ".cp__cmdk .cp__cmdk-scroller" with
+        | Some el -> el.Ui_services.set_scroll_top 0.
+        | None -> ())
   ; set_timeout = D.set_timeout
   ; install_listeners =
       (fun scope h ->
@@ -172,6 +177,11 @@ let services : unit -> Svs.t =
           Signal.on_dispose scope (fun () -> D.remove_document_listener name listener capture)
         in
         let open Svs in
+        List.iter (fun (name, composing) ->
+          add_document_listener name (fun ev -> match D.ev_target ev with
+            | Some el when D.el_closest el ".cp__cmdk__modal" <> None
+                && D.el_closest el ".cp__cmdk-search-input" <> None -> h.composition composing
+            | _ -> ()) true) ["compositionstart", true; "compositionend", false];
         add_document_listener "keydown"
           (fun ev ->
             let a =
@@ -230,6 +240,11 @@ let services : unit -> Svs.t =
   ; commands = (fun () -> List.map cmd_of (Commands_data.current_table ()))
   ; plugin_commands =
       (fun () -> List.map cmd_of (Plugin_host.palette_commands ()))
+  ; installed_themes = (fun () -> List.map
+      (fun theme -> Sdk_convert.wire_of_json (Sdk_json.of_js theme)) !Plugin_host.installed_themes)
+  ; selected_theme_url = (fun () -> !Plugin_host.selected_theme)
+  ; select_theme = (fun theme -> Plugin_host.core_select_theme
+      (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:false theme)))
   ; exec_palette_command = Plugin_host.exec_palette_command
   ; hook_app =
       (fun name -> Plugin_host.hook_app name Js.Json.null Js.Json.null)

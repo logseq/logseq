@@ -586,6 +586,15 @@ let group_header svs (st : S.t) (g : S.group) : t =
        else spacer ~key:"gmore" [])
     ]
 
+(* Master keeps the standalone Create group in its action cache while
+   filtered rendering admits only the selected group (and current page
+   alongside Nodes). Keep that cache/renderer boundary explicit. *)
+let rendered_groups (v : S.view) =
+  List.filter (fun (g : S.group) -> match v.S.filter with
+    | None -> true
+    | Some S.G_nodes -> g.S.gid = S.G_nodes || g.S.gid = S.G_current_page
+    | Some gid -> g.S.gid = gid) v.S.groups
+
 let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
   Ui_components.cmdk_group ~key:"group"
     ~kind:(gid_name (Signal.get group_sig).S.gid)
@@ -594,7 +603,7 @@ let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
     ~last:
       (reactive
          (fun (v : S.view) (g : S.group) ->
-           match List.rev v.S.groups with
+           match List.rev (rendered_groups v) with
            | last :: _ -> last.S.gid = g.S.gid
            | [] -> true)
          (Signal.value st.S.vs) group_sig)
@@ -626,7 +635,7 @@ let groups_body svs st : t =
  fun ctx parent ->
   (keyed
      ~source:
-       (reactive (fun (v : S.view) -> v.S.groups)
+       (reactive rendered_groups
           (Signal.value (st.S.vs)))
      ~key:(fun (g : S.group) -> gid_name g.S.gid)
      ~cmp:Stdlib.compare
@@ -666,10 +675,9 @@ let scroller svs st : t =
              (fun (v : S.view) ->
                v.S.input <> ""
                && not
-                    (v.S.groups <> []
-                    && List.exists
+                    (List.exists
                          (fun (g : S.group) -> g.S.gitems <> [])
-                         v.S.groups))
+                         (rendered_groups v)))
              view_sig)
         (Ui_components.cmdk_empty ~key:"empty"
            [ text ~key:"empty-t"
@@ -744,6 +752,7 @@ let hint_action_of (it : S.item) =
   | S.Open_page _ -> (`open_, true)
   | S.Open_block _ -> (`open_, true)
   | S.Open_file _ -> (`open_, false)
+  | S.Select_theme _ -> (`trigger, false)
 
 let hint_variant (it : S.item option) : int =
   match it with
@@ -809,7 +818,7 @@ let hints svs st : t =
           hint_variant a = hint_variant b)
         (action_hints svs st)
         (Signal.map
-           (fun (v : S.view) -> S.item_at v v.S.hl)
+           S.highlighted_item
            (Signal.value (st.S.vs)))
     ])
     ctx parent
@@ -924,7 +933,8 @@ let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =
   services.Svs.install_listeners context.Lui_ui.ui_scope
     { Svs.key = handle_keydown st
     ; click = handle_click st
-    ; mousemove = handle_mousemove st };
+    ; mousemove = handle_mousemove st
+    ; composition = S.on_composition st };
   (* The keyed box gives the conditional its own reconcile-stable parent:
      spliced directly under #app-container its dynamic segment goes stale
      after navigation and later mounts emit an inconsistent op batch *)
