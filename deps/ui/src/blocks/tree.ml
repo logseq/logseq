@@ -762,6 +762,26 @@ let comments_row ~scope ~depth ~editable ~library (bs : Model.block Signal.signa
               ; column ~grow:1. ~min_width:0 [Comments_view.area_el ~scope bs] ] ]))))
     ctx parent
 
+let row_drop_indicators ~scope uuid =
+  if not (Ui_services.env_native_drag ()) then []
+  else
+    let indicator zone offset edge =
+      if_
+        ~test:(reactive
+          (fun drag -> drag_target_zone ~scope uuid drag = Some zone)
+          (S.drag_sig ()))
+        (Ui_components.with_props
+           [ Ui_components.Prop.position `absolute
+           ; Ui_components.Prop.inset_left offset
+           ; Ui_components.Prop.inset_right 0.
+           ; edge ]
+           (box ~height:3 ~background:"hsl(var(--border))" []))
+    in
+    [ indicator Block_drag.Top 20. (Ui_components.Prop.inset_top 0.)
+    ; indicator Block_drag.Sibling 20. (Ui_components.Prop.inset_bottom 0.)
+    ; indicator Block_drag.Nested 48. (Ui_components.Prop.inset_bottom 0.)
+    ]
+
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
     ?(virtualize = false) (b : Model.block) : t =
@@ -774,13 +794,12 @@ let rec block_row
   (row_el ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope b) ctx parent
 
 
-(* the .block-main-container subtree — everything inside .ls-block
-   except the children container *)
+(* The title/editor row; properties, query results and children follow
+   in the block shell. *)
 and row_main ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
-  let content =
   row ~key:("main-" ^ key)
       ~style_class:"block-main-container" ~gap:4 ~min_height:24
         ~data_attrs:
@@ -846,28 +865,6 @@ and row_main ~editable ~library scope (b : Model.block) : t =
             ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
             ]
         ]
-  in
-  if not (Ui_services.env_native_drag ()) then content
-  else
-    let indicator zone offset edge =
-      if_
-        ~test:(reactive
-          (fun drag -> drag_target_zone ~scope uuid drag = Some zone)
-          (S.drag_sig ()))
-        (Ui_components.with_props
-           [ Ui_components.Prop.position `absolute
-           ; Ui_components.Prop.inset_left offset
-           ; Ui_components.Prop.inset_right 0.
-           ; edge ]
-           (box ~height:3 ~background:"hsl(var(--border))" []))
-    in
-    Ui_components.with_props [ Ui_components.Prop.position `relative ]
-      (column ~key:("drag-" ^ key)
-         [ content
-         ; indicator Block_drag.Top 20. (Ui_components.Prop.inset_top 0.)
-         ; indicator Block_drag.Sibling 20. (Ui_components.Prop.inset_bottom 0.)
-         ; indicator Block_drag.Nested 48. (Ui_components.Prop.inset_bottom 0.)
-         ])
 
 and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     (b : Model.block) : t =
@@ -887,6 +884,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
   track_mounted_row ~scope b
     (with_editor_font
     (Ui_parts.class_signal (row_class_sig ~scope uuid blank embed b) Fun.id
+    (Ui_components.with_props [ Ui_components.Prop.position `relative ]
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
@@ -896,7 +894,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
           only visible while the fill shows *)
        ~corner_radius:4
        ~data_attrs_signal:(row_attrs_sig ~scope ~depth ~editable uuid b)
-    [ row_main ~editable ~library scope b
+    ([ row_main ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
          pills, sibling of .block-main-container *)
       Properties_area.block_area ~scope ~uuid
@@ -910,7 +908,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
     ; (if has_children && not (Comments.is_comments_area b) then
          children_el ~depth ~editable ~library ~virtualize uuid scope b
        else Logseq_el.nothing)
-    ])))
+    ] @ row_drop_indicators ~scope uuid)))))
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
@@ -946,12 +944,13 @@ and row_sig ~depth ~editable ~library ~virtualize scope
   (track_mounted_row ~scope b0
     (with_editor_font
     (Ui_parts.class_signal (row_class_sig_of ~scope bs) Fun.id
+    (Ui_components.with_props [ Ui_components.Prop.position `relative ]
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        ~corner_radius:4
        ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
-    [ reactive
+    ([ reactive
         ~equal:
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
           a == b && ga = gb && not (gen_bumped a ia ib))
@@ -979,7 +978,8 @@ and row_sig ~depth ~editable ~library ~virtualize scope
         (Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:""))
     ; row_children ~depth ~editable ~library ~virtualize scope bs
-    ]))))
+    ] @ row_drop_indicators ~scope
+          (Option.value b0.Model.block_uuid ~default:"")))))))
     ctx parent
 
 and row_children ~depth ~editable ~library ~virtualize scope
