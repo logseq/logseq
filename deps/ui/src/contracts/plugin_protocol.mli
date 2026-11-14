@@ -19,7 +19,9 @@ type request =
   | Get_current_block
   | Get_current_page
   | Get_block of identity
+  | Get_block_tree of identity
   | Get_page of identity
+  | Get_page_linked_references of identity
   | Get_sibling_block of sibling_direction * identity
   | Datascript_query of query
   | Log of log_level * string
@@ -30,6 +32,7 @@ type reply =
   | Editing_state of editing_context option
   | Block of entity option
   | Page of entity option
+  | Page_linked_references of (entity * entity list) list option
   | Current_page of page_result
   | Query_result of Json.t
   | Logged

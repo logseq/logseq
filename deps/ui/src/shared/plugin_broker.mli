@@ -10,7 +10,10 @@ type read_services = {
   current_block : unit -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   current_page : unit -> (Plugin_protocol.page_result, Plugin_protocol.error) result Ui_task.t;
   get_block : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  get_block_tree : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   get_page : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  page_linked_references : Plugin_protocol.identity ->
+    ((Plugin_protocol.entity * Plugin_protocol.entity list) list option, Plugin_protocol.error) result Ui_task.t;
   sibling_block : Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
     (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   query : Plugin_protocol.query -> (Json.t, Plugin_protocol.error) result Ui_task.t;
@@ -31,6 +34,10 @@ val dispatch : t -> session -> invocation -> Plugin_protocol.request ->
 val get_sibling_block : t -> session -> invocation ->
   direction:Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
   (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t
+val get_block_tree : t -> session -> invocation -> Plugin_protocol.identity ->
+  (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t
+val get_page_linked_references : t -> session -> invocation -> Plugin_protocol.identity ->
+  ((Plugin_protocol.entity * Plugin_protocol.entity list) list option, Plugin_protocol.error) result Ui_task.t
 val accept_program : t -> session -> invocation -> Plugin_protocol.program ->
   (Plugin_protocol.program, Plugin_protocol.error) result
 val cancel : t -> invocation -> unit

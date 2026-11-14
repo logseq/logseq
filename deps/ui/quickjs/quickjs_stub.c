@@ -423,12 +423,16 @@ static JSModuleDef *deny_module(JSContext *context, const char *name, void *opaq
     return NULL;
 }
 
+static int host_arity(int operation) {
+    return operation < 5 ? 0 : operation < 7 || operation == 23 || operation == 24 ? 1 : 2;
+}
+
 static JSValue host_request(JSContext *context, JSValueConst this_value, int argc,
                             JSValueConst *argv, int magic, JSValue *data) {
     (void)this_value; (void)magic;
     Bridge *bridge = JS_GetContextOpaque(context);
     int operation = JS_VALUE_GET_INT(data[1]);
-    int arguments = operation < 5 ? 0 : operation < 7 ? 1 : 2;
+    int arguments = host_arity(operation);
     if (argc != arguments)
         return JS_Throw(context, JS_NewString(context, error_names[INVALID]));
     if (!bridge->active || JS_VALUE_GET_INT(data[0]) != bridge->epoch)
@@ -582,18 +586,21 @@ CAMLprim value logseq_quickjs_start(value handle, value slot) {
     bridge->wall_deadline = monotonic() + 1;
     double before = enter(bridge, 0.005);
     JSValue host = JS_NewObjectProto(bridge->context, JS_NULL);
-    static const char *methods[] = {
-        "getEditingContext", "getPluginInfo", "getEditingState", "getCurrentBlock",
-        "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log", "registerEditorCommand",
-        "getSiblingBlock"
+    /* Slots 11-22 are reserved for the independent graph-write surface. */
+    static const struct { const char *name; int operation; } methods[] = {
+        {"getEditingContext", 0}, {"getPluginInfo", 1}, {"getEditingState", 2}, {"getCurrentBlock", 3},
+        {"getCurrentPage", 4}, {"getBlock", 5}, {"getPage", 6}, {"datascriptQuery", 7}, {"log", 8},
+        {"registerEditorCommand", 9}, {"getSiblingBlock", 10},
+        {"getBlockTree", 23}, {"getPageLinkedReferences", 24}
     };
     if (JS_IsException(host)) bridge->error = RESOURCE;
-    for (int operation = 0; operation < 11 && bridge->error < 0; operation++) {
+    for (size_t method = 0; method < sizeof(methods) / sizeof(methods[0]) && bridge->error < 0; method++) {
+        int operation = methods[method].operation;
         JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation)};
-        int arguments = operation < 5 ? 0 : operation < 7 ? 1 : 2;
+        int arguments = host_arity(operation);
         JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 2, data);
         if (JS_IsException(function) || JS_DefinePropertyValueStr(bridge->context, host,
-                methods[operation], function, JS_PROP_ENUMERABLE) < 0) bridge->error = RESOURCE;
+                methods[method].name, function, JS_PROP_ENUMERABLE) < 0) bridge->error = RESOURCE;
     }
     if (bridge->error < 0) {
         JS_PreventExtensions(bridge->context, host);
