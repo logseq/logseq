@@ -1389,7 +1389,7 @@ let editor_action st cid : (unit -> unit) option =
              | Some p -> st.svs.Svs.select_single p
              | None -> ()))
   | "editor/open-edit" ->
-      Some (first_target (fun u -> st.svs.Svs.enter_edit u 0))
+      Some st.svs.Svs.open_selected_block
   | "editor/open-selected-blocks-in-sidebar" ->
       Some (fun () -> st.svs.Svs.sidebar_open_uuids (target_uuids st))
   | "editor/toggle-block-children" ->

@@ -186,7 +186,7 @@ type t =
   ; indent : bool -> unit
   ; move_blocks_vert : bool -> unit
   ; select_single : string -> unit
-  ; enter_edit : string -> int -> unit
+  ; open_selected_block : unit -> unit
   ; toggle_collapse : string -> unit
   ; set_collapsed : string -> bool -> unit
   ; toggle_open_blocks : unit -> unit

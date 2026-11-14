@@ -350,7 +350,7 @@ let services : unit -> Svs.t =
       (fun up -> Editor_actions.indent_or_outdent ~indent:up)
   ; move_blocks_vert = Editor_actions.move_blocks_up_down
   ; select_single = Editor_actions.select_single
-  ; enter_edit = Editor_actions.enter_edit
+  ; open_selected_block = Editor_actions.open_selected_block ~at_end:true
   ; toggle_collapse = Editor_actions.toggle_collapse
   ; set_collapsed = Editor_actions.set_collapsed
   ; toggle_open_blocks = Editor_actions.toggle_open_blocks
