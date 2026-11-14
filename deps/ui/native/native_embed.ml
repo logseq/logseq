@@ -389,10 +389,22 @@ let perf_mark name t0 =
   then Printf.eprintf "[perf] %s %.1fms\n%!" name (perf_ms () -. t0)
 
 let initialize_unlocked platform_code host_code (payload : string) =
-  let paints_caret =
+  let fields =
     match Yojson.Safe.from_string payload with
-    | `Assoc [ ("paintsCaret", `Bool value) ] -> value
-    | _ -> invalid_arg "Native startup requires exactly one boolean paintsCaret capability"
+    | `Assoc fields -> List.sort (fun (a, _) (b, _) -> String.compare a b) fields
+    | _ -> invalid_arg "Native startup capabilities must be an object"
+  in
+  let paints_caret, virtual_capabilities =
+    match fields with
+    | [ ("paintsCaret", `Bool value)
+      ; ("sharedVirtualViewportVersion", `Int version)
+      ] when host_code = 2 && version = 1
+             && version = Lui_virtual.shared_viewport_version ->
+        value, [ Lui_virtual.Shared_viewport_retention_v1 ]
+    | [ ("paintsCaret", `Bool value) ] when host_code <> 2 -> value, []
+    | _ ->
+        invalid_arg
+          "Native startup requires boolean paintsCaret and, only for SwiftUI, sharedVirtualViewportVersion=1"
   in
   Printexc.record_backtrace true;
   Daemon_client.start_prewarm ();
@@ -430,7 +442,7 @@ let initialize_unlocked platform_code host_code (payload : string) =
   Logseq_katex.register registry;
   Logseq_editor.register registry;
   let app =
-    Lui_app.create_with_extensions backend registry Model.initial
+    Lui_app.create_with_extensions ~virtual_capabilities backend registry Model.initial
       Update.apply View.view
   in
   current_app := Some app;
@@ -617,6 +629,9 @@ let visible_range node first last =
 
 let virtual_window node generation first last pins =
   dispatch_lui (Lui_protocol.VirtualWindow (node, generation, first, last, pins))
+
+let virtual_retention owner ticket receipt =
+  dispatch_lui (Lui_protocol.VirtualRetention (owner, ticket, receipt))
 
 let picked node payload =
   dispatch_lui (Lui_protocol.Picked (node, payload))
@@ -884,6 +899,7 @@ module Ffi = struct
   let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
   let visible_range node first last = encode_batches (visible_range node first last)
   let virtual_window node generation first last pins = encode_batches (virtual_window node generation first last pins)
+  let virtual_retention owner ticket receipt = encode_batches (virtual_retention owner ticket receipt)
   let picked node payload = encode_batches (picked node payload)
   let navigate_previous node = encode_batches (navigate_previous node)
   let navigate_next node = encode_batches (navigate_next node)
@@ -941,6 +957,7 @@ let () =
   Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;
   Callback.register "lui_ocaml_visible_range" Ffi.visible_range;
   Callback.register "lui_ocaml_virtual_window" Ffi.virtual_window;
+  Callback.register "lui_ocaml_virtual_retention_utf8" Ffi.virtual_retention;
   Callback.register "lui_ocaml_picked" Ffi.picked;
   Callback.register "lui_ocaml_navigate_previous" Ffi.navigate_previous;
   Callback.register "lui_ocaml_navigate_next" Ffi.navigate_next;

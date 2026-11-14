@@ -14,6 +14,7 @@ typealias ToggleCall = @convention(c) (Int64, Int32) -> Int32
 typealias SliderCall = @convention(c) (Int64, Double) -> Int32
 typealias RangeCall = @convention(c) (Int64, Int64, Int64) -> Int32
 typealias VirtualWindowCall = @convention(c) (Int64, Int64, Int64, Int64, UnsafePointer<Int64>?, Int32) -> Int32
+typealias VirtualRetentionCall = @convention(c) (Int64, Int64, UnsafePointer<CChar>?, Int32) -> Int32
 typealias ScrollCall = @convention(c) (Int64, Int64, UnsafePointer<CChar>?) -> Int32
 typealias PointerCall = @convention(c) (Int64, Double, Double, Int32, Int32, UnsafePointer<CChar>?) -> Int32
 typealias ExtensionCall = @convention(c) (Int64, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32) -> Int32
@@ -79,12 +80,16 @@ final class NativeRuntime {
         }
         self.library = library
         // Resolve the complete application ABI before initializing OCaml.
-        let names = ["start", "pump", "resync", "stop", "root_node", "platform_event", "document_event_utf8", "editor_snapshot_utf8", "press", "press_ex", "long_press", "double_press", "appear", "load", "navigate_previous", "navigate_next", "text_changed_utf8", "picked_utf8", "submit", "dismiss", "toggle_changed", "radio_changed", "slider_changed", "scroll_edges", "scroll_completed", "visible_range", "virtual_window", "extension_event_utf8", "press_detail", "pointer_down", "pointer_up", "pointer_move", "pointer_cancel", "pointer_enter", "pointer_leave", "context_menu_press"]
+        let names = ["start", "pump", "resync", "stop", "root_node", "platform_event", "document_event_utf8", "editor_snapshot_utf8", "press", "press_ex", "long_press", "double_press", "appear", "load", "navigate_previous", "navigate_next", "text_changed_utf8", "picked_utf8", "submit", "dismiss", "toggle_changed", "radio_changed", "slider_changed", "scroll_edges", "scroll_completed", "visible_range", "virtual_window", "virtual_retention_utf8", "virtual_viewport_version", "extension_event_utf8", "press_detail", "pointer_down", "pointer_up", "pointer_move", "pointer_cancel", "pointer_enter", "pointer_leave", "context_menu_press"]
         for name in names {
             guard let address = dlsym(library, "lui_ocaml_" + name) else {
                 throw HostError("Missing runtime symbol lui_ocaml_\(name)")
             }
             symbols[name] = address
+        }
+        guard LUIAppleBackend.sharedVirtualViewportVersion == 1,
+              function("virtual_viewport_version", UnitCall.self)() == 1 else {
+            throw HostError("Shared virtual viewport v1 requires matching Apple and native runtimes")
         }
     }
 
@@ -107,7 +112,10 @@ final class NativeRuntime {
             CFRunLoopAddSource(CFRunLoopGetMain(), source, CFRunLoopMode(rawValue: mode.rawValue as CFString))
         }
         activeRuntime = self
-        let payload = "{\"paintsCaret\":false}"
+        let payload = try jsonString([
+            "paintsCaret": false,
+            "sharedVirtualViewportVersion": LUIAppleBackend.sharedVirtualViewportVersion,
+        ])
         let accepted = payload.withCString { function("start", StartCall.self)(patches, wake, requests, 1, 2, $0, Int32(payload.utf8.count)) }
         guard accepted == 1 else { throw HostError("OCaml initialization refused; see bridge diagnostics") }
         started = true
@@ -230,6 +238,13 @@ final class NativeRuntime {
             try check(nativePins.withUnsafeBufferPointer { buffer in
                 function("virtual_window", VirtualWindowCall.self)(Int64(id), Int64(generation), Int64(first), Int64(last), buffer.isEmpty ? nil : buffer.baseAddress, count)
             }, "virtual window")
+        case let .virtualRetention(owner, ticket, receipt):
+            guard let count = Int32(exactly: receipt.utf8.count) else {
+                throw HostError("Virtual retention receipt exceeds Int32")
+            }
+            try check(receipt.withCString {
+                function("virtual_retention_utf8", VirtualRetentionCall.self)(Int64(owner), Int64(ticket), $0, count)
+            }, "virtual retention")
         case let .pressDetail(id, x, y, mods, button, target): try pointer("press_detail", id, x, y, mods, button, target)
         case let .pointerDown(id, x, y, mods, button, target): try pointer("pointer_down", id, x, y, mods, button, target)
         case let .pointerUp(id, x, y, mods, button, target): try pointer("pointer_up", id, x, y, mods, button, target)
