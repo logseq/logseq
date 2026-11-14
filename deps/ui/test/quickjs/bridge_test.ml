@@ -95,7 +95,7 @@ let cases = [
     (Error Stale_context);
   case ~change:Unload_pending "unload invalidates pending read"
     {|export async function run(host){ await host.getEditingContext(); return []; }|} (Error Cancelled);
-  case ~change:Cancel_pending "task cancellation retires invocation"
+  case ~change:Cancel_pending "cancellation retires queued continuations"
     {|export async function run(host){ await host.getEditingContext(); return []; }|} (Error Cancelled);
   case ~repeat:true "retained host cannot access next invocation"
     {|let saved; export async function run(host){
@@ -133,10 +133,16 @@ let execute case =
               (match case.change with
               | Stale_pending -> current := false
               | Unload_pending -> Quickjs_runtime.close runtime
-              | Cancel_pending -> Ui_task.cancel task
+              | Cancel_pending ->
+                  (Option.get !pending) (Ok context);
+                  flush ();
+                  Ui_task.cancel task
               | None_pending -> assert false));
           until runtime (fun () -> Option.is_some !result);
           let settled = Option.get !result in
+          if case.change = Cancel_pending &&
+             Quickjs_runtime.load runtime ~source:case.source <> Error Cancelled then
+            failwith "Cancelled instance allowed reuse with queued continuations";
           Option.iter (fun resolve -> resolve (Ok context)) !pending;
           flush ();
           if !result <> Some settled then failwith "Late result changed settled invocation";
