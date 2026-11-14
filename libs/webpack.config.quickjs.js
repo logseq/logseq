@@ -23,6 +23,7 @@ module.exports = (env = {}) => {
           loader: 'ts-loader',
           options: {
             compiler: path.resolve(__dirname, 'quickjs-typescript.cjs'),
+            configFile: path.resolve(__dirname, 'tsconfig.json'),
             transpileOnly: true,
             compilerOptions: { rootDir: undefined, declaration: false },
           },
