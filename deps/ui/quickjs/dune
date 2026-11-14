@@ -10,7 +10,7 @@
  (wrapped false)
  (modes native)
  (libraries logseq_ui_contracts logseq_ui_shared)
- (c_library_flags -lm -lpthread)
+ (c_library_flags -lm)
  (foreign_stubs
   (language c)
   (names quickjs_stub quickjs cutils dtoa libregexp libunicode)
