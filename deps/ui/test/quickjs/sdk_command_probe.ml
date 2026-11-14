@@ -167,6 +167,26 @@ let run path =
     15, [|identity; Json.String (String.make 65 'x')|], Resource_limit;
     15, [|identity|], Invalid_request;
   ];
+  let property_name = "plugin.property.command-probe/portable-score" in
+  let set_title title = ignore (invoke "thread-api/apply-outliner-ops" [Wire.String repo;
+    Wire.Array [
+      Wire.Array [Wire.kw "save-block"; Wire.Array [Wire.Map [Wire.kw "block/uuid", Wire.Uuid changed_uuid;
+        Wire.kw "block/title", Wire.String title]; Wire.Map []]];
+      Wire.Array [Wire.kw "set-block-property";
+        Wire.Array [Wire.Uuid changed_uuid; Wire.kw property_name; Wire.Int 4]]];
+    Wire.Map []]) in
+  set_title (String.make (max_string_bytes + 1) 'x');
+  let services, reads = Plugin_read_services.capture ~id in
+  let broker = Plugin_broker.create () in
+  let session = Plugin_broker.open_session broker id [Graph_read] in
+  let invocation = Plugin_broker.begin_invocation ~reads broker session services in
+  let properties = task (Plugin_broker.dispatch broker session invocation
+      (Get_block_properties (Uuid changed_uuid))) |> success in
+  check "property projection ignores an unrelated oversized title"
+    (match properties with Properties value -> Json.get (":" ^ property_name) value = Some (Json.Number 4.)
+     | _ -> false);
+  Plugin_broker.close_session broker session;
+  set_title "portable updated";
   check "duplicate live plugin ID denied"
     (task (Plugin_host.load_command_plugin ~id ~grants ~source) = Error Invalid_request);
   let greet = handle "greet" in

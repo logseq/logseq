@@ -144,18 +144,19 @@ let capture_editor ~id =
           | Uuid value -> Js.Json.string value
           | Page_name _ -> assert false in
         let source = await (fun () -> Sdk_util.get_entity_json_for_repo repo key)
-          (fun wire -> check_wire wire; Ok wire) in
+          (fun wire -> match Wire.get wire "block/properties" with
+            | Some (Wire.Map _ as props) ->
+                check_wire props; Ok (Some (Wire.map_get_int wire "db/id", props))
+            | _ -> Ok None) in
         Ui_task.bind source (function
           | Error error -> Ui_task.resolve (Error error)
-          | Ok block -> match Wire.get block "block/properties" with
-            | Some (Wire.Map _ as props) ->
-                await (fun () -> Sdk_util.all_block_properties_for_repo repo
-                  (Wire.map_get_int block "db/id") props)
-                  (fun wire -> match wire with
-                    | Wire.Map fields -> Ok (checked_json Sdk_convert.result_json_of_wire
-                        (Sdk_util.readable_properties fields))
-                    | _ -> Error Runtime_failure)
-            | _ -> immediate (fun () -> Ok Json.Null))
+          | Ok (Some (db_id, props)) ->
+              await (fun () -> Sdk_util.all_block_properties_for_repo repo db_id props)
+                (fun wire -> match wire with
+                  | Wire.Map fields -> Ok (checked_json Sdk_convert.result_json_of_wire
+                      (Sdk_util.readable_properties fields))
+                  | _ -> Error Runtime_failure)
+          | Ok None -> immediate (fun () -> Ok Json.Null))
   in
   let apply ~check mutation =
     let cancelled = ref false in
