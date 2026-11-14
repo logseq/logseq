@@ -109,6 +109,8 @@ RUN ln -s /opt/logseq-cli/dist/logseq.js /usr/local/bin/logseq \
   && mkdir -p /data \
   && logseq --version \
   && HOME=/tmp/smoke logseq graph create --graph=smoke --output json \
+  && HOME=/tmp/smoke logseq server start --graph=smoke --output json \
+  && HOME=/tmp/smoke logseq list page --graph=smoke --output json \
   && HOME=/tmp/smoke logseq server stop --graph=smoke --output json \
   && rm -rf /tmp/smoke
 
