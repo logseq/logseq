@@ -23,6 +23,9 @@ properties and today pages return `null`; an existing property-free page returns
 `{}`. Today lookup never creates a journal. Selections use their owning
 projection's order. The page catalog excludes hidden pages, projects metadata
 only and sorts by UTF-8 title then entity ID; it has no repository argument.
+Its return type is `PortablePageMetadata[]`: ID, UUID, name and title, with
+optional creation/update timestamps, not legacy file-page fields such as
+`format`, `type` or `journal?`.
 
 Property names must be canonical qualified identifiers, optionally prefixed by
 `:`. Property-map keys retain that prefix; values retain structured references

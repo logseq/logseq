@@ -116,7 +116,9 @@ not a recursive tree. A missing selected entity invalidates the captured read.
 
 The catalog excludes `logseq.property/hide?` pages and contains only ID, UUID,
 name, title, and available creation/update metadata (plus standard DTO title
-aliases). It sorts by case-sensitive UTF-8 title, then entity ID. It does not
+aliases). Its `PortablePageMetadata` type requires `id`, `uuid`, `name` and
+`title`, with optional `createdAt` and `updatedAt`; legacy `format`, `type` and
+`journal?` fields are not promised. It sorts by case-sensitive UTF-8 title, then entity ID. It does not
 accept a repository argument or return a truncated success when limits are
 exceeded: oversized complete results reject with `Resource_limit`. Today-page
 lookup uses the application date captured at invocation, not a JS/browser clock.

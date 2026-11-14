@@ -48,6 +48,15 @@ export interface PortablePluginInfo {
   readonly grantedCapabilities: readonly QuickjsCapability[]
 }
 
+export interface PortablePageMetadata {
+  readonly id: number
+  readonly uuid: string
+  readonly name: string
+  readonly title: string
+  readonly createdAt?: number
+  readonly updatedAt?: number
+}
+
 export interface QuickjsHost {
   getPluginInfo(): Promise<PortablePluginInfo>
   getEditingState(): Promise<EditingState>
@@ -60,7 +69,7 @@ export interface QuickjsHost {
   getBlockProperty(identity: Identity, key: string): Promise<Data>
   getPageProperties(identity: Identity): Promise<Record<string, Data> | null>
   getTodayPage(): Promise<PageEntity | null>
-  getAllPages(): Promise<PageEntity[]>
+  getAllPages(): Promise<PortablePageMetadata[]>
   getSiblingBlock(
     direction: 'previous' | 'next',
     identity: Identity
