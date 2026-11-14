@@ -1611,7 +1611,8 @@ let on_native_pointerup ev =
           drag_state := next;
           publish_drag ();
           Option.iter (fun ((source : S.drag_owner), (target : S.drag_owner), zone) ->
-            A.drop_dragged_block source.S.uuid target.S.uuid (Drag.zone_name zone)) drop
+            A.drop_dragged_block ~alt:ev.Ui_services.alt ~scope:target.S.scope
+              source.S.uuid target.S.uuid (Drag.zone_name zone)) drop
 
 let consume_drag_click () =
   let next, suppress = Drag.consume_click !drag_state in

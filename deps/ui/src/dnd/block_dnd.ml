@@ -121,7 +121,7 @@ let hide_indicator () =
 (* ---------- drag lifecycle ---------- *)
 
 let dragging_uuid : string option ref = ref None
-let drop_target : (string * string) option ref = ref None
+let drop_target : (S.drag_owner * string) option ref = ref None
 
 let clear_drop_target () =
   drop_target := None;
@@ -169,7 +169,7 @@ let update_drop_target src tgt_el client_x client_y =
           ~top:(Web_dom.rect_top rect) ~x:client_x ~y:client_y
         |> Block_drag.zone_name
       in
-      drop_target := Some (tgt, move_to);
+      drop_target := Some (S.drag_owner ~scope tgt, move_to);
       show_indicator tgt_el move_to
   | _ ->
       clear_drop_target ()
@@ -199,7 +199,8 @@ let on_drag_end ev _m =
      update_from_event ev;
      match (!dragging_uuid, !drop_target) with
      | Some src, Some (tgt, move_to) ->
-         A.drop_dragged_block src tgt move_to
+         let alt = Option.fold ~none:false ~some:Web_dom.ev_alt (K.ev_native ev) in
+         A.drop_dragged_block ~alt ~scope:tgt.S.scope src tgt.S.uuid move_to
      | _ -> ()
    end);
   dragging_uuid := None;

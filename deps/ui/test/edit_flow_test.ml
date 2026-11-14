@@ -1416,7 +1416,7 @@ let test_drop_top_owner (h : host) =
           (fun method_name args ->
             if method_name = "thread-api/get-block-parent" then parent
             else worker.Worker_client.invoke_fn method_name args) };
-        A.drop_dragged_block "drop-source" "drop-target" "top";
+        A.drop_dragged_block ~alt:false ~scope "drop-source" "drop-target" "top";
         let* () = h.wait_ms 25 in
         check ("top drop awaits its target parent: " ^ name) (!ops = []);
         change_origin ();

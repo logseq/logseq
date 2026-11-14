@@ -1986,12 +1986,84 @@ let can_drop_dragged_block src tgt =
   S.find src <> None && S.find tgt <> None
   && not (S.String_set.mem tgt sources || has_drag_source_parent sources tgt)
 
+let insert_dragged_reference ~scope src tgt move_to =
+  match Runtime.capture_reload_origin () with
+  | None -> ()
+  | Some origin ->
+      let context = Runtime.model () in
+      let opts = Ops.current_history_opts (Wire.Map []) in
+      let uuid = Ui_services.env_random_uuid () in
+      let sibling direction =
+        Runtime.invoke3 "thread-api/get-block-sibling"
+          (Wire.String origin.Runtime.reload_repo) (Wire.Uuid tgt)
+          (Wire.Keyword direction)
+      in
+      ignore
+        (let* anchor =
+           match move_to with
+           | "top" ->
+               let* left = sibling "left" in
+               if not (Runtime.reload_origin_current origin) then
+                 Js.Promise.resolve None
+               else
+                 (match Wire.map_get_uuid left "block/uuid" with
+                  | Some uuid -> Js.Promise.resolve (Some (uuid, true))
+                  | None ->
+                      let* parent = Runtime.invoke2 "thread-api/get-block-parent"
+                          (Wire.String origin.Runtime.reload_repo) (Wire.Uuid tgt) in
+                      Js.Promise.resolve
+                        (Option.map (fun uuid -> uuid, false)
+                           (Wire.map_get_uuid parent "block/uuid")))
+           | "nested" ->
+               let* last = sibling "last-child" in
+               (* API insertion appends under the actual target; a blank
+                  direct last child is an anchor, not a replacement. *)
+               Js.Promise.resolve
+                 (Some (match Wire.map_get_uuid last "block/uuid" with
+                        | Some uuid -> uuid, true
+                        | None -> tgt, false))
+           | "sibling" -> Js.Promise.resolve (Some (tgt, true))
+           | _ -> invalid_arg "Unknown block drag zone"
+         in
+         match anchor with
+         | Some (target, sibling) when Runtime.reload_origin_current origin ->
+             let* block = Ops.block_map_parsed_source
+                 ~origin_repo:origin.Runtime.reload_repo ~source:false uuid
+                 ("[[" ^ src ^ "]]") in
+             if not (Runtime.reload_origin_current origin) then
+               Js.Promise.resolve ()
+             else
+               let* () = Ops.apply_and_refresh ~opts
+                   [ Ops.insert_blocks [block] target ~sibling ] in
+               (* Refresh may advance the load generation itself. Only
+                  enter a new entity still presented by its target owner. *)
+               let scope_live =
+                 scope = "main"
+                 || (match Runtime.route () with
+                     | Model.Block_zoom uuid -> scope = "zoom-" ^ uuid
+                     | _ -> false)
+                 || (scope = "quick-add" && Dialogs_state.ready ()
+                     && Dialogs_state.is_open "quick-add")
+                 || List.mem_assoc scope !S.extra_sources
+               in
+               if Ops.context_current context
+                  && scope_live
+                  && S.find_in (S.blocks_in_scope scope) uuid <> None then
+                 enter_edit ~scope uuid (-1);
+               Js.Promise.resolve ()
+         | _ -> Js.Promise.resolve ())
+
 (* cljs dnd/move-blocks: :top -> first child of the target's parent (page
    when top-level); :nested -> first child of target; :sibling -> after
    target *)
-let drop_dragged_block src tgt move_to =
+let drop_dragged_block ~alt ~scope src tgt move_to =
   if not (can_drop_dragged_block src tgt) then ()
   else
+    let selected = S.selected () in
+    let count = if S.String_set.mem src selected then S.String_set.cardinal selected else 1 in
+    (* Count original blocks before pruning selected descendants. *)
+    if alt && count = 1 then insert_dragged_reference ~scope src tgt move_to
+    else
     let sources = dragged_block_uuids src in
     if sources = [] then () else
     match move_to with
