@@ -1645,11 +1645,13 @@ let test_cmdk_block_reveal ~finish =
     ; "logseq.property/created-from-property", Wire.Int 88
     ; "block/parent", wmap ["block/uuid", Wire.Uuid "wrong-self"] ] in
   let cases =
-    [ "Original block gets its page and anchor", false, false,
+    [ "Original block gets its page and anchor", `None, false,
         "#/page/page-p?graph-id=graph-g&anchor=ls-block-block-b"
-    ; "Property-origin reveal retains the resolved target's own page", true, false,
+    ; "Property-origin reveal retains the resolved target's own page", `Tagged, false,
         "#/page/page-q?graph-id=graph-g&anchor=ls-block-owner-o"
-    ; "Original collapsed ancestors zoom the resolved target", true, true,
+    ; "Original collapsed ancestors zoom the resolved target", `Tagged, true,
+        "#/page/owner-o?graph-id=graph-g"
+    ; "Native scalar property parent zooms owner205 instead of child269", `Scalar, true,
         "#/page/owner-o?graph-id=graph-g" ] in
   let rec run = function
     | [] ->
@@ -1657,10 +1659,24 @@ let test_cmdk_block_reveal ~finish =
         Ui_services.nav_set_hash previous_hash;
         Signal.stabilize scheduler;
         finish ()
-    | (label, property_origin, collapsed, expected) :: rest ->
+    | (label, origin_shape, collapsed, expected) :: rest ->
         Ui_services.nav_set_hash "#/";
+        let original_id = if origin_shape = `Scalar then 269 else 10 in
+        let original = if origin_shape = `Scalar then
+          wmap ["db/id", Wire.Int original_id; "block/uuid", Wire.Uuid "block-b";
+            "block/page", Wire.Int 195]
+          else original in
         let parents =
-          if property_origin then
+          match origin_shape with
+          | `None -> []
+          | `Scalar ->
+            [ wmap ["db/id", Wire.Int 195; "block/uuid", Wire.Uuid "page-p"]
+            ; wmap ["db/id", Wire.Int 205; "block/uuid", Wire.Uuid "owner-o";
+                "block/page", Wire.Int 195; "block/parent", Wire.Int 195]
+            ; wmap ["db/id", Wire.Int 268; "block/uuid", Wire.Uuid "property-value";
+                "logseq.property/created-from-property", Wire.Int 267;
+                "block/parent", Wire.Int 205; "block/collapsed?", Wire.Bool collapsed] ]
+          | `Tagged ->
             [ wmap ["db/id", Wire.Int 20;
                 "logseq.property/created-from-property", Wire.Int 88;
                 "block/parent", Wire.Tagged ("datascript/Entity", wmap ["db/id", Wire.Int 200])]
@@ -1668,7 +1684,7 @@ let test_cmdk_block_reveal ~finish =
                 "logseq.property/created-from-property", Wire.Int 89;
                 "block/parent", wmap ["block/uuid", Wire.Uuid "wrong-inner"];
                 "block/collapsed?", Wire.Bool collapsed] ]
-          else [] in
+          in
         let services = { (Cmdk_host.services ()) with
           repo = (fun () -> Some "cmdk-fixture");
           exit_edit = (fun () -> ()); mark_nav = (fun () -> ());
@@ -1677,10 +1693,12 @@ let test_cmdk_block_reveal ~finish =
             let answer = match name, args with
               | "thread-api/get-blocks", _ ->
                   Wire.Array [wmap ["block", original]]
-              | "thread-api/get-block-parents", [_; Wire.Int 10; Wire.Int 1000] ->
-                  Wire.Array parents
+              | "thread-api/get-block-parents", [_; Wire.Int id; Wire.Int 1000] when id = original_id ->
+                  (if origin_shape = `Scalar then Wire.List parents else Wire.Array parents)
               | "thread-api/pull", [_; _; Wire.Int 200] ->
                   wmap ["db/id", Wire.Int 200; "block/uuid", Wire.Uuid "owner-o"]
+              | "thread-api/pull", [_; _; Wire.Int 205] ->
+                  wmap ["db/id", Wire.Int 205; "block/uuid", Wire.Uuid "owner-o"]
               | "thread-api/pull", [_; _; Wire.Array [Wire.Keyword "block/uuid"; Wire.Uuid "owner-o"]] ->
                   wmap ["block/page", Wire.Uuid "page-q"]
               | "thread-api/get-block-page-info", _ ->

@@ -1309,9 +1309,11 @@ let resolve_block_reveal st repo uuid =
           | Some parent when Wire.map_get_uuid parent "block/uuid" <> None ->
               Ui_task.resolve parent
           | Some parent ->
-              let id = match Wire.get parent "db/id" with
-                | Some id -> id
-                | None -> failwith "CmdK property-origin parent is missing db/id" in
+              let id = match parent with
+                | (Wire.Int _ | Wire.Int64 _) as id -> id
+                | parent -> (match Wire.get parent "db/id" with
+                  | Some id -> id
+                  | None -> failwith "CmdK property-origin parent is missing db/id") in
               invoke "thread-api/pull"
                 [Wire.Array [Wire.kw "db/id"; Wire.kw "block/uuid";
                   wmap ["block/page", Wire.Array [Wire.kw "block/uuid"]]]; id] in
