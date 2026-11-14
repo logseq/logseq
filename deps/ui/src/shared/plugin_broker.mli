@@ -11,6 +11,8 @@ type read_services = {
   current_page : unit -> (Plugin_protocol.page_result, Plugin_protocol.error) result Ui_task.t;
   get_block : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   get_page : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  sibling_block : Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
+    (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   query : Plugin_protocol.query -> (Json.t, Plugin_protocol.error) result Ui_task.t;
   log : Plugin_protocol.log_level -> string -> (unit, Plugin_protocol.error) result Ui_task.t;
 }
@@ -26,6 +28,9 @@ val begin_invocation : ?reads:read_services -> t -> session -> services -> invoc
 val check : t -> session -> invocation -> (unit, Plugin_protocol.error) result
 val dispatch : t -> session -> invocation -> Plugin_protocol.request ->
   (Plugin_protocol.reply, Plugin_protocol.error) result Ui_task.t
+val get_sibling_block : t -> session -> invocation ->
+  direction:Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
+  (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t
 val accept_program : t -> session -> invocation -> Plugin_protocol.program ->
   (Plugin_protocol.program, Plugin_protocol.error) result
 val cancel : t -> invocation -> unit

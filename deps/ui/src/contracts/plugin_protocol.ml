@@ -9,6 +9,7 @@ type query = { text : string; inputs : Json.t array }
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type program = action list
 type identity = Entity_id of int | Uuid of string | Page_name of string
+type sibling_direction = Previous_sibling | Next_sibling
 type log_level = Log_debug | Log_info | Log_warn | Log_error
 type capability = Editor_read | Editor_command | Graph_read | Db_query
 type request =
@@ -19,6 +20,7 @@ type request =
   | Get_current_page
   | Get_block of identity
   | Get_page of identity
+  | Get_sibling_block of sibling_direction * identity
   | Datascript_query of query
   | Log of log_level * string
   | Register_editor_command of command_descriptor * callback_id
@@ -243,6 +245,13 @@ let decode_request ~operation value =
       let* identity = decode_identity ~page:true value in Ok (Get_page identity)
   | 7, Json.Array [|Json.String text; Json.Array inputs|] ->
       let* query = query ~text ~inputs in Ok (Datascript_query query)
+  | 10, Json.Array [|Json.String direction; value|] ->
+      let* relation = match direction with
+        | "previous" -> Ok Previous_sibling
+        | "next" -> Ok Next_sibling
+        | _ -> Error Invalid_request in
+      let* identity = decode_identity ~page:false value in
+      Ok (Get_sibling_block (relation, identity))
   | 8, Json.Array [|Json.String level; Json.String text|] ->
       if String.length text > 8192 then Error Resource_limit
       else
@@ -252,7 +261,7 @@ let decode_request ~operation value =
         | "warn" -> Ok (Log (Log_warn, text))
         | "error" -> Ok (Log (Log_error, text))
         | _ -> Error Invalid_request)
-  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8), _ -> Error Invalid_request
+  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10), _ -> Error Invalid_request
   | _ -> Error Unsupported
 
 let capability_name = function

@@ -36,6 +36,20 @@ const connected = logseq.ready(async (info) => {
       [(mask & 1) !== 0, () => logseq.Editor.checkEditing()],
       [(mask & 2) !== 0, () => logseq.Editor.getPage('quickjs sdk probe')],
       [
+        (mask & 2) !== 0,
+        () =>
+          logseq.Editor.getPreviousSiblingBlock(
+            '00000000-0000-0000-0000-000000000101'
+          ),
+      ],
+      [
+        (mask & 2) !== 0,
+        () =>
+          logseq.Editor.getNextSiblingBlock(
+            '00000000-0000-0000-0000-000000000100'
+          ),
+      ],
+      [
         (mask & 6) === 6,
         () => logseq.DB.datascriptQuery('[:find ?e :where [?e :block/uuid]]'),
       ],
@@ -77,6 +91,10 @@ const connected = logseq.ready(async (info) => {
     check((await logseq.Editor.getCurrentPage()) === null, 'absent page')
     check((await logseq.Editor.getBlock(uuid)) === null, 'no graph block')
     check((await logseq.Editor.getPage('missing')) === null, 'no graph page')
+    check(
+      (await logseq.Editor.getNextSiblingBlock(uuid)) === null,
+      'no graph sibling'
+    )
     let rejected = false
     try {
       await logseq.DB.datascriptQuery('[:find ?e :where [?e :block/uuid]]')
@@ -111,6 +129,28 @@ const connected = logseq.ready(async (info) => {
     'page name'
   )
   check((await logseq.Editor.getPage(block.id))?.uuid === uuid, 'page ID')
+  const firstUuid = '00000000-0000-0000-0000-000000000100'
+  const lastUuid = '00000000-0000-0000-0000-000000000101'
+  const previous = await logseq.Editor.getPreviousSiblingBlock(lastUuid)
+  const next = await logseq.Editor.getNextSiblingBlock({ uuid: firstUuid })
+  check(
+    previous?.uuid === firstUuid && next?.uuid === lastUuid,
+    'immediate sibling order'
+  )
+  check(
+    (await logseq.Editor.getPreviousSiblingBlock(previous.id)) === null,
+    'first sibling boundary'
+  )
+  check(
+    (await logseq.Editor.getNextSiblingBlock(next.id)) === null,
+    'last sibling boundary'
+  )
+  check(
+    (await logseq.Editor.getNextSiblingBlock(
+      '00000000-0000-0000-0000-000000000088'
+    )) === null,
+    'missing sibling source'
+  )
   const rows = await logseq.DB.datascriptQuery(
     '[:find ?uuid :in $ ?title :where [?e :block/title ?title] [?e :block/uuid ?uuid]]',
     'quickjs sdk probe'

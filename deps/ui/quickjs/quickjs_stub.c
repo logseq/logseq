@@ -584,10 +584,11 @@ CAMLprim value logseq_quickjs_start(value handle, value slot) {
     JSValue host = JS_NewObjectProto(bridge->context, JS_NULL);
     static const char *methods[] = {
         "getEditingContext", "getPluginInfo", "getEditingState", "getCurrentBlock",
-        "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log", "registerEditorCommand"
+        "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log", "registerEditorCommand",
+        "getSiblingBlock"
     };
     if (JS_IsException(host)) bridge->error = RESOURCE;
-    for (int operation = 0; operation < 10 && bridge->error < 0; operation++) {
+    for (int operation = 0; operation < 11 && bridge->error < 0; operation++) {
         JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation)};
         int arguments = operation < 5 ? 0 : operation < 7 ? 1 : 2;
         JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 2, data);

@@ -55,6 +55,10 @@ export interface QuickjsHost {
   getCurrentPage(): Promise<PageResult | null>
   getBlock(identity: Identity): Promise<BlockEntity | null>
   getPage(identity: Identity): Promise<PageEntity | null>
+  getSiblingBlock(
+    direction: 'previous' | 'next',
+    identity: Identity
+  ): Promise<BlockEntity | null>
   datascriptQuery(query: string, inputs: Data[]): Promise<Data>
   log(level: LogLevel, text: string): Promise<void>
   registerEditorCommand(
@@ -316,6 +320,14 @@ export const logseq = surface({
     return info
   },
   Editor: surface({
+    getPreviousSiblingBlock(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getSiblingBlock('previous', key))
+    },
+    getNextSiblingBlock(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getSiblingBlock('next', key))
+    },
     async checkEditing(): Promise<string | false> {
       return (await call((host) => host.getEditingState()))?.blockUuid ?? false
     },

@@ -10,6 +10,7 @@ type read_services = {
   current_page : unit -> (page_result, error) result Ui_task.t;
   get_block : identity -> (entity option, error) result Ui_task.t;
   get_page : identity -> (entity option, error) result Ui_task.t;
+  sibling_block : sibling_direction -> identity -> (entity option, error) result Ui_task.t;
   query : query -> (Json.t, error) result Ui_task.t;
   log : log_level -> string -> (unit, error) result Ui_task.t;
 }
@@ -94,7 +95,7 @@ let required_capabilities = function
   | Get_plugin_info | Log _ -> []
   | Get_editing_context | Get_editing_state -> [Editor_read]
   | Get_current_block | Get_current_page -> [Editor_read; Graph_read]
-  | Get_block _ | Get_page _ -> [Graph_read]
+  | Get_block _ | Get_page _ | Get_sibling_block _ -> [Graph_read]
   | Datascript_query _ -> [Graph_read; Db_query]
   | Register_editor_command _ -> [Editor_command]
 
@@ -127,6 +128,8 @@ let service invocation request =
           | Get_current_page -> map (reads.current_page ()) (fun value -> Current_page value)
           | Get_block identity -> map (reads.get_block identity) (fun value -> Block value)
           | Get_page identity -> map (reads.get_page identity) (fun value -> Page value)
+          | Get_sibling_block (direction, identity) ->
+              map (reads.sibling_block direction identity) (fun value -> Block value)
           | Datascript_query query -> map (reads.query query) (fun value -> Query_result value)
           | Log (level, text) ->
               invocation.diagnostic_bytes <- invocation.diagnostic_bytes + String.length text;
@@ -152,6 +155,13 @@ let dispatch t session invocation request =
       invocation.cancel_hooks <-
         (fun () -> Ui_task.cancel task; Ui_task.cancel request_task) :: invocation.cancel_hooks;
       task
+
+let get_sibling_block t session invocation ~direction identity =
+  Ui_task.bind (dispatch t session invocation (Get_sibling_block (direction, identity)))
+    (function
+      | Ok (Block block) -> Ui_task.resolve (Ok block)
+      | Error error -> Ui_task.resolve (Error error)
+      | Ok _ -> invalid_arg "Unexpected sibling block reply")
 
 let accept_program t session invocation program =
   match check t session invocation with

@@ -64,6 +64,12 @@ ignore this additive reply field.
 
 ## API and permission inventory
 
+Sibling navigation is also available as
+`Editor.getPreviousSiblingBlock(identity)` and
+`Editor.getNextSiblingBlock(identity)`, each requiring only `graph_read`.
+They accept an entity ID, UUID, or `{ uuid }` and return an immediate sibling
+entity or `null`. They do not flatten descendants or follow visible UI order.
+
 | QuickJS SDK API                                       | Required grants             | Implemented boundary                                                                          |
 | ----------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------- |
 | `ready(callback?)`                                    | None                        | Activation and asynchronous initialization, not subscriptions or a general resident lifecycle |
@@ -90,6 +96,28 @@ and the existing configured editor executor. Read/query calls inside a handler
 still need their separate grants. The command slice requires a noncomposing,
 collapsed editor selection; delayed UI commits retain the plugin/editor lease.
 See [the command migration notes](../docs/api-migrations.md).
+
+## Typed OCaml sibling calls
+
+Application-owned callers can use the same authorization and freshness boundary
+without constructing JS or interpreting an untyped broker reply:
+
+```ocaml
+Plugin_broker.get_sibling_block broker session invocation
+  ~direction:Plugin_protocol.Next_sibling (Plugin_protocol.Uuid block_uuid)
+```
+
+The result is `(Plugin_protocol.entity option, Plugin_protocol.error) result
+Ui_task.t`. The invocation must have application read services. Missing graph,
+missing source, or first/last boundary returns `Ok None` (`null` in JS).
+Malformed identities/directions are `Invalid_request`; page-name identities are
+not accepted. Missing authority is `Permission_denied`; missing read services
+is `Unsupported`. Context changes produce `Stale_context`, retired invocations
+produce `Cancelled`, transport failures produce `Runtime_failure`, and the
+existing bounded-value/call limits produce `Resource_limit`. JS receives these
+codes as `PluginError`; local SDK validation can throw before a request is sent.
+The application captures the graph before
+invocation and rechecks freshness around the existing worker sibling read.
 
 Not implemented by this target: imperative block/page/property writes,
 settings, subscriptions, plugin installation/discovery,
