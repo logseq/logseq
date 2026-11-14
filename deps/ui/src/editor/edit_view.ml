@@ -725,7 +725,7 @@ let overlay ?visible (frame : frame Signal.signal) : t =
 
 (* --- input sink ---------------------------------------------------------------- *)
 
-let sink ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input : t =
+let sink ~scope ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input : t =
  fun context parent ->
   let node = Lui_ui.extension context Editor_sink.identifier in
   Lui_ui.key context node ("ed-sink-" ^ block_id);
@@ -780,11 +780,13 @@ let sink ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input : t =
   (match parent with
    | Some p -> Lui_ui.append context p node
    | None -> ());
+  Option.iter (fun scope ->
+    Outline_viewport_state.register_editor context ~node ~uuid:block_id ~scope) scope;
   node
 
 (* --- root --------------------------------------------------------------------- *)
 
-let view ~model ~frame ~block_id ~on_input ~cls : t =
+let view_with_scope ~scope ~model ~frame ~block_id ~on_input ~cls : t =
  fun context parent ->
   let visible =
     if Ui_services.env_paints_caret () || Ui_services.env_css_animations () then None
@@ -827,6 +829,11 @@ let view ~model ~frame ~block_id ~on_input ~cls : t =
      [ keyed ~source:lines_s ~key:(fun l -> l.lidx) ~cmp:Int.compare
          ~mount:(line_view ~on_input)
      ; overlay ?visible frame
-     ; sink ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input
+     ; sink ~scope ~block_id ~source_s ~runs_s ~caret_s ~comp_s ~on_input
      ])
     context parent
+
+(* Standalone inputs, including page-title drafts, do not borrow the global
+   outliner edit session. Its editor surface supplies an explicit scope. *)
+let view ~model ~frame ~block_id ~on_input ~cls : t =
+  view_with_scope ~scope:None ~model ~frame ~block_id ~on_input ~cls

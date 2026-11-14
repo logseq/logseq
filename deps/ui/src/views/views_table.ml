@@ -1241,7 +1241,7 @@ let row_stream ?(paginate = false) inst cols uuids : t =
     | Wr.VFlat { count; _ } -> List.length items < count
     | _ -> false
   in
-  if more_rows || Virt_list.enabled ~virtualize:true (List.length items)
+  if inst.V.virtualize && (more_rows || Virt_list.enabled ~virtualize:true (List.length items))
   then
     Virt_list.list ~key_of:fst
       ~data_sig:(fun dctx ->
@@ -1565,7 +1565,7 @@ let list_stream ?(paginate = false) inst uuids : t =
     | Wr.VFlat { count; _ } -> List.length items < count
     | _ -> false
   in
-  if more_rows || Virt_list.enabled ~virtualize:true (List.length items)
+  if inst.V.virtualize && (more_rows || Virt_list.enabled ~virtualize:true (List.length items))
   then
     Virt_list.list ~key_of:fst
       ~data_sig:(fun dctx ->
@@ -1592,19 +1592,16 @@ let list_stream ?(paginate = false) inst uuids : t =
    but the host only builds flex trees for the visible window. *)
 let ref_vlist inst ~paginate ~item_extent (rows : t list) : t =
  fun ctx parent ->
+  let attrs =
+    ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ::
+    (if paginate then ["data-virt-count", string_of_int (List.length rows)] else []) in
   let node =
-    virtual_list ~key:"ref-window" ~grow:1. ~gap:4 ~item_extent
-      ~overscan:1
-      ~data_attrs:
-        (( "style"
-         , "border-top:1px solid hsl(var(--border));padding-top:8px" )
-         ::
-         (if paginate then
-            [ ("data-virt-count", string_of_int (List.length rows)) ]
-          else []))
-      rows ctx parent
+    (if inst.V.virtualize then
+       virtual_list ~key:"ref-window" ~grow:1. ~gap:4 ~item_extent
+         ~overscan:1 ~data_attrs:attrs rows
+     else column ~key:"ref-window" ~grow:1. ~gap:4 ~data_attrs:attrs rows) ctx parent
   in
-  if paginate then
+  if paginate && inst.V.virtualize then
     Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
         (V.ops ()).V.o_load_more inst);
   node
@@ -1902,15 +1899,15 @@ let render_gallery inst (s : V.vstate) : t =
   in
   let paginate = more_ref_rows inst s in
   let body ctx parent =
-    let node = virtual_list ~key:"gal-window" ~grow:1. ~gap:8
-      ~item_extent:(float_of_int (snd (Wr.gallery_dimensions s.V.view_ent) + 8))
-      ~overscan:1
-      ~data_attrs:
-        (if paginate then
-           [ ("data-virt-count", string_of_int (List.length row_els)) ]
-         else [])
-      row_els ctx parent in
-    if paginate then
+    let attrs =
+      if paginate then ["data-virt-count", string_of_int (List.length row_els)] else [] in
+    let node =
+      (if inst.V.virtualize then
+         virtual_list ~key:"gal-window" ~grow:1. ~gap:8
+           ~item_extent:(float_of_int (snd (Wr.gallery_dimensions s.V.view_ent) + 8))
+           ~overscan:1 ~data_attrs:attrs row_els
+       else column ~key:"gal-window" ~grow:1. ~gap:8 ~data_attrs:attrs row_els) ctx parent in
+    if paginate && inst.V.virtualize then
       Platform.register_dom_handler node ~events:"virt-end" (fun _ _ ->
           (V.ops ()).V.o_load_more inst);
     node in
@@ -1968,7 +1965,7 @@ let error_el ~title ~content : t =
     [ text ~value:title ~foreground:"hsl(var(--destructive))" []
     ; text ~value:content [] ]
 
-let result_el inst (s : V.vstate) : t =
+let result_body inst (s : V.vstate) : t =
   (* A refetch keeps existing rows on screen. References never show the
      placeholder: their head and count already identify the pending section. *)
   let has_data = s.V.data <> Wr.VEmpty in
@@ -1988,3 +1985,22 @@ let result_el inst (s : V.vstate) : t =
     | "list" -> render_list inst s
     | "gallery" -> render_gallery inst s
     | _ -> render_table inst s
+
+(* Ordinary content inside a projected row may paginate through the existing
+   visibility sensor, but must not create another virtual list or window. *)
+let pagination_tail inst (s : V.vstate) : t =
+ fun ctx parent ->
+  let key = Lui_ui.owner_name ctx
+      ("view-page-" ^ string_of_int inst.V.id ^ "-" ^ string_of_int s.fetch_limit) in
+  (Lazy_children.lazy_children ~key ~uuid:key ~min_height:1.
+    ~render:(fun () -> fun context parent ->
+      ignore (Lui_ui.after context 0. (fun () -> (V.ops ()).V.o_load_more inst));
+      spacer ~height:1 [] context parent)) ctx parent
+
+let result_el inst (s : V.vstate) : t =
+  if inst.V.virtualize then result_body inst s
+  else
+    column ~key:"ordinary-view-content" ~min_width:0 ~gap:0
+      [ result_body inst s
+      ; (if not s.loading && s.view_error = None && more_ref_rows inst s
+         then pagination_tail inst s else Logseq_el.nothing) ]

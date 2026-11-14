@@ -411,8 +411,11 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
 (* #main-content-container scroll — the detail column's page area.
    The split's second pane wraps this in the titlebar column below. *)
 let main_scroll (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let outline = Outline_viewport_state.ensure ctx ms in
   let st = Sidebar_state.ensure ms in
-  scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
+  (scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
+    ?virtual_owner:(Outline_viewport_state.owner outline)
     ~padding_horizontal:16 ~padding_vertical:32
     ~accessibility_identifier:"main-content-container"
     ~style_class:"scrollbar-spacing"
@@ -437,7 +440,7 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                     (fun (m : Model.t) ->
                       match m.route with
                       | Model.Journals | Model.Home -> spacer ~key:"content-end" []
-                      | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]
+                      | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]) ctx parent
 
 (* Native NavigationSplitView owns the sidebar's titlebar and safe area;
    app controls belong in its detail column, not above both columns. *)

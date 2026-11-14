@@ -918,6 +918,24 @@ module Ffi = struct
     let prevented, batches = document_event name json in
     prevented, encode_batches batches
   let root_node = root_node
+  let issued_reveals () =
+    with_entry_lock (fun () ->
+      if not (Issued_reveal.has_editor_work ()) then "[]", ""
+      else begin
+        (* Commit projection/bindings before reading the producer. Release uses
+           the current SDK receipt; publish its metadata through ordinary patches. *)
+        Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app;
+        let demands = `List (List.map (fun (d : Issued_reveal.demand) ->
+          `Assoc ["scope", `String d.scope; "attempt", `Int d.attempt;
+            "source", `Int d.source_node; "lease", `Int d.source_lease;
+            "owner", `Int d.owner_node; "epoch", `Int d.owner_epoch;
+            "ticket", `Int d.ticket; "key", `String d.key;
+            "block", `String d.block; "requireFocus", `Bool d.require_focus;
+            "control", `Int d.control_node])
+          (Issued_reveal.poll ())) in
+        Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app;
+        Yojson.Safe.to_string demands, encode_batches (take_patches_dbg "issued-reveals")
+      end)
   let editor_snapshot block_id =
     with_entry_lock (fun () ->
       match Editor_state.editing () with
@@ -969,4 +987,5 @@ let () =
   Callback.register "lui_ocaml_dispose" Ffi.dispose;
   Callback.register "lui_ocaml_root_node" Ffi.root_node;
   Callback.register "lui_ocaml_editor_snapshot" Ffi.editor_snapshot;
+  Callback.register "logseq_issued_reveals" Ffi.issued_reveals;
   Callback.register "lui_ocaml_resync" Ffi.resync

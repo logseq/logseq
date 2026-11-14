@@ -947,13 +947,16 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
        ~on_resize:(Sidebar_state.on_right_split_resize st)
        first second)
 
-let main_content (ms : Model.t Signal.signal) =
-  Ui_parts.class_signal ms
+let main_content (ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  let outline = Outline_viewport_state.ensure ctx ms in
+  (Ui_parts.class_signal ms
     (fun (m : Model.t) ->
       if m.left_sidebar_open then " is-left-sidebar-open" else "")
     (row ~key:"main-container" ~accessibility_identifier:"main-container"
        ~grow:1.
        [ scroll ~key:"main-content"
+              ?virtual_owner:(Outline_viewport_state.owner outline)
               ~accessibility_identifier:"main-content-container"
               ~orientation:`vertical ~grow:1.
               ~style_class:"scrollbar-spacing"
@@ -1021,7 +1024,7 @@ let main_content (ms : Model.t Signal.signal) =
                          ])
                   ]
            ]
-       ])
+       ])) ctx parent
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;

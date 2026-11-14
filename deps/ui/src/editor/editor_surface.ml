@@ -83,7 +83,7 @@ let mount ?(cls = "") ?owner uuid scope : t =
           | _ -> ())));
     (Ui_parts.editor_wrapper ~key:("ew-" ^ uuid)
     ~id:("editor-edit-block-" ^ uuid)
-    [ Edit_view.view ~model:model_sig
+    [ Edit_view.view_with_scope ~scope:(Some scope) ~model:model_sig
         ~frame:(Signal.value (frame)) ~block_id:uuid ~cls
         ~on_input:(fun input ->
           match owner, !epoch, S.editing () with

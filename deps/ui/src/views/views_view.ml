@@ -1006,7 +1006,7 @@ let query_insts : (string * string, V.inst) Hashtbl.t = Hashtbl.create 8
    broadcast; an inst leaves the table when its host unmounts *)
 let live : (int, V.inst) Hashtbl.t = Hashtbl.create 16
 
-let view ~kind ~owner : t =
+let view_with_virtualization ~virtualize ~kind ~owner : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
   let repo = Runtime.repo () in
@@ -1039,6 +1039,7 @@ let view ~kind ~owner : t =
     | _ ->
         (V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner, true)
   in
+  let inst = {inst with V.virtualize} in
   Hashtbl.replace live inst.V.id inst;
   (* defer to post-mount: refresh flushes signals, which must not run
      while the mount is still emitting ops (a microtask, so the current
@@ -1064,6 +1065,17 @@ let view ~kind ~owner : t =
    | V.KQuery _ -> query_view_el inst
    | _ -> view_el inst)
     ctx parent
+
+(* Admit result windows only after retained ownership is known. Constructors
+   may be detached even inside an already mounted projected row. No result
+   subtree is built before this decision, including cached query results. *)
+let view ~kind ~owner : t =
+ fun ctx parent ->
+  let anchor = box ~display:`contents [] ctx parent in
+  Outline_viewport_state.after_attachment ctx (fun () ->
+    let virtualize = not (Outline_viewport_state.inside_rows ctx (Some anchor)) in
+    ignore (view_with_virtualization ~virtualize ~kind ~owner ctx (Some anchor)));
+  anchor
 
 (* Toggle the raw-source editor of the cached query instance. *)
 let toggle_query_editor ~block_uuid =

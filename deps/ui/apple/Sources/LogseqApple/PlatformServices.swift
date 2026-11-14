@@ -36,6 +36,7 @@ final class PlatformServices {
     @ObservationIgnored private(set) var children: [Int: [Int]] = [:]
     @ObservationIgnored lazy var editorGeometry = EditorGeometry(services: self)
     @ObservationIgnored lazy var scrolling = NativeScrolling(services: self)
+    @ObservationIgnored lazy var issuedReveals = IssuedEditorReveals(services: self)
     @ObservationIgnored var decodedImageSizes: [Int: CGSize] = [:]
     @ObservationIgnored var pendingImageSizes: [Int: UInt64] = [:]
     @ObservationIgnored private var lazyMountsSent: [Int: UInt64] = [:]
