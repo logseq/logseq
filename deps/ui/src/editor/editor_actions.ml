@@ -1615,14 +1615,33 @@ let range_between anchor head =
     anchor :: List.filteri (fun i _ -> i <= ih) uuids
   else []
 
-(* extend selection one visible step from the current head *)
+(* The next keyboard range endpoint is outside the selected row's subtree.
+   Returning the remaining siblings lets an exhausted child list ascend. *)
+let next_after_subtree ~scope uuid =
+  let rec remaining = function
+    | [] -> None
+    | b :: rest when b.Model.block_uuid = Some uuid -> Some rest
+    | b :: rest ->
+        match remaining (S.children_of b) with
+        | None -> remaining rest
+        | Some [] -> Some rest
+        | Some siblings -> Some siblings
+  in
+  match remaining (S.blocks_in_scope scope) with
+  | Some (b :: _) -> Some b
+  | Some [] | None -> None
+
+(* Grow by explicit endpoints; reversing direction removes the active one. *)
 let extend_selection up =
   let sel = S.selected () in
   match S.anchor () with
   | None -> ()
   | Some anchor -> (
       let uuids = flat_uuids () in
-      let ordered = List.filter (fun u -> S.String_set.mem u sel) uuids in
+      let visible = S.String_set.of_list uuids in
+      let ordered = List.filter
+        (fun u -> S.String_set.mem u visible)
+        (selected_uuids ()) in
       let head =
         match ordered with
         | [] -> None
@@ -1652,11 +1671,16 @@ let extend_selection up =
                   ; action_bar = true
                   })
           | _ -> ())
+      | Some h when h <> anchor
+          && (if up then index_of uuids h > index_of uuids anchor
+              else index_of uuids h < index_of uuids anchor) ->
+          S.set (fun st ->
+              { st with S.selected = S.String_set.remove h sel; action_bar = true })
       | Some h -> (
           let nbr =
             (if up
              then S.prev_visible ~scope:(S.selection_scope ())
-             else S.next_visible ~scope:(S.selection_scope ()))
+             else next_after_subtree ~scope:(S.selection_scope ()))
               h
           in
           match nbr with
@@ -1681,10 +1705,10 @@ let extend_selection up =
               match nb.Model.block_uuid with
               | None -> ()
               | Some nu ->
-                  let range = range_between anchor nu in
+                  let base = if h = anchor then S.String_set.singleton anchor else sel in
                   S.set (fun st ->
                       { st with
-                        S.selected = S.String_set.of_list range
+                        S.selected = S.String_set.add nu base
                       ; anchor = Some anchor
                       ; action_bar = true
                       }))))
@@ -1769,7 +1793,15 @@ let move_selection_focus up =
           | Some u -> select_single_in ~scope:(S.selection_scope ()) u
           | None -> ())
       | None -> ())
-  | _ -> ()
+  | [] ->
+      let scope = S.selection_scope () in
+      match S.outliner_blocks_in_scope scope with
+      | None -> ()
+      | Some _ ->
+          let uuids = flat_uuids () in
+          match (if up then List.rev uuids else uuids) with
+          | uuid :: _ -> select_single_in ~scope uuid
+          | [] -> ()
 
 (* ---- block structure ops ---- *)
 

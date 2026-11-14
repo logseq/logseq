@@ -3797,6 +3797,49 @@ let test_selected_uuids () =
   S.extra_sources := saved_sources;
   model_stub := saved_model
 
+let test_scoped_keyboard_selection () =
+  let module S = Editor_state in
+  let module A = Editor_actions in
+  let saved_model = !model_stub in
+  let saved_state = !(S.st) and saved_sources = !(S.extra_sources) in
+  Fun.protect ~finally:(fun () ->
+    model_stub := saved_model; S.st := saved_state; S.extra_sources := saved_sources)
+    (fun () ->
+      let scope = "keyboard-sidebar" in
+      let tree = [block ~children:[block "c1" "First child"; block "c2" "Last child"]
+          "parent" "Parent"; block "sibling" "Next sibling"] in
+      model_stub := { Model.initial with route_page = Some
+        (page [block "parent" "Main occurrence"; block "main-only" "Main tail"]) };
+      S.extra_sources := [{ S.source_scope = scope; source_kind = S.Outliner;
+        source_blocks = (fun () -> tree) }];
+      let reset selected anchor =
+        S.st := Some (Signal.state (Signal.scheduler ())
+          { S.initial with selection_scope = scope;
+            selected = S.String_set.of_list selected; anchor }) in
+      let expect label expected =
+        check label (A.selected_uuids () = expected && S.selection_scope () = scope) in
+      reset [] None;
+      A.move_selection_focus true;
+      expect "Empty Up selects the last block in the owning projection" ["sibling"];
+      reset [] None;
+      A.move_selection_focus false;
+      expect "Empty Down selects the first occurrence in the owning projection" ["parent"];
+      (* Start from an explicit endpoint so the range assertion remains useful
+         even when empty-selection navigation itself regresses. *)
+      reset ["parent"] (Some "parent");
+      List.iter (fun (up, expected) ->
+        A.extend_selection up;
+        expect "Keyboard range grows past a subtree and reverses by its explicit endpoint" expected)
+        [false, ["parent"; "sibling"]; true, ["parent"];
+         false, ["parent"; "sibling"]];
+      reset ["sibling"] (Some "sibling");
+      List.iter (fun (up, expected) ->
+        A.extend_selection up;
+        expect "Upward range retains explicit children when its direction reverses" expected)
+        [true, ["c2"; "sibling"]; true, ["c1"; "c2"; "sibling"];
+         true, ["parent"; "c1"; "c2"; "sibling"];
+         false, ["c1"; "c2"; "sibling"]])
+
 (* ---- Update.update: remaining arm ---- *)
 
 let test_update_sidebar2 () =
@@ -4846,6 +4889,7 @@ let () =
   test_title_refs3 ();
   test_block_source_remount ();
   test_selected_uuids ();
+  test_scoped_keyboard_selection ();
   test_update_sidebar2 ();
   test_decode7 ();
   test_edn3 ();
