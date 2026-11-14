@@ -13,6 +13,7 @@ typealias BytesCall = @convention(c) (UnsafePointer<CChar>?, Int32) -> Int32
 typealias ToggleCall = @convention(c) (Int64, Int32) -> Int32
 typealias SliderCall = @convention(c) (Int64, Double) -> Int32
 typealias RangeCall = @convention(c) (Int64, Int64, Int64) -> Int32
+typealias VirtualWindowCall = @convention(c) (Int64, Int64, Int64, Int64, UnsafePointer<Int64>?, Int32) -> Int32
 typealias ScrollCall = @convention(c) (Int64, Int64, UnsafePointer<CChar>?) -> Int32
 typealias PointerCall = @convention(c) (Int64, Double, Double, Int32, Int32, UnsafePointer<CChar>?) -> Int32
 typealias ExtensionCall = @convention(c) (Int64, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32) -> Int32
@@ -78,7 +79,7 @@ final class NativeRuntime {
         }
         self.library = library
         // Resolve the complete application ABI before initializing OCaml.
-        let names = ["start", "pump", "resync", "stop", "root_node", "platform_event", "document_event_utf8", "editor_snapshot_utf8", "press", "press_ex", "long_press", "double_press", "appear", "load", "navigate_previous", "navigate_next", "text_changed_utf8", "picked_utf8", "submit", "dismiss", "toggle_changed", "radio_changed", "slider_changed", "scroll_edges", "scroll_completed", "visible_range", "extension_event_utf8", "press_detail", "pointer_down", "pointer_up", "pointer_move", "pointer_cancel", "pointer_enter", "pointer_leave", "context_menu_press"]
+        let names = ["start", "pump", "resync", "stop", "root_node", "platform_event", "document_event_utf8", "editor_snapshot_utf8", "press", "press_ex", "long_press", "double_press", "appear", "load", "navigate_previous", "navigate_next", "text_changed_utf8", "picked_utf8", "submit", "dismiss", "toggle_changed", "radio_changed", "slider_changed", "scroll_edges", "scroll_completed", "visible_range", "virtual_window", "extension_event_utf8", "press_detail", "pointer_down", "pointer_up", "pointer_move", "pointer_cancel", "pointer_enter", "pointer_leave", "context_menu_press"]
         for name in names {
             guard let address = dlsym(library, "lui_ocaml_" + name) else {
                 throw HostError("Missing runtime symbol lui_ocaml_\(name)")
@@ -221,7 +222,14 @@ final class NativeRuntime {
         case let .valueChanged(id, value): try check(function("slider_changed", SliderCall.self)(Int64(id), value), "slider")
         case let .visibleRange(id, first, last): try check(function("visible_range", RangeCall.self)(Int64(id), Int64(first), Int64(last)), "visible range")
         case let .scrollCompleted(id, token, outcome): try check(outcome.withCString { function("scroll_completed", ScrollCall.self)(Int64(id), Int64(token), $0) }, "scroll completed")
-        case .virtualWindow: throw HostError("Runtime does not export virtual_window; sparse virtual lists are unavailable")
+        case let .virtualWindow(id, generation, first, last, pins):
+            guard let count = Int32(exactly: pins.count) else {
+                throw HostError("Virtual window pin count exceeds Int32")
+            }
+            let nativePins = pins.map { Int64($0) }
+            try check(nativePins.withUnsafeBufferPointer { buffer in
+                function("virtual_window", VirtualWindowCall.self)(Int64(id), Int64(generation), Int64(first), Int64(last), buffer.isEmpty ? nil : buffer.baseAddress, count)
+            }, "virtual window")
         case let .pressDetail(id, x, y, mods, button, target): try pointer("press_detail", id, x, y, mods, button, target)
         case let .pointerDown(id, x, y, mods, button, target): try pointer("pointer_down", id, x, y, mods, button, target)
         case let .pointerUp(id, x, y, mods, button, target): try pointer("pointer_up", id, x, y, mods, button, target)
