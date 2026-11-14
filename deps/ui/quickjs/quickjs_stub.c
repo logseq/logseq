@@ -46,10 +46,19 @@ static double monotonic(void) {
     return (double)now.tv_sec + (double)now.tv_nsec / 1e9;
 }
 
-static void clear_exception(Bridge *bridge) {
+static void classify_error(Bridge *bridge, JSValueConst exception) {
     JSContext *context = bridge->context;
-    JSValue exception = JS_GetException(context);
-    if (bridge->error == RUNTIME && JS_IsError(context, exception)) {
+    if (bridge->error != RUNTIME) return;
+    if (JS_IsString(exception)) {
+        size_t length;
+        const char *name = JS_ToCStringLen(context, &length, exception);
+        if (name) {
+            for (int i = 0; i <= RUNTIME; i++)
+                if (length == strlen(error_names[i]) && !memcmp(name, error_names[i], length))
+                    bridge->error = i;
+            JS_FreeCString(context, name);
+        }
+    } else if (JS_IsError(context, exception)) {
         JSPropertyDescriptor descriptor = {0, JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED};
         JSAtom key = JS_NewAtom(context, "message");
         int found = JS_GetOwnProperty(context, &descriptor, exception, key);
@@ -68,7 +77,12 @@ static void clear_exception(Bridge *bridge) {
             JS_FreeValue(context, descriptor.setter);
         }
     }
-    JS_FreeValue(context, exception);
+}
+
+static void clear_exception(Bridge *bridge) {
+    JSValue exception = JS_GetException(bridge->context);
+    classify_error(bridge, exception);
+    JS_FreeValue(bridge->context, exception);
 }
 
 static int interrupt(JSRuntime *runtime, void *opaque) {
@@ -574,16 +588,7 @@ CAMLprim value logseq_quickjs_poll(value handle) {
                               : JS_PromiseResult(bridge->context, bridge->result);
     if (state == JS_PROMISE_REJECTED) {
         bridge->error = RUNTIME;
-        if (JS_IsString(result)) {
-            size_t length;
-            const char *name = JS_ToCStringLen(bridge->context, &length, result);
-            if (name) {
-                for (int i = 0; i <= RUNTIME; i++)
-                    if (length == strlen(error_names[i]) && !memcmp(name, error_names[i], length))
-                        bridge->error = i;
-                JS_FreeCString(bridge->context, name);
-            }
-        }
+        classify_error(bridge, result);
         JS_FreeValue(bridge->context, result);
         CAMLreturn(failed_event(bridge->error));
     }

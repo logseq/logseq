@@ -89,7 +89,7 @@ let cases = [
   case "execution deadline enforced"
     {|export function run() { for (;;) {} }|} (Error Resource_limit);
   case "heap allocation bounded"
-    {|export function run() { return new Uint8Array(32*1024*1024); }|} (Error Resource_limit);
+    {|export async function run() { return new Uint8Array(32*1024*1024); }|} (Error Resource_limit);
   case ~change:Stale_pending "stale async completion rejected"
     {|export async function run(host){ await host.getEditingContext(); return [{kind:"exitEditing"}]; }|}
     (Error Stale_context);
