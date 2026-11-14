@@ -46,6 +46,7 @@ type ac_desc =
 type ac_item =
   { ai_key : string
   ; ai_label : string
+  ; ai_english : string
   ; ai_icon : string option (* tabler/tabler-ext icon name *)
 
   ; ai_group : string option
@@ -63,7 +64,7 @@ type ac_item =
   ; ai_act : item_action
   }
 
-let mk_item ~key ~label ?icon ?group ?info ?(desc = Desc_none)
+let mk_item ~key ~label ?english ?icon ?group ?info ?(desc = Desc_none)
     ?(node = false) ?node_icon ?title_icon ?breadcrumb act =
   let title, help =
     match desc with
@@ -75,6 +76,7 @@ let mk_item ~key ~label ?icon ?group ?info ?(desc = Desc_none)
     | Desc_help -> (None, true)
   in
   { ai_key = key; ai_label = label; ai_icon = icon; ai_group = group
+  ; ai_english = Option.value english ~default:label
   ; ai_info = info; ai_title = title; ai_help = help
   ; ai_node = node; ai_node_icon = node_icon
   ; ai_title_icon = title_icon; ai_breadcrumb = breadcrumb
@@ -395,7 +397,7 @@ let group_items grp entries =
   let g = Some (U.t grp) in
   List.map
     (fun (key, icon, desc, act) ->
-      mk_item ~key ~label:(U.t key) ~icon ?group:g ~desc act)
+      mk_item ~key ~label:(U.t key) ~english:(U.en_text key) ~icon ?group:g ~desc act)
     entries
 
 ;;
@@ -425,6 +427,21 @@ let configured_slash_items () =
         | _ -> invalid_arg "Slash command must be [label output doc? icon? group?]") rows
   | _ -> invalid_arg "Configured commands must be a vector"
 
+let slash_value_label translate value =
+  let title = Properties_data.ref_title value in
+  let prefix = "logseq.property/" in
+  match Properties_data.getk (Properties_data.untag value) "db/ident" with
+  | Some ident when S.starts_with ~prefix ident ->
+      let name = S.sub ident (S.length prefix) (S.length ident - S.length prefix) in
+      (match S.index_opt name '.' with
+       | Some dot ->
+           let key = "property." ^ S.sub name 0 dot ^ "/"
+             ^ S.sub name (dot + 1) (S.length name - dot - 1) in
+           let label = translate key in
+           if label = key then title else label
+       | None -> title)
+  | _ -> title
+
 let slash_items ~statuses ~priorities ~has_heading : ac_item list =
   let items = List.concat
     [ group_items "editor.slash/group-basic"
@@ -445,29 +462,28 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
         ; "editor.slash/math-block", "math"
           , Desc_key "editor.slash/math-block-desc", cmd "math-block" ]
     ; (let g = Some (U.t "editor.slash/group-heading") in
-       [ mk_item ~key:"editor.slash/normal-text"
-           ~label:(U.t "editor.slash/normal-text") ~icon:"text" ?group:g
-           ~desc:(Desc_key "editor.slash/normal-text-desc")
-           (cmd "normal-text") ]
-       @ (if has_heading then
-            [ mk_item ~key:"editor.slash/clear-heading"
-                ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
-                ?group:g ~desc:(Desc_key "editor.slash/normal-text-desc")
-                (cmd "clear-heading") ]
-          else [])
-       @ List.init 6 (fun i ->
+       List.init 6 (fun i ->
            let l = string_of_int (i + 1) in
            mk_item ~key:("heading-" ^ l)
              ~label:(U.tf "editor.slash/heading-label" [ l ])
+             ~english:(U.sub (U.en_text "editor.slash/heading-label") [ l ])
              ~icon:("h-" ^ l) ?group:g ~desc:Desc_self
-             (cmd ("heading:" ^ l))))
+             (cmd ("heading:" ^ l)))
+       @ (if has_heading then
+            [ mk_item ~key:"editor.slash/clear-heading"
+                ~label:(U.t "editor.slash/clear-heading") ~icon:"heading-off"
+                ~english:(U.en_text "editor.slash/clear-heading")
+                ?group:g ~desc:(Desc_key "editor.slash/normal-text-desc")
+                (cmd "clear-heading") ]
+          else []))
     ; List.filter_map (fun value ->
         Option.map (fun title ->
-          let label = Properties_data.ref_title value in
+          let label = slash_value_label U.t value in
           let icon = match title with
             | "Canceled" -> "Cancelled" | "Doing" -> "InProgress50" | _ -> title
           in
-          mk_item ~key:("status:" ^ title) ~label ~icon
+          mk_item ~key:("status:" ^ title) ~label
+            ~english:(slash_value_label U.en_text value) ~icon
             ~group:(U.t "editor.slash/group-task-status")
             ~desc:(Desc_custom (U.tf "editor.slash/status-desc" [label]))
             (cmd ("status:" ^ title))) (Properties_data.entity_title_of value)) statuses
@@ -477,18 +493,21 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
         ; "property.built-in/scheduled", "calendar-month"
           , Desc_none, cmd "scheduled" ]
     ; (let g = Some (U.t "editor.slash/group-priority") in
-       mk_item ~key:"editor.slash/no-priority"
-         ~label:(U.t "editor.slash/no-priority") ~icon:"priorityLvlNone"
-         ?group:g (cmd "priority:")
-       :: List.filter_map (fun value ->
+       List.filter_map (fun value ->
             Option.map (fun title ->
-              let label = Properties_data.ref_title value in
+              let label = slash_value_label U.t value in
               mk_item ~key:("priority:" ^ title)
                 ~label:(U.tf "editor.slash/priority-label" [label])
+                ~english:(U.sub (U.en_text "editor.slash/priority-label")
+                  [slash_value_label U.en_text value])
                 ~icon:("priorityLvl" ^ title)
                 ~desc:(Desc_custom (U.tf "editor.slash/priority-desc" [label]))
                 ?group:g (cmd ("priority:" ^ title)))
-              (Properties_data.entity_title_of value)) priorities)
+              (Properties_data.entity_title_of value)) priorities
+       @ [mk_item ~key:"editor.slash/no-priority"
+           ~label:(U.t "editor.slash/no-priority")
+           ~english:(U.en_text "editor.slash/no-priority")
+           ~icon:"priorityLvlNone" ?group:g (cmd "priority:")])
 
     ; group_items "editor.slash/group-time-and-date"
         [ "date.nlp/tomorrow", "tomorrow"
@@ -531,8 +550,7 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
         ; "editor.slash/embed-twitter-tweet", "xEmbed", Desc_none
           , Emit ("{{tweet }}", 2)
         ; "command.editor/add-property", "cube-plus", Desc_none
-          , cmd "add-property"
-        ; "editor.slash/cloze", "brackets-contain", Desc_none, Emit ("{{cloze }}", 2) ]
+          , cmd "add-property" ]
     ; configured_slash_items ()
     ; (match Plugin_host.slash_cmd_tags () with
        | [] -> []
@@ -602,10 +620,11 @@ let editing_has_heading () =
 ;;
 
 let filter_slash q items =
-  (* cljs get-matched-commands → fuzzy-search-multi (label, limit 50) —
-     hides the group banners while filtered *)
+  let fields = [ (fun it -> it.ai_label); (fun it -> it.ai_english) ] in
+  let fields = if U.current_lang () = "zh-CN" then
+      fields @ [fun it -> Fuzzy.hanzi_initials it.ai_label] else fields in
   let fs =
-    Fuzzy.fuzzy_search ~extract:(fun it -> it.ai_label) ~limit:50 items q
+    Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
   in
 
   (match fs with [] -> [ slash_fallback () ] | _ -> fs)

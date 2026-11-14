@@ -11,6 +11,10 @@ let js_random () = Random.float 1.
 (* native str_normalize is documented as identity (no ICU) *)
 let str_normalize (s : string) = s
 
+let url_pattern = Regexp.compile Svs.url_pattern
+let first_url text =
+  Option.bind (Regexp.exec url_pattern text) (fun result -> result.groups.(0))
+
 (* Js.Promise -> Ui_task — native Promise.error is already exn *)
 let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
   Ui_task.create (fun ~resolve ~reject ->
@@ -70,8 +74,11 @@ let services : unit -> Svs.t =
   ; now_ms = Js.Date.now
   ; console_error = (fun label e -> Platform.console_error (label, e))
   ; i18n = I18n.t
+  ; i18n_en = I18n.en_text
+  ; i18n_locale = I18n.t_locale
   ; i18nf = I18n.tf
   ; normalize = str_normalize
+  ; first_url
   ; render_icon = (fun ~size value -> Icon_picker.icon_el ~size:(float_of_int size) value)
   ; today_journal_day = Dates.today_journal_day
   ; rel_journal_day =
@@ -167,7 +174,9 @@ let services : unit -> Svs.t =
                 { key = (match ev.Ui_services.key with Some k -> k | None -> "")
                 ; meta = ev.Ui_services.meta
                 ; ctrl = ev.Ui_services.ctrl; shift = ev.Ui_services.shift
-                ; alt = ev.Ui_services.alt }
+                ; alt = ev.Ui_services.alt
+                ; composing = ev.Ui_services.composing
+                    || ev.Ui_services.key = Some "Process" }
             in
             if a.prevent then ev.Ui_services.prevent_default ();
             if a.stop then ev.Ui_services.stop_propagation ());

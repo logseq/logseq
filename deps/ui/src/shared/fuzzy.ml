@@ -38,6 +38,33 @@ let utf8_bytes text =
         Buffer.contents buffer
   | Other backend -> invalid_arg ("Fuzzy: unsupported text backend " ^ backend)
 
+let hanzi_initials text =
+  let bytes = utf8_bytes text in
+  let result = Buffer.create (String.length text) in
+  let offset = ref 0 and source_offset = ref 0 and word_start = ref true in
+  while !offset < String.length bytes do
+    let decoded = String.get_utf_8_uchar bytes !offset in
+    let cp = Uchar.to_int (Uchar.utf_decode_uchar decoded) in
+    let width = Uchar.utf_decode_length decoded in
+    let source_width = match Sys.backend_type with
+      | Other "Melange" -> if cp > 0xffff then 2 else 1
+      | _ -> width in
+    if (cp >= 0x3400 && cp <= 0x4dbf) || (cp >= 0x4e00 && cp <= 0x9fff) then begin
+      let initial = Pinyin_data.initials.[cp - 0x3400] in
+      if initial = '.' then Buffer.add_substring result text !source_offset source_width
+      else Buffer.add_char result initial;
+      word_start := true
+    end else if cp = 0x20 then word_start := true
+    else if (cp >= 0x41 && cp <= 0x5a) || (cp >= 0x61 && cp <= 0x7a)
+         || (cp >= 0x30 && cp <= 0x39) then begin
+      if !word_start then Buffer.add_char result (Char.lowercase_ascii (Char.chr cp));
+      word_start := false
+    end;
+    offset := !offset + width;
+    source_offset := !source_offset + source_width
+  done;
+  Buffer.contents result
+
 (* Internal normalization helpers consume UTF-8 bytes. Public scoring
    and search functions accept host text and return original items. *)
 

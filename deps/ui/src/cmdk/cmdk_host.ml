@@ -12,6 +12,11 @@ external js_random : unit -> float = "random" [@@mel.scope "Math"]
    str_normalize as identity (no ICU) *)
 external str_normalize : string -> string = "normalize" [@@mel.send]
 
+let url_pattern = Js.Re.fromString Svs.url_pattern
+let first_url text =
+  Option.bind (Js.Re.exec ~str:text url_pattern)
+    (fun result -> Js.Nullable.toOption (Js.Re.captures result).(0))
+
 (* Js.Promise -> Ui_task *)
 let task_of (p : 'a Js.Promise.t) : 'a Ui_task.t =
   Ui_task.create (fun ~resolve ~reject ->
@@ -74,8 +79,11 @@ let services : unit -> Svs.t =
   ; now_ms = Js.Date.now
   ; console_error = (fun label e -> Ui_services.log_error (label, e))
   ; i18n = I18n.t
+  ; i18n_en = I18n.en_text
+  ; i18n_locale = I18n.t_locale
   ; i18nf = I18n.tf
   ; normalize = str_normalize
+  ; first_url
   ; render_icon = (fun ~size value -> Icon_picker.icon_el ~size:(float_of_int size) value)
   ; today_journal_day = Dates.today_journal_day
   ; rel_journal_day =
@@ -170,7 +178,9 @@ let services : unit -> Svs.t =
               h.key
                 { key = D.ev_key ev; meta = D.ev_meta ev
                 ; ctrl = D.ev_ctrl ev; shift = D.ev_shift ev
-                ; alt = D.ev_alt ev }
+                ; alt = D.ev_alt ev
+                ; composing = D.ev_composing ev || D.ev_key_code ev = 229
+                    || D.ev_key ev = "Process" }
             in
             if a.prevent then D.ev_prevent_default ev;
             if a.stop then D.ev_stop_propagation ev)

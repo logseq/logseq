@@ -20,9 +20,12 @@ type key_ev =
   ; ctrl : bool
   ; shift : bool
   ; alt : bool
+  ; composing : bool
   }
 
 type key_answer = { prevent : bool; stop : bool }
+
+let url_pattern = {|[^\s\(\[]+://[^\s\)\]]+|}
 
 (* document events reach the shared handlers as precomputed facts — the
    host adapter runs the closest()/attr lookups *)
@@ -77,8 +80,11 @@ type t =
   ; now_ms : unit -> float
   ; console_error : string -> exn -> unit
   ; i18n : string -> string
+  ; i18n_en : string -> string
+  ; i18n_locale : string -> string option
   ; i18nf : string -> string list -> string
   ; normalize : string -> string
+  ; first_url : string -> string option
   ; render_icon : size:int -> Node_icon.t -> Lui_elements.t
     (* -- dates -------------------------------------------------------- *)
   ; today_journal_day : unit -> int (* yyyymmdd *)

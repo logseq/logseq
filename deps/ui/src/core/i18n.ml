@@ -133,14 +133,14 @@ let en_text key =
   | Some value -> value
   | None -> key
 
-let t (key : string) : string =
+let t_locale (key : string) : string option =
   match current_lang () with
-  | "en" -> en_text key
+  | "en" -> None
   | loc ->
-      (match locale_tbl loc with
-       | Some tbl ->
-           (try Hashtbl.find tbl key with Not_found -> en_text key)
-       | None -> en_text key)
+      Option.bind (locale_tbl loc) (fun tbl -> Hashtbl.find_opt tbl key)
+
+let t (key : string) : string =
+  match t_locale key with Some value -> value | None -> en_text key
 
 let tf (key : string) (args : string list) : string = sub (t key) args
 

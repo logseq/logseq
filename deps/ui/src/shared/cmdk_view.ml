@@ -834,7 +834,9 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   let v = S.get st in
   let no = { Svs.prevent = false; stop = false } in
   let matches = st.S.svs.Svs.matches_shortcut in
-  if matches "go/search" ev || matches "command-palette/toggle" ev then begin
+  let mod_key = if st.S.svs.Svs.is_mac () then ev.Svs.meta else ev.Svs.ctrl in
+  if ev.Svs.composing && ev.Svs.key = "Enter" then no
+  else if matches "go/search" ev || matches "command-palette/toggle" ev then begin
     if v.S.open_ then S.close st
     else if matches "command-palette/toggle" ev then S.open_commands st
     else S.open_palette st;
@@ -847,45 +849,36 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
     | "Escape" ->
         if S.clear_or_close st then { Svs.prevent = true; stop = true }
         else no
-    | "Home" ->
-        S.jump_hl st false;
-        { Svs.prevent = true; stop = false }
-    | "End" ->
-        S.jump_hl st true;
-        { Svs.prevent = true; stop = false }
-    | "PageDown" ->
-        S.page_hl st 1;
-        { Svs.prevent = true; stop = false }
-    | "PageUp" ->
-        S.page_hl st (-1);
-        { Svs.prevent = true; stop = false }
     | "ArrowDown" ->
-        if ev.Svs.meta || ev.Svs.ctrl then
+        if mod_key then
           Option.iter (fun gid -> S.toggle_expand st gid true) (S.hl_group st)
         else S.move_hl st 1;
-        { Svs.prevent = true; stop = false }
+        { Svs.prevent = true; stop = true }
     | "ArrowUp" ->
-        if ev.Svs.meta || ev.Svs.ctrl then
+        if mod_key then
           Option.iter (fun gid -> S.toggle_expand st gid false) (S.hl_group st)
         else S.move_hl st (-1);
-        { Svs.prevent = true; stop = false }
+        { Svs.prevent = true; stop = true }
     | "n" when ev.Svs.ctrl ->
         S.move_hl st 1;
-        { Svs.prevent = true; stop = false }
+        { Svs.prevent = true; stop = true }
     | "p" when ev.Svs.ctrl ->
         S.move_hl st (-1);
-        { Svs.prevent = true; stop = false }
+        { Svs.prevent = true; stop = true }
     | "Enter" ->
         (* cljs consume-open-search-sidebar-keydown! binds mod+enter
            before the highlighted-item action *)
-        if ev.Svs.meta || ev.Svs.ctrl then
+        if mod_key then
           S.open_search_sidebar st
         else if ev.Svs.shift then S.run_highlighted_sidebar st
         else S.run_highlighted st;
         { Svs.prevent = true; stop = true }
-    | "c" when (ev.Svs.meta || ev.Svs.ctrl) && not (ev.Svs.shift || ev.Svs.alt) ->
+    | "c" when mod_key ->
         if S.copy_highlighted_ref st then { Svs.prevent = true; stop = true }
         else no
+    | "o" when mod_key ->
+        S.open_current_item_link st;
+        no
     | _ -> no
   else no
 

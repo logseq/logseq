@@ -376,15 +376,24 @@ let command_item svs (c : Svs.cmd) : item =
   ; ibadge = No_badge; act = Run c.Svs.id
   ; ihl = false; imouse = false; iq = "" }
 
-(* cljs load-results :commands — fuzzy-search-multi over the english
-   label (en locale), limit 20 *)
+(* cljs load-results :commands — locale + English, with initials in zh-CN. *)
 let commands_matched q : Svs.cmd list =
   let svs = services () in
-  let cmds = command_table () in
+  let cmds = command_table () |> List.take 1000 in
   if String.trim q = "" then cmds
   else
-    svs.Svs.fuzzy_search_multi ~extract_fns:[ cmd_label svs ] ~limit:20
-      cmds q
+    let english (c : Svs.cmd) =
+      if c.i18n then svs.Svs.i18n_en c.label else c.label in
+    let locale (c : Svs.cmd) =
+      if c.i18n then Option.value (svs.Svs.i18n_locale c.label) ~default:""
+      else "" in
+    let zh_cn = Option.fold ~none:false
+      ~some:(fun language -> Ui_services.storage_unquote language = "zh-CN")
+      (Ui_services.storage_get "preferred-language") in
+    let fields = [english; locale] in
+    let fields = if zh_cn then fields @ [fun c -> Fuzzy.hanzi_initials (locale c)]
+      else fields in
+    svs.Svs.fuzzy_search_multi ~extract_fns:fields ~limit:20 cmds q
 
 let commands_items svs q : item list =
   if svs.Svs.publishing () then []
@@ -1142,27 +1151,6 @@ let move_hl st dir =
     set_in st (fun v -> { v with hl = i; mouse = false });
     st.svs.Svs.scroll_row_index i
 
-let jump_hl st last =
-  let n = Array.length (flat_items (get st)) in
-  if n > 0 then (
-    let i = if last then n - 1 else 0 in
-    set_hl st i false;
-    st.svs.Svs.scroll_row_index i)
-
-let page_hl st direction =
-  let v = get st in
-  let n = Array.length (flat_items v) in
-  if n > 0 then (
-    let page_size =
-      List.find_map (fun g ->
-          if List.exists (fun (it : item) -> it.idx = v.hl) g.gitems
-          then Some (max 1 g.glimit) else None) v.groups
-      |> Option.value ~default:1
-    in
-    let i = max 0 (min (n - 1) (v.hl + direction * page_size)) in
-    set_hl st i false;
-    st.svs.Svs.scroll_row_index i)
-
 let toggle_expand st gid expand =
   set_in st (fun v ->
       { v with
@@ -1496,10 +1484,11 @@ let rec run_item st it =
        st.svs.Svs.set_input_value "";
        refresh st
    | Run cid -> run_with_lifecycle st repo cid
-   | Open_file _ ->
-       (* cljs file rows open the file editor — no such route here;
-          just close *)
-       close st))
+   | Open_file path ->
+       close st;
+       st.svs.Svs.exit_edit ();
+       Ui_services.nav_set_hash
+         (st.svs.Svs.nav_hash ("#/file/" ^ Ui_services.uri_encode_component path))))
 
 (* cljs invoke-command: record the invoke in "commands-history" then
    dispatch the shortcut's :f. Many cljs handlers need an editing
@@ -1745,6 +1734,27 @@ let copy_highlighted_ref st =
       close st;
       true
   | _ -> false
+
+let open_current_item_link st =
+  let warn key = st.svs.Svs.toast (st.svs.Svs.i18n key) "warning" in
+  let open_link key = function
+    | Some link -> Ui_services.env_open_url link
+    | None -> warn key in
+  let v = get st in
+  match st.svs.Svs.repo (), item_at v v.hl with
+  | Some repo, Some { act = Open_page uuid; _ } ->
+      ignore (let* result = st.svs.Svs.invoke "thread-api/get-first-url-property-value"
+        [Wire.String repo; Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]] in
+        open_link "cmdk.error/no-page-link" (Wire.as_string result);
+        Ui_task.resolve ())
+  | Some repo, Some { act = Open_block uuid; _ } ->
+      ignore (let* result = st.svs.Svs.invoke "thread-api/pull"
+        [Wire.String repo; Wire.Array [Wire.kw "block/title"];
+         Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]] in
+        open_link "cmdk.error/no-block-link"
+          (Option.bind (Wire.map_get_string result "block/title") st.svs.Svs.first_url);
+        Ui_task.resolve ())
+  | _ -> warn "cmdk.error/no-search-item-link"
 
 (* keyboard-shortcut entry point: run a command id exactly as the
    palette would. Palette-shaped commands open the palette in the right

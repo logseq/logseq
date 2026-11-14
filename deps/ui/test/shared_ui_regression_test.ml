@@ -2909,6 +2909,15 @@ let run_views ~registry ~profile ~finish =
   let footer_button key = List.find (fun n ->
     M.string_prop n "accessibility-label" = Some (I18n.t key)) (nodes footer) in
   let press_footer key = S.press footer (footer_button key).M.id in
+  List.iter (fun (meta, ctrl, shift) ->
+    select [item 0 (Run "ui/toggle-left-sidebar")] 0;
+    let answer = Cmdk_view.handle_keydown footer_st
+      {key="Enter"; meta; ctrl; shift; alt=false; composing=true} in
+    check "IME confirmation preserves the palette without dispatching Enter actions"
+      (!footer_effects = [] && (Cmdk_state.get footer_st).open_
+       && not answer.prevent && not answer.stop))
+    [false, false, false; true, false, false; false, true, false;
+     false, false, true];
   List.iter (fun (action, expected) ->
     select [item 0 action] 0;
     press_footer "cmdk.action/create";
@@ -2977,7 +2986,7 @@ let run_views ~registry ~profile ~finish =
     [Open_page "ref-target"; Open_block "ref-target"];
   select pages 1;
   ignore (Cmdk_view.handle_keydown footer_st
-    {key="c"; meta=true; ctrl=false; shift=false; alt=false});
+    {key="c"; meta=true; ctrl=false; shift=false; alt=false; composing=false});
   check "palette copy shortcut shares the selected-result copy action"
     (!footer_effects = ["copy:[[second-page]]"]
      && not (Cmdk_state.get footer_st).open_);
@@ -3076,7 +3085,7 @@ let run_views ~registry ~profile ~finish =
   ignore (Lui_app.dispose restored_bindings.S.app);
   let toggle_search () =
     ignore ((Option.get !handlers).Cmdk_services.key
-      { key = "k"; meta = true; ctrl = false; shift = false; alt = false });
+      { key = "k"; meta = true; ctrl = false; shift = false; alt = false; composing = false });
     S.flush search
   in
   let search_inputs () =
