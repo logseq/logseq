@@ -45,7 +45,13 @@ switch (positional[0] === "login" ? "login" : command) {
   case "graph list":
     ok({ graphs: state.local });
     break;
+  case "graph create":
+    state.local.push(graph);
+    ok({ graph });
+    break;
   case "sync remote-graphs":
+    if (!graph) error("missing-graph", "graph name is required");
+    if (!state.local.includes(graph)) error("graph-not-exists", "graph not exists");
     ok({ graphs: [{ "graph-name": "notes", "graph-e2ee?": true }] });
     break;
   case "sync download":

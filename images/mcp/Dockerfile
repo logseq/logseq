@@ -99,10 +99,20 @@ COPY --from=deps /opt/logseq-mcp/node_modules /opt/logseq-mcp/node_modules
 COPY images/mcp/server/package.json /opt/logseq-mcp/package.json
 COPY images/mcp/server/src /opt/logseq-mcp/src
 
+# The CLI looks for db-worker-node.js next to argv[1], which would be the
+# /usr/local/bin symlink, so point it at the bundled worker explicitly.
+ENV LOGSEQ_DB_WORKER_NODE_SCRIPT=/opt/logseq-cli/static/js/db-worker-node.js
+
 RUN ln -s /opt/logseq-cli/dist/logseq.js /usr/local/bin/logseq \
   && chmod +x /opt/logseq-cli/dist/logseq.js \
+  && test -f "${LOGSEQ_DB_WORKER_NODE_SCRIPT}" \
   && mkdir -p /data \
-  && logseq --version
+  && logseq --version \
+  && HOME=/tmp/smoke logseq graph create --graph=smoke --output json \
+  && HOME=/tmp/smoke logseq server start --graph=smoke --output json \
+  && HOME=/tmp/smoke logseq list page --graph=smoke --output json \
+  && HOME=/tmp/smoke logseq server stop --graph=smoke --output json \
+  && rm -rf /tmp/smoke
 
 # HOME holds ~/logseq (graphs, auth.json, cli.edn, kv-store.json) and MCP state.
 ENV HOME=/data

@@ -12,6 +12,9 @@ const AUTH_ERROR_CODES = new Set([
 ]);
 
 const DOWNLOAD_TIMEOUT_MS = 35 * 60 * 1000;
+// `sync remote-graphs` must run inside some graph's db-worker-node. When no
+// graph has been downloaded yet, an empty local-only graph is used instead.
+export const BOOTSTRAP_GRAPH = "mcp-bootstrap";
 const SYNC_START_TIMEOUT_MS = 2 * 60 * 1000;
 
 export function errorFields(error) {
@@ -122,13 +125,29 @@ export class GraphManager {
     return this.config.e2eePassword ? [`--e2ee-password=${this.config.e2eePassword}`] : [];
   }
 
-  async localGraphs() {
+  async allLocalGraphs() {
     const data = await runLogseqJson(["graph", "list"]);
     return data?.graphs ?? [];
   }
 
+  async localGraphs() {
+    return (await this.allLocalGraphs()).filter((graph) => graph !== BOOTSTRAP_GRAPH);
+  }
+
   async remoteGraphs() {
-    return this.withAuth(() => runLogseqJson(["sync", "remote-graphs"]));
+    const all = await this.allLocalGraphs();
+    const helper = all.find((graph) => graph !== BOOTSTRAP_GRAPH) ?? BOOTSTRAP_GRAPH;
+    if (helper === BOOTSTRAP_GRAPH && !all.includes(BOOTSTRAP_GRAPH)) {
+      await runLogseqJson(["graph", "create", `--graph=${BOOTSTRAP_GRAPH}`]);
+      log("bootstrap-graph-created", { graph: BOOTSTRAP_GRAPH });
+    }
+    try {
+      return await this.withAuth(() => runLogseqJson(["sync", "remote-graphs", `--graph=${helper}`]));
+    } finally {
+      if (helper === BOOTSTRAP_GRAPH) {
+        await runLogseqJson(["server", "stop", `--graph=${BOOTSTRAP_GRAPH}`]).catch(() => {});
+      }
+    }
   }
 
   async syncStatus(graph) {
@@ -285,7 +304,7 @@ export class GraphManager {
   /** Stops every db-worker-node so SQLite files are closed cleanly. */
   async shutdown() {
     clearInterval(this.watchdog);
-    const graphs = await this.localGraphs().catch(() => []);
+    const graphs = await this.allLocalGraphs().catch(() => []);
     await Promise.allSettled(
       graphs.map((graph) =>
         runLogseqJson(["server", "stop", `--graph=${graph}`], { timeoutMs: 15_000 }),
