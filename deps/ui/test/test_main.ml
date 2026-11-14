@@ -132,7 +132,7 @@ let test_editor_cmds () =
   Shared_scenarios_editor_cmds.run
     { Shared_scenarios_editor_cmds.check = check
     ; run = (fun ~command ~block ~value ->
-          outcome_tag (Editor_cmds.run ~command ~block ~value))
+          outcome_tag (Editor_cmds.run ~scope:(Editor_state.interaction_scope ()) ~command ~block ~value))
     ; (* deferred worker-fed ops ride deeper promise chains (title parse,
          op resolve, apply) — give the drain enough microtask ticks, then
          restore the swapped model reader + worker and report *)

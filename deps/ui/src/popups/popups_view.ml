@@ -1274,6 +1274,12 @@ let handle_contextmenu st (ev : Ui_services.ev) =
   match ev.Ui_services.target with
   | None -> ()
   | Some el -> (
+      let scope = Editor_actions.scope_of_el el in
+      let selected () =
+        if Editor_state.selection_scope () = scope then
+          Editor_actions.selected_uuids ()
+        else []
+      in
       match el.Ui_services.closest ".block-tag[data-tag-uuid]" with
       | Some chip -> (
           (* cljs block-tag popup: its own menu, not the block/page menu *)
@@ -1299,7 +1305,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                     | None -> tuuid
                   in
                   let ax, atop, abot = S.anchor_of_ev ev el in
-                  S.open_cm_tag st ~ax ~atop ~abot ~block_id:bid
+                  S.open_cm_tag st ~scope ~ax ~atop ~abot ~block_id:bid
                     ~tag_uuid:tuuid ~tag_id:tid ~tag_title:title
                     ~priv:(priv = Some "true")
               | None -> ())
@@ -1327,17 +1333,16 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               ev.Ui_services.stop_propagation ();
               (* cljs block-content contextmenu selects the block it
                  opened on, unless it is already in a multi-selection *)
-              if not (Editor_state.is_selected id) then
-                Editor_actions.select_single id;
+              if Editor_state.selection_scope () <> scope
+                 || not (Editor_state.is_selected id) then
+                Editor_actions.select_single_in ~scope id;
               close_cm_picker ();
               (* cljs popup-show! re-anchors the menu to the event
                  target element (centered, dropping from its bottom
                  edge), not the raw pointer *)
               let ax, atop, abot = S.anchor_of_ev ev el in
-              S.open_cm st ~ax ~atop ~abot ~block_id:id
-                ~multi:
-                  (List.length (Ui_services.dom_selected_block_uuids ())
-                   >= 2)
+              S.open_cm st ~scope ~ax ~atop ~abot ~block_id:id
+                ~multi:(List.length (selected ()) >= 2)
           | None -> ())
       | None -> (
           (* cljs: right-click inside a selection shows the selection menu;
@@ -1350,7 +1355,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
           | Some blk -> (
               match
                 (blk.Ui_services.attr "data-blockid"
-                , Ui_services.dom_selected_block_uuids ())
+                , selected ())
               with
               | Some id, _
                 when el.Ui_services.closest ".block-editor" <> None
@@ -1370,7 +1375,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                       S.anchor_at_point ~x:ev.Ui_services.x
                         ~y:ev.Ui_services.y
                     in
-                    S.open_cm_edit st ~ax ~atop ~abot ~block_id:id)
+                    S.open_cm_edit st ~scope ~ax ~atop ~abot ~block_id:id)
                   else
                     (* web: mirror the model selection into a live DOM
                        selection so the browser's own menu offers real
@@ -1388,7 +1393,7 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   ev.Ui_services.stop_propagation ();
                   close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
-                  S.open_cm st ~ax ~atop ~abot ~block_id:first
+                  S.open_cm st ~scope ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
               | Some id, _
                 when Ui_services.env_native_block_controls ()
@@ -1402,17 +1407,18 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   ev.Ui_services.stop_propagation ();
                   close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
-                  S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
+                  S.open_cm st ~scope ~ax ~atop ~abot ~block_id:id ~multi:false
               | Some id, _
                 when Ui_services.env_native_block_controls ()
                      && not (el.Ui_services.editable ()) ->
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
-                  if not (Editor_state.is_selected id) then
-                    Editor_actions.select_single id;
+                  if Editor_state.selection_scope () <> scope
+                     || not (Editor_state.is_selected id) then
+                    Editor_actions.select_single_in ~scope id;
                   close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
-                  S.open_cm st ~ax ~atop ~abot ~block_id:id ~multi:false
+                  S.open_cm st ~scope ~ax ~atop ~abot ~block_id:id ~multi:false
               | _ -> ())
           | None -> ()))
 ;;

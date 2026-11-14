@@ -412,6 +412,7 @@ and node ~model () : t =
                                                  Popups_state.anchor_of_el btn
                                                in
                                                Popups_state.open_cm
+                                                 ~scope:(Editor_state.selection_scope ())
                                                  ~allow_cut:
                                                    (can_cut sel eligibility)
                                                  ~allow_delete:

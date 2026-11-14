@@ -628,7 +628,7 @@ let test_editor_ctrl_np () =
    ================================================================ *)
 
 let test_cm_entries st =
-  P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+  P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
   (match cm_of st with
    | Some cm ->
        let cmds =
@@ -656,7 +656,7 @@ let test_cm_entries st =
   P.close_cm st;
   (* cljs custom-context-menu-content: no open-in-sidebar, adds copy
      and cycle-todo for the multi selection *)
-  P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:true;
+  P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:true;
   (match cm_of st with
    | Some cm ->
        let cmds =
@@ -674,7 +674,7 @@ let test_cm_entries st =
    | None -> check "multi context menu opens" false);
   P.close_cm st;
   (* text-edit menu inside the block editor *)
-  P.open_cm_edit st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1";
+  P.open_cm_edit ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1";
   (match cm_of st with
    | Some cm ->
        let cmds =
@@ -688,7 +688,7 @@ let test_cm_entries st =
    | None -> check "edit context menu opens" false);
   P.close_cm st;
   (* block-tag popup: private classes drop Remove tag *)
-  P.open_cm_tag st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1"
+  P.open_cm_tag ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1"
     ~tag_uuid:"tu" ~tag_id:9 ~tag_title:"T" ~priv:false;
   (match cm_of st with
    | Some cm ->
@@ -697,7 +697,7 @@ let test_cm_entries st =
        eqi "public tag menu rows" 3 (List.length cm.P.entries)
    | None -> check "tag menu opens" false);
   P.close_cm st;
-  P.open_cm_tag st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1"
+  P.open_cm_tag ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1"
     ~tag_uuid:"tu" ~tag_id:9 ~tag_title:"T" ~priv:true;
   check "private tag menu drops remove-tag"
     (match cm_of st with
@@ -732,24 +732,77 @@ let test_cm_activation st =
     ~finally:(fun () ->
       Stub_dom.set_field document "dispatchEvent" prev_dispatch)
     (fun () ->
-      P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
       P.run_cm_item st "copy-ref";
       check "item activation closes the menu" (cm_of st = None);
       check "activation emits the editor command"
         (!fired = [ "copy-ref" ]);
-      P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
       P.run_cm_color st "red";
       check "color swatch activation closes the menu" (cm_of st = None);
-      P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
       P.run_cm_heading st "3";
       check "heading activation closes the menu" (cm_of st = None);
       check "color/heading commands emitted"
         (List.rev !fired = [ "copy-ref"; "set-color"; "set-heading" ]))
 
+let test_cm_scope st =
+  let module E = Editor_state in
+  let module A = Editor_actions in
+  let uuid = "menu-target" and scope = "menu-sidebar" in
+  let parent = block ~children:[ block "menu-child" "child" ] uuid uuid in
+  stage_main_session [ parent; block "menu-other" "other" ];
+  clear_editing ();
+  let unregister = E.register_block_source ~scope ~kind:E.Outliner (fun () -> [ parent ]) in
+  A.select_single_in ~scope:"main" uuid;
+  E.set (fun state -> { state with
+    E.selected = E.String_set.of_list [ uuid; "menu-other" ];
+    editing = Some (E.mk_editing ~uuid ~buffer:uuid ~base:uuid ~scope:"main" ()) });
+  E.set_collapsed ~scope:"main" uuid false;
+  E.set_collapsed ~scope uuid false;
+  let ev = Edit_flow_test.native_drag_event ~scope ~uuid ~pending:(ref false)
+      ~buttons:0 ~x:10. ~y:10. in
+  let hit = Option.get ev.Ui_services.target in
+  let row = Option.get (hit.Ui_services.closest ".ls-block") in
+  let ev = { ev with Ui_services.target = Some { hit with Ui_services.closest = (function
+      | ".bullet-container[data-blockid], .ls-block[data-originalblockid]"
+      | ".ls-block[data-blockid]" -> Some row
+      | selector -> hit.Ui_services.closest selector) } } in
+  let document = Stub_dom.get_field Stub_dom.global "document" in
+  let previous : Js.Json.t -> bool = Stub_dom.get_field document "dispatchEvent" in
+  let previous_host = !Editor_cmds.installed in
+  Editor_cmds.install_host (Editor_cmds_host.host ());
+  Fun.protect ~finally:(fun () ->
+    Editor_cmds.installed := previous_host;
+    Stub_dom.set_field document "dispatchEvent" previous;
+    E.set_collapsed ~scope uuid false;
+    E.set_collapsed ~scope:"main" uuid false;
+    P.close_cm st;
+    unregister ();
+    A.clear_selection ~scope:"main" ();
+    clear_editing ())
+    (fun () ->
+      Popups_view.handle_contextmenu st ev;
+      check "context menu replaces another container's same-UUID selection"
+        (E.selection_scope () = scope
+         && E.String_set.equal (E.selected ()) (E.String_set.singleton uuid));
+      Stub_dom.set_field document "dispatchEvent" (fun event ->
+        let name : string = Stub_dom.get_field event "type" in
+        if name = "ls:editor-command" then (
+          let detail = Stub_dom.get_field event "detail" in
+          let fields = Option.get (Js.Json.decodeObject detail) in
+          Editor_commands.on_command { ev with Ui_services.detail = (fun key ->
+            Option.bind (Js.Dict.get fields key) Js.Json.decodeString) };
+          true)
+        else previous event);
+      P.run_cm_item st "collapse-children";
+      check "menu activation keeps the captured scope despite ambient editing"
+        (E.is_collapsed_in ~scope uuid && not (E.is_collapsed_in ~scope:"main" uuid)))
+
 (* submenu state: opening marks the trigger highlighted; closing the
    sub returns highlight to the trigger (base-ui parity) *)
 let test_cm_submenu st =
-  P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+  P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
   let sub_idx =
     match cm_of st with
     | Some cm ->
@@ -781,7 +834,7 @@ let test_cm_submenu st =
   ignore (keydown st "Escape");
   check "Escape closes the context menu" (cm_of st = None);
   (* Escape with a sub open closes the sub first *)
-  P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+  P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
   Option.iter
     (fun idx ->
       P.open_cm_sub st ~index:idx ~x:0. ~y:0.;
@@ -824,7 +877,7 @@ let test_cm_keynav st =
     ~finally:(fun () ->
       Stub_dom.set_field document "getElementById" prev_byid)
     (fun () ->
-      P.open_cm st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
       let first_interactive_idx entries =
         Option.get
           (List.find_mapi
@@ -1331,6 +1384,7 @@ let run ~finish =
   (* C. block context menu *)
   test_cm_entries st;
   test_cm_activation st;
+  test_cm_scope st;
   test_cm_submenu st;
   test_cm_keynav st;
   (* B. editor keys *)

@@ -165,6 +165,7 @@ type cm =
                     available height *)
   ; flip : bool (* menu opens above the anchor *)
   ; block_id : string (* owner block/page entity of the menu target *)
+  ; scope : string
   ; multi : bool
   ; entries : cm_item list
   ; sub_open : int (* index into entries, -1 = none *)
@@ -2695,7 +2696,7 @@ let icon_of_cmd = function
   | "dev/show-block-ast" -> "code"
   | _ -> ""
 
-let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
+let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
     let base =
@@ -2716,19 +2717,19 @@ let open_cm ?allow_cut ?allow_delete t ~ax ~atop ~abot ~block_id ~multi =
   let cm =
     { epoch = next_cm_epoch t
     ; cx = ax; cy = (if flip then atop else abot); atop; flip
-    ; block_id; multi; entries; sub_open = -1; sub_xy = (0., 0.)
+    ; block_id; scope; multi; entries; sub_open = -1; sub_xy = (0., 0.)
     ; highlighted = None; tag = None }
   in
   set_cm t (Some cm)
 ;;
 
-let open_cm_edit t ~ax ~atop ~abot ~block_id =
+let open_cm_edit t ~scope ~ax ~atop ~abot ~block_id =
   close_ac t;
   let flip = anchor_above atop abot in
   set_cm t (Some
     { epoch = next_cm_epoch t
     ; cx = ax; cy = (if flip then atop else abot); atop; flip
-    ; block_id; multi = false; entries = edit_entries ()
+    ; block_id; scope; multi = false; entries = edit_entries ()
     ; sub_open = -1; sub_xy = (0., 0.); tag = None
     ; highlighted = None })
 ;;
@@ -2751,14 +2752,14 @@ let tag_entries ~title ~priv =
   @ if priv then []
     else [ Ci_item (U.t "block/remove-tag", None, "remove-tag") ]
 
-let open_cm_tag t ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
+let open_cm_tag t ~scope ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
     ~priv =
   close_ac t;
   let flip = anchor_above atop abot in
   set_cm t (Some
     { epoch = next_cm_epoch t
     ; cx = ax; cy = (if flip then atop else abot); atop; flip
-    ; block_id; multi = false
+    ; block_id; scope; multi = false
     ; entries = tag_entries ~title:tag_title ~priv
     ; sub_open = -1; sub_xy = (0., 0.)
     ; tag = Some (tag_uuid, tag_id, priv)
@@ -2810,7 +2811,8 @@ let run_cm_item t label =
                         ; Wire.Keyword "block/tags"
                         ; Wire.Int tid ] ])
            | _ -> ())
-       | None -> emit_cmd label [ "block", Json.String cm.block_id ]);
+       | None -> emit_cmd label
+           [ "block", Json.String cm.block_id; "scope", Json.String cm.scope ]);
       close_cm t
   | None -> ()
 ;;
@@ -2819,6 +2821,7 @@ let run_cm_color t color =
   match (get t).cm with
   | Some cm ->
       emit_cmd "set-color"        [ "block", Json.String cm.block_id
+        ; "scope", Json.String cm.scope
         ; "value", Json.String color ];
       close_cm t
   | None -> ()
@@ -2828,6 +2831,7 @@ let run_cm_heading t h =
   match (get t).cm with
   | Some cm ->
       emit_cmd "set-heading"        [ "block", Json.String cm.block_id
+        ; "scope", Json.String cm.scope
         ; "value", Json.String h ];
       close_cm t
   | None -> ()

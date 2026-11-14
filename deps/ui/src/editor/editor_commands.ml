@@ -1,8 +1,9 @@
 (* Slash/context command consumer. popups_state dispatches
    `ls:editor-command` CustomEvents with {command, from, to} (the slash
-   trigger range inside the editing model) or {command, block, value}
-   (context-menu rows on unedited blocks). Side effects beyond a text
-   splice live here: property writes (heading/status/priority/
+   trigger range inside the editing model) or {command, block, scope, value}
+   (context-menu rows on unedited blocks).
+   Keyboard and slash commands use the current interaction scope.
+   Side effects beyond a text splice live here: property writes (heading/status/priority/
    display-type/order-list), the inline calendar (#date-time-picker,
    cljs components/date-picker), the link/image-link form
    (.ls-editor-link-form, cljs components/link), and the popup key
@@ -1595,13 +1596,17 @@ let run_editor_cmd uuid command from to_ =
             (W.Keyword "logseq.property/empty-placeholder")
         else
           set_closed_prop ~caret uuid "logseq.property/priority" s)
-      else ignore (Editor_cmds.run ~command ~block:None ~value:None)
+      else ignore (Editor_cmds.run ~scope:(S.interaction_scope ()) ~command ~block:None ~value:None)
 
 let on_command (ev : Ui_services.ev) =
   if S.ready () then
     match detail_str ev "command" with
     | None -> ()
     | Some command -> (
+        let scope = match detail_str ev "scope" with
+          | Some scope -> scope
+          | None -> S.interaction_scope ()
+        in
         match detail_str ev "block" with
         | Some uuid -> (
             (* deadline/scheduled on a non-editing block (the `p d`
@@ -1642,13 +1647,13 @@ let on_command (ev : Ui_services.ev) =
                 Exporter.show_data command (Some uuid)
             | _ ->
                 ignore
-                  (Editor_cmds.run ~command ~block:(Some uuid)
+                  (Editor_cmds.run ~scope ~command ~block:(Some uuid)
                      ~value:(detail_str ev "value")))
         | None -> (
             match S.editing () with
             | None ->
                 ignore
-                  (Editor_cmds.run ~command ~block:None
+                  (Editor_cmds.run ~scope ~command ~block:None
                      ~value:(detail_str ev "value"))
             | Some e ->
                 let from =

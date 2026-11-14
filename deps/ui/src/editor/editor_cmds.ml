@@ -114,15 +114,15 @@ let current_block fallback =
 
 (* "upload" needs no block target — dispatch it before the uuid check
    like the event listeners it replaces did. *)
-let run ~command ~block ~value : outcome =
+let run ~scope ~command ~block ~value : outcome =
   let h = host () in
-  let scope = Editor_state.interaction_scope () in
   match command with
   | "upload" ->
       h.pick_files ();
       Handled
   | ("copy" | "cut" | "delete")
     when Editor_state.selection_active ()
+         && Editor_state.selection_scope () = scope
          && (match block with
              | None -> false
              | Some uuid -> Editor_state.String_set.mem uuid (Editor_state.selected ())) ->
@@ -319,7 +319,8 @@ let run ~command ~block ~value : outcome =
                  selection ctx menu exports the top-level selected roots *)
               let sel = Editor_state.selected () in
               let uuids =
-                if Editor_state.String_set.mem uuid sel then
+                if Editor_state.selection_scope () = scope
+                   && Editor_state.String_set.mem uuid sel then
                   List.filter
                     (fun u ->
                       not (Editor_actions.has_selected_ancestor sel u))

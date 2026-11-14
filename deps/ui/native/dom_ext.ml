@@ -283,7 +283,13 @@ let closest (el : element) (sel : string) : element option =
     match candidates with
     | [] -> None
     | c :: rest ->
-        if compiled_matches selectors c rest then Some c
+        if compiled_matches selectors c rest then
+          match c with
+          | Js.Json.JObject fields ->
+              Some (Js.Json.JObject
+                (("ancestors", Js.Json.JArray (Array.of_list rest))
+                 :: List.remove_assoc "ancestors" fields))
+          | _ -> invalid_arg "native DOM element is not an object"
         else walk rest
   in
   walk (el :: ancestors_of el)

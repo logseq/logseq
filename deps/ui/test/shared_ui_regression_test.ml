@@ -255,7 +255,7 @@ let flashcards_config ~registry ~profile =
       check (label ^ " gates the sidebar entry") (has_nav ()=enabled);
       List.iter (fun multi ->
         let popup=Option.get !popup in
-        Popups_state.open_cm popup ~ax:10. ~atop:10. ~abot:10. ~block_id:"flashcard-block" ~multi;
+        Popups_state.open_cm ~scope:"main" popup ~ax:10. ~atop:10. ~abot:10. ~block_id:"flashcard-block" ~multi;
         let entries=(Option.get (Popups_state.get popup).cm).entries in
         check (label ^ (if multi then " gates the multi-block menu" else " gates the single-block menu"))
           (List.exists (function Popups_state.Ci_item (_,_,"make-flashcard") -> true | _ -> false) entries=enabled);
@@ -2954,7 +2954,7 @@ let run_views ~registry ~profile ~finish =
       check ("a closed block menu cannot consume another menu's " ^ key)
         (not !consumed)) ["ArrowDown";"Enter"];
     check "block-menu listeners cannot focus or activate foreign menu items" (!foreign_actions=0);
-    let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";
+    let cm : Popups_state.cm = {epoch=0;cx=0.;cy=0.;atop=0.;flip=false;block_id="context-fixture";scope="main";
       multi=false;entries=[Ci_item ("Action",None,"fixture-action")];
       sub_open=(-1);sub_xy=(0.,0.);highlighted=None;tag=None} in
     Signal.set context.vs {ac=None;cm=Some cm;pv=None};
