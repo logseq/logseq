@@ -3393,8 +3393,8 @@ let run_views ~registry ~profile ~finish =
     [Open_page "sidebar-target"; Open_block "sidebar-target"];
   select [item 0 (Open_block "block-target")] 0;
   press_footer "cmdk.action/open";
-  check "footer Open resolves a selected block through the existing navigation action"
-    (List.mem "thread-api/get-block-page-info" !footer_effects);
+  check "footer Open starts block reveal with a fresh block read"
+    (List.mem "thread-api/get-blocks" !footer_effects);
   let document = !Stub_dom.document_ref in
   let previous_copy : Js.Json.t = Stub_dom.get_field document "execCommand" in
   Stub_dom.set_field document "execCommand" (fun (_ : string) ->

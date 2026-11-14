@@ -125,6 +125,7 @@ let services : unit -> Svs.t =
       (fun target -> Runtime.send (Action.Navigate_to (route_of_target target)))
   ; resolve_route = Router.resolve
   ; scroll_to_top = Router.scroll_to_top
+  ; jump_to_anchor = Router.jump_to_anchor
   ; set_input_value =
       (fun v ->
         match Ui_services.dom_query ".cp__cmdk-search-input" with
@@ -143,7 +144,7 @@ let services : unit -> Svs.t =
               el.Ui_services.focus ();
               if q <> "" then (
                 el.Ui_services.set_value q;
-                el.Ui_services.set_selection_range 0 (String.length q))
+                el.Ui_services.select_text ())
           | None ->
               if tries > 0 then
                 ignore
@@ -162,11 +163,21 @@ let services : unit -> Svs.t =
                 Ui_services.dom_scroll_row_into_view ~scroller ~row
             | None -> ())
         | None -> ())
+  ; reset_search_scroll =
+      (fun () -> match Ui_services.dom_query ".cp__cmdk .cp__cmdk-scroller" with
+        | Some el -> el.Ui_services.set_scroll_top 0.
+        | None -> ())
   ; set_timeout =
       (fun f ms -> ignore (Ui_services.timers_timeout f ms))
   ; install_listeners =
       (fun scope h ->
         let open Svs in
+        List.iter (fun (name, composing) ->
+          Ui_services.dom_subscribe_document_event ~scope ~capture:true name
+            (fun ev -> match ev.Ui_services.target with
+              | Some el when el.Ui_services.closest ".cp__cmdk__modal" <> None
+                  && el.Ui_services.closest ".cp__cmdk-search-input" <> None -> h.composition composing
+              | _ -> ())) ["compositionstart", true; "compositionend", false];
         Ui_services.dom_subscribe_document_event ~scope ~capture:true "keydown"
           (fun ev ->
             let a =
@@ -226,6 +237,14 @@ let services : unit -> Svs.t =
   ; commands = (fun () -> List.map cmd_of (Commands_data.current_table ~desktop:true ()))
   ; plugin_commands =
       (fun () -> List.map cmd_of (Plugin_host.palette_commands ()))
+  ; installed_themes = (fun () -> []) (* Native has no plugin CSS runtime. *)
+  ; selected_theme_url = (fun () -> None)
+  ; select_theme = (fun theme ->
+      match Wire.get theme "url" with
+      | Some Wire.Nil ->
+          Ui_services.storage_remove "ui/custom-theme";
+          Option.iter Ui_theme.apply (Wire.map_get_string theme "mode")
+      | _ -> Plugin_host.report_unavailable "selectTheme")
   ; exec_palette_command = Plugin_host.exec_palette_command
   ; hook_app =
       (fun name -> Plugin_host.hook_app name Js.Json.null Js.Json.null)

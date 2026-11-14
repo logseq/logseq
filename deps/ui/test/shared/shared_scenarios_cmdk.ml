@@ -138,8 +138,8 @@ let results_order (h : ('m, 'a) Shared_scenarios.host) =
     (idxs = List.init (List.length idxs) Fun.id);
   h.H.keydown ~meta:false "ArrowDown";
   h.flush ();
-  h.H.check "ArrowDown highlights the first result"
-    (highlighted_indexes h = [ 0 ]);
+  h.H.check "ArrowDown advances and wraps from the keyboard fallback"
+    (items <> [] && highlighted_indexes h = [ 1 mod List.length items ]);
   (* Expanding the highlighted group also publishes the local groups. *)
   h.H.keydown ~meta:true "ArrowDown";
   h.flush ();

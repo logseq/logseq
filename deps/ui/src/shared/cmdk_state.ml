@@ -87,10 +87,11 @@ type action =
   | Create_page of string
   | Create_tag of string
   | Open_page of string (* block/uuid *)
-  | Open_block of string (* block/uuid -> resolve owning page *)
+  | Open_block of string (* block/uuid -> resolve target and reveal *)
   | Open_file of string (* file/path, e.g. logseq/config.edn *)
   | Run of string (* cljs shortcut id, e.g. "editor/move-blocks" *)
   | Set_filter of group_id
+  | Select_theme of Wire.t
 
 type item =
   { ikey : string
@@ -185,6 +186,7 @@ type t =
   ; source_rows : Wire.t list ref (* retain the last search's entity metadata *)
   ; source_total : int ref
   ; source_query : string ref
+  ; composing : bool ref
   }
 
 let initial_view =
@@ -223,7 +225,8 @@ let make ?(register = true) scheduler svs : t =
   let vs = Signal.state scheduler initial_view in
   let st =
     { vs; req = Ui_effect.request (); recents_req = Ui_effect.request ()
-    ; svs; source_rows = ref []; source_total = ref 0; source_query = ref "" }
+    ; svs; source_rows = ref []; source_total = ref 0; source_query = ref ""
+    ; composing = ref false }
   in
   (* the modal palette is the singleton shortcuts dispatch through;
      sidebar cmdk blocks are independent and must not steal the refs *)
@@ -260,6 +263,12 @@ let is_open () =
    removed mid-flush would otherwise re-mount its branch and emit DOM
    ops for nodes that the same batch tears down. *)
 let decorate (v : view) : view =
+  let highlighted =
+    if v.hl >= 0 || v.mouse then v.hl
+    else match List.find_map (fun g -> List.nth_opt g.gitems 0) v.groups with
+      | Some it -> it.idx
+      | None -> -1
+  in
   { v with
     groups =
       List.map
@@ -270,7 +279,7 @@ let decorate (v : view) : view =
               List.map
                 (fun it ->
                   { it with
-                    ihl = v.hl = it.idx
+                    ihl = highlighted = it.idx
                   ; imouse = v.mouse
                   ; iq = (if it.gid = G_create then "" else v.input) })
                 g.gitems })
@@ -298,6 +307,13 @@ let flat_items (v : view) : item array =
 let item_at v i =
   let xs = flat_items v in
   if i >= 0 && i < Array.length xs then Some xs.(i) else None
+
+(* Master keeps the first cached action when explicit highlight is clear.
+   Mouse mode affects its paint, not the default Enter action. *)
+let highlighted_item v =
+  match item_at v v.hl with
+  | Some _ as item -> item
+  | None -> item_at v 0
 
 (* -- commands -------------------------------------------------------- *)
 
@@ -536,15 +552,17 @@ let item_of_row w i : item =
 
 let wmap kvs = Wire.Map (List.map (fun (k, v) -> (Wire.kw k, v)) kvs)
 
-let search_opts ~dev move_mode nodes_limit =
+let search_opts ?page ?(code_only = false) ~dev move_mode nodes_limit =
   wmap
-    ([ ("limit", Wire.Int nodes_limit)
-     ; ("search-limit", Wire.Int 100)
+    ([ ("limit", Wire.Int (if code_only then 20 else nodes_limit))
+     ; ("search-limit", Wire.Int (if code_only then 300 else 100))
      ; ("enable-snippet?", Wire.Bool true)
      ; ("include-breadcrumb?", Wire.Bool true)
-     ; ("include-matched-count?", Wire.Bool true)
-     ; ("built-in?", Wire.Bool true)
-     ; ("dev?", Wire.Bool dev) ]
+     ; ("include-matched-count?", Wire.Bool true) ]
+    @ (match page with
+       | Some uuid -> ["page", Wire.String uuid]
+       | None -> ["built-in?", Wire.Bool true; "dev?", Wire.Bool dev])
+    @ (if code_only then ["code-only?", Wire.Bool true] else [])
     @ if move_mode then [ ("page-only?", Wire.Bool true) ] else [])
 
 (* cljs get-group-limit: nodes-ish groups page at 10, expand to 100 on
@@ -557,11 +575,11 @@ let current_page_limit expanded =
 
 (* include-matched-count? returns {items, matched-count}; fall back to
    a bare array if the shape differs *)
-let search_rows (svs : Svs.t) repo q move_mode nodes_limit =
+let search_rows ?page ?(code_only = false) (svs : Svs.t) repo q move_mode nodes_limit =
   let* w =
     svs.Svs.invoke "thread-api/search-blocks"
       [ Wire.String repo; Wire.String q
-      ; search_opts ~dev:(svs.Svs.dev_build ()) move_mode nodes_limit ]
+      ; search_opts ?page ~code_only ~dev:(svs.Svs.dev_build ()) move_mode nodes_limit ]
   in
   let rows, total =
     match w with
@@ -705,6 +723,31 @@ let visible_groups v groups =
       else { g with gitems = List.filteri (fun i _ -> i < g.glimit) g.gitems })
     groups
 
+let filter_query_parts q =
+  match String.rindex_opt q '/' with
+  | None -> (q, "")
+  | Some i ->
+      (String.trim (String.sub q 0 i),
+       String.trim (String.sub q (i + 1) (String.length q - i - 1)))
+
+let theme_items (svs : Svs.t) q =
+  let installed = svs.Svs.installed_themes () in
+  let name theme = Option.value (Wire.map_get_string theme "name") ~default:"" in
+  let installed =
+    if String.trim q = "" then installed
+    else svs.Svs.fuzzy_search ~extract:name ~limit:100 installed q in
+  let default = wmap ["name", Wire.String (svs.Svs.i18n "theme/logseq-default");
+    "pid", Wire.String "logseq-classic-theme";
+    "mode", Wire.String (Ui_services.theme_mode ()); "url", Wire.Nil] in
+  List.map (fun theme ->
+    let field key = Option.value (Wire.map_get_string theme key) ~default:"" in
+    { ikey = String.concat "\000" ["theme"; field "pid"; field "url"; name theme; field "mode"]
+    ; idx = -1; gid = G_themes; ititle = name theme; info = None; header = None
+    ; iicon = Some (Node_icon.tabler
+        (if Wire.map_get_string theme "url" = svs.Svs.selected_theme_url () then "check" else "palette"))
+    ; inline_icon = None; isc = ""; ibadge = No_badge; act = Select_theme theme
+    ; ihl = false; imouse = false; iq = "" }) (default :: installed)
+
 let group_order ?(source_rows = []) v q rows total =
   let svs = services () in
   let create_g () =
@@ -721,26 +764,15 @@ let group_order ?(source_rows = []) v q rows total =
     ; glimit = nodes_limit v.move_mode v.expanded
     ; gexpanded = List.mem G_nodes v.expanded; gfilter_active = false }
   in
-  (* cljs :current-page group — same block search as nodes, then
-     filtered client-side to items on the current page *)
   let current_page_g () =
-    let items =
-      List.filter_map
-        (fun (it : item) ->
-          if it.ibadge <> No_badge then Some { it with gid = G_current_page }
-          else None)
-        rows
-    in
+    let loaded = v.filter = Some G_current_page in
+    let items = if loaded then List.map (fun (it : item) ->
+      { it with gid = G_current_page;
+        ibadge = (match it.act with Open_page _ -> Text_badge | _ -> Header_badge) }) rows else [] in
     { gid = G_current_page
     ; gtitle = svs.Svs.i18n "cmdk.group/current-page"
-      (* cljs laziness: current-page results load only via the filter row
-         or group expansion — a normal search leaves the group empty so it
-         renders nothing *)
-    ; gitems =
-        (if v.filter = Some G_current_page
-            || List.mem G_current_page v.expanded
-         then items else [])
-    ; gtotal = max total (List.length items)
+    ; gitems = items
+    ; gtotal = if loaded then max total (List.length items) else 0
     ; glimit = current_page_limit v.expanded
     ; gexpanded = List.mem G_current_page v.expanded
     ; gfilter_active = v.filter = Some G_current_page }
@@ -760,7 +792,10 @@ let group_order ?(source_rows = []) v q rows total =
     ; gfilter_active = false }
   in
   let filters_g () =
+    let _, suffix = filter_query_parts q in
     let items = filter_items () in
+    let items = if suffix = "" then items
+      else svs.Svs.fuzzy_search ~extract:(fun (it : item) -> it.ititle) ~limit:100 items suffix in
     { gid = G_filters; gtitle = svs.Svs.i18n "cmdk.group/filters"
     ; gitems = items; gtotal = List.length items
     ; glimit = 5; gexpanded = List.mem G_filters v.expanded
@@ -783,6 +818,16 @@ let group_order ?(source_rows = []) v q rows total =
   let cp () =
     if current_page_uuid () <> None then [ current_page_g () ] else []
   in
+  let codes_g () =
+    { gid = G_codes; gtitle = svs.Svs.i18n "cmdk.group/codes"
+    ; gitems = List.map (fun (it : item) -> {it with gid = G_codes}) rows
+    ; gtotal = max total (List.length rows); glimit = 5
+    ; gexpanded = List.mem G_codes v.expanded; gfilter_active = true } in
+  let themes_g () =
+    let items = theme_items svs q in
+    { gid = G_themes; gtitle = svs.Svs.i18n "cmdk.group/themes"
+    ; gitems = items; gtotal = List.length items; glimit = 5
+    ; gexpanded = List.mem G_themes v.expanded; gfilter_active = true } in
   let starts_slash =
     String.length q > 0 && String.get q 0 = '/'
   in
@@ -798,7 +843,9 @@ let group_order ?(source_rows = []) v q rows total =
         | G_current_page -> [ current_page_g () ]
         | G_commands -> [ commands_g () ]
         | G_files -> [ files_g () ]
-        | _ -> [] (* codes/themes have no backend yet *)
+        | G_codes -> [ codes_g () ]
+        | G_themes -> [ themes_g () ]
+        | G_create | G_recently_updated | G_filters -> []
       in
       (* cljs filtered order puts the Create row after the group *)
       only @ Option.to_list (create_g ())
@@ -870,10 +917,33 @@ let refresh ?(clear = true) st =
   | Some repo ->
       ignore
         ((let* (source_rows, total) =
-           search_rows st.svs repo v.input v.move_mode
-             (match v.filter with
-              | Some G_current_page -> current_page_limit v.expanded
-              | _ -> nodes_limit v.move_mode v.expanded)
+           if String.trim v.input = "" then Ui_task.resolve ([], 0)
+           else match v.filter with
+           | Some (G_commands | G_files | G_filters | G_themes) -> Ui_task.resolve ([], 0)
+           | Some G_current_page ->
+               (match st.svs.Svs.route_page_uuid () with
+                | None -> Ui_task.resolve ([], 0)
+                | Some uuid ->
+                    let* node = st.svs.Svs.invoke "thread-api/pull"
+                      [Wire.String repo;
+                       Wire.Array [Wire.kw "block/uuid";
+                         wmap ["block/page", Wire.Array [Wire.kw "block/uuid"]]];
+                       Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]] in
+                    let page = Option.bind (Wire.get node "block/page") (fun page ->
+                      match Wire.as_uuid page with
+                      | Some _ as uuid -> uuid
+                      | None -> Wire.map_get_uuid page "block/uuid") in
+                    let page = match page with
+                      | Some _ -> page
+                      | None -> Wire.map_get_uuid node "block/uuid" in
+                    match page with
+                    | None -> Ui_task.resolve ([], 0)
+                    | Some page ->
+                        if Ui_effect.is_current st.req gen && st.svs.Svs.repo () = Some repo then
+                          search_rows ~page st.svs repo v.input false (current_page_limit v.expanded)
+                        else Ui_task.resolve ([], 0))
+           | Some G_codes -> search_rows ~code_only:true st.svs repo v.input false 20
+           | _ -> search_rows st.svs repo v.input v.move_mode (nodes_limit v.move_mode v.expanded)
          in
          let rows = List.mapi (fun i row -> item_of_row row i) source_rows in
          if Ui_effect.is_current st.req gen && st.svs.Svs.repo () = Some repo then
@@ -973,13 +1043,21 @@ let load_recents st repo =
      Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun _ -> Ui_task.resolve ()))
 
 let on_input st q =
+  let gen = Ui_effect.issue st.req in
   set_in st (fun v ->
-      upsert_create ~source_rows:!(st.source_rows) { v with input = q; edited = true });
-  (* search fires on the keystroke itself — a debounce delays the last
-     keystroke's results past the worker roundtrip it should overlap.
-     request-stamped responses keep stale answers from overwriting
-     newer input *)
-  refresh ~clear:false st
+      upsert_create ~source_rows:!(st.source_rows)
+        { v with input = q; edited = true; hl = -1; mouse = false });
+  st.svs.Svs.reset_search_scroll ();
+  if not !(st.composing) then
+    st.svs.Svs.set_timeout (fun () ->
+      if Ui_effect.is_current st.req gen && not !(st.composing) && (get st).open_
+      then refresh ~clear:false st) 300
+
+let on_composition st composing =
+  if (get st).open_ then (
+    st.composing := composing;
+    ignore (Ui_effect.issue st.req);
+    if not composing then on_input st (get st).input)
 
 (* -- open/close ------------------------------------------------------ *)
 
@@ -1053,6 +1131,7 @@ let load_last_search (svs : Svs.t) : (string * group_id option) option =
       with _ -> None)
 
 let open_palette ?(move = false) st =
+  st.composing := false;
   ignore (Ui_effect.issue st.req);
   ignore (Ui_effect.issue st.recents_req);
   (* publish the reset view before opening: the mount reads derived signals
@@ -1090,6 +1169,7 @@ let open_palette ?(move = false) st =
   svs.Svs.focus_input_init q
 
 let close st =
+  st.composing := false;
   ignore (Ui_effect.issue st.req);
   ignore (Ui_effect.issue st.recents_req);
   let v = get st in
@@ -1145,8 +1225,11 @@ let move_hl st dir =
   let n = Array.length xs in
   if n > 0 then
     let i =
-      if v.hl < 0 then (if dir > 0 then 0 else n - 1)
-      else ((v.hl + dir) mod n + n) mod n
+      let base =
+        if v.hl >= 0 then v.hl
+        else if not v.mouse then 0
+        else if dir > 0 then -1 else 0 in
+      ((base + dir) mod n + n) mod n
     in
     set_in st (fun v -> { v with hl = i; mouse = false });
     st.svs.Svs.scroll_row_index i
@@ -1165,7 +1248,7 @@ let toggle_expand st gid expand =
 
 let toast st msg cls = st.svs.Svs.toast msg cls
 
-let goto_page st _repo uuid =
+let goto_page ?anchor st _repo uuid =
   (* navigation intent: commit and close any in-progress edit so the old
      page stops rendering an editor during the async load gap (e2e
      waits on .editor-visible and must not see the stale one) *)
@@ -1176,7 +1259,75 @@ let goto_page st _repo uuid =
   (* one navigation path: set the hash and let the router's hashchange
      resolve drive Navigate_to + load (a manual prefetch here double-
      fetched and bypassed nav_hash's ?graph-id) *)
-  Ui_services.nav_set_hash (st.svs.Svs.nav_hash ("#/page/" ^ uuid))
+  let hash = st.svs.Svs.nav_hash ("#/page/" ^ uuid) in
+  let hash = match anchor with
+    | Some anchor -> hash ^ (if String.contains hash '?' then "&" else "?")
+        ^ "anchor=" ^ anchor
+    | None -> hash in
+  if Ui_services.nav_hash () = hash then
+    Option.iter st.svs.Svs.jump_to_anchor anchor
+  else Ui_services.nav_set_hash hash
+
+type block_reveal =
+  { target_uuid : string
+  ; page_uuid : string option
+  ; zoom : bool
+  }
+
+let page_uuid_of_block block =
+  Option.bind (Wire.get block "block/page") (fun page ->
+    match Wire.as_uuid page with
+    | Some _ as uuid -> uuid
+    | None -> Wire.map_get_uuid page "block/uuid")
+
+let resolve_block_reveal st repo uuid =
+  let invoke name args = st.svs.Svs.invoke name (Wire.String repo :: args) in
+  let* response = invoke "thread-api/get-blocks"
+    [Wire.Array [wmap ["id", Wire.Uuid uuid;
+      "opts", wmap ["children?", Wire.Bool false]]]] in
+  match Wire.elems response with
+  | [pair] -> (match Wire.block_of_pair pair with
+    | Some (Wire.Map _ as original) ->
+        let id = match Wire.get original "db/id" with
+          | Some id -> id
+          | None -> failwith "CmdK block is missing db/id" in
+        let* parents = invoke "thread-api/get-block-parents" [id; Wire.Int 1000] in
+        let parents = Wire.elems parents in
+        (* Parents are root-first. Only ancestors participate in the
+           property-origin redirect; their original chain decides zoom. *)
+        let origin_parent = List.find_map (fun parent ->
+          match Wire.get parent "logseq.property/created-from-property" with
+          | None | Some Wire.Nil | Some (Wire.Bool false) -> None
+          | Some _ -> (match Wire.get parent "block/parent" with
+            | None | Some Wire.Nil -> None
+            | Some _ as parent -> parent)) parents in
+        let* origin = match origin_parent with
+          | None -> Ui_task.resolve Wire.Nil
+          | Some parent when Wire.map_get_uuid parent "block/uuid" <> None ->
+              Ui_task.resolve parent
+          | Some parent ->
+              let id = match Wire.get parent "db/id" with
+                | Some id -> id
+                | None -> failwith "CmdK property-origin parent is missing db/id" in
+              invoke "thread-api/pull"
+                [Wire.Array [Wire.kw "db/id"; Wire.kw "block/uuid";
+                  wmap ["block/page", Wire.Array [Wire.kw "block/uuid"]]]; id] in
+        let target = if origin = Wire.Nil then original else origin in
+        let target_uuid = match Wire.map_get_uuid target "block/uuid" with
+          | Some uuid -> uuid
+          | None -> failwith "CmdK reveal target is missing block/uuid" in
+        let* page_uuid = match page_uuid_of_block target with
+          | Some _ as page -> Ui_task.resolve page
+          | None ->
+              let* block = invoke "thread-api/pull"
+                [Wire.Array [wmap ["block/page", Wire.Array [Wire.kw "block/uuid"]]];
+                 Wire.Array [Wire.kw "block/uuid"; Wire.Uuid target_uuid]] in
+              Ui_task.resolve (page_uuid_of_block block) in
+        let zoom = List.exists (fun parent ->
+          Wire.get parent "block/collapsed?" = Some (Wire.Bool true)) parents in
+        Ui_task.resolve (Some {target_uuid; page_uuid; zoom})
+    | _ -> Ui_task.resolve None)
+  | _ -> Ui_task.resolve None
 
 let goto_today_journal st repo =
   let day = st.svs.Svs.today_journal_day () in
@@ -1456,26 +1607,31 @@ let rec run_item st it =
        close st;
        Option.iter (fun repo -> goto_page st repo uuid) repo
    | Open_block uuid ->
-       close st;
        Option.iter
          (fun repo ->
+           let gen = Ui_effect.issue st.req in
            ignore
-             (let* w =
-               st.svs.Svs.invoke "thread-api/get-block-page-info"
-                 [ Wire.String repo
-                 ; Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ] ]
-             in
-             match Wire.map_get_uuid w "block/uuid" with
-             | Some puuid ->
-                 goto_page st repo puuid;
-                 Ui_task.resolve ()
-             | None -> Ui_task.resolve ()))
+             (let* reveal = resolve_block_reveal st repo uuid in
+              if Ui_effect.is_current st.req gen && st.svs.Svs.repo () = Some repo then
+                Option.iter (fun reveal ->
+                  if reveal.zoom then goto_page st repo reveal.target_uuid
+                  else Option.iter (fun page ->
+                    goto_page ~anchor:("ls-block-" ^ reveal.target_uuid) st repo page)
+                    reveal.page_uuid;
+                  close st) reveal;
+              Ui_task.resolve ()))
          repo
    | Set_filter gid ->
+       let input, _ = filter_query_parts v.input in
        set_in st (fun v ->
-           { v with filter = Some gid; input = "" });
-       st.svs.Svs.set_input_value "";
+           { v with filter = Some gid; input; hl = -1; mouse = false });
+       st.svs.Svs.set_input_value input;
+       st.svs.Svs.focus_search_input ();
+       st.svs.Svs.reset_search_scroll ();
        refresh st
+   | Select_theme theme ->
+       st.svs.Svs.select_theme theme;
+       close st
    | Run cid -> run_with_lifecycle st repo cid
    | Open_file path ->
        close st;
@@ -1717,11 +1873,11 @@ and run_with_lifecycle st repo (cid : string) =
 
 let run_highlighted st =
   let v = get st in
-  match item_at v v.hl with Some it -> run_item st it | None -> ()
+  match highlighted_item v with Some it -> run_item st it | None -> ()
 
 let copy_highlighted_ref st =
   let v = get st in
-  match item_at v v.hl with
+  match highlighted_item v with
   | Some { act = Open_page uuid | Open_block uuid; _ } ->
       Ui_services.clipboard_copy ("[[" ^ uuid ^ "]]");
       close st;
@@ -1734,7 +1890,7 @@ let open_current_item_link st =
     | Some link -> Ui_services.env_open_url link
     | None -> warn key in
   let v = get st in
-  match st.svs.Svs.repo (), item_at v v.hl with
+  match st.svs.Svs.repo (), highlighted_item v with
   | Some repo, Some { act = Open_page uuid; _ } ->
       ignore (let* result = st.svs.Svs.invoke "thread-api/get-first-url-property-value"
         [Wire.String repo; Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]] in
@@ -1776,7 +1932,7 @@ let dispatch_id (cid : string) =
    (cljs cmdk on-shift-enter -> ui/open-in-right-sidebar) *)
 let run_highlighted_sidebar st =
   let v = get st in
-  match item_at v v.hl with
+  match highlighted_item v with
   | Some it -> (
       match it.act with
       | Open_page uuid | Open_block uuid ->
@@ -1788,7 +1944,7 @@ let run_highlighted_sidebar st =
 (* group of the currently highlighted item (for mod+down expand) *)
 let hl_group st =
   let v = get st in
-  Option.map (fun (it : item) -> it.gid) (item_at v v.hl)
+  Option.map (fun (it : item) -> it.gid) (highlighted_item v)
 
 (* open the current palette without a handle — global shortcuts
    (mod+k, mod+shift+p) fire before any caller holds st *)

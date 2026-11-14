@@ -1557,6 +1557,146 @@ let test_cmdk_view () =
     && List.map (fun (it : Cmdk_state.item) -> it.gid) (List.hd v3.groups).gitems
        = [ Cmdk_state.G_nodes; Cmdk_state.G_create; Cmdk_state.G_nodes ])
 
+let test_cmdk_filter_dispatch ~finish =
+  let module C = Cmdk_state in
+  let previous_services = !C.services_ref in
+  let timers = ref [] and searches = ref [] in
+  let scheduler = Signal.scheduler () in
+  let settle f = ignore (Ui_services.timers_timeout f 0) in
+  let row uuid = wmap ["block/uuid", Wire.Uuid uuid;
+    "block/title", Wire.String uuid; "page?", Wire.Bool false] in
+  let services = { (Cmdk_host.services ()) with
+    repo = (fun () -> Some "cmdk-fixture");
+    route_is_page = (fun () -> true); route_page_uuid = (fun () -> Some "zoom-b");
+    set_input_value = (fun _ -> ()); focus_search_input = (fun () -> ());
+    set_timeout = (fun f ms -> timers := (ms, f) :: !timers);
+    scroll_row_index = (fun _ -> ());
+    reset_search_scroll = (fun () -> ());
+    invoke = (fun name args ->
+      let answer = match name, args with
+        | "thread-api/pull", _ ->
+            wmap ["block/uuid", Wire.Uuid "zoom-b";
+              "block/page", wmap ["block/uuid", Wire.Uuid "page-p"]]
+        | "thread-api/search-blocks", [_; Wire.String q; opts] ->
+            searches := (q, opts) :: !searches;
+            let uuid, total =
+              if Wire.get opts "page" = Some (Wire.String "page-p") then "page-hit", 23
+              else if Wire.get opts "code-only?" = Some (Wire.Bool true) then "code-hit", 31
+              else "global-hit", 100 in
+            wmap ["items", Wire.Array [row uuid]; "matched-count", Wire.Int total]
+        | _ -> Wire.Array [] in
+      Ui_task.resolve answer) } in
+      C.services_ref := Some services;
+      let st = C.make ~register:false scheduler services in
+      let dispatch_filter gid q =
+        C.set st { C.initial_view with open_ = true; input = q };
+        C.run_item st (cmdk_item ~act:(C.Set_filter gid) "filter");
+        if gid = C.G_current_page || gid = C.G_codes then (
+          C.on_input st "needle";
+          List.iter (fun (ms, f) -> if ms = 300 then f ()) (List.rev !timers)) in
+      dispatch_filter C.G_current_page "";
+      settle (fun () ->
+      check "Current-page dispatch resolves a zoom root to its page and retains scoped count"
+        (List.exists (fun (g : C.group) -> g.gid = C.G_current_page && g.gtotal = 23
+           && List.exists (fun (it : C.item) -> it.act = C.Open_block "page-hit") g.gitems)
+           (C.get st).groups);
+      dispatch_filter C.G_codes "";
+      settle (fun () ->
+      check "Codes dispatch loads code results with an independent matched count"
+        (List.exists (fun (g : C.group) -> g.gid = C.G_codes && g.gtotal = 31
+           && List.exists (fun (it : C.item) -> it.act = C.Open_block "code-hit") g.gitems)
+           (C.get st).groups);
+      dispatch_filter C.G_commands "toggle";
+      eqs "Plain-query filter dispatch retains the complete input" "toggle" (C.get st).input;
+      dispatch_filter C.G_commands "toggle /comm";
+      eqs "Slash filter dispatch retains the query prefix" "toggle" (C.get st).input;
+      let filters = C.group_order {C.initial_view with edited = true} "toggle /comm" [] 0 in
+      check "Slash suffix narrows filter choices"
+        (match List.find_opt (fun (g : C.group) -> g.gid = C.G_filters) filters with
+         | Some g -> List.map (fun (it : C.item) -> it.act) g.gitems = [C.Set_filter C.G_commands]
+         | None -> false);
+      dispatch_filter C.G_themes "";
+      settle (fun () ->
+      check "Themes dispatch includes the default theme"
+        (List.exists (fun (g : C.group) -> g.gid = C.G_themes
+           && List.exists (fun (it : C.item) -> it.ititle = services.i18n "theme/logseq-default") g.gitems)
+           (C.get st).groups);
+      C.set st {C.initial_view with open_ = true; hl = 3; mouse = true};
+      searches := []; timers := [];
+      C.on_input st "first"; C.on_input st "last";
+      check "Input dispatch resets navigation and defers search"
+        ((C.get st).hl = -1 && not (C.get st).mouse && !searches = []);
+      List.iter (fun (ms, f) -> if ms = 300 then f ()) (List.rev !timers);
+      settle (fun () ->
+      check "Only the latest debounced input produces results"
+        (List.map fst !searches = ["last"] && (C.get st).input = "last");
+      C.services_ref := previous_services;
+      Signal.stabilize scheduler;
+      finish ()))) )
+
+let test_cmdk_block_reveal ~finish =
+  let module C = Cmdk_state in
+  let previous_services = !C.services_ref in
+  let previous_hash = Ui_services.nav_hash () in
+  let scheduler = Signal.scheduler () in
+  let original = wmap
+    [ "db/id", Wire.Int 10; "block/uuid", Wire.Uuid "block-b"
+    ; "block/page", wmap ["block/uuid", Wire.Uuid "page-p"]
+    ; "logseq.property/created-from-property", Wire.Int 88
+    ; "block/parent", wmap ["block/uuid", Wire.Uuid "wrong-self"] ] in
+  let cases =
+    [ "Original block gets its page and anchor", false, false,
+        "#/page/page-p?graph-id=graph-g&anchor=ls-block-block-b"
+    ; "Property-origin reveal retains the resolved target's own page", true, false,
+        "#/page/page-q?graph-id=graph-g&anchor=ls-block-owner-o"
+    ; "Original collapsed ancestors zoom the resolved target", true, true,
+        "#/page/owner-o?graph-id=graph-g" ] in
+  let rec run = function
+    | [] ->
+        C.services_ref := previous_services;
+        Ui_services.nav_set_hash previous_hash;
+        Signal.stabilize scheduler;
+        finish ()
+    | (label, property_origin, collapsed, expected) :: rest ->
+        Ui_services.nav_set_hash "#/";
+        let parents =
+          if property_origin then
+            [ wmap ["db/id", Wire.Int 20;
+                "logseq.property/created-from-property", Wire.Int 88;
+                "block/parent", wmap ["db/id", Wire.Int 200]]
+            ; wmap ["db/id", Wire.Int 21;
+                "logseq.property/created-from-property", Wire.Int 89;
+                "block/parent", wmap ["block/uuid", Wire.Uuid "wrong-inner"];
+                "block/collapsed?", Wire.Bool collapsed] ]
+          else [] in
+        let services = { (Cmdk_host.services ()) with
+          repo = (fun () -> Some "cmdk-fixture");
+          exit_edit = (fun () -> ()); mark_nav = (fun () -> ());
+          nav_hash = (fun hash -> hash ^ "?graph-id=graph-g");
+          invoke = (fun name args ->
+            let answer = match name, args with
+              | "thread-api/get-blocks", _ ->
+                  Wire.Array [wmap ["block", original]]
+              | "thread-api/get-block-parents", [_; Wire.Int 10; Wire.Int 1000] ->
+                  Wire.Array parents
+              | "thread-api/pull", [_; _; Wire.Int 200] ->
+                  wmap ["db/id", Wire.Int 200; "block/uuid", Wire.Uuid "owner-o"]
+              | "thread-api/pull", [_; _; Wire.Array [Wire.Keyword "block/uuid"; Wire.Uuid "owner-o"]] ->
+                  wmap ["block/page", Wire.Uuid "page-q"]
+              | "thread-api/get-block-page-info", _ ->
+                  wmap ["block/uuid", Wire.Uuid "page-p"]
+              | _ -> Wire.Nil in
+            Ui_task.resolve answer) } in
+        C.services_ref := Some services;
+        let st = C.make ~register:false scheduler services in
+        C.set st {C.initial_view with open_ = true; persist = false};
+        C.run_item st (cmdk_item ~act:(C.Open_block "block-b") "block");
+        ignore (Ui_services.timers_timeout (fun () ->
+          check label (Ui_services.nav_hash () = expected);
+          run rest) 0)
+  in
+  run cases
+
 let test_cmdk_groups () =
   let gids v q rows total =
     List.map
@@ -4719,6 +4859,8 @@ let () =
      the summary + exit must wait for that stage. The parity suite runs
      first: it mounts its own app session and cleans up on its own drain
      stage, so it does not depend on the shared drive mount. *)
+  test_cmdk_filter_dispatch ~finish:(fun () ->
+  test_cmdk_block_reveal ~finish:(fun () ->
   Parity_drive_test.run ~finish:(fun () ->
   Test_drive.run ~finish:(fun () ->
       Handbook_scenarios.run ~check;
@@ -4729,4 +4871,4 @@ let () =
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)
-          test_editor_cmds ()))))))
+          test_editor_cmds ()))))))))
