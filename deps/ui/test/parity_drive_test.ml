@@ -656,6 +656,10 @@ let test_cm_entries st =
   P.close_cm st;
   (* cljs custom-context-menu-content: no open-in-sidebar, adds copy
      and cycle-todo for the multi selection *)
+  stage_main_session [ block "b1" "first"; block "b2" "second" ];
+  Editor_state.set (fun state ->
+    { state with selection_scope = "main"
+    ; selected = Editor_state.String_set.of_list [ "b1"; "b2" ] });
   P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:true;
   (match cm_of st with
    | Some cm ->

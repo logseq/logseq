@@ -2791,6 +2791,22 @@ let icon_of_cmd = function
   | "dev/show-block-ast" -> "code"
   | _ -> ""
 
+let selection_can_comment ~scope =
+  Editor_state.selection_scope () = scope
+  && (let selected = Editor_state.selected () in
+      let rec any_target ~parent = function
+        | [] -> false
+        | (b : Model.block) :: rest ->
+            (Option.fold ~none:false
+               ~some:(fun uuid -> Editor_state.String_set.mem uuid selected)
+               b.block_uuid
+             && Comments_ops.comment_target_block_p ~parent b)
+            || any_target ~parent:(Some b) (Editor_state.children_of b)
+            || any_target ~parent rest
+      in
+      any_target ~parent:None (Editor_state.blocks_in_scope scope))
+;;
+
 let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
@@ -2798,14 +2814,20 @@ let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
       if multi then multi_entries ?allow_cut ?allow_delete ()
       else block_entries () @ dev_entries ()
     in
-    if flashcards_enabled () then base
+    let available =
+      if not multi || selection_can_comment ~scope then base
+      else List.filter
+          (function Ci_item (_, _, "add-comment") -> false | _ -> true)
+          base
+    in
+    if flashcards_enabled () then available
     else
       List.filter
         (fun e ->
           match e with
           | Ci_item (_, _, action) -> action <> "make-flashcard"
           | _ -> true)
-        base
+        available
   in
   close_ac t;
   let flip = anchor_above atop abot in
