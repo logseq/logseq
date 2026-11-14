@@ -1189,6 +1189,60 @@ let test_drop_top_owner (h : host) =
       "graph changed", (fun () ->
           h.restore { (h.snapshot ()) with Model.repo = Some "different-graph" }), false ]
 
+let test_zoom_out_origin (h : host) =
+  let saved = h.snapshot () in
+  let saved_hash = Ui_services.nav_hash () in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (name, change_origin, accept) :: rest ->
+        reset_editor ();
+        ignore (A.consume_pending_zoom ());
+        let child = Test_check.block "zoom-child" "child" in
+        stage_page h [ Test_check.block ~children:[ child ] "zoom-root" "root" ];
+        h.restore { (h.snapshot ()) with Model.route = Model.Block_zoom "zoom-root" };
+        S.set (fun st -> { st with S.editing = Some
+          (S.mk_editing ~uuid:"zoom-child" ~buffer:"child" ~scope:"zoom-zoom-root"
+             ~base:"child" ()) });
+        Ui_services.nav_replace_hash (Runtime.nav_hash "#/page/zoom-root");
+        let initial_hash = Ui_services.nav_hash () in
+        let parent_hash = Runtime.nav_hash "#/page/zoom-parent" in
+        install_worker ~repo:h.repo h;
+        let release = ref (fun () -> ()) in
+        let parent = Js.Promise.make (fun ~resolve ~reject:_ ->
+            release := (fun () -> resolve
+                (W.Map [ W.Keyword "block/uuid", W.Uuid "zoom-parent" ]) [@u])) in
+        let worker = Option.get !Runtime.worker in
+        Runtime.worker := Some { worker with Worker_client.invoke_fn =
+          (fun method_name args ->
+            if method_name = "thread-api/get-block-parent" then parent
+            else worker.Worker_client.invoke_fn method_name args) };
+        A.zoom_out ();
+        let* () = h.wait_ms 25 in
+        check ("zoom-out waits for its parent: " ^ name)
+          (Ui_services.nav_hash () = initial_hash);
+        change_origin ();
+        let retained_hash = Ui_services.nav_hash () in
+        !release ();
+        let* () = h.wait_ms 25 in
+        check ("zoom-out reply belongs to its origin: " ^ name)
+          (if accept then Ui_services.nav_hash () = parent_hash
+           else Ui_services.nav_hash () = retained_hash
+                && A.consume_pending_zoom () = None);
+        ignore (A.consume_pending_zoom ());
+        reset_editor ();
+        Ui_services.nav_replace_hash saved_hash;
+        h.restore saved;
+        run rest
+  in
+  run
+    [ "current", (fun () -> ()), true;
+      "route changed", (fun () ->
+          h.restore { (h.snapshot ()) with Model.route = Model.Page "elsewhere" };
+          Ui_services.nav_replace_hash (Runtime.nav_hash "#/page/elsewhere")), false;
+      "graph changed", (fun () ->
+          h.restore { (h.snapshot ()) with Model.repo = Some "different-graph" };
+          Ui_services.nav_replace_hash "#/page/different-graph-destination"), false ]
+
 let test_append_owner (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -1256,6 +1310,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_scoped_indent_target h in
   let* () = test_zoom_structure_boundary h in
   let* () = test_drop_top_owner h in
+  let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
   h.restore saved;
   Js.Promise.resolve ()

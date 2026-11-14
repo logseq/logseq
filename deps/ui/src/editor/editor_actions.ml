@@ -3105,23 +3105,25 @@ let zoom_out () =
   match S.editing_uuid () with
   | Some edit_u -> (
       match Runtime.route () with
-      | Model.Block_zoom uuid ->
-          pending_zoom := Some edit_u;
-          ignore
-            (let* p =
-              Runtime.invoke2 "thread-api/get-block-parent"
-                (Wire.String
-                   (Option.value (Runtime.model ()).Model.repo ~default:""))
-                (Wire.Uuid uuid)
-            in
-            (match Wire.map_get_uuid p "block/uuid" with
-             | Some pu ->
-                 (* cljs zoom-out! redirects to-page! — /page/<uuid>
-                    whether the parent is a page or another block *)
-                 Ui_services.nav_set_hash
-                   (Runtime.nav_hash ("#/page/" ^ pu))
-             | None -> ());
-            Js.Promise.resolve ())
+      | Model.Block_zoom uuid -> (
+          match Runtime.capture_reload_origin () with
+          | None -> ()
+          | Some origin ->
+              ignore
+                (let* p =
+                   Runtime.invoke2 "thread-api/get-block-parent"
+                     (Wire.String origin.Runtime.reload_repo) (Wire.Uuid uuid)
+                 in
+                 if Runtime.reload_origin_current origin then
+                   (match Wire.map_get_uuid p "block/uuid" with
+                    | Some pu ->
+                        (* Publish the editor handoff only with its owned
+                           navigation; unrelated routes must not consume it. *)
+                        pending_zoom := Some edit_u;
+                        Ui_services.nav_set_hash
+                          (Runtime.nav_hash ("#/page/" ^ pu))
+                    | None -> ());
+                 Js.Promise.resolve ()))
       | _ -> ())
   | None -> Ui_services.nav_back ()
 
