@@ -1,0 +1,48 @@
+# Logseq MCP server for CasaOS.
+#
+# Runs a headless Logseq CLI that stays synced with the self-hosted Logseq Sync
+# server and exposes it as an MCP server at http://<host>:8080/mcp.
+# Put nginx / Tailscale in front of port 8080 as usual.
+name: logseq-mcp
+
+services:
+  logseq-mcp:
+    image: ghcr.io/ssamdav/logseq-selfhost-mcp:latest
+    container_name: logseq-mcp
+    restart: unless-stopped
+    # Give the db-worker-node processes time to close their SQLite files.
+    stop_grace_period: 30s
+    ports:
+      - "8080:8080"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Self-hosted sync server. host.docker.internal reaches ports published on
+      # the CasaOS host; use the service name instead if both share a network.
+      LOGSEQ_SYNC_URL: http://host.docker.internal:8787
+      # Logseq account (email + password login; MFA/social login unsupported).
+      LOGSEQ_USERNAME: ${LOGSEQ_USERNAME}
+      LOGSEQ_PASSWORD: ${LOGSEQ_PASSWORD}
+      # Settings -> Encryption in the Logseq app. Only needed for E2EE graphs.
+      LOGSEQ_E2EE_PASSWORD: ${LOGSEQ_E2EE_PASSWORD}
+      # Optional: comma-separated graphs to open on startup. Graphs can also be
+      # opened at any time with the open_graph MCP tool.
+      LOGSEQ_GRAPHS: ""
+      # Optional bearer token for /mcp. Leave empty when only reachable via Tailscale.
+      MCP_TOKEN: ""
+    volumes:
+      - /DATA/AppData/logseq-mcp:/data
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: logseq-mcp
+  author: SSamDav
+  category: Productivity
+  description:
+    en_us: Headless Logseq CLI synced with the self-hosted Logseq Sync server, exposed as an MCP server.
+  title:
+    en_us: Logseq MCP
+  port_map: "8080"
+  index: /health
