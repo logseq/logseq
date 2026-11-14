@@ -18,6 +18,7 @@ The user approved SDK/application wiring, both existing Dune edits and DB query
 capability on 2026-11-14, then explicitly deferred DB evaluator budgets and actual
 query cancellation. This delivery includes no evaluator, protected worker
 interface, dependency-version or mobile/Swift/Kotlin host changes.
+An additional QuickJS Dune link-flag fix was approved for Apple embedding.
 
 ## SDK and bundle contract
 
@@ -81,9 +82,12 @@ through `Plugin_host.load_read_plugin` / `unload_read_plugin`. It uses
 an empty program without command authority. Failure/cancellation/staleness
 retires the invocation/runtime; close is idempotent.
 
-Only the approved `deps/ui/native/dune` and `deps/ui/test/quickjs/dune` files
-change for application copies/library linkage and one integration executable.
-No additional Dune files or cross-project bundle-generation rules are added.
+The approved `deps/ui/native/dune` and `deps/ui/test/quickjs/dune` edits provide
+application copies/library linkage and one integration executable. A third
+approved edit in `deps/ui/quickjs/dune` omits explicit `-lm` on macOS, where math
+symbols resolve through libSystem at the final host link, and retains it on
+other platforms. No new Dune files or cross-project bundle-generation rules
+are added.
 
 `sh deps/ui/scripts/check-quickjs-sdk.sh` builds native OCaml and Melange,
 runs the existing native bridge tests, builds the SDK fixture and executes one
