@@ -160,7 +160,10 @@ let rec wire_of_json (j : Json.t) : Wire.t =
   | Json.Bool b -> Wire.Bool b
   | Json.String s -> Wire.String s
   | Json.Number f ->
-      if Float.is_integer f then Wire.Int (int_of_float f)
+      if Float.is_integer f && Float.abs f <= 9007199254740991. then
+        if f >= Int32.to_float Int32.min_int && f <= Int32.to_float Int32.max_int then
+          Wire.Int (int_of_float f)
+        else Wire.Int64 (Int64.of_float f)
       else Wire.Float f
   | Json.Array xs ->
       Wire.Array (List.map wire_of_json (Array.to_list xs))

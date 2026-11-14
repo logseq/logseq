@@ -71,7 +71,15 @@ const connected = logseq.ready(async (info) => {
     'quickjs sdk probe'
   )
   check(JSON.stringify(rows) === JSON.stringify([[uuid]]), 'graph query')
-  const inputs = [null, false, 2, 'unicode \u2603', { 'sample-key': [1, null] }]
+  const inputs = [
+    null,
+    false,
+    2,
+    'unicode \u2603',
+    {
+      'sample-key': [1, null, 1e20, -1e20, 1e16, 9007199254740991, 2147483648],
+    },
+  ]
   const roundtrip = await logseq.DB.datascriptQuery(
     '[:find ?a ?b ?c ?d ?e :in $ ?a ?b ?c ?d ?e]',
     ...inputs
