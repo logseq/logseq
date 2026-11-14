@@ -38,6 +38,7 @@ jobs:
             pnpm-lock.yaml
             deps/db-worker/pnpm-lock.yaml
             deps/ui/pnpm-lock.yaml
+            libs/pnpm-lock.yaml
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -87,11 +88,12 @@ jobs:
             _opam
           key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
-      - name: JS deps (db-worker, ui)
+      - name: JS deps (db-worker, ui, SDK)
         # package-lock.json is out of sync with package.json; pnpm lock works
         run: |
           pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
           pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
+          pnpm --dir libs install --ignore-workspace --frozen-lockfile
 
       - name: Build deps/db-worker
         working-directory: deps/db-worker
@@ -117,6 +119,11 @@ jobs:
 
       - name: db-worker bundle
         run: pnpm db-worker:build
+
+      - name: QuickJS SDK contract
+        run: |
+          (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
+          sh deps/ui/scripts/check-quickjs-sdk.sh
 
       - name: Web bundle (vite)
         run: pnpm ui:build
@@ -151,6 +158,7 @@ jobs:
             pnpm-lock.yaml
             deps/db-worker/pnpm-lock.yaml
             deps/ui/pnpm-lock.yaml
+            libs/pnpm-lock.yaml
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
@@ -200,10 +208,16 @@ jobs:
             _opam
           key: ${{ steps.opam-cache.outputs.cache-primary-key }}
 
-      - name: JS deps (db-worker, ui)
+      - name: JS deps (db-worker, ui, SDK)
         run: |
           pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
           pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
+          pnpm --dir libs install --ignore-workspace --frozen-lockfile
+
+      - name: QuickJS SDK contract
+        run: |
+          (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
+          sh deps/ui/scripts/check-quickjs-sdk.sh
 
       - name: Build Apple host
         run: bash deps/ui/apple/build.sh

@@ -1,4 +1,11 @@
 (test
  (name bridge_test)
+ (modules bridge_test)
  (modes native)
  (libraries logseq_plugin_quickjs logseq_ui_shared logseq_ui_contracts unix))
+
+(executable
+ (name sdk_read_probe)
+ (modules sdk_read_probe)
+ (modes native)
+ (libraries logseq_ui_native unix threads.posix))

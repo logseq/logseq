@@ -1,11 +1,33 @@
 type plugin_id = string
 type callback_id = { owner : int }
 type editing_context = { block_uuid : string; text : string }
+type entity = Json.t
+type page_result = Json.t
+type query = { text : string; inputs : Json.t array }
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type program = action list
-type capability = Editor_read | Editor_command
-type request = Get_editing_context
-type reply = Editing_context of editing_context
+type identity = Entity_id of int | Uuid of string | Page_name of string
+type log_level = Log_debug | Log_info | Log_warn | Log_error
+type capability = Editor_read | Editor_command | Graph_read | Db_query
+type request =
+  | Get_editing_context
+  | Get_plugin_info
+  | Get_editing_state
+  | Get_current_block
+  | Get_current_page
+  | Get_block of identity
+  | Get_page of identity
+  | Datascript_query of query
+  | Log of log_level * string
+type reply =
+  | Editing_context of editing_context
+  | Plugin_info of plugin_id
+  | Editing_state of editing_context option
+  | Block of entity option
+  | Page of entity option
+  | Current_page of page_result
+  | Query_result of Json.t
+  | Logged
 type error =
   | Invalid_request
   | Unsupported
@@ -101,6 +123,7 @@ let plugin_id id =
   else Error Invalid_request
 
 let callback_id ~owner = { owner }
+let plugin_id_value id = id
 let owns_callback ~owner callback = owner = callback.owner
 
 let editing_context ~block_uuid ~text =
@@ -117,8 +140,90 @@ let editing_context ~block_uuid ~text =
   if not uuid_valid then Error Invalid_request
   else let* () = validate_value (Json.String text) in Ok { block_uuid; text }
 
-let reply_value (Editing_context context) =
+let editing_context_value context =
   Json.Object ["blockUuid", Json.String context.block_uuid; "text", Json.String context.text]
+
+let entity value =
+  let* () = validate_value value in
+  match value with
+  | Json.Object _ ->
+      (match Json.get "id" value, Json.get "uuid" value with
+      | Some (Json.Number id), Some (Json.String uuid)
+        when id >= 1. && id <= 2147483647. && Float.floor id = id ->
+          let* _ = editing_context ~block_uuid:uuid ~text:"" in
+          Ok value
+      | _ -> Error Invalid_request)
+  | _ -> Error Invalid_request
+
+let query ~text ~inputs =
+  if String.length text = 0 then Error Invalid_request
+  else
+    let* () = validate_value (Json.Array [|Json.String text; Json.Array inputs|]) in
+    Ok { text; inputs = Array.copy inputs }
+
+let page_result value =
+  let* () = validate_value value in
+  match value with
+  | Json.Null -> Ok value
+  | Json.Object fields ->
+      (match Json.get "id" value with
+       | Some _ -> entity value
+       | None ->
+           match fields, Json.get "title" value, Json.get "name" value with
+           | [_; _], Some (Json.String title), Some (Json.String name)
+             when title = name -> Ok value
+           | _ -> Error Invalid_request)
+  | _ -> Error Invalid_request
+
+let query_text query = query.text
+let query_inputs query = Array.copy query.inputs
+
+let decode_identity ~page = function
+  | Json.Number id when id >= 1. && id <= 2147483647. && Float.floor id = id ->
+      Ok (Entity_id (int_of_float id))
+  | Json.Object ["uuid", Json.String uuid] ->
+      let* _ = editing_context ~block_uuid:uuid ~text:"" in
+      Ok (Uuid uuid)
+  | Json.String text when String.length text > 0 ->
+      (match editing_context ~block_uuid:text ~text:"" with
+      | Ok _ -> Ok (Uuid text)
+      | Error _ when page -> Ok (Page_name text)
+      | Error error -> Error error)
+  | _ -> Error Invalid_request
+
+let decode_request ~operation value =
+  let* () = validate_value value in
+  match operation, value with
+  | 0, Json.Array [||] -> Ok Get_editing_context
+  | 1, Json.Array [||] -> Ok Get_plugin_info
+  | 2, Json.Array [||] -> Ok Get_editing_state
+  | 3, Json.Array [||] -> Ok Get_current_block
+  | 4, Json.Array [||] -> Ok Get_current_page
+  | 5, Json.Array [|value|] ->
+      let* identity = decode_identity ~page:false value in Ok (Get_block identity)
+  | 6, Json.Array [|value|] ->
+      let* identity = decode_identity ~page:true value in Ok (Get_page identity)
+  | 7, Json.Array [|Json.String text; Json.Array inputs|] ->
+      let* query = query ~text ~inputs in Ok (Datascript_query query)
+  | 8, Json.Array [|Json.String level; Json.String text|] ->
+      if String.length text > 8192 then Error Resource_limit
+      else
+        (match level with
+        | "debug" -> Ok (Log (Log_debug, text))
+        | "info" -> Ok (Log (Log_info, text))
+        | "warn" -> Ok (Log (Log_warn, text))
+        | "error" -> Ok (Log (Log_error, text))
+        | _ -> Error Invalid_request)
+  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8), _ -> Error Invalid_request
+  | _ -> Error Unsupported
+
+let reply_value = function
+  | Editing_context context -> editing_context_value context
+  | Plugin_info id -> Json.Object ["id", Json.String id; "runtime", Json.String "quickjs"]
+  | Editing_state (Some context) -> editing_context_value context
+  | Block (Some entity) | Page (Some entity) -> entity
+  | Editing_state None | Block None | Page None | Logged -> Json.Null
+  | Current_page value | Query_result value -> value
 
 let program actions =
   let rec loop count bytes = function

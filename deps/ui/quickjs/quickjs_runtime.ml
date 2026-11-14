@@ -1,7 +1,7 @@
 open Plugin_protocol
 
 type handle
-type event = Waiting | Host_request of int | Finished of Json.t | Failed of int
+type event = Waiting | Host_request of int * int * Json.t | Finished of Json.t | Failed of int
 external native_create : int array -> handle = "logseq_quickjs_create"
 external native_load : handle -> string -> int = "logseq_quickjs_load"
 external native_start : handle -> int = "logseq_quickjs_start"
@@ -12,6 +12,7 @@ external native_close : handle -> unit = "logseq_quickjs_close"
 
 type call = {
   invocation : Plugin_broker.invocation;
+  read_only : bool;
   resolve : (program, error) result -> unit;
   mutable jobs : unit Ui_task.t list;
 }
@@ -70,7 +71,7 @@ let load t ~source =
     | 0 -> t.loaded <- true; Ok (callback_id ~owner:t.owner)
     | code -> let error = error_of_code (code - 1) in close t; Error error
 
-let invoke_command t invocation callback =
+let invoke ~read_only t invocation callback =
   if t.closed then Ui_task.resolve (Error Cancelled)
   else if not t.loaded || not (owns_callback ~owner:t.owner callback) then
     Ui_task.resolve (Error Invalid_request)
@@ -84,7 +85,7 @@ let invoke_command t invocation callback =
           Ui_task.create ~cancel:(fun () ->
             Option.iter (fun call -> finish t call (Error Cancelled)) !current)
             (fun ~resolve ~reject:_ ->
-              let call = { invocation; resolve; jobs = [] } in
+              let call = { invocation; read_only; resolve; jobs = [] } in
               current := Some call;
               t.active <- Some call;
               match native_start t.handle with
@@ -93,8 +94,16 @@ let invoke_command t invocation callback =
                   finish t call (Error (error_of_code (code - 1)));
                   close t)
 
-let serve t call request =
-  let task = Plugin_broker.dispatch t.broker t.session call.invocation Get_editing_context in
+let invoke_command = invoke ~read_only:false
+
+let invoke_read_only t invocation callback =
+  Ui_task.bind (invoke ~read_only:true t invocation callback)
+    (fun result -> Ui_task.resolve (Result.map (fun _ -> ()) result))
+
+let serve t call request operation payload =
+  let task = match decode_request ~operation payload with
+    | Ok decoded -> Plugin_broker.dispatch t.broker t.session call.invocation decoded
+    | Error error -> Ui_task.resolve (Error error) in
   let job = Ui_task.bind task (fun result ->
     if is_active t call then begin
       match Plugin_broker.check t.broker t.session call.invocation with
@@ -120,9 +129,10 @@ let pump t =
         | Ok () ->
             match native_poll t.handle with
             | Waiting -> ()
-            | Host_request request -> serve t call request
+            | Host_request (request, operation, payload) -> serve t call request operation payload
             | Finished value ->
-                let result = Result.bind (decode_program value)
-                  (Plugin_broker.accept_program t.broker t.session call.invocation) in
+                let result = Result.bind (decode_program value) (fun program ->
+                  if call.read_only && actions program <> [] then Error Permission_denied
+                  else Plugin_broker.accept_program t.broker t.session call.invocation program) in
                 finish t call result
             | Failed code -> finish t call (Error (error_of_code code)); close t

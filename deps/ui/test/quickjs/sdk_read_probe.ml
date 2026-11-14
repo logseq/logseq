@@ -1,0 +1,106 @@
+open Plugin_protocol
+
+let check name value = if not value then failwith name
+let repo = "logseq_db_quickjs_sdk_probe"
+let uuid = "00000000-0000-0000-0000-000000000099"
+let model = ref Model.initial
+
+let spin ready =
+  let deadline = Unix.gettimeofday () +. 20. in
+  let rec loop () =
+    Host.drain ();
+    if not (ready ()) then begin
+      if Unix.gettimeofday () > deadline then failwith "probe deadline";
+      Thread.delay 0.001;
+      loop ()
+    end
+  in
+  loop ()
+
+let promise task =
+  spin (fun () -> match task.Js.Promise.state with Js.Promise.Pending -> false | _ -> true);
+  match task.Js.Promise.state with
+  | Js.Promise.Resolved value -> value
+  | Js.Promise.Rejected error -> raise error
+  | Js.Promise.Pending -> assert false
+
+let task pending =
+  let result = ref None in
+  let observer = Ui_task.bind pending (fun value -> result := Some (Ok value); Ui_task.resolve ()) in
+  ignore (Ui_task.catch observer (fun error -> result := Some (Error error); Ui_task.resolve ()));
+  spin (fun () -> Option.is_some !result);
+  match !result with Some (Ok value) -> value | Some (Error error) -> raise error | None -> assert false
+
+let success = function
+  | Ok value -> value
+  | Error error -> failwith (error_name error)
+
+let source path =
+  let channel = open_in_bin path in
+  Fun.protect ~finally:(fun () -> close_in channel)
+    (fun () -> really_input_string channel (in_channel_length channel))
+
+let cleanup () =
+  List.iter (fun (pid, _) ->
+    try match Unix.waitpid [Unix.WNOHANG] pid with
+    | 0, _ -> Unix.kill pid Sys.sigterm; ignore (Unix.waitpid [] pid)
+    | _ -> ()
+    with Unix.Unix_error (Unix.ECHILD, _, _) -> ()) (Daemon_client.read_server_list ())
+
+let run path =
+  let root = Sys.getenv "LOGSEQ_ROOT_DIR" in
+  check "probe requires an owned root"
+    (Sys.file_exists (Filename.concat root ".quickjs-sdk-probe"));
+  let owner = Thread.id (Thread.self ()) in
+  let assert_owner () = check "owner thread" (Thread.id (Thread.self ()) = owner) in
+  Platform.install_ui_services ~paints_caret:true ~assert_owner ~request_flush:(fun () -> ())
+    ~dom:Ui_dom_native.ops ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
+  Runtime.read_model := (fun () -> !model);
+  let worker = Worker_client.create () in
+  Runtime.worker := Some worker;
+  let invoke name args = promise (Worker_client.invoke worker name args) in
+  ignore (invoke "thread-api/create-or-open-db" [Wire.String repo; Wire.Map []]);
+  let page = Wire.Map [
+    Wire.kw "block/name", Wire.String "quickjs sdk probe";
+    Wire.kw "block/title", Wire.String "quickjs sdk probe";
+    Wire.kw "block/uuid", Wire.Uuid uuid;
+    Wire.kw "block/created-at", Wire.Int 1;
+    Wire.kw "block/updated-at", Wire.Int 1;
+    Wire.kw "block/tags", Wire.Set [Wire.kw "logseq.class/Page"];
+  ] in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [page]; Wire.Nil; Wire.Nil]);
+  let page = match Decode.page_of_summary page with Some page -> page | None -> failwith "page" in
+  model := { Model.initial with repo = Some repo; route = Model.Page page.Model.page_title;
+    route_page = Some page };
+  let scheduler = Signal.scheduler () in
+  let backend = { Lui_protocol.backend_profile = Lui_protocol.profile Lui_protocol.MacOS Lui_protocol.GenericHost;
+    apply_batch = (fun _ -> true) } in
+  let application = Lui_runtime.create scheduler backend in
+  let scope = Signal.scope "sdk-probe" in
+  Editor_state.ensure (Lui_ui.context application scope);
+  let editing = Editor_state.mk_editing ~uuid ~buffer:"unsaved probe text" ~scope:"main" ~base:"quickjs sdk probe" () in
+  Editor_state.set_silent (fun state -> {state with editing = Some editing});
+  let id = success (plugin_id "sdk-probe") in
+  let source = source path in
+  let grants = [Editor_read; Graph_read; Db_query] in
+  let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
+  Plugin_host.unload_read_plugin runner;
+  Plugin_host.unload_read_plugin runner;
+  check "graph permission" (task (Plugin_host.load_read_plugin ~id ~grants:[Editor_read] ~source) = Error Permission_denied);
+  let _, reads = Plugin_read_services.capture ~id in
+  let pending = reads.get_block (Uuid uuid) in
+  model := {!model with context_revision = (!model).context_revision + 1};
+  check "late reply must be stale" (task pending = Error Stale_context);
+  check "read runner cannot receive command grants"
+    (task (Plugin_host.load_read_plugin ~id ~grants:[Editor_command] ~source) = Error Permission_denied);
+  model := Model.initial;
+  Editor_state.set_silent (fun state -> {state with editing = None});
+  let id = success (plugin_id "sdk-probe-empty") in
+  let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
+  Plugin_host.unload_read_plugin runner;
+  Signal.dispose_scope scope;
+  print_endline "SDK/QuickJS/application/worker graph contract passed"
+
+let () =
+  if Array.length Sys.argv <> 2 then invalid_arg "sdk_read_probe <bundle.mjs>";
+  Fun.protect ~finally:cleanup (fun () -> run Sys.argv.(1))

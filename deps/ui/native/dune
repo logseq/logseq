@@ -218,6 +218,10 @@
 (rule
  (copy ../src/sdk/sdk_read.ml sdk_read.ml))
 (rule
+ (copy ../src/sdk/plugin_read_services.ml plugin_read_services.ml))
+(rule
+ (copy ../src/sdk/plugin_read_services.mli plugin_read_services.mli))
+(rule
  (copy ../src/sdk/sdk_ui.ml sdk_ui.ml))
 (rule
  (copy ../src/sdk/title_refs.ml title_refs.ml))
@@ -277,6 +281,7 @@
    logseq_ui_contracts
    logseq_ui_native_services
    logseq_ui_shared
+   logseq_plugin_quickjs
    ocaml-signal
    melange-transit-core
    melange-transit-native

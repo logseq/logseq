@@ -7,6 +7,7 @@
   "typings": "index.d.ts",
   "private": false,
   "scripts": {
+    "build:quickjs": "webpack --config webpack.config.quickjs.js",
     "build:user": "webpack --mode production",
     "dev:user": "pnpm build:user -- --mode development --watch",
     "build:core": "webpack --config webpack.config.core.js --mode production",

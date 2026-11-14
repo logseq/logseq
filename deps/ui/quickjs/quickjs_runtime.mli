@@ -9,5 +9,7 @@ val create : Plugin_broker.t -> Plugin_broker.session -> (t, Plugin_protocol.err
 val load : t -> source:string -> (Plugin_protocol.callback_id, Plugin_protocol.error) result
 val invoke_command : t -> Plugin_broker.invocation -> Plugin_protocol.callback_id ->
   (Plugin_protocol.program, Plugin_protocol.error) result Ui_task.t
+val invoke_read_only : t -> Plugin_broker.invocation -> Plugin_protocol.callback_id ->
+  (unit, Plugin_protocol.error) result Ui_task.t
 val pump : t -> unit
 val close : t -> unit

@@ -235,3 +235,7 @@ let make_asset_url (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
     (_ : Js.Json.t) : Js.Json.t Js.Promise.t = reject_unavailable "makeAssetUrl"
 let open_pdf_viewer (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
     (_ : Js.Json.t) : Js.Json.t Js.Promise.t = reject_unavailable "openPDFViewer"
+
+type read_plugin = Plugin_read_runner.t
+let load_read_plugin = Plugin_read_runner.start
+let unload_read_plugin = Plugin_read_runner.close
