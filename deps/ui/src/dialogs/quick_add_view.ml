@@ -9,6 +9,7 @@ module U = I18n
 let body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   Quick_add_state.ensure ctx;
+  Editor_state.ensure ctx;
   let blocks_sig =
     Signal.map
       (fun (s : Quick_add_state.t) -> s.Quick_add_state.blocks)
@@ -41,11 +42,14 @@ let body (_ms : Model.t Signal.signal) : t =
                    @ [ (* cljs quick_add page-blocks mounts
                           page-blocks-cp, which carries add-button *)
                        Add_button.el ~scope:"quick-add"
+                         ~previous_blank:(reactive
+                           (Add_button.previous_blank ~scope:"quick-add" blocks)
+                           (Editor_state.collapse_sig ()))
                          ?puuid:
                            (Quick_add_state.value ()).Quick_add_state.page_uuid
                          ~flags:(fun ctx ->
                            Signal.constant ctx.Lui_ui.ui_scheduler
-                             (blocks <> [], false))
+                             (blocks <> [], false)) ()
                      ]))
               blocks_sig ]
       ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"

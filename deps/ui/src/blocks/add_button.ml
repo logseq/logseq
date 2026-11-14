@@ -6,33 +6,61 @@
 
 open Lui_elements
 
-(* cljs page.cljs opacity-class: on desktop opacity-0 only when the
-   owner entity has children (visible-uuids / the route block's
-   children), opacity-50 otherwise; the row carries
-   .ls-block-content-indent when the owner is a block (block routes and
-   sidebar block items). Callers supply both flags per region —
-   constant for snapshot-backed lists, derived signals for live ones.
+(* Project the predecessor in this owner's rendered DFS order, respecting
+   the same scoped collapse state as its rows. This is intentionally
+   owner-local; Master's DOM lookup can cross container boundaries. *)
+let previous_blank ~scope blocks collapse =
+  let rec last_visible = function
+    | [] -> None
+    | _ :: (_ :: _ as rest) -> last_visible rest
+    | [ (block : Model.block) ] ->
+        let collapsed =
+          match block.block_uuid with
+          | None -> false
+          | Some uuid ->
+              Editor_state.effective_collapsed_in_view ~scope uuid
+                block.block_default_collapsed collapse
+        in
+        if collapsed then Some block
+        else
+          match last_visible (Editor_state.children_of block) with
+          | Some _ as last -> last
+          | None -> Some block
+  in
+  Option.map (fun (block : Model.block) -> String.trim block.block_title = "")
+    (last_visible blocks)
 
-   On an empty page this row is the only bullet. The web fades it to
-   50% and relies on :hover { opacity: 1 }, which this host does not
-   apply. Compounded with the dot's own 0.8 that resting pixel is
-   about #e9e9e9 — the bullet the empty journal actually shows. Keep
-   the row hidden once real blocks exist, and paint the empty-page
-   dot at full opacity in the same gray as a block bullet. *)
-let el ?puuid ?(scope = "main")
-    ~(flags : 'a -> (bool * bool) Signal.signal) : t =
+(* Desktop Master: rest at 0 with children, 0.5 otherwise; hover keeps
+   a blank predecessor hidden, reveals a populated owner at 0.5, and
+   an empty owner at 1. Appearance never substitutes for semantic Press. *)
+let el ?puuid ?(scope = "main") ?(library = false)
+    ?previous_blank ?previous_blank_signal
+    ~(flags : 'a -> (bool * bool) Signal.signal) () : t =
  fun context parent ->
   if Ui_services.env_publishing () then Logseq_el.nothing context parent
   else
     let fs = flags context in
+    let previous =
+      match previous_blank, previous_blank_signal with
+      | Some value, None -> Signal.constant context.Lui_ui.ui_scheduler value
+      | None, Some source -> source
+      | _ -> invalid_arg "Add_button.el requires exactly one previous_blank source"
+    in
     (Ui_parts.pressable
        ~on_press:(fun _ ->
-         Editor_actions.append_block ?for_page:puuid ~scope ())
+         Editor_actions.append_block ?for_page:puuid ~scope ~library ())
        (Ui_parts.class_signal fs
        (fun (_has, indented) ->
-         "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text transition-opacity ease-in duration-100 !py-0 "
+         "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text !py-0 "
          ^ (if indented then " ls-block-content-indent" else ""))
-       (column ~key:"bab"
+       (Ui_parts.float_prop Lui_protocol.HoverOpacity
+          ~value:(reactive
+            (fun (has, _) previous_blank ->
+              match previous_blank with
+              | Some true -> 0.
+              | Some false when has -> 0.5
+              | _ -> 1.) fs previous)
+       (column ~key:"bab" ~transition:"opacity 100ms ease-in"
           ~data_attrs:
             (("tabindex", "0")
              :: (match puuid with
@@ -40,7 +68,7 @@ let el ?puuid ?(scope = "main")
                  | None -> []))
           ~opacity:
             (reactive
-               (fun (has, _) -> if has then 0. else 1.) fs)
+               (fun (has, _) -> if has then 0. else 0.5) fs)
           [ row ~key:"bab-row"
               [ (* margin-left follows .ls-block-content-indent on the
                    outer column: 22px flat, 6px indented — bound to the
@@ -60,5 +88,5 @@ let el ?puuid ?(scope = "main")
                               ~corner_radius:999 ~opacity:1.
                               ~background:
                                 "var(--lx-gray-09, var(--ls-block-bullet-color))"
-                              [] ] ]) ] ])))
+                              [] ] ]) ] ]))))
       context parent

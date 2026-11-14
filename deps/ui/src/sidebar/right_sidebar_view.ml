@@ -734,10 +734,19 @@ let item_body st idx (it : Sidebar_state.item) =
                      (List.map
                         (Tree.block_row ~scope:"sidebar")
                         it.blocks
-                      @ [ Add_button.el ?puuid:it.Sidebar_state.uuid ~scope:"sidebar"
+                      @ [ (fun mount_ctx mount_parent ->
+                            Editor_state.ensure mount_ctx;
+                            let add = Add_button.el ?puuid:it.Sidebar_state.uuid ~scope:"sidebar"
+                            ~previous_blank:(reactive
+                              (Add_button.previous_blank ~scope:"sidebar" it.blocks)
+                              (Editor_state.collapse_sig ()))
+                            ~library:(match it.Sidebar_state.page with
+                              | Some page -> page.Model.page_is_library
+                              | None -> false)
                             ~flags:(fun ctx ->
                               Signal.constant ctx.Lui_ui.ui_scheduler
-                                (has_children, indented))
+                                (has_children, indented)) () in
+                            add mount_ctx mount_parent)
                         ]))
                  ]
              ]

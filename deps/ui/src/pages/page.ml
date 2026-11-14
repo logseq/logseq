@@ -825,10 +825,15 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
         (box ~key:"page-blocks-inner" ~style_class:"page-blocks-inner"
            ~data_attrs:(("data-cid", scope) :: inner_attrs)
         (body
-         @ [ Add_button.el ?puuid ~scope
+         @ [ (fun mount_ctx mount_parent ->
+               S.ensure mount_ctx;
+               let add = Add_button.el ?puuid ~scope ~library
+               ~previous_blank:(reactive
+                 (Add_button.previous_blank ~scope blocks) (S.collapse_sig ()))
                ~flags:(fun ctx ->
                  Signal.constant ctx.Lui_ui.ui_scheduler
-                   (blocks <> [], false))
+                   (blocks <> [], false)) () in
+               add mount_ctx mount_parent)
            ]))
     ]
 
@@ -1105,9 +1110,12 @@ let journal_item_sig (ms : Model.t Signal.signal)
                     ; (* cljs journal-page mounts add-button inside
                          .page-blocks-inner per day *)
                       Add_button.el ~puuid:key
+                        ~previous_blank:(reactive
+                          (Add_button.previous_blank ~scope:"main")
+                          blocks_sig (S.collapse_sig ()))
                         ~flags:(fun ectx ->
                           Logseq_el.own ectx
-                            (Signal.map (fun has -> (has, false)) nonempty))
+                            (Signal.map (fun has -> (has, false)) nonempty)) ()
                     ])
                 ])
             ])
@@ -1253,6 +1261,7 @@ let blocks_sig_of (ms : Model.t Signal.signal) =
    touched row instead of re-diffing every mounted block *)
 let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
+  S.ensure ctx;
   let blocks_sig = Logseq_el.own ctx (blocks_sig_of ms) in
   let nonempty =
     Logseq_el.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
@@ -1390,7 +1399,14 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                | Some u -> [ ("data-containerid", u) ]
                | None -> [])
             [ Lui_elements.if_ ~test:nonempty list_el ]
-        ; Add_button.el ?puuid ~scope
+        ; Add_button.el ?puuid ~scope ~library
+            ~previous_blank:(reactive
+              (fun (m : Model.t) collapse ->
+                match m.Model.route_page with
+                | Some page ->
+                    Add_button.previous_blank ~scope page.Model.page_blocks collapse
+                | None -> None)
+              ms (S.collapse_sig ()))
             ~flags:(fun _ ->
               Logseq_el.own ctx
                 (Signal.map
@@ -1402,7 +1418,7 @@ let blocks_area ~scope ~library ?puuid (ms : Model.t Signal.signal) : t =
                          | [] -> (false, true))
                      | Some p -> (p.Model.page_blocks <> [], false)
                      | None -> (false, false))
-                   ms))
+                   ms)) ()
         ])
     ])
     ctx parent

@@ -1083,6 +1083,7 @@ let pv_track st (el : Ui_services.el) =
    inline styles live in lui-overlay.css *)
 let pv_popover (st : S.t) (p : S.pv) : t =
  fun context parent ->
+  Editor_state.ensure context;
   (* same hover-reveal contract as the page title: actions only show
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
@@ -1138,14 +1139,20 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                        p.S.pv_blocks
                      @ [ (* cljs page-preview-content mounts the real
                             page-cp, which carries add-button *)
-                         Add_button.el
+                         Add_button.el ~scope:"preview"
+                           ~previous_blank:(reactive
+                             (Add_button.previous_blank ~scope:"preview" p.S.pv_blocks)
+                             (Editor_state.collapse_sig ()))
+                           ~library:(match p.S.pv_page with
+                             | Some page -> page.Model.page_is_library
+                             | None -> false)
                            ?puuid:
                              (match p.S.pv_page with
                               | Some pg -> pg.Model.page_uuid
                               | None -> None)
                            ~flags:(fun ctx ->
                              Signal.constant ctx.Lui_ui.ui_scheduler
-                               (p.S.pv_blocks <> [], false))
+                               (p.S.pv_blocks <> [], false)) ()
                        ])
                 ]
             ]
