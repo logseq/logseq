@@ -160,7 +160,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
               | None -> ())
             [ property_icon row ]
         else Logseq_el.nothing)
-     ; Jump_state.target ~key:anchor_id ~uuid:ctx.block_uuid ~activate:open_key
+     ; Jump_state.target ~key:anchor_id ~owner:ctx.jump_owner ~activate:open_key
        (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ~min_width:0
          ~style_class:"property-k jtrigger"
@@ -412,8 +412,9 @@ let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
 let block_state (context : Lui_ui.ui_context) uuid =
   S.area_state context ~key:(block_key uuid) ~fetch:(block_fetch uuid)
 
-let block_ctx ~owner_key uuid key : V.ctx =
+let block_ctx ~scope ~owner_key uuid key : V.ctx =
   { owner_key
+  ; jump_owner = Jump_state.owner ~scope ~container:uuid
   ; block_uuid = uuid
   ; block_id = None
   ; refresh = (fun () -> S.refresh_key key)
@@ -439,7 +440,7 @@ let block_area ~scope ~uuid : t =
             column ~gap:2 ~style_class:"ls-block-content-indent"
               ~data_attrs:[ ("style", "padding-left:45px") ] []
           else
-            let ctx = block_ctx ~owner_key:(scope ^ ":panel:" ^ key) uuid key in
+            let ctx = block_ctx ~scope ~owner_key:(scope ^ ":panel:" ^ key) uuid key in
             column ~gap:2
               ~style_class:"ls-block-content-indent"
               ~data_attrs:[ ("style", "padding-left:45px") ]
@@ -472,7 +473,7 @@ let block_below_pills ~scope ~uuid : t =
           if d.below = [] then
             Logseq_el.nothing
           else
-            let ctx = block_ctx ~owner_key:(scope ^ ":below:" ^ key) uuid key in
+            let ctx = block_ctx ~scope ~owner_key:(scope ^ ":below:" ^ key) uuid key in
             pills_view ctx ~owner_is_tag:false ~owner_title:"" d.below)
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.below = b.below))
@@ -495,7 +496,7 @@ let block_left_chips ~scope ~uuid : t =
                position has no properties *)
             Logseq_el.nothing
           else
-            let ctx = block_ctx ~owner_key:(scope ^ ":left:" ^ key) uuid key in
+            let ctx = block_ctx ~scope ~owner_key:(scope ^ ":left:" ^ key) uuid key in
             row ~gap:4 ~cross:`center
               ~style_class:"positioned-properties block-left"
               (List.map
@@ -530,7 +531,7 @@ let block_right_chips ~scope ~uuid : t =
           if d.right = [] then
             Logseq_el.nothing
           else
-            let ctx = block_ctx ~owner_key:(scope ^ ":right:" ^ key) uuid key in
+            let ctx = block_ctx ~scope ~owner_key:(scope ^ ":right:" ^ key) uuid key in
             row ~gap:2 ~cross:`center
               ~style_class:"positioned-properties block-right"
               (List.map
@@ -757,8 +758,9 @@ let page_fetch ~uuid ~is_tag ~db_id (publish : S.area_data -> unit) :
                            ; bidi };
   Js.Promise.resolve ()
 
-let page_ctx (p : Model.page) key uuid : V.ctx =
+let page_ctx ~scope (p : Model.page) key uuid : V.ctx =
   { owner_key = key
+  ; jump_owner = Jump_state.owner ~scope ~container:uuid
   ; block_uuid = uuid
   ; block_id = p.Model.page_db_id
   ; refresh = (fun () -> S.refresh_key key)
@@ -769,7 +771,7 @@ let page_ctx (p : Model.page) key uuid : V.ctx =
 (* the properties block inside the title's .ls-block — a holder div
    carrying .ls-properties-area.ls-page-properties, the class section
    on tag pages, or the "Add property" button elsewhere *)
-let page_area (p : Model.page) : t =
+let page_area ~scope (p : Model.page) : t =
  fun context parent ->
   let uuid = Option.value ~default:"" p.Model.page_uuid in
   if uuid = "" then
@@ -797,7 +799,7 @@ let page_area (p : Model.page) : t =
               && d.hidden = []
             then column ~gap:0 []
             else
-              let ctx = page_ctx p key uuid in
+              let ctx = page_ctx ~scope p key uuid in
               column ~key:("parea-" ^ uuid)
                 ~accessibility_identifier:uuid
                 ~style_class:"ls-properties-area ls-page-properties"
@@ -883,7 +885,7 @@ let bidi_area (p : Model.page) : t =
 (* cljs page.cljs sidebar-page-properties: tag/class pages DO mount the
    area here; a non-class page with no rows renders only the "Add
    property" button (no .ls-properties-area) *)
-let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
+let sidebar_area ~scope ~uuid ~db_id ~title ~is_tag : t =
  fun context parent ->
   let key = "sb:" ^ uuid in
   let st =
@@ -916,6 +918,7 @@ let sidebar_area ~uuid ~db_id ~title ~is_tag : t =
   in
   let ctx =
     { V.owner_key = key
+    ; jump_owner = Jump_state.owner ~scope ~container:uuid
     ; block_uuid = uuid
     ; block_id = db_id
     ; refresh = (fun () -> S.refresh_key key)

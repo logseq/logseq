@@ -530,6 +530,7 @@ let date_value_view d prop : t =
     Js.Promise.resolve ());
   let ctx : V.ctx =
     {owner_key="property-dialog";block_uuid=d.d_target.uuid;block_id=d.d_target.db_id;
+     jump_owner=Jump_state.owner ~scope:"property-dialog" ~container:d.d_target.uuid;
      refresh=(fun () -> ());is_page=false;class_schema=false} in
   let writes = ref 0 and dismiss_after_write = ref false in
   let dismiss () =

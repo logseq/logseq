@@ -1326,6 +1326,11 @@ let dispatch_command cid =
       let target = match selected with
         | uuid :: _ -> Some uuid
         | [] -> Option.map (fun editing -> editing.S.uuid) editing in
+      let target_owner = match selected with
+        | uuid :: _ -> Some (Jump_state.owner
+            ~scope:(S.selection_scope ()) ~container:uuid)
+        | [] -> Option.map (fun editing -> Jump_state.owner
+            ~scope:editing.S.scope ~container:editing.S.uuid) editing in
       let expand = match editing with
         | Some editing -> Some (editing.S.uuid, editing.S.scope)
         | None -> Option.map (fun uuid -> uuid, "main") target in
@@ -1334,7 +1339,7 @@ let dispatch_command cid =
         List.iteri (fun index block -> Option.iter
             (fun uuid -> Hashtbl.replace positions uuid index) block.Model.block_uuid)
           (S.flat_visible ());
-        Jump_state.start ~uuid:target
+        Jump_state.start ~owner:target_owner
           ~rank:(fun uuid -> Option.value (Hashtbl.find_opt positions uuid) ~default:max_int)
           ~clear_selection:(fun () -> A.clear_selection ()) () in
       (match expand with

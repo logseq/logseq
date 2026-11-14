@@ -451,12 +451,15 @@ let page_plugin_slots ctx (page : Model.page) : t list =
            [])
        (Plugin_host.ui_items_of_type "pagebar")
 
+let scope_of_route (r : Model.route) =
+  match r with Model.Block_zoom u -> "zoom-" ^ u | _ -> "main"
+
 let page_title_el (m : Model.t) (page : Model.page) : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then
     column ~style_class:"ls-page-title title"
       [ heading ~level:1 ~value:page.page_title []
-      ; Properties_area.page_area page ] ctx parent
+      ; Properties_area.page_area ~scope:(scope_of_route m.route) page ] ctx parent
   else
   (* title rows also render in the journals list before any block row
      mounts the editor state — the .ls-block class signal needs it *)
@@ -726,7 +729,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ]
         ; (* cljs db-properties-cp: the page properties area sits
              inside the title's .ls-block, after .block-main-container *)
-          Properties_area.page_area page
+          Properties_area.page_area ~scope:(scope_of_route m.route) page
         ])
       ])
     ; (* cljs plugin slot extension point after the title block *)
@@ -1235,9 +1238,6 @@ let journal_keys (js : Model.page list) =
     (fun (p : Model.page) ->
       Option.value p.Model.page_uuid ~default:p.Model.page_title)
     js
-
-let scope_of_route (r : Model.route) =
-  match r with Model.Block_zoom u -> "zoom-" ^ u | _ -> "main"
 
 let page_cls (m : Model.t) =
   let base = "page cp__page-inner-wrap" in

@@ -488,7 +488,8 @@ let content_wrapper ~scope ~editable uuid (b : Model.block) : t =
   row ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper" ~grow:1.
     ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
-    [ Jump_state.target ~enabled:editable ~key:"content" ~uuid
+    [ Jump_state.target ~enabled:editable ~key:"content"
+        ~owner:(Jump_state.owner ~scope ~container:uuid)
         ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]

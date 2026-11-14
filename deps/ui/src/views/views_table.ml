@@ -567,6 +567,8 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                in
                let pctx : Properties_value.ctx =
                  { owner_key = "view-" ^ string_of_int inst.V.id
+                 ; jump_owner = Jump_state.owner
+                     ~scope:("view-" ^ string_of_int inst.V.id) ~container:row_uuid
                  ; block_uuid = row_uuid
                  ; block_id = Properties_data.entity_id_of blk
                  ; refresh = (fun () -> refresh inst)
@@ -1870,6 +1872,8 @@ let gallery_card inst (row_uuid, blk) : t =
                          W.Keyword "value", value] in
                       let pctx : Properties_value.ctx =
                         { owner_key = "view-" ^ string_of_int inst.V.id
+                        ; jump_owner = Jump_state.owner
+                            ~scope:("view-" ^ string_of_int inst.V.id) ~container:row_uuid
                         ; block_uuid = row_uuid; block_id = Properties_data.entity_id_of blk
                         ; refresh = (fun () -> refresh inst); is_page = is_page_row blk
                         ; class_schema = false } in

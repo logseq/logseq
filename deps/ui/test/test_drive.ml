@@ -2005,6 +2005,7 @@ let props_mount_cell ~block_uuid ~row =
   let s_ref = ref None in
   let ctx : Properties_value.ctx =
     { owner_key = "property-cell-fixture"
+    ; jump_owner = Jump_state.owner ~scope:"main" ~container:block_uuid
     ; block_uuid
     ; block_id = None
     ; refresh =
@@ -2046,6 +2047,7 @@ let props_host () : (Model.t, Action.t) Shared_scenarios_props.host =
       (fun ~ident ~is_datetime ~text ->
         Properties_value.commit_date_text
           { Properties_value.owner_key = "property-fixture"
+          ; jump_owner = Jump_state.owner ~scope:"main" ~container:"b1"
           ; block_uuid = "b1"
           ; block_id = None
           ; refresh = (fun () -> ())
