@@ -41,17 +41,18 @@ let create broker session =
 let is_active t call =
   match t.active with Some active -> active == call | None -> false
 
-let finish t call result =
+let rec finish t call result =
   if is_active t call then begin
     t.active <- None;
     if not t.closed then native_stop t.handle;
     Plugin_broker.cancel t.broker call.invocation;
     List.iter Ui_task.cancel call.jobs;
     call.jobs <- [];
+    if Result.is_error result then close t;
     call.resolve result
   end
 
-let close t =
+and close t =
   if not t.closed then begin
     t.closed <- true;
     Option.iter (fun call -> finish t call (Error Cancelled)) t.active;
