@@ -94,7 +94,14 @@ final class NativeEditorInput: NSTextView {
         let text = (string as? NSAttributedString)?.string ?? string as? String ?? ""
         if !composing { send("composition", ["state": .string("start")]); composing = true }
         super.setMarkedText(string, selectedRange: selectedRange, replacementRange: replacementRange)
-        send("composition", ["state": .string("update"), "text": .string(text)])
+        // AppKit can end marked text without calling unmarkText.
+        if super.hasMarkedText() {
+            send("composition", ["state": .string("update"), "text": .string(text)])
+        } else {
+            composing = false
+            send("composition", ["state": .string("cancel")])
+            synchronize()
+        }
     }
     override func unmarkText() {
         guard composing else { return }
