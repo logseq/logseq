@@ -312,6 +312,12 @@ let command_instance handle =
 
 let command_current handle = Option.is_some (command_instance handle)
 
+let command_pending () =
+  Hashtbl.fold (fun _ slot pending ->
+    pending || Option.fold ~none:false
+      ~some:(fun plugin -> Plugin_runner.invoking plugin.runner) !slot)
+    command_plugins false
+
 let invoke_command handle services reads =
   match command_instance handle with
   | None -> Ui_task.resolve (Error Plugin_protocol.Cancelled)

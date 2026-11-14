@@ -195,6 +195,8 @@ let run path =
     "input", (fun () -> incr Editor_state.edit_input_seq);
     "popup", (fun () -> Popups_state.open_ac ~tpos:0 popup Popups_state.Slash);
   ] in
+  let reload_deferred () =
+    Worker_events.ui_busy ~now:(Ui_services.time_now () +. 10000.) ~last_fire:0. in
   List.iter (fun (name, mutate) ->
     let runner = load () in
     let ac = editing "/read" in
@@ -206,6 +208,7 @@ let run path =
     let invocation = Popups_state.invoke_command ticket in
     let result = observe invocation in
     spin (fun () -> !requested);
+    check "pending command defers subscription publication" (reload_deferred ());
     check "busy invocation denied without disturbing active command"
       (task (Plugin_host.invoke_command ticket.ticket_handle ticket.ticket_services reads) = Error Invalid_request);
     mutate ();
@@ -213,6 +216,7 @@ let run path =
     resolve (Ok None);
     check (name ^ " invalidates pending command") (await result = Error Stale_context && buffer () = before);
     check (name ^ " retires session") (not (Plugin_host.command_current ticket.ticket_handle));
+    check "retired command releases subscription deferral" (not (reload_deferred ()));
     Plugin_host.unload_command_plugin runner) mutations;
   List.iter (fun cancel ->
     let runner = load () in
