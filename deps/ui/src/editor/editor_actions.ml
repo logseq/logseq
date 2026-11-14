@@ -2724,8 +2724,8 @@ let collapse_expand ~collapse () =
               blocks)
 
 (* cljs editor/toggle-collapse!: edit mode toggles the open block,
-   selection toggles all selected by the first block's state, otherwise
-   no-op *)
+   selection toggles all selected by the first block's persisted state,
+   independently of scoped presentation overrides. Otherwise no-op. *)
 let toggle_children_collapse () =
   let scope, cur =
     match S.editing () with
@@ -2733,22 +2733,32 @@ let toggle_children_collapse () =
     | Some e -> e.S.scope, [ e.S.uuid ]
     | None -> S.selection_scope (), selected_uuids ()
   in
-  match cur with
-  | u :: us -> (
+  let context = Runtime.model () in
+  match context.Model.repo, cur with
+  | Some repo, u :: _ -> (
       match find_outliner_block ~scope u with
-      | Some b ->
-          let want = not (S.effective_collapsed ~scope b) in
-          List.iter
-            (fun u ->
-              match find_outliner_block ~scope u with
-              | Some b
-                when S.children_of b <> []
-                     && S.effective_collapsed ~scope b <> want ->
-                  toggle_collapse ~scope u
-              | _ -> ())
-            (u :: us)
+      | Some _ ->
+          ignore
+            (let* block = Runtime.invoke3 "thread-api/pull"
+                 (Wire.String repo)
+                 (Wire.String "[:block/collapsed?]")
+                 (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid u ]) in
+             Ops.check_loader_result block;
+             if Ops.context_current context then (
+               match block with
+               | Wire.Map _ ->
+                   let want =
+                     match Wire.get block "block/collapsed?" with
+                     | Some (Wire.Bool collapsed) -> not collapsed
+                     | None | Some Wire.Nil -> true
+                     | _ -> invalid_arg "toggle_children_collapse: expected a collapse boolean"
+                   in
+                   List.iter (fun uuid -> set_collapsed ~scope uuid want) cur
+               | Wire.Nil -> ()
+               | _ -> invalid_arg "toggle_children_collapse: expected a block entity");
+             Js.Promise.resolve ())
       | None -> ())
-  | [] -> ()
+  | _ -> ()
 
 (* cljs editor/toggle-open-blocks: any collapsed block -> expand all,
    else collapse all collapsible blocks *)

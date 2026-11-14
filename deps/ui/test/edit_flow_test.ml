@@ -1197,7 +1197,9 @@ let test_scoped_collapse_commands (h : host) =
   let uuid = "collapse-target" in
   let other = "collapse-other" in
   let projected = List.map (fun id ->
-      Test_check.block ~children:[ Test_check.block (id ^ "-child") "child" ] id id)
+      let block = Test_check.block
+          ~children:[ Test_check.block (id ^ "-child") "child" ] id id in
+      { block with Model.block_default_collapsed = true })
       [ uuid; other ] in
   let unregister = S.register_block_source ~scope ~kind:S.Outliner (fun () -> projected) in
   let rec run = function
@@ -1205,11 +1207,26 @@ let test_scoped_collapse_commands (h : host) =
         unregister ();
         reset_editor ();
         Js.Promise.resolve ()
-    | (name, command, editing, before, want) :: rest ->
+    | (name, command, editing, before, want, db_before) :: rest ->
         let* () = settle h 40 in
         stage_page h [ Test_check.block uuid uuid; Test_check.block other other ];
         reset_editor ();
         install_worker ~repo:h.repo h;
+        let complete_read = ref (fun () -> ()) in
+        Option.iter (fun collapsed ->
+          S.set (fun st -> { st with S.collapsed =
+            (if collapsed then S.String_set.empty else S.String_set.singleton uuid) });
+          let worker = Option.get !Runtime.worker in
+          let pending = Js.Promise.make (fun ~resolve ~reject:_ ->
+            complete_read := (fun () -> resolve
+              (W.Map [W.Keyword "block/collapsed?", W.Bool collapsed]) [@u])) in
+          Runtime.worker := Some { worker with Worker_client.invoke_fn =
+            (fun name args ->
+              match name, args with
+              | "thread-api/pull",
+                [W.String repo; _; W.Array [W.Keyword "block/uuid"; W.Uuid id]]
+                when repo = h.repo && id = uuid -> pending
+              | _ -> worker.Worker_client.invoke_fn name args) }) db_before;
         List.iter (fun id ->
           S.set_collapsed ~scope:"main" id (not before);
           S.set_collapsed ~scope id (if id = uuid then before else want)) [ uuid; other ];
@@ -1220,22 +1237,31 @@ let test_scoped_collapse_commands (h : host) =
         else
           S.set (fun st -> { st with S.selected = S.String_set.of_list [ uuid; other ] });
         Editor_keys.dispatch_command command;
+        let* () = match db_before with
+          | None -> Js.Promise.resolve ()
+          | Some _ ->
+              let* () = h.wait_ms 25 in
+              check (name ^ " waits for persisted state before writing") (!ops = []);
+              !complete_read ();
+              Js.Promise.resolve ()
+        in
         let* () = h.wait_ms 25 in
         let* () = settle h 40 in
-        check (name ^ " uses the active projection and scoped override")
+        check (name ^ " applies to its projection without changing the main override")
           (S.is_collapsed_in ~scope uuid = want
            && S.is_collapsed_in ~scope other = want
            && S.is_collapsed_in ~scope:"main" uuid = not before
            && S.is_collapsed_in ~scope:"main" other = not before);
         check (name ^ " preserves the entity collapse persistence intent")
-          (List.mem (Ops.collapse_expand [ uuid, want ]) !ops);
+          (List.for_all (fun id -> List.mem (Ops.collapse_expand [ id, want ]) !ops)
+             (if editing then [uuid] else [uuid; other]));
         reset_editor ();
         run rest
   in
-  run [ "selected toggle", "editor/toggle-block-children", false, true, false;
-        "editing toggle", "editor/toggle-block-children", true, false, true;
-        "selected collapse", "editor/collapse-block-children", false, false, true;
-        "selected expand", "editor/expand-block-children", false, true, false ]
+  run [ "selected toggle", "editor/toggle-block-children", false, false, false, Some true;
+        "editing toggle", "editor/toggle-block-children", true, true, true, Some false;
+        "selected collapse", "editor/collapse-block-children", false, false, true, None;
+        "selected expand", "editor/expand-block-children", false, true, false, None ]
 
 let test_scoped_indent_target (h : host) =
   let* () = settle h 40 in
