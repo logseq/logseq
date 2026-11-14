@@ -197,6 +197,19 @@ const connected = logseq.ready(async (info) => {
     'nested children'
   )
   const refs = await logseq.Editor.getPageLinkedReferences(uuid)
+  const child = tree.children?.[0]
+  check(child && !Array.isArray(child), 'nested block entity')
+  const grandchild = child.children?.[0]
+  check(grandchild && !Array.isArray(grandchild), 'recursive block entity')
+  check(
+    child.properties?.[':plugin.property.sdk-probe/score']?.[
+      ':logseq.property/value'
+    ] === 11 &&
+      grandchild.properties?.[':plugin.property.sdk-probe/score']?.[
+        ':logseq.property/value'
+      ] === 13,
+    'descendant properties'
+  )
   const groups = new Map(
     refs?.map(([page, blocks]) => [
       page.uuid,
