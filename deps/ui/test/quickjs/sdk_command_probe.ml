@@ -85,6 +85,20 @@ let run path =
     Wire.kw "block/parent", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid];
     Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid]] in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [page; block]; Wire.Nil; Wire.Nil]);
+  let special_page name suffix tag fields = Wire.Map (
+    [Wire.kw "block/name", Wire.String name; Wire.kw "block/title", Wire.String name;
+     Wire.kw "block/uuid", Wire.Uuid ("00000000-0000-0000-0000-000000000" ^ suffix);
+     Wire.kw "block/created-at", Wire.Int 1; Wire.kw "block/updated-at", Wire.Int 1;
+     Wire.kw "block/tags", Wire.Set [Wire.kw tag]] @ fields) in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    special_page "portable class" "111" "logseq.class/Tag"
+      [Wire.kw "db/ident", Wire.kw "user.class/portable";
+       Wire.kw "logseq.property.class/extends", Wire.Set [Wire.kw "logseq.class/Root"]];
+    special_page "portable property" "112" "logseq.class/Property"
+      [Wire.kw "db/ident", Wire.kw "plugin.property.command-probe/protected";
+       Wire.kw "logseq.property/type", Wire.kw "default"];
+    special_page "portable journal" "113" "logseq.class/Journal"
+      [Wire.kw "block/journal-day", Wire.Int 20200101]]; Wire.Nil; Wire.Nil]);
   let page = Option.get (Decode.page_of_summary page) in
   let initial = {Model.initial with repo=Some repo; route=Model.Page page.Model.page_title;
     route_page=Some page} in
@@ -110,14 +124,90 @@ let run path =
   let buffer () = Option.get (Editor_state.editing ()) |> fun editor -> editor.buffer in
   let id = success (plugin_id "command-probe") in
   let source = source path in
-  let grants = [Editor_read; Editor_command; Graph_read; Db_query] in
+  let grants = [Editor_read; Editor_command; Graph_read; Db_query; Graph_write] in
   let load ?(id=id) ?(grants=grants) ?(source=source) () =
     task (Plugin_host.load_command_plugin ~id ~grants ~source) |> success in
   let handle key =
     List.find (fun handle -> command_key (command_metadata handle) = key)
       (Plugin_host.portable_commands ()) in
   let runner = load () in
-  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 8);
+  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 11);
+  let ac = editing "/delete-special-pages" in
+  check "special pages cannot be permanently deleted"
+    (task (Popups_state.run_portable_command popup ac (handle "delete-special-pages")) = Ok ());
+  let ac = editing "/editor-api-v2" in
+  check "tree, block and page operations preserve the active editor"
+    (task (Popups_state.run_portable_command popup ac (handle "editor-api-v2")) = Ok ()
+     && buffer () = "/editor-api-v2");
+  let ac = editing "/editor-api-v1" in
+  check "editor graph writes preserve configured ownership and the editing buffer"
+    (task (Popups_state.run_portable_command popup ac (handle "editor-api-v1")) = Ok ()
+     && buffer () = "/editor-api-v1");
+  let changed_uuid = "00000000-0000-0000-0000-000000000107" in
+  let mutation = Plugin_protocol.Mutate (Update_block (Uuid changed_uuid, "must not commit", [])) in
+  List.iter (fun mode ->
+    model := initial;
+    let services, reads, writes = Plugin_read_services.capture_editor ~id in
+    let broker = Plugin_broker.create () in
+    let grants = if mode = "denied" then [Editor_command] else [Editor_command; Graph_write] in
+    let session = Plugin_broker.open_session broker id grants in
+    if mode <> "registering" then ignore (Plugin_broker.activate_commands broker session |> success);
+    let invocation = Plugin_broker.begin_invocation ~reads ~writes broker session services in
+    let request = Plugin_broker.dispatch broker session invocation mutation in
+    let observed = observe request in
+    let expected = match mode with
+      | "denied" -> Permission_denied
+      | "registering" -> Unsupported
+      | "stale" ->
+          check "write preparation is pending" (!observed = None);
+          model := {initial with context_revision=initial.context_revision + 1}; Stale_context
+      | "cancelled" -> Plugin_broker.cancel broker invocation; Cancelled
+      | "unloaded" -> Plugin_broker.close_session broker session; Cancelled
+      | _ -> assert false in
+    let result = try await observed with Ui_task.Cancelled -> Error Cancelled in
+    check (mode ^ " cannot commit an editor write") (result = Error expected);
+    Plugin_broker.close_session broker session;
+    model := initial;
+    ignore (promise (Sdk_util.get_entity_for_repo repo changed_uuid));
+    let block = promise (Sdk_util.get_entity_for_repo repo changed_uuid) in
+    check "refused writes leave the graph unchanged"
+      (Wire.map_get_string block "block/title" = Some "portable updated")
+  ) ["denied"; "registering"; "stale"; "cancelled"; "unloaded"];
+  let identity = Json.String changed_uuid in
+  List.iter (fun (operation, arguments, error) ->
+    check "editor wire arguments fail closed"
+      (Plugin_protocol.decode_request ~operation (Json.Array arguments) = Error error)) [
+    11, [|Json.String "page name"|], Invalid_request;
+    12, [|identity; Json.String "text"; Json.Object ["start", Json.Bool true; "end", Json.Bool true]|], Invalid_request;
+    12, [|identity; Json.String "text"; Json.Object ["unknown", Json.Bool true]|], Invalid_request;
+    12, [|identity; Json.String "text"; Json.Object ["properties", Json.Object []]|], Unsupported;
+    13, [|identity; Json.String (String.make (max_string_bytes + 1) 'x')|], Resource_limit;
+    14, [|identity; Json.String "db/id"; Json.Number 3.|], Invalid_request;
+    14, [|identity; Json.String "value"; Json.Null|], Invalid_request;
+    14, [|identity; Json.String "value"; Json.Array [||]|], Unsupported;
+    15, [|identity; Json.String (String.make 65 'x')|], Resource_limit;
+    15, [|identity|], Invalid_request;
+  ];
+  let property_name = "plugin.property.command-probe/portable-score" in
+  let set_title title = ignore (invoke "thread-api/apply-outliner-ops" [Wire.String repo;
+    Wire.Array [
+      Wire.Array [Wire.kw "save-block"; Wire.Array [Wire.Map [Wire.kw "block/uuid", Wire.Uuid changed_uuid;
+        Wire.kw "block/title", Wire.String title]; Wire.Map []]];
+      Wire.Array [Wire.kw "set-block-property";
+        Wire.Array [Wire.Uuid changed_uuid; Wire.kw property_name; Wire.Int 4]]];
+    Wire.Map []]) in
+  set_title (String.make (max_string_bytes + 1) 'x');
+  let services, reads = Plugin_read_services.capture ~id in
+  let broker = Plugin_broker.create () in
+  let session = Plugin_broker.open_session broker id [Graph_read] in
+  let invocation = Plugin_broker.begin_invocation ~reads broker session services in
+  let properties = task (Plugin_broker.dispatch broker session invocation
+      (Get_block_properties (Uuid changed_uuid))) |> success in
+  check "property projection ignores an unrelated oversized title"
+    (match properties with Properties value -> Json.get (":" ^ property_name) value = Some (Json.Number 4.)
+     | _ -> false);
+  Plugin_broker.close_session broker session;
+  set_title "portable updated";
   check "duplicate live plugin ID denied"
     (task (Plugin_host.load_command_plugin ~id ~grants ~source) = Error Invalid_request);
   let greet = handle "greet" in

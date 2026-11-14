@@ -141,83 +141,8 @@ let get_property a _b _c _d =
           resolved_result w'
       | _ -> resolved_nil)
 
-(* db-property/property-value-content: (or :block/title
-   :logseq.property/value) — ref-value content for readable maps *)
-let property_value_content (v : Wire.t) =
-  match Wire.get v "block/title" with
-  | Some t -> t
-  | None -> (
-      match Wire.get v "logseq.property/value" with
-      | Some x -> x
-      | None -> v)
 
-(* db-property-util/get-property-value: numbers stay raw; entity maps
-   deref to their content *)
-let get_property_value (v : Wire.t) =
-  match v with
-  | Wire.Int _ | Wire.Int64 _ | Wire.Float _ -> v
-  | other -> property_value_content other
-
-(* readable-properties: keys -> ":" prefixed ident strings; values —
-   set -> set of contents; sequential -> map get-property-value;
-   map -> property-value-content; scalar -> raw *)
-let readable_properties (props : (Wire.t * Wire.t) list) : Wire.t =
-  Wire.Map
-    (List.map
-       (fun (k, v) ->
-         let ks =
-           match k with
-           | Wire.Keyword s -> ":" ^ s
-           | Wire.String s -> s
-           | other -> (
-               match other with
-               | _ -> Sdk_convert.wire_to_string other)
-         in
-         let v' =
-           match v with
-           | Wire.Set xs -> Wire.Set (List.map property_value_content xs)
-           | Wire.Array xs -> Wire.Array (List.map get_property_value xs)
-           | Wire.List xs -> Wire.List (List.map get_property_value xs)
-           | Wire.Map _ -> get_property_value v
-           | _ -> v
-         in
-         (Wire.String ks, v'))
-       props)
-
-(* get-all-block-properties: own block/properties merged over class
-   default properties (own keys win) *)
-let all_block_properties db_id props =
-  match db_id with
-  | None -> Js.Promise.resolve props
-  | Some id ->
-      let* defaults =
-        Runtime.invoke2 "thread-api/get-block-class-default-properties"
-          (Wire.String (repo ()))
-          (Wire.Int id)
-      in
-      let merged =
-        match defaults, props with
-        | Wire.Map dvs, Wire.Map kvs ->
-            let own_keys =
-              List.filter_map
-                (fun (k, _) ->
-                  match k with
-                  | Wire.Keyword s | Wire.String s -> Some s
-                  | _ -> None)
-                kvs
-            in
-            Wire.Map
-              (List.filter
-                 (fun (k, _) ->
-                   match k with
-                   | Wire.Keyword s | Wire.String s ->
-                       not (List.mem s own_keys)
-                   | _ -> true)
-                 dvs
-              @ kvs)
-        | _ -> props
-      in
-      Js.Promise.resolve merged
+let all_block_properties db_id props = all_block_properties_for_repo (repo ()) db_id props
 
 let get_block_properties a _b _c _d =
   let* block = get_entity_json a in
@@ -714,4 +639,3 @@ let custom_query a _b _c _d =
       in
       (* cljs: (flatten query-result) under normalize camel *)
       resolved (Sdk_json.to_js (Sdk_convert.json_of_wire (Wire.List (flatten_wire w)))))
-

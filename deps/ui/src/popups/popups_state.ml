@@ -2353,6 +2353,7 @@ type command_ticket =
   ; ticket_execute : unsupported:(unit -> unit) -> configured_step list -> unit Js.Promise.t
   ; ticket_services : Plugin_broker.services
   ; ticket_reads : Plugin_broker.read_services
+  ; ticket_writes : Plugin_broker.write_services
   ; ticket_handle : Plugin_protocol.command_handle
   ; ticket_at_start : bool
   ; mutable ticket_consumed : bool
@@ -2370,11 +2371,11 @@ let prepare_command t ac handle =
       (match prepare_configured ~lease t ac with
       | None -> Error Plugin_protocol.Stale_context
       | Some (current, execute) ->
-          let services, reads = Plugin_read_services.capture ~id:(Plugin_protocol.command_plugin handle) in
+          let services, reads, writes = Plugin_read_services.capture_editor ~id:(Plugin_protocol.command_plugin handle) in
           let services = {services with Plugin_broker.current =
             (fun () -> current () && services.current ())} in
           Ok {ticket_current=current; ticket_execute=execute;
-              ticket_services=services; ticket_reads=reads; ticket_handle=handle;
+              ticket_services=services; ticket_reads=reads; ticket_writes=writes; ticket_handle=handle;
               ticket_at_start=ac.tpos = 0; ticket_consumed=false})
   | Some _ | None -> Error Plugin_protocol.Invalid_request
 
@@ -2398,7 +2399,7 @@ let execute_command ticket program =
 
 let invoke_command ticket =
   if ticket.ticket_consumed then Ui_task.resolve (Error Plugin_protocol.Cancelled) else
-  let invocation = Plugin_host.invoke_command ticket.ticket_handle
+  let invocation = Plugin_host.invoke_command ~writes:ticket.ticket_writes ticket.ticket_handle
       ticket.ticket_services ticket.ticket_reads in
   let completion = Ui_task.bind invocation (function
     | Error error -> ticket.ticket_consumed <- true; Ui_task.resolve (Error error)

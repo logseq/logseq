@@ -16,8 +16,15 @@ type read_services = {
     ((Plugin_protocol.entity * Plugin_protocol.entity list) list option, Plugin_protocol.error) result Ui_task.t;
   sibling_block : Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
     (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  block_properties : Plugin_protocol.identity -> (Json.t, Plugin_protocol.error) result Ui_task.t;
+  page_blocks_tree : Plugin_protocol.identity -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
+  block_children : Plugin_protocol.identity -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
   query : Plugin_protocol.query -> (Json.t, Plugin_protocol.error) result Ui_task.t;
   log : Plugin_protocol.log_level -> string -> (unit, Plugin_protocol.error) result Ui_task.t;
+}
+type write_services = {
+  apply : check:(unit -> (unit, Plugin_protocol.error) result) -> Plugin_protocol.mutation ->
+    (Plugin_protocol.reply, Plugin_protocol.error) result Ui_task.t;
 }
 
 val create : unit -> t
@@ -27,7 +34,7 @@ val activate_commands : t -> session -> (unit, Plugin_protocol.error) result
 val commands : t -> session -> Plugin_protocol.command_descriptor list
 val command_callback : t -> session -> key:string ->
   (Plugin_protocol.callback_id, Plugin_protocol.error) result
-val begin_invocation : ?reads:read_services -> t -> session -> services -> invocation
+val begin_invocation : ?reads:read_services -> ?writes:write_services -> t -> session -> services -> invocation
 val check : t -> session -> invocation -> (unit, Plugin_protocol.error) result
 val dispatch : t -> session -> invocation -> Plugin_protocol.request ->
   (Plugin_protocol.reply, Plugin_protocol.error) result Ui_task.t

@@ -22,12 +22,33 @@ type Identity = string | number | { uuid: string }
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EditingState = { blockUuid: string; text: string } | null
 type PageResult = PageEntity | { name: string; title: string; uuid?: string }
+export interface InsertBlockOptions {
+  before?: boolean
+  sibling?: boolean
+  start?: boolean
+  end?: boolean
+  customUUID?: string
+}
+export type PropertyValue = string | number | boolean
+export type CreatedPage = Pick<PageEntity, 'id' | 'uuid' | 'name'>
+export interface MoveBlockOptions {
+  before?: boolean
+  children?: boolean
+}
+export interface CreatePageOptions {
+  customUUID?: string
+  redirect?: false
+}
+export interface UpdateBlockOptions {
+  properties?: Record<string, PropertyValue | null>
+}
 
 const capabilityNames = [
   'editor_read',
   'editor_command',
   'graph_read',
   'db_query',
+  'graph_write',
 ] as const
 
 export type QuickjsCapability = (typeof capabilityNames)[number]
@@ -56,6 +77,34 @@ export interface QuickjsHost {
   getBlock(identity: Identity): Promise<BlockEntity | null>
   getBlockTree(identity: Identity): Promise<BlockEntity | null>
   getPage(identity: Identity): Promise<PageEntity | null>
+  getBlockProperties(identity: Identity): Promise<Record<string, Data> | null>
+  insertBlock(
+    identity: Identity,
+    content: string,
+    options: InsertBlockOptions
+  ): Promise<BlockEntity | null>
+  updateBlock(
+    identity: Identity,
+    content: string,
+    properties: Record<string, PropertyValue | null>
+  ): Promise<void>
+  getPageBlocksTree(identity: Identity): Promise<BlockEntity[]>
+  getBlockChildren(identity: Identity): Promise<BlockEntity[]>
+  removeBlock(identity: Identity): Promise<void>
+  moveBlock(
+    source: Identity,
+    target: Identity,
+    options: MoveBlockOptions
+  ): Promise<void>
+  createPage(name: string, options: CreatePageOptions): Promise<CreatedPage>
+  renamePage(identity: Identity, name: string): Promise<boolean>
+  deletePage(identity: Identity): Promise<void>
+  upsertBlockProperty(
+    identity: Identity,
+    key: string,
+    value: PropertyValue
+  ): Promise<void>
+  removeBlockProperty(identity: Identity, key: string): Promise<void>
   getPageLinkedReferences(
     identity: Identity
   ): Promise<Array<[PageEntity, BlockEntity[]]> | null>
@@ -219,6 +268,68 @@ function surface<T extends object>(value: T): Readonly<T> {
   })
 }
 
+function insertionOptions(value: unknown): InsertBlockOptions {
+  const copy = data(value === undefined ? {} : value)
+  if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+    failure('Invalid_request')
+  for (const [key, entry] of Object.entries(copy)) {
+    if (['properties', 'schema', 'autoOrderedList'].includes(key))
+      failure('Unsupported')
+    if (key === 'customUUID') {
+      if (
+        typeof entry !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          entry
+        )
+      )
+        failure('Invalid_request')
+    } else if (
+      !['before', 'sibling', 'start', 'end'].includes(key) ||
+      typeof entry !== 'boolean'
+    ) {
+      failure('Invalid_request')
+    }
+  }
+  if (
+    (copy.start && copy.end) ||
+    ((copy.before || copy.sibling) && (copy.start || copy.end))
+  )
+    failure('Invalid_request')
+  return copy as InsertBlockOptions
+}
+
+function propertyKey(value: string): string {
+  if (
+    typeof value !== 'string' ||
+    !value.length ||
+    !/^[a-zA-Z0-9_-]+$/.test(value)
+  )
+    failure('Invalid_request')
+  if (bytes(value) > 64) failure('Resource_limit')
+  return value
+}
+
+function content(value: string): string {
+  if (typeof value !== 'string') failure('Invalid_request')
+  return data(value) as string
+}
+
+function emptyOptions(
+  value: unknown,
+  unsupported: string[],
+  flags = false
+): void {
+  if (value === undefined) return
+  const copy = data(value)
+  if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+    failure('Invalid_request')
+  for (const [key, entry] of Object.entries(copy)) {
+    if (!unsupported.includes(key)) failure('Invalid_request')
+    if (flags && typeof entry !== 'boolean') failure('Invalid_request')
+    if (!flags || entry !== false) failure('Unsupported')
+  }
+}
+
 function pluginInfo(value: PortablePluginInfo): Readonly<PortablePluginInfo> {
   const grants = value.grantedCapabilities
   if (!Array.isArray(grants)) failure('Unsupported')
@@ -335,6 +446,73 @@ export const logseq = surface({
     return info
   },
   Editor: surface({
+    getPageBlocksTree(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getPageBlocksTree(key))
+    },
+    getBlockChildren(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getBlockChildren(key))
+    },
+    removeBlock(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.removeBlock(key))
+    },
+    moveBlock(source: Identity, target: Identity, opts: MoveBlockOptions = {}) {
+      const from = identity(source),
+        to = identity(target),
+        flags = data(opts) as MoveBlockOptions
+      if (
+        !flags ||
+        typeof flags !== 'object' ||
+        Array.isArray(flags) ||
+        Object.entries(flags).some(
+          ([key, value]) =>
+            !['before', 'children'].includes(key) || typeof value !== 'boolean'
+        ) ||
+        (flags.before && flags.children)
+      )
+        failure('Invalid_request')
+      return call((host) => host.moveBlock(from, to, flags))
+    },
+    createPage(
+      name: string,
+      properties?: Record<string, Data>,
+      opts: CreatePageOptions = {}
+    ) {
+      const title = content(name),
+        flags = data(opts) as CreatePageOptions
+      if (!title.trim()) failure('Invalid_request')
+      if (properties !== undefined) {
+        const values = data(properties)
+        if (!values || typeof values !== 'object' || Array.isArray(values))
+          failure('Invalid_request')
+        if (Object.keys(values).length) failure('Unsupported')
+      }
+      if (!flags || typeof flags !== 'object' || Array.isArray(flags))
+        failure('Invalid_request')
+      for (const [key, value] of Object.entries(flags)) {
+        if (key === 'customUUID') {
+          if (typeof value !== 'string') failure('Invalid_request')
+          insertionOptions({ customUUID: value })
+        } else if (key === 'redirect') {
+          if (value !== false) failure('Unsupported')
+        } else if (['journal', 'class', 'schema'].includes(key))
+          failure('Unsupported')
+        else failure('Invalid_request')
+      }
+      return call((host) => host.createPage(title, flags))
+    },
+    renamePage(value: Identity, name: string) {
+      const key = identity(value),
+        title = content(name)
+      if (!title.trim()) failure('Invalid_request')
+      return call((host) => host.renamePage(key, title))
+    },
+    deletePage(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.deletePage(key))
+    },
     getPreviousSiblingBlock(value: Identity) {
       const key = identity(value)
       return call((host) => host.getSiblingBlock('previous', key))
@@ -362,6 +540,70 @@ export const logseq = surface({
       if (options(opts)) failure('Unsupported')
       const key = identity(value)
       return call((host) => host.getPage(key))
+    },
+    getBlockProperties(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getBlockProperties(key))
+    },
+    insertBlock(value: Identity, text: string, opts?: InsertBlockOptions) {
+      const key = identity(value),
+        body = content(text),
+        flags = insertionOptions(opts)
+      return call((host) => host.insertBlock(key, body, flags))
+    },
+    updateBlock(value: Identity, text: string, opts: UpdateBlockOptions = {}) {
+      const key = identity(value),
+        body = content(text)
+      const copy = data(opts)
+      if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+        failure('Invalid_request')
+      for (const name of Object.keys(copy)) {
+        if (name === 'schema') failure('Unsupported')
+        if (name !== 'properties') failure('Invalid_request')
+      }
+      const patch = 'properties' in copy ? copy.properties : {}
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+        failure('Invalid_request')
+      if (Object.keys(patch).length > 32) failure('Resource_limit')
+      for (const [name, value] of Object.entries(patch)) {
+        propertyKey(name)
+        if (
+          value !== null &&
+          !['string', 'number', 'boolean'].includes(typeof value)
+        )
+          failure('Unsupported')
+      }
+      return call((host) =>
+        host.updateBlock(
+          key,
+          body,
+          patch as Record<string, PropertyValue | null>
+        )
+      )
+    },
+    upsertBlockProperty(
+      value: Identity,
+      key: string,
+      property: PropertyValue,
+      opts?: { reset?: boolean; entityId?: boolean }
+    ) {
+      const target = identity(value),
+        name = propertyKey(key),
+        copy = data(property)
+      if (copy === null) failure('Invalid_request')
+      if (
+        typeof copy !== 'string' &&
+        typeof copy !== 'number' &&
+        typeof copy !== 'boolean'
+      )
+        failure('Unsupported')
+      emptyOptions(opts, ['reset', 'entityId'], true)
+      return call((host) => host.upsertBlockProperty(target, name, copy))
+    },
+    removeBlockProperty(value: Identity, key: string) {
+      const target = identity(value),
+        name = propertyKey(key)
+      return call((host) => host.removeBlockProperty(target, name))
     },
     getPageLinkedReferences(value: Identity) {
       const key = identity(value)

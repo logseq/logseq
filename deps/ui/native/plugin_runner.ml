@@ -75,8 +75,8 @@ let start ~commands ~id ~grants ~source =
       match Quickjs_runtime.load runtime ~source with
       | Error error -> close runner; Ui_task.resolve (Error error)
       | Ok callback ->
-          let services, reads = Plugin_read_services.capture ~id in
-          let invocation = Plugin_broker.begin_invocation ~reads broker session services in
+          let services, reads, writes = Plugin_read_services.capture_editor ~id in
+          let invocation = Plugin_broker.begin_invocation ~reads ~writes broker session services in
           owned runner (Ui_task.bind (perform runner ~read_only:true invocation callback) (fun result ->
             let result = Result.bind result (fun _ ->
               if commands then Plugin_broker.activate_commands broker session else Ok ()) in
@@ -84,19 +84,19 @@ let start ~commands ~id ~grants ~source =
             Ui_task.resolve (Result.map (fun () -> runner) result)))
 
 let start_read ~id ~grants ~source =
-  if List.mem Editor_command grants then Ui_task.resolve (Error Permission_denied)
+  if List.mem Editor_command grants || List.mem Graph_write grants then Ui_task.resolve (Error Permission_denied)
   else start ~commands:false ~id ~grants ~source
 
 let start_commands ~id ~grants ~source =
   if not (List.mem Editor_command grants) then Ui_task.resolve (Error Permission_denied)
   else start ~commands:true ~id ~grants ~source
 
-let invoke runner ~key services reads =
+let invoke ?writes runner ~key services reads =
   (Ui_services.get ()).assert_owner ();
   if not (current runner) then Ui_task.resolve (Error Cancelled)
   else if runner.busy then Ui_task.resolve (Error Invalid_request)
   else match Plugin_broker.command_callback runner.broker runner.session ~key with
     | Error error -> Ui_task.resolve (Error error)
     | Ok callback ->
-        let invocation = Plugin_broker.begin_invocation ~reads runner.broker runner.session services in
+        let invocation = Plugin_broker.begin_invocation ~reads ?writes runner.broker runner.session services in
         perform runner ~read_only:false invocation callback
