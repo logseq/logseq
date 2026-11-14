@@ -17,14 +17,18 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     environment:
-      # Self-hosted sync server. host.docker.internal reaches ports published on
-      # the CasaOS host; use the service name instead if both share a network.
-      LOGSEQ_SYNC_URL: http://host.docker.internal:8787
+      # REQUIRED: address of your self-hosted Logseq Sync server (the
+      # logseq-selfhost-sync container), as seen from inside this container.
+      # Use the CasaOS LAN IP and the host port published by the sync app,
+      # e.g. http://192.168.1.50:8787. If the sync app publishes port 8787 on
+      # the host, http://host.docker.internal:8787 also works. Avoid Tailscale
+      # MagicDNS names here: containers usually cannot resolve them.
+      LOGSEQ_SYNC_URL: http://CASAOS_IP:8787
       # Logseq account (email + password login; MFA/social login unsupported).
-      LOGSEQ_USERNAME: ${LOGSEQ_USERNAME}
-      LOGSEQ_PASSWORD: ${LOGSEQ_PASSWORD}
+      LOGSEQ_USERNAME: you@example.com
+      LOGSEQ_PASSWORD: change-me
       # Settings -> Encryption in the Logseq app. Only needed for E2EE graphs.
-      LOGSEQ_E2EE_PASSWORD: ${LOGSEQ_E2EE_PASSWORD}
+      LOGSEQ_E2EE_PASSWORD: change-me
       # Optional: comma-separated graphs to open on startup. Graphs can also be
       # opened at any time with the open_graph MCP tool.
       LOGSEQ_GRAPHS: ""

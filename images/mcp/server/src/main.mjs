@@ -22,6 +22,9 @@ function configureSyncEndpoints() {
     throw new Error("LOGSEQ_SYNC_URL is required, e.g. http://logseq-sync:8787");
   }
   const base = new URL(syncUrl);
+  if (base.hostname === "casaos_ip") {
+    throw new Error("LOGSEQ_SYNC_URL still has the CASAOS_IP placeholder; set your sync server address");
+  }
   if (base.protocol !== "http:" && base.protocol !== "https:") {
     throw new Error(`LOGSEQ_SYNC_URL must be http(s), got ${syncUrl}`);
   }
