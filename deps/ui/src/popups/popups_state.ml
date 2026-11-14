@@ -642,7 +642,8 @@ let filter_slash q items =
   let fields = if U.current_lang () = "zh-CN" then
       fields @ [fun it -> Fuzzy.hanzi_initials it.ai_label] else fields in
   let fs =
-    Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
+    if q = "" then items
+    else Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
   in
 
   (match fs with [] -> [ slash_fallback () ] | _ -> fs)
