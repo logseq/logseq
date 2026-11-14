@@ -14,6 +14,7 @@
             [frontend.config :as config]
             [frontend.context.i18n :as i18n]
             [frontend.db.restore :as db-restore]
+            [frontend.db.subs :as db-subs]
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.e2ee]
@@ -50,6 +51,12 @@
           (when-not (error/ignored? message)
             (log/error :exception error)))))
 
+(defn- clear-stale-current-repo!
+  []
+  (when (state/get-current-repo)
+    (state/set-current-repo! nil)
+    (db-subs/reset-graph! nil)))
+
 (defn restore-and-setup!
   [repo]
   (when repo
@@ -77,13 +84,40 @@
                 (state/set-db-restoring! false))))))
         (p/then
          (fn []
-           (js/console.log "db restored, setting up repo hooks")
+           (log/info :event :db-restored)
 
            (page-handler/init-commands!)
 
            (page-handler/watch-for-date!)))
         (p/catch (fn [error]
-                   (log/error :exception error))))))
+                   (log/error :exception error)
+                   (when (error/graph-absent-error? error)
+                     (clear-stale-current-repo!)
+                     (state/set-db-restoring! false)
+                     (throw error)))))))
+
+(defn- <restore-or-demo!
+  [repo]
+  (if (nil? repo)
+    (repo-handler/new-db! config/demo-repo)
+    (-> (restore-and-setup! repo)
+        (p/catch (fn [error]
+                   (if (error/graph-absent-error? error)
+                     (repo-handler/new-db! config/demo-repo)
+                     (throw error)))))))
+
+(defn <open-startup-repo!
+  "Opens the resolved startup graph. A missing graph falls back to the next
+  registered repo, then to the demo graph."
+  [repo repos]
+  (if (nil? repo)
+    (repo-handler/new-db! config/demo-repo)
+    (-> (restore-and-setup! repo)
+        (p/catch (fn [error]
+                   (if (error/graph-absent-error? error)
+                     (<restore-or-demo!
+                      (:url (first (remove #(= repo (:url %)) repos))))
+                     (throw error)))))))
 
 (defn- handle-connection-change
   [e]
@@ -188,9 +222,7 @@
                            url-target
                            (graph-handler/get-tab-graph)
                            (state/get-current-repo))
-                     _ (if (empty? repos)
-                         (repo-handler/new-db! config/demo-repo)
-                         (restore-and-setup! repo))
+                     _ (<open-startup-repo! repo repos)
                      _ (when target-repo
                          (apply-url-target-route! url-target))]
                (set-network-watcher!)
