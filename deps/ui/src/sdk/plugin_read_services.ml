@@ -226,7 +226,7 @@ let capture ~id =
                 | Error error -> Ui_task.resolve (Error error)
                 | Ok blocks ->
                     let groups = Hashtbl.create 16 in
-                    let page_ids = ref [] in
+                    let page_order_rev = ref [] in
                     let page_id block = match Wire.get block "block/page" with
                       | Some (Wire.Int id) -> Some id
                       | Some (Wire.Map _ as page) -> Wire.map_get_int page "db/id"
@@ -235,24 +235,24 @@ let capture ~id =
                     let grouped = List.for_all (fun block -> match page_id block with
                       | None -> false
                       | Some id ->
-                          if not (Hashtbl.mem groups id) then page_ids := id :: !page_ids;
+                          if not (Hashtbl.mem groups id) then page_order_rev := id :: !page_order_rev;
                           let existing = Option.value ~default:[] (Hashtbl.find_opt groups id) in
                           Hashtbl.replace groups id (block :: existing);
                           true) blocks in
                     if not grouped then Ui_task.resolve (Error Runtime_failure)
                     else if blocks = [] then Ui_task.resolve (Ok (Some []))
                     else
-                      let page_ids = List.rev !page_ids in
+                      let page_ids = List.rev !page_order_rev in
                       await (fun () -> get_many repo page_ids) (fun wire ->
                           let pages = Wire.elems wire in
-                          let result = List.map2 (fun id page ->
-                            if Wire.map_get_int page "db/id" <> Some id then raise (Rejected Runtime_failure);
-                            let page = match entity (checked_json Sdk_convert.result_json_of_wire page) with
-                              | Ok page -> page | Error error -> raise (Rejected error) in
-                            let blocks = List.rev (Hashtbl.find groups id) |> List.map (fun block ->
-                              match entity (checked_json Sdk_convert.json_of_wire block) with
-                              | Ok block -> block | Error error -> raise (Rejected error)) in
-                            page, blocks) page_ids pages in
+                          let result = List.map2 (fun id page_wire ->
+                            if Wire.map_get_int page_wire "db/id" <> Some id then raise (Rejected Runtime_failure);
+                            let page_entity = match entity (checked_json Sdk_convert.result_json_of_wire page_wire) with
+                              | Ok converted_page -> converted_page | Error error -> raise (Rejected error) in
+                            let reference_entities = List.rev (Hashtbl.find groups id) |> List.map (fun reference_wire ->
+                              match entity (checked_json Sdk_convert.json_of_wire reference_wire) with
+                              | Ok reference_entity -> reference_entity | Error error -> raise (Rejected error)) in
+                            page_entity, reference_entities) page_ids pages in
                           let reply = Page_linked_references (Some result) in
                           match validate_value (reply_value reply) with
                           | Ok () -> Ok (Some result)
