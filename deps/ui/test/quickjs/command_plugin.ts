@@ -22,14 +22,27 @@ void logseq.ready(async () => {
         seed.uuid,
         [
           {
-            content: 'A [[batch reference]]',
+            content: 'A [[batch reference]] #portable-batch-shared-tag',
             properties: { score: 2 },
             children: [{ content: 'A1', properties: { enabled: false } }],
           },
-          { content: 'B [[batch reference]]', properties: { score: 3 } },
+          {
+            content: 'B [[batch reference]] #[[portable-batch-shared-tag]]',
+            properties: { score: 3 },
+          },
         ],
         { sibling: true }
       )
+      const tags = await logseq.DB.q(
+        '[:find ?tag (count ?block) :where [?tag :block/title "portable-batch-shared-tag"] [?tag :db/ident] [?block :block/tags ?tag]]'
+      )
+      if (
+        !Array.isArray(tags) ||
+        tags.length !== 1 ||
+        !Array.isArray(tags[0]) ||
+        tags[0][1] !== 2
+      )
+        throw new Error('Batch hashtags must share one referenced tag class')
       const first = await logseq.Editor.prependBlockInPage(page.name, 'first')
       const last = await logseq.Editor.appendBlockInPage(page.id, 'last', {
         properties: { label: 'end' },

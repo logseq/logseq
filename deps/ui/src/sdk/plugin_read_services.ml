@@ -351,8 +351,9 @@ let capture_editor ~id =
         | Wire.Array [] | Wire.List [] | Wire.Set [] -> Js.Promise.resolve ()
         | Wire.Array _ | Wire.List _ | Wire.Set _ -> stop Unsupported
         | _ -> stop Runtime_failure in
+      let parse_title = Title_refs.parser ~origin_repo:repo () in
       let parse_block uuid parent text =
-        let* parsed = Title_refs.parse ~origin_repo:repo text in
+        let* parsed = parse_title text in
         guard ();
         Js.Promise.resolve (Wire.Map (
           [Wire.kw "block/title", Wire.String parsed.Title_refs.title;

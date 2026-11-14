@@ -26,7 +26,10 @@ Page-edge methods require an explicit existing page name, UUID, `{ uuid }` or
 positive ID, and insert one first/last direct child. They never create a missing
 target page, navigate, or infer today's page. Plain-block creation does not author
 property-value/default-value/closed-value structures. Content references and tags
-still use the normal parser and outliner path.
+still use the normal parser and outliner path. One mutation shares reference
+resolution across its new nodes: repeated bare and bracketed hashtags reuse one
+case-sensitive tag-class identity and staged definition. This cache never spans
+mutations or repositories.
 
 ```ts
 const created = await logseq.Editor.createBlock(parentUuid, 'Task', {

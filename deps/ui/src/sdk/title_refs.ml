@@ -181,25 +181,38 @@ let tag_class_by_name ~origin_repo name =
   | uuid :: _ -> Sdk_util.get_by_id_for_repo origin_repo (Wire.Uuid uuid)
   | [] -> Js.Promise.resolve Wire.Nil
 
-let resolve_names ~origin_repo names tags hash =
+let resolve_names ?cache ~origin_repo names tags hash =
   let* a =
     names
     |> List.map (fun name ->
            let is_tag = List.mem name tags in
            let is_hash = is_tag || List.mem name hash in
-           let* w =
-             if List.mem name hash then tag_class_by_name ~origin_repo name
-             else Sdk_util.get_entity_for_repo origin_repo name
-           in
-           Js.Promise.resolve
-             (match Wire.map_get_uuid w "block/uuid" with
-              | Some u ->
-                  { name; uuid = u; is_tag; is_hash
-                  ; fresh = false; entity = w }
-              | None ->
-                  { name; uuid = Ui_services.env_random_uuid ()
-                  ; is_tag; is_hash; fresh = true
-                  ; entity = Wire.Nil }))
+           let resolve () =
+             let* w =
+               if is_hash then tag_class_by_name ~origin_repo name
+               else Sdk_util.get_entity_for_repo origin_repo name
+             in
+             Js.Promise.resolve
+               (match Wire.map_get_uuid w "block/uuid" with
+                | Some u ->
+                    { name; uuid = u; is_tag; is_hash
+                    ; fresh = false; entity = w }
+                | None ->
+                    let uuid = Ui_services.env_random_uuid () in
+                    { name; uuid
+                    ; is_tag; is_hash; fresh = true
+                    ; entity = if is_hash then new_tag_map name uuid else new_page_map name uuid }) in
+           let* resolved = match cache with
+             | None -> resolve ()
+             | Some cache ->
+                 let key = is_hash, (if is_hash then name else lc name) in
+                 match Hashtbl.find_opt cache key with
+                 | Some pending -> pending
+                 | None ->
+                     let pending = resolve () in
+                     Hashtbl.add cache key pending;
+                     pending in
+           Js.Promise.resolve { resolved with name; is_tag; is_hash })
     |> Array.of_list |> Js.Promise.all
   in
   Js.Promise.resolve (Array.to_list a)
@@ -258,7 +271,7 @@ let rewrite_title title resolved =
 
 type parsed = { title : string; refs : Wire.t list; tags : Wire.t list }
 
-let parse ?(origin_repo = Sdk_util.repo ()) title =
+let parse ?cache ?(origin_repo = Sdk_util.repo ()) title =
   let cache_context_revision =
     let entry_model = Runtime.model () in
     if entry_model.Model.repo = Some origin_repo then
@@ -266,7 +279,7 @@ let parse ?(origin_repo = Sdk_util.repo ()) title =
     else None
   in
   let names, tags, hash = scan_title title in
-  let* resolved = resolve_names ~origin_repo names tags hash in
+  let* resolved = resolve_names ?cache ~origin_repo names tags hash in
   let fresh_model = Runtime.model () in
   (* seed the render pull caches with the resolved metas: a remounted
      [[uuid]] anchor then paints its title immediately instead of
@@ -285,13 +298,11 @@ let parse ?(origin_repo = Sdk_util.repo ()) title =
           | None -> ())
       resolved;
   let ref_of r =
-    if r.fresh then
-      if r.is_hash then new_tag_map r.name r.uuid
-      else new_page_map r.name r.uuid
+    if r.fresh then r.entity
     else existing_ref_map r.entity
   in
   let tag_of r =
-    if r.fresh then new_tag_map r.name r.uuid else uuid_lookup r.uuid
+    if r.fresh then r.entity else uuid_lookup r.uuid
   in
   Js.Promise.resolve
     { title = rewrite_title title resolved
@@ -300,6 +311,8 @@ let parse ?(origin_repo = Sdk_util.repo ()) title =
                (fun r -> if r.is_tag then Some (tag_of r) else None)
                resolved
     }
+
+let parser ~origin_repo () = parse ~origin_repo ~cache:(Hashtbl.create 32)
 
 (* block map kvs for block/refs + block/tags — omitted when empty so
    save-block merges do not clobber existing values *)
