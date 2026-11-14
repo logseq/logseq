@@ -310,7 +310,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
               ~on_chosen:(fun c -> on_chosen (icon_choice c))
         | None -> ())
   ; appearance_popup =
-      (fun () -> Runtime.send (Action.Appearance_set true))
+      Runtime.toggle_appearance
   ; dialogs_open = Dialogs_state.open_
   ; dialogs_close = Dialogs_state.close_named
   ; dialogs_is_open = Dialogs_state.is_open

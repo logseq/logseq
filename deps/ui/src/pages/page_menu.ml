@@ -251,7 +251,7 @@ let global_items () =
         close ();
         Sidebar_state.open_dialog "plugins")
   ; icon_item "appearance" (I18n.t "nav/appearance") "color-swatch" (fun () ->
-        Runtime.send (Action.Appearance_set true))
+        Runtime.toggle_appearance ())
   ; icon_item "recycle" (I18n.t "storage.recycle/title") "trash" (fun () ->
         close ();
         Runtime.mark_nav ();

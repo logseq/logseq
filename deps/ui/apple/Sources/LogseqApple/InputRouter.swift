@@ -124,12 +124,16 @@ final class InputRouter {
     }
 
     func capture(_ event: NSEvent) throws -> Bool {
+        // Refresh physical state even after a release outside this window.
+        // Escape/capture cancellation is independent of button ownership.
+        buttons = Int(NSEvent.pressedMouseButtons)
         let flags = event.modifierFlags
         var payload: [String: Any] = [
             "shiftKey": flags.contains(.shift), "altKey": flags.contains(.option),
             "metaKey": flags.contains(.command), "ctrlKey": flags.contains(.control)
         ]
         if event.type == .keyDown || event.type == .keyUp {
+            payload["buttons"] = buttons
             payload["nodeId"] = keyboardTarget(in: event.window)
             payload["key"] = nativeKey(event); payload["code"] = nativeCode(event)
             payload["repeat"] = event.isARepeat

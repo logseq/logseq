@@ -10,6 +10,7 @@ let font_family ~apple () =
 
 let view _context model_source _send : t =
  fun ctx parent ->
+  Runtime.install_appearance_guard ~scope:ctx.Lui_ui.ui_state_scope;
   Settings_state.ensure ctx;
   ignore (Outline_viewport_state.ensure ctx model_source);
   (Ui_parts.string_prop Lui_protocol.FontFamily
