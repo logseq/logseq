@@ -57,7 +57,7 @@ let rec show ~anchor ~column_width (block : Model.block) =
       let session = { uuid; popup_id = !(P.next_id) + 1;
         return_scope = (S.read ()).S.selection_scope } in
       active := Some session;
-      S.add_block_source ~scope (fun () -> [block]);
+      S.add_block_source ~scope ~kind:S.Field_editor (fun () -> [block]);
       let width = max 160 column_width - 18 in
       (* The reference card adds four-point padding, a one-point border and
          six trailing points around its column-width-minus-eighteen content. *)

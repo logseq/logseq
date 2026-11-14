@@ -3589,8 +3589,8 @@ let test_block_source_remount () =
   let sources = !(S.extra_sources) in
   Fun.protect ~finally:(fun () -> S.extra_sources := sources) (fun () ->
     let scope = "property-source-remount" and uuid = "property-value" in
-    let old = S.register_block_source ~scope (fun () -> [block uuid "Before"]) in
-    let live = S.register_block_source ~scope (fun () -> [block uuid "After"]) in
+    let old = S.register_block_source ~scope ~kind:S.Field_editor (fun () -> [block uuid "Before"]) in
+    let live = S.register_block_source ~scope ~kind:S.Field_editor (fun () -> [block uuid "After"]) in
     old ();
     check "Property source survives retirement of its previous view"
       (Option.map (fun b -> b.Model.block_title) (S.find uuid) = Some "After"
@@ -3612,7 +3612,8 @@ let test_selected_uuids () =
     ; block "m" "Last" ]
   in
   let p = page tree in
-  S.extra_sources := ["selection-side", (fun () -> tree)];
+  S.extra_sources := [{ S.source_scope = "selection-side";
+    source_kind = S.Outliner; source_blocks = (fun () -> tree) }];
   List.iter (fun (label, model, scope, expected) ->
       model_stub := model;
       S.st := Some (Signal.state sched

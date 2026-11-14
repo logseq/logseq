@@ -1156,7 +1156,7 @@ let test_selection_direction (h : host) =
 let test_selected_open (h : host) =
   let scope = "selected-open-sidebar" in
   let blocks = [ Test_check.block "b1" "first"; Test_check.block "b2" "last" ] in
-  let release = S.register_block_source ~scope (fun () -> blocks) in
+  let release = S.register_block_source ~scope ~kind:S.Outliner (fun () -> blocks) in
   let enter =
     { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
       alt = false; composing = false; key = Some "Enter"; key_char = None;
@@ -1201,7 +1201,7 @@ let test_scoped_indent_target (h : host) =
   install_worker ~repo:h.repo h;
   reset_editor ();
   let release =
-    S.register_block_source ~scope:"indent-test" (fun () -> [ target; current ])
+    S.register_block_source ~scope:"indent-test" ~kind:S.Outliner (fun () -> [ target; current ])
   in
   S.set_collapsed ~scope:"indent-test" "main-parent" true;
   S.set_collapsed ~scope:"indent-test" "local-parent" true;
@@ -1339,7 +1339,7 @@ let test_multi_selection_arrows (h : host) =
       [ "before"; "z-first"; "a-last"; "after" ] in
   stage_page h (List.rev blocks);
   reset_editor ();
-  let release = S.register_block_source ~scope (fun () -> blocks) in
+  let release = S.register_block_source ~scope ~kind:S.Outliner (fun () -> blocks) in
   List.iter (fun (up, anchor) ->
     S.set (fun st -> { st with S.selection_scope = scope;
       selected = S.String_set.of_list [ "z-first"; "a-last" ]; anchor = Some anchor });
@@ -1404,7 +1404,7 @@ let test_drop_top_owner (h : host) =
         let blocks =
             [ Test_check.block "drop-source" "source";
               Test_check.block "drop-target" "target" ] in
-        let unregister = S.register_block_source ~scope (fun () -> blocks) in
+        let unregister = S.register_block_source ~scope ~kind:S.Outliner (fun () -> blocks) in
         A.begin_block_drag ~scope "drop-source";
         install_worker ~repo:h.repo h;
         let release = ref (fun () -> ()) in
