@@ -12,7 +12,8 @@ let check_wire value =
     if not (valid_utf8 value) then raise (Rejected Invalid_request)
   in
   let integer value =
-    if value < -9007199254740991L || value > 9007199254740991L then
+    let number = Int64.to_float value in
+    if number >= Int64.to_float Int64.max_int || Int64.of_float number <> value then
       raise (Rejected Unsupported)
   in
   let rec visit depth value =
