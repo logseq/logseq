@@ -216,7 +216,13 @@ let get_block_class_default_properties args =
              Wire.Map
                (List.filter_map
                   (fun (p : entity) ->
-                     match Ldb.value p "logseq.property/default-value" with
+                     let default_attr =
+                       match Ldb.value p "logseq.property/type" with
+                       | Some (Keyword "checkbox" | String "checkbox") ->
+                           "logseq.property/scalar-default-value"
+                       | _ -> "logseq.property/default-value"
+                     in
+                     match Ldb.value p default_attr with
                      | Some (Ref id) ->
                          (match Ldb.ent_of_id db id with
                           | Some dv ->

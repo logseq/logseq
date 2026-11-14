@@ -71,20 +71,59 @@ let run path =
     Wire.kw "block/tags", Wire.Set [Wire.kw "logseq.class/Page"];
   ] in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [page]; Wire.Nil; Wire.Nil]);
-  let block block_uuid parent order title = Wire.Map [
+  let block ?(page_uuid = uuid) block_uuid parent order title = Wire.Map [
     Wire.kw "block/uuid", Wire.Uuid block_uuid;
     Wire.kw "block/title", Wire.String title;
     Wire.kw "block/order", Wire.String order;
     Wire.kw "block/created-at", Wire.Int 1;
     Wire.kw "block/updated-at", Wire.Int 1;
     Wire.kw "block/parent", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid parent];
-    Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]] in
+    Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid]] in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
     block first_uuid uuid "a0" "first";
     block last_uuid uuid "a1" "last";
     block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested";
     block "00000000-0000-0000-0000-000000000108" "00000000-0000-0000-0000-000000000102" "a0" "deeper"];
     Wire.Nil; Wire.Nil]);
+  let today = Dates.today () in
+  let page_row ?(kind = "logseq.class/Page") page_uuid title extra = Wire.Map ([
+    Wire.kw "block/uuid", Wire.Uuid page_uuid;
+    Wire.kw "block/name", Wire.String (String.lowercase_ascii title);
+    Wire.kw "block/title", Wire.String title;
+    Wire.kw "block/created-at", Wire.Int 1;
+    Wire.kw "block/updated-at", Wire.Int 1;
+    Wire.kw "block/tags", Wire.Set [Wire.kw kind]] @ extra) in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    page_row "00000000-0000-0000-0000-000000000120" today
+      [Wire.kw "block/journal-day", Wire.Int (Dates.today_journal_day ())];
+    page_row "00000000-0000-0000-0000-000000000111" "Hidden SDK page"
+      [Wire.kw "logseq.property/hide?", Wire.Bool true];
+    block ~page_uuid:"00000000-0000-0000-0000-000000000111" "00000000-0000-0000-0000-000000000112"
+      "00000000-0000-0000-0000-000000000111" "a0" (String.make 32769 'x')];
+    Wire.Nil; Wire.Nil]);
+  let score = Wire.kw "plugin.property.sdk-probe/score" in
+  let op name args = Wire.Array [Wire.kw name; Wire.Array args] in
+  ignore (invoke "thread-api/apply-outliner-ops" [Wire.String repo; Wire.Array [
+    op "upsert-property" [score; Wire.Map [
+      Wire.kw "logseq.property/type", Wire.kw "number";
+      Wire.kw "db/cardinality", Wire.kw "db.cardinality/many"]; Wire.Map []];
+    op "set-block-property" [Wire.Uuid first_uuid; score; Wire.Int 7];
+    op "set-block-property" [Wire.Uuid first_uuid; score; Wire.Int 9];
+    op "set-block-property" [Wire.Uuid uuid; score; Wire.Int 11];
+    op "set-block-property" [Wire.Uuid "00000000-0000-0000-0000-000000000112";
+      score; Wire.Int 13];
+    op "upsert-property" [Wire.kw "plugin.property.sdk-probe/checked"; Wire.Map [
+      Wire.kw "logseq.property/type", Wire.kw "checkbox";
+      Wire.kw "logseq.property/scalar-default-value", Wire.Bool true]; Wire.Map []];
+    op "set-block-property" [Wire.Uuid last_uuid;
+      Wire.kw "plugin.property.sdk-probe/checked"; Wire.Bool false]]; Wire.Map []]);
+  let class_uuid = "00000000-0000-0000-0000-000000000114" in
+  let member block_uuid = Wire.Map [Wire.kw "block/uuid", Wire.Uuid block_uuid;
+    Wire.kw "block/tags", Wire.Set [Wire.Array [Wire.kw "block/uuid"; Wire.Uuid class_uuid]]] in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    page_row ~kind:"logseq.class/Tag" class_uuid "SDK probe checklist"
+      [Wire.kw "logseq.property.class/properties", Wire.Set [Wire.kw "plugin.property.sdk-probe/checked"]];
+    member uuid; member first_uuid; member last_uuid]; Wire.Nil; Wire.Nil]);
   let page = match Decode.page_of_summary page with Some page -> page | None -> failwith "page" in
   let source_page = "00000000-0000-0000-0000-000000000103" in
   let reference source_page suffix order = match block
@@ -103,11 +142,11 @@ let run path =
     source_page_map other_page "quickjs other source page";
     reference source_page "104" "a0"; reference other_page "107" "a0";
     reference source_page "105" "a1"]; Wire.Nil; Wire.Nil]);
-  let property = Wire.kw "plugin.property.sdk-probe/score" in
+  let property = Wire.kw "plugin.property.sdk-probe/tree-score" in
   ignore (invoke "thread-api/apply-outliner-ops" [Wire.String repo; Wire.Array [
     Wire.Array [Wire.kw "upsert-property"; Wire.Array [property;
       Wire.Map [Wire.kw "logseq.property/type", Wire.kw "number"; Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
-      Wire.Map [Wire.kw "property-name", Wire.String "score"]]];
+      Wire.Map [Wire.kw "property-name", Wire.String "tree-score"]]];
     Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid first_uuid; property; Wire.Int 7]];
     Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid "00000000-0000-0000-0000-000000000102"; property; Wire.Int 11]];
     Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid "00000000-0000-0000-0000-000000000108"; property; Wire.Int 13]];
@@ -138,9 +177,18 @@ let run path =
   Plugin_host.unload_read_plugin runner;
   Plugin_host.unload_read_plugin runner;
   check "graph permission" (task (Plugin_host.load_read_plugin ~id ~grants:[Editor_read] ~source) = Error Permission_denied);
+  let scoped_block uuid = Decode.block_of_wire (block uuid first_uuid "a0" "Selection") in
+  let selection_scope = "sdk-probe-selection" in
+  let remove_source = Editor_state.register_block_source ~scope:selection_scope ~kind:Editor_state.Outliner
+    (fun () -> [scoped_block last_uuid; scoped_block first_uuid]) in
+  Editor_state.set_silent (fun state -> {state with editing = None; selection_scope;
+    selected = Editor_state.String_set.of_list [first_uuid; last_uuid]});
+  let selection_id = success (plugin_id selection_scope) in
+  let runner = task (Plugin_host.load_read_plugin ~id:selection_id ~grants ~source) |> success in
+  Plugin_host.unload_read_plugin runner;
   let services, reads = Plugin_read_services.capture ~id in
   let broker = Plugin_broker.create () in
-  let session = Plugin_broker.open_session broker id [Graph_read] in
+  let session = Plugin_broker.open_session broker id [Editor_read; Graph_read] in
   let invocation = Plugin_broker.begin_invocation ~reads broker session services in
   let sibling = task (Plugin_broker.get_sibling_block broker session invocation
     ~direction:Next_sibling (Uuid first_uuid)) |> success in
@@ -150,18 +198,32 @@ let run path =
   let pending_sibling = Plugin_broker.get_sibling_block broker session invocation
     ~direction:Previous_sibling (Uuid last_uuid) in
   let pending = reads.get_block (Uuid uuid) in
+  let unit_result read = Ui_task.bind read (fun result ->
+    Ui_task.resolve (Result.map ignore result)) in
+  let pending_batch = [
+    unit_result (Plugin_broker.get_current_page_blocks_tree broker session invocation);
+    unit_result (Plugin_broker.get_selected_blocks broker session invocation);
+    unit_result (Plugin_broker.get_block_property broker session invocation (Uuid first_uuid)
+      (success (property_ident "plugin.property.sdk-probe/score")));
+    unit_result (Plugin_broker.get_page_properties broker session invocation (Page_name "quickjs sdk probe"));
+    unit_result (Plugin_broker.get_today_page broker session invocation);
+    unit_result (Plugin_broker.get_all_pages broker session invocation)] in
   let pending_tree = Plugin_broker.get_block_tree broker session invocation (Uuid first_uuid) in
   let pending_refs = Plugin_broker.get_page_linked_references broker session invocation (Uuid uuid) in
   model := {!model with context_revision = (!model).context_revision + 1};
   check "late reply must be stale" (task pending = Error Stale_context);
   check "late sibling reply must be stale" (task pending_sibling = Error Stale_context);
+  List.iter (fun pending ->
+    check "late batch-4 reply must be stale" (task pending = Error Stale_context)) pending_batch;
   check "late tree reply must be stale" (task pending_tree = Error Stale_context);
   check "late reference reply must be stale" (task pending_refs = Error Stale_context);
   Plugin_broker.close_session broker session;
+  remove_source ();
   check "read runner cannot receive command grants"
     (task (Plugin_host.load_read_plugin ~id ~grants:[Editor_command] ~source) = Error Permission_denied);
   model := Model.initial;
-  Editor_state.set_silent (fun state -> {state with editing = None});
+  Editor_state.set_silent (fun state -> {state with editing = None; selection_scope = "main";
+    selected = Editor_state.String_set.empty});
   let id = success (plugin_id "sdk-probe-empty") in
   let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
   Plugin_host.unload_read_plugin runner;

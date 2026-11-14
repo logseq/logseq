@@ -69,6 +69,15 @@ export interface PortablePluginInfo {
   readonly grantedCapabilities: readonly QuickjsCapability[]
 }
 
+export interface PortablePageMetadata {
+  readonly id: number
+  readonly uuid: string
+  readonly name: string
+  readonly title: string
+  readonly createdAt?: number
+  readonly updatedAt?: number
+}
+
 export interface QuickjsHost {
   getPluginInfo(): Promise<PortablePluginInfo>
   getEditingState(): Promise<EditingState>
@@ -77,6 +86,12 @@ export interface QuickjsHost {
   getBlock(identity: Identity): Promise<BlockEntity | null>
   getBlockTree(identity: Identity): Promise<BlockEntity | null>
   getPage(identity: Identity): Promise<PageEntity | null>
+  getCurrentPageBlocksTree(): Promise<BlockEntity[]>
+  getSelectedBlocks(): Promise<BlockEntity[]>
+  getBlockProperty(identity: Identity, key: string): Promise<Data>
+  getPageProperties(identity: Identity): Promise<Record<string, Data> | null>
+  getTodayPage(): Promise<PageEntity | null>
+  getAllPages(): Promise<PortablePageMetadata[]>
   getBlockProperties(identity: Identity): Promise<Record<string, Data> | null>
   insertBlock(
     identity: Identity,
@@ -251,6 +266,16 @@ function options(value?: { includeChildren?: boolean }): boolean {
     failure('Invalid_request')
   }
   return copy.includeChildren === true
+}
+
+function propertyIdent(value: string): string {
+  if (typeof value !== 'string') failure('Invalid_request')
+  data(value)
+  const key = value.startsWith(':') ? value.slice(1) : value
+  if (!/^[^\u0000-\u0020\u007f:/]+\/[^\u0000-\u0020\u007f:/]+$/u.test(key)) {
+    failure('Invalid_request')
+  }
+  return key
 }
 
 function surface<T extends object>(value: T): Readonly<T> {
@@ -446,6 +471,28 @@ export const logseq = surface({
     return info
   },
   Editor: surface({
+    getCurrentPageBlocksTree() {
+      return call((host) => host.getCurrentPageBlocksTree())
+    },
+    getSelectedBlocks() {
+      return call((host) => host.getSelectedBlocks())
+    },
+    getBlockProperty(value: Identity, key: string) {
+      const target = identity(value)
+      const name = propertyIdent(key)
+      return call((host) => host.getBlockProperty(target, name))
+    },
+    getPageProperties(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getPageProperties(key))
+    },
+    getTodayPage() {
+      return call((host) => host.getTodayPage())
+    },
+    getAllPages(...args: never[]) {
+      if (args.length !== 0) failure('Unsupported')
+      return call((host) => host.getAllPages())
+    },
     getPageBlocksTree(value: Identity) {
       const key = identity(value)
       return call((host) => host.getPageBlocksTree(key))
