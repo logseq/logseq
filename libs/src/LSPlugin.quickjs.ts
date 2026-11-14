@@ -23,6 +23,16 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EditingState = { blockUuid: string; text: string } | null
 type PageResult = PageEntity | { name: string; title: string; uuid?: string }
 
+export type EditorCommandAction =
+  | { readonly kind: 'insertText'; readonly text: string }
+  | { readonly kind: 'showDatePicker' }
+  | { readonly kind: 'exitEditing' }
+export type EditorCommandProgram = readonly EditorCommandAction[]
+export interface EditorCommandDescriptor {
+  readonly key: string
+  readonly label: string
+}
+
 export interface PortablePluginInfo {
   readonly id: string
   readonly runtime: 'quickjs'
@@ -37,6 +47,10 @@ export interface QuickjsHost {
   getPage(identity: Identity): Promise<PageEntity | null>
   datascriptQuery(query: string, inputs: Data[]): Promise<Data>
   log(level: LogLevel, text: string): Promise<void>
+  registerEditorCommand(
+    descriptor: EditorCommandDescriptor,
+    handler: (host: QuickjsHost) => Promise<EditorCommandProgram>
+  ): Promise<void>
 }
 
 export class PluginError extends Error {
@@ -304,6 +318,43 @@ export const logseq = surface({
       ) as Promise<T>
     },
   }),
+  Commands: surface({
+    registerEditorCommand(
+      descriptor: EditorCommandDescriptor,
+      handler: () => EditorCommandProgram | Promise<EditorCommandProgram>
+    ): Promise<void> {
+      if (!activating) return Promise.reject(new PluginError('Unsupported'))
+      if (typeof handler !== 'function') failure('Invalid_request')
+      const copy = data(descriptor)
+      if (
+        !copy ||
+        typeof copy !== 'object' ||
+        Array.isArray(copy) ||
+        Object.keys(copy).length !== 2 ||
+        typeof copy.key !== 'string' ||
+        typeof copy.label !== 'string' ||
+        !/^[a-zA-Z0-9_.-]+$/.test(copy.key) ||
+        !copy.label.length ||
+        Array.from(copy.label).some((char) => {
+          const code = char.codePointAt(0)!
+          return code < 32 || (code >= 127 && code <= 159)
+        })
+      )
+        failure('Invalid_request')
+      if (bytes(copy.key) > 64 || bytes(copy.label) > 128)
+        failure('Resource_limit')
+      const command = { key: copy.key, label: copy.label }
+      return call((host) =>
+        host.registerEditorCommand(command, (current) =>
+          withHost(current, async () => {
+            const result = await handler()
+            data(result)
+            return result
+          })
+        )
+      )
+    },
+  }),
 })
 
 Object.defineProperty(globalThis, 'logseq', { value: logseq })
@@ -317,39 +368,16 @@ Object.defineProperty(globalThis, 'console', {
   }),
 })
 
-export async function activate(host: QuickjsHost): Promise<[]> {
-  if (activating) failure('Invalid_request')
-  if (initialized) return []
-  activating = true
+async function withHost<T>(
+  host: QuickjsHost,
+  action: () => Promise<T>
+): Promise<T> {
+  if (activeHost) failure('Invalid_request')
   activeHost = host
   try {
-    info = surface(await call((current) => current.getPluginInfo()))
-    initialized = true
-    const initializers: Promise<unknown>[] = []
-    for (const registration of registrations.splice(0)) {
-      initializers.push(
-        Promise.resolve()
-          .then(() => {
-            const completion = registration.callback?.(info!)
-            registration.resolve()
-            return completion
-          })
-          .then(
-            () => registration.resolve(),
-            (error: unknown) => {
-              registration.reject(error)
-              throw error
-            }
-          )
-      )
-    }
-    await Promise.all(initializers)
+    const result = await action()
     while (pending.size) await Promise.all([...pending])
-    return []
-  } catch (error) {
-    for (const registration of registrations.splice(0))
-      registration.reject(error)
-    throw error
+    return result
   } finally {
     try {
       while (diagnostics.length) {
@@ -359,7 +387,45 @@ export async function activate(host: QuickjsHost): Promise<[]> {
       diagnosticBytes = 0
     } finally {
       activeHost = null
-      activating = false
     }
+  }
+}
+
+export async function activate(host: QuickjsHost): Promise<[]> {
+  if (activating) failure('Invalid_request')
+  if (initialized) return []
+  activating = true
+  try {
+    return await withHost(host, async () => {
+      info = surface(await call((current) => current.getPluginInfo()))
+      initialized = true
+      const initializers: Promise<unknown>[] = []
+      for (const registration of registrations.splice(0)) {
+        initializers.push(
+          Promise.resolve()
+            .then(() => {
+              const completion = registration.callback?.(info!)
+              registration.resolve()
+              return completion
+            })
+            .then(
+              () => registration.resolve(),
+              (error: unknown) => {
+                registration.reject(error)
+                throw error
+              }
+            )
+        )
+      }
+      await Promise.all(initializers)
+      while (pending.size) await Promise.all([...pending])
+      return []
+    })
+  } catch (error) {
+    for (const registration of registrations.splice(0))
+      registration.reject(error)
+    throw error
+  } finally {
+    activating = false
   }
 }

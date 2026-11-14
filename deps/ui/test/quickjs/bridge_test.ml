@@ -101,6 +101,39 @@ let cases = [
     {|let saved; export async function run(host){
       if (!saved) { saved=host; return []; } await saved.getEditingContext(); return []; }|}
     (Error Cancelled);
+  case ~grants:[Editor_read] "registration requires command authority"
+    {|export async function run(host){
+      await host.registerEditorCommand({key:"test",label:"Test"},()=>[]); return [];
+    }|} (Error Permission_denied);
+  case "callback slots cannot be supplied by JavaScript"
+    {|export async function run(host){
+      await host.registerEditorCommand({key:"test",label:"Test"},1); return [];
+    }|} (Error Invalid_request);
+  case "duplicate command keys rejected"
+    {|export async function run(host){
+      await host.registerEditorCommand({key:"test",label:"Test"},()=>[]);
+      await host.registerEditorCommand({key:"test",label:"Other"},()=>[]); return [];
+    }|} (Error Invalid_request);
+  case "command metadata bounded"
+    {|export async function run(host){
+      await host.registerEditorCommand({key:"test",label:"x".repeat(129)},()=>[]); return [];
+    }|} (Error Resource_limit);
+  case "command metadata accessors rejected"
+    {|export async function run(host){
+      await host.registerEditorCommand({get key(){throw new Error("accessor")},label:"Test"},()=>[]); return [];
+    }|} (Error Invalid_request);
+  case ~repeat:true "successful jobs drain before another epoch"
+    {|let turn=0, completed=0;
+      export function run(){
+        if (turn++ && completed!==96) throw new Error("unfinished epoch");
+        let chain=Promise.resolve();
+        for(let i=0;i<96;i++) chain=chain.then(()=>{completed++});
+        return [];
+      }|} (Ok []);
+  case "successful infinite job chain retires under budget"
+    {|export function run(){
+      function loop(){Promise.resolve().then(loop)} loop(); return [];
+    }|} (Error Resource_limit);
 ]
 
 let execute case =

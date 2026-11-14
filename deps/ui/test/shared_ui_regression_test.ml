@@ -559,7 +559,8 @@ let configured_popup_ownership () =
         {configured_uuid=uuid; configured_caret=5; configured_editor=editor;
          configured_repo="configured-popup"; configured_route=Runtime.route ();
          configured_input_seq= !Editor_state.edit_input_seq;
-         configured_popup_session=popup_session; configured_popup_generation=0} in
+         configured_popup_session=popup_session; configured_popup_generation=0;
+         configured_lease=(fun () -> true)} in
       let open_popup () =
         if image then begin
           Editor_commands.open_link_form ~configured:checkpoint false uuid 0;

@@ -1,3 +1,9 @@
+let portable_commands () : Plugin_protocol.command_handle list = []
+let command_current (_ : Plugin_protocol.command_handle) = false
+let invoke_command (_ : Plugin_protocol.command_handle)
+    (_ : Plugin_broker.services) (_ : Plugin_broker.read_services) =
+  Ui_task.resolve (Error Plugin_protocol.Unsupported)
+
 (* LSPlugin host runtime for the web build. Installs window.apis
    (EventEmitter3), wires LSPluginCore listeners, persists installed
    plugins + per-plugin settings under localStorage keys mirroring the
@@ -1834,4 +1840,3 @@ let api_methods =
   ; "set_main_ui_inline_style", nil_fn
   ; "set_main_ui_attrs", nil_fn
   ]
-

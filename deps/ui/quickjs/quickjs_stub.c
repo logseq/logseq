@@ -27,6 +27,8 @@ typedef struct Bridge {
     JSRuntime *runtime;
     JSContext *context;
     JSValue handler, result, object_proto, array_proto;
+    JSValue callbacks[MAX_CALLS];
+    int callback_count, selected_slot;
     JSClassID object_class, array_class;
     pthread_t owner;
     int error, interrupted, active, epoch, next_request, calls;
@@ -130,6 +132,8 @@ static void destroy(Bridge *bridge) {
     if (bridge->context) {
         stop(bridge);
         JS_FreeValue(bridge->context, bridge->handler);
+        for (int i = 0; i < bridge->callback_count; i++)
+            JS_FreeValue(bridge->context, bridge->callbacks[i]);
         JS_FreeValue(bridge->context, bridge->object_proto);
         JS_FreeValue(bridge->context, bridge->array_proto);
         JS_FreeContext(bridge->context);
@@ -429,6 +433,12 @@ static JSValue host_request(JSContext *context, JSValueConst this_value, int arg
         return JS_Throw(context, JS_NewString(context, error_names[INVALID]));
     if (!bridge->active || JS_VALUE_GET_INT(data[0]) != bridge->epoch)
         return JS_Throw(context, JS_NewString(context, error_names[CANCELLED]));
+    if (operation == 9 && bridge->selected_slot != 0)
+        return JS_Throw(context, JS_NewString(context, error_names[UNSUPPORTED]));
+    if (operation == 9 && !JS_IsFunction(context, argv[1]))
+        return JS_Throw(context, JS_NewString(context, error_names[INVALID]));
+    if (operation == 9 && bridge->callback_count >= MAX_CALLS)
+        return JS_Throw(context, JS_NewString(context, error_names[RESOURCE]));
     if (bridge->calls >= MAX_CALLS || bridge->next_request == INT_MAX) {
         bridge->error = RESOURCE;
         return JS_ThrowInternalError(context, "Plugin request budget exhausted");
@@ -439,7 +449,9 @@ static JSValue host_request(JSContext *context, JSValueConst this_value, int arg
     JSValue input = JS_NewArray(context);
     if (JS_IsException(input)) { bridge->error = RESOURCE; return input; }
     for (int i = 0; i < argc; i++) {
-        if (JS_DefinePropertyValueUint32(context, input, i, JS_DupValue(context, argv[i]),
+        JSValue argument = operation == 9 && i == 1
+            ? JS_NewInt32(context, bridge->callback_count + 1) : JS_DupValue(context, argv[i]);
+        if (JS_DefinePropertyValueUint32(context, input, i, argument,
                                         JS_PROP_ENUMERABLE) < 0) {
             JS_FreeValue(context, input);
             bridge->error = RESOURCE;
@@ -455,6 +467,8 @@ static JSValue host_request(JSContext *context, JSValueConst this_value, int arg
     }
     bridge->pending[index] = (Pending){1, ++bridge->next_request, operation,
                                       functions[0], functions[1], input};
+    if (operation == 9)
+        bridge->callbacks[bridge->callback_count++] = JS_DupValue(context, argv[1]);
     bridge->calls++;
     return promise;
 }
@@ -547,13 +561,22 @@ CAMLprim value logseq_quickjs_load(value handle, value source) {
     CAMLreturn(Val_int(bridge->error + 1));
 }
 
-CAMLprim value logseq_quickjs_start(value handle) {
-    CAMLparam1(handle);
+CAMLprim value logseq_quickjs_has_callback(value handle, value slot) {
+    CAMLparam2(handle, slot);
+    Bridge *bridge = owned(handle);
+    CAMLreturn(Val_bool(Int_val(slot) >= 1 && Int_val(slot) <= bridge->callback_count));
+}
+
+CAMLprim value logseq_quickjs_start(value handle, value slot) {
+    CAMLparam2(handle, slot);
     Bridge *bridge = owned(handle);
     if (bridge->active || JS_IsUndefined(bridge->handler)) CAMLreturn(Val_int(INVALID + 1));
+    int selected = Int_val(slot);
+    if (selected < 0 || selected > bridge->callback_count) CAMLreturn(Val_int(INVALID + 1));
     if (bridge->epoch == INT_MAX) CAMLreturn(Val_int(RESOURCE + 1));
     bridge->epoch++;
     bridge->active = 1;
+    bridge->selected_slot = selected;
     bridge->calls = 0;
     bridge->execution = 0;
     bridge->wall_deadline = monotonic() + 1;
@@ -561,10 +584,10 @@ CAMLprim value logseq_quickjs_start(value handle) {
     JSValue host = JS_NewObjectProto(bridge->context, JS_NULL);
     static const char *methods[] = {
         "getEditingContext", "getPluginInfo", "getEditingState", "getCurrentBlock",
-        "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log"
+        "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log", "registerEditorCommand"
     };
     if (JS_IsException(host)) bridge->error = RESOURCE;
-    for (int operation = 0; operation < 9 && bridge->error < 0; operation++) {
+    for (int operation = 0; operation < 10 && bridge->error < 0; operation++) {
         JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation)};
         int arguments = operation < 5 ? 0 : operation < 7 ? 1 : 2;
         JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 2, data);
@@ -573,7 +596,8 @@ CAMLprim value logseq_quickjs_start(value handle) {
     }
     if (bridge->error < 0) {
         JS_PreventExtensions(bridge->context, host);
-        bridge->result = JS_Call(bridge->context, bridge->handler, JS_UNDEFINED, 1, &host);
+        JSValue handler = selected == 0 ? bridge->handler : bridge->callbacks[selected - 1];
+        bridge->result = JS_Call(bridge->context, handler, JS_UNDEFINED, 1, &host);
         if (JS_IsException(bridge->result)) bridge->error = RUNTIME;
     }
     JS_FreeValue(bridge->context, host);
@@ -625,6 +649,12 @@ CAMLprim value logseq_quickjs_poll(value handle) {
         classify_error(bridge, result);
         JS_FreeValue(bridge->context, result);
         CAMLreturn(failed_event(bridge->error));
+    }
+    int pending = JS_IsJobPending(bridge->runtime);
+    for (int i = 0; i < MAX_CALLS; i++) pending |= bridge->pending[i].state;
+    if (pending) {
+        JS_FreeValue(bridge->context, result);
+        CAMLreturn(Val_int(0));
     }
     Budget budget = {0};
     payload = to_json(bridge, result, 0, &budget);

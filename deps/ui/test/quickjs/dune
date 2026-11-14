@@ -9,3 +9,9 @@
  (modules sdk_read_probe)
  (modes native)
  (libraries logseq_ui_native unix threads.posix))
+
+(executable
+ (name sdk_command_probe)
+ (modules sdk_command_probe)
+ (modes native)
+ (libraries logseq_ui_native unix threads.posix))
