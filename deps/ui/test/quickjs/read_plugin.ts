@@ -38,6 +38,21 @@ const connected = logseq.ready(async (info) => {
       [
         (mask & 2) !== 0,
         () =>
+          logseq.Editor.getBlock('00000000-0000-0000-0000-000000000100', {
+            includeChildren: true,
+          }),
+      ],
+      [
+        (mask & 2) !== 0,
+        () => logseq.Editor.getPageLinkedReferences('quickjs sdk probe'),
+      ],
+      [
+        (mask & 6) === 6,
+        () => logseq.DB.q('[:find ?e :where [?e :block/uuid]]'),
+      ],
+      [
+        (mask & 2) !== 0,
+        () =>
           logseq.Editor.getPreviousSiblingBlock(
             '00000000-0000-0000-0000-000000000101'
           ),
@@ -91,6 +106,14 @@ const connected = logseq.ready(async (info) => {
     check((await logseq.Editor.getCurrentPage()) === null, 'absent page')
     check((await logseq.Editor.getBlock(uuid)) === null, 'no graph block')
     check((await logseq.Editor.getPage('missing')) === null, 'no graph page')
+    check(
+      (await logseq.Editor.getBlock(uuid, { includeChildren: true })) === null,
+      'no graph tree'
+    )
+    check(
+      (await logseq.Editor.getPageLinkedReferences(uuid)) === null,
+      'no graph references'
+    )
     check(
       (await logseq.Editor.getNextSiblingBlock(uuid)) === null,
       'no graph sibling'
@@ -156,6 +179,59 @@ const connected = logseq.ready(async (info) => {
     'quickjs sdk probe'
   )
   check(JSON.stringify(rows) === JSON.stringify([[uuid]]), 'graph query')
+  const tree = await logseq.Editor.getBlock(
+    '00000000-0000-0000-0000-000000000100',
+    { includeChildren: true }
+  )
+  check(
+    tree?.properties?.[':plugin.property.sdk-probe/score']?.[
+      ':logseq.property/value'
+    ] === 7,
+    'tree properties'
+  )
+  check(
+    tree['collapsed?'] === true &&
+      tree.children?.length === 1 &&
+      !Array.isArray(tree.children[0]) &&
+      tree.children[0]?.uuid === '00000000-0000-0000-0000-000000000102',
+    'nested children'
+  )
+  const refs = await logseq.Editor.getPageLinkedReferences(uuid)
+  const child = tree.children?.[0]
+  check(child && !Array.isArray(child), 'nested block entity')
+  const grandchild = child.children?.[0]
+  check(grandchild && !Array.isArray(grandchild), 'recursive block entity')
+  check(
+    child.properties?.[':plugin.property.sdk-probe/score']?.[
+      ':logseq.property/value'
+    ] === 11 &&
+      grandchild.properties?.[':plugin.property.sdk-probe/score']?.[
+        ':logseq.property/value'
+      ] === 13,
+    'descendant properties'
+  )
+  const groups = new Map(
+    refs?.map(([page, blocks]) => [
+      page.uuid,
+      blocks.map((block) => block.uuid),
+    ])
+  )
+  check(
+    groups.size === 2 &&
+      groups.get('00000000-0000-0000-0000-000000000103')?.length === 2 &&
+      groups.get('00000000-0000-0000-0000-000000000106')?.[0] ===
+        '00000000-0000-0000-0000-000000000107',
+    'grouped page references'
+  )
+  check(
+    (await logseq.Editor.getPageLinkedReferences('missing')) === null,
+    'missing reference target'
+  )
+  check(
+    (await logseq.Editor.getPageLinkedReferences('quickjs source page'))
+      ?.length === 0,
+    'empty references'
+  )
   const inputs = [
     null,
     false,
@@ -165,7 +241,7 @@ const connected = logseq.ready(async (info) => {
       'sample-key': [1, null, 1e20, -1e20, 1e16, 9007199254740991, 2147483648],
     },
   ]
-  const roundtrip = await logseq.DB.datascriptQuery(
+  const roundtrip = await logseq.DB.q(
     '[:find ?a ?b ?c ?d ?e :in $ ?a ?b ?c ?d ?e]',
     ...inputs
   )
@@ -175,7 +251,7 @@ const connected = logseq.ready(async (info) => {
   )
   let unsupported = false
   try {
-    Reflect.get(logseq.DB, 'q')
+    Reflect.get(logseq.DB, 'transact')
   } catch (error) {
     unsupported = error instanceof Error && error.message === 'Unsupported'
   }

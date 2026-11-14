@@ -804,6 +804,30 @@ let test_search_blocks_page_filter () =
   check_list "page filter keeps only Alpha blocks" [ "shared term one" ]
     (result_titles (outcome_rows res)) Fun.id
 
+let test_search_blocks_namespace_page_filter () =
+  let conn =
+    T.create_conn_with_blocks
+      ~pages_and_blocks:
+        [ T.{ page = { default_page with pg_title = Some "Alpha" }
+            ; blocks = [ { default_block with b_title = Some "component alpha" } ] }
+        ; T.{ page = { default_page with pg_title = Some "Beta" }
+            ; blocks = [ { default_block with b_title = Some "component beta" } ] } ]
+      ()
+  in
+  let sdb = open_search_db () in
+  ignore (index_conn_blocks conn sdb);
+  let alpha_uuid =
+    match T.find_page_by_title (Datascript.db conn) "Alpha" with
+    | Some page -> block_uuid page
+    | None -> failwith "Alpha fixture page missing"
+  in
+  let res =
+    run_search conn sdb "namespace/component"
+      ~opts:(opts ~limit:10 ~enable_snippet:false ~page:alpha_uuid ()) ()
+  in
+  check_list "namespace last-component matches stay on the selected page"
+    [ "component alpha" ] (result_titles (outcome_rows res)) Fun.id
+
 let test_search_blocks_skips_fuzzy_for_multi_term_keyword_hits () =
   let conn, sdb = graph_with_blocks [ "Page-10000" ] in
   let res =
@@ -2278,6 +2302,7 @@ let () =
   test_search_blocks_fuzzy_matches_sanitized_umlaut ();
   test_search_blocks_fuzzy_prioritizes_page_candidates ();
   test_search_blocks_page_filter ();
+  test_search_blocks_namespace_page_filter ();
   test_search_blocks_skips_fuzzy_for_multi_term_keyword_hits ();
   test_search_blocks_skips_fts_for_enough_exact_title_hits ();
   test_search_blocks_normalizes_tag_title_query ();

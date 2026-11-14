@@ -50,6 +50,36 @@ and true query cancellation remain deferred. Native/headless graph verification
 does not establish GUI, Web/WASM, iOS or Android support; no DOM/WebView fallback
 was added.
 
+## QuickJS bound queries, block children, and linked references
+
+The DOM-free target now exposes `DB.q(query, ...inputs)` as the exact read-only
+Datalog alias of `DB.datascriptQuery`. Unlike the legacy iframe SDK's `DB.q(dsl)`,
+it does not translate simple-query DSL strings. Keep values in `:in` bindings and
+pass plain-data inputs separately; do not interpolate values into query text.
+Both methods require `graph_read` and `db_query`. No transaction endpoint,
+evaluator CPU budget, or true query cancellation is added.
+
+`Editor.getBlock(uuid, { includeChildren: true })` preserves the root entity's
+properties and adds recursive ordered children, including collapsed descendants,
+through the existing worker tree read. Numeric IDs and `{ uuid }` also work.
+The default/false option keeps the existing single-entity read. `getPage` retains
+its existing identity/property semantics and rejects child expansion.
+
+`Editor.getPageLinkedReferences(identity)` returns
+`[PageEntity, BlockEntity[]][] | null`. Page names, UUIDs, `{ uuid }`, and numeric
+IDs are accepted, including references to a block UUID. A missing target or
+absent graph returns `null`; an existing target with no references returns `[]`.
+References are grouped by source page, preserving worker result order within
+groups. These reads need only `graph_read` and use the existing typed broker,
+worker endpoints, captured context, value limits, and error categories.
+`getCurrentPage` and `getEditingBlockContent` retain their existing captured
+page/live unsaved-buffer semantics and grants. Late results reject as
+`Stale_context`; retired invocations reject as `Cancelled`.
+
+Property mutations are not part of this read-only slice. They will reuse the
+independent graph-write/property-patch implementation after it reaches the base
+branch, rather than copying its implementation here.
+
 ## QuickJS sibling navigation reads
 
 `Editor.getPreviousSiblingBlock(identity)` and `Editor.getNextSiblingBlock(identity)`

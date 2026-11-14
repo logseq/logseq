@@ -75,6 +75,7 @@ export interface QuickjsHost {
   getCurrentBlock(): Promise<BlockEntity | null>
   getCurrentPage(): Promise<PageResult | null>
   getBlock(identity: Identity): Promise<BlockEntity | null>
+  getBlockTree(identity: Identity): Promise<BlockEntity | null>
   getPage(identity: Identity): Promise<PageEntity | null>
   getBlockProperties(identity: Identity): Promise<Record<string, Data> | null>
   insertBlock(
@@ -104,6 +105,9 @@ export interface QuickjsHost {
     value: PropertyValue
   ): Promise<void>
   removeBlockProperty(identity: Identity, key: string): Promise<void>
+  getPageLinkedReferences(
+    identity: Identity
+  ): Promise<Array<[PageEntity, BlockEntity[]]> | null>
   getSiblingBlock(
     direction: 'previous' | 'next',
     identity: Identity
@@ -234,8 +238,8 @@ function identity(value: Identity): Identity {
   return { uuid: copy.uuid }
 }
 
-function options(value?: { includeChildren?: boolean }): void {
-  if (value === undefined) return
+function options(value?: { includeChildren?: boolean }): boolean {
+  if (value === undefined) return false
   const copy = data(value)
   if (
     !copy ||
@@ -246,7 +250,7 @@ function options(value?: { includeChildren?: boolean }): void {
   ) {
     failure('Invalid_request')
   }
-  if (copy.includeChildren === true) failure('Unsupported')
+  return copy.includeChildren === true
 }
 
 function surface<T extends object>(value: T): Readonly<T> {
@@ -424,6 +428,17 @@ function diagnostic(level: LogLevel, values: unknown[]): void {
   diagnostics.push({ level, text })
 }
 
+function datascriptQuery<T = Data>(
+  query: string,
+  ...inputs: Data[]
+): Promise<T> {
+  if (typeof query !== 'string' || !query.length) failure('Invalid_request')
+  const request = data({ query, inputs }) as { query: string; inputs: Data[] }
+  return call((host) =>
+    host.datascriptQuery(request.query, request.inputs)
+  ) as Promise<T>
+}
+
 export const logseq = surface({
   ready,
   get baseInfo(): Readonly<PortablePluginInfo> {
@@ -515,12 +530,14 @@ export const logseq = surface({
     getCurrentBlock: () => call((host) => host.getCurrentBlock()),
     getCurrentPage: () => call((host) => host.getCurrentPage()),
     getBlock(value: Identity, opts?: { includeChildren?: boolean }) {
-      options(opts)
+      const children = options(opts)
       const key = identity(value)
-      return call((host) => host.getBlock(key))
+      return call((host) =>
+        children ? host.getBlockTree(key) : host.getBlock(key)
+      )
     },
     getPage(value: Identity, opts?: { includeChildren?: boolean }) {
-      options(opts)
+      if (options(opts)) failure('Unsupported')
       const key = identity(value)
       return call((host) => host.getPage(key))
     },
@@ -588,18 +605,14 @@ export const logseq = surface({
         name = propertyKey(key)
       return call((host) => host.removeBlockProperty(target, name))
     },
+    getPageLinkedReferences(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getPageLinkedReferences(key))
+    },
   }),
   DB: surface({
-    datascriptQuery<T = Data>(query: string, ...inputs: Data[]): Promise<T> {
-      if (typeof query !== 'string' || !query.length) failure('Invalid_request')
-      const request = data({ query, inputs }) as {
-        query: string
-        inputs: Data[]
-      }
-      return call((host) =>
-        host.datascriptQuery(request.query, request.inputs)
-      ) as Promise<T>
-    },
+    q: datascriptQuery,
+    datascriptQuery,
   }),
   Commands: surface({
     registerEditorCommand(

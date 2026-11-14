@@ -38,6 +38,10 @@ final class PlatformServices {
     @ObservationIgnored lazy var scrolling = NativeScrolling(services: self)
     @ObservationIgnored var decodedImageSizes: [Int: CGSize] = [:]
     @ObservationIgnored var pendingImageSizes: [Int: UInt64] = [:]
+    @ObservationIgnored private var lazyMountsSent: [Int: UInt64] = [:]
+    @ObservationIgnored private var lazyMountCheckScheduled = false
+    @ObservationIgnored private var flushingLazyMounts = false
+    @ObservationIgnored private var lazyMountObservers: [NSObjectProtocol] = []
     @ObservationIgnored private var menuActions: [MenuAction] = []
     @ObservationIgnored private var panels: [NSSavePanel] = []
     private struct PendingTextInput {
@@ -77,6 +81,8 @@ final class PlatformServices {
         editorGeometry.clear()
         scrolling.clear()
         decodedImageSizes.removeAll(); pendingImageSizes.removeAll()
+        lazyMountsSent.removeAll()
+        stopLazyMountObservation()
         nodes.removeAll(); parents.removeAll(); children.removeAll(); views.removeAll(); frames.removeAll(); incarnations.removeAll()
         editors.removeAll(); focusIntents.removeAll()
     }
@@ -87,8 +93,14 @@ final class PlatformServices {
             case "create-node", "create-extension":
                 nodes[id] = op
                 nextIncarnation += 1; incarnations[id] = nextIncarnation
-            case "set-prop", "set-extension-prop": if let name = op["property"] as? String { nodes[id]?[name] = op["value"] }
-            case "remove-prop", "remove-extension-prop": if let name = op["property"] as? String { nodes[id]?.removeValue(forKey: name) }
+            case "set-prop", "set-extension-prop": if let name = op["property"] as? String {
+                nodes[id]?[name] = op["value"]
+                if ["height", "attrs", "events"].contains(name) { lazyMountsSent.removeValue(forKey: id) }
+            }
+            case "remove-prop", "remove-extension-prop": if let name = op["property"] as? String {
+                nodes[id]?.removeValue(forKey: name)
+                if ["height", "attrs", "events"].contains(name) { lazyMountsSent.removeValue(forKey: id) }
+            }
             case "drop-node", "detach-subtree":
                 var pending = [id]
                 while let dead = pending.popLast() {
@@ -96,6 +108,7 @@ final class PlatformServices {
                     nodes.removeValue(forKey: dead); parents.removeValue(forKey: dead); incarnations.removeValue(forKey: dead)
                     children.removeValue(forKey: dead)
                     decodedImageSizes.removeValue(forKey: dead); pendingImageSizes.removeValue(forKey: dead)
+                    lazyMountsSent.removeValue(forKey: dead)
                     views.removeValue(forKey: dead); frames.removeValue(forKey: dead)
                 }
                 for parent in children.keys { children[parent]?.removeAll { nodes[$0] == nil } }
@@ -111,6 +124,95 @@ final class PlatformServices {
                     if let parent = parents.removeValue(forKey: child) { children[parent]?.removeAll { $0 == child } }
                 }
             default: break
+            }
+        }
+    }
+    private func isColdLazyRow(_ id: Int) -> Bool {
+        guard let node = nodes[id], node["identifier"] as? String == "logseq-div",
+              node["height"] as? String != "auto",
+              let events = node["events"] as? String else { return false }
+        return events.split(separator: " ").contains("lazy-mount")
+    }
+    private func observeLazyMountGeometry() {
+        guard lazyMountObservers.isEmpty else { return }
+        for name in [NSView.boundsDidChangeNotification, NSView.frameDidChangeNotification, NSWindow.didResizeNotification] {
+            lazyMountObservers.append(NotificationCenter.default.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+                let clip = notification.object as? NSClipView
+                let resized = notification.object as? NSWindow
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    let window: NSWindow?
+                    if let clip { window = clip.window }
+                    else { window = resized }
+                    guard let window, self.ownsInputWindow(window) else { return }
+                    self.scheduleLazyMountCheck()
+                }
+            })
+        }
+    }
+    private func stopLazyMountObservation() {
+        for observer in lazyMountObservers { NotificationCenter.default.removeObserver(observer) }
+        lazyMountObservers.removeAll()
+    }
+    func scheduleLazyMountCheck(_ id: Int? = nil) {
+        guard !closed, !lazyMountCheckScheduled else { return }
+        if let id, !isColdLazyRow(id) { return }
+        observeLazyMountGeometry()
+        lazyMountCheckScheduled = true
+        onMainRunLoop { [weak self] in
+            guard let self else { return }
+            self.lazyMountCheckScheduled = false
+            self.perform { try self.mountVisibleLazyRows() }
+        }
+    }
+    private func lazyRowIsVisible(_ id: Int) -> Bool {
+        guard let view = views[id]?.value as? ViewAnchor.AnchorView, view.isCurrent(node: id, services: self),
+              !view.isHiddenOrHasHiddenAncestor, let window = view.window, ownsInputWindow(window),
+              let content = window.contentView else { return false }
+        // All rectangles here use this NSWindow's AppKit content coordinates.
+        let row = view.convert(view.bounds, to: content)
+        guard [row.minX, row.minY, row.width, row.height].allSatisfy({ $0.isFinite }),
+              row.width >= 0, row.height >= 0 else { return false }
+        var viewport = content.bounds
+        var ancestor = view.superview
+        while let parent = ancestor {
+            if let clip = parent as? NSClipView {
+                clip.postsBoundsChangedNotifications = true
+                clip.postsFrameChangedNotifications = true
+                viewport = viewport.intersection(clip.convert(clip.bounds, to: content))
+            }
+            if parent === content { break }
+            ancestor = parent.superview
+        }
+        // Empty VStacks can have zero width/height. A zero-height marker must
+        // lie strictly inside the visible band; never invent a minimum height.
+        return [viewport.minX, viewport.minY, viewport.width, viewport.height].allSatisfy({ $0.isFinite })
+            && !viewport.isEmpty && row.maxY > viewport.minY && row.minY < viewport.maxY
+            && row.maxX >= viewport.minX && row.minX <= viewport.maxX
+    }
+    func mountVisibleLazyRows() throws {
+        guard !closed, !applyingPatches, !flushingLazyMounts,
+              let runtime, runtime.started else { return }
+        flushingLazyMounts = true
+        defer { flushingLazyMounts = false }
+        let candidates = views.keys.filter { isColdLazyRow($0) }
+        guard !candidates.isEmpty else { return }
+        observeLazyMountGeometry()
+        let ready = try candidates.compactMap { id -> (Int, UInt64, String)? in
+            guard let incarnation = incarnations[id],
+                  lazyMountsSent[id] != incarnation, lazyRowIsVisible(id),
+                  let attrs = nodes[id]?["attrs"] as? String,
+                  let key = try object(attrs)["data-lazy-mount"] else { return nil }
+            guard let key = key as? String, !key.isEmpty else { throw HostError("Invalid lazy mount key") }
+            return (id, incarnation, attrs)
+        }
+        for (id, incarnation, attrs) in ready {
+            guard incarnations[id] == incarnation, nodes[id]?["attrs"] as? String == attrs,
+                  isColdLazyRow(id), lazyRowIsVisible(id) else { continue }
+            try runtime.extensionEvent(node: id, identifier: "logseq-div", name: "dom-event",
+                values: ["name": "lazy-mount", "payload": try jsonString(["nodeId": id])])
+            if incarnations[id] == incarnation, nodes[id]?["attrs"] as? String == attrs, isColdLazyRow(id) {
+                lazyMountsSent[id] = incarnation
             }
         }
     }
@@ -357,6 +459,7 @@ final class PlatformServices {
     }
     func close() {
         closed = true
+        lazyMountsSent.removeAll(); stopLazyMountObservation()
         pendingTextInput = nil
         for panel in panels { panel.cancel(nil) }
         panels.removeAll(); editors.removeAll(); views.removeAll()

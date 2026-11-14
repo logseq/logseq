@@ -1921,7 +1921,7 @@ let search_blocks ~(conn : conn) ~(search_db : Sqlite.db option)
     let pg_sql = if opts.opt_page <> None then "page = ? and" else "" in
     let match_sql =
       if Ns_util.namespace_page (Some q) then
-        select ^ pg_sql ^ " title match ? or title match ? limit ?"
+        select ^ pg_sql ^ " (title match ? or title match ?) limit ?"
       else select ^ pg_sql ^ " title match ? limit ?"
     in
     let non_match_sql = select ^ pg_sql ^ " title like ? limit ?" in

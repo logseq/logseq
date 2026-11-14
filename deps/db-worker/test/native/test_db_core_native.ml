@@ -2584,6 +2584,68 @@ let test_reorder_favorites () =
   in
   check "reorder favorites" (linked = [ pid2; pid1 ])
 
+let duplicate_favorites_fixture () =
+  let conn = create_conn_bare () in
+  seed_favorites_page conn;
+  let target i = Printf.sprintf "99999999-0000-0000-0000-%012d" i in
+  let first, recycled, second, unmentioned = target 1, target 2, target 3, target 4 in
+  ignore (transact_maps conn
+    (List.mapi (fun i uuid ->
+       [ "block/uuid", Uuid uuid
+       ; "block/title", Str ("Favorite " ^ string_of_int i)
+       ; "block/name", Str ("favorite " ^ string_of_int i) ]
+       @ if uuid = recycled then [ "logseq.property/deleted-at", Int64 1 ] else [])
+       [ first; recycled; second; unmentioned ]));
+  let links = [ Some first; Some first; Some recycled; Some second; Some unmentioned; None ] in
+  let slots = List.mapi (fun i _ -> Printf.sprintf "aaaaaaaa-0000-0000-0000-%012d" (i + 1)) links in
+  ignore (transact_maps conn
+    (List.mapi (fun i link ->
+       [ "block/uuid", Uuid (List.nth slots i)
+       ; "block/title", Str ""
+       ; "block/page", Vec [ Kw "block/uuid"; Uuid "11111111-ffff-1111-ffff-111111111111" ]
+       ; "block/parent", Vec [ Kw "block/uuid"; Uuid "11111111-ffff-1111-ffff-111111111111" ]
+       ; "block/order", Str (String.make 1 (Char.chr (Char.code 'a' + i))) ]
+       @ match link with Some uuid -> [ "block/link", Vec [ Kw "block/uuid"; Uuid uuid ] ] | None -> []) links));
+  register_conn conn;
+  conn, (first, recycled, second, unmentioned), slots
+
+let favorite_slot_uuids conn =
+  let page = Option.get (Ldb.get_page (db_of conn) (String favorites_page)) in
+  Ldb.sort_by_order (Ldb.ref_ents page "block/_page")
+  |> List.filter_map (fun b -> match Ldb.value b "block/uuid" with Some (Uuid u) -> Some u | _ -> None)
+
+let favorite_target_uuids () =
+  api_repo "get-favorite-pages" |> wire_maps
+  |> List.filter_map (wire_string_field "block/uuid")
+
+let test_favorite_projection_dedup () =
+  let _, (first, _, second, unmentioned), _ = duplicate_favorites_fixture () in
+  check "favorites deduplicate targets in slot order and omit recycled/missing links"
+    (favorite_target_uuids () = [ first; second; unmentioned ])
+
+let test_unfavorite_all_duplicate_links () =
+  let conn, (first, _, second, unmentioned), slots = duplicate_favorites_fixture () in
+  ignore (api "set-page-favorite" [ Wire.String test_repo; Wire.Uuid first; Wire.Bool false ]);
+  check "unfavorite removes every matching link and preserves unrelated slots"
+    (favorite_slot_uuids conn = List.filteri (fun i _ -> i >= 2) slots
+     && favorite_target_uuids () = [ second; unmentioned ]
+     && Option.is_some (entity_at_uuid (db_of conn) first))
+
+let test_reorder_duplicate_favorite_slots () =
+  let conn, (first, recycled, second, unmentioned), slots = duplicate_favorites_fixture () in
+  let missing = Wire.String "99999999-0000-0000-0000-000000000099" in
+  let order = Wire.Array [ Wire.Uuid second; missing; Wire.String first; Wire.Uuid second; Wire.Uuid recycled ] in
+  let reorder value = ignore (api "reorder-favorites" [ Wire.String test_repo; value ]) in
+  reorder order;
+  let expected_slots = List.filteri (fun i _ -> i <> 3) slots in
+  check "reorder reuses slots, drops duplicate leftovers and preserves unmentioned favorites"
+    (favorite_slot_uuids conn = expected_slots && favorite_target_uuids () = [ second; first; unmentioned ]);
+  List.iter (fun value ->
+    reorder value;
+    check "repeated or missing-only reorder preserves normalized favorites and slots"
+      (favorite_slot_uuids conn = expected_slots && favorite_target_uuids () = [ second; first; unmentioned ]))
+    [ order; Wire.Array [ missing ]; Wire.Array [] ]
+
 (* ---------- route-info / by-page-name ---------- *)
 
 (* (deftest get-page-route-info ...) *)
@@ -3510,6 +3572,12 @@ let cases =
       test_set_page_favorite_repeated_false
   ; Alcotest.test_case "reorder-favorites-is-idempotent-test" `Quick
       test_reorder_favorites
+  ; Alcotest.test_case "favorites-project-distinct-live-targets" `Quick
+      test_favorite_projection_dedup
+  ; Alcotest.test_case "unfavorite-removes-all-duplicate-links" `Quick
+      test_unfavorite_all_duplicate_links
+  ; Alcotest.test_case "reorder-normalizes-duplicate-favorite-slots" `Quick
+      test_reorder_duplicate_favorite_slots
   ; Alcotest.test_case "get-page-route-info" `Quick test_get_page_route_info
   ; Alcotest.test_case "reset-db-replaces-conn-db" `Quick test_reset_db
   ; Alcotest.test_case "get-class-objects-returns-entities-for-class-test" `Quick

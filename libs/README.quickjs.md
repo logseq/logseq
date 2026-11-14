@@ -79,7 +79,7 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `Editor.getEditingBlockContent()`                         | `editor_read`               | Live editing text or `null`                                                                   |
 | `Editor.getCurrentBlock()`                                | `editor_read`, `graph_read` | Current graph entity or `null`                                                                |
 | `Editor.getCurrentPage()`                                 | `editor_read`, `graph_read` | Page entity, route summary, or `null`                                                         |
-| `Editor.getBlock(identity, opts?)`                        | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; no child tree expansion                               |
+| `Editor.getBlock(identity, opts?)`                        | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; properties and optional recursive children            |
 | `Editor.getPage(identity, opts?)`                         | `graph_read`                | Numeric entity ID, UUID, `{ uuid }`, or page name; no child tree expansion                    |
 | `Editor.getBlockProperties(identity)`                     | `graph_read`                | Readable own/class-default properties or `null`                                               |
 | `Editor.getPageBlocksTree(identity)`                      | `graph_read`                | Ordered nested page blocks; IDs, UUIDs, or page names                                         |
@@ -96,8 +96,19 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `DB.datascriptQuery(query, ...inputs)`                    | `graph_read`, `db_query`    | DataScript query with bounded plain-data inputs/results                                       |
 | `Commands.registerEditorCommand(descriptor, handler)`     | `editor_command`            | Activation-time registration; handlers return the closed editor action program                |
 | `console.log/info/warn/error/debug`                       | None                        | Bounded application diagnostics, not a browser console                                        |
+| `Editor.getPageLinkedReferences(identity)`                | `graph_read`                | References grouped as `[PageEntity, BlockEntity[]][]`, or `null` for a missing target         |
+| `DB.q(query, ...inputs)`                                  | `graph_read`, `db_query`    | Exact read-only Datalog alias of `datascriptQuery`, not the legacy simple-query DSL           |
 
-`includeChildren` may be omitted or `false`; `true` is `Unsupported`. Explicit
+`getBlock` preserves properties and expands nested, ordered block entities when
+`includeChildren: true`, including collapsed descendants. Omitted/false keeps
+the existing single-entity read. Property values retain existing reference/value
+maps rather than being flattened to scalars. `getPage` still rejects `includeChildren: true`
+as `Unsupported`; unknown options are `Invalid_request`. Linked references accept
+the same identities as `getPage`, including block UUID targets. Existing targets
+with no references return `[]`; missing targets and absent graphs return `null`.
+Groups follow first page appearance in worker results, preserving reference order
+within each page. Missing/malformed source-page metadata rejects rather than
+silently dropping references. Explicit
 identity reads use graph services; active-editor reads also retain the captured
 editing context. A graph/context transition invalidates late replies. Read,
 query, diagnostics, and initialization calls remain subject to the existing
@@ -205,6 +216,12 @@ size/depth limits. Page trees contain nested `children`; block children are only
 the direct content children, not a flattened descendant walk. The latter uses a
 fixed parent-constrained worker query and batched entity reads, not plugin-supplied
 query text. Both need only `graph_read`. No worker endpoint is added.
+
+`Plugin_broker.get_block_tree` and `Plugin_broker.get_page_linked_references`
+provide typed OCaml reads under the same session/invocation boundary. They return
+an optional entity and an optional `(entity * entity list) list`, respectively.
+The native bridge retains graph-write operations 11–22 and uses slots 23–24
+for these reads without renumbering existing operations.
 
 Not implemented by this target: batch insertion and unlisted block/page options,
 settings, subscriptions, plugin installation/discovery,
