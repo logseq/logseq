@@ -34,6 +34,7 @@ module W = Wire
 (* The owner context a value cell is rendered for. *)
 type ctx =
   { owner_key : string
+  ; jump_owner : Jump_state.owner
   ; block_uuid : string
   ; block_id : int option
   ; refresh : unit -> unit
@@ -538,7 +539,7 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
-            ~uuid:ctx.block_uuid ~activate:(fun () -> open_editor ~steal:true ())
+            ~owner:ctx.jump_owner ~activate:(fun () -> open_editor ~steal:true ())
             (value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ())))
      ; if_ ~test:(Signal.value editing)
          (fun edit_context edit_parent ->
@@ -635,7 +636,7 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
          | _ ->
              Jump_state.target ~enabled:jump_target
                ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
-               ~uuid:ctx.block_uuid ~activate
+               ~owner:ctx.jump_owner ~activate
                (value_button ~text:initial ~on_press:(fun _ -> activate ())))
          (Editor_state.editing_target_sig ()) ]) context parent
 
@@ -645,7 +646,7 @@ let checkbox_view ?(jump_target = true) ctx row : t =
   let activate () = set_scalar ctx
       ~ident:(D.row_ident row |> Option.value ~default:"") ~value:(W.Bool (not checked)) in
   Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ D.row_title row)
-    ~uuid:ctx.block_uuid ~activate (Ui_components.checkbox ~checked
+    ~owner:ctx.jump_owner ~activate (Ui_components.checkbox ~checked
     ~on_toggle:(fun ev ->
       match ev with
       | Lui_protocol.ToggleChanged (_, b) ->
@@ -1044,7 +1045,7 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
   let hover =
     match hover with Some h -> h | None -> Signal.state sched false
   in
-  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate:open_picker
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~owner:ctx.jump_owner ~activate:open_picker
   (Lui_elements.row ~gap:4 ~cross:`center ~grow:1.0 ~accessibility_identifier:anchor_id
      ~style_class:"ls-datetime"
      ~on_pointer_enter:(fun _ ->
@@ -1220,7 +1221,7 @@ let extends_view ~jump_target ctx row : t =
   in
   let chips = ref_chips row in
   (Jump_state.target ~enabled:jump_target ~key:("extends-" ^ ctx.owner_key)
-     ~uuid:ctx.block_uuid ~activate:(fun () -> load (); Runtime.signal_set open_ true)
+     ~owner:ctx.jump_owner ~activate:(fun () -> load (); Runtime.signal_set open_ true)
   (column ~gap:2 ~grow:1.0 ~min_width:0
      [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          (chips
@@ -1344,7 +1345,7 @@ let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t 
                            ~selected_keys:(Signal.value selected)
                            ~placeholder:(I18n.t1 "property/set-placeholder" (D.row_title row)) items)
                    (Signal.value items_st) ]) popup_context popup_parent) in
-  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~owner:ctx.jump_owner ~activate
   (column ~gap:0 ~grow:1.0
      [ Ui_components.with_props
          [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
@@ -1412,7 +1413,7 @@ let node_view ?(jump_target = true) ctx row : t =
                 Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
              context' parent') in
-  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~owner:ctx.jump_owner ~activate
   (column ~gap:2 ~grow:1.0 ~min_width:0
      [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          ((if many then chips else [])
@@ -1485,7 +1486,7 @@ let many_number_values_view ~jump_target ctx row : t =
     let value = Option.value (D.getf value "logseq.property/value") ~default:value in
     value_button ~text:(D.value_display value) ~on_press:(fun _ -> activate ()))
       (D.value_elems (D.row_value row)) in
-  Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  Jump_state.target ~enabled:jump_target ~key:anchor_id ~owner:ctx.jump_owner ~activate
     (Lui_elements.row ~gap:4 ~flex_wrap:`wrap ~accessibility_identifier:anchor_id
       (values @ [value_button ~text:"" ~on_press:(fun _ -> activate ())]))
 
@@ -1589,7 +1590,7 @@ and icon_view ?(jump_target = true) ctx row : t =
                    |> ignore;
                    S.refresh_all ())
            | None -> () in
-  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+  (Jump_state.target ~enabled:jump_target ~key:anchor_id ~owner:ctx.jump_owner ~activate
   (Lui_elements.row ~gap:0 ~grow:1.0
      [ Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
          ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
@@ -1645,7 +1646,7 @@ and url_view ~jump_target ctx row : t =
   if url = "" then scalar_edit_cell ~jump_target ctx row
   else
     Jump_state.target ~enabled:jump_target ~key:("url-" ^ ctx.owner_key ^ "-" ^ D.row_title row)
-      ~uuid:ctx.block_uuid ~activate:(fun () -> Ui_services.env_open_url url)
+      ~owner:ctx.jump_owner ~activate:(fun () -> Ui_services.env_open_url url)
     (Ui_components.with_props
          [ Ui_components.Prop.text_decoration "none";
            Ui_components.Prop.white_space `normal; Ui_components.Prop.min_width 0 ]

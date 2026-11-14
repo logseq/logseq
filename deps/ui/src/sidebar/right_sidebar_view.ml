@@ -609,7 +609,7 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                 box ~key:("parea-" ^ it.key)
                   ~style_class:"ls-page-properties ls-properties-area"
                   ~accessibility_identifier:("sbprops-" ^ uuid)
-                  [ Properties_area.sidebar_area ~uuid
+                  [ Properties_area.sidebar_area ~scope:"sidebar" ~uuid
                       ~db_id:p.Model.page_db_id
                       ~title:p.Model.page_title
                       ~is_tag:p.Model.page_is_tag ]

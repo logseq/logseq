@@ -63,28 +63,34 @@ let track_mounted_row ~scope (b : Model.block) child =
 
 (* drag affordance classes come from the native bullet-drag gesture —
    S.drag_sig stays None on web, so the classes never appear there *)
-let row_class_str (b : Model.block) uuid (selected : S.String_set.t)
-    (drag : (string * string * string) option) =
+let drag_target_zone ~scope uuid = function
+  | Some { S.target = Some (target, zone); _ }
+    when target.S.scope = scope && target.S.uuid = uuid -> Some zone
+  | _ -> None
+
+let row_class_str ~scope (b : Model.block) uuid (selected : S.String_set.t)
+    (drag : S.drag_preview option) =
   let order_list = b.Model.block_order_list = Some "number" in
   let blank = String.trim b.block_title = "" in
   let embed = b.Model.block_link <> None in
   (* cljs :class order — dynamic flags first, base classes last *)
   (if S.String_set.mem uuid selected then "selected " else "")
   ^ (match drag with
-     | Some (src, _, _) when src = uuid -> "block-dragging "
-     | Some (_, tgt, move_to) when tgt = uuid ->
-         "block-drag-over block-drag-over-" ^ move_to ^ " "
-     | _ -> "")
+     | Some { S.source; _ } when source.S.scope = scope && source.S.uuid = uuid ->
+         "block-dragging "
+     | _ -> match drag_target_zone ~scope uuid drag with
+       | Some zone -> "block-drag-over block-drag-over-" ^ Block_drag.zone_name zone ^ " "
+       | None -> "")
   ^ (if order_list then "is-order-list " else "")
   ^ (if blank then "is-blank " else "")
   ^ (if embed then "embed-block " else "")
   ^ (if Comments.is_comments_area b then "is-comments-area " else "")
   ^ "ls-block swipe-item"
 
-let row_class_sig uuid blank embed (b : Model.block) =
+let row_class_sig ~scope uuid blank embed (b : Model.block) =
   ignore (blank, embed);
   Signal.map2
-    (fun selected drag -> row_class_str b uuid selected drag)
+    (fun selected drag -> row_class_str ~scope b uuid selected drag)
     (S.selected_sig ()) (S.drag_sig ())
 
 (* same class signal driven by a per-item block signal — keyed rows get
@@ -92,11 +98,11 @@ let row_class_sig uuid blank embed (b : Model.block) =
    be captured at mount. Fused into one map2: a map over a map leaks the
    inner derivation's upstream subscription — the outer's owner can't
    reach it *)
-let row_class_sig_of (bs : Model.block Signal.signal) =
+let row_class_sig_of ~scope (bs : Model.block Signal.signal) =
   Signal.map2
     (fun ((b : Model.block), selected) drag ->
       let uuid = Option.value b.block_uuid ~default:"" in
-      row_class_str b uuid selected drag)
+      row_class_str ~scope b uuid selected drag)
     (Signal.map2 (fun b selected -> (b, selected)) bs (S.selected_sig ()))
     (S.drag_sig ())
 
@@ -488,7 +494,8 @@ let content_wrapper ~scope ~editable uuid (b : Model.block) : t =
   row ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper" ~grow:1.
     ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
-    [ Jump_state.target ~enabled:editable ~key:"content" ~uuid
+    [ Jump_state.target ~enabled:editable ~key:"content"
+        ~owner:(Jump_state.owner ~scope ~container:uuid)
         ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
@@ -743,7 +750,7 @@ let comments_row ~scope ~depth ~editable ~library (bs : Model.block Signal.signa
   let key = block_key block in
   (track_mounted_row ~scope block
     (with_editor_font
-      (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
+      (Ui_parts.class_signal (row_class_sig_of ~scope bs) Fun.id
         (column ~key:("ls-" ^ scope ^ "-" ^ key)
           ~accessibility_identifier:("ls-block-" ^ key) ~corner_radius:4
           ~background:(reactive (fun selected ->
@@ -845,9 +852,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
     let indicator zone offset edge =
       if_
         ~test:(reactive
-          (function
-            | Some (_, target, move_to) -> target = uuid && move_to = zone
-            | None -> false)
+          (fun drag -> drag_target_zone ~scope uuid drag = Some zone)
           (S.drag_sig ()))
         (Ui_components.with_props
            [ Ui_components.Prop.position `absolute
@@ -859,9 +864,9 @@ and row_main ~editable ~library scope (b : Model.block) : t =
     Ui_components.with_props [ Ui_components.Prop.position `relative ]
       (column ~key:("drag-" ^ key)
          [ content
-         ; indicator "top" 20. (Ui_components.Prop.inset_top 0.)
-         ; indicator "sibling" 20. (Ui_components.Prop.inset_bottom 0.)
-         ; indicator "nested" 48. (Ui_components.Prop.inset_bottom 0.)
+         ; indicator Block_drag.Top 20. (Ui_components.Prop.inset_top 0.)
+         ; indicator Block_drag.Sibling 20. (Ui_components.Prop.inset_bottom 0.)
+         ; indicator Block_drag.Nested 48. (Ui_components.Prop.inset_bottom 0.)
          ])
 
 and row_el ~depth ~editable ~virtualize scope ~(library : bool)
@@ -881,7 +886,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
   track_mounted_row ~scope b
     (with_editor_font
-    (Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
+    (Ui_parts.class_signal (row_class_sig ~scope uuid blank embed b) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
@@ -940,7 +945,7 @@ and row_sig ~depth ~editable ~library ~virtualize scope
   in
   (track_mounted_row ~scope b0
     (with_editor_font
-    (Ui_parts.class_signal (row_class_sig_of bs) Fun.id
+    (Ui_parts.class_signal (row_class_sig_of ~scope bs) Fun.id
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
@@ -1116,7 +1121,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   let blank = String.trim b.block_title = "" in
   track_mounted_row ~scope:"ref" b
     (with_editor_font
-    (Ui_parts.class_signal (row_class_sig uuid blank embed b) Fun.id
+    (Ui_parts.class_signal (row_class_sig ~scope:"ref" uuid blank embed b) Fun.id
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition

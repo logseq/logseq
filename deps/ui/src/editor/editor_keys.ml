@@ -37,9 +37,23 @@ let non_editor_control_target target =
             [role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio']"
            target <> None)
 
+(* Master keeps the range shortcuts active when its selection toolbar has
+   button focus. Other controls and toolbar activation keys stay local. *)
+let selection_bar_arrow ev =
+  ev.Ui_services.shift && not (mods ev || ev.Ui_services.alt)
+  && (ev_key ev = "ArrowUp" || ev_key ev = "ArrowDown")
+  && S.ready () && S.editing () = None && S.selection_active ()
+  && (S.value ()).S.action_bar
+  && not (is_editable_target ev.Ui_services.target)
+  && closest "button" ev.Ui_services.target <> None
+  && closest ".selection-action-bar" ev.Ui_services.target <> None
+
+let control_target ev =
+  non_editor_control_target ev.Ui_services.target && not (selection_bar_arrow ev)
+
 let control_owned_key ev =
   not (mods ev || ev.Ui_services.alt)
-  && non_editor_control_target ev.Ui_services.target
+  && control_target ev
   && (match ev_key ev with
       | "Enter" | " " | "Tab" | "Escape" | "Backspace" | "Delete"
       | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
@@ -730,7 +744,7 @@ let on_global_key ev =
             is_editable_target (ev.Ui_services.target)
             || S.editing () <> None
           in
-          let control = non_editor_control_target ev.Ui_services.target in
+          let control = control_target ev in
           let tbl = List.filter (fun (_, cid) -> chord_may_run ~target:ev.Ui_services.target ~control editing cid) tbl in
           let tbl = if palette_open () then
               List.filter (fun (_, cid) -> cid = "go/search" || cid = "command-palette/toggle") tbl
@@ -1326,6 +1340,11 @@ let dispatch_command cid =
       let target = match selected with
         | uuid :: _ -> Some uuid
         | [] -> Option.map (fun editing -> editing.S.uuid) editing in
+      let target_owner = match selected with
+        | uuid :: _ -> Some (Jump_state.owner
+            ~scope:(S.selection_scope ()) ~container:uuid)
+        | [] -> Option.map (fun editing -> Jump_state.owner
+            ~scope:editing.S.scope ~container:editing.S.uuid) editing in
       let expand = match editing with
         | Some editing -> Some (editing.S.uuid, editing.S.scope)
         | None -> Option.map (fun uuid -> uuid, "main") target in
@@ -1334,7 +1353,7 @@ let dispatch_command cid =
         List.iteri (fun index block -> Option.iter
             (fun uuid -> Hashtbl.replace positions uuid index) block.Model.block_uuid)
           (S.flat_visible ());
-        Jump_state.start ~uuid:target
+        Jump_state.start ~owner:target_owner
           ~rank:(fun uuid -> Option.value (Hashtbl.find_opt positions uuid) ~default:max_int)
           ~clear_selection:(fun () -> A.clear_selection ()) () in
       (match expand with
@@ -1509,16 +1528,13 @@ let queue_racing_key ev uuid =
 module Drag = Block_drag
 
 let drag_state = ref Drag.empty
-let drag_scope = ref "main"
 
 let drag_context () = Runtime.repo (), Runtime.route ()
 
 let publish_drag () =
   if S.ready () then begin
-    let next = Option.map (fun (source, target) ->
-      match target with
-      | Some (target, zone) -> source, target, Drag.zone_name zone
-      | None -> source, "", "") (Drag.preview !drag_state) in
+    let next = Option.map (fun (source, target) -> { S.source; target })
+      (Drag.preview !drag_state) in
     if next <> S.drag () then S.set_drag next
   end
 
@@ -1535,36 +1551,37 @@ let arm_drag (ev : Ui_services.ev) =
   | Some el -> (
       match el.Ui_services.attr "data-blockid" with
       | Some u when S.find u <> None ->
-          drag_scope := A.scope_of_el el;
-          drag_state := Drag.arm ~context:(drag_context ()) ~source:u
+          let source = S.drag_owner ~scope:(A.scope_of_el el) u in
+          drag_state := Drag.arm ~context:(drag_context ()) ~source
             ~x:ev.Ui_services.x ~y:ev.Ui_services.y
       | _ -> ())
   | None -> ()
 
-let native_drag_target ev src =
+let native_drag_target ev (src : S.drag_owner) =
   if readonly_block_target ev.Ui_services.target then None
   else
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
         match el.Ui_services.attr "data-blockid" with
-        | Some t when A.can_drop_dragged_block src t ->
+        | Some t when A.can_drop_dragged_block src.S.uuid t ->
             let left, top, width, height = el.Ui_services.rect () in
             if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
             then None
             else
+              let scope = A.scope_of_el el in
               let first =
-                match S.find_parent t with
+                match S.find_parent_in_scope ~scope t with
                 | Some (_, idx) -> idx = 0
                 | None -> false
               in
-              Some (t, Drag.zone ~first ~left ~top
+              Some (S.drag_owner ~scope t, Drag.zone ~first ~left ~top
                 ~x:ev.Ui_services.x ~y:ev.Ui_services.y)
         | _ -> None)
     | None -> None
 
 let native_drag_ready () =
   S.ready () && not (Ui_services.env_publishing ())
-  && Option.fold ~none:false ~some:(fun uuid -> S.find uuid <> None)
+  && Option.fold ~none:false ~some:(fun (source : S.drag_owner) -> S.find source.S.uuid <> None)
        (Drag.source !drag_state)
 
 let on_native_pointermove ev =
@@ -1579,7 +1596,7 @@ let on_native_pointermove ev =
           ~x:ev.Ui_services.x ~y:ev.Ui_services.y
           ~target:(native_drag_target ev source) !drag_state;
         if not was_active && Drag.preview !drag_state <> None then
-          A.begin_block_drag ~scope:!drag_scope source;
+          A.begin_block_drag ~scope:source.S.scope source.S.uuid;
         publish_drag ()
 
 let on_native_pointerup ev =
@@ -1593,8 +1610,9 @@ let on_native_pointerup ev =
             ~target:(native_drag_target ev source) !drag_state in
           drag_state := next;
           publish_drag ();
-          Option.iter (fun (source, target, zone) ->
-            A.drop_dragged_block source target (Drag.zone_name zone)) drop
+          Option.iter (fun ((source : S.drag_owner), (target : S.drag_owner), zone) ->
+            A.drop_dragged_block ~alt:ev.Ui_services.alt ~scope:target.S.scope
+              source.S.uuid target.S.uuid (Drag.zone_name zone)) drop
 
 let consume_drag_click () =
   let next, suppress = Drag.consume_click !drag_state in
@@ -1604,7 +1622,7 @@ let consume_drag_click () =
 
 let on_keydown ev =
   if Ui_services.env_native_drag () && ev_key ev = "Escape" then drag_cancel ();
-  let control = non_editor_control_target ev.Ui_services.target in
+  let control = control_target ev in
   if blocked_default ~control ev then begin
     ev.Ui_services.prevent_default ();
     ev.Ui_services.stop_immediate ()

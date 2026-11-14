@@ -1,7 +1,11 @@
 open Lui_elements
 
+type owner = { scope : string; container : string }
+
+let owner ~scope ~container = { scope; container }
+
 type target =
-  { id : string; uuid : string; serial : int; activate : unit -> unit }
+  { id : string; owner : owner; serial : int; activate : unit -> unit }
 
 include State_cell.Make (struct
   type t = (string * string) list
@@ -17,13 +21,13 @@ let exit () =
   capture := None;
   if ready () then set (fun _ -> [])
 
-let target ?(enabled = true) ~key ~uuid ~activate child : t =
+let target ?(enabled = true) ~key ~owner:target_owner ~activate child : t =
  fun ctx parent ->
   if not enabled then child ctx parent else begin
     if not (ready ()) then mount ctx [];
     incr next_serial;
-    let id = uuid ^ ":" ^ key ^ ":" ^ string_of_int !next_serial in
-    let target = {id; uuid; serial = !next_serial; activate} in
+    let id = target_owner.container ^ ":" ^ key ^ ":" ^ string_of_int !next_serial in
+    let target = {id; owner = target_owner; serial = !next_serial; activate} in
     Hashtbl.replace targets id target;
     Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
       (match Hashtbl.find_opt targets id with
@@ -51,13 +55,13 @@ let letters = ["a"; "s"; "d"; "f"; "g"; "h"; "q"; "w"; "e"; "r"; "t";
 let hints = letters @ List.concat_map (fun prefix ->
     List.map (fun suffix -> prefix ^ suffix) letters) ["j"; "k"; "l"]
 
-let start ~uuid ~rank ~clear_selection () =
+let start ~owner:current_owner ~rank ~clear_selection () =
   if !capture = None && ready () && not (Keyboard_capture.active ()) then begin
     let candidates = Hashtbl.fold (fun _ target acc ->
-        if Option.fold ~none:true ~some:((=) target.uuid) uuid
+        if Option.fold ~none:true ~some:((=) target.owner) current_owner
         then target :: acc else acc) targets []
       |> List.sort (fun a b ->
-          match Int.compare (rank a.uuid) (rank b.uuid) with
+          match Int.compare (rank a.owner.container) (rank b.owner.container) with
           | 0 -> Int.compare a.serial b.serial
           | order -> order) in
     let rec assign hints targets = match hints, targets with

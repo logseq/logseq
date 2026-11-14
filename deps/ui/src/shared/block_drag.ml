@@ -1,13 +1,14 @@
 type zone = Top | Nested | Sibling
-type target = string * zone
-type drop = string * string * zone
+type 'block target = 'block * zone
+type 'block drop = 'block * 'block * zone
 
-type 'context gesture =
+type ('context, 'block) gesture =
   | Idle
-  | Armed of 'context * string * float * float
-  | Active of 'context * string * target option
+  | Armed of 'context * 'block * float * float
+  | Active of 'context * 'block * 'block target option
 
-type 'context t = { gesture : 'context gesture; suppress_click : bool }
+type ('context, 'block) t =
+  { gesture : ('context, 'block) gesture; suppress_click : bool }
 
 let empty = { gesture = Idle; suppress_click = false }
 

@@ -1074,6 +1074,7 @@ let test_settings_tabs () =
 
 let prop_ctx : Properties_value.ctx =
   { owner_key = "parity-fixture"
+  ; jump_owner = Jump_state.owner ~scope:"main" ~container:"b1"
   ; block_uuid = "b1"
   ; block_id = None
   ; refresh = (fun () -> ())

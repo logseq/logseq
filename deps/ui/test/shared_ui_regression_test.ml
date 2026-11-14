@@ -848,6 +848,7 @@ let run_views ~registry ~profile ~finish =
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   let property_ctx : Properties_value.ctx =
     {owner_key="inline-property";block_uuid="inline-property-owner";block_id=Some 123;refresh=(fun () -> ());
+     jump_owner=Jump_state.owner ~scope:"main" ~container:"inline-property-owner";
      is_page=true;class_schema=false} in
   let inline_properties = mount (fun _ -> Lui_elements.column
     [Properties_area.new_property_btn property_ctx ~for_class:false ~owner_title:"Owner";
@@ -1562,6 +1563,7 @@ let run_views ~registry ~profile ~finish =
             let open Lui_elements in
             if not in_panel then Properties_dialog.value_edit_view d prop context parent else
             let ctx : Properties_value.ctx = {owner_key="property-picker";block_uuid="property-owner";
+              jump_owner=Jump_state.owner ~scope:"main" ~container:"property-owner";
               block_id=Some 79;refresh=(fun () -> ());is_page=false;class_schema=false} in
             let row = Wire.Map [Wire.kw "property-id",Wire.kw ident;Wire.kw "property",prop;
               Wire.kw "value",Wire.Set [first]] in
@@ -1642,6 +1644,7 @@ let run_views ~registry ~profile ~finish =
     ] in
     let ctx : Properties_value.ctx =
       {owner_key="property-text-fixture";block_uuid="33333333-3333-4333-8333-333333333333";
+       jump_owner=Jump_state.owner ~scope:"main" ~container:"33333333-3333-4333-8333-333333333333";
        block_id=Some 79;refresh=(fun () -> ());is_page=false;class_schema=false} in
     let editor = mount (fun _ -> Properties_value.view ~hover:None ctx row) in
     let open_editor () =
@@ -1740,6 +1743,7 @@ let run_views ~registry ~profile ~finish =
               operations := !operations @ Wire.elems (List.nth args 1);
               Wire.Map [Wire.kw "result",Wire.Nil]) else Wire.Nil));
           let ctx : Properties_value.ctx = {owner_key="property-completion";block_uuid="owner";
+            jump_owner=Jump_state.owner ~scope:"main" ~container:"owner";
             block_id=None;refresh=(fun () -> ());is_page=false;class_schema=false} in
           let row = Wire.Map [Wire.kw "property-id",Wire.kw "fixture/escape";
             Wire.kw "value",(if ty="string" then Wire.String "seed" else Wire.Float 7.);
@@ -1816,6 +1820,7 @@ let run_views ~registry ~profile ~finish =
       Wire.kw "block/journal-day",Wire.Int day] in
     let ctx : Properties_value.ctx =
       {owner_key="property-date-fixture";block_uuid="date-owner";block_id=Some 79;
+       jump_owner=Jump_state.owner ~scope:"main" ~container:"date-owner";
        refresh=(fun () -> ());is_page=false;class_schema=false} in
     let many_date_check () =
       let ident = "fixture/date" in
