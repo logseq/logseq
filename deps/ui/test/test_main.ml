@@ -1663,7 +1663,7 @@ let test_cmdk_block_reveal ~finish =
           if property_origin then
             [ wmap ["db/id", Wire.Int 20;
                 "logseq.property/created-from-property", Wire.Int 88;
-                "block/parent", wmap ["db/id", Wire.Int 200]]
+                "block/parent", Wire.Tagged ("datascript/Entity", wmap ["db/id", Wire.Int 200])]
             ; wmap ["db/id", Wire.Int 21;
                 "logseq.property/created-from-property", Wire.Int 89;
                 "block/parent", wmap ["block/uuid", Wire.Uuid "wrong-inner"];

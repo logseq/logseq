@@ -1282,6 +1282,9 @@ let page_uuid_of_block block =
 
 let resolve_block_reveal st repo uuid =
   let invoke name args = st.svs.Svs.invoke name (Wire.String repo :: args) in
+  let entity_fields = function
+    | Wire.Tagged ("datascript/Entity", fields) -> fields
+    | fields -> fields in
   let* response = invoke "thread-api/get-blocks"
     [Wire.Array [wmap ["id", Wire.Uuid uuid;
       "opts", wmap ["children?", Wire.Bool false]]]] in
@@ -1292,7 +1295,7 @@ let resolve_block_reveal st repo uuid =
           | Some id -> id
           | None -> failwith "CmdK block is missing db/id" in
         let* parents = invoke "thread-api/get-block-parents" [id; Wire.Int 1000] in
-        let parents = Wire.elems parents in
+        let parents = List.map entity_fields (Wire.elems parents) in
         (* Parents are root-first. Only ancestors participate in the
            property-origin redirect; their original chain decides zoom. *)
         let origin_parent = List.find_map (fun parent ->
@@ -1300,7 +1303,7 @@ let resolve_block_reveal st repo uuid =
           | None | Some Wire.Nil | Some (Wire.Bool false) -> None
           | Some _ -> (match Wire.get parent "block/parent" with
             | None | Some Wire.Nil -> None
-            | Some _ as parent -> parent)) parents in
+            | Some parent -> Some (entity_fields parent))) parents in
         let* origin = match origin_parent with
           | None -> Ui_task.resolve Wire.Nil
           | Some parent when Wire.map_get_uuid parent "block/uuid" <> None ->
