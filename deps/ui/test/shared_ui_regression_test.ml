@@ -1503,8 +1503,127 @@ let run_views ~registry ~profile ~finish =
             next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
     in next [false,false,false;true,false,false;false,true,false;true,true,false;true,false,true]
   in
+  let property_picker_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    let previous_dialog = !Properties_dialog.current in
+    let previous_dialog_sig = !Properties_dialog.current_sig in
+    let previous_overlays = !Properties_state.view_overlays_state in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "property-picker-fixture"});
+    let rec next = function
+      | [] ->
+          Properties_dialog.current := previous_dialog;
+          Properties_dialog.current_sig := previous_dialog_sig;
+          Properties_state.view_overlays_state := previous_overlays;
+          Runtime.worker := previous_worker;
+          Runtime.read_model := previous_model;
+          done_ ()
+      | (ty, many, closed, in_panel) :: rest ->
+          let ident = "fixture/" ^ ty in
+          let chosen = ref [80] in
+          let choice id title = Wire.Map [Wire.kw "db/id",Wire.Int id;
+            Wire.kw "block/uuid",Wire.Uuid ("value-" ^ string_of_int id);
+            Wire.kw "block/title",Wire.String title] in
+          let first = choice 80 "First" and second = choice 81 "Second" in
+          ignore (Fake_worker.install (fun name args -> match name with
+            | "thread-api/get-property-values" -> Wire.Array (List.map (fun value ->
+                Wire.Map [Wire.kw "value",value; Wire.kw "label",Wire.String (Properties_data.ref_title value)])
+                [first;second])
+            | "thread-api/entity" -> Wire.Map [Wire.kw ident,Wire.Set (List.map (fun id -> Wire.Int id) !chosen)]
+            | "thread-api/apply-outliner-ops" ->
+                (match List.nth_opt args 1 with
+                 | Some (Wire.Array ops) -> List.iter (function
+                     | Wire.Array [Wire.Keyword "batch-set-property";
+                         Wire.Array [_;Wire.Keyword key;Wire.Int id;_]]
+                     | Wire.Array [Wire.Keyword "set-block-property";
+                         Wire.Array [_;Wire.Keyword key;Wire.Int id]] when key=ident ->
+                         chosen := if many && ty="number" && id=23 then 82 :: !chosen
+                           else if many then id :: List.filter ((<>) id) !chosen else [id]
+                     | Wire.Array [Wire.Keyword "delete-property-value";
+                         Wire.Array [_;Wire.Keyword key;Wire.Int id]] when key=ident ->
+                         chosen := List.filter ((<>) id) !chosen
+                     | Wire.Array [Wire.Keyword "batch-set-property";
+                         Wire.Array [_;Wire.Keyword key;Wire.Float _;_]] when key=ident -> chosen := 82 :: !chosen
+                     | _ -> ()) ops
+                 | _ -> ());
+                Wire.Map [Wire.kw "result",Wire.Nil]
+            | _ -> Wire.Nil));
+          let prop = Wire.Map [Wire.kw "db/ident",Wire.kw ident;
+            Wire.kw "block/title",Wire.String ty;
+            Wire.kw "logseq.property/type",Wire.kw ty;
+            Wire.kw "db/cardinality",Wire.kw (if many then "db.cardinality/many" else "db.cardinality/one");
+            Wire.kw "property/closed-values",Wire.Array (if closed then [first;second] else [])] in
+          let d : Properties_dialog.dlg_state =
+            {d_target={uuid="property-owner";uuids=[];db_id=Some 79;is_tag=false;title=""};
+             d_remove=false;d_placement=Properties_dialog.Centered;
+             d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+          Properties_dialog.current := (if in_panel then None else Some d);
+          if in_panel then (Properties_state.view_overlays_state := None;Properties_dialog.current_sig := None);
+          let picker = mount (fun _ context parent ->
+            let open Lui_elements in
+            if not in_panel then Properties_dialog.value_edit_view d prop context parent else
+            let ctx : Properties_value.ctx = {owner_key="property-picker";block_uuid="property-owner";
+              block_id=Some 79;refresh=(fun () -> ());is_page=false;class_schema=false} in
+            let row = Wire.Map [Wire.kw "property-id",Wire.kw ident;Wire.kw "property",prop;
+              Wire.kw "value",Wire.Set [first]] in
+            let view = column [Properties_value.view ~hover:None ctx row;Properties_view.overlays] in
+            view context parent) in
+          if in_panel then begin
+            let trigger = List.find (fun n -> n.M.kind="button") (nodes picker) in
+            let document = !(Stub_dom.document_ref) in
+            let lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+            let anchor = Stub_dom.make_element "button" in
+            let id = "property-number-property-picker-property-owner-" ^ ident in
+            let set : string -> string -> unit = Stub_dom.get_field anchor "setAttribute" in
+            set "id" id;
+            Stub_dom.set_field document "getElementById" (fun key -> if key=id then anchor else lookup key);
+            S.press picker trigger.M.id;
+            Stub_dom.set_field document "getElementById" lookup
+          end;
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            let input () = List.find (fun n -> n.M.kind="text-field") (nodes picker) in
+            let original_input = (input ()).M.id in
+            let checks () = List.length (List.filter (fun n -> n.M.kind="icon"
+              && M.string_prop n "name"=Some "app:check") (nodes picker)) in
+            let owned () = if in_panel then Properties_state.view_overlay_open () else
+              Option.fold ~none:false ~some:(fun current -> current==d) !Properties_dialog.current in
+            if many then check "A reopened property chooser marks its current entity" (checks ()=1);
+            let option = List.find_opt (fun n -> n.M.kind="list-item"
+              && M.string_prop n "text"=Some "Second") (nodes picker) in
+            check ("Property dialog reuses existing " ^ ty ^ " value entities") (Option.is_some option);
+            Option.iter (fun n -> S.press picker n.M.id) option;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check ("Choosing existing " ^ ty ^ " persists its entity rather than creating text")
+                (List.sort compare !chosen=(if many then [80;81] else [81]));
+              let finish () = ignore (Lui_app.dispose picker.S.app); next rest in
+              if not many then finish () else begin
+                check "A many property chooser retains its input and both selected entities"
+                  ((input ()).M.id=original_input && checks ()=2
+                   && owned ());
+                let first = List.find_opt (fun n -> n.M.kind="list-item"
+                  && M.string_prop n "text"=Some "First") (nodes picker) in
+                Option.iter (fun n -> S.press picker n.M.id) first;
+                ignore (Js.Global.setTimeout ~f:(fun () ->
+                  check "Toggling a selected entity removes only that entity and keeps the chooser usable"
+                    (!chosen=[81] && checks ()=1 && (input ()).M.id=original_input);
+                  if closed then finish () else begin
+                    S.text_changed picker (input ()).M.id "23";
+                    S.submit picker (input ()).M.id;
+                    ignore (Js.Global.setTimeout ~f:(fun () ->
+                      check "A new number appends without closing the many chooser"
+                        (List.sort compare !chosen=[81;82]
+                         && owned ());
+                      finish ()) 0)
+                  end) 0)
+              end) 0)) 0)
+    in
+    next ["number",false,false,false;"default",false,false,false;"url",false,false,false;
+      "number",true,false,false;"default",true,true,false;"number",true,false,true]
+  in
   let property_text_many_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
+    let reset_editor () = Editor_state.st := None; Editor_state.field_sigs_opt := None in
+    reset_editor ();
     let operations = ref [] in
     Runtime.read_model := (fun () -> {Model.initial with repo=Some "property-text-fixture"});
     ignore (Fake_worker.install (fun name args ->
@@ -1526,7 +1645,8 @@ let run_views ~registry ~profile ~finish =
        block_id=Some 79;refresh=(fun () -> ());is_page=false;class_schema=false} in
     let editor = mount (fun _ -> Properties_value.view ~hover:None ctx row) in
     let open_editor () =
-      let button = List.find (fun n -> n.M.kind = "button") (nodes editor) in
+      let button = List.find (fun n -> n.M.kind = "button"
+        && not (List.mem (button_label n) [Some "alpha";Some "beta"])) (nodes editor) in
       S.press editor button.M.id;
       List.find (fun n -> n.M.kind = "text-field") (nodes editor)
     in
@@ -1544,10 +1664,149 @@ let run_views ~registry ~profile ~finish =
            | [Wire.Array [Wire.Array [Wire.Keyword "create-property-text-block";
                Wire.Array [_; Wire.Keyword "fixture/text"; Wire.String "gamma"; _]]]] -> true
            | _ -> false);
-        ignore (Lui_app.dispose editor.S.app);
-        Runtime.worker := previous_worker;
-        Runtime.read_model := previous_model;
-        done_ ()) 0)) 0)
+        let beta = List.find_opt (fun n -> n.M.kind="button" && button_label n=Some "beta") (nodes editor) in
+        check "Many Text exposes each existing value as its own editable block" (Option.is_some beta);
+        Option.iter (fun n -> S.press editor n.M.id) beta;
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "Editing a many Text value retains its UUID and title, not the owner or a sibling"
+            (match Editor_state.editing () with Some e ->
+              e.uuid="22222222-2222-4222-8222-222222222222" && e.buffer="beta" | None -> false);
+          Option.iter (fun _ -> Editor_state.set (fun st -> {st with editing=None})) !Editor_state.st;
+          ignore (Lui_app.dispose editor.S.app);
+          reset_editor ();
+          let url_row = Wire.Map [Wire.kw "property-id",Wire.kw "fixture/text";
+            Wire.kw "value",Properties_data.row_value row;
+            Wire.kw "property",Wire.Map [
+              Wire.kw "db/cardinality",Wire.kw "db.cardinality/many";
+              Wire.kw "logseq.property/type",Wire.kw "url"]] in
+          let url = mount (fun _ -> Properties_value.view ~hover:None ctx url_row) in
+          let beta = List.find_opt (fun n -> n.M.kind="button" && button_label n=Some "beta") (nodes url) in
+          check "Many URL values have individual existing-block edit entries" (Option.is_some beta);
+          Option.iter (fun n -> S.press url n.M.id) beta;
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check "Editing a many URL value preserves the selected existing UUID"
+              (Editor_state.editing_uuid ()=Some "22222222-2222-4222-8222-222222222222");
+            Option.iter (fun _ -> Editor_state.set (fun st -> {st with editing=None})) !Editor_state.st;
+            ignore (Lui_app.dispose url.S.app);
+            reset_editor ();
+            operations := [];
+            let prop = Wire.Map [Wire.kw "db/ident",Wire.kw "fixture/text";
+              Wire.kw "db/cardinality",Wire.kw "db.cardinality/many"] in
+            let d : Properties_dialog.dlg_state =
+              {d_target={uuid=ctx.block_uuid;uuids=[];db_id=ctx.block_id;is_tag=false;title=""};
+               d_remove=false;d_placement=Properties_dialog.Centered;
+               d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+            Properties_dialog.add_empty_text_block d prop;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              let uuid = Option.get (List.find_map (function
+                | Wire.Array [Wire.Array [Wire.Keyword "create-property-text-block";
+                    Wire.Array [_;_;_;opts]]] -> Option.bind (Properties_data.getf opts "new-block-id") Wire.as_uuid
+                | _ -> None) !operations) in
+              let row = Wire.Map [Wire.kw "property-id",Wire.kw "fixture/text";
+                Wire.kw "property",prop;
+                Wire.kw "value",Wire.Set (Properties_data.value_elems (Properties_data.row_value row)
+                  @ [value uuid ""])] in
+              let pending = mount (fun _ -> Properties_value.view ~hover:None ctx row) in
+              List.iter (fun n -> if Hashtbl.find_opt n.M.props "appear-enabled"=Some (P.BoolValue true)
+                then S.appear pending n.M.id) (nodes pending);
+              ignore (Js.Global.setTimeout ~f:(fun () ->
+                check "A newly appended value activates its exact UUID instead of the first sibling"
+                  (Editor_state.editing_uuid ()=Some uuid);
+                Option.iter (fun _ -> Editor_state.set (fun st -> {st with editing=None})) !Editor_state.st;
+                ignore (Lui_app.dispose pending.S.app);
+                Editor_state.st := previous_editor;
+                Editor_state.field_sigs_opt := previous_fields;
+                Runtime.worker := previous_worker;
+                Runtime.read_model := previous_model;
+                done_ ()) 0)) 0)) 0)) 0)) 0)) 0)
+  in
+  let property_value_completion_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    let previous_pending = !Properties_value.pending_edit in
+    let previous_active = !Properties_value.active_editor and previous_close = !Properties_value.close_editor in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "property-completion-fixture"});
+    let finish () =
+      Properties_value.pending_edit := previous_pending;
+      Properties_value.active_editor := previous_active;
+      Properties_value.close_editor := previous_close;
+      Runtime.worker := previous_worker;Runtime.read_model := previous_model;done_ () in
+    let rec escape = function
+      | [] -> finish ()
+      | ty::rest ->
+          Properties_value.close_editor := (fun () -> ());
+          let operations = ref [] in
+          ignore (Fake_worker.install (fun name args ->
+            if name="thread-api/apply-outliner-ops" then (
+              operations := !operations @ Wire.elems (List.nth args 1);
+              Wire.Map [Wire.kw "result",Wire.Nil]) else Wire.Nil));
+          let ctx : Properties_value.ctx = {owner_key="property-completion";block_uuid="owner";
+            block_id=None;refresh=(fun () -> ());is_page=false;class_schema=false} in
+          let row = Wire.Map [Wire.kw "property-id",Wire.kw "fixture/escape";
+            Wire.kw "value",(if ty="string" then Wire.String "seed" else Wire.Float 7.);
+            Wire.kw "property",Wire.Map [Wire.kw "logseq.property/type",Wire.kw ty]] in
+          let editor = mount (fun _ -> Properties_value.scalar_edit_cell ctx row) in
+          S.press editor (List.find (fun n -> n.M.kind="button") (nodes editor)).M.id;
+          let input = List.find (fun n -> n.M.kind="text-field") (nodes editor) in
+          let draft = if ty="string" then "cancelled" else "23" in
+          S.text_changed editor input.M.id draft;
+          let target = Stub_dom.make_element "input" in
+          let document = !(Stub_dom.document_ref) in
+          let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
+          let set : string -> string -> unit = Stub_dom.get_field target "setAttribute" in
+          set "id" (Option.get (M.string_prop input "accessibility-identifier"));
+          Stub_dom.set_field target "value" draft;
+          Stub_dom.set_field target "contains" (fun other -> other == target);
+          Stub_dom.set_field document "activeElement" target;
+          let listener = List.find (fun listener -> listener.Stub_dom.l_name="keydown")
+              (List.rev (Stub_dom.rec_r !(Stub_dom.window_ref)).listeners) in
+          listener.l_fn (Stub_dom.make_event ~target ~fields:["key",Js.Json.string "Escape"] "keydown");
+          Stub_dom.set_field document "activeElement" previous_focus;
+          S.flush editor;
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check (ty ^ " Escape exits only its active property cell")
+              (not (List.exists (fun n -> n.M.kind="text-field") (nodes editor)));
+            check (ty ^ " Escape preserves its type-specific write policy")
+              (if ty="string" then !operations=[] else match !operations with
+                | [Wire.Array [Wire.Keyword "set-block-property";
+                    Wire.Array [Wire.Uuid "owner";Wire.Keyword "fixture/escape";Wire.Float 23.]]] -> true
+                | _ -> false);
+            if ty="string" then (
+              S.press editor (List.find (fun n -> n.M.kind="button") (nodes editor)).M.id;
+              check "Reopening a cancelled String edit restores its original value"
+                (List.exists (fun n -> n.M.kind="text-field" && M.string_prop n "text"=Some "seed") (nodes editor)));
+            ignore (Lui_app.dispose editor.S.app);
+            Properties_value.active_editor := None;
+            escape rest) 0)
+    in
+    let rec next = function
+      | [] -> escape ["string";"number"]
+      | (ty,many)::rest ->
+          let operations = ref [] in
+          ignore (Fake_worker.install (fun name args ->
+            if name="thread-api/apply-outliner-ops" then (
+              operations := !operations @ Wire.elems (List.nth args 1);
+              Wire.Map [Wire.kw "result",Wire.Nil]) else Wire.Nil));
+          let shared = "44444444-4444-4444-8444-444444444444" in
+          let prop = Wire.Map [Wire.kw "db/ident",Wire.kw "fixture/default";
+            Wire.kw "logseq.property/type",Wire.kw ty;
+            Wire.kw "db/cardinality",Wire.kw (if many then "db.cardinality/many" else "db.cardinality/one");
+            Wire.kw "logseq.property/default-value",Wire.Map [Wire.kw "block/uuid",Wire.Uuid shared;
+              Wire.kw "block/title",Wire.String "seed"]] in
+          let d : Properties_dialog.dlg_state =
+            {d_target={uuid="owner-a";uuids=["owner-a";"owner-b"];db_id=None;is_tag=false;title=""};
+             d_remove=false;d_placement=Properties_dialog.Centered;
+             d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+          Properties_dialog.add_empty_text_block d prop;
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check ("Creating " ^ (if many then "many " else "single ") ^ ty ^ " seeds only fresh owned value blocks")
+              (List.length !operations=2 && List.for_all (function
+                | Wire.Array [Wire.Keyword "create-property-text-block";
+                    Wire.Array [Wire.Uuid owner;Wire.Keyword "fixture/default";Wire.String title;opts]] ->
+                    List.mem owner ["owner-a";"owner-b"] && title=(if many then "" else "seed")
+                    && Option.bind (Properties_data.getf opts "new-block-id") Wire.as_uuid<>Some shared
+                | _ -> false) !operations);
+            next rest) 0)
+    in next ["default",false;"url",false;"default",true]
   in
   let property_date_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
@@ -1651,7 +1910,8 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    property_text_many_check (fun () -> next [false,false;false,true;true,false;true,true])
+    property_picker_check (fun () -> property_text_many_check
+      (fun () -> property_value_completion_check (fun () -> next [false,false;false,true;true,false;true,true])))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in

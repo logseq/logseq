@@ -151,10 +151,14 @@ let is_many prop =
 let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
-  V.set_pending_edit ~block_uuid:d.d_target.uuid ~ident;
+  let owner = List.hd (owners d) in
+  let value_uuid = Ui_services.env_random_uuid () in
+  let title = if is_many prop then "" else
+    Option.fold ~none:"" ~some:D.ref_title (D.getf prop "logseq.property/default-value") in
+  V.set_pending_edit ~block_uuid:owner ~ident ~value_uuid;
   (let* _ = for_owners d (fun block_uuid ->
     D.create_property_text_block ~block_uuid ~ident
-      ~title:"" ~new_block_id:(Ui_services.env_random_uuid ()) ())
+      ~title ~new_block_id:(if block_uuid=owner then value_uuid else Ui_services.env_random_uuid ()) ())
   in
   S.refresh_now ();
   close_current d;
@@ -210,8 +214,12 @@ and pick_value d prop id =
   let uuids =
     match d.d_target.uuids with [] -> [ d.d_target.uuid ] | us -> us
   in
-  if is_many prop then
-    (let* ent = D.entity_by_uuid d.d_target.uuid in
+  let origin = Runtime.repo (), Runtime.route () in
+  let owned () = origin = (Runtime.repo (), Runtime.route ())
+    && Option.fold ~none:false ~some:(fun active -> active == d) !current in
+  if not (owned ()) then Js.Promise.resolve ()
+  else if is_many prop then
+    (let* ent = D.entity_by_uuid (List.hd uuids) in
     let cur_ids, cur_idents = value_ids ent ident in
     let* picked = D.entity (W.Int id) in
     let picked_ident = D.getk (D.untag picked) "db/ident" in
@@ -221,6 +229,7 @@ and pick_value d prop id =
           | Some i -> List.mem i cur_idents
           | None -> false)
     in
+    if not (owned ()) then Js.Promise.resolve () else
     let* _ =
       (match hit, uuids with
        | true, _ :: _ :: _ ->
@@ -236,12 +245,15 @@ and pick_value d prop id =
            D.set_block_property ~block_uuid:d.d_target.uuid ~ident
              ~value:(W.Int id))
     in
-    S.refresh_all ();
+    if owned () then S.refresh_all ();
     (* re-render the value list — picked items keep their check
        state from the refreshed entity *)
     Js.Promise.resolve ())
-    |> ignore
-  else write_prop_value d prop (Some (W.Int id))
+  else
+    let* _ = D.batch_set_property ~block_uuids:uuids ~ident ~value:(W.Int id) in
+    S.refresh_all ();
+    close_current d;
+    Js.Promise.resolve ()
 
 and valid_property_name s =
   String.trim s <> "" && not (String.length s > 0
@@ -294,7 +306,7 @@ and on_type_chosen d name ty =
    switches to the anchored popover spec (32px input + 32px rows) —
    master's mod+p picker is that compact dropdown, not the roomier
    centered-card variant *)
-let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?on_search
+let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?on_search ?selected_keys
     fetch : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -310,7 +322,7 @@ let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?
         match m with
         | None -> column ~gap:2 []
         | Some items ->
-            Sel.view ~placeholder ~compact ~new_case_sensitive ?new_option ?on_search items)
+            Sel.view ~placeholder ~compact ~new_case_sensitive ?new_option ?on_search ?selected_keys items)
      (Signal.value items_st))
     context parent
 
@@ -419,7 +431,7 @@ let node_tags_view d prop : t =
      in
      Js.Promise.resolve items)
 
-let value_items ?closed_values d prop wire_values =
+let value_items ?closed_values ~on_pick prop wire_values =
   let ty = type_of prop in
   let closed =
     match closed_values, D.getf prop "property/closed-values" with
@@ -433,12 +445,16 @@ let value_items ?closed_values d prop wire_values =
         match D.entity_id_of c with
         | Some id ->
             Some
-              (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title c) (fun () -> pick_value d prop id))
+              (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title c) (fun () -> on_pick id))
         | None -> None)
       closed
   else
     match ty with
-    | "number" | "default" | "url" -> []
+    | "number" | "default" | "url" ->
+        List.map (fun (id, title) ->
+          Sel.item ~key:("entity-" ^ string_of_int id) title
+            (fun () -> on_pick id))
+          (D.property_value_options wire_values)
     | _ ->
         List.filter_map
           (fun v ->
@@ -446,7 +462,7 @@ let value_items ?closed_values d prop wire_values =
             | Some id ->
                 Some
                   (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title v) (fun () ->
-                       pick_value d prop id))
+                       on_pick id))
             | None -> None)
           wire_values
 
@@ -538,6 +554,28 @@ let date_value_view d prop : t =
 let value_edit_view d prop : t =
  fun context parent ->
   let ty = type_of prop in
+  let selected = Signal.state context.Lui_ui.ui_scheduler [] in
+  let origin = Runtime.repo (), Runtime.route () in
+  let owned () = Ui_effect.alive context.Lui_ui.ui_scope
+    && origin = (Runtime.repo (), Runtime.route ())
+    && Option.fold ~none:false ~some:(fun active -> active == d) !current in
+  let read_selected () =
+    if not (owned ()) then Js.Promise.resolve () else
+    let* block = D.entity_by_uuid (List.hd (owners d)) in
+    let* keys = V.reference_keys (Option.value (D.getf (D.untag block) (ident_of prop)) ~default:W.Nil) in
+    if owned () then Runtime.signal_set selected keys;
+    Js.Promise.resolve () in
+  let on_pick id = ignore (let* () = pick_value d prop id in read_selected ()) in
+  let after_write task =
+    ignore (let* _ = task in
+      if owned () then (
+        S.refresh_all ();
+        if not (is_many prop) then close_current d);
+      read_selected ()) in
+  let write_new value = if owned () then
+    after_write (D.batch_set_property ~block_uuids:(owners d) ~ident:(ident_of prop) ~value) in
+  if not (List.mem ty ["checkbox"; "date"; "datetime"])
+     && ident_of prop <> "logseq.property/icon" then ignore (read_selected ());
   if ty = "date" || ty = "datetime" then date_value_view d prop context parent
   else if ty = "checkbox" then
     (async_select ~placeholder:(title_of prop)
@@ -562,10 +600,11 @@ let value_edit_view d prop : t =
           (fun text ->
             match D.number_of_text text with
             | Some n ->
-                write_prop_value d prop (Some (W.Float n))
+                if owned () then after_write
+                  (D.add_number_value ~block_uuids:(owners d) ~ident:(ident_of prop) ~number:n)
             | None -> ())
       else if ty = "string" then
-        Some (fun text -> write_prop_value d prop (Some (W.String text)))
+        Some (fun text -> write_new (W.String text))
       else if ty = "node" || ty = "class" then
         Some
           (fun text ->
@@ -581,7 +620,7 @@ let value_edit_view d prop : t =
                      let* id = D.db_id_of_uuid uuid in
                      match id with
                      | Some id ->
-                         write_prop_value d prop (Some (W.Int id));
+                         write_new (W.Int id);
                          Js.Promise.resolve ()
                      | None -> Js.Promise.resolve ())
                  | None -> Js.Promise.resolve ()
@@ -591,37 +630,37 @@ let value_edit_view d prop : t =
         Some
           (fun text ->
             (* text value -> create value block *)
-            finish_write d (for_owners d (fun block_uuid ->
+            if owned () then after_write (for_owners d (fun block_uuid ->
               D.create_property_text_block ~block_uuid
                 ~ident:(ident_of prop) ~title:text
                 ~new_block_id:(Ui_services.env_random_uuid ()) ())))
     in
     if closed <> [] then
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+      (async_select ~placeholder ~compact:(d.d_placement <> Centered) ~selected_keys:(Signal.value selected)
         (let rec eligible_for values = function
           | [] -> Js.Promise.resolve values
           | block_uuid :: rest ->
               let* values = V.closed_values_for_owner ~block_uuid values in
               eligible_for values rest in
          let* eligible = eligible_for closed (owners d) in
-         Js.Promise.resolve (value_items ~closed_values:eligible d prop []))) context parent
+         Js.Promise.resolve (value_items ~closed_values:eligible ~on_pick prop []))) context parent
     else if List.mem ty [ "node"; "page"; "class"; "property"; "asset" ] then
       let initial, on_search =
         V.node_items_source ~block:(D.uuid_ref d.d_target.uuid) ~prop
-          ~on_pick:(fun id -> pick_value d prop id)
+          ~on_pick
       in
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+      (async_select ~placeholder ~compact:(d.d_placement <> Centered) ~selected_keys:(Signal.value selected)
          ?new_option:on_new
          ~on_search:(Some on_search) initial)
         context parent
     else
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered)
+      (async_select ~placeholder ~compact:(d.d_placement <> Centered) ~selected_keys:(Signal.value selected)
          ?new_option:on_new
          (let* w =
             D.property_values ~property_ident:(ident_of prop)
               ~block:(D.uuid_ref d.d_target.uuid)
           in
-          Js.Promise.resolve (value_items d prop (W.elems w))))
+          Js.Promise.resolve (value_items ~on_pick prop (W.elems w))))
         context parent
 
 let date_phase = function

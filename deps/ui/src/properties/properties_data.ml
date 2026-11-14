@@ -212,6 +212,13 @@ let rec value_display w =
   | W.Tagged (_, inner) -> value_display inner
   | other -> Option.value ~default:"" (W.as_string other)
 
+let property_value_options values =
+  List.filter_map (fun option ->
+    Option.bind (getf option "value") (fun value ->
+      Option.map (fun id ->
+        id, value_display (Option.get (getf option "label")))
+        (entity_id_of value))) values
+
 let empty_placeholder_p w =
   match untag w with
   | W.Keyword "logseq.property/empty-placeholder" -> true
@@ -478,6 +485,16 @@ let uuid_list uuids = W.List (List.map (fun u -> W.Uuid u) uuids)
 let batch_set_property ~block_uuids ~ident ~value =
   apply "batch-set-property"
     [ uuid_list block_uuids; W.Keyword ident; value; W.Map [] ]
+
+let select_property_value ~block_uuids ~ident ~id =
+  apply "batch-set-property"
+    [ uuid_list block_uuids; W.Keyword ident; W.Int id;
+      W.Map [W.Keyword "entity-id?", W.Bool true] ]
+
+let add_number_value ~block_uuids ~ident ~number =
+  apply "batch-set-property"
+    [ uuid_list block_uuids; W.Keyword ident; W.Float number;
+      W.Map [W.Keyword "entity-id?", W.Bool false] ]
 
 let batch_delete_property_value ~block_uuids ~ident ~value =
   apply "batch-delete-property-value"

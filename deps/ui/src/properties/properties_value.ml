@@ -44,14 +44,14 @@ type ctx =
 (* When the "add property" dialog creates a text/url value block it also
    marks the row for immediate editing — the next render shows the
    editor already open (cljs enters block editing right away). *)
-let pending_edit : (string * string) option ref = ref None
+let pending_edit : (string * string * string) option ref = ref None
 
-let set_pending_edit ~block_uuid ~ident =
-  pending_edit := Some (block_uuid, ident)
+let set_pending_edit ~block_uuid ~ident ~value_uuid =
+  pending_edit := Some (block_uuid, ident, value_uuid)
 
-let take_pending_edit ~block_uuid ~ident =
+let take_pending_edit ~block_uuid ~ident ~value_uuid =
   match !pending_edit with
-  | Some (u, i) when u = block_uuid && i = ident ->
+  | Some (u, i, v) when u = block_uuid && i = ident && value_uuid = Some v ->
       pending_edit := None;
       true
   | _ -> false
@@ -511,7 +511,7 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
   in
   let editing =
     Signal.state sched
-      ((take_pending_edit ~block_uuid:ctx.block_uuid ~ident
+      ((take_pending_edit ~block_uuid:ctx.block_uuid ~ident ~value_uuid:(D.ref_uuid value)
         || has_active_edit ctx row)
        && Editor_state.editing () = None)
   in
@@ -557,10 +557,15 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
                   && target.contains focused && focused.contains target ->
                   ev.prevent_default ();
                   ev.stop_immediate ();
-                  let value = target.value () in
-                  Signal.set buffer value;
-                  set_edit_buffer ctx row value;
-                  commit ()
+                  if D.row_type row = "string" then (
+                    clear_active_edit ctx row;
+                    Runtime.signal_set buffer initial;
+                    Runtime.signal_set editing false)
+                  else (
+                    let value = target.value () in
+                    Signal.set buffer value;
+                    set_edit_buffer ctx row value;
+                    commit ())
               | _ -> ()
           in
           let off = (Ui_services.get ()).dom.subscribe_window_event "keydown" on_key in
@@ -609,7 +614,7 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
         ignore ((let* _ = D.create_property_text_block ~block_uuid:ctx.block_uuid
                     ~ident ~title:initial ~new_block_id:uuid () in
           if alive () then begin
-            set_pending_edit ~block_uuid:ctx.block_uuid ~ident;
+            set_pending_edit ~block_uuid:ctx.block_uuid ~ident ~value_uuid:uuid;
             S.refresh_all ()
           end;
           Js.Promise.resolve ())
@@ -619,7 +624,7 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
             Js.Promise.resolve ()))
     | None -> ()
   in
-  let pending = take_pending_edit ~block_uuid:ctx.block_uuid ~ident in
+  let pending = take_pending_edit ~block_uuid:ctx.block_uuid ~ident ~value_uuid:uuid in
   (column ~gap:0 ~grow:1. ~min_width:0
      ~on_appear:(fun _ -> if pending then activate ())
      [ reactive (fun target ->
@@ -1426,6 +1431,64 @@ let node_view ?(jump_target = true) ctx row : t =
 
 (* ---------- dispatch ---------- *)
 
+let many_number_values_view ~jump_target ctx row : t =
+  let ident = Option.get (D.row_ident row) in
+  let anchor_id = "property-number-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
+  let activate () =
+    let origin = Runtime.repo (), Runtime.route () in
+    open_value_picker anchor_id (fun ~alive ~close:_ context parent ->
+      let owned () = alive () && origin = (Runtime.repo (), Runtime.route ()) in
+      let selected = Signal.state context.Lui_ui.ui_scheduler [] in
+      let read_selected () =
+        let* block = D.entity_by_uuid ctx.block_uuid in
+        let* keys = reference_keys
+            (Option.value (D.getf (D.untag block) ident) ~default:W.Nil) in
+        if owned () then Runtime.signal_set selected keys;
+        Js.Promise.resolve keys
+      in
+      let after_write action =
+        ignore (Js.Promise.then_ (fun _ ->
+          if not (owned ()) then Js.Promise.resolve () else
+          let* _ = read_selected () in
+          if owned () then S.refresh_all ();
+          Js.Promise.resolve ()) action)
+      in
+      let pick id =
+        ignore (Js.Promise.then_ (fun keys ->
+          if not (owned ()) then Js.Promise.resolve () else
+          let key = "entity-" ^ string_of_int id in
+          let action = if List.mem key keys then
+            D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
+          else D.select_property_value ~block_uuids:[ctx.block_uuid] ~ident ~id in
+          after_write action;
+          Js.Promise.resolve ()) (read_selected ()))
+      in
+      let load () =
+        let* _ = read_selected () in
+        let* values = D.property_values ~property_ident:ident ~block:(W.Uuid ctx.block_uuid) in
+        Js.Promise.resolve (List.map (fun (id, title) ->
+          Sel.item ~key:("entity-" ^ string_of_int id) title (fun () -> pick id))
+          (D.property_value_options (W.elems values)))
+      in
+      let on_new text =
+        match D.number_of_text text with
+        | Some number when owned () ->
+            after_write (D.add_number_value ~block_uuids:[ctx.block_uuid] ~ident ~number)
+        | _ -> ()
+      in
+      picker_content ~selected_keys:(Signal.value selected)
+        ~new_option:(Some on_new)
+        ~placeholder:(I18n.t1 "property/set-placeholder" (D.row_title row))
+        ~initial:(load ()) ~on_search:(fun _ -> load ()) context parent)
+  in
+  let values = List.map (fun value ->
+    let value = Option.value (D.getf value "logseq.property/value") ~default:value in
+    value_button ~text:(D.value_display value) ~on_press:(fun _ -> activate ()))
+      (D.value_elems (D.row_value row)) in
+  Jump_state.target ~enabled:jump_target ~key:anchor_id ~uuid:ctx.block_uuid ~activate
+    (Lui_elements.row ~gap:4 ~flex_wrap:`wrap ~accessibility_identifier:anchor_id
+      (values @ [value_button ~text:"" ~on_press:(fun _ -> activate ())]))
+
 (* [view ctx row] renders the cell's value control inside the row's
    value column. [hover] (when the row supplies one) reflects pointer
    hover over the whole property-pair so hover-only affordances like
@@ -1452,10 +1515,14 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
   else if ident = "logseq.property/icon" then icon_view ~jump_target ctx row'
   else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~jump_target ~hover ctx row'
   else if D.row_closed_values row' <> [] then closed_value_view ~jump_target ~positioned ~table_view ctx row'
+  else if D.row_many row' && List.mem ty ["default";"url"] then
+    many_text_values_view ~jump_target ctx row
   else
     match ty with
     | "checkbox" -> checkbox_view ~jump_target ctx row'
-    | "number" -> scalar_edit_cell ~jump_target ctx row'
+    | "number" ->
+        if D.row_many row then many_number_values_view ~jump_target ctx row'
+        else scalar_edit_cell ~jump_target ctx row'
     | "date" | "datetime" ->
         date_view ~jump_target ~bottom_pill ~raw_value:(D.row_value row) ~hover ctx row'
     | "url" -> url_view ~jump_target ctx row'
@@ -1473,6 +1540,15 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
         if ty = "default" && not (D.value_empty_p (D.row_value row))
         then block_value_wrap cell
         else cell
+
+and many_text_values_view ~jump_target ctx row : t =
+  column ~gap:0 ~grow:1. ~min_width:0
+    (List.map (fun value ->
+       let uuid = Option.get (D.ref_uuid value) in
+       let ctx = {ctx with owner_key=ctx.owner_key ^ "-" ^ uuid} in
+       block_value_wrap (text_edit_cell ~jump_target ctx (D.row_with_value row value)))
+       (D.value_elems (D.row_value row))
+     @ [block_value_wrap (scalar_edit_cell ~jump_target ctx (D.row_with_value row W.Nil))])
 
 (* :logseq.property/icon's editing cell is the icon picker, not a
    text/closed-value editor — the {:type :id} map value can't be
