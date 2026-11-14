@@ -48,8 +48,9 @@ An empty grant list is valid, and metadata/logging do not require a read grant.
 
 **A grant is not an API support or platform support claim.** In particular,
 `editor_command` permits typed editor command registration and execution through
-the command loader. The read-only loader rejects that grant; neither loader
-provides arbitrary graph writes.
+the command loader. With `graph_write`, command invocations can also use the
+listed editor mutations. The read-only loader rejects both grants; neither loader
+provides unrestricted graph writes or arbitrary transactions.
 Likewise, `db_query` alone does not imply `graph_read`. The broker still checks
 every request against its own session, freshness, and resource limits; editing
 or replacing the JS list cannot grant access. A loaded graph or active editor
