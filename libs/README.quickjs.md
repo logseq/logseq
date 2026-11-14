@@ -85,6 +85,12 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `Editor.getPageBlocksTree(identity)`                      | `graph_read`                | Ordered nested page blocks; IDs, UUIDs, or page names                                         |
 | `Editor.getBlockChildren(identity)`                       | `graph_read`                | Ordered direct content children, including collapsed children                                 |
 | `Editor.insertBlock(identity, content, opts?)`            | `graph_write`               | Insert one block during a command invocation                                                  |
+| `Editor.setBlockProperties(identity, values)`             | `graph_write`               | Merge plugin-owned scalar assignments; omitted keys survive                                   |
+| `Editor.patchBlockProperties(identity, patch)`            | `graph_write`               | Assign scalars or explicitly remove with `null`; acknowledgement only                         |
+| `Editor.createBlock(identity, content, opts?)`            | `graph_write`               | One create-with-properties operation; UUID-only receipt                                       |
+| `Editor.insertBatchBlock(identity, batch, opts?)`         | `graph_write`               | Ordered plain-block trees, bounded shared schema preflight, preorder UUID receipts            |
+| `Editor.prependBlockInPage(page, content, opts?)`         | `graph_write`               | First direct child of an explicit existing page; UUID-only receipt                            |
+| `Editor.appendBlockInPage(page, content, opts?)`          | `graph_write`               | Last direct child of an explicit existing page; UUID-only receipt                             |
 | `Editor.updateBlock(identity, content, opts?)`            | `graph_write`               | Replace a nonediting block title and patch plugin-owned properties                            |
 | `Editor.upsertBlockProperty(identity, key, value, opts?)` | `graph_write`               | Plugin-owned scalar property                                                                  |
 | `Editor.removeBlockProperty(identity, key)`               | `graph_write`               | Remove a plugin-owned property value                                                          |
@@ -122,6 +128,12 @@ collapsed editor selection; delayed UI commits retain the plugin/editor lease.
 See [the command migration notes](../docs/api-migrations.md).
 
 ## Editor graph writes
+
+For the portable property-patch and receipt-only creation contracts, see the
+[migration guide](../docs/api-migrations.md#quickjs-property-patches-and-plain-block-creation).
+These methods do not promise legacy hydrated return values. Batch is limited to
+32 nodes and 32 aggregate initial-property assignments; all nodes are preflighted
+and submitted together, not through repeated public `insertBlock` calls.
 
 Writes require `graph_write`; it does not imply `graph_read` or `editor_read`.
 The configured command loader also requires `editor_command`. Registration-time

@@ -7,6 +7,91 @@ void logseq.ready(async () => {
   if (++activated !== 1) throw new Error('Repeated activation')
   const register = logseq.Commands.registerEditorCommand
   await register(
+    { key: 'portable-batch', label: 'Portable batch insertion' },
+    async () => {
+      const page = await logseq.Editor.createPage('portable batch')
+      const seed = await logseq.Editor.createBlock(page.uuid, 'seed', {
+        properties: { score: 0, enabled: false, label: '' },
+      })
+      await logseq.Editor.patchBlockProperties(seed.uuid, {
+        score: 1,
+        label: null,
+      })
+      await logseq.Editor.setBlockProperties(seed.uuid, { enabled: true })
+      const receipts = await logseq.Editor.insertBatchBlock(
+        seed.uuid,
+        [
+          {
+            content: 'A [[batch reference]]',
+            properties: { score: 2 },
+            children: [{ content: 'A1', properties: { enabled: false } }],
+          },
+          { content: 'B [[batch reference]]', properties: { score: 3 } },
+        ],
+        { sibling: true }
+      )
+      const first = await logseq.Editor.prependBlockInPage(page.name, 'first')
+      const last = await logseq.Editor.appendBlockInPage(page.id, 'last', {
+        properties: { label: 'end' },
+      })
+      if (
+        [seed, ...receipts, first, last].some(
+          (value) =>
+            Object.keys(value).length !== 1 || typeof value.uuid !== 'string'
+        )
+      )
+        throw new Error('Creation must return UUID-only receipts')
+      const tree = await logseq.Editor.getPageBlocksTree(page.uuid)
+      if (
+        tree.map((block) => block.uuid).join() !==
+          [first, seed, receipts[0], receipts[2], last]
+            .map((value) => value?.uuid)
+            .join() ||
+        !JSON.stringify(tree[2]?.children).includes(
+          receipts[1]?.uuid ?? 'missing'
+        )
+      )
+        throw new Error('Batch preorder and page edges must preserve parentage')
+      const properties = await logseq.Editor.getBlockProperties(seed.uuid)
+      if (
+        properties?.[':plugin.property.command-probe/score'] !== 1 ||
+        properties?.[':plugin.property.command-probe/enabled'] !== true ||
+        properties?.[':plugin.property.command-probe/label'] !== undefined
+      )
+        throw new Error('Property patch/set must preserve omitted assignments')
+      let rejected = false
+      try {
+        await logseq.Editor.insertBatchBlock(page.uuid, [
+          { content: 'must not exist', properties: { conflict: 1 } },
+          {
+            content: 'must not exist either',
+            properties: { conflict: 'text' },
+          },
+        ])
+      } catch (error) {
+        rejected = (error as Error).message.includes('Unsupported')
+      }
+      if (
+        !rejected ||
+        JSON.stringify(await logseq.Editor.getPageBlocksTree(page.uuid)) !==
+          JSON.stringify(tree)
+      )
+        throw new Error('Schema conflicts must not commit a valid prefix')
+      let destinationRefused = false
+      try {
+        await logseq.Editor.insertBatchBlock(
+          '00000000-0000-0000-0000-000000000115',
+          { content: 'must not be acknowledged' }
+        )
+      } catch (error) {
+        destinationRefused = (error as Error).message.includes('Unsupported')
+      }
+      if (!destinationRefused)
+        throw new Error('A worker no-op must not produce creation receipts')
+      return []
+    }
+  )
+  await register(
     { key: 'delete-special-pages', label: 'Delete special pages' },
     async () => {
       for (const suffix of ['111', '112', '113']) {

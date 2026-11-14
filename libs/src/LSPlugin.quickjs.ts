@@ -30,6 +30,30 @@ export interface InsertBlockOptions {
   customUUID?: string
 }
 export type PropertyValue = string | number | boolean
+export type PropertySet = Readonly<Record<string, PropertyValue>>
+export type PropertyPatch = Readonly<Record<string, PropertyValue | null>>
+export type CreatedBlock = Readonly<{ uuid: string }>
+export interface CreateBlockOptions extends InsertBlockOptions {
+  properties?: PropertySet
+}
+export interface PortableBatchBlock {
+  readonly content: string
+  readonly properties?: PropertySet
+  readonly children?: ReadonlyArray<PortableBatchBlock>
+}
+export interface BatchInsertOptions {
+  readonly before?: boolean
+  readonly sibling?: boolean
+  readonly keepUUID?: false
+}
+export interface PageInsertOptions {
+  readonly properties?: PropertySet
+}
+type NormalizedBatchBlock = {
+  content: string
+  properties: PropertySet
+  children: NormalizedBatchBlock[]
+}
 export type CreatedPage = Pick<PageEntity, 'id' | 'uuid' | 'name'>
 export interface MoveBlockOptions {
   before?: boolean
@@ -70,6 +94,27 @@ export interface PortablePluginInfo {
 }
 
 export interface QuickjsHost {
+  patchBlockProperties(
+    identity: Identity,
+    properties: PropertyPatch
+  ): Promise<void>
+  createBlockWithProperties(
+    identity: Identity,
+    content: string,
+    options: InsertBlockOptions,
+    properties: PropertySet
+  ): Promise<CreatedBlock>
+  insertBatchBlock(
+    identity: Identity,
+    roots: NormalizedBatchBlock[],
+    options: BatchInsertOptions
+  ): Promise<ReadonlyArray<CreatedBlock>>
+  insertPageBlock(
+    identity: Identity,
+    content: string,
+    edge: 'prepend' | 'append',
+    properties: PropertySet
+  ): Promise<CreatedBlock>
   getPluginInfo(): Promise<PortablePluginInfo>
   getEditingState(): Promise<EditingState>
   getCurrentBlock(): Promise<BlockEntity | null>
@@ -298,6 +343,87 @@ function insertionOptions(value: unknown): InsertBlockOptions {
   return copy as InsertBlockOptions
 }
 
+function propertyValues(value: unknown, patch: true): PropertyPatch
+function propertyValues(value: unknown, patch?: false): PropertySet
+function propertyValues(value: unknown, patch = false): PropertyPatch {
+  const copy = data(value)
+  if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+    failure('Invalid_request')
+  const entries = Object.entries(copy)
+  if (entries.length > 32) failure('Resource_limit')
+  for (const [key, value] of entries) {
+    propertyKey(key)
+    if (value === null) {
+      if (!patch) failure('Invalid_request')
+    } else if (
+      typeof value !== 'string' &&
+      typeof value !== 'number' &&
+      typeof value !== 'boolean'
+    ) {
+      failure('Unsupported')
+    }
+  }
+  return Object.fromEntries(entries) as PropertyPatch
+}
+
+function batchOptions(value: unknown): BatchInsertOptions {
+  const copy = data(value)
+  if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+    failure('Invalid_request')
+  for (const [key, value] of Object.entries(copy)) {
+    if (key === 'uuid' || key === 'customUUID') failure('Unsupported')
+    if (
+      !['before', 'sibling', 'keepUUID'].includes(key) ||
+      typeof value !== 'boolean'
+    )
+      failure('Invalid_request')
+    if (key === 'keepUUID' && value) failure('Unsupported')
+  }
+  return { before: copy.before === true, sibling: copy.sibling === true }
+}
+
+function batchBlocks(value: unknown): NormalizedBatchBlock[] {
+  const copy = data(value)
+  let count = 0,
+    assignments = 0
+  const node = (value: Data): NormalizedBatchBlock => {
+    if (++count > 32) failure('Resource_limit')
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      failure('Invalid_request')
+    for (const key of Object.keys(value)) {
+      if (key === 'uuid' || key === 'customUUID') failure('Unsupported')
+      if (!['content', 'properties', 'children'].includes(key))
+        failure('Invalid_request')
+    }
+    if (typeof value.content !== 'string') failure('Invalid_request')
+    const properties = propertyValues(
+      'properties' in value ? value.properties : {}
+    )
+    assignments += Object.keys(properties).length
+    if (assignments > 32) failure('Resource_limit')
+    if ('children' in value && !Array.isArray(value.children))
+      failure('Invalid_request')
+    return {
+      content: content(value.content),
+      properties,
+      children: Array.isArray(value.children) ? value.children.map(node) : [],
+    }
+  }
+  return (Array.isArray(copy) ? copy : [copy]).map(node)
+}
+
+function pageInsertOptions(value: unknown): PropertySet {
+  const copy = data(value)
+  if (
+    !copy ||
+    typeof copy !== 'object' ||
+    Array.isArray(copy) ||
+    Object.keys(copy).some((key) => key !== 'properties')
+  )
+    failure('Invalid_request')
+  return propertyValues('properties' in copy ? copy.properties : {})
+}
+
 function propertyKey(value: string): string {
   if (
     typeof value !== 'string' ||
@@ -446,6 +572,67 @@ export const logseq = surface({
     return info
   },
   Editor: surface({
+    insertBatchBlock(
+      value: Identity,
+      batch: PortableBatchBlock | ReadonlyArray<PortableBatchBlock>,
+      opts: BatchInsertOptions = {}
+    ) {
+      const target = identity(value),
+        roots = batchBlocks(batch),
+        flags = batchOptions(opts)
+      return call((host) => host.insertBatchBlock(target, roots, flags))
+    },
+    prependBlockInPage(
+      page: Identity,
+      text: string,
+      opts: PageInsertOptions = {}
+    ) {
+      const target = identity(page),
+        body = content(text),
+        values = pageInsertOptions(opts)
+      return call((host) =>
+        host.insertPageBlock(target, body, 'prepend', values)
+      )
+    },
+    appendBlockInPage(
+      page: Identity,
+      text: string,
+      opts: PageInsertOptions = {}
+    ) {
+      const target = identity(page),
+        body = content(text),
+        values = pageInsertOptions(opts)
+      return call((host) =>
+        host.insertPageBlock(target, body, 'append', values)
+      )
+    },
+    patchBlockProperties(value: Identity, patch: PropertyPatch) {
+      const target = identity(value),
+        values = propertyValues(patch, true)
+      return call((host) => host.patchBlockProperties(target, values)).then(
+        () => undefined
+      )
+    },
+    setBlockProperties(value: Identity, properties: PropertySet) {
+      const target = identity(value),
+        values = propertyValues(properties)
+      return call((host) => host.patchBlockProperties(target, values)).then(
+        () => undefined
+      )
+    },
+    createBlock(value: Identity, text: string, opts: CreateBlockOptions = {}) {
+      const target = identity(value),
+        body = content(text),
+        copy = data(opts)
+      if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+        failure('Invalid_request')
+      const { properties = {}, ...position } = copy
+      const values = propertyValues(properties),
+        flags = insertionOptions(position)
+      return call((host) =>
+        host.createBlockWithProperties(target, body, flags, values)
+      )
+    },
     getPageBlocksTree(value: Identity) {
       const key = identity(value)
       return call((host) => host.getPageBlocksTree(key))
