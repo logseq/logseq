@@ -3004,12 +3004,16 @@ let run_views ~registry ~profile ~finish =
   in
   let handlers : Cmdk_services.handlers option ref = ref None in
   let shortcut_actions = ref 0 in
+  let routed_commands = ref [] and legacy_selection = ref 0 in
   let services =
     { (Cmdk_host.services ()) with
       repo = (fun () -> None)
     ; focus_input_init = (fun _ -> ())
     ; install_listeners = (fun _scope h -> handlers := Some h)
     ; toggle_left_sidebar = (fun () -> incr shortcut_actions)
+    ; editor_command = (fun cid -> routed_commands := cid :: !routed_commands)
+    ; extend_selection = (fun _ -> incr legacy_selection)
+    ; move_selection_focus = (fun _ -> incr legacy_selection)
     }
   in
   let search = mount (fun ms -> Cmdk_view.render ~services ms) in
@@ -3042,6 +3046,13 @@ let run_views ~registry ~profile ~finish =
     footer_state := Some st;
     Cmdk_view.hints footer_services st ctx parent) in
   let footer_st = Option.get !footer_state in
+  List.iter (fun cid ->
+    let previous = !routed_commands in
+    Option.iter (fun run -> run ()) (Cmdk_state.editor_action footer_st cid);
+    check ("Selection command delegates to the mode-aware editor: " ^ cid)
+      (!routed_commands=cid :: previous && !legacy_selection=0))
+    ["editor/select-up";"editor/select-down";
+     "editor/select-block-up";"editor/select-block-down"];
   let item index action : Cmdk_state.item =
     { ikey = string_of_int index; idx = index; gid = G_nodes;
       ititle = "Footer result"; info = None; header = None; iicon = None; inline_icon = None;

@@ -393,6 +393,9 @@ let edit_arrows ~route ~conduit uuid (kev : Edit_model.key_event)
     (* cljs mod+up / mod+down collapse/expand the block's children *)
     A.collapse_expand ~collapse:up ();
     m)
+  else if kev.alt && not kev.shift then (
+    A.shift_arrow_select up;
+    m)
   else if not (kev.shift || kev.alt) && Edit_model.has_selection m then
     let lo, hi = A.sel_span_of m in
     let caret = if up then lo else hi in
@@ -838,11 +841,11 @@ let on_normal_key ev =
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
       ev.Ui_services.prevent_default ();
-      A.move_selection_focus true
+      A.extend_selection true
   | "ArrowDown" when alt && not shift ->
       (* editor/select-block-down *)
       ev.Ui_services.prevent_default ();
-      A.move_selection_focus false
+      A.extend_selection false
   | "ArrowUp" when move ->
       ev.Ui_services.prevent_default ();
       A.move_blocks_up_down true
@@ -1340,6 +1343,17 @@ let dispatch_command cid =
            A.set_collapsed ~scope uuid false;
            Ui_services.timers_later ~ms:100 start
        | _ -> start ())
+  | editing, ("editor/select-up" | "editor/select-down") ->
+      let up = cid = "editor/select-up" in
+      (match editing with
+       | Some editing ->
+           apply_input ?frame:!S.active_frame editing.S.uuid
+             (Edit_input.Key
+                (Edit_model.key_ev ~shift:true
+                   (if up then "ArrowUp" else "ArrowDown"), false))
+       | None -> A.extend_selection up)
+  | _, ("editor/select-block-up" | "editor/select-block-down") ->
+      A.shift_arrow_select (cid = "editor/select-block-up")
   | Some editing, ("editor/up" | "editor/down" | "editor/left" | "editor/right") ->
       let key = match cid with
         | "editor/up" -> "ArrowUp" | "editor/down" -> "ArrowDown"

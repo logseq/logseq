@@ -1378,10 +1378,6 @@ let editor_action st cid : (unit -> unit) option =
   | "editor/move-block-down" -> Some (fun () -> st.svs.Svs.move_blocks_vert false)
   | "editor/delete-selection" -> Some (fun () -> st.svs.Svs.delete_selection ())
   | "editor/select-all-blocks" -> Some (fun () -> st.svs.Svs.select_all ())
-  | "editor/select-up" -> Some (fun () -> st.svs.Svs.extend_selection true)
-  | "editor/select-down" -> Some (fun () -> st.svs.Svs.extend_selection false)
-  | "editor/select-block-up" -> Some (fun () -> st.svs.Svs.move_selection_focus true)
-  | "editor/select-block-down" -> Some (fun () -> st.svs.Svs.move_selection_focus false)
   | "editor/select-parent" ->
       Some
         (first_target (fun u ->
@@ -1410,6 +1406,8 @@ let editor_action st cid : (unit -> unit) option =
   | "editor/cut" ->
       Some st.svs.Svs.cut_selection
   | "editor/up" | "editor/down" | "editor/left" | "editor/right"
+  | "editor/select-up" | "editor/select-down"
+  | "editor/select-block-up" | "editor/select-block-down"
   | "editor/jump" | "editor/copy-page-url" | "window/close"
   | "editor/insert-link" | "editor/new-block" | "editor/new-line"
   | "editor/backspace" | "editor/delete" | "editor/escape-editing"
