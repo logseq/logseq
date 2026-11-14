@@ -408,6 +408,7 @@ let get_favorite_pages args =
          | Some fav ->
              Ldb.sort_by_order (Ldb.ref_ents fav "block/_parent")
              |> List.filter_map (fun block -> Ldb.ref_ent block "block/link")
+             |> Delete_blocks.distinct_entities
              |> List.filter (fun e -> not (Ldb.recycled e))
              |> fun es -> Wire.Array (List.map (plain_map_wire db) es)))
 
@@ -1016,12 +1017,17 @@ let page_block_entities db (page_id : entity_id) : entity list =
   |> List.of_seq
   |> List.filter_map (Ldb.ent_of_id db)
 
-let favorite_block db (page_block_uuid : string) : entity option =
+let favorite_blocks db (page_block_uuid : string) : entity list =
   match entity db (Lookup_ref ("block/uuid", Uuid page_block_uuid)), favorite_page db with
   | Some page_block, Some page ->
       page_block_entities db page.id
-      |> List.find_opt (fun b -> Ldb.ref_ids b "block/link" = [ page_block.id ])
-  | _ -> None
+      |> List.filter (fun b -> Ldb.ref_ids b "block/link" = [ page_block.id ])
+  | _ -> []
+
+let favorite_block db page_block_uuid =
+  match favorite_blocks db page_block_uuid with
+  | block :: _ -> Some block
+  | [] -> None
 
 (* :thread-api/set-page-favorite / :thread-api/reorder-favorites —
    handler/graph.cljs write side *)
@@ -1052,18 +1058,21 @@ let favorite_page_ops db (page_block_uuid : string) : Wire.t =
   | _ -> Wire.Array []
 
 let unfavorite_page_ops db (page_block_uuid : string) : Wire.t =
-  match favorite_block db page_block_uuid with
-  | Some block ->
-      let uuid =
-        match Ldb.value block "block/uuid" with
-        | Some (Uuid u) -> Wire.Uuid u
-        | _ -> Wire.Nil
+  match favorite_blocks db page_block_uuid with
+  | [] -> Wire.Array []
+  | blocks ->
+      let uuids =
+        List.map
+          (fun block ->
+            match Ldb.value block "block/uuid" with
+            | Some (Uuid u) -> Wire.Uuid u
+            | _ -> Wire.Nil)
+          blocks
       in
       Wire.Array
         [ Wire.Array
             [ Wire.keyword "delete-blocks"
-            ; Wire.Array [ Wire.Array [ uuid ]; Wire.Map [] ] ] ]
-  | _ -> Wire.Array []
+            ; Wire.Array [ Wire.Array uuids; Wire.Map [] ] ] ]
 
 let () =
   Dispatcher.register "thread-api/set-page-favorite" (fun args ->
@@ -1127,14 +1136,16 @@ let () =
                     match w with
                     | Wire.Uuid u -> (
                         match entity db (Lookup_ref ("block/uuid", Uuid u)) with
-                        | Some e -> Some e.id
+                        | Some e -> Some e
                         | None -> None)
                     | Wire.String s when Ldb.is_uuid_string s -> (
                         match entity db (Lookup_ref ("block/uuid", Uuid s)) with
-                        | Some e -> Some e.id
+                        | Some e -> Some e
                         | None -> None)
                     | _ -> None)
                   uuids
+                |> Delete_blocks.distinct_entities
+                |> List.map (fun e -> e.id)
               in
               let ops =
                 match favorite_page db with
@@ -1143,27 +1154,53 @@ let () =
                     let current =
                       Ldb.sort_by_order (page_block_entities db page.id)
                     in
-                    List.filter_map
-                      (fun (page_block_id, block) ->
-                        let link_id =
-                          match Ldb.ref_ids block "block/link" with
-                          | [ id ] -> Some id
-                          | _ -> None
-                        in
-                        if link_id <> Some page_block_id then
-                          let m = Ds_wire.entity_map_wire block in
-                          let m =
-                            Cljs_map.assoc m "block/link"
-                              (Wire.Int page_block_id)
+                    let ordered_ids = Db_reference.IdSet.of_list page_block_ids in
+                    let rec reuse_slots saves ids blocks =
+                      match ids, blocks with
+                      | [], extras -> saves, extras
+                      | _ :: _, [] -> saves, []
+                      | page_block_id :: ids, block :: blocks ->
+                          let link_id =
+                            match Ldb.ref_ids block "block/link" with
+                            | [ id ] -> Some id
+                            | _ -> None
                           in
-                          Some
-                            (Wire.Array
-                               [ Wire.keyword "save-block"
-                               ; Wire.Array [ m; Wire.Nil ] ])
-                        else None)
-                      (List.combine page_block_ids current
-                         |> List.filteri (fun i _ ->
-                                i < List.length current))
+                          let saves =
+                            if link_id <> Some page_block_id then
+                              let m = Ds_wire.entity_map_wire block in
+                              let m =
+                                Cljs_map.assoc m "block/link"
+                                  (Wire.Int page_block_id)
+                              in
+                              Wire.Array
+                                [ Wire.keyword "save-block"
+                                ; Wire.Array [ m; Wire.Nil ] ] :: saves
+                            else saves
+                          in
+                          reuse_slots saves ids blocks
+                    in
+                    let saves, extras = reuse_slots [] page_block_ids current in
+                    let duplicate_uuids =
+                      List.filter_map
+                        (fun block ->
+                          match Ldb.ref_ids block "block/link" with
+                          | [ id ] when Db_reference.IdSet.mem id ordered_ids ->
+                              Some
+                                (match Ldb.value block "block/uuid" with
+                                | Some (Uuid u) -> Wire.Uuid u
+                                | _ -> Wire.Nil)
+                          | _ -> None)
+                        extras
+                    in
+                    let deletes =
+                      match duplicate_uuids with
+                      | [] -> []
+                      | uuids ->
+                          [ Wire.Array
+                              [ Wire.keyword "delete-blocks"
+                              ; Wire.Array [ Wire.Array uuids; Wire.Map [] ] ] ]
+                    in
+                    List.rev_append saves deletes
               in
               (match ops with
                | [] -> ()
