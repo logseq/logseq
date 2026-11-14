@@ -149,12 +149,57 @@ struct RawElement: View {
 struct ViewAnchor: NSViewRepresentable {
     let node: Int
     let services: PlatformServices
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        services.views[node] = WeakView(view)
+    func makeNSView(context: Context) -> AnchorView {
+        let view = AnchorView(frame: .zero)
+        view.bind(node: node, services: services)
         return view
     }
-    func updateNSView(_ view: NSView, context: Context) { services.views[node] = WeakView(view) }
+    func updateNSView(_ view: AnchorView, context: Context) { view.bind(node: node, services: services) }
+    static func dismantleNSView(_ view: AnchorView, coordinator: ()) { view.unbind() }
+    @MainActor final class AnchorView: NSView {
+        private weak var services: PlatformServices?
+        private var node: Int?
+        private var incarnation: UInt64?
+        private var laidOut = false
+        func bind(node: Int, services: PlatformServices) {
+            if self.services !== services || self.node != node || incarnation != services.incarnations[node] { unbind() }
+            self.services = services; self.node = node
+            incarnation = services.incarnations[node]
+            services.views[node] = WeakView(self)
+            laidOut = false; needsLayout = true
+            services.scheduleLazyMountCheck(node)
+        }
+        func unbind() {
+            if let node, services?.views[node]?.value === self { services?.views.removeValue(forKey: node) }
+            node = nil; services = nil; incarnation = nil; laidOut = false
+        }
+        func isCurrent(node: Int, services: PlatformServices) -> Bool {
+            laidOut && self.services === services && self.node == node && incarnation == services.incarnations[node]
+        }
+        override func layout() {
+            super.layout()
+            laidOut = true
+            if let node { services?.scheduleLazyMountCheck(node) }
+        }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            laidOut = false; needsLayout = true
+        }
+        override func viewDidMoveToSuperview() {
+            super.viewDidMoveToSuperview()
+            laidOut = false; needsLayout = true
+        }
+        override func setFrameOrigin(_ newOrigin: NSPoint) {
+            let changed = frame.origin != newOrigin
+            super.setFrameOrigin(newOrigin)
+            if changed { laidOut = false; needsLayout = true }
+        }
+        override func setFrameSize(_ newSize: NSSize) {
+            let changed = frame.size != newSize
+            super.setFrameSize(newSize)
+            if changed { laidOut = false; needsLayout = true }
+        }
+    }
 }
 struct WeakView { weak var value: NSView?; init(_ value: NSView) { self.value = value } }
 

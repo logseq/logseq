@@ -84,6 +84,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard !services.closed, !services.applyingPatches else { return }
         try services.editorGeometry.flush()
         services.scrolling.flush()
+        try services.mountVisibleLazyRows()
         try services.flushImageSizes()
         try input?.afterFrame()
     }
