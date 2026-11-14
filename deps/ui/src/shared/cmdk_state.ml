@@ -1130,10 +1130,13 @@ let load_last_search (svs : Svs.t) : (string * group_id option) option =
         | None -> None
       with _ -> None)
 
-let open_palette ?(move = false) st =
+let cancel_requests st =
   st.composing := false;
   ignore (Ui_effect.issue st.req);
-  ignore (Ui_effect.issue st.recents_req);
+  ignore (Ui_effect.issue st.recents_req)
+
+let open_palette ?(move = false) st =
+  cancel_requests st;
   (* publish the reset view before opening: the mount reads derived signals
      whose republish lags the source publish by one stabilize round, so
      this separate flush guarantees every derived map already carries the
@@ -1169,16 +1172,15 @@ let open_palette ?(move = false) st =
   svs.Svs.focus_input_init q
 
 let close st =
-  st.composing := false;
-  ignore (Ui_effect.issue st.req);
-  ignore (Ui_effect.issue st.recents_req);
+  cancel_requests st;
   let v = get st in
   (* cljs persist-cmdk-query-state! runs on unmount and every committed
      action; move mode is outside the default context. A command-palette
      session (persist = false) must not overwrite the last real search
-     with its forced Commands filter. *)
-  if v.persist && not v.move_mode then save_last_search st.svs v;
-  set_in st (fun v -> { v with open_ = false; persist = true })
+     with its forced Commands filter. Embedded searches intentionally
+     never write the modal's saved query, including committed actions. *)
+  if v.persist && not v.move_mode && not v.sidebar then save_last_search st.svs v;
+  set_in st (fun v -> { v with open_ = v.sidebar; persist = not v.sidebar })
 
 let clear_filter st =
   set_in st (fun v -> { v with filter = None });
@@ -1189,7 +1191,8 @@ let clear_filter st =
    query is already non-blank so groups load normally *)
 let make_sidebar scheduler svs q : t =
   let st = make ~register:false scheduler svs in
-  set_in st (fun v -> { v with input = q; edited = true; sidebar = true });
+  set_in st (fun v -> { v with input = q; edited = true; sidebar = true;
+    open_ = true; persist = false });
   apply_results st q false [] [] 0;
   refresh st;
   st

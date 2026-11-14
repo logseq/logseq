@@ -433,7 +433,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
              ])
     | None -> None
   in
-  box ~key:"item-wrap"
+  box ~key:(S.item_dom_key (Signal.get item_sig))
     ~data_attrs:(reactive (fun it -> wrapper_attrs it) item_sig)
     [ (* pressable: the delegated document click can't see inside the
          native tree — on_press routes row clicks to the item directly *)
@@ -596,7 +596,7 @@ let rendered_groups (v : S.view) =
     | Some gid -> g.S.gid = gid) v.S.groups
 
 let group_el svs (st : S.t) (group_sig : S.group Signal.signal) : t =
-  Ui_components.cmdk_group ~key:"group"
+  Ui_components.cmdk_group ~key:(gid_name (Signal.get group_sig).S.gid)
     ~kind:(gid_name (Signal.get group_sig).S.gid)
     (* the bottom hairline mirrors :last-child's missing border — a group
        is last when its gid closes the view's group list *)
@@ -824,18 +824,30 @@ let hints svs st : t =
     ctx parent
 
 let palette svs st : t =
-  Ui_components.cmdk_palette ~key:"cmdk" ~sidebar:false
+  Ui_components.cmdk_palette ~key:"cmdk" ~owner:"modal" ~sidebar:false
     [ input_row svs st; scroller svs st; hints svs st ]
 
 (* cljs cmdk-block: the :sidebar? variant renders the same cp__cmdk body
    inside .cp__cmdk__block, without the modal shell and without the hints
    row ((when-not sidebar? (hints))) *)
-let sidebar ~(services : Svs.t) ~query : t =
- fun ctx parent ->
-  let st = S.make_sidebar ctx.Lui_ui.ui_scheduler services query in
-  (Ui_components.cmdk_palette ~key:("cmdk-sb-" ^ query) ~sidebar:true
-     [ input_row services st; scroller services st ])
-    ctx parent
+type sidebar_instance = { owner : string; state : S.t }
+
+let sidebar_counter = ref 0
+
+(* Allocate in the keyed pane's scope, outside its index/item rendering.
+   The opaque root also keeps arbitrary query text out of selectors. *)
+let make_sidebar ~services ~query ctx =
+  incr sidebar_counter;
+  let owner = "cmdk-sidebar-" ^ string_of_int !sidebar_counter in
+  let services = services ("[data-cmdk-owner=\"" ^ owner ^ "\"]") in
+  let state = S.make_sidebar ctx.Lui_ui.ui_scheduler services query in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> S.cancel_requests state);
+  { owner; state }
+
+let sidebar instance : t =
+  let st = instance.state in
+  Ui_components.cmdk_palette ~key:instance.owner ~owner:instance.owner ~sidebar:true
+    [ input_row st.S.svs st; scroller st.S.svs st ]
 
 (* -- delegated event handlers -------------------------------------------- *)
 

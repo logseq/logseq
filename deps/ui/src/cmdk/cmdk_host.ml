@@ -68,8 +68,7 @@ let with_sidebar f =
   | Some sst -> f sst
   | None -> ()
 
-let services : unit -> Svs.t =
- fun () ->
+let services ?(root = ".cp__cmdk__modal") () : Svs.t =
   { Svs.publishing = Ui_services.env_publishing
   ; is_mac = Ui_services.env_is_mac
   ; matches_shortcut = (fun cid ev -> Keymap_data.matches_key cid
@@ -133,18 +132,18 @@ let services : unit -> Svs.t =
   ; jump_to_anchor = Router.jump_to_anchor
   ; set_input_value =
       (fun v ->
-        match D.query_selector ".cp__cmdk-search-input" with
+        match D.query_selector (root ^ " .cp__cmdk-search-input") with
         | Some el -> D.el_set_value el v
         | None -> ())
   ; focus_search_input =
       (fun () ->
-        match D.query_selector ".cp__cmdk-search-input" with
+        match D.query_selector (root ^ " .cp__cmdk-search-input") with
         | Some el -> D.el_focus el
         | None -> ())
   ; focus_input_init =
       (fun q ->
         let rec go tries =
-          match D.query_selector ".cp__cmdk-search-input" with
+          match D.query_selector (root ^ " .cp__cmdk-search-input") with
           | Some el ->
               D.el_focus el;
               if q <> "" then (
@@ -156,7 +155,7 @@ let services : unit -> Svs.t =
         D.set_timeout (fun () -> go 20) 0)
   ; scroll_row_index =
       (fun i ->
-        match D.query_selector ".cp__cmdk .cp__cmdk-scroller" with
+        match D.query_selector (root ^ " .cp__cmdk-scroller") with
         | Some scroller -> (
             match
               D.el_query scroller
@@ -166,7 +165,7 @@ let services : unit -> Svs.t =
             | None -> ())
         | None -> ())
   ; reset_search_scroll =
-      (fun () -> match Ui_services.dom_query ".cp__cmdk .cp__cmdk-scroller" with
+      (fun () -> match Ui_services.dom_query (root ^ " .cp__cmdk-scroller") with
         | Some el -> el.Ui_services.set_scroll_top 0.
         | None -> ())
   ; set_timeout = D.set_timeout
@@ -179,7 +178,7 @@ let services : unit -> Svs.t =
         let open Svs in
         List.iter (fun (name, composing) ->
           add_document_listener name (fun ev -> match D.ev_target ev with
-            | Some el when D.el_closest el ".cp__cmdk__modal" <> None
+            | Some el when D.el_closest el root <> None
                 && D.el_closest el ".cp__cmdk-search-input" <> None -> h.composition composing
             | _ -> ()) true) ["compositionstart", true; "compositionend", false];
         add_document_listener "keydown"
@@ -202,9 +201,9 @@ let services : unit -> Svs.t =
                 h.click
                   { search_button = D.el_closest el "#search-button" <> None
                   ; inside_modal =
-                      D.el_closest el ".cp__cmdk__modal" <> None
+                      D.el_closest el root <> None
                   ; item_key =
-                      (match D.el_closest el ".cp__cmdk [data-item-key]" with
+                      (match D.el_closest el (root ^ " [data-item-key]") with
                        | Some wrap -> D.el_get_attr wrap "data-item-key"
                        | None -> None) }
             | None -> ())
@@ -214,10 +213,10 @@ let services : unit -> Svs.t =
             match D.ev_target ev with
             | Some el ->
                 h.mousemove
-                  { inside_cmdk = D.el_closest el ".cp__cmdk" <> None
+                  { inside_cmdk = D.el_closest el root <> None
                   ; item_index =
                       (match
-                         D.el_closest el ".cp__cmdk [data-item-index]"
+                         D.el_closest el (root ^ " [data-item-index]")
                        with
                        | Some wrap -> (
                            match D.el_get_attr wrap "data-item-index" with

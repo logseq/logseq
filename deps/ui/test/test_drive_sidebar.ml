@@ -40,6 +40,70 @@ let host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
   ; set_language = (fun m -> Settings_view.set_language m)
   }
 
+let cmdk_instance_ownership () =
+  let module C = Cmdk_state in
+  let module M = Drive.Model in
+  let session = Test_drive.s () in
+  let state = Option.get (Sidebar_state.current ()) in
+  let main = Option.get !C.latest_t in
+  let previous_view = C.get main and previous_services = !C.services_ref in
+  let previous_items = Runtime.signal_get state.items in
+  let previous_saved = Ui_services.storage_get C.last_search_key in
+  let model = Drive.Session.read_model session in
+  let panel query = { (push_item ("search-" ^ query) query) with kind = "search" } in
+  let first = panel "Instance action" and second = panel "Second query" in
+  let rec find pred node =
+    if pred node then Some node else
+      List.find_map (find pred) (M.children session.Drive.Session.tree node.M.id) in
+  let in_panel index pred =
+    Option.get (Option.bind
+      (Test_drive.first ("prop:accessibility-identifier=\"sidebar-panel-content-"
+        ^ string_of_int index ^ "\"")) (find pred)) in
+  let input index = in_panel index (fun node -> Test_drive.has_tok node "cp__cmdk-search-input") in
+  let cleanup () =
+    Sidebar_state.set_items state previous_items;
+    C.services_ref := previous_services;
+    C.set main previous_view;
+    (match previous_saved with
+     | Some saved -> Ui_services.storage_set C.last_search_key saved
+     | None -> Ui_services.storage_remove C.last_search_key);
+    if (Drive.Session.read_model session).Model.left_sidebar_open <> model.Model.left_sidebar_open then
+      Runtime.send Action.Toggle_left_sidebar;
+    if (Drive.Session.read_model session).Model.right_sidebar_open <> model.Model.right_sidebar_open then
+      Runtime.send Action.Toggle_right_sidebar in
+  let run () =
+      let catalog = Cmdk_host.services () in
+      C.services_ref := Some {catalog with
+        Cmdk_services.commands = (fun () ->
+          [{Cmdk_services.id = "ui/toggle-left-sidebar"; label = "Instance action";
+            i18n = false; sc = ""; dev = false}]);
+        plugin_commands = (fun () -> [])};
+      C.set main {previous_view with input = "modal retained"; sidebar = false; persist = true};
+      C.close main;
+      let saved = Ui_services.storage_get C.last_search_key in
+      if not model.Model.right_sidebar_open then Runtime.send Action.Toggle_right_sidebar;
+      Sidebar_state.set_items state [first; second];
+      Runtime.flush ();
+      Drive.Session.text_changed session (input 1).M.id "Different query";
+      Runtime.flush ();
+      check "sidebar query edits remain local and do not steal the modal owner"
+        (M.string_prop (input 0) "text" = Some "Instance action"
+         && M.string_prop (input 1) "text" = Some "Different query"
+         && (match !C.latest_t with Some current -> current == main | None -> false));
+      Sidebar_state.move_item state second.key 0;
+      Runtime.flush ();
+      check "sidebar reorder retains each search instance's edited query"
+        (M.string_prop (input 0) "text" = Some "Different query"
+         && M.string_prop (input 1) "text" = Some "Instance action");
+      let action = in_panel 1 (fun node ->
+        Test_drive.attr_val node "data-item-key" = Some "cmd-ui/toggle-left-sidebar") in
+      let target = List.hd (M.children session.Drive.Session.tree action.M.id) in
+      Drive.Session.press session target.M.id;
+      Runtime.flush ();
+      check "sidebar actions keep the modal's saved query"
+        (Ui_services.storage_get C.last_search_key = saved) in
+  try run (); cleanup () with exn -> cleanup (); raise exn
+
 let block_instance_ownership () =
   let module E = Editor_state in
   let module A = Editor_actions in
@@ -212,4 +276,5 @@ let run ~finish =
     (Runtime.signal_get st.open_menu = "");
   if not was_open then toggle ();
   block_instance_ownership ();
+  cmdk_instance_ownership ();
   pointer_reorder ~finish ()

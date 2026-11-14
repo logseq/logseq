@@ -644,7 +644,7 @@ let object_tabs_host (it : Sidebar_state.item) =
       [ Page.object_tabs_el ~key_prefix:("tabs-" ^ it.key) page ]
   | _ -> []
 
-let item_body st idx (it : Sidebar_state.item) =
+let item_body ?search st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
   let scope = Sidebar_state.item_scope it in
   (* add-button indent/children flags — same rule the imperative
@@ -681,7 +681,7 @@ let item_body st idx (it : Sidebar_state.item) =
         ~data_attrs:[ ("style", "padding-top:8px") ]
         [ box ~key:("cmdkb-" ^ it.key)
             ~style_class:"cp__cmdk__block rounded-md"
-            [ Cmdk_view.sidebar ~services:(Cmdk_host.services ()) ~query:it.title ]
+            [ Cmdk_view.sidebar (Option.get search) ]
         ]
   | "shortcut-settings" ->
       column ~key:("body-" ^ it.key)
@@ -761,7 +761,7 @@ let item_body st idx (it : Sidebar_state.item) =
     ]
 
 
-let sidebar_item st idx (it : Sidebar_state.item) =
+let sidebar_item ?search st idx (it : Sidebar_state.item) =
   Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.shadow
@@ -780,7 +780,7 @@ let sidebar_item st idx (it : Sidebar_state.item) =
         [ item_header st idx it
         ; Ui_components.with_props
             (if it.collapsed then [Ui_components.Prop.display `none] else [])
-            (item_body st idx it)
+            (item_body ?search st idx it)
         ; item_menu_host st it ])
     ])
 
@@ -810,8 +810,15 @@ let inner st =
                     (Signal.value st.Sidebar_state.items))
                 ~key:(fun (_, (it : Sidebar_state.item)) -> it.key)
                 ~cmp:String.compare
-                ~mount:(fun entry ->
-                  reactive (fun (idx, it) -> sidebar_item st idx it) entry)
+                ~mount:(fun entry ctx parent ->
+                  let _, it = Signal.get entry in
+                  let search = if it.Sidebar_state.kind = "search" then
+                    Some (Cmdk_view.make_sidebar
+                      ~services:(fun root -> Cmdk_host.services ~root ())
+                      ~query:it.title ctx)
+                    else None in
+                  (reactive (fun (idx, it) -> sidebar_item ?search st idx it) entry)
+                    ctx parent)
             ]) ]
     ])
 

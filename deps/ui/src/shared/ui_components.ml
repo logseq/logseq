@@ -291,13 +291,13 @@ let cmdk_modal ~key children =
 (* Palette body — data-keep-selection is a closest() contract
    (container.cljs + selection_bar.ml); position:relative anchors
    overlay children like the tooltip arrow. *)
-let cmdk_palette ~key ~sidebar children =
+let cmdk_palette ~key ~owner ~sidebar children =
   with_props
     [ Prop.position `relative; Prop.user_select `none ]
     (column ~key ~style_class:"cp__cmdk" ~cross:`stretch ~grow:1.
        ~corner_radius:(if sidebar then 0 else 8)
        ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)))"
-       ~data_attrs:[ "data-keep-selection", "true" ]
+       ~data_attrs:[ "data-keep-selection", "true"; "data-cmdk-owner", owner ]
        children)
 
 (* 54px input band; the bottom hairline is an inset shadow so the row
