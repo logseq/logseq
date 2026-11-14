@@ -602,7 +602,8 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
    | Some _ ->
        let block = Decode.block_of_wire value in
        Signal.on_dispose context.Lui_ui.ui_scope
-         (Editor_state.register_block_source ~scope (fun () -> [block]))
+         (Editor_state.register_block_source ~scope ~kind:Editor_state.Field_editor
+            (fun () -> [block]))
    | None -> ());
   let creating = ref false in
   let activate () =

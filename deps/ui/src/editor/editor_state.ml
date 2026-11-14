@@ -517,30 +517,59 @@ let rec find_in blocks uuid =
         | Some _ as r -> r
         | None -> find_in rest uuid)
 
-(* Container owners expose their trees for lookup, navigation and selection. *)
-let extra_sources : (string * (unit -> Model.block list)) list ref = ref []
+(* Field sources support editing lookup but do not own an outliner
+   presentation. The distinction is explicit at each registration. *)
+type block_source_kind = Outliner | Field_editor
 
-let add_block_source ~scope f = extra_sources := (scope, f) :: !extra_sources
+type block_source =
+  { source_scope : string
+  ; source_kind : block_source_kind
+  ; source_blocks : unit -> Model.block list
+  }
+
+let extra_sources : block_source list ref = ref []
+
+let add_block_source ~scope ~kind source_blocks =
+  extra_sources := { source_scope = scope; source_kind = kind; source_blocks }
+                   :: !extra_sources
+
+let block_source scope =
+  List.find_opt (fun source -> source.source_scope = scope) !extra_sources
 
 let remove_block_source ~scope =
-  extra_sources := List.filter (fun (owner, _) -> owner <> scope) !extra_sources
+  extra_sources := List.filter (fun source -> source.source_scope <> scope) !extra_sources
 
-let register_block_source ~scope source =
-  add_block_source ~scope source;
+let register_block_source ~scope ~kind source =
+  add_block_source ~scope ~kind source;
   fun () ->
-    extra_sources := List.filter (fun (owner, live) ->
-      owner <> scope || live != source) !extra_sources
+    extra_sources := List.filter (fun entry ->
+      entry.source_scope <> scope || entry.source_blocks != source) !extra_sources
 
-let blocks_in_scope scope =
+let builtin_blocks_in_scope scope =
   let page_scope =
     match Runtime.route () with
     | Model.Block_zoom uuid -> "zoom-" ^ uuid
     | _ -> "main"
   in
-  if scope = "main" || scope = page_scope then page_blocks ()
+  if scope = "main" || scope = page_scope then Some (page_blocks ())
   else match scope with
-    | "quick-add" -> (Quick_add_state.value ()).Quick_add_state.blocks
-    | _ -> (List.assoc scope !extra_sources) ()
+    | "quick-add" -> Some (Quick_add_state.value ()).Quick_add_state.blocks
+    | _ -> None
+
+let blocks_in_scope scope =
+  match builtin_blocks_in_scope scope with
+  | Some blocks -> blocks
+  | None ->
+      let source = List.find (fun source -> source.source_scope = scope) !extra_sources in
+      source.source_blocks ()
+
+let outliner_blocks_in_scope scope =
+  match builtin_blocks_in_scope scope with
+  | Some _ as blocks -> blocks
+  | None ->
+      match block_source scope with
+      | Some { source_kind = Outliner; source_blocks; _ } -> Some (source_blocks ())
+      | Some { source_kind = Field_editor; _ } | None -> None
 
 let find uuid =
   match find_in (page_blocks ()) uuid with
@@ -548,8 +577,8 @@ let find uuid =
   | None ->
       let rec go = function
         | [] -> None
-        | (_, f) :: fs -> (
-            match find_in (f ()) uuid with Some _ as r -> r | None -> go fs)
+        | source :: fs -> (
+            match find_in (source.source_blocks ()) uuid with Some _ as r -> r | None -> go fs)
       in
       go !extra_sources
       |> (fun r ->

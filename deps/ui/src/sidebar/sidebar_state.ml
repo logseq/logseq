@@ -1337,7 +1337,7 @@ let init (ms : Model.t Signal.signal) : t =
       model_signal := Some ms;
       (* sidebar item blocks are editable: expose them to Editor_state.find
          so click-to-edit works on .cp__right-sidebar block rows *)
-      Editor_state.add_block_source ~scope:"sidebar" (fun () ->
+      Editor_state.add_block_source ~scope:"sidebar" ~kind:Editor_state.Outliner (fun () ->
           List.concat_map (fun (it : item) -> it.blocks)
             (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));

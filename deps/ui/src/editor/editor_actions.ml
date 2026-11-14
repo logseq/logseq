@@ -2044,7 +2044,7 @@ let insert_dragged_reference ~scope src tgt move_to =
                      | _ -> false)
                  || (scope = "quick-add" && Dialogs_state.ready ()
                      && Dialogs_state.is_open "quick-add")
-                 || List.mem_assoc scope !S.extra_sources
+                 || Option.is_some (S.block_source scope)
                in
                if Ops.context_current context
                   && scope_live
@@ -2667,18 +2667,22 @@ let set_collapsed ?(scope = "main") uuid collapsed =
    outline level (expand = shallowest collapsed level, collapse =
    deepest expandable level) *)
 let collapse_expand ~collapse () =
-  let set u want =
-    match S.find u with
-    | Some b
-      when S.children_of b <> [] && S.effective_collapsed b <> want ->
-        toggle_collapse u
-    | _ -> ()
+  let set ~scope u want =
+    (* An explicit command must update persistence even when a temporary
+       presentation override already displays the requested value. A field
+       input scope does not itself identify an outer tree container. *)
+    match S.outliner_blocks_in_scope scope with
+    | Some blocks when S.find_in blocks u <> None -> set_collapsed ~scope u want
+    | Some _ | None -> ()
   in
-  match S.editing_uuid () with
-  | Some u -> set u collapse
+  match S.editing () with
+  | Some e when S.is_draft e -> ()
+  | Some e -> set ~scope:e.S.scope e.S.uuid collapse
   | None -> (
       match selected_uuids () with
-      | _ :: _ as us -> List.iter (fun u -> set u collapse) us
+      | _ :: _ as us ->
+          let scope = S.selection_scope () in
+          List.iter (fun u -> set ~scope u collapse) us
       | [] ->
           let blocks = S.flat_all () in
           let lvl (b : Model.block) = b.Model.block_level in
