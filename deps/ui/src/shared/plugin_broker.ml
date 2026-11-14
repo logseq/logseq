@@ -103,14 +103,14 @@ let dispatch t session invocation request =
   | Ok () when invocation.calls >= max_calls -> Ui_task.resolve (Error Resource_limit)
   | Ok () ->
       invocation.calls <- invocation.calls + 1;
-      let service = service invocation request in
-      let task = Ui_task.bind service (fun result ->
+      let request_task = service invocation request in
+      let task = Ui_task.bind request_task (fun result ->
         Ui_task.resolve (match check t session invocation, result with
           | Error error, _ | Ok (), Error error -> Error error
           | Ok (), Ok reply ->
               Result.map (fun () -> reply) (validate_value (reply_value reply)))) in
       invocation.cancel_hooks <-
-        (fun () -> Ui_task.cancel task; Ui_task.cancel service) :: invocation.cancel_hooks;
+        (fun () -> Ui_task.cancel task; Ui_task.cancel request_task) :: invocation.cancel_hooks;
       task
 
 let accept_program t session invocation program =

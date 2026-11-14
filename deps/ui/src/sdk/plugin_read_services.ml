@@ -111,11 +111,11 @@ let capture ~id =
     match snapshot.Model.repo with
     | None -> immediate (fun () -> Ok None)
     | Some repo ->
-        let identity = match identity with
+        let key = match identity with
           | Entity_id value -> Js.Json.number (float_of_int value)
           | Uuid value | Page_name value -> Js.Json.string value
         in
-        await (fun () -> Sdk_util.get_entity_json_for_repo repo identity)
+        await (fun () -> Sdk_util.get_entity_json_for_repo repo key)
           (entity_result convert)
   in
   let current_block () =
