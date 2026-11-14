@@ -22,6 +22,7 @@ let close runner =
   end
 
 let current runner = not runner.closed && Plugin_broker.session_current runner.broker runner.session
+let invoking runner = current runner && runner.busy
 let commands runner = Plugin_broker.commands runner.broker runner.session
 
 let owned runner task =
