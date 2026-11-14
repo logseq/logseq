@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { CliError, runLogseqJson } from "./cli.mjs";
+import { log } from "./logging.mjs";
 
 const AUTH_ERROR_CODES = new Set([
   "missing-auth",
@@ -13,14 +14,12 @@ const AUTH_ERROR_CODES = new Set([
 const DOWNLOAD_TIMEOUT_MS = 35 * 60 * 1000;
 const SYNC_START_TIMEOUT_MS = 2 * 60 * 1000;
 
-function log(event, fields = {}) {
-  console.log(JSON.stringify({ time: new Date().toISOString(), event, ...fields }));
-}
-
-function errorFields(error) {
-  return error instanceof CliError
-    ? { code: error.code, message: error.message, hint: error.hint }
-    : { message: String(error?.message ?? error) };
+export function errorFields(error) {
+  if (!(error instanceof CliError)) return { message: String(error?.message ?? error) };
+  const fields = { code: error.code, message: error.message, hint: error.hint };
+  const stderr = error.stderr?.trim();
+  if (stderr) fields.stderr = stderr.slice(-1000);
+  return fields;
 }
 
 function wsState(status) {

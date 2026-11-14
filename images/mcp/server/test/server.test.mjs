@@ -14,6 +14,7 @@ const port = 18000 + Math.floor(Math.random() * 1000);
 const baseUrl = `http://127.0.0.1:${port}`;
 let home;
 let child;
+let stdout = "";
 
 function readState() {
   return JSON.parse(fs.readFileSync(path.join(home, "fake", "state.json"), "utf8"));
@@ -63,6 +64,9 @@ before(async () => {
       LOGSEQ_E2EE_PASSWORD: "secret",
     },
     stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
   });
   await waitForServer();
 });
@@ -161,4 +165,29 @@ test("health reports open graphs", async () => {
   const response = await fetch(`${baseUrl}/health`);
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, graphs: [{ graph: "notes", state: "open" }] });
+});
+
+test("logs tool errors without arguments", async () => {
+  await withClient(async (client) => {
+    await call(client, "search", { graph: "other", text: "private note" });
+  });
+  const line = stdout.split("\n").find((l) => l.includes('"tool-error"') && l.includes('"other"'));
+  assert.ok(line, "tool-error not logged");
+  const entry = JSON.parse(line);
+  assert.equal(entry.tool, "search");
+  assert.equal(entry.code, "graph-not-open");
+  assert.ok(!line.includes("private note"));
+});
+
+test("forwards db-worker-node warnings to stdout", async () => {
+  const dir = path.join(home, "logseq", "graphs", "notes");
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, "db-worker-node-20261114.log");
+  fs.writeFileSync(file, "2026-11-14T10:00:00.000Z [info] [sync] \"connected\"\n");
+  fs.appendFileSync(file, "2026-11-14T10:00:01.000Z [warning] [sync] \"ws closed\"\n");
+  for (let i = 0; i < 50 && !stdout.includes("ws closed"); i += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(stdout.includes('[db-worker-node notes] 2026-11-14T10:00:01.000Z [warning] [sync] "ws closed"'));
+  assert.ok(!stdout.includes("connected"));
 });

@@ -3,6 +3,7 @@ import path from "node:path";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { GraphManager } from "./graphs.mjs";
+import { log, WorkerLogForwarder } from "./logging.mjs";
 import { registerTools, SERVER_INSTRUCTIONS } from "./tools.mjs";
 
 const MAX_BODY_BYTES = 16 * 1024 * 1024;
@@ -47,6 +48,7 @@ function loadConfig() {
       .map((graph) => graph.trim())
       .filter(Boolean),
     syncCheckIntervalMs: Number(env("SYNC_CHECK_INTERVAL_SECONDS") ?? 60) * 1000,
+    workerLogLevel: env("WORKER_LOG_LEVEL") ?? "warn",
   };
 }
 
@@ -121,7 +123,15 @@ async function handleMcp(req, res, manager) {
 async function main() {
   const endpoints = configureSyncEndpoints();
   const config = loadConfig();
-  console.log(JSON.stringify({ time: new Date().toISOString(), event: "sync-endpoints", ...endpoints }));
+  if (!["off", "warn", "all"].includes(config.workerLogLevel)) {
+    throw new Error(`WORKER_LOG_LEVEL must be off, warn or all, got ${config.workerLogLevel}`);
+  }
+  log("sync-endpoints", endpoints);
+  const forwarder = new WorkerLogForwarder({
+    graphsDir: path.join(config.rootDir, "graphs"),
+    level: config.workerLogLevel,
+  });
+  forwarder.start();
   const manager = new GraphManager(config);
   await manager.init();
 
@@ -143,20 +153,13 @@ async function main() {
       }
       sendJson(res, 404, { error: "not found" });
     } catch (error) {
-      console.error(error);
+      log("http-error", { path: url.pathname, message: String(error?.message ?? error), stack: error?.stack });
       if (!res.headersSent) sendJson(res, 500, { error: String(error?.message ?? error) });
     }
   });
 
   httpServer.listen(config.port, () => {
-    console.log(
-      JSON.stringify({
-        time: new Date().toISOString(),
-        event: "mcp-listening",
-        port: config.port,
-        auth: config.token ? "bearer" : "none",
-      }),
-    );
+    log("mcp-listening", { port: config.port, auth: config.token ? "bearer" : "none" });
   });
 
   const shutdown = async () => {
@@ -169,6 +172,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(error);
+  log("fatal", { message: String(error?.message ?? error), stack: error?.stack });
   process.exit(1);
 });

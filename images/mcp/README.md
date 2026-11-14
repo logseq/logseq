@@ -65,10 +65,27 @@ The resource `logseq://skill/logseq-cli` serves the output of `logseq skill show
 | `MCP_TOKEN` | no | When set, `/mcp` requires `Authorization: Bearer <token>`. |
 | `MCP_PORT` | no | Defaults to `8080`. |
 | `SYNC_CHECK_INTERVAL_SECONDS` | no | Defaults to `60`. |
+| `WORKER_LOG_LEVEL` | no | db-worker-node log lines forwarded to stdout: `off`, `warn` (default) or `all`. |
 
 All state lives in `/data`: graphs, `auth.json`, the E2EE password, and the list
 of open graphs. The E2EE password is stored in `kv-store.json`, encrypted with
 the refresh token. See `docker-compose.yml` for a CasaOS example.
+
+## Logs
+
+Everything goes to stdout, so it shows up in `docker logs logseq-mcp` and in
+the CasaOS app logs. Each server event is a JSON line:
+
+- Startup and auth: `sync-endpoints`, `login-ok`, `login-failed`, `auth-retry`, `mcp-listening`.
+- Graph lifecycle: `graph-download-start`, `graph-download-ok`, `graph-open`, `graph-open-failed`, `graph-close`.
+- Sync watchdog: `sync-restart`, `sync-check-failed`.
+- MCP tool calls: `tool-ok` and `tool-error`, with the tool name, graph, duration, and the CLI error code, message and stderr. Tool arguments are not logged.
+- Unexpected failures: `http-error`, `fatal`.
+
+db-worker-node writes its own log per graph to
+`/data/logseq/graphs/<graph>/db-worker-node-YYYYMMDD.log`. With the default
+`WORKER_LOG_LEVEL=warn`, warnings and errors from those files are also
+forwarded to stdout, prefixed with `[db-worker-node <graph>]`.
 
 ## Development
 

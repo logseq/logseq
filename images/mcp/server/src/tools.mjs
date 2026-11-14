@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { CliError, ednStringVector, runLogseqJson, runLogseqText } from "./cli.mjs";
+import { errorFields } from "./graphs.mjs";
+import { log } from "./logging.mjs";
 
 const BLOCKED_GENERIC_COMMANDS = new Set(["login", "logout", "completion", "agent"]);
 
@@ -85,9 +87,15 @@ function exactlyOne(input, keys) {
 export function registerTools(server, manager) {
   const tool = (name, config, handler) => {
     server.registerTool(name, config, async (input) => {
+      const startedAt = Date.now();
+      // Only the tool name and graph are logged; arguments may contain notes.
+      const fields = { tool: name, graph: input?.graph };
       try {
-        return ok(await handler(input ?? {}));
+        const result = ok(await handler(input ?? {}));
+        log("tool-ok", { ...fields, ms: Date.now() - startedAt });
+        return result;
       } catch (error) {
+        log("tool-error", { ...fields, ms: Date.now() - startedAt, ...errorFields(error) });
         return fail(error);
       }
     });

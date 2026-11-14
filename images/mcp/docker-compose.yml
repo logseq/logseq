@@ -30,6 +30,7 @@ services:
       LOGSEQ_E2EE_PASSWORD: change-me
       LOGSEQ_GRAPHS: ""
       MCP_TOKEN: ""
+      WORKER_LOG_LEVEL: warn
     volumes:
       - type: bind
         source: /DATA/AppData/logseq-mcp
@@ -54,6 +55,9 @@ services:
         - container: MCP_TOKEN
           description:
             en_us: Optional bearer token for /mcp (leave empty on Tailscale)
+        - container: WORKER_LOG_LEVEL
+          description:
+            en_us: Sync worker logs shown in the app logs (off, warn, all)
       ports:
         - container: "8080"
           description:
