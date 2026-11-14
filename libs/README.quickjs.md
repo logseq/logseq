@@ -21,7 +21,7 @@ interface PortablePluginInfo {
 }
 
 type QuickjsCapability =
-  'editor_read' | 'editor_command' | 'graph_read' | 'db_query'
+  'editor_read' | 'editor_command' | 'graph_read' | 'db_query' | 'graph_write'
 ```
 
 For example, in a plugin using the QuickJS SDK entry:
@@ -70,19 +70,24 @@ Sibling navigation is also available as
 They accept an entity ID, UUID, or `{ uuid }` and return an immediate sibling
 entity or `null`. They do not flatten descendants or follow visible UI order.
 
-| QuickJS SDK API                                       | Required grants             | Implemented boundary                                                                          |
-| ----------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------- |
-| `ready(callback?)`                                    | None                        | Activation and asynchronous initialization, not subscriptions or a general resident lifecycle |
-| `baseInfo`                                            | None                        | `id`, `runtime`, and immutable `grantedCapabilities` after initialization                     |
-| `Editor.checkEditing()`                               | `editor_read`               | Editing UUID or `false`                                                                       |
-| `Editor.getEditingBlockContent()`                     | `editor_read`               | Live editing text or `null`                                                                   |
-| `Editor.getCurrentBlock()`                            | `editor_read`, `graph_read` | Current graph entity or `null`                                                                |
-| `Editor.getCurrentPage()`                             | `editor_read`, `graph_read` | Page entity, route summary, or `null`                                                         |
-| `Editor.getBlock(identity, opts?)`                    | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; no child tree expansion                               |
-| `Editor.getPage(identity, opts?)`                     | `graph_read`                | Numeric entity ID, UUID, `{ uuid }`, or page name; no child tree expansion                    |
-| `DB.datascriptQuery(query, ...inputs)`                | `graph_read`, `db_query`    | DataScript query with bounded plain-data inputs/results                                       |
-| `Commands.registerEditorCommand(descriptor, handler)` | `editor_command`            | Activation-time registration; handlers return the closed editor action program                |
-| `console.log/info/warn/error/debug`                   | None                        | Bounded application diagnostics, not a browser console                                        |
+| QuickJS SDK API                                           | Required grants             | Implemented boundary                                                                          |
+| --------------------------------------------------------- | --------------------------- | --------------------------------------------------------------------------------------------- |
+| `ready(callback?)`                                        | None                        | Activation and asynchronous initialization, not subscriptions or a general resident lifecycle |
+| `baseInfo`                                                | None                        | `id`, `runtime`, and immutable `grantedCapabilities` after initialization                     |
+| `Editor.checkEditing()`                                   | `editor_read`               | Editing UUID or `false`                                                                       |
+| `Editor.getEditingBlockContent()`                         | `editor_read`               | Live editing text or `null`                                                                   |
+| `Editor.getCurrentBlock()`                                | `editor_read`, `graph_read` | Current graph entity or `null`                                                                |
+| `Editor.getCurrentPage()`                                 | `editor_read`, `graph_read` | Page entity, route summary, or `null`                                                         |
+| `Editor.getBlock(identity, opts?)`                        | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; no child tree expansion                               |
+| `Editor.getPage(identity, opts?)`                         | `graph_read`                | Numeric entity ID, UUID, `{ uuid }`, or page name; no child tree expansion                    |
+| `Editor.getBlockProperties(identity)`                     | `graph_read`                | Readable own/class-default properties or `null`                                               |
+| `Editor.insertBlock(identity, content, opts?)`            | `graph_write`               | Insert one block during a command invocation                                                  |
+| `Editor.updateBlock(identity, content, opts?)`            | `graph_write`               | Replace a nonediting block title                                                              |
+| `Editor.upsertBlockProperty(identity, key, value, opts?)` | `graph_write`               | Plugin-owned scalar property                                                                  |
+| `Editor.removeBlockProperty(identity, key)`               | `graph_write`               | Remove a plugin-owned property value                                                          |
+| `DB.datascriptQuery(query, ...inputs)`                    | `graph_read`, `db_query`    | DataScript query with bounded plain-data inputs/results                                       |
+| `Commands.registerEditorCommand(descriptor, handler)`     | `editor_command`            | Activation-time registration; handlers return the closed editor action program                |
+| `console.log/info/warn/error/debug`                       | None                        | Bounded application diagnostics, not a browser console                                        |
 
 `includeChildren` may be omitted or `false`; `true` is `Unsupported`. Explicit
 identity reads use graph services; active-editor reads also retain the captured
@@ -91,11 +96,58 @@ query, diagnostics, and initialization calls remain subject to the existing
 bridge message, Unicode, depth, size, call, and execution budgets.
 
 Registered command handlers return `insertText`, `showDatePicker`, or
-`exitEditing` actions, not imperative writes. They use a fresh invocation host
+`exitEditing` actions. Separately granted graph writes are described below. They use a fresh invocation host
 and the existing configured editor executor. Read/query calls inside a handler
 still need their separate grants. The command slice requires a noncomposing,
 collapsed editor selection; delayed UI commits retain the plugin/editor lease.
 See [the command migration notes](../docs/api-migrations.md).
+
+## Editor graph writes
+
+Writes require `graph_write`; it does not imply `graph_read` or `editor_read`.
+The configured command loader also requires `editor_command`. Registration-time
+writes and invocations without captured write services reject with `Unsupported`.
+The read-only loader rejects write grants. Existing read APIs retain their grants.
+
+The four mutations accept a positive entity ID, UUID or `{ uuid }`, not a page
+name. Missing targets/graphs are `Invalid_request`, not successful no-ops.
+`insertBlock` returns the persisted entity; the other three return no value.
+
+- Insert defaults to the last child. `start: true` inserts the first child;
+  `end: true` is an explicit last child. `sibling: true` inserts after the target;
+  `before: true` inserts before it. Start/end cannot combine with sibling/before,
+  and start/end cannot both be true. `customUUID` must be a valid unused UUID.
+- Insert `properties`, `schema` and `autoOrderedList` are `Unsupported`. Unknown
+  fields, wrong value types and contradictory positioning are `Invalid_request`.
+- Update accepts omitted/empty options only; `properties` is `Unsupported`.
+  Updating page titles or the currently edited block is `Unsupported`, avoiding
+  overwriting an editor buffer. Use the configured `insertText` action for that buffer.
+- Property keys contain 1–64 ASCII letters, digits, `_` or `-`. Writes resolve
+  them only inside `plugin.property.<plugin-id>/<key>`, never a built-in or another
+  plugin namespace. Reads expose readable colon-prefixed property idents and
+  merge class defaults, so removing an own value can reveal a class default.
+- Property values are finite numbers, booleans or strings. Null is
+  `Invalid_request`; arrays/objects are `Unsupported`. The host creates scalar
+  number/checkbox/default properties. Existing incompatible types or cardinality
+  are `Unsupported`; this slice does not change schemas. Upsert options
+  `reset`/`entityId` may be omitted or false; true is `Unsupported`.
+
+All calls use the existing runtime/value budgets. The broker validates grants
+before entering the service. Application services capture the graph and editor
+context, prepare references/operations, then recheck context and invocation
+cancellation immediately before sending outliner operations. No raw worker RPC
+or transaction payload is exposed to JavaScript. OCaml callers use
+`Plugin_protocol.Mutate` with the closed mutation variants through
+`Plugin_broker.dispatch`; option/key constructors validate their restricted forms.
+
+`Stale_context` and `Cancelled` prevent mutations before dispatch. Once a worker
+operation has been sent, cancellation is not rollback: it may already have
+committed, and a late error does not prove that nothing changed. Multiple API
+calls and multi-operation property creation are not promised atomic. Do not
+blindly retry a mutation after an uncertain result. Backing-service/decoding
+failures are `Runtime_failure`; bounded-value/call limits are `Resource_limit`.
+Mutations do not force a view reload inside the command: normal worker
+subscription refresh resumes after the existing busy-command deferral window.
 
 ## Typed OCaml sibling calls
 
@@ -119,7 +171,7 @@ codes as `PluginError`; local SDK validation can throw before a request is sent.
 The application captures the graph before
 invocation and rechecks freshness around the existing worker sibling read.
 
-Not implemented by this target: imperative block/page/property writes,
+Not implemented by this target: other block/page writes (including delete/move/rename),
 settings, subscriptions, plugin installation/discovery,
 toolbar/panel/custom renderers, network/timers/files/Git, and browser or OS
 window APIs. DOM, CSS injection, WebView, iframe, and ReactDOM fallbacks are not

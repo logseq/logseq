@@ -22,12 +22,21 @@ type Identity = string | number | { uuid: string }
 type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EditingState = { blockUuid: string; text: string } | null
 type PageResult = PageEntity | { name: string; title: string; uuid?: string }
+export interface InsertBlockOptions {
+  before?: boolean
+  sibling?: boolean
+  start?: boolean
+  end?: boolean
+  customUUID?: string
+}
+export type PropertyValue = string | number | boolean
 
 const capabilityNames = [
   'editor_read',
   'editor_command',
   'graph_read',
   'db_query',
+  'graph_write',
 ] as const
 
 export type QuickjsCapability = (typeof capabilityNames)[number]
@@ -55,6 +64,19 @@ export interface QuickjsHost {
   getCurrentPage(): Promise<PageResult | null>
   getBlock(identity: Identity): Promise<BlockEntity | null>
   getPage(identity: Identity): Promise<PageEntity | null>
+  getBlockProperties(identity: Identity): Promise<Record<string, Data> | null>
+  insertBlock(
+    identity: Identity,
+    content: string,
+    options: InsertBlockOptions
+  ): Promise<BlockEntity | null>
+  updateBlock(identity: Identity, content: string): Promise<void>
+  upsertBlockProperty(
+    identity: Identity,
+    key: string,
+    value: PropertyValue
+  ): Promise<void>
+  removeBlockProperty(identity: Identity, key: string): Promise<void>
   getSiblingBlock(
     direction: 'previous' | 'next',
     identity: Identity
@@ -215,6 +237,68 @@ function surface<T extends object>(value: T): Readonly<T> {
   })
 }
 
+function insertionOptions(value: unknown): InsertBlockOptions {
+  const copy = data(value === undefined ? {} : value)
+  if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+    failure('Invalid_request')
+  for (const [key, entry] of Object.entries(copy)) {
+    if (['properties', 'schema', 'autoOrderedList'].includes(key))
+      failure('Unsupported')
+    if (key === 'customUUID') {
+      if (
+        typeof entry !== 'string' ||
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          entry
+        )
+      )
+        failure('Invalid_request')
+    } else if (
+      !['before', 'sibling', 'start', 'end'].includes(key) ||
+      typeof entry !== 'boolean'
+    ) {
+      failure('Invalid_request')
+    }
+  }
+  if (
+    (copy.start && copy.end) ||
+    ((copy.before || copy.sibling) && (copy.start || copy.end))
+  )
+    failure('Invalid_request')
+  return copy as InsertBlockOptions
+}
+
+function propertyKey(value: string): string {
+  if (
+    typeof value !== 'string' ||
+    !value.length ||
+    !/^[a-zA-Z0-9_-]+$/.test(value)
+  )
+    failure('Invalid_request')
+  if (bytes(value) > 64) failure('Resource_limit')
+  return value
+}
+
+function content(value: string): string {
+  if (typeof value !== 'string') failure('Invalid_request')
+  return data(value) as string
+}
+
+function emptyOptions(
+  value: unknown,
+  unsupported: string[],
+  flags = false
+): void {
+  if (value === undefined) return
+  const copy = data(value)
+  if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+    failure('Invalid_request')
+  for (const [key, entry] of Object.entries(copy)) {
+    if (!unsupported.includes(key)) failure('Invalid_request')
+    if (flags && typeof entry !== 'boolean') failure('Invalid_request')
+    if (!flags || entry !== false) failure('Unsupported')
+  }
+}
+
 function pluginInfo(value: PortablePluginInfo): Readonly<PortablePluginInfo> {
   const grants = value.grantedCapabilities
   if (!Array.isArray(grants)) failure('Unsupported')
@@ -345,6 +429,50 @@ export const logseq = surface({
       options(opts)
       const key = identity(value)
       return call((host) => host.getPage(key))
+    },
+    getBlockProperties(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getBlockProperties(key))
+    },
+    insertBlock(value: Identity, text: string, opts?: InsertBlockOptions) {
+      const key = identity(value),
+        body = content(text),
+        flags = insertionOptions(opts)
+      return call((host) => host.insertBlock(key, body, flags))
+    },
+    updateBlock(
+      value: Identity,
+      text: string,
+      opts?: { properties?: Record<string, Data> }
+    ) {
+      const key = identity(value),
+        body = content(text)
+      emptyOptions(opts, ['properties'])
+      return call((host) => host.updateBlock(key, body))
+    },
+    upsertBlockProperty(
+      value: Identity,
+      key: string,
+      property: PropertyValue,
+      opts?: { reset?: boolean; entityId?: boolean }
+    ) {
+      const target = identity(value),
+        name = propertyKey(key),
+        copy = data(property)
+      if (copy === null) failure('Invalid_request')
+      if (
+        typeof copy !== 'string' &&
+        typeof copy !== 'number' &&
+        typeof copy !== 'boolean'
+      )
+        failure('Unsupported')
+      emptyOptions(opts, ['reset', 'entityId'], true)
+      return call((host) => host.upsertBlockProperty(target, name, copy))
+    },
+    removeBlockProperty(value: Identity, key: string) {
+      const target = identity(value),
+        name = propertyKey(key)
+      return call((host) => host.removeBlockProperty(target, name))
     },
   }),
   DB: surface({

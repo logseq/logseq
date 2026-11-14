@@ -1,5 +1,33 @@
 # Plugin API Migrations
 
+## QuickJS editor API v1
+
+The DOM-free editor surface now includes `getBlockProperties`, `insertBlock`,
+`updateBlock`, `upsertBlockProperty` and `removeBlockProperty`, alongside the
+existing current-page/current-block/block reads. These are typed broker calls,
+not legacy positional worker RPC. See the [SDK contract](../libs/README.quickjs.md#editor-graph-writes)
+for supported insertion options, scalar property values and error codes.
+
+Reads keep their existing grants. Mutations need the new independent
+`graph_write` grant and an active command invocation with captured application
+write services; registration writes are `Unsupported`. A read-only loader cannot
+load write-granted plugins. `graph_write` is reported in the immutable session
+metadata only when actually granted, and does not grant reads.
+
+This is not full legacy write compatibility. Page names, page renaming,
+currently edited block replacement, inline properties, schema/entity-valued
+property writes and unlisted options are not implemented. Property keys are
+restricted to the calling plugin's namespace rather than arbitrary keywords.
+Missing mutation targets reject; missing property reads return `null`.
+
+Freshness and cancellation are checked before sending worker mutations. A
+mutation already dispatched can still commit after cancellation or a context
+change; there is no rollback or multi-call atomicity guarantee. UI reloads remain
+deferred during the existing command invocation window. DB evaluator budgets
+and true query cancellation remain deferred. Native/headless graph verification
+does not establish GUI, Web/WASM, iOS or Android support; no DOM/WebView fallback
+was added.
+
 ## QuickJS sibling navigation reads
 
 `Editor.getPreviousSiblingBlock(identity)` and `Editor.getNextSiblingBlock(identity)`

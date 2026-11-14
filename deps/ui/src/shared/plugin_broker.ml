@@ -11,8 +11,12 @@ type read_services = {
   get_block : identity -> (entity option, error) result Ui_task.t;
   get_page : identity -> (entity option, error) result Ui_task.t;
   sibling_block : sibling_direction -> identity -> (entity option, error) result Ui_task.t;
+  block_properties : identity -> (Json.t, error) result Ui_task.t;
   query : query -> (Json.t, error) result Ui_task.t;
   log : log_level -> string -> (unit, error) result Ui_task.t;
+}
+type write_services = {
+  apply : check:(unit -> (unit, error) result) -> mutation -> (reply, error) result Ui_task.t;
 }
 type t = { identity : unit ref }
 type session = {
@@ -28,6 +32,7 @@ and invocation = {
   session : session;
   services : services;
   reads : read_services option;
+  writes : write_services option;
   mutable retired : bool;
   mutable calls : int;
   mutable diagnostic_bytes : int;
@@ -65,10 +70,10 @@ let command_callback t session ~key =
     | Some (_, callback) -> Ok callback
     | None -> Error Invalid_request
 
-let begin_invocation ?reads t session services =
+let begin_invocation ?reads ?writes t session services =
   require_owner t session;
   if session.closed then invalid_arg "Closed plugin session";
-  let invocation = { session; services; reads; retired = false; calls = 0;
+  let invocation = { session; services; reads; writes; retired = false; calls = 0;
                      diagnostic_bytes = 0; cancel_hooks = [] } in
   session.invocations <- invocation :: session.invocations;
   invocation
@@ -95,17 +100,24 @@ let required_capabilities = function
   | Get_plugin_info | Log _ -> []
   | Get_editing_context | Get_editing_state -> [Editor_read]
   | Get_current_block | Get_current_page -> [Editor_read; Graph_read]
-  | Get_block _ | Get_page _ | Get_sibling_block _ -> [Graph_read]
+  | Get_block _ | Get_page _ | Get_sibling_block _ | Get_block_properties _ -> [Graph_read]
+  | Mutate _ -> [Graph_write]
   | Datascript_query _ -> [Graph_read; Db_query]
   | Register_editor_command _ -> [Editor_command]
 
-let service invocation request =
+let service t invocation request =
   let map task f = Ui_task.bind task (fun result -> Ui_task.resolve (Result.map f result)) in
   match request with
   | Get_editing_context ->
       map (invocation.services.get_editing_context ()) (fun value -> Editing_context value)
   | Get_plugin_info -> Ui_task.resolve (Ok (Plugin_info
-      (invocation.session.plugin, invocation.session.capabilities)))
+        (invocation.session.plugin, invocation.session.capabilities)))
+  | Mutate mutation ->
+      if invocation.session.registering then Ui_task.resolve (Error Unsupported)
+      else (match invocation.writes with
+        | None -> Ui_task.resolve (Error Unsupported)
+        | Some writes -> writes.apply
+            ~check:(fun () -> check t invocation.session invocation) mutation)
   | Register_editor_command (descriptor, callback) ->
       let session = invocation.session in
       let result =
@@ -128,6 +140,7 @@ let service invocation request =
           | Get_current_page -> map (reads.current_page ()) (fun value -> Current_page value)
           | Get_block identity -> map (reads.get_block identity) (fun value -> Block value)
           | Get_page identity -> map (reads.get_page identity) (fun value -> Page value)
+          | Get_block_properties identity -> map (reads.block_properties identity) (fun value -> Properties value)
           | Get_sibling_block (direction, identity) ->
               map (reads.sibling_block direction identity) (fun value -> Block value)
           | Datascript_query query -> map (reads.query query) (fun value -> Query_result value)
@@ -135,7 +148,7 @@ let service invocation request =
               invocation.diagnostic_bytes <- invocation.diagnostic_bytes + String.length text;
               if invocation.diagnostic_bytes > 8192 then Ui_task.resolve (Error Resource_limit)
               else map (reads.log level text) (fun () -> Logged)
-          | Get_editing_context | Get_plugin_info | Register_editor_command _ -> assert false
+          | Get_editing_context | Get_plugin_info | Register_editor_command _ | Mutate _ -> assert false
 
 let dispatch t session invocation request =
   match check t session invocation with
@@ -146,7 +159,7 @@ let dispatch t session invocation request =
   | Ok () when invocation.calls >= max_calls -> Ui_task.resolve (Error Resource_limit)
   | Ok () ->
       invocation.calls <- invocation.calls + 1;
-      let request_task = service invocation request in
+      let request_task = service t invocation request in
       let task = Ui_task.bind request_task (fun result ->
         Ui_task.resolve (match check t session invocation, result with
           | Error error, _ | Ok (), Error error -> Error error

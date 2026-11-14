@@ -10,8 +10,17 @@ type action = Insert_text of string | Show_date_picker | Exit_editing
 type program = action list
 type identity = Entity_id of int | Uuid of string | Page_name of string
 type sibling_direction = Previous_sibling | Next_sibling
+type insertion_position = First_child | Last_child | Before | After
+type insert_options = { position : insertion_position; custom_uuid : string option }
+type property_key = string
+type property_value = Text_value of string | Number_value of float | Checkbox_value of bool
+type mutation =
+  | Insert_block of identity * string * insert_options
+  | Update_block of identity * string
+  | Upsert_block_property of identity * property_key * property_value
+  | Remove_block_property of identity * property_key
 type log_level = Log_debug | Log_info | Log_warn | Log_error
-type capability = Editor_read | Editor_command | Graph_read | Db_query
+type capability = Editor_read | Editor_command | Graph_read | Db_query | Graph_write
 type request =
   | Get_editing_context
   | Get_plugin_info
@@ -21,6 +30,8 @@ type request =
   | Get_block of identity
   | Get_page of identity
   | Get_sibling_block of sibling_direction * identity
+  | Get_block_properties of identity
+  | Mutate of mutation
   | Datascript_query of query
   | Log of log_level * string
   | Register_editor_command of command_descriptor * callback_id
@@ -34,6 +45,8 @@ type reply =
   | Query_result of Json.t
   | Logged
   | Editor_command_registered
+  | Properties of Json.t
+  | Mutation_applied
 type error =
   | Invalid_request
   | Unsupported
@@ -231,6 +244,47 @@ let decode_identity ~page = function
       | Error error -> Error error)
   | _ -> Error Invalid_request
 
+let property_key key =
+  if String.length key > 64 then Error Resource_limit
+  else if String.length key = 0 || not (String.for_all (function
+    | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '_' | '-' -> true
+    | _ -> false) key) then Error Invalid_request
+  else Ok key
+
+let property_key_value key = key
+let insertion_position options = options.position
+let custom_uuid options = options.custom_uuid
+
+let insert_options value =
+  let* () = validate_value value in
+  match value with
+  | Json.Object fields ->
+      let rec validate = function
+        | [] -> Ok ()
+        | ("customUUID", Json.String uuid) :: rest ->
+            let* _ = editing_context ~block_uuid:uuid ~text:"" in validate rest
+        | (("before" | "sibling" | "start" | "end"), Json.Bool _) :: rest -> validate rest
+        | (("before" | "sibling" | "start" | "end" | "customUUID"), _) :: _ -> Error Invalid_request
+        | (("properties" | "schema" | "autoOrderedList"), _) :: _ -> Error Unsupported
+        | _ :: _ -> Error Invalid_request in
+      let* () = validate fields in
+      let flag name = Json.get name value = Some (Json.Bool true) in
+      let before = flag "before" and sibling = flag "sibling"
+      and start = flag "start" and finish = flag "end" in
+      if (start && finish) || ((before || sibling) && (start || finish)) then Error Invalid_request
+      else Ok { position = (if before then Before else if sibling then After
+                             else if start then First_child else Last_child);
+                custom_uuid = (match Json.get "customUUID" value with
+                  | Some (Json.String uuid) -> Some uuid | _ -> None) }
+  | _ -> Error Invalid_request
+
+let decode_property_value = function
+  | Json.String value -> Ok (Text_value value)
+  | Json.Number value -> Ok (Number_value value)
+  | Json.Bool value -> Ok (Checkbox_value value)
+  | Json.Null -> Error Invalid_request
+  | Json.Array _ | Json.Object _ -> Error Unsupported
+
 let decode_request ~operation value =
   let* () = validate_value value in
   match operation, value with
@@ -252,6 +306,21 @@ let decode_request ~operation value =
         | _ -> Error Invalid_request in
       let* identity = decode_identity ~page:false value in
       Ok (Get_sibling_block (relation, identity))
+  | 11, Json.Array [|value|] ->
+      let* identity = decode_identity ~page:false value in Ok (Get_block_properties identity)
+  | 12, Json.Array [|value; Json.String text; options|] ->
+      let* identity = decode_identity ~page:false value in
+      let* options = insert_options options in Ok (Mutate (Insert_block (identity, text, options)))
+  | 13, Json.Array [|value; Json.String text|] ->
+      let* identity = decode_identity ~page:false value in Ok (Mutate (Update_block (identity, text)))
+  | 14, Json.Array [|value; Json.String key; property_value|] ->
+      let* identity = decode_identity ~page:false value in
+      let* key = property_key key in
+      let* property_value = decode_property_value property_value in
+      Ok (Mutate (Upsert_block_property (identity, key, property_value)))
+  | 15, Json.Array [|value; Json.String key|] ->
+      let* identity = decode_identity ~page:false value in
+      let* key = property_key key in Ok (Mutate (Remove_block_property (identity, key)))
   | 8, Json.Array [|Json.String level; Json.String text|] ->
       if String.length text > 8192 then Error Resource_limit
       else
@@ -261,7 +330,7 @@ let decode_request ~operation value =
         | "warn" -> Ok (Log (Log_warn, text))
         | "error" -> Ok (Log (Log_error, text))
         | _ -> Error Invalid_request)
-  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10), _ -> Error Invalid_request
+  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 14 | 15), _ -> Error Invalid_request
   | _ -> Error Unsupported
 
 let capability_name = function
@@ -269,6 +338,7 @@ let capability_name = function
   | Editor_command -> "editor_command"
   | Graph_read -> "graph_read"
   | Db_query -> "db_query"
+  | Graph_write -> "graph_write"
 
 let reply_value = function
   | Editing_context context -> editing_context_value context
@@ -280,7 +350,8 @@ let reply_value = function
   | Editing_state (Some context) -> editing_context_value context
   | Block (Some entity) | Page (Some entity) -> entity
   | Editing_state None | Block None | Page None | Logged | Editor_command_registered -> Json.Null
-  | Current_page value | Query_result value -> value
+  | Current_page value | Query_result value | Properties value -> value
+  | Mutation_applied -> Json.Null
 
 let program actions =
   let rec loop count bytes = function
