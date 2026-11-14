@@ -82,7 +82,8 @@ let run path =
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
     block first_uuid uuid "a0" "first";
     block last_uuid uuid "a1" "last";
-    block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested"];
+    block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested";
+    block "00000000-0000-0000-0000-000000000108" "00000000-0000-0000-0000-000000000102" "a0" "deeper"];
     Wire.Nil; Wire.Nil]);
   let page = match Decode.page_of_summary page with Some page -> page | None -> failwith "page" in
   let source_page = "00000000-0000-0000-0000-000000000103" in
@@ -108,6 +109,8 @@ let run path =
       Wire.Map [Wire.kw "logseq.property/type", Wire.kw "number"; Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
       Wire.Map [Wire.kw "property-name", Wire.String "score"]]];
     Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid first_uuid; property; Wire.Int 7]];
+    Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid "00000000-0000-0000-0000-000000000102"; property; Wire.Int 11]];
+    Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid "00000000-0000-0000-0000-000000000108"; property; Wire.Int 13]];
     Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid first_uuid; Wire.kw "block/collapsed?"; Wire.Bool true]]]; Wire.Map []]);
   model := { Model.initial with repo = Some repo; route = Model.Page page.Model.page_title;
     route_page = Some page };

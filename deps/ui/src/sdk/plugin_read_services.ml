@@ -121,6 +121,13 @@ let capture ~id =
             | _ -> Result.map Option.some (convert wire))
   in
   let lookup convert = lookup_with (fun wire -> entity (checked_json convert wire)) in
+  let get_many repo ids =
+    Promise_ext.(let* records = Sdk_util.get_many_for_repo repo
+      (List.map (fun id -> Wire.Int id) ids) in
+    Js.Promise.resolve (Wire.Array (List.map (function
+      | Some record -> record
+      | None -> invalid_arg "Missing block metadata") records)))
+  in
   let sibling_block direction identity =
     let reference = match identity with
       | Entity_id value -> Some (Wire.Int value)
@@ -150,22 +157,55 @@ let capture ~id =
               let uuid = match Json.get "uuid" json with
                 | Some (Json.String uuid) -> uuid
                 | _ -> invalid_arg "Block is missing its UUID" in
-              await (fun () -> Runtime.invoke3 "thread-api/get-page-blocks-tree"
+              let node_id node = match Json.get "id" node with
+                | Some (Json.Number id) when id >= 1. && id <= 2147483647. && Float.floor id = id -> int_of_float id
+                | _ -> raise (Rejected Runtime_failure) in
+              let node_children node = match Json.get "children" node with
+                | Some (Json.Array nodes) -> nodes
+                | _ -> raise (Rejected Runtime_failure) in
+              let tree_read = await (fun () -> Runtime.invoke3 "thread-api/get-page-blocks-tree"
                 (Wire.String repo) (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) (Wire.Map []))
                 (fun wire ->
                   let tree = checked_json Sdk_convert.json_of_wire wire in
                   let children = match tree with
                     | Json.Array [|node|] when Json.get "uuid" node = Some (Json.String uuid) ->
-                        (match Json.get "children" node with
-                         | Some (Json.Array _ as children) -> children
-                         | None -> Json.Array [||]
-                         | _ -> raise (Rejected Runtime_failure))
+                        Json.Array (node_children node)
                     | Json.Array _ -> tree
                     | _ -> raise (Rejected Runtime_failure) in
-                  match json with
-                  | Json.Object fields -> Result.map Option.some
-                      (entity (Json.Object (("children", children) :: List.remove_assoc "children" fields)))
-                  | _ -> Error Runtime_failure))
+                  let ids = ref [] in
+                  let rec collect = function
+                    | Json.Array nodes -> Array.iter (fun node ->
+                        ids := node_id node :: !ids;
+                        collect (Json.Array (node_children node))) nodes
+                    | _ -> raise (Rejected Runtime_failure) in
+                  collect children;
+                  Ok (children, List.sort_uniq Stdlib.compare !ids)) in
+              Ui_task.bind tree_read (function
+                | Error error -> Ui_task.resolve (Error error)
+                | Ok (children, ids) ->
+                    let rebuild nested = match json with
+                      | Json.Object fields -> Result.map Option.some
+                          (entity (Json.Object (("children", nested) :: List.remove_assoc "children" fields)))
+                      | _ -> Error Runtime_failure in
+                    if ids = [] then immediate (fun () -> rebuild children)
+                    else await (fun () -> get_many repo ids) (fun wire ->
+                      let properties = Hashtbl.create (List.length ids) in
+                      List.iter2 (fun id metadata ->
+                        if Wire.map_get_int metadata "db/id" <> Some id then raise (Rejected Runtime_failure);
+                        let property_values = match Wire.get metadata "block/properties" with
+                          | Some (Wire.Map _ as property_wire) -> checked_json Sdk_convert.json_of_wire property_wire
+                          | _ -> raise (Rejected Runtime_failure) in
+                        Hashtbl.add properties id property_values) ids (Wire.elems wire);
+                      let rec hydrate = function
+                        | Json.Array nodes -> Json.Array (Array.map (fun node ->
+                            match node with
+                            | Json.Object fields -> Json.Object (
+                                ("properties", Hashtbl.find properties (node_id node)) ::
+                                ("children", hydrate (Json.Array (node_children node))) ::
+                                List.remove_assoc "properties" (List.remove_assoc "children" fields))
+                            | _ -> raise (Rejected Runtime_failure)) nodes)
+                        | _ -> raise (Rejected Runtime_failure) in
+                      rebuild (hydrate children))))
   in
   let page_linked_references identity =
     match snapshot.Model.repo with
@@ -203,12 +243,7 @@ let capture ~id =
                     else if blocks = [] then Ui_task.resolve (Ok (Some []))
                     else
                       let page_ids = List.rev !page_ids in
-                      await (fun () ->
-                        Promise_ext.(let* pages = Sdk_util.get_many_for_repo repo
-                          (List.map (fun id -> Wire.Int id) page_ids) in
-                        Js.Promise.resolve (Wire.Array (List.map (function
-                          | Some page -> page
-                          | None -> invalid_arg "Missing reference page") pages)))) (fun wire ->
+                      await (fun () -> get_many repo page_ids) (fun wire ->
                           let pages = Wire.elems wire in
                           let result = List.map2 (fun id page ->
                             if Wire.map_get_int page "db/id" <> Some id then raise (Rejected Runtime_failure);
