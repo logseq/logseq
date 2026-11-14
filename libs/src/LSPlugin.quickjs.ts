@@ -23,6 +23,15 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EditingState = { blockUuid: string; text: string } | null
 type PageResult = PageEntity | { name: string; title: string; uuid?: string }
 
+const capabilityNames = [
+  'editor_read',
+  'editor_command',
+  'graph_read',
+  'db_query',
+] as const
+
+export type QuickjsCapability = (typeof capabilityNames)[number]
+
 export type EditorCommandAction =
   | { readonly kind: 'insertText'; readonly text: string }
   | { readonly kind: 'showDatePicker' }
@@ -36,6 +45,7 @@ export interface EditorCommandDescriptor {
 export interface PortablePluginInfo {
   readonly id: string
   readonly runtime: 'quickjs'
+  readonly grantedCapabilities: readonly QuickjsCapability[]
 }
 
 export interface QuickjsHost {
@@ -45,6 +55,10 @@ export interface QuickjsHost {
   getCurrentPage(): Promise<PageResult | null>
   getBlock(identity: Identity): Promise<BlockEntity | null>
   getPage(identity: Identity): Promise<PageEntity | null>
+  getSiblingBlock(
+    direction: 'previous' | 'next',
+    identity: Identity
+  ): Promise<BlockEntity | null>
   datascriptQuery(query: string, inputs: Data[]): Promise<Data>
   log(level: LogLevel, text: string): Promise<void>
   registerEditorCommand(
@@ -201,6 +215,25 @@ function surface<T extends object>(value: T): Readonly<T> {
   })
 }
 
+function pluginInfo(value: PortablePluginInfo): Readonly<PortablePluginInfo> {
+  const grants = value.grantedCapabilities
+  if (!Array.isArray(grants)) failure('Unsupported')
+  if (
+    typeof value.id !== 'string' ||
+    value.runtime !== 'quickjs' ||
+    grants.length > capabilityNames.length ||
+    grants.some((capability) => !capabilityNames.includes(capability)) ||
+    new Set(grants).size !== grants.length
+  ) {
+    failure('Invalid_request')
+  }
+  return surface({
+    id: value.id,
+    runtime: value.runtime,
+    grantedCapabilities: Object.freeze([...grants]),
+  })
+}
+
 let activeHost: QuickjsHost | null = null
 let info: PortablePluginInfo | null = null
 let initialized = false
@@ -287,6 +320,14 @@ export const logseq = surface({
     return info
   },
   Editor: surface({
+    getPreviousSiblingBlock(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getSiblingBlock('previous', key))
+    },
+    getNextSiblingBlock(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getSiblingBlock('next', key))
+    },
     async checkEditing(): Promise<string | false> {
       return (await call((host) => host.getEditingState()))?.blockUuid ?? false
     },
@@ -397,7 +438,7 @@ export async function activate(host: QuickjsHost): Promise<[]> {
   activating = true
   try {
     return await withHost(host, async () => {
-      info = surface(await call((current) => current.getPluginInfo()))
+      info = pluginInfo(await call((current) => current.getPluginInfo()))
       initialized = true
       const initializers: Promise<unknown>[] = []
       for (const registration of registrations.splice(0)) {

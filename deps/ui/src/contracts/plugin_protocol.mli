@@ -9,6 +9,7 @@ type query
 type program
 
 type identity = Entity_id of int | Uuid of string | Page_name of string
+type sibling_direction = Previous_sibling | Next_sibling
 type log_level = Log_debug | Log_info | Log_warn | Log_error
 type capability = Editor_read | Editor_command | Graph_read | Db_query
 type request =
@@ -19,12 +20,13 @@ type request =
   | Get_current_page
   | Get_block of identity
   | Get_page of identity
+  | Get_sibling_block of sibling_direction * identity
   | Datascript_query of query
   | Log of log_level * string
   | Register_editor_command of command_descriptor * callback_id
 type reply =
   | Editing_context of editing_context
-  | Plugin_info of plugin_id
+  | Plugin_info of plugin_id * capability list
   | Editing_state of editing_context option
   | Block of entity option
   | Page of entity option

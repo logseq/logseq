@@ -1,5 +1,26 @@
 # Plugin API Migrations
 
+## QuickJS sibling navigation reads
+
+`Editor.getPreviousSiblingBlock(identity)` and `Editor.getNextSiblingBlock(identity)`
+now use the shared typed broker and existing worker sibling query. Both require
+`Graph_read`, not editing, command, or DB-query authority. Entity IDs, UUIDs,
+and `{ uuid }` are accepted; page names are not. Results are immediate siblings
+under the same parent, not flattened tree neighbors. Boundaries, missing blocks,
+and absent graphs return `null`; malformed input, denied permissions, stale
+context and resource failures reject using the existing `PluginError` codes.
+Application OCaml callers use `Plugin_broker.get_sibling_block` with a closed
+`Previous_sibling`/`Next_sibling` direction and the same session/invocation.
+
+## QuickJS session capability metadata
+
+`logseq.baseInfo.grantedCapabilities` and the `ready` callback metadata now
+contain an immutable snapshot of the host-created session's actual grants.
+The broker remains the authority; the list does not grant access or establish
+API/platform availability. New SDK bundles require this metadata from a matching
+host and fail with `Unsupported` if it is absent. See the
+[QuickJS API/permission inventory](../libs/README.quickjs.md) for names and limits.
+
 ## QuickJS registered editor commands
 
 The DOM-free QuickJS target now supports explicitly registered editor commands.

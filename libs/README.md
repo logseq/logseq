@@ -17,6 +17,7 @@ import "@logseq/libs"
 ```
 
 #### APIs & Samples & References
+- [DOM-free QuickJS SDK: API inventory and session grants](./README.quickjs.md)
 - https://logseq.github.io/plugins/
 - https://github.com/logseq/logseq-plugin-samples
 - [The New DB properties developer guide - A](./guides/db_properties_guide.md)

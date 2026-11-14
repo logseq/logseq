@@ -3,6 +3,8 @@ open Plugin_protocol
 let check name value = if not value then failwith name
 let repo = "logseq_db_quickjs_sdk_probe"
 let uuid = "00000000-0000-0000-0000-000000000099"
+let first_uuid = "00000000-0000-0000-0000-000000000100"
+let last_uuid = "00000000-0000-0000-0000-000000000101"
 let model = ref Model.initial
 
 let spin ready =
@@ -69,6 +71,19 @@ let run path =
     Wire.kw "block/tags", Wire.Set [Wire.kw "logseq.class/Page"];
   ] in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [page]; Wire.Nil; Wire.Nil]);
+  let block block_uuid parent order title = Wire.Map [
+    Wire.kw "block/uuid", Wire.Uuid block_uuid;
+    Wire.kw "block/title", Wire.String title;
+    Wire.kw "block/order", Wire.String order;
+    Wire.kw "block/created-at", Wire.Int 1;
+    Wire.kw "block/updated-at", Wire.Int 1;
+    Wire.kw "block/parent", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid parent];
+    Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]] in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    block first_uuid uuid "a0" "first";
+    block last_uuid uuid "a1" "last";
+    block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested"];
+    Wire.Nil; Wire.Nil]);
   let page = match Decode.page_of_summary page with Some page -> page | None -> failwith "page" in
   model := { Model.initial with repo = Some repo; route = Model.Page page.Model.page_title;
     route_page = Some page };
@@ -83,14 +98,35 @@ let run path =
   let id = success (plugin_id "sdk-probe") in
   let source = source path in
   let grants = [Editor_read; Graph_read; Db_query] in
+  for mask = 0 to 7 do
+    let id = success (plugin_id ("sdk-probe-grants-" ^ string_of_int mask)) in
+    let grants = List.filter_map (fun (bit, capability) ->
+      if mask land bit <> 0 then Some capability else None)
+      [1, Editor_read; 2, Graph_read; 4, Db_query] in
+    let grants = List.rev (grants @ grants) in
+    let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
+    Plugin_host.unload_read_plugin runner
+  done;
   let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
   Plugin_host.unload_read_plugin runner;
   Plugin_host.unload_read_plugin runner;
   check "graph permission" (task (Plugin_host.load_read_plugin ~id ~grants:[Editor_read] ~source) = Error Permission_denied);
-  let _, reads = Plugin_read_services.capture ~id in
+  let services, reads = Plugin_read_services.capture ~id in
+  let broker = Plugin_broker.create () in
+  let session = Plugin_broker.open_session broker id [Graph_read] in
+  let invocation = Plugin_broker.begin_invocation ~reads broker session services in
+  let sibling = task (Plugin_broker.get_sibling_block broker session invocation
+    ~direction:Next_sibling (Uuid first_uuid)) |> success in
+  check "typed OCaml sibling read"
+    (Option.map (fun value -> Json.get "uuid" (reply_value (Block (Some value)))) sibling
+      = Some (Some (Json.String last_uuid)));
+  let pending_sibling = Plugin_broker.get_sibling_block broker session invocation
+    ~direction:Previous_sibling (Uuid last_uuid) in
   let pending = reads.get_block (Uuid uuid) in
   model := {!model with context_revision = (!model).context_revision + 1};
   check "late reply must be stale" (task pending = Error Stale_context);
+  check "late sibling reply must be stale" (task pending_sibling = Error Stale_context);
+  Plugin_broker.close_session broker session;
   check "read runner cannot receive command grants"
     (task (Plugin_host.load_read_plugin ~id ~grants:[Editor_command] ~source) = Error Permission_denied);
   model := Model.initial;

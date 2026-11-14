@@ -118,6 +118,22 @@ let capture ~id =
         await (fun () -> Sdk_util.get_entity_json_for_repo repo key)
           (entity_result convert)
   in
+  let sibling_block direction identity =
+    let reference = match identity with
+      | Entity_id value -> Some (Wire.Int value)
+      | Uuid value -> Some (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid value])
+      | Page_name _ -> None in
+    match reference, snapshot.Model.repo with
+    | None, _ -> immediate (fun () -> Error Invalid_request)
+    | Some _, None -> immediate (fun () -> Ok None)
+    | Some key, Some repo ->
+        let relation = match direction with
+          | Previous_sibling -> "left"
+          | Next_sibling -> "right" in
+        await (fun () -> Runtime.invoke3 "thread-api/get-block-sibling"
+          (Wire.String repo) key (Wire.kw relation))
+          (entity_result Sdk_convert.json_of_wire)
+  in
   let current_block () =
     match editing, selected with
     | Some (editor, _), _ -> lookup Sdk_convert.json_of_wire (Uuid editor.uuid)
@@ -177,6 +193,7 @@ let capture ~id =
     current_page;
     get_block = lookup Sdk_convert.json_of_wire;
     get_page = lookup Sdk_convert.result_json_of_wire;
+    sibling_block;
     query;
     log = (fun level text -> immediate (fun () ->
       let message = "[plugin:" ^ plugin_id_value id ^ "] " ^ text in
