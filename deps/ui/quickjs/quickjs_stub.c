@@ -19,8 +19,8 @@ static const char *error_names[] = {
 #define MAX_CALLS 32
 
 typedef struct {
-    int state, id;
-    JSValue resolve, reject;
+    int state, id, operation;
+    JSValue resolve, reject, arguments;
 } Pending;
 
 typedef struct Bridge {
@@ -68,6 +68,9 @@ static void classify_error(Bridge *bridge, JSValueConst exception) {
                 size_t length;
                 const char *message = JS_ToCStringLen(context, &length, descriptor.value);
                 if (message) {
+                    for (int i = 0; i <= RUNTIME; i++)
+                        if (length == strlen(error_names[i]) && !memcmp(message, error_names[i], length))
+                            bridge->error = i;
                     if (length == 13 && !memcmp(message, "out of memory", 13)) bridge->error = RESOURCE;
                     JS_FreeCString(context, message);
                 }
@@ -117,6 +120,7 @@ static void stop(Bridge *bridge) {
         if (bridge->pending[i].state) {
             JS_FreeValue(bridge->context, bridge->pending[i].resolve);
             JS_FreeValue(bridge->context, bridge->pending[i].reject);
+            JS_FreeValue(bridge->context, bridge->pending[i].arguments);
             bridge->pending[i].state = 0;
         }
     }
@@ -415,11 +419,14 @@ static JSModuleDef *deny_module(JSContext *context, const char *name, void *opaq
     return NULL;
 }
 
-static JSValue read_context(JSContext *context, JSValueConst this_value, int argc,
+static JSValue host_request(JSContext *context, JSValueConst this_value, int argc,
                             JSValueConst *argv, int magic, JSValue *data) {
-    (void)this_value; (void)argv; (void)magic;
+    (void)this_value; (void)magic;
     Bridge *bridge = JS_GetContextOpaque(context);
-    if (argc != 0) return JS_ThrowTypeError(context, "getEditingContext takes no arguments");
+    int operation = JS_VALUE_GET_INT(data[1]);
+    int arguments = operation < 5 ? 0 : operation < 7 ? 1 : 2;
+    if (argc != arguments)
+        return JS_Throw(context, JS_NewString(context, error_names[INVALID]));
     if (!bridge->active || JS_VALUE_GET_INT(data[0]) != bridge->epoch)
         return JS_Throw(context, JS_NewString(context, error_names[CANCELLED]));
     if (bridge->calls >= MAX_CALLS || bridge->next_request == INT_MAX) {
@@ -429,10 +436,25 @@ static JSValue read_context(JSContext *context, JSValueConst this_value, int arg
     int index = 0;
     while (index < MAX_CALLS && bridge->pending[index].state) index++;
     if (index == MAX_CALLS) { bridge->error = RESOURCE; return JS_ThrowOutOfMemory(context); }
+    JSValue input = JS_NewArray(context);
+    if (JS_IsException(input)) { bridge->error = RESOURCE; return input; }
+    for (int i = 0; i < argc; i++) {
+        if (JS_DefinePropertyValueUint32(context, input, i, JS_DupValue(context, argv[i]),
+                                        JS_PROP_ENUMERABLE) < 0) {
+            JS_FreeValue(context, input);
+            bridge->error = RESOURCE;
+            return JS_EXCEPTION;
+        }
+    }
     JSValue functions[2];
     JSValue promise = JS_NewPromiseCapability(context, functions);
-    if (JS_IsException(promise)) { bridge->error = RESOURCE; return promise; }
-    bridge->pending[index] = (Pending){1, ++bridge->next_request, functions[0], functions[1]};
+    if (JS_IsException(promise)) {
+        JS_FreeValue(context, input);
+        bridge->error = RESOURCE;
+        return promise;
+    }
+    bridge->pending[index] = (Pending){1, ++bridge->next_request, operation,
+                                      functions[0], functions[1], input};
     bridge->calls++;
     return promise;
 }
@@ -536,15 +558,20 @@ CAMLprim value logseq_quickjs_start(value handle) {
     bridge->execution = 0;
     bridge->wall_deadline = monotonic() + 1;
     double before = enter(bridge, 0.005);
-    JSValue token = JS_NewInt32(bridge->context, bridge->epoch);
-    JSValue function = JS_NewCFunctionData(bridge->context, read_context, 0, 0, 1, &token);
     JSValue host = JS_NewObjectProto(bridge->context, JS_NULL);
-    if (JS_IsException(function) || JS_IsException(host)) {
-        JS_FreeValue(bridge->context, function); bridge->error = RESOURCE;
-    } else if (JS_DefinePropertyValueStr(bridge->context, host, "getEditingContext", function,
-                                       JS_PROP_ENUMERABLE) < 0)
-        bridge->error = RESOURCE;
-    else {
+    static const char *methods[] = {
+        "getEditingContext", "getPluginInfo", "getEditingState", "getCurrentBlock",
+        "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log"
+    };
+    if (JS_IsException(host)) bridge->error = RESOURCE;
+    for (int operation = 0; operation < 9 && bridge->error < 0; operation++) {
+        JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation)};
+        int arguments = operation < 5 ? 0 : operation < 7 ? 1 : 2;
+        JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 2, data);
+        if (JS_IsException(function) || JS_DefinePropertyValueStr(bridge->context, host,
+                methods[operation], function, JS_PROP_ENUMERABLE) < 0) bridge->error = RESOURCE;
+    }
+    if (bridge->error < 0) {
         JS_PreventExtensions(bridge->context, host);
         bridge->result = JS_Call(bridge->context, bridge->handler, JS_UNDEFINED, 1, &host);
         if (JS_IsException(bridge->result)) bridge->error = RUNTIME;
@@ -577,9 +604,16 @@ CAMLprim value logseq_quickjs_poll(value handle) {
     leave(bridge, before);
     if (bridge->error >= 0) CAMLreturn(failed_event(bridge->error));
     for (int i = 0; i < MAX_CALLS; i++) if (bridge->pending[i].state == 1) {
+        Budget budget = {0};
+        payload = to_json(bridge, bridge->pending[i].arguments, 0, &budget);
+        if (bridge->error >= 0) CAMLreturn(failed_event(bridge->error));
+        JS_FreeValue(bridge->context, bridge->pending[i].arguments);
+        bridge->pending[i].arguments = JS_UNDEFINED;
         bridge->pending[i].state = 2;
-        event = caml_alloc(1, 0);
+        event = caml_alloc(3, 0);
         Store_field(event, 0, Val_int(bridge->pending[i].id));
+        Store_field(event, 1, Val_int(bridge->pending[i].operation));
+        Store_field(event, 2, payload);
         CAMLreturn(event);
     }
     int state = JS_PromiseState(bridge->context, bridge->result);

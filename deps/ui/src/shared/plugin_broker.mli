@@ -5,10 +5,19 @@ type services = {
   get_editing_context : unit -> (Plugin_protocol.editing_context, Plugin_protocol.error) result Ui_task.t;
   current : unit -> bool;
 }
+type read_services = {
+  editing_state : unit -> (Plugin_protocol.editing_context option, Plugin_protocol.error) result Ui_task.t;
+  current_block : unit -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  current_page : unit -> (Plugin_protocol.page_result, Plugin_protocol.error) result Ui_task.t;
+  get_block : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  get_page : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  query : Plugin_protocol.query -> (Json.t, Plugin_protocol.error) result Ui_task.t;
+  log : Plugin_protocol.log_level -> string -> (unit, Plugin_protocol.error) result Ui_task.t;
+}
 
 val create : unit -> t
 val open_session : t -> Plugin_protocol.plugin_id -> Plugin_protocol.capability list -> session
-val begin_invocation : t -> session -> services -> invocation
+val begin_invocation : ?reads:read_services -> t -> session -> services -> invocation
 val check : t -> session -> invocation -> (unit, Plugin_protocol.error) result
 val dispatch : t -> session -> invocation -> Plugin_protocol.request ->
   (Plugin_protocol.reply, Plugin_protocol.error) result Ui_task.t

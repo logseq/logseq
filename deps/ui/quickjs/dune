@@ -5,12 +5,22 @@
  (deps fetch.py dependencies.json)
  (action (run python3 %{dep:fetch.py} %{dep:dependencies.json} .)))
 
+(rule
+ (target math_flags.sexp)
+ (enabled_if (= %{system} macosx))
+ (action (write-file %{target} "()")))
+
+(rule
+ (target math_flags.sexp)
+ (enabled_if (<> %{system} macosx))
+ (action (write-file %{target} "(-lm)")))
+
 (library
  (name logseq_plugin_quickjs)
  (wrapped false)
  (modes native)
  (libraries logseq_ui_contracts logseq_ui_shared)
- (c_library_flags -lm)
+ (c_library_flags (:include math_flags.sexp))
  (foreign_stubs
   (language c)
   (names quickjs_stub quickjs cutils dtoa libregexp libunicode)

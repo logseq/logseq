@@ -1,11 +1,33 @@
 type plugin_id
 type callback_id
 type editing_context
+type entity
+type page_result
+type query
 type program
 
-type capability = Editor_read | Editor_command
-type request = Get_editing_context
-type reply = Editing_context of editing_context
+type identity = Entity_id of int | Uuid of string | Page_name of string
+type log_level = Log_debug | Log_info | Log_warn | Log_error
+type capability = Editor_read | Editor_command | Graph_read | Db_query
+type request =
+  | Get_editing_context
+  | Get_plugin_info
+  | Get_editing_state
+  | Get_current_block
+  | Get_current_page
+  | Get_block of identity
+  | Get_page of identity
+  | Datascript_query of query
+  | Log of log_level * string
+type reply =
+  | Editing_context of editing_context
+  | Plugin_info of plugin_id
+  | Editing_state of editing_context option
+  | Block of entity option
+  | Page of entity option
+  | Current_page of page_result
+  | Query_result of Json.t
+  | Logged
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type error =
   | Invalid_request
@@ -24,9 +46,16 @@ val max_calls : int
 val valid_utf8 : string -> bool
 val validate_value : Json.t -> (unit, error) result
 val plugin_id : string -> (plugin_id, error) result
+val plugin_id_value : plugin_id -> string
 val callback_id : owner:int -> callback_id
 val owns_callback : owner:int -> callback_id -> bool
 val editing_context : block_uuid:string -> text:string -> (editing_context, error) result
+val entity : Json.t -> (entity, error) result
+val page_result : Json.t -> (page_result, error) result
+val query : text:string -> inputs:Json.t array -> (query, error) result
+val query_text : query -> string
+val query_inputs : query -> Json.t array
+val decode_request : operation:int -> Json.t -> (request, error) result
 val reply_value : reply -> Json.t
 val program : action list -> (program, error) result
 val decode_program : Json.t -> (program, error) result

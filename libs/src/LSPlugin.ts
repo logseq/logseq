@@ -5,6 +5,8 @@ import { LSPluginCaller } from './LSPlugin.caller'
 import { LSPluginExperiments } from './modules/LSPlugin.Experiments'
 import { IAsyncStorage, LSPluginFileStorage } from './modules/LSPlugin.Storage'
 import { LSPluginNet } from './modules/LSPlugin.Net'
+import type { EntityID, BlockUUID, BlockUUIDTuple, IEntityID, BlockEntity, PageEntity } from './LSPlugin.entities'
+export type { EntityID, BlockUUID, BlockUUIDTuple, IEntityID, BlockEntity, PageEntity } from './LSPlugin.entities'
 
 export type WithOptional<T, K extends keyof T> = Omit<T, K> &
   Partial<Pick<T, K>>
@@ -120,12 +122,8 @@ export type IUserConditionSlotHook<C = any, E = any> = (
   callback: (e: IHookEvent & UISlotIdentity & E) => void
 ) => void
 
-export type EntityID = number
-export type BlockUUID = string
-export type BlockUUIDTuple = ['uuid', BlockUUID]
 export type RendererKey = string
 
-export type IEntityID = { id: EntityID; [key: string]: any }
 export type IBatchBlock = {
   content: string
 
@@ -177,63 +175,6 @@ export interface AppGraphInfo {
   name: string
   url: string
   path: string
-
-  [key: string]: unknown
-}
-
-/**
- * Block - Logseq's fundamental data structure.
- */
-export interface BlockEntity {
-  id: EntityID // db id
-  uuid: BlockUUID
-  order: string
-  format: 'markdown' | 'org'
-  parent: IEntityID
-  title: string
-  fullTitle: string // replace block reference uuid with title text
-  content?: string // @deprecated. use :title instead!
-  page: IEntityID // owner page
-  createdAt: number
-  updatedAt: number
-  ident?: string // ident for property block
-  properties?: Record<string, any>
-  'collapsed?': boolean
-
-  // optional fields in dummy page
-  anchor?: string
-  body?: any
-  children?: Array<BlockEntity | BlockUUIDTuple>
-  container?: string
-  file?: IEntityID
-  level?: number
-  meta?: { timestamps: any; properties: any; startPos: number; endPos: number }
-  marker?: string
-
-  [key: string]: unknown
-}
-
-/**
- * Page is just a block with some specific properties.
- */
-export interface PageEntity {
-  id: EntityID
-  uuid: BlockUUID
-  name: string
-  format: 'markdown' | 'org'
-  type: 'page' | 'journal' | 'whiteboard' | 'class' | 'property' | 'hidden'
-  updatedAt: number
-  createdAt: number
-  'journal?': boolean
-
-  title?: string
-  file?: IEntityID
-  originalName?: string
-  namespace?: IEntityID
-  children?: Array<PageEntity>
-  properties?: Record<string, any>
-  journalDay?: number
-  ident?: string
 
   [key: string]: unknown
 }
