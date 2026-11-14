@@ -1062,6 +1062,88 @@ let test_property_command_refresh (h : host) =
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
 
+let test_selection_direction (h : host) =
+  stage_page h
+    [ Test_check.block "b1" "first"; Test_check.block "b2" "anchor";
+      Test_check.block "b3" "third" ];
+  reset_editor ();
+  A.select_single_in ~scope:"main" "b2";
+  List.iter
+    (fun (up, expected) ->
+      A.extend_selection up;
+      check "reversing selection contracts toward its anchor"
+        (S.String_set.equal (S.selected ()) (S.String_set.of_list expected)
+         && S.anchor () = Some "b2"))
+    [ false, [ "b2"; "b3" ]; true, [ "b2" ];
+      true, [ "b1"; "b2" ]; false, [ "b2" ] ];
+  reset_editor ()
+
+let test_scoped_indent_target (h : host) =
+  let* () = settle h 40 in
+  let main = Test_check.block "main-parent" "main" in
+  let target = Test_check.block "local-parent" "local" in
+  let current = Test_check.block "local-child" "current" in
+  stage_page h [ main; Test_check.block "main-other" "other" ];
+  install_worker ~repo:h.repo h;
+  reset_editor ();
+  let release =
+    S.register_block_source ~scope:"indent-test" (fun () -> [ target; current ])
+  in
+  S.set_collapsed ~scope:"indent-test" "main-parent" true;
+  S.set_collapsed ~scope:"indent-test" "local-parent" true;
+  A.select_single_in ~scope:"indent-test" "local-child";
+  A.indent_or_outdent ~indent:true;
+  check "indent reveals its scoped target and preserves unrelated collapse"
+    (not (S.is_collapsed_in ~scope:"indent-test" "local-parent")
+     && S.is_collapsed_in ~scope:"indent-test" "main-parent");
+  let* () = settle h 40 in
+  release ();
+  S.set_collapsed ~scope:"indent-test" "main-parent" false;
+  S.set_collapsed ~scope:"indent-test" "local-parent" false;
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_zoom_structure_boundary (h : host) =
+  let saved = h.snapshot () in
+  let stage uuid =
+    let child = Test_check.block "zoom-child" "" in
+    let root = Test_check.block ~children:[ child ] "zoom-root" "root" in
+    stage_page h [ root ];
+    h.restore { (h.snapshot ()) with Model.route = Model.Block_zoom "zoom-root" };
+    reset_editor ();
+    install_worker ~repo:h.repo h;
+    let buffer = if uuid = "zoom-root" then "root" else "" in
+    S.set (fun st -> { st with S.editing = Some
+      (S.mk_editing ~uuid ~buffer ~scope:"zoom-zoom-root" ~base:buffer ()) })
+  in
+  let rec blocked = function
+    | [] -> Js.Promise.resolve ()
+    | (name, uuid, action) :: rest ->
+        stage uuid;
+        action ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("zoom boundary blocks " ^ name) (!ops = []);
+        reset_editor ();
+        blocked rest
+  in
+  let* () = blocked
+    [ "root indent", "zoom-root", (fun () -> A.indent_or_outdent ~indent:true);
+      "root outdent", "zoom-root", (fun () -> A.indent_or_outdent ~indent:false);
+      "child outdent", "zoom-child", (fun () -> A.indent_or_outdent ~indent:false);
+      "root move", "zoom-root", (fun () -> A.move_blocks_up_down ~uuid:"zoom-root" true) ]
+  in
+  stage "zoom-child";
+  A.split_at_cursor "zoom-child";
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Enter on an empty zoom child inserts inside the focused root"
+    (List.mem "insert-blocks" (op_names ())
+     && not (List.mem "indent-outdent-blocks" (op_names ())));
+  reset_editor ();
+  h.restore saved;
+  Js.Promise.resolve ()
+
 let test_append_owner (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -1125,6 +1207,9 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
+  test_selection_direction h;
+  let* () = test_scoped_indent_target h in
+  let* () = test_zoom_structure_boundary h in
   let* () = test_append_owner h in
   h.restore saved;
   Js.Promise.resolve ()

@@ -964,6 +964,17 @@ let optimistic_edit ?owner (f : Model.page -> Model.page option) =
       in
       loop [] !Runtime.current_journals)
 
+(* The worker knows the graph hierarchy, not the UI's focused root. *)
+let within_focused_root ~outdent uuid =
+  match Runtime.route () with
+  | Model.Block_zoom root ->
+      uuid <> root
+      && (not outdent
+          || match S.find_parent uuid with
+             | Some (Some parent, _) -> parent.Model.block_uuid <> Some root
+             | _ -> true)
+  | _ -> true
+
 let apply_indent_outdent ?parent_original uuids indent =
   let opts = Ops.current_history_opts (Wire.Map []) in
   let* cfg = Sdk_config.read_config (Runtime.repo ()) in
@@ -984,7 +995,8 @@ let apply_indent_outdent ?parent_original uuids indent =
    instead of inserting a sibling (when no right sibling exists) *)
 let outdent_empty_last_child uuid e b =
   let _ = (e, b) in
-  if String.trim (live_buffer uuid) <> "" then false
+  if String.trim (live_buffer uuid) <> ""
+     || not (within_focused_root ~outdent:true uuid) then false
   else
     match S.find_parent uuid with
     | Some (Some parent, idx) ->
@@ -1597,10 +1609,19 @@ let extend_selection up =
       let uuids = flat_uuids () in
       let ordered = List.filter (fun u -> S.String_set.mem u sel) uuids in
       let head =
-        match (up, ordered) with
-        | true, h :: _ -> Some h
-        | false, _ :: _ -> Some (List.nth ordered (List.length ordered - 1))
-        | _ -> None
+        match ordered with
+        | [] -> None
+        | first :: rest ->
+            let last = List.fold_left (fun _ u -> u) first rest in
+            (* The active endpoint is opposite the fixed anchor, regardless
+               of the next arrow's direction. A disjoint selection starts
+               a new range from its anchor. *)
+            Some
+              (if first = anchor
+                  || (anchor_is_page_title anchor && not (List.mem anchor uuids))
+               then last
+               else if last = anchor then first
+               else anchor)
       in
       match head with
       | None -> (
@@ -1744,6 +1765,8 @@ let indent_or_outdent ~indent =
     | Some u -> [ u ]
     | None -> selected_uuids ()
   in
+  let uuids = List.filter (within_focused_root ~outdent:(not indent)) uuids
+  in
   match uuids with
   | [] -> ()
   | focus :: _ ->
@@ -1799,6 +1822,7 @@ let move_blocks_up_down ?uuid up =
         | Some _, _ -> []
         | None, _ -> selected_uuids ()
       in
+      let uuids = List.filter (within_focused_root ~outdent:false) uuids in
       match uuids with
       | [] -> Js.Promise.resolve ()
       | uuids ->

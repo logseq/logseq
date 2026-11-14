@@ -682,8 +682,8 @@ let prev_sibling uuid =
   | Some (parent_opt, idx) when idx > 0 ->
       let siblings =
         match parent_opt with
-        | Some p -> p.Model.block_children
-        | None -> page_blocks ()
+        | Some p -> children_of p
+        | None -> blocks_in_scope (interaction_scope ())
       in
       List.nth_opt siblings (idx - 1)
   | _ -> None
