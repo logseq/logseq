@@ -17,6 +17,11 @@ type read_services = {
 
 val create : unit -> t
 val open_session : t -> Plugin_protocol.plugin_id -> Plugin_protocol.capability list -> session
+val session_current : t -> session -> bool
+val activate_commands : t -> session -> (unit, Plugin_protocol.error) result
+val commands : t -> session -> Plugin_protocol.command_descriptor list
+val command_callback : t -> session -> key:string ->
+  (Plugin_protocol.callback_id, Plugin_protocol.error) result
 val begin_invocation : ?reads:read_services -> t -> session -> services -> invocation
 val check : t -> session -> invocation -> (unit, Plugin_protocol.error) result
 val dispatch : t -> session -> invocation -> Plugin_protocol.request ->

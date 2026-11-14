@@ -1,5 +1,7 @@
 type plugin_id
 type callback_id
+type command_descriptor
+type command_handle
 type editing_context
 type entity
 type page_result
@@ -19,6 +21,7 @@ type request =
   | Get_page of identity
   | Datascript_query of query
   | Log of log_level * string
+  | Register_editor_command of command_descriptor * callback_id
 type reply =
   | Editing_context of editing_context
   | Plugin_info of plugin_id * capability list
@@ -28,6 +31,7 @@ type reply =
   | Current_page of page_result
   | Query_result of Json.t
   | Logged
+  | Editor_command_registered
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type error =
   | Invalid_request
@@ -48,6 +52,15 @@ val validate_value : Json.t -> (unit, error) result
 val plugin_id : string -> (plugin_id, error) result
 val plugin_id_value : plugin_id -> string
 val callback_id : owner:int -> callback_id
+val command_callback_id : owner:int -> slot:int -> (callback_id, error) result
+val callback_slot : callback_id -> int
+val command_descriptor : Json.t -> (command_descriptor, error) result
+val command_key : command_descriptor -> string
+val command_label : command_descriptor -> string
+val command_handle : id:plugin_id -> generation:int -> command_descriptor -> command_handle
+val command_plugin : command_handle -> plugin_id
+val command_generation : command_handle -> int
+val command_metadata : command_handle -> command_descriptor
 val owns_callback : owner:int -> callback_id -> bool
 val editing_context : block_uuid:string -> text:string -> (editing_context, error) result
 val entity : Json.t -> (entity, error) result

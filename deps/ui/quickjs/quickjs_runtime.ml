@@ -4,7 +4,8 @@ type handle
 type event = Waiting | Host_request of int * int * Json.t | Finished of Json.t | Failed of int
 external native_create : int array -> handle = "logseq_quickjs_create"
 external native_load : handle -> string -> int = "logseq_quickjs_load"
-external native_start : handle -> int = "logseq_quickjs_start"
+external native_start : handle -> int -> int = "logseq_quickjs_start"
+external native_has_callback : handle -> int -> bool = "logseq_quickjs_has_callback"
 external native_poll : handle -> event = "logseq_quickjs_poll"
 external native_complete : handle -> int -> bool -> Json.t -> unit = "logseq_quickjs_complete"
 external native_stop : handle -> unit = "logseq_quickjs_stop"
@@ -88,7 +89,7 @@ let invoke ~read_only t invocation callback =
               let call = { invocation; read_only; resolve; jobs = [] } in
               current := Some call;
               t.active <- Some call;
-              match native_start t.handle with
+              match native_start t.handle (callback_slot callback) with
               | 0 -> ()
               | code ->
                   finish t call (Error (error_of_code (code - 1)));
@@ -101,7 +102,17 @@ let invoke_read_only t invocation callback =
     (fun result -> Ui_task.resolve (Result.map (fun _ -> ()) result))
 
 let serve t call request operation payload =
-  let task = match decode_request ~operation payload with
+  let decoded =
+    if operation <> 9 then decode_request ~operation payload
+    else match payload with
+      | Json.Array [|descriptor; Json.Number slot|]
+        when Float.is_finite slot && Float.floor slot = slot && slot >= 1. && slot <= 32.
+             && native_has_callback t.handle (int_of_float slot) ->
+          Result.bind (command_descriptor descriptor) (fun descriptor ->
+            Result.map (fun callback -> Register_editor_command (descriptor, callback))
+              (command_callback_id ~owner:t.owner ~slot:(int_of_float slot)))
+      | _ -> Error Invalid_request in
+  let task = match decoded with
     | Ok decoded -> Plugin_broker.dispatch t.broker t.session call.invocation decoded
     | Error error -> Ui_task.resolve (Error error) in
   let job = Ui_task.bind task (fun result ->

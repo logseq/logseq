@@ -30,6 +30,7 @@ type item_action =
   | Template_apply of string (* template block uuid — apply-template op *)
   | Run_query of bool (* cljs editor/run-query-command; arg = advanced? *)
   | Plugin_slash of string * string (* plugin pid + trigger tag *)
+  | Portable_command of Plugin_protocol.command_handle
   | Configured of Wire.t
   | Noop (* "No matched commands" row — applies to nothing *)
 
@@ -559,6 +560,15 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
         ; "command.editor/add-property", "cube-plus", Desc_none
           , cmd "add-property" ]
     ; configured_slash_items ()
+    ; List.map (fun handle ->
+        let descriptor = Plugin_protocol.command_metadata handle in
+        let id = Plugin_protocol.plugin_id_value (Plugin_protocol.command_plugin handle) in
+        mk_item ~key:("quickjs." ^ id ^ "/" ^
+            string_of_int (Plugin_protocol.command_generation handle) ^ "/" ^
+            Plugin_protocol.command_key descriptor)
+          ~label:(Plugin_protocol.command_label descriptor) ~icon:"puzzle"
+          ~group:(U.t "editor.slash/group-plugins")
+          (Portable_command handle)) (Plugin_host.portable_commands ())
     ; (match Plugin_host.slash_cmd_tags () with
        | [] -> []
        | xs ->
@@ -574,7 +584,8 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
     ] in
   let labels = Hashtbl.create (List.length items) in
   let items = List.fold_right (fun item result ->
-      if Hashtbl.mem labels item.ai_label then result
+      if (match item.ai_act with Portable_command _ -> true | _ -> false) then item :: result
+      else if Hashtbl.mem labels item.ai_label then result
       else begin Hashtbl.add labels item.ai_label (); item :: result end) items [] in
   let page = Option.fold ~none:false ~some:Editor_actions.anchor_is_page_title
       (Editor_state.editing_uuid ()) in
@@ -2003,10 +2014,12 @@ type configured_checkpoint =
   ; configured_input_seq : int
   ; configured_popup_session : int ref
   ; configured_popup_generation : int
+  ; configured_lease : unit -> bool
   }
 
 let configured_checkpoint_current checkpoint =
-  checkpoint.configured_repo = Runtime.repo ()
+  checkpoint.configured_lease ()
+  && checkpoint.configured_repo = Runtime.repo ()
   && checkpoint.configured_route = Runtime.route ()
   && checkpoint.configured_input_seq = !Editor_state.edit_input_seq
   && checkpoint.configured_popup_generation = !(checkpoint.configured_popup_session)
@@ -2249,7 +2262,7 @@ let open_configured_search t checkpoint kind =
         | None -> false
       end
 
-let run_configured t ac ~unsupported steps =
+let prepare_configured ?(lease = fun () -> true) t ac =
   match Editor_state.editing (), Runtime.capture_reload_origin () with
   | Some editor, Some origin when editor.uuid = ac.auuid
       && (match ac.editor with
@@ -2263,7 +2276,7 @@ let run_configured t ac ~unsupported steps =
       close_ac t;
       let session = !(t.session) in
       let current () =
-        session = !(t.session) && input_seq = !Editor_state.edit_input_seq
+        lease () && session = !(t.session) && input_seq = !Editor_state.edit_input_seq
         && Outliner_ops.refresh_current ~owner context
         && match Editor_state.editing () with
            | Some live -> live.epoch == editor.epoch && live.uuid = editor.uuid
@@ -2273,6 +2286,7 @@ let run_configured t ac ~unsupported steps =
                && not (Edit_model.composing live.model)
            | None -> false
       in
+      let execute ~unsupported steps =
       let rec run = function
         | _ when not (current ()) -> Js.Promise.resolve ()
         | [] -> Editor_sink.focus_input ac.auuid; Js.Promise.resolve ()
@@ -2282,7 +2296,8 @@ let run_configured t ac ~unsupported steps =
               {configured_uuid=ac.auuid; configured_caret=editor.model.caret;
                configured_editor=editor; configured_repo=origin.reload_repo;
                configured_route=origin.reload_route; configured_input_seq=input_seq;
-               configured_popup_session=t.session; configured_popup_generation=session} in
+               configured_popup_session=t.session; configured_popup_generation=session;
+               configured_lease=current} in
             (match action with
              | Configured_exit -> Editor_actions.exit_edit ~select:false
              | Configured_search kind ->
@@ -2323,8 +2338,81 @@ let run_configured t ac ~unsupported steps =
                 run rest
       in
       Editor_sink.focus_input ac.auuid;
-      run steps
-  | _ -> Js.Promise.resolve ()
+      run steps in
+      Some (current, execute)
+  | _ -> None
+
+let run_configured t ac ~unsupported steps =
+  match prepare_configured t ac with
+  | None -> Js.Promise.resolve ()
+  | Some (_, execute) -> execute ~unsupported steps
+
+type command_ticket =
+  { ticket_current : unit -> bool
+  ; ticket_execute : unsupported:(unit -> unit) -> configured_step list -> unit Js.Promise.t
+  ; ticket_services : Plugin_broker.services
+  ; ticket_reads : Plugin_broker.read_services
+  ; ticket_handle : Plugin_protocol.command_handle
+  ; ticket_at_start : bool
+  ; mutable ticket_consumed : bool
+  }
+
+let prepare_command t ac handle =
+  if not (Plugin_host.command_current handle) then Error Plugin_protocol.Cancelled
+  else if not (ac_current ac) ||
+    not (match (get t).ac with Some live -> live == ac | None -> false)
+  then Error Plugin_protocol.Stale_context
+  else match Editor_state.editing () with
+  | Some editor when not (Edit_model.composing editor.model)
+      && Option.fold ~none:true ~some:(( = ) editor.model.caret) editor.model.anchor ->
+      let lease () = Plugin_host.command_current handle in
+      (match prepare_configured ~lease t ac with
+      | None -> Error Plugin_protocol.Stale_context
+      | Some (current, execute) ->
+          let services, reads = Plugin_read_services.capture ~id:(Plugin_protocol.command_plugin handle) in
+          let services = {services with Plugin_broker.current =
+            (fun () -> current () && services.current ())} in
+          Ok {ticket_current=current; ticket_execute=execute;
+              ticket_services=services; ticket_reads=reads; ticket_handle=handle;
+              ticket_at_start=ac.tpos = 0; ticket_consumed=false})
+  | Some _ | None -> Error Plugin_protocol.Invalid_request
+
+let execute_command ticket program =
+  if ticket.ticket_consumed then Ui_task.resolve (Error Plugin_protocol.Cancelled)
+  else begin
+    ticket.ticket_consumed <- true;
+    if not (ticket.ticket_current ()) then Ui_task.resolve (Error Plugin_protocol.Stale_context)
+    else match configured_program ~at_block_start:ticket.ticket_at_start (Plugin_configured.output program) with
+    | None -> Ui_task.resolve (Error Plugin_protocol.Invalid_request)
+    | Some steps ->
+        Ui_task.create (fun ~resolve ~reject:_ ->
+          let unsupported = ref false in
+          ignore (ticket.ticket_execute ~unsupported:(fun () -> unsupported := true) steps
+            |> Js.Promise.then_ (fun () ->
+              resolve (if !unsupported then Error Plugin_protocol.Unsupported else Ok ());
+              Js.Promise.resolve ())
+            |> Js.Promise.catch (fun _ ->
+              resolve (Error Plugin_protocol.Runtime_failure); Js.Promise.resolve ())))
+  end
+
+let invoke_command ticket =
+  if ticket.ticket_consumed then Ui_task.resolve (Error Plugin_protocol.Cancelled) else
+  let invocation = Plugin_host.invoke_command ticket.ticket_handle
+      ticket.ticket_services ticket.ticket_reads in
+  let completion = Ui_task.bind invocation (function
+    | Error error -> ticket.ticket_consumed <- true; Ui_task.resolve (Error error)
+    | Ok program -> execute_command ticket program) in
+  Ui_task.create ~cancel:(fun () ->
+    ticket.ticket_consumed <- true; Ui_task.cancel invocation; Ui_task.cancel completion)
+    (fun ~resolve ~reject ->
+      ignore (Ui_task.catch
+        (Ui_task.bind completion (fun result -> resolve result; Ui_task.resolve ()))
+        (fun error -> reject error; Ui_task.resolve ())))
+
+let run_portable_command t ac handle =
+  match prepare_command t ac handle with
+  | Error error -> Ui_task.resolve (Error error)
+  | Ok ticket -> invoke_command ticket
 
 let apply_item t ac ~meta it =
   let draft_allowed = match it.ai_act with
@@ -2333,6 +2421,12 @@ let apply_item t ac ~meta it =
     | _ -> false in
   if not (ac_current ac) || (draft_editing () && not draft_allowed) then close_ac t else
   match it.ai_act with
+  | Portable_command handle ->
+      ignore (Ui_task.bind (run_portable_command t ac handle) (fun result ->
+        (match result with
+        | Ok () -> ()
+        | Error error -> Toast.error (U.t1 "plugin/remote-error" (Plugin_protocol.error_name error)));
+        Ui_task.resolve ()))
   | Configured output ->
       let unsupported () =
         Toast.error (U.t1 "editor.slash/unsupported-configured-command-error" it.ai_label) in

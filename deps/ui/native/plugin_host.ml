@@ -236,6 +236,100 @@ let make_asset_url (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
 let open_pdf_viewer (_ : Js.Json.t) (_ : Js.Json.t) (_ : Js.Json.t)
     (_ : Js.Json.t) : Js.Json.t Js.Promise.t = reject_unavailable "openPDFViewer"
 
-type read_plugin = Plugin_read_runner.t
-let load_read_plugin = Plugin_read_runner.start
-let unload_read_plugin = Plugin_read_runner.close
+type read_plugin = Plugin_runner.t
+let load_read_plugin = Plugin_runner.start_read
+let unload_read_plugin = Plugin_runner.close
+
+type command_plugin = { id : string; generation : int; runner : Plugin_runner.t }
+let command_plugins : (string, command_plugin option ref) Hashtbl.t = Hashtbl.create 8
+let command_generation = ref 0
+
+let load_command_plugin ~id ~grants ~source =
+  let key = Plugin_protocol.plugin_id_value id in
+  (match Hashtbl.find_opt command_plugins key with
+   | Some slot when Option.fold ~none:false ~some:(fun plugin ->
+       not (Plugin_runner.current plugin.runner)) !slot -> Hashtbl.remove command_plugins key
+   | _ -> ());
+  if Hashtbl.mem command_plugins key then Ui_task.resolve (Error Plugin_protocol.Invalid_request)
+  else if !command_generation = max_int then Ui_task.resolve (Error Plugin_protocol.Resource_limit)
+  else begin
+    incr command_generation;
+    let generation = !command_generation and slot = ref None in
+    Hashtbl.add command_plugins key slot;
+    let remove () =
+      match Hashtbl.find_opt command_plugins key with
+      | Some live when live == slot -> Hashtbl.remove command_plugins key
+      | Some _ | None -> () in
+    let activation = Plugin_runner.start_commands ~id ~grants ~source in
+    Ui_task.create ~cancel:(fun () ->
+      Option.iter (fun plugin -> Plugin_runner.close plugin.runner) !slot;
+      Ui_task.cancel activation; remove (); bump ())
+      (fun ~resolve ~reject ->
+        ignore (Ui_task.catch
+          (Ui_task.bind activation (fun result ->
+            let result = match result with
+              | Error error -> remove (); Error error
+              | Ok runner ->
+                  let reserved = match Hashtbl.find_opt command_plugins key with
+                    | Some live -> live == slot | None -> false in
+                  if not reserved then begin
+                    Plugin_runner.close runner; Error Plugin_protocol.Cancelled
+                  end else begin
+                    let plugin = { id=key; generation; runner } in
+                    slot := Some plugin; Ok plugin
+                  end in
+            bump (); resolve result; Ui_task.resolve ()))
+          (fun error -> remove (); reject error; Ui_task.resolve ())))
+  end
+
+let unload_command_plugin plugin =
+  Plugin_runner.close plugin.runner;
+  (match Hashtbl.find_opt command_plugins plugin.id with
+  | Some slot when Option.fold ~none:false
+      ~some:(fun live -> live.generation = plugin.generation) !slot ->
+      Hashtbl.remove command_plugins plugin.id
+  | Some _ | None -> ());
+  bump ()
+
+let portable_commands () =
+  Hashtbl.fold (fun id slot result ->
+    match !slot with
+    | Some plugin when Plugin_runner.current plugin.runner ->
+        let id = match Plugin_protocol.plugin_id id with Ok id -> id | Error _ -> assert false in
+        List.map (Plugin_protocol.command_handle ~id ~generation:plugin.generation)
+          (Plugin_runner.commands plugin.runner) @ result
+    | Some _ | None -> result) command_plugins []
+
+let command_instance handle =
+  let id = Plugin_protocol.plugin_id_value (Plugin_protocol.command_plugin handle) in
+  match Hashtbl.find_opt command_plugins id with
+  | Some slot ->
+      (match !slot with
+      | Some plugin when plugin.generation = Plugin_protocol.command_generation handle
+                         && Plugin_runner.current plugin.runner -> Some plugin
+      | Some _ | None -> None)
+  | None -> None
+
+let command_current handle = Option.is_some (command_instance handle)
+
+let command_pending () =
+  Hashtbl.fold (fun _ slot pending ->
+    pending || Option.fold ~none:false
+      ~some:(fun plugin -> Plugin_runner.invoking plugin.runner) !slot)
+    command_plugins false
+
+let invoke_command handle services reads =
+  match command_instance handle with
+  | None -> Ui_task.resolve (Error Plugin_protocol.Cancelled)
+  | Some plugin ->
+      let key = Plugin_protocol.command_key (Plugin_protocol.command_metadata handle) in
+      let invocation = Plugin_runner.invoke plugin.runner ~key services reads in
+      Ui_task.create ~cancel:(fun () ->
+        Ui_task.cancel invocation;
+        if not (Plugin_runner.current plugin.runner) then unload_command_plugin plugin)
+        (fun ~resolve ~reject ->
+          ignore (Ui_task.catch
+            (Ui_task.bind invocation (fun result ->
+              if not (Plugin_runner.current plugin.runner) then unload_command_plugin plugin;
+              resolve result; Ui_task.resolve ()))
+            (fun error -> unload_command_plugin plugin; reject error; Ui_task.resolve ())))
