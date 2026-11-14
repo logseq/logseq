@@ -10,9 +10,15 @@
     (if (js/isNaN n) default n)))
 
 (defn config-from-env []
-  (let [env (.-env js/process)]
+  (let [env (.-env js/process)
+        base-url-raw (env-value env "DB_SYNC_BASE_URL")
+        base-urls (when base-url-raw
+                    (->> (string/split base-url-raw #"\s*,\s*")
+                         (mapv string/trim)
+                         (filterv seq)))]
     {:port (when-let [v (env-value env "DB_SYNC_PORT")] (parse-int v 8080))
-     :base-url (env-value env "DB_SYNC_BASE_URL")
+     :base-url (first base-urls)
+     :base-urls base-urls
      :data-dir (or (env-value env "DB_SYNC_DATA_DIR") "data/db-sync")
      :storage-driver (or (env-value env "DB_SYNC_STORAGE_DRIVER") "sqlite")
      :assets-driver (or (env-value env "DB_SYNC_ASSETS_DRIVER") "filesystem")
@@ -23,7 +29,7 @@
      :cognito-jwks-url (env-value env "COGNITO_JWKS_URL")}))
 
 (def ^:private allowed-config-keys
-  [:port :base-url :data-dir :storage-driver :assets-driver :log-level :asset-link-secret
+  [:port :base-url :base-urls :data-dir :storage-driver :assets-driver :log-level :asset-link-secret
    :cognito-issuer :cognito-client-id :cognito-jwks-url])
 
 (defn normalize-config [overrides]
@@ -35,6 +41,15 @@
         ;; an unset env var is nil in config-from-env: drop it, or merge
         ;; replaces the default with nil (no DB_SYNC_PORT gave a random port)
         merged (merge defaults (into {} (remove (comp nil? val)) (config-from-env)) overrides)
+        ;; When a single :base-url is passed (e.g. in tests or programmatic use)
+        ;; promote it into :base-urls so the rest of the code only needs to
+        ;; deal with the vector form.
+        merged (cond
+                 (and (:base-url merged) (nil? (:base-urls merged)))
+                 (assoc merged :base-urls [(:base-url merged)])
+                 (and (:base-urls merged) (nil? (:base-url merged)))
+                 (assoc merged :base-url (first (:base-urls merged)))
+                 :else merged)
         storage-driver (string/lower-case (:storage-driver merged))
         assets-driver (string/lower-case (:assets-driver merged))]
     (when-not (#{"sqlite"} storage-driver)

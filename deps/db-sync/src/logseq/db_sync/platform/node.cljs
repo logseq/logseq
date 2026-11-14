@@ -9,7 +9,14 @@
     out))
 
 (defn request-from-node
-  [^js req {:keys [scheme host]}]
+  "Builds a platform Request from a Node.js IncomingMessage.
+  `origins` is a vector of {:scheme :host} maps (as returned by
+  `server/request-origin-opts`). The entry whose :host matches the request's
+  Host header is used to reconstruct the full URL; the first entry is used as
+  a fallback when no match is found. This allows the server to accept requests
+  arriving via different addresses (e.g. LAN IP over HTTP and a Tailscale /
+  reverse-proxy domain over HTTPS) without any per-request configuration."
+  [^js req origins]
   (let [headers (js/Headers.)
         node-headers (.-headers req)
         header-keys (js/Object.keys node-headers)
@@ -18,9 +25,11 @@
               (when (some? value)
                 (.set headers (string/lower-case k) value))))
         method (or (.-method req) "GET")
-        host (or host (aget node-headers "host") "localhost")
-        scheme (or scheme "http")
-        url (str scheme "://" host (.-url req))
+        req-host (or (aget node-headers "host") "localhost")
+        {:keys [scheme host]} (or (some #(when (= (:host %) req-host) %) origins)
+                                  (first origins)
+                                  {:scheme "http"})
+        url (str scheme "://" (or host req-host) (.-url req))
         init #js {:method method
                   :headers headers}]
     (when-not (or (= method "GET") (= method "HEAD"))

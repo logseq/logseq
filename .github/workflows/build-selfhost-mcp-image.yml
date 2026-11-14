@@ -1,0 +1,121 @@
+name: Build self-hosted MCP image
+
+on:
+  workflow_dispatch:
+    inputs:
+      logseq_ref:
+        description: Logseq ref to build (branch, tag, or commit SHA)
+        required: false
+        default: master
+      image_tag:
+        description: Optional image tag
+        required: false
+        default: latest
+  push:
+    branches: [master]
+    paths:
+      - .github/workflows/build-selfhost-mcp-image.yml
+      - images/mcp/**
+      - mise.toml
+      - package.json
+      - pnpm-lock.yaml
+      - shadow-cljs.edn
+      - deps.edn
+      - cli/**
+      - deps/common/**
+      - deps/db/**
+      - deps/db-sync/**
+      - deps/graph-lifecycle/**
+      - deps/graph-parser/**
+      - deps/outliner/**
+      - src/main/frontend/worker/**
+      - src/main/logseq/db_worker/**
+      - scripts/build-db-worker-node-bundle.mjs
+      - scripts/prepare-cli-package.mjs
+      - scripts/stage-cli-runtime.mjs
+      - .agents/skills/logseq-cli/**
+  pull_request:
+    branches: [master]
+    paths:
+      - .github/workflows/build-selfhost-mcp-image.yml
+      - images/mcp/**
+      - mise.toml
+      - package.json
+      - pnpm-lock.yaml
+      - shadow-cljs.edn
+      - deps.edn
+      - cli/**
+      - deps/common/**
+      - deps/db/**
+      - deps/db-sync/**
+      - deps/graph-lifecycle/**
+      - deps/graph-parser/**
+      - deps/outliner/**
+      - src/main/frontend/worker/**
+      - src/main/logseq/db_worker/**
+      - scripts/build-db-worker-node-bundle.mjs
+      - scripts/prepare-cli-package.mjs
+      - scripts/stage-cli-runtime.mjs
+      - .agents/skills/logseq-cli/**
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE_NAME: ghcr.io/ssamdav/logseq-selfhost-mcp
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Test MCP server
+        working-directory: images/mcp/server
+        run: |
+          npm ci --no-audit --no-fund
+          npm test
+
+  build:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: images/mcp/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          cache-from: type=gha,scope=logseq-selfhost-mcp
+          cache-to: type=gha,mode=max,scope=logseq-selfhost-mcp
+          build-args: |
+            LOGSEQ_REPO=https://github.com/${{ github.repository }}.git
+            LOGSEQ_REF=${{ inputs.logseq_ref || github.event.pull_request.head.sha || github.sha }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:${{ inputs.image_tag || 'latest' }}
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
