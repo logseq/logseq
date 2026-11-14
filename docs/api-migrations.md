@@ -35,6 +35,11 @@ silently approximating legacy behavior. The existing permission, stale-context,
 cancellation and resource error codes still apply, including complete-result
 limits instead of silent truncation.
 
+The existing `thread-api/get-block-class-default-properties` worker read now
+uses `logseq.property/scalar-default-value` for checkbox schemas, matching
+property lookup semantics. Reference and many-valued defaults continue to use
+`logseq.property/default-value`.
+
 Shared OCaml callers use the corresponding `Plugin_broker.get_*` functions
 and `Plugin_protocol.property_ident`. Wire methods 27–32 are additive; 25–26
 remain reserved for the separately approved property-write design. This slice
@@ -43,6 +48,36 @@ on the independently reviewed explicit tree/query or graph-write surfaces.
 See the [QuickJS inventory](../libs/README.quickjs.md) for exact limits and
 tree-field boundaries. Native headless evidence is not Web/WASM or mobile
 runtime validation.
+
+## QuickJS bound queries, block children, and linked references
+
+The DOM-free target now exposes `DB.q(query, ...inputs)` as the exact read-only
+Datalog alias of `DB.datascriptQuery`. Unlike the legacy iframe SDK's `DB.q(dsl)`,
+it does not translate simple-query DSL strings. Keep values in `:in` bindings and
+pass plain-data inputs separately; do not interpolate values into query text.
+Both methods require `graph_read` and `db_query`. No transaction endpoint,
+evaluator CPU budget, or true query cancellation is added.
+
+`Editor.getBlock(uuid, { includeChildren: true })` preserves the root entity's
+properties and adds recursive ordered children, including collapsed descendants,
+through the existing worker tree read. Numeric IDs and `{ uuid }` also work.
+The default/false option keeps the existing single-entity read. `getPage` retains
+its existing identity/property semantics and rejects child expansion.
+
+`Editor.getPageLinkedReferences(identity)` returns
+`[PageEntity, BlockEntity[]][] | null`. Page names, UUIDs, `{ uuid }`, and numeric
+IDs are accepted, including references to a block UUID. A missing target or
+absent graph returns `null`; an existing target with no references returns `[]`.
+References are grouped by source page, preserving worker result order within
+groups. These reads need only `graph_read` and use the existing typed broker,
+worker endpoints, captured context, value limits, and error categories.
+`getCurrentPage` and `getEditingBlockContent` retain their existing captured
+page/live unsaved-buffer semantics and grants. Late results reject as
+`Stale_context`; retired invocations reject as `Cancelled`.
+
+Property mutations are not part of this read-only slice. They will reuse the
+independent graph-write/property-patch implementation after it reaches the base
+branch, rather than copying its implementation here.
 
 ## QuickJS sibling navigation reads
 

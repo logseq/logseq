@@ -286,6 +286,7 @@ type field_sigs =
   { editing_sig : editing option Signal.signal
   ; editing_target_sig : (string * string) option Signal.signal
   ; selected_sig : String_set.t Signal.signal
+  ; selection_sig : (string * String_set.t) Signal.signal
   ; anchor_sig : string option Signal.signal
   ; action_bar_sig : bool Signal.signal
   ; collapse_sig : collapse_view Signal.signal
@@ -310,6 +311,11 @@ let field_sigs () =
         ; selected_sig =
             Signal.cutoff String_set.equal
               (Signal.map (fun st -> st.selected) s)
+        ; selection_sig =
+            Signal.cutoff
+              (fun (scope_a, selected_a) (scope_b, selected_b) ->
+                scope_a = scope_b && String_set.equal selected_a selected_b)
+              (Signal.map (fun st -> st.selection_scope, st.selected) s)
         ; anchor_sig =
             Signal.cutoff ( = ) (Signal.map (fun st -> st.anchor) s)
         ; action_bar_sig =
@@ -336,6 +342,7 @@ let field_sigs () =
 let editing_sig () = (field_sigs ()).editing_sig
 let editing_target_sig () = (field_sigs ()).editing_target_sig
 let selected_sig () = (field_sigs ()).selected_sig
+let selection_sig () = (field_sigs ()).selection_sig
 let anchor_sig () = (field_sigs ()).anchor_sig
 let action_bar_sig () = (field_sigs ()).action_bar_sig
 let collapse_sig () = (field_sigs ()).collapse_sig
@@ -390,6 +397,8 @@ let selection_scope () = (selection_state ()).selection_scope
 let interaction_scope () =
   match editing () with Some e -> e.scope | None -> selection_scope ()
 let is_selected uuid = String_set.mem uuid (selected ())
+let is_selected_in_view ~scope uuid (owner_scope, selected) =
+  scope = owner_scope && String_set.mem uuid selected
 let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
 let is_expanded uuid = String_set.mem uuid (read ()).expanded

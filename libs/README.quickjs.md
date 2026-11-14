@@ -84,13 +84,24 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `Editor.getPageProperties(identity)`                  | `graph_read`                | Canonical property map, including class defaults, or `null` for a missing page                |
 | `Editor.getTodayPage()`                               | `graph_read`                | Existing page for the captured application date, or `null`; never creates it                  |
 | `Editor.getAllPages()`                                | `graph_read`                | Bounded, sorted visible-page metadata from the captured graph, or `[]` without a graph        |
-| `Editor.getBlock(identity, opts?)`                    | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; no child tree expansion                               |
+| `Editor.getBlock(identity, opts?)`                    | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; properties and optional recursive children            |
 | `Editor.getPage(identity, opts?)`                     | `graph_read`                | Numeric entity ID, UUID, `{ uuid }`, or page name; no child tree expansion                    |
+| `Editor.getPageLinkedReferences(identity)`            | `graph_read`                | References grouped as `[PageEntity, BlockEntity[]][]`, or `null` for a missing target         |
 | `DB.datascriptQuery(query, ...inputs)`                | `graph_read`, `db_query`    | DataScript query with bounded plain-data inputs/results                                       |
+| `DB.q(query, ...inputs)`                              | `graph_read`, `db_query`    | Exact read-only Datalog alias of `datascriptQuery`, not the legacy simple-query DSL           |
 | `Commands.registerEditorCommand(descriptor, handler)` | `editor_command`            | Activation-time registration; handlers return the closed editor action program                |
 | `console.log/info/warn/error/debug`                   | None                        | Bounded application diagnostics, not a browser console                                        |
 
-`includeChildren` may be omitted or `false`; `true` is `Unsupported`. Explicit
+`getBlock` preserves properties and expands nested, ordered block entities when
+`includeChildren: true`, including collapsed descendants. Omitted/false keeps
+the existing single-entity read. Property values retain existing reference/value
+maps rather than being flattened to scalars. `getPage` still rejects `includeChildren: true`
+as `Unsupported`; unknown options are `Invalid_request`. Linked references accept
+the same identities as `getPage`, including block UUID targets. Existing targets
+with no references return `[]`; missing targets and absent graphs return `null`.
+Groups follow first page appearance in worker results, preserving reference order
+within each page. Missing/malformed source-page metadata rejects rather than
+silently dropping references. Explicit
 identity reads use graph services; active-editor reads also retain the captured
 editing context. A graph/context transition invalidates late replies. Read,
 query, diagnostics, and initialization calls remain subject to the existing
@@ -160,6 +171,12 @@ Lists return typed entity lists; today returns an optional entity; property
 operations return bounded `Json.t` values. Wire methods are respectively
 27–32; 25–26 remain reserved for the separate property-write design. No new
 worker endpoint, write capability, Dune configuration, or mobile host is needed.
+
+`Plugin_broker.get_block_tree` and `Plugin_broker.get_page_linked_references`
+provide typed OCaml reads under the same session/invocation boundary. They return
+an optional entity and an optional `(entity * entity list) list`, respectively.
+The native bridge reserves operation slots 11–22 for the independent graph-write
+surface; these reads use slots 23–24 without renumbering existing operations.
 
 Not implemented by this target: imperative block/page/property writes,
 settings, subscriptions, plugin installation/discovery,

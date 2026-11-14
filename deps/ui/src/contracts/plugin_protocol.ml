@@ -20,7 +20,9 @@ type request =
   | Get_current_block
   | Get_current_page
   | Get_block of identity
+  | Get_block_tree of identity
   | Get_page of identity
+  | Get_page_linked_references of identity
   | Get_sibling_block of sibling_direction * identity
   | Get_current_page_blocks_tree
   | Get_selected_blocks
@@ -37,6 +39,7 @@ type reply =
   | Editing_state of editing_context option
   | Block of entity option
   | Page of entity option
+  | Page_linked_references of (entity * entity list) list option
   | Current_page of page_result
   | Query_result of Json.t
   | Entity_list of entity list
@@ -265,6 +268,10 @@ let decode_request ~operation value =
       let* identity = decode_identity ~page:false value in Ok (Get_block identity)
   | 6, Json.Array [|value|] ->
       let* identity = decode_identity ~page:true value in Ok (Get_page identity)
+  | 23, Json.Array [|value|] ->
+      let* identity = decode_identity ~page:false value in Ok (Get_block_tree identity)
+  | 24, Json.Array [|value|] ->
+      let* identity = decode_identity ~page:true value in Ok (Get_page_linked_references identity)
   | 7, Json.Array [|Json.String text; Json.Array inputs|] ->
       let* query = query ~text ~inputs in Ok (Datascript_query query)
   | 27, Json.Array [||] -> Ok Get_current_page_blocks_tree
@@ -292,7 +299,7 @@ let decode_request ~operation value =
         | "warn" -> Ok (Log (Log_warn, text))
         | "error" -> Ok (Log (Log_error, text))
         | _ -> Error Invalid_request)
-  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 27 | 28 | 29 | 30 | 31 | 32), _ -> Error Invalid_request
+  | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 23 | 24 | 27 | 28 | 29 | 30 | 31 | 32), _ -> Error Invalid_request
   | _ -> Error Unsupported
 
 let capability_name = function
@@ -310,6 +317,10 @@ let reply_value = function
           (List.map (fun capability -> Json.String (capability_name capability)) normalized_capabilities))]
   | Editing_state (Some context) -> editing_context_value context
   | Block (Some entity) | Page (Some entity) -> entity
+  | Page_linked_references None -> Json.Null
+  | Page_linked_references (Some groups) ->
+      Json.Array (Array.of_list (List.map (fun (page, blocks) ->
+        Json.Array [|page; Json.Array (Array.of_list blocks)|]) groups))
   | Editing_state None | Block None | Page None | Logged | Editor_command_registered -> Json.Null
   | Current_page value | Query_result value | Property_value value | Page_properties value -> value
   | Entity_list values -> Json.Array (Array.of_list values)

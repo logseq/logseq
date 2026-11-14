@@ -9,7 +9,9 @@ type read_services = {
   current_block : unit -> (entity option, error) result Ui_task.t;
   current_page : unit -> (page_result, error) result Ui_task.t;
   get_block : identity -> (entity option, error) result Ui_task.t;
+  get_block_tree : identity -> (entity option, error) result Ui_task.t;
   get_page : identity -> (entity option, error) result Ui_task.t;
+  page_linked_references : identity -> ((entity * entity list) list option, error) result Ui_task.t;
   sibling_block : sibling_direction -> identity -> (entity option, error) result Ui_task.t;
   current_page_blocks_tree : unit -> (entity list, error) result Ui_task.t;
   selected_blocks : unit -> (entity list, error) result Ui_task.t;
@@ -102,7 +104,7 @@ let required_capabilities = function
   | Get_editing_context | Get_editing_state -> [Editor_read]
   | Get_current_block | Get_current_page | Get_current_page_blocks_tree
   | Get_selected_blocks -> [Editor_read; Graph_read]
-  | Get_block _ | Get_page _ | Get_sibling_block _ -> [Graph_read]
+  | Get_block _ | Get_block_tree _ | Get_page _ | Get_page_linked_references _ | Get_sibling_block _ -> [Graph_read]
   | Get_block_property _ | Get_page_properties _ | Get_today_page | Get_all_pages -> [Graph_read]
   | Datascript_query _ -> [Graph_read; Db_query]
   | Register_editor_command _ -> [Editor_command]
@@ -135,7 +137,10 @@ let service invocation request =
           | Get_current_block -> map (reads.current_block ()) (fun value -> Block value)
           | Get_current_page -> map (reads.current_page ()) (fun value -> Current_page value)
           | Get_block identity -> map (reads.get_block identity) (fun value -> Block value)
+          | Get_block_tree identity -> map (reads.get_block_tree identity) (fun value -> Block value)
           | Get_page identity -> map (reads.get_page identity) (fun value -> Page value)
+          | Get_page_linked_references identity ->
+              map (reads.page_linked_references identity) (fun value -> Page_linked_references value)
           | Get_sibling_block (direction, identity) ->
               map (reads.sibling_block direction identity) (fun value -> Block value)
           | Get_current_page_blocks_tree ->
@@ -212,6 +217,18 @@ let get_today_page t session invocation =
     | Ok (Page value) -> Ui_task.resolve (Ok value)
     | Error error -> Ui_task.resolve (Error error)
     | Ok _ -> invalid_arg "Unexpected today page reply")
+
+let get_block_tree t session invocation identity =
+  Ui_task.bind (dispatch t session invocation (Get_block_tree identity)) (function
+    | Ok (Block block) -> Ui_task.resolve (Ok block)
+    | Error error -> Ui_task.resolve (Error error)
+    | Ok _ -> invalid_arg "Unexpected block tree reply")
+
+let get_page_linked_references t session invocation identity =
+  Ui_task.bind (dispatch t session invocation (Get_page_linked_references identity)) (function
+    | Ok (Page_linked_references groups) -> Ui_task.resolve (Ok groups)
+    | Error error -> Ui_task.resolve (Error error)
+    | Ok _ -> invalid_arg "Unexpected page references reply")
 
 let accept_program t session invocation program =
   match check t session invocation with

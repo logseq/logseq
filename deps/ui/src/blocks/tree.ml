@@ -50,13 +50,13 @@ let track_mounted_row ~scope (b : Model.block) child =
       Lazy_children.track_mounted ~scope ~uuid (fun ctx parent ->
           Settings_state.ensure ctx;
           Ui_parts.string_prop Lui_protocol.BackgroundValue
-            ~value:(reactive (fun selected preferences ->
-              if S.String_set.mem uuid selected then "var(--ls-block-highlight-color)"
+            ~value:(reactive (fun selection preferences ->
+              if S.is_selected_in_view ~scope uuid selection then "var(--ls-block-highlight-color)"
               else if preferences.Settings_state.highlight_recent
                   && Settings_state.Recent_blocks.mem uuid preferences.recent_blocks
               then "var(--ls-secondary-background-color, var(--lx-gray-03))"
               else "transparent")
-              (S.selected_sig ()) (Signal.value (Settings_state.state ()))) child ctx parent)
+              (S.selection_sig ()) (Settings_state.signal ())) child ctx parent)
   | None -> child
 
 (* -- per-row signals -- *)
@@ -68,13 +68,13 @@ let drag_target_zone ~scope uuid = function
     when target.S.scope = scope && target.S.uuid = uuid -> Some zone
   | _ -> None
 
-let row_class_str ~scope (b : Model.block) uuid (selected : S.String_set.t)
+let row_class_str ~scope (b : Model.block) uuid selection
     (drag : S.drag_preview option) =
   let order_list = b.Model.block_order_list = Some "number" in
   let blank = String.trim b.block_title = "" in
   let embed = b.Model.block_link <> None in
   (* cljs :class order — dynamic flags first, base classes last *)
-  (if S.String_set.mem uuid selected then "selected " else "")
+  (if S.is_selected_in_view ~scope uuid selection then "selected " else "")
   ^ (match drag with
      | Some { S.source; _ } when source.S.scope = scope && source.S.uuid = uuid ->
          "block-dragging "
@@ -86,25 +86,6 @@ let row_class_str ~scope (b : Model.block) uuid (selected : S.String_set.t)
   ^ (if embed then "embed-block " else "")
   ^ (if Comments.is_comments_area b then "is-comments-area " else "")
   ^ "ls-block swipe-item"
-
-let row_class_sig ~scope uuid blank embed (b : Model.block) =
-  ignore (blank, embed);
-  Signal.map2
-    (fun selected drag -> row_class_str ~scope b uuid selected drag)
-    (S.selected_sig ()) (S.drag_sig ())
-
-(* same class signal driven by a per-item block signal — keyed rows get
-   fresh block records on republish, so blank/embed/order-list must not
-   be captured at mount. Fused into one map2: a map over a map leaks the
-   inner derivation's upstream subscription — the outer's owner can't
-   reach it *)
-let row_class_sig_of ~scope (bs : Model.block Signal.signal) =
-  Signal.map2
-    (fun ((b : Model.block), selected) drag ->
-      let uuid = Option.value b.block_uuid ~default:"" in
-      row_class_str ~scope b uuid selected drag)
-    (Signal.map2 (fun b selected -> (b, selected)) bs (S.selected_sig ()))
-    (S.drag_sig ())
 
 (* effective collapse for a block: scoped UI overrides, then persisted
    set || view default — projected on the [collapse_view] carried by
@@ -387,11 +368,11 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
                              ~value:(string_of_int idx ^ ".") []
                        | None -> box [])
                   | None ->
-                      Ui_parts.class_signal (S.selected_sig ())
-                        (fun selected ->
-                          if S.String_set.mem uuid selected then
+                      Ui_parts.string_prop Lui_protocol.StyleClass
+                        ~value:(reactive (fun selection ->
+                          if S.is_selected_in_view ~scope uuid selection then
                             "selected bullet"
-                          else "bullet")
+                          else "bullet") (S.selection_sig ()))
                         (Ui_components.block_bullet ~key:("b-" ^ uuid)
                            ~opacity:(reactive (fun collapsed _ ->
                              if not collapsed && Settings_state.document_mode () then 0. else 0.8)
@@ -750,12 +731,15 @@ let comments_row ~scope ~depth ~editable ~library (bs : Model.block Signal.signa
   let key = block_key block in
   (track_mounted_row ~scope block
     (with_editor_font
-      (Ui_parts.class_signal (row_class_sig_of ~scope bs) Fun.id
+      (Ui_parts.string_prop Lui_protocol.StyleClass
+        ~value:(reactive (fun (b : Model.block) selection drag ->
+          row_class_str ~scope b (Option.value b.block_uuid ~default:"") selection drag)
+          bs (S.selection_sig ()) (S.drag_sig ()))
         (column ~key:("ls-" ^ scope ^ "-" ^ key)
           ~accessibility_identifier:("ls-block-" ^ key) ~corner_radius:4
-          ~background:(reactive (fun selected ->
-              if S.String_set.mem uuid selected then "var(--ls-block-highlight-color)"
-              else "transparent") (S.selected_sig ()))
+          ~background:(reactive (fun selection ->
+              if S.is_selected_in_view ~scope uuid selection then "var(--ls-block-highlight-color)"
+              else "transparent") (S.selection_sig ()))
           ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
           [ row ~style_class:"block-main-container" ~gap:4 ~min_height:24
               [ reactive (control_wrap ~scope ~library uuid) bs
@@ -875,15 +859,14 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
       (Signal.constant ctx.Lui_ui.ui_scheduler b) ctx parent)
   else
   let key = block_key b in
-  let embed = b.block_link <> None in
   let has_children = S.children_of b <> [] in
-  let blank = String.trim b.block_title = "" in
   (* the reload key is scope-namespaced: the same block uuid renders in the
      main list, sidebars, previews and embeds simultaneously, and a bare
      ls-<uuid> key makes those distinct rows claim each other's DOM node *)
   track_mounted_row ~scope b
     (with_editor_font
-    (Ui_parts.class_signal (row_class_sig ~scope uuid blank embed b) Fun.id
+    (Ui_parts.string_prop Lui_protocol.StyleClass
+      ~value:(reactive (row_class_str ~scope b uuid) (S.selection_sig ()) (S.drag_sig ()))
     (Ui_components.with_props [ Ui_components.Prop.position `relative ]
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
@@ -943,7 +926,10 @@ and row_sig ~depth ~editable ~library ~virtualize scope
   in
   (track_mounted_row ~scope b0
     (with_editor_font
-    (Ui_parts.class_signal (row_class_sig_of ~scope bs) Fun.id
+    (Ui_parts.string_prop Lui_protocol.StyleClass
+      ~value:(reactive (fun (b : Model.block) selection drag ->
+        row_class_str ~scope b (Option.value b.block_uuid ~default:"") selection drag)
+        bs (S.selection_sig ()) (S.drag_sig ()))
     (Ui_components.with_props [ Ui_components.Prop.position `relative ]
     (column ~key:("ls-" ^ scope ^ "-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
@@ -1116,12 +1102,11 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
   S.ensure ctx;
   (let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
-  let embed = b.block_link <> None in
   let has_children = b.block_children <> [] in
-  let blank = String.trim b.block_title = "" in
   track_mounted_row ~scope:"ref" b
     (with_editor_font
-    (Ui_parts.class_signal (row_class_sig ~scope:"ref" uuid blank embed b) Fun.id
+    (Ui_parts.string_prop Lui_protocol.StyleClass
+      ~value:(reactive (row_class_str ~scope:"ref" b uuid) (S.selection_sig ()) (S.drag_sig ()))
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition

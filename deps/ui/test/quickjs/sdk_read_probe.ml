@@ -82,7 +82,8 @@ let run path =
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
     block first_uuid uuid "a0" "first";
     block last_uuid uuid "a1" "last";
-    block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested"];
+    block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested";
+    block "00000000-0000-0000-0000-000000000108" "00000000-0000-0000-0000-000000000102" "a0" "deeper"];
     Wire.Nil; Wire.Nil]);
   let today = Dates.today () in
   let page_row ?(kind = "logseq.class/Page") page_uuid title extra = Wire.Map ([
@@ -93,7 +94,7 @@ let run path =
     Wire.kw "block/updated-at", Wire.Int 1;
     Wire.kw "block/tags", Wire.Set [Wire.kw kind]] @ extra) in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
-    page_row "00000000-0000-0000-0000-000000000103" today
+    page_row "00000000-0000-0000-0000-000000000120" today
       [Wire.kw "block/journal-day", Wire.Int (Dates.today_journal_day ())];
     page_row "00000000-0000-0000-0000-000000000111" "Hidden SDK page"
       [Wire.kw "logseq.property/hide?", Wire.Bool true];
@@ -124,6 +125,32 @@ let run path =
       [Wire.kw "logseq.property.class/properties", Wire.Set [Wire.kw "plugin.property.sdk-probe/checked"]];
     member uuid; member first_uuid; member last_uuid]; Wire.Nil; Wire.Nil]);
   let page = match Decode.page_of_summary page with Some page -> page | None -> failwith "page" in
+  let source_page = "00000000-0000-0000-0000-000000000103" in
+  let reference source_page suffix order = match block
+      ("00000000-0000-0000-0000-000000000" ^ suffix) source_page order "[[quickjs sdk probe]]" with
+    | Wire.Map fields -> Wire.Map ((Wire.kw "block/refs", Wire.Set [Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]])
+        :: (Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid source_page])
+        :: List.filter (fun (key, _) -> key <> Wire.kw "block/page") fields)
+    | _ -> assert false in
+  let source_page_map uuid title = Wire.Map [Wire.kw "block/uuid", Wire.Uuid uuid;
+    Wire.kw "block/name", Wire.String title; Wire.kw "block/title", Wire.String title;
+    Wire.kw "block/tags", Wire.Set [Wire.kw "logseq.class/Page"];
+    Wire.kw "block/created-at", Wire.Int 1; Wire.kw "block/updated-at", Wire.Int 1] in
+  let other_page = "00000000-0000-0000-0000-000000000106" in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    source_page_map source_page "quickjs source page";
+    source_page_map other_page "quickjs other source page";
+    reference source_page "104" "a0"; reference other_page "107" "a0";
+    reference source_page "105" "a1"]; Wire.Nil; Wire.Nil]);
+  let property = Wire.kw "plugin.property.sdk-probe/tree-score" in
+  ignore (invoke "thread-api/apply-outliner-ops" [Wire.String repo; Wire.Array [
+    Wire.Array [Wire.kw "upsert-property"; Wire.Array [property;
+      Wire.Map [Wire.kw "logseq.property/type", Wire.kw "number"; Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
+      Wire.Map [Wire.kw "property-name", Wire.String "tree-score"]]];
+    Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid first_uuid; property; Wire.Int 7]];
+    Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid "00000000-0000-0000-0000-000000000102"; property; Wire.Int 11]];
+    Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid "00000000-0000-0000-0000-000000000108"; property; Wire.Int 13]];
+    Wire.Array [Wire.kw "set-block-property"; Wire.Array [Wire.Uuid first_uuid; Wire.kw "block/collapsed?"; Wire.Bool true]]]; Wire.Map []]);
   model := { Model.initial with repo = Some repo; route = Model.Page page.Model.page_title;
     route_page = Some page };
   let scheduler = Signal.scheduler () in
@@ -181,11 +208,15 @@ let run path =
     unit_result (Plugin_broker.get_page_properties broker session invocation (Page_name "quickjs sdk probe"));
     unit_result (Plugin_broker.get_today_page broker session invocation);
     unit_result (Plugin_broker.get_all_pages broker session invocation)] in
+  let pending_tree = Plugin_broker.get_block_tree broker session invocation (Uuid first_uuid) in
+  let pending_refs = Plugin_broker.get_page_linked_references broker session invocation (Uuid uuid) in
   model := {!model with context_revision = (!model).context_revision + 1};
   check "late reply must be stale" (task pending = Error Stale_context);
   check "late sibling reply must be stale" (task pending_sibling = Error Stale_context);
   List.iter (fun pending ->
     check "late batch-4 reply must be stale" (task pending = Error Stale_context)) pending_batch;
+  check "late tree reply must be stale" (task pending_tree = Error Stale_context);
+  check "late reference reply must be stale" (task pending_refs = Error Stale_context);
   Plugin_broker.close_session broker session;
   remove_source ();
   check "read runner cannot receive command grants"

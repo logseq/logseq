@@ -73,6 +73,21 @@ const connected = logseq.ready(async (info) => {
           (mask & 6) === 6,
           () => logseq.DB.datascriptQuery('[:find ?e :where [?e :block/uuid]]'),
         ],
+        [
+          (mask & 2) !== 0,
+          () =>
+            logseq.Editor.getBlock('00000000-0000-0000-0000-000000000100', {
+              includeChildren: true,
+            }),
+        ],
+        [
+          (mask & 2) !== 0,
+          () => logseq.Editor.getPageLinkedReferences('quickjs sdk probe'),
+        ],
+        [
+          (mask & 6) === 6,
+          () => logseq.DB.q('[:find ?e :where [?e :block/uuid]]'),
+        ],
       ] as const
     ).entries()) {
       try {
@@ -90,12 +105,98 @@ const connected = logseq.ready(async (info) => {
     return
   }
   const uuid = '00000000-0000-0000-0000-000000000099'
+  const firstUuid = '00000000-0000-0000-0000-000000000100'
+  const lastUuid = '00000000-0000-0000-0000-000000000101'
   if (info.id === 'sdk-probe-selection') {
     const selected = await logseq.Editor.getSelectedBlocks()
     check(
       selected.map((block) => block.uuid).join(',') ===
         '00000000-0000-0000-0000-000000000101,00000000-0000-0000-0000-000000000100',
       'selection follows its owning projection, not UUID or main-page order'
+    )
+    const pageEntity = await logseq.Editor.getBlock(uuid)
+    const currentTree = await logseq.Editor.getCurrentPageBlocksTree()
+    const currentChild = currentTree[0]?.children?.[0]
+    check(
+      currentTree.map((block) => block.uuid).join(',') ===
+        '00000000-0000-0000-0000-000000000100,00000000-0000-0000-0000-000000000101' &&
+        typeof currentChild === 'object' &&
+        currentChild !== null &&
+        !Array.isArray(currentChild) &&
+        currentChild.uuid === '00000000-0000-0000-0000-000000000102',
+      'complete ordered current-page tree'
+    )
+    const key = ':plugin.property.sdk-probe/score'
+    const first = await logseq.Editor.getBlock(
+      '00000000-0000-0000-0000-000000000100'
+    )
+    const value = await logseq.Editor.getBlockProperty(
+      '00000000-0000-0000-0000-000000000100',
+      key
+    )
+    check(
+      Array.isArray(value) &&
+        value.length === 2 &&
+        JSON.stringify(value) === JSON.stringify(first?.properties?.[key]),
+      'canonical property read preserves the structured value'
+    )
+    check(
+      (await logseq.Editor.getBlockProperty(
+        uuid,
+        'plugin.property.sdk-probe/missing'
+      )) === null,
+      'absent property'
+    )
+    const properties =
+      await logseq.Editor.getPageProperties('quickjs sdk probe')
+    const checkbox = 'plugin.property.sdk-probe/checked'
+    check(
+      (await logseq.Editor.getBlockProperty(
+        '00000000-0000-0000-0000-000000000100',
+        checkbox
+      )) === true &&
+        (await logseq.Editor.getBlockProperty(
+          '00000000-0000-0000-0000-000000000101',
+          checkbox
+        )) === false &&
+        properties?.[':' + checkbox] === true,
+      'class checkbox default and explicit false override'
+    )
+    check(
+      properties !== null &&
+        JSON.stringify(properties[key]) ===
+          JSON.stringify(pageEntity?.properties?.[key]),
+      'page properties use canonical keys'
+    )
+    check(
+      (await logseq.Editor.getPageProperties('missing sdk page')) === null,
+      'absent page properties'
+    )
+    const today = await logseq.Editor.getTodayPage()
+    check(
+      today?.uuid === '00000000-0000-0000-0000-000000000120',
+      'today lookup without creation'
+    )
+    const pages = await logseq.Editor.getAllPages()
+    check(
+      pages.some((page) => page.uuid === uuid) &&
+        pages.some((page) => page.uuid === today.uuid) &&
+        !pages.some(
+          (page) => page.uuid === '00000000-0000-0000-0000-000000000111'
+        ) &&
+        pages.every(
+          (page, index) =>
+            index === 0 || String(pages[index - 1].title) <= String(page.title)
+        ),
+      'deterministic current-graph catalog excludes hidden pages'
+    )
+    const projected = await logseq.Editor.getBlockProperty(
+      '00000000-0000-0000-0000-000000000112',
+      key
+    )
+    check(
+      Array.isArray(projected) && projected.length === 1,
+      'unrelated large title is not projected'
     )
     return
   }
@@ -143,6 +244,14 @@ const connected = logseq.ready(async (info) => {
     check((await logseq.Editor.getBlock(uuid)) === null, 'no graph block')
     check((await logseq.Editor.getPage('missing')) === null, 'no graph page')
     check(
+      (await logseq.Editor.getBlock(uuid, { includeChildren: true })) === null,
+      'no graph tree'
+    )
+    check(
+      (await logseq.Editor.getPageLinkedReferences(uuid)) === null,
+      'no graph references'
+    )
+    check(
       (await logseq.Editor.getNextSiblingBlock(uuid)) === null,
       'no graph sibling'
     )
@@ -181,94 +290,10 @@ const connected = logseq.ready(async (info) => {
   )
   const pageById = await logseq.Editor.getPage(block.id)
   check(pageById?.uuid === uuid, 'page ID')
-  const tree = await logseq.Editor.getCurrentPageBlocksTree()
-  const child = tree[0]?.children?.[0]
-  check(
-    tree.map((block) => block.uuid).join(',') ===
-      '00000000-0000-0000-0000-000000000100,00000000-0000-0000-0000-000000000101' &&
-      typeof child === 'object' &&
-      child !== null &&
-      !Array.isArray(child) &&
-      child.uuid === '00000000-0000-0000-0000-000000000102',
-    'complete ordered current-page tree'
-  )
   check(
     (await logseq.Editor.getSelectedBlocks()).length === 0,
     'empty selection with editing'
   )
-  const key = ':plugin.property.sdk-probe/score'
-  const first = await logseq.Editor.getBlock(
-    '00000000-0000-0000-0000-000000000100'
-  )
-  const value = await logseq.Editor.getBlockProperty(
-    '00000000-0000-0000-0000-000000000100',
-    key
-  )
-  check(
-    Array.isArray(value) &&
-      value.length === 2 &&
-      JSON.stringify(value) === JSON.stringify(first?.properties?.[key]),
-    'canonical property read preserves the structured value'
-  )
-  check(
-    (await logseq.Editor.getBlockProperty(
-      uuid,
-      'plugin.property.sdk-probe/missing'
-    )) === null,
-    'absent property'
-  )
-  const properties = await logseq.Editor.getPageProperties('quickjs sdk probe')
-  const checkbox = 'plugin.property.sdk-probe/checked'
-  check(
-    (await logseq.Editor.getBlockProperty(
-      '00000000-0000-0000-0000-000000000100',
-      checkbox
-    )) === true &&
-      (await logseq.Editor.getBlockProperty(
-        '00000000-0000-0000-0000-000000000101',
-        checkbox
-      )) === false &&
-      properties?.[':' + checkbox] === true,
-    'class checkbox default and explicit false override'
-  )
-  check(
-    properties !== null &&
-      JSON.stringify(properties[key]) ===
-        JSON.stringify(block.properties?.[key]),
-    'page properties use canonical keys'
-  )
-  check(
-    (await logseq.Editor.getPageProperties('missing sdk page')) === null,
-    'absent page properties'
-  )
-  const today = await logseq.Editor.getTodayPage()
-  check(
-    today?.uuid === '00000000-0000-0000-0000-000000000103',
-    'today lookup without creation'
-  )
-  const pages = await logseq.Editor.getAllPages()
-  check(
-    pages.some((page) => page.uuid === uuid) &&
-      pages.some((page) => page.uuid === today.uuid) &&
-      !pages.some(
-        (page) => page.uuid === '00000000-0000-0000-0000-000000000111'
-      ) &&
-      pages.every(
-        (page, index) =>
-          index === 0 || String(pages[index - 1].title) <= String(page.title)
-      ),
-    'deterministic current-graph catalog excludes hidden pages'
-  )
-  const projected = await logseq.Editor.getBlockProperty(
-    '00000000-0000-0000-0000-000000000112',
-    key
-  )
-  check(
-    Array.isArray(projected) && projected.length === 1,
-    'unrelated large title is not projected'
-  )
-  const firstUuid = '00000000-0000-0000-0000-000000000100'
-  const lastUuid = '00000000-0000-0000-0000-000000000101'
   const previous = await logseq.Editor.getPreviousSiblingBlock(lastUuid)
   const next = await logseq.Editor.getNextSiblingBlock({ uuid: firstUuid })
   check(
@@ -294,6 +319,59 @@ const connected = logseq.ready(async (info) => {
     'quickjs sdk probe'
   )
   check(JSON.stringify(rows) === JSON.stringify([[uuid]]), 'graph query')
+  const tree = await logseq.Editor.getBlock(
+    '00000000-0000-0000-0000-000000000100',
+    { includeChildren: true }
+  )
+  check(
+    tree?.properties?.[':plugin.property.sdk-probe/tree-score']?.[
+      ':logseq.property/value'
+    ] === 7,
+    'tree properties'
+  )
+  check(
+    tree['collapsed?'] === true &&
+      tree.children?.length === 1 &&
+      !Array.isArray(tree.children[0]) &&
+      tree.children[0]?.uuid === '00000000-0000-0000-0000-000000000102',
+    'nested children'
+  )
+  const refs = await logseq.Editor.getPageLinkedReferences(uuid)
+  const child = tree.children?.[0]
+  check(child && !Array.isArray(child), 'nested block entity')
+  const grandchild = child.children?.[0]
+  check(grandchild && !Array.isArray(grandchild), 'recursive block entity')
+  check(
+    child.properties?.[':plugin.property.sdk-probe/tree-score']?.[
+      ':logseq.property/value'
+    ] === 11 &&
+      grandchild.properties?.[':plugin.property.sdk-probe/tree-score']?.[
+        ':logseq.property/value'
+      ] === 13,
+    'descendant properties'
+  )
+  const groups = new Map(
+    refs?.map(([page, blocks]) => [
+      page.uuid,
+      blocks.map((block) => block.uuid),
+    ])
+  )
+  check(
+    groups.size === 2 &&
+      groups.get('00000000-0000-0000-0000-000000000103')?.length === 2 &&
+      groups.get('00000000-0000-0000-0000-000000000106')?.[0] ===
+        '00000000-0000-0000-0000-000000000107',
+    'grouped page references'
+  )
+  check(
+    (await logseq.Editor.getPageLinkedReferences('missing')) === null,
+    'missing reference target'
+  )
+  check(
+    (await logseq.Editor.getPageLinkedReferences('quickjs source page'))
+      ?.length === 0,
+    'empty references'
+  )
   const inputs = [
     null,
     false,
@@ -303,7 +381,7 @@ const connected = logseq.ready(async (info) => {
       'sample-key': [1, null, 1e20, -1e20, 1e16, 9007199254740991, 2147483648],
     },
   ]
-  const roundtrip = await logseq.DB.datascriptQuery(
+  const roundtrip = await logseq.DB.q(
     '[:find ?a ?b ?c ?d ?e :in $ ?a ?b ?c ?d ?e]',
     ...inputs
   )
@@ -333,7 +411,7 @@ const connected = logseq.ready(async (info) => {
   }
   let unsupported = false
   try {
-    Reflect.get(logseq.DB, 'q')
+    Reflect.get(logseq.DB, 'transact')
   } catch (error) {
     unsupported = error instanceof Error && error.message === 'Unsupported'
   }
