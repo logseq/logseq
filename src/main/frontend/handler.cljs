@@ -57,6 +57,29 @@
     (state/set-current-repo! nil)
     (db-subs/reset-graph! nil)))
 
+(defn- discard-unregistered-current-repo!
+  [registered-repos]
+  (let [current (state/get-current-repo)
+        registered (set registered-repos)]
+    (when (and current (not (contains? registered current)))
+      (log/warn :event :startup/stale-current-repo :repo current)
+      (clear-stale-current-repo!))))
+
+(defn- <discard-missing-electron-current-repo!
+  "Drop a last-opened graph that is no longer on disk before starting its worker.
+
+  Desktop `getGraphs` lists directories without starting a runtime, so this does
+  not depend on Electron preserving IPC error codes."
+  []
+  (if-not (util/electron?)
+    (p/resolved nil)
+    (-> (p/let [names (ipc/ipc "getGraphs")]
+          (discard-unregistered-current-repo!
+           (map str (bean/->clj names))))
+        (p/catch (fn [error]
+                   (log/warn :event :startup/list-graphs-failed :error error)
+                   nil)))))
+
 (defn restore-and-setup!
   [repo]
   (when repo
@@ -202,6 +225,7 @@
           (p/then
            (fn []
              (p/let [t2 (util/time-ms)
+                     _ (<discard-missing-electron-current-repo!)
                      _ (persist-db/<start-runtime!)
                      _ (log/info ::db-worker-spent-time (- (util/time-ms) t2))
                      repos (repo-handler/get-repos)

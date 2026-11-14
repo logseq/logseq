@@ -1,5 +1,6 @@
 (ns frontend.handler-test
   (:require [cljs.test :refer [async deftest is testing]]
+            [electron.ipc :as ipc]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
             [frontend.db.restore :as db-restore]
@@ -14,6 +15,7 @@
             [frontend.handler.ui :as ui-handler]
             [frontend.modules.shortcut.core :as shortcut]
             [frontend.state :as state]
+            [frontend.util :as util]
             [promesa.core :as p]))
 
 (deftest date-watch-queries-the-journal-only-when-the-day-changes-test
@@ -150,6 +152,9 @@
   (let [js-error (js/Error. "Graph is absent or stopped by deletion")]
     (set! (.-code js-error) "graph-not-exists")
     (is (error/graph-absent-error? js-error)))
+  (is (error/graph-absent-error?
+       (js/Error. "Graph is absent or stopped by deletion"))
+      "Electron IPC may reconstruct the error from its message only")
   (is (not (error/graph-absent-error? (ex-info "other" {:code :server-start-failed}))))
   (is (not (error/graph-absent-error? (js/Error. "boom")))))
 
@@ -200,3 +205,40 @@
               (is (= config/demo-repo @created))))
           (p/catch (fn [err] (is false (str err))))
           (p/finally done)))))
+
+(deftest discard-unregistered-current-repo-clears-stale-last-opened-graph-test
+  (let [discard-f (some-> (resolve 'frontend.handler/discard-unregistered-current-repo!) deref)
+        original-state (state/get-state)]
+    (is (fn? discard-f))
+    (try
+      (state/swap-state! assoc :git/current-repo "logseq_db_deleted")
+      (discard-f ["logseq_db_other"])
+      (is (nil? (state/get-current-repo)))
+      (state/swap-state! assoc :git/current-repo "logseq_db_other")
+      (discard-f ["logseq_db_other"])
+      (is (= "logseq_db_other" (state/get-current-repo)))
+      (finally
+        (state/replace-state! original-state)))))
+
+(deftest discard-missing-electron-current-repo-uses-disk-graph-list-test
+  (async done
+    (let [discard-f (some-> (resolve 'frontend.handler/<discard-missing-electron-current-repo!) deref)
+          original-state (state/get-state)
+          original-electron? util/electron?
+          original-ipc ipc/ipc]
+      (is (fn? discard-f))
+      (state/swap-state! assoc :git/current-repo "logseq_db_deleted")
+      (set! util/electron? (constantly true))
+      (set! ipc/ipc (fn [channel & _args]
+                      (case channel
+                        "getGraphs" (p/resolved ["logseq_db_other"])
+                        (p/resolved nil))))
+      (-> (p/let [_ (discard-f)]
+            (is (nil? (state/get-current-repo))))
+          (p/catch (fn [err] (is false (str err))))
+          (p/finally
+           (fn []
+             (set! util/electron? original-electron?)
+             (set! ipc/ipc original-ipc)
+             (state/replace-state! original-state)
+             (done)))))))
