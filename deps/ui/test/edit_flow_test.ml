@@ -1207,6 +1207,99 @@ let test_move_block_chord (h : host) =
         run rest
   in run cases
 
+let test_platform_delete (h : host) =
+  let mac = Ui_services.env_is_mac () in
+  let primary = EM.key_ev ~meta:mac ~ctrl:(not mac) "Backspace" in
+  let source = "one two" in
+  let cases =
+    [ "primary", primary, 7, None, false,
+        (if mac then "" else "one "), (if mac then 0 else 4);
+      "visual line", primary, 7, None, true, "one ", 4;
+      "selection", primary, 6, Some 1, false, "oo", 1;
+      "primary at start", primary, 0, None, false, source, 0;
+      "shift at start", EM.key_ev ~shift:true "Backspace", 0, None, false, source, 0;
+      "alternate at start", EM.key_ev ~ctrl:mac ~meta:(not mac) "Backspace",
+        0, None, false, source, 0 ]
+    @ (if mac then [] else
+        [ "forward word", EM.key_ev ~ctrl:true "Delete", 0, None, false, " two", 0 ])
+  in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (name, key, caret, anchor, wrapped, expected, expected_caret) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" "previous";
+          Test_check.block "b2" source; Test_check.block "b3" "next" ];
+        set_editing ~uuid:"b2" ~buffer:source ~caret ~base:source;
+        S.set (fun st -> { st with S.editing = Option.map (fun e ->
+          let model = match anchor with None -> e.S.model
+            | Some anchor -> EM.select e.S.model ~anchor ~focus:caret in
+          let model = if wrapped then EM.set_lines model [ 0, 4; 4, 7 ] else model in
+          { e with S.model }) st.S.editing });
+        install_worker ~repo:h.repo h;
+        Editor_keys.apply_input "b2" (EI.Key (key, false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("platform deletion: " ^ name)
+          ((match S.editing () with
+            | Some e -> e.S.uuid = "b2" && e.S.buffer = expected
+                && e.S.model.EM.caret = expected_caret
+                && not (EM.has_selection e.S.model)
+            | None -> false)
+           && Option.is_some (S.find "b1") && Option.is_some (S.find "b3")
+           && not (List.mem "delete-blocks" (op_names ())));
+        reset_editor ();
+        run rest
+  in run cases
+
+let test_text_selection_arrows (h : host) =
+  let cases = List.concat_map (fun source ->
+    List.concat_map (fun up -> List.map (fun reverse -> source, up, reverse)
+        [ false; true ]) [ true; false ]) [ "abcd"; "ab\ncd\nef" ] in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (source, up, reverse) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" "previous";
+          Test_check.block "b2" source; Test_check.block "b3" "next" ];
+        let lo, hi = if source = "abcd" then 1, 3 else 3, 4 in
+        let anchor, caret = if reverse then hi, lo else lo, hi in
+        set_editing ~uuid:"b2" ~buffer:source ~caret ~base:source;
+        S.set (fun st -> { st with S.editing = Option.map (fun e ->
+          { e with S.model = EM.select e.S.model ~anchor ~focus:caret }) st.S.editing });
+        install_worker ~repo:h.repo h;
+        Editor_keys.apply_input "b2"
+          (EI.Key (EM.key_ev (if up then "ArrowUp" else "ArrowDown"), false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (Printf.sprintf "text selection collapses before navigation up=%b reverse=%b" up reverse)
+          (match S.editing () with
+           | Some e -> e.S.uuid = "b2" && e.S.scope = "main" && e.S.buffer = source
+               && e.S.model.EM.caret = (if up then lo else hi)
+               && not (EM.has_selection e.S.model)
+           | None -> false);
+        reset_editor ();
+        run rest
+  in run cases
+
+let test_multi_selection_arrows (h : host) =
+  let scope = "multi-selection-sidebar" in
+  let blocks = List.map (fun u -> Test_check.block u u)
+      [ "before"; "z-first"; "a-last"; "after" ] in
+  stage_page h (List.rev blocks);
+  reset_editor ();
+  let release = S.register_block_source ~scope (fun () -> blocks) in
+  List.iter (fun (up, anchor) ->
+    S.set (fun st -> { st with S.selection_scope = scope;
+      selected = S.String_set.of_list [ "z-first"; "a-last" ]; anchor = Some anchor });
+    A.move_selection_focus up;
+    let expected = if up then "before" else "after" in
+    check (Printf.sprintf "multi-selection navigation uses scoped endpoint up=%b anchor=%s" up anchor)
+      (S.selected () = S.String_set.singleton expected
+       && S.anchor () = Some expected && S.selection_scope () = scope))
+    [ true, "z-first"; true, "a-last"; false, "z-first"; false, "a-last" ];
+  A.clear_selection ();
+  release ()
+
 let test_zoom_structure_boundary (h : host) =
   let saved = h.snapshot () in
   let stage uuid =
@@ -1415,6 +1508,9 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_selected_open h in
   let* () = test_scoped_indent_target h in
   let* () = test_move_block_chord h in
+  let* () = test_platform_delete h in
+  let* () = test_text_selection_arrows h in
+  test_multi_selection_arrows h;
   let* () = test_zoom_structure_boundary h in
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in

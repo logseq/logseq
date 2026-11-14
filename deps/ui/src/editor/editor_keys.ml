@@ -393,6 +393,10 @@ let edit_arrows ~route ~conduit uuid (kev : Edit_model.key_event)
     (* cljs mod+up / mod+down collapse/expand the block's children *)
     A.collapse_expand ~collapse:up ();
     m)
+  else if not (kev.shift || kev.alt) && Edit_model.has_selection m then
+    let lo, hi = A.sel_span_of m in
+    let caret = if up then lo else hi in
+    Edit_model.select m ~anchor:caret ~focus:caret
   else
     let first = Edit_model.first_line m in
     let last = Edit_model.last_line m in
@@ -425,6 +429,16 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
   in
   if Edit_model.composing m then m
   else if ac_popup_open () && ac_owned_key key then m
+  else if key = "Backspace" && meta && not (ctrl || kev.alt)
+          && Ui_services.env_is_mac () then
+    let intent = if Edit_model.has_selection m then Edit_input.Del_selection
+      else Edit_input.Del_line_backward in
+    Edit_input.handle ~route ~conduit m (Edit_input.Delete intent)
+  else if ctrl && not (meta || kev.alt) && not (Ui_services.env_is_mac ())
+          && (key = "Backspace" || key = "Delete") then
+    let intent = if key = "Backspace" then Edit_input.Del_word_backward
+      else Edit_input.Del_word_forward in
+    Edit_input.handle ~route ~conduit m (Edit_input.Delete intent)
   else if (match S.editing () with Some e -> e.S.uuid = uuid && S.is_draft e | None -> false) then
     (match key with
      | "Enter" when shift -> Edit_model.insert_text m "\n"
@@ -1168,13 +1182,16 @@ and apply_input ?frame uuid ev =
        | _ -> S.note_input ());
       let route = A.route_of uuid in
       let conduit = A.conduit_of uuid in
-      (* Visual-line hit testing is needed for line navigation, not for
+      (* Visual-line hit testing is needed for line navigation/deletion, not for
          every inserted character. On web it reads the already rendered
          surface; the host paints the caret after the content flush. *)
       let m0 =
         match ev with
         | Edit_input.Key ({ Edit_model.key = "ArrowUp" | "ArrowDown" | "Home" | "End"; _ }, _)
           when not (Edit_model.composing e.S.model) ->
+            A.refresh_lines e.S.model conduit
+        | Edit_input.Key ({ Edit_model.key = "Backspace"; meta = true; _ }, _)
+          when Ui_services.env_is_mac () && not (Edit_model.composing e.S.model) ->
             A.refresh_lines e.S.model conduit
         | _ -> e.S.model
       in

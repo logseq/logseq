@@ -1747,8 +1747,9 @@ let select_parent () =
 (* move selection up/down one block (single-block arrow nav in normal
    mode, plain move for shift-extend callers) *)
 let move_selection_focus up =
-  match S.selected () |> S.String_set.elements with
-  | [ cur ] -> (
+  let uuids = selected_uuids () in
+  match (if up then uuids else List.rev uuids) with
+  | cur :: _ -> (
       let nb =
         (if up
          then S.prev_visible ~scope:(S.selection_scope ())

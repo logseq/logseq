@@ -626,7 +626,7 @@ let keymap m ev : edit_action =
     | "Backspace" ->
         if has_selection m then Delete D_selection
         else if ev.alt then Delete D_word_backward
-        else if m.caret = 0 then Merge_prev
+        else if m.caret = 0 && not (ev.shift || cmd) then Merge_prev
         else Delete D_backward
     | "Delete" ->
         if has_selection m then Delete D_selection
