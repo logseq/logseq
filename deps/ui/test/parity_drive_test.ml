@@ -1227,7 +1227,7 @@ let test_sidebar_nav () =
           ; recents = state []
           ; nav_checked = state [ "flashcards"; "all-pages" ]
           ; nav_tag_titles = state []
-          ; items = state []
+          ; block_sources = Hashtbl.create 8; items = state []
           ; open_menu = state ""
           ; groups_collapsed = state []
           ; left_width = state 246.

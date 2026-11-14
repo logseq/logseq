@@ -411,7 +411,7 @@ let set_right_sidebar_visible a _b _c _d =
    items directly *)
 let clear_right_sidebar_blocks a _b _c _d =
   (match Sidebar_state.current () with
-   | Some st -> Runtime.signal_set st.Sidebar_state.items []
+   | Some st -> Sidebar_state.set_items st []
    | None -> ());
   let close =
     match Wire.get (arg_map a) "close" with

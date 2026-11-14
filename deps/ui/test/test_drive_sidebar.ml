@@ -40,6 +40,75 @@ let host () : (Model.t, Action.t) Shared_scenarios_sidebar.host =
   ; set_language = (fun m -> Settings_view.set_language m)
   }
 
+let block_instance_ownership () =
+  let module E = Editor_state in
+  let module A = Editor_actions in
+  let module M = Drive.Model in
+  let session = Test_drive.s () in
+  let state = Option.get (Sidebar_state.current ()) in
+  let previous_items = Runtime.signal_get state.items and previous_editor = E.read () in
+  let previous_reader = !Runtime.read_model in
+  let was_open = (Drive.Session.read_model session).Model.right_sidebar_open in
+  let target = block ~children:[block "instance-child" "child"] "instance-target" "target" in
+  let page_panel = { (push_item "instance-page" "page") with
+    blocks = [block ~children:[block "instance-before" "before"; target] "instance-parent" "parent"] } in
+  let block_panel = { (push_item "instance-root" "root") with
+    kind = "block"; uuid = Some "instance-target"; blocks = [target] } in
+  let rec scope_of node =
+    let attrs = match M.string_prop node "data-attrs" with
+      | Some encoded -> Lui_protocol.data_attrs_decode encoded | None -> [] in
+    match List.assoc_opt "data-cid" attrs with
+    | Some _ as scope -> scope
+    | None -> List.find_map scope_of (M.children session.Drive.Session.tree node.M.id)
+  in
+  let panel_scope index =
+    let body = Test_drive.first ("prop:accessibility-identifier=\"sidebar-panel-content-"
+      ^ string_of_int index ^ "\"") in
+    Option.get (Option.bind body scope_of)
+  in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model := previous_reader;
+    Sidebar_state.set_items state previous_items;
+    E.set (fun _ -> previous_editor);
+    if (Drive.Session.read_model session).Model.right_sidebar_open <> was_open then
+      Runtime.send Action.Toggle_right_sidebar)
+    (fun () ->
+      if not was_open then Runtime.send Action.Toggle_right_sidebar;
+      Runtime.read_model := (fun () -> {(previous_reader ()) with Model.repo = Some "sidebar-occurrence-fixture"});
+      E.set (fun editor -> {editor with E.editing = None});
+      Sidebar_state.set_items state [page_panel; block_panel];
+      let page_scope = panel_scope 0 and root_scope = panel_scope 1 in
+      check "sidebar repeated instances have distinct rendered owners" (page_scope <> root_scope);
+      let check_order () =
+        List.iter (fun (scope, parent, index, previous) ->
+          let found = Option.map (fun (parent, index) ->
+            Option.bind parent (fun block -> block.Model.block_uuid), index)
+              (E.find_parent_in_scope ~scope "instance-target") in
+          check "sidebar occurrence resolves its own parent and index" (found = Some (parent, index));
+          A.select_single_in ~scope "instance-target";
+          check "sidebar occurrence keeps its own previous sibling"
+            (Option.bind (E.prev_sibling "instance-target") (fun block -> block.Model.block_uuid) = previous))
+          [page_scope, Some "instance-parent", 1, Some "instance-before";
+           root_scope, None, 0, None]
+      in
+      check_order ();
+      Sidebar_state.move_item state block_panel.key 0;
+      check "sidebar panel reorder preserves occurrence identity"
+        (panel_scope 0 = root_scope && panel_scope 1 = page_scope);
+      check_order ();
+      Sidebar_state.remove_item state block_panel.key;
+      check "closing a sidebar occurrence retires its source and selection"
+        (E.outliner_blocks_in_scope root_scope = None
+         && E.selection_scope () <> root_scope);
+      Sidebar_state.push_item state block_panel;
+      E.set (fun editor -> {editor with E.editing = Some
+        (E.mk_editing ~uuid:"instance-target" ~buffer:"target" ~caret:0 ~scope:root_scope ~base:"target" ())});
+      Sidebar_state.remove_item state block_panel.key;
+      Runtime.flush ();
+      check "closing an editing occurrence exits its editor and retires its ownership"
+        (E.editing () = None && E.outliner_blocks_in_scope root_scope = None
+         && E.selection_scope () <> root_scope))
+
 let pointer_reorder ~finish () =
   let session = Test_drive.s () in
   let state = Option.get (Sidebar_state.current ()) in
@@ -67,7 +136,7 @@ let pointer_reorder ~finish () =
         element);
   let items = List.map (fun key -> { (push_item key key) with collapsed = true })
     ["pointer-a"; "pointer-b"; "pointer-c"] in
-  Runtime.signal_set state.items items;
+  Sidebar_state.set_items state items;
   let dispatch id event =
     match Test_drive.first ("prop:accessibility-identifier=\"" ^ id ^ "\"") with
     | Some node -> Drive.Session.dispatch session (event node.Drive.Model.id)
@@ -113,7 +182,7 @@ let pointer_reorder ~finish () =
         Stub_dom.set_field document "getElementById" previous_get;
         Runtime.read_model := previous_reader;
         Runtime.load_gen := previous_generation;
-        Runtime.signal_set state.items previous_items;
+        Sidebar_state.set_items state previous_items;
         if (Drive.Session.read_model session).Model.right_sidebar_open <> was_open then
           Runtime.send Action.Toggle_right_sidebar;
         finish ())))
@@ -142,4 +211,5 @@ let run ~finish =
   check "reopening a dock does not resurrect its old menu"
     (Runtime.signal_get st.open_menu = "");
   if not was_open then toggle ();
+  block_instance_ownership ();
   pointer_reorder ~finish ()

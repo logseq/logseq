@@ -37,6 +37,15 @@ type item =
   ; collapsed : bool (* cljs :ui/sidebar-collapsed-blocks — panel body *)
   }
 
+(* A panel owns a projection, while UUIDs and DB ordering remain shared. *)
+let item_scope (item : item) = "sidebar-" ^ item.key
+
+type item_source =
+  { repo : string
+  ; blocks : Model.block list ref
+  ; unregister : unit -> unit
+  }
+
 type t =
   { favorites : Model.page list Signal.state
   ; home_page : Model.page option Signal.state
@@ -45,6 +54,7 @@ type t =
   ; nav_checked : string list Signal.state
   ; nav_tag_titles : (string * string) list Signal.state
   ; items : item list Signal.state
+  ; block_sources : (string, item_source) Hashtbl.t
   ; open_menu : string Signal.state
   ; groups_collapsed : string list Signal.state
   ; left_width : float Signal.state
@@ -53,6 +63,51 @@ type t =
   }
 
 let st_ref : t option ref = ref None
+
+let retire_missing_sources st =
+  let live = List.fold_left (fun scopes item ->
+    Editor_state.String_set.add (item_scope item) scopes)
+      Editor_state.String_set.empty (Runtime.signal_get st.items) in
+  let editing = if Editor_state.ready () then Editor_state.editing () else None in
+  let retired = Hashtbl.fold (fun scope source retired ->
+    if Editor_state.String_set.mem scope live
+       || (match editing with Some editing -> editing.Editor_state.scope = scope | None -> false)
+    then retired else (scope, source) :: retired) st.block_sources [] in
+  List.iter (fun (scope, source) ->
+    source.unregister ();
+    Hashtbl.remove st.block_sources scope;
+    if Editor_state.ready () && Editor_state.selection_scope () = scope then
+      Editor_actions.clear_selection
+        ~scope:(match Runtime.route () with Model.Block_zoom uuid -> "zoom-" ^ uuid | _ -> "main") ()) retired
+
+let bind_editor_sources st (ctx : Lui_ui.ui_context) =
+  Editor_state.ensure ctx;
+  let subscription = Signal.subscribe ~emit_initial:false (Editor_state.editing_target_sig ())
+      (fun _ -> retire_missing_sources st) in
+  Signal.on_dispose ctx.ui_scope (fun () -> Signal.dispose_subscription subscription)
+
+let set_items st items =
+  let repo = Runtime.repo () in
+  List.iter (fun item ->
+    let scope = item_scope item in
+    let existing = Hashtbl.find_opt st.block_sources scope in
+    match existing with
+    | Some source when source.repo = repo -> source.blocks := item.blocks
+    | _ ->
+        Option.iter (fun source -> source.unregister ()) existing;
+        let blocks = ref item.blocks in
+        let unregister = Editor_state.register_block_source ~scope ~kind:Editor_state.Outliner
+          (fun () -> if Runtime.repo () = repo then !blocks else []) in
+        Hashtbl.replace st.block_sources scope {repo; blocks; unregister}) items;
+  Runtime.signal_set st.items items;
+  retire_missing_sources st;
+  (* Keep a closing editor's source until the ordinary save/exit completes. *)
+  if Editor_state.ready () then
+    match Editor_state.editing () with
+    | Some editing when Hashtbl.mem st.block_sources editing.Editor_state.scope
+        && not (List.exists (fun item -> item_scope item = editing.Editor_state.scope) items) ->
+        Editor_actions.exit_edit ~select:false
+    | _ -> ()
 
 (* the live model signal — stored at init so document-event handlers
    read current model state without a shadow ref of their own *)
@@ -703,7 +758,7 @@ let push_item st it =
   let items = Runtime.signal_get st.items in
   match List.find_opt (fun (current : item) -> current.key = it.key) items with
   | Some current ->
-      Runtime.signal_set st.items
+      set_items st
         ({ current with collapsed = false } ::
          List.filter (fun (other : item) -> other.key <> it.key) items)
   | None -> begin
@@ -713,11 +768,11 @@ let push_item st it =
        signal_set and must not undo a user's collapse in this pane *)
     (match it.kind, it.uuid with
      | "block", Some u ->
-         Editor_state.expand_root ~scope:"sidebar" u
+         Editor_state.expand_root ~scope:(item_scope it) u
      | _ -> ());
     (* cljs sidebar-add-block! conses the entry — newest pane is on
        TOP of the sidebar item list, not appended at the bottom *)
-    Runtime.signal_set st.items (it :: items)
+    set_items st (it :: items)
   end
 
 (* cljs sidebar-add-block! :search — a cmdk-block pane pinned to the
@@ -748,14 +803,14 @@ let remove_item st key =
     List.filter (fun (i : item) -> i.key <> key)
       (Runtime.signal_get st.items)
   in
-  Runtime.signal_set st.items rest;
+  set_items st rest;
   (* cljs: once the last item is closed the right dock closes itself —
      same rule clear_items applies *)
   if rest = [] && (model ()).Model.right_sidebar_open then
     Runtime.send Action.Toggle_right_sidebar
 
 let toggle_props st key =
-  Runtime.signal_set st.items
+  set_items st
     (List.map
        (fun (i : item) ->
          if i.key = key then { i with props_collapsed = not i.props_collapsed }
@@ -774,10 +829,10 @@ let move_item st key destination =
         | [] -> [ item ]
         | first :: tail -> first :: insert (index - 1) tail
       in
-      Runtime.signal_set st.items (insert destination rest)
+      set_items st (insert destination rest)
 
 let toggle_collapsed st key =
-  Runtime.signal_set st.items
+  set_items st
     (List.map
        (fun (i : item) ->
          if i.key = key then { i with collapsed = not i.collapsed }
@@ -785,32 +840,32 @@ let toggle_collapsed st key =
        (Runtime.signal_get st.items))
 
 let set_collapsed st key v =
-  Runtime.signal_set st.items
+  set_items st
     (List.map
        (fun (i : item) ->
          if i.key = key then { i with collapsed = v } else i)
        (Runtime.signal_get st.items))
 
 let collapse_others st key v =
-  Runtime.signal_set st.items
+  set_items st
     (List.map
        (fun (i : item) ->
          if i.key = key then i else { i with collapsed = v })
        (Runtime.signal_get st.items))
 
 let collapse_all st v =
-  Runtime.signal_set st.items
+  set_items st
     (List.map
        (fun (i : item) -> { i with collapsed = v })
        (Runtime.signal_get st.items))
 
 let remove_rest st key =
-  Runtime.signal_set st.items
+  set_items st
     (List.filter (fun (i : item) -> i.key = key)
        (Runtime.signal_get st.items))
 
 let clear_items st =
-  Runtime.signal_set st.items [];
+  set_items st [];
   if (model ()).Model.right_sidebar_open then
     Runtime.send Action.Toggle_right_sidebar
 ;;
@@ -861,7 +916,7 @@ let open_uuid ?(edit = false) st uuid =
        | Some item ->
            push_item st item;
            if edit && context = (Runtime.repo (), Runtime.route ()) then
-             Editor_actions.enter_edit ~scope:"sidebar" uuid 0
+             Editor_actions.enter_edit ~scope:(item_scope item) uuid 0
        | None -> ());
       Js.Promise.resolve ())
 
@@ -954,7 +1009,7 @@ let refresh_items repo st =
          Array.iter2 (fun original fresh ->
              Hashtbl.replace refreshed original.key { fresh with key = original.key })
            (Array.of_list items) arr;
-         Runtime.signal_set st.items
+         set_items st
            (List.map (fun current ->
                 match Hashtbl.find_opt refreshed current.key with
                 | None -> current
@@ -1319,6 +1374,7 @@ let init (ms : Model.t Signal.signal) : t =
         ; nav_checked = Signal.state owner (nav_checked_of_storage ())
         ; nav_tag_titles = Signal.state owner []
         ; items = Signal.state owner []
+        ; block_sources = Hashtbl.create 8
         ; open_menu = Signal.state owner ""
         ; groups_collapsed = Signal.state owner []
         ; left_width =
@@ -1335,11 +1391,6 @@ let init (ms : Model.t Signal.signal) : t =
       in
       st_ref := Some st;
       model_signal := Some ms;
-      (* sidebar item blocks are editable: expose them to Editor_state.find
-         so click-to-edit works on .cp__right-sidebar block rows *)
-      Editor_state.add_block_source ~scope:"sidebar" ~kind:Editor_state.Outliner (fun () ->
-          List.concat_map (fun (it : item) -> it.blocks)
-            (Runtime.signal_get st.items));
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
       Ui_services.dom_on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with

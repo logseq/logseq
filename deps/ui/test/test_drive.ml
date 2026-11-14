@@ -734,11 +734,11 @@ let test_help () =
   Runtime.read_model:=(fun () -> Signal.get ms);
   Fun.protect ~finally:(fun () ->
     Runtime.read_model:=previous_read;
-    Runtime.signal_set st.items saved;
+    Sidebar_state.set_items st saved;
     if (Signal.get ms).Model.help_open then send Action.Help_toggle;
     if (Signal.get ms).Model.right_sidebar_open<>was_open then send Action.Toggle_right_sidebar;
     Runtime.flush ()) (fun () ->
-    Runtime.signal_set st.items [];
+    Sidebar_state.set_items st [];
     if (Signal.get ms).Model.right_sidebar_open then send Action.Toggle_right_sidebar;
     let trigger=List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "help-menu-trigger")
       (M.all_nodes (tree ())) in
@@ -771,7 +771,7 @@ let test_help () =
       (find_where (fun n -> M.string_prop n "text"=Some (I18n.t "help/learn-more" ^ {js| →|js}))<>[]);
     check "Shortcut help includes the existing keymap search"
       (find_where (fun n -> M.string_prop n "placeholder"=Some "Search shortcuts...")<>[]);
-    Runtime.signal_set st.items (List.map (fun (it : Sidebar_state.item) -> {it with collapsed=true}) items);
+    Sidebar_state.set_items st (List.map (fun (it : Sidebar_state.item) -> {it with collapsed=true}) items);
     if (Signal.get ms).Model.right_sidebar_open then send Action.Toggle_right_sidebar;
     open_shortcuts ();
     check "Reopening shortcut help expands the retained item without duplicates"
@@ -2066,7 +2066,7 @@ let test_sdk_api () =
         | None -> true
       in
       (match Sidebar_state.current () with
-       | Some st -> Runtime.signal_set st.Sidebar_state.items saved_items
+       | Some st -> Sidebar_state.set_items st saved_items
        | None -> ());
       cleared);
   sdk_expect "sdk get_current_page_blocks_tree null without page"

@@ -609,7 +609,7 @@ let sidebar_props_row st (it : Sidebar_state.item) =
                 box ~key:("parea-" ^ it.key)
                   ~style_class:"ls-page-properties ls-properties-area"
                   ~accessibility_identifier:("sbprops-" ^ uuid)
-                  [ Properties_area.sidebar_area ~scope:"sidebar" ~uuid
+                  [ Properties_area.sidebar_area ~scope:(Sidebar_state.item_scope it) ~uuid
                       ~db_id:p.Model.page_db_id
                       ~title:p.Model.page_title
                       ~is_tag:p.Model.page_is_tag ]
@@ -646,6 +646,7 @@ let object_tabs_host (it : Sidebar_state.item) =
 
 let item_body st idx (it : Sidebar_state.item) =
   let n = string_of_int idx in
+  let scope = Sidebar_state.item_scope it in
   (* add-button indent/children flags — same rule the imperative
      doc-scan read off the DOM: the owner row is the item's own block
      (a block-kind item, blocks = [owner]) -> indented + children
@@ -730,15 +731,15 @@ let item_body st idx (it : Sidebar_state.item) =
                      [ Ui_components.Prop.position `relative ]
                      (box ~key:("pbin-" ^ it.key)
                         ~style_class:"page-blocks-inner"
-                     ~data_attrs:[ ("data-cid", "sidebar") ]
+                     ~data_attrs:[ ("data-cid", scope) ]
                      (List.map
-                        (Tree.block_row ~scope:"sidebar")
+                        (Tree.block_row ~scope)
                         it.blocks
                       @ [ (fun mount_ctx mount_parent ->
                             Editor_state.ensure mount_ctx;
-                            let add = Add_button.el ?puuid:it.Sidebar_state.uuid ~scope:"sidebar"
+                            let add = Add_button.el ?puuid:it.Sidebar_state.uuid ~scope
                             ~previous_blank:(reactive
-                              (Add_button.previous_blank ~scope:"sidebar" it.blocks)
+                              (Add_button.previous_blank ~scope it.blocks)
                               (Editor_state.collapse_sig ()))
                             ~library:(match it.Sidebar_state.page with
                               | Some page -> page.Model.page_is_library
@@ -817,6 +818,7 @@ let inner st =
 let render (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let st = Sidebar_state.ensure ms in
+  Sidebar_state.bind_editor_sources st ctx;
   (Logseq_el.fragment
      [ (* the hand-rolled .resizer separator is gone — the docked
           split's divider owns the drag affordance *)
