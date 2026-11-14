@@ -736,9 +736,14 @@ let theme_items (svs : Svs.t) q =
   let installed =
     if String.trim q = "" then installed
     else svs.Svs.fuzzy_search ~extract:name ~limit:100 installed q in
+  let mode =
+    match Ui_services.theme_mode () with
+    | "system" -> if Ui_services.theme_prefers_dark () then "dark" else "light"
+    | mode -> mode
+  in
   let default = wmap ["name", Wire.String (svs.Svs.i18n "theme/logseq-default");
     "pid", Wire.String "logseq-classic-theme";
-    "mode", Wire.String (Ui_services.theme_mode ()); "url", Wire.Nil] in
+    "mode", Wire.String mode; "url", Wire.Nil] in
   List.map (fun theme ->
     let field key = Option.value (Wire.map_get_string theme key) ~default:"" in
     { ikey = String.concat "\000" ["theme"; field "pid"; field "url"; name theme; field "mode"]

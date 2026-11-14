@@ -242,7 +242,11 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
       match Wire.get theme "url" with
       | Some Wire.Nil ->
           Ui_services.storage_remove "ui/custom-theme";
-          Option.iter Ui_theme.apply (Wire.map_get_string theme "mode")
+          Option.iter
+            (fun mode ->
+              Settings_view.apply_theme_dom mode;
+              Ui_services.theme_set_pref mode)
+            (Wire.map_get_string theme "mode")
       | _ -> Plugin_host.report_unavailable "selectTheme")
   ; exec_palette_command = Plugin_host.exec_palette_command
   ; hook_app =
