@@ -36,6 +36,14 @@ type draft_owner =
 
 type editing_owner = Persisted | Explicit_draft of draft_owner
 
+type drag_owner = { uuid : string; scope : string }
+type drag_preview =
+  { source : drag_owner
+  ; target : (drag_owner * Block_drag.zone) option
+  }
+
+let drag_owner ~scope uuid : drag_owner = { uuid; scope }
+
 type editing =
   { uuid : string; buffer : string; scope : string; base : string
   ; model : Edit_model.t
@@ -96,10 +104,9 @@ type t =
       (* bumped by Render_inline cache invalidations via worker_events —
          lets painted rows recheck their rendered-ref gens without
          subscribing the whole state record *)
-  ; drag : (string * string * string) option
-      (* native bullet-drag affordance: (src_uuid, tgt_uuid, move_to)
-         while a drag gesture is in flight — the web dnd-kit path never
-         sets it *)
+  ; drag : drag_preview option
+      (* Native affordances retain the presented source and target owners.
+         The web dnd-kit path renders its own indicator. *)
   }
 
 let initial =
@@ -283,7 +290,7 @@ type field_sigs =
   ; action_bar_sig : bool Signal.signal
   ; collapse_sig : collapse_view Signal.signal
   ; invalidation_sig : int Signal.signal
-  ; drag_sig : (string * string * string) option Signal.signal
+  ; drag_sig : drag_preview option Signal.signal
   }
 
 let field_sigs_opt : field_sigs option ref = ref None
@@ -614,9 +621,9 @@ let rec find_parent_in blocks uuid =
           | Some _ as r -> r
           | None -> find_parent_in rest uuid))
 
-let find_parent uuid =
+let find_parent_in_scope ~scope uuid =
   (* top-level: parent = None (page) *)
-  let tops = blocks_in_scope (interaction_scope ()) in
+  let tops = blocks_in_scope scope in
   let rec top_idx i = function
     | [] -> None
     | b :: _ when b.Model.block_uuid = Some uuid -> Some i
@@ -625,6 +632,8 @@ let find_parent uuid =
   match top_idx 0 tops with
   | Some i -> Some (None, i)
   | None -> find_parent_in tops uuid
+
+let find_parent uuid = find_parent_in_scope ~scope:(interaction_scope ()) uuid
 
 (* uuid of the top-level row containing [uuid] — virtual lists window
    top-level items only, so a nested block's row lives under its

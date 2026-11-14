@@ -1528,16 +1528,13 @@ let queue_racing_key ev uuid =
 module Drag = Block_drag
 
 let drag_state = ref Drag.empty
-let drag_scope = ref "main"
 
 let drag_context () = Runtime.repo (), Runtime.route ()
 
 let publish_drag () =
   if S.ready () then begin
-    let next = Option.map (fun (source, target) ->
-      match target with
-      | Some (target, zone) -> source, target, Drag.zone_name zone
-      | None -> source, "", "") (Drag.preview !drag_state) in
+    let next = Option.map (fun (source, target) -> { S.source; target })
+      (Drag.preview !drag_state) in
     if next <> S.drag () then S.set_drag next
   end
 
@@ -1554,36 +1551,37 @@ let arm_drag (ev : Ui_services.ev) =
   | Some el -> (
       match el.Ui_services.attr "data-blockid" with
       | Some u when S.find u <> None ->
-          drag_scope := A.scope_of_el el;
-          drag_state := Drag.arm ~context:(drag_context ()) ~source:u
+          let source = S.drag_owner ~scope:(A.scope_of_el el) u in
+          drag_state := Drag.arm ~context:(drag_context ()) ~source
             ~x:ev.Ui_services.x ~y:ev.Ui_services.y
       | _ -> ())
   | None -> ()
 
-let native_drag_target ev src =
+let native_drag_target ev (src : S.drag_owner) =
   if readonly_block_target ev.Ui_services.target then None
   else
     match closest ".ls-block" (ev.Ui_services.target) with
     | Some el -> (
         match el.Ui_services.attr "data-blockid" with
-        | Some t when A.can_drop_dragged_block src t ->
+        | Some t when A.can_drop_dragged_block src.S.uuid t ->
             let left, top, width, height = el.Ui_services.rect () in
             if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
             then None
             else
+              let scope = A.scope_of_el el in
               let first =
-                match S.find_parent t with
+                match S.find_parent_in_scope ~scope t with
                 | Some (_, idx) -> idx = 0
                 | None -> false
               in
-              Some (t, Drag.zone ~first ~left ~top
+              Some (S.drag_owner ~scope t, Drag.zone ~first ~left ~top
                 ~x:ev.Ui_services.x ~y:ev.Ui_services.y)
         | _ -> None)
     | None -> None
 
 let native_drag_ready () =
   S.ready () && not (Ui_services.env_publishing ())
-  && Option.fold ~none:false ~some:(fun uuid -> S.find uuid <> None)
+  && Option.fold ~none:false ~some:(fun (source : S.drag_owner) -> S.find source.S.uuid <> None)
        (Drag.source !drag_state)
 
 let on_native_pointermove ev =
@@ -1598,7 +1596,7 @@ let on_native_pointermove ev =
           ~x:ev.Ui_services.x ~y:ev.Ui_services.y
           ~target:(native_drag_target ev source) !drag_state;
         if not was_active && Drag.preview !drag_state <> None then
-          A.begin_block_drag ~scope:!drag_scope source;
+          A.begin_block_drag ~scope:source.S.scope source.S.uuid;
         publish_drag ()
 
 let on_native_pointerup ev =
@@ -1612,8 +1610,8 @@ let on_native_pointerup ev =
             ~target:(native_drag_target ev source) !drag_state in
           drag_state := next;
           publish_drag ();
-          Option.iter (fun (source, target, zone) ->
-            A.drop_dragged_block source target (Drag.zone_name zone)) drop
+          Option.iter (fun ((source : S.drag_owner), (target : S.drag_owner), zone) ->
+            A.drop_dragged_block source.S.uuid target.S.uuid (Drag.zone_name zone)) drop
 
 let consume_drag_click () =
   let next, suppress = Drag.consume_click !drag_state in

@@ -158,8 +158,9 @@ let update_drop_target src tgt_el client_x client_y =
   match Web_dom.el_get_attr tgt_el "data-blockid" with
   | Some tgt when A.can_drop_dragged_block src tgt ->
       let rect = Web_dom.el_bounding_rect tgt_el in
+      let scope = A.scope_of_el (Ui_dom_web.el_of tgt_el) in
       let first =
-        match S.find_parent tgt with
+        match S.find_parent_in_scope ~scope tgt with
         | Some (_, idx) -> idx = 0
         | None -> false
       in
