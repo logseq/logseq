@@ -127,6 +127,7 @@ type popup_menu =
 
 type popup =
   { kind : popup_kind
+  ; configured : (Popups_state.configured_checkpoint * unit ref) option
   ; uuid : string
   ; from : int (* caret position the cleared slash range ended at *)
   ; cy : int
@@ -161,16 +162,38 @@ let publish () =
   | Some vs -> Runtime.signal_set vs !active
   | None -> ()
 
+let owns_popup p =
+  match p.configured with
+  | None -> (match !active with Some {configured=None; _} -> true | _ -> false)
+  | Some (_, token) ->
+      match !active with
+      | Some {configured=Some (_, live); _} -> token == live
+      | _ -> false
+
+let popup_current p =
+  owns_popup p && match p.configured with
+  | None -> true
+  | Some (checkpoint, _) -> Popups_state.configured_checkpoint_current checkpoint
+
+let retire_popup () =
+  active := None;
+  Runtime.editor_popup_open := false;
+  publish ()
+
 let update_p f =
   (match !active with
-   | Some p -> active := Some (f p)
+   | Some p when popup_current p -> active := Some (f p)
+   | Some _ -> retire_popup ()
    | None -> ());
   publish ()
 
 let update_rpt f =
   update_p (fun p -> { p with rpt = Option.map f p.rpt })
 
-let with_p f = match !active with Some p -> f p | None -> ()
+let with_p f = match !active with
+  | Some p when popup_current p -> f p
+  | Some _ -> retire_popup ()
+  | None -> ()
 
 let cur_rpt () = match !active with Some p -> p.rpt | None -> None
 
@@ -191,14 +214,20 @@ let focus_day () =
   | None -> ()
 
 let close_popup ?focus_caret p =
-  active := None;
-  Runtime.editor_popup_open := false;
-  publish ();
+  if owns_popup p then begin
+  retire_popup ();
   match focus_caret with
   | Some c ->
       Editor_sink.focus_input p.uuid;
       A.set_caret p.uuid c
   | None -> ()
+  end
+
+let accept_popup p =
+  if popup_current p then true else begin
+    if owns_popup p then close_popup p;
+    false
+  end
 
 let () = S.on_edit_exit (fun uuid ->
     match !active with
@@ -216,6 +245,7 @@ let insert_at_trigger p text =
   replace_range p.uuid p.from to_ text
 
 let commit_cal p =
+  if accept_popup p then
   let d = day_date p in
   match p.kind with
   | Cal_insert _ ->
@@ -322,6 +352,7 @@ let open_choice_menu sel items =
 let parse_nlp_date s = Dates.parse s
 
 let nlp_commit p =
+  if accept_popup p then
   let v =
     match p.kind with
     | Cal_insert text | Cal_prop (_, text) -> String.trim text
@@ -372,6 +403,7 @@ let clamp_x () =
    split as commit_cal: the editing path saves the live buffer first so
    typed-but-unsaved text survives the refresh *)
 let apply_props p ops =
+  if accept_popup p then
   match A.edit_model p.uuid with
   | Some _ -> prop_batch ~caret:p.from p.uuid ops
   | None -> ignore (Ops.apply_and_refresh ops)
@@ -925,6 +957,7 @@ let cal_body ps (p : popup) : t =
    p-2/gap-2 column — one column at 15px inset (7+8) reproduces the
    same content box: 288 wide, 258-wide inputs, Submit button below *)
 let submit_link p =
+  if accept_popup p then
   let url, label, image =
     match p.kind with
     | Link_form { url; label; image } ->
@@ -1020,7 +1053,7 @@ let load_repeat p ident =
      in
      (* the popup may have closed while fetching *)
      (match !active with
-      | Some ap when ap.uuid = p.uuid && ap.rpt = None ->
+      | Some ap when ap.uuid = p.uuid && ap.rpt = None && popup_current p ->
           let block = Properties_data.untag wires.(0)
           and prop_w = Properties_data.untag wires.(1)
           and units = W.elems wires.(2)
@@ -1222,11 +1255,12 @@ let load_repeat p ident =
 
 (* ---------- popup entries ---------- *)
 
-let open_cal kind uuid from =
+let open_cal ?configured kind uuid from =
+  let configured = Option.map (fun checkpoint -> checkpoint, ref ()) configured in
   let today = Dates.fields (Dates.date_now ()) in
   let x, y = cal_pos uuid in
   let p =
-    { kind; uuid; from
+    { kind; configured; uuid; from
     ; cy = today.Dates.year; cm = today.Dates.month; cd = today.Dates.day
     ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
@@ -1239,10 +1273,11 @@ let open_cal kind uuid from =
 
 (* ---------- link / image-link form ---------- *)
 
-let open_link_form image uuid from =
+let open_link_form ?configured image uuid from =
+  let configured = Option.map (fun checkpoint -> checkpoint, ref ()) configured in
   let x, y = cal_pos uuid in
   let p =
-    { kind = Link_form { image; url = ""; label = "" }; uuid; from; cy = 0; cm = 0; cd = 0
+    { kind = Link_form { image; url = ""; label = "" }; configured; uuid; from; cy = 0; cm = 0; cd = 0
     ; hour = 0; tmin = 0; x; y; menu = None; rpt = None }
   in
   active := Some p;
@@ -1256,6 +1291,7 @@ let open_link_form image uuid from =
 let popup_key ~key ~inside ~prevent_default =
   match !active with
   | None -> false
+  | Some p when not (popup_current p) -> close_popup p; false
   | Some p -> (
       match (p.kind, key) with
       | (Cal_insert _ | Cal_prop _),
@@ -1621,11 +1657,48 @@ let on_command (ev : Ui_services.ev) =
                 let to_ = Option.value (detail_int ev "to") ~default:from in
                 run_editor_cmd e.uuid command from to_))
 
+let run_configured_ui (checkpoint : Popups_state.configured_checkpoint) ~current action =
+  let uuid = checkpoint.configured_uuid and caret = checkpoint.configured_caret in
+  let prefix = String.sub checkpoint.configured_editor.model.source 0 caret in
+  let selected = Option.fold ~none:false ~some:(( <> ) caret)
+      checkpoint.configured_editor.model.anchor in
+  let from = match action with
+    | (Popups_state.Configured_link_form _ | Popups_state.Configured_date_picker)
+      when selected -> None
+    | Popups_state.Configured_link_form _ ->
+        if caret >= 5 && String.sub prefix (caret - 5) 5 = "/link"
+        then Some (caret - 5) else None
+    | _ -> Some (Option.value (String.rindex_opt prefix '/') ~default:caret) in
+  match from with
+  | None -> false
+  | Some from ->
+      ignore ((let* () = Ops.flush_pending_save () in
+        if current () && Popups_state.configured_checkpoint_current checkpoint then
+          (match action with
+           | Popups_state.Configured_date_picker ->
+               open_cal ~configured:checkpoint (Cal_insert "") uuid from
+           | Popups_state.Configured_link_form image ->
+               open_link_form ~configured:checkpoint image uuid from
+           | Popups_state.Configured_new_property None ->
+               Properties_dialog.open_for_block uuid
+           | Popups_state.Configured_new_property (Some ident) ->
+               let context_revision () =
+                 if current () && Popups_state.configured_checkpoint_current checkpoint
+                 then Some checkpoint.configured_input_seq else None in
+               Properties_dialog.open_for_block_with_property ~context_revision
+                 ~uuids:[uuid] uuid ~ident);
+        Js.Promise.resolve ())
+        |> Js.Promise.catch (fun error ->
+          Ui_services.log_error ("Configured UI handoff failed", error);
+          Js.Promise.resolve ()));
+      true
+
 let installed = ref false
 
 let install () =
   if not !installed then begin
     installed := true;
+    Popups_state.install_configured_ui run_configured_ui;
     (* the host adapter supplies clipboard, dispatch, file-pick and
        plugin capabilities — installed once with the dispatcher *)
     Editor_cmds.install_host (Editor_cmds_host.host ());

@@ -530,8 +530,72 @@ let configured_continuations finish =
   in
   next [`Unchanged; `Input; `Epoch; `Scope; `Caret; `Popup; `Repo; `Route]
 
+let configured_popup_ownership () =
+  let previous_model = !Runtime.read_model and previous_editor = !Editor_state.st in
+  let previous_popup = !Editor_commands.active and previous_signal = !Editor_commands.popup_vs in
+  let previous_open = !Runtime.editor_popup_open and previous_flush = !Runtime.app_flush in
+  let previous_seq = !Editor_state.edit_input_seq and previous_history = !Editor_state.history_input_before in
+  let previous_pending = !Outliner_ops.pending_save and previous_timer = !Outliner_ops.save_timer in
+  Editor_state.st := Some (Signal.state (Signal.scheduler ()) (Editor_state.read ()));
+  Editor_commands.popup_vs := None;
+  Runtime.app_flush := (fun () -> ());
+  Outliner_ops.pending_save := None;
+  Fun.protect ~finally:(fun () ->
+    Ui_services.timers_clear_timeout !Outliner_ops.save_timer;
+    Runtime.read_model := previous_model; Editor_state.st := previous_editor;
+    Editor_commands.active := previous_popup; Editor_commands.popup_vs := previous_signal;
+    Runtime.editor_popup_open := previous_open; Runtime.app_flush := previous_flush;
+    Editor_state.edit_input_seq := previous_seq; Editor_state.history_input_before := previous_history;
+    Outliner_ops.pending_save := previous_pending; Outliner_ops.save_timer := previous_timer)
+    (fun () -> List.iter (fun image -> List.iter (fun transition ->
+      let uuid = "configured-popup-owner" in
+      let model = ref {Model.initial with repo = Some "configured-popup"} in
+      Runtime.read_model := (fun () -> !model);
+      let editor = Editor_state.mk_editing ~uuid ~scope:"main"
+          ~buffer:"/link" ~base:"/link" ~caret:5 () in
+      Editor_state.set (fun state -> {state with editing = Some editor});
+      let popup_session = ref 0 in
+      let checkpoint : Popups_state.configured_checkpoint =
+        {configured_uuid=uuid; configured_caret=5; configured_editor=editor;
+         configured_repo="configured-popup"; configured_route=Runtime.route ();
+         configured_input_seq= !Editor_state.edit_input_seq;
+         configured_popup_session=popup_session; configured_popup_generation=0} in
+      let open_popup () =
+        if image then begin
+          Editor_commands.open_link_form ~configured:checkpoint false uuid 0;
+          Editor_commands.update_p (fun popup -> {popup with kind=Link_form
+            {image=false;url="https://example.com";label="Example"}})
+        end else Editor_commands.open_cal ~configured:checkpoint (Cal_insert "") uuid 0 in
+      open_popup ();
+      let popup = Option.get !Editor_commands.active in
+      (match transition with
+       | `Unchanged -> ()
+       | `Epoch -> Editor_state.set (fun state -> {state with editing = Some
+           (Editor_state.mk_editing ~uuid ~scope:"main" ~buffer:"/link" ~base:"/link" ~caret:5 ())})
+       | `Scope -> Editor_state.set (fun state -> {state with editing=Some {editor with scope="right"}})
+       | `Input -> Editor_state.note_input ()
+       | `Source -> Editor_actions.update_model uuid (fun value -> Edit_model.set_source value "newer text")
+       | `Caret -> Editor_actions.set_caret uuid 2
+       | `Popup -> open_popup ()
+       | `Autocomplete -> incr popup_session
+       | `Repo -> model := {!model with repo=Some "another-graph"}
+       | `Route -> model := Update.update !model (Action.Navigate_to Model.All_pages));
+      let before = Option.get (Editor_state.editing ()) in
+      if image then Editor_commands.submit_link popup else Editor_commands.commit_cal popup;
+      let after = Option.get (Editor_state.editing ()) in
+      check "Configured popup completion only mutates its owning editor checkpoint"
+        (if transition = `Unchanged then after.buffer <> before.buffer
+         else after.buffer=before.buffer && after.epoch == before.epoch
+           && after.scope=before.scope && after.model.caret=before.model.caret);
+      Ui_services.timers_clear_timeout !Outliner_ops.save_timer;
+      Outliner_ops.pending_save := None;
+      Editor_commands.active := None;
+      Runtime.editor_popup_open := false)
+      [`Unchanged; `Epoch; `Scope; `Input; `Source; `Caret; `Popup; `Autocomplete; `Repo; `Route]) [false;true])
+
 let run_views ~registry ~profile ~finish =
   let finish () = configured_continuations finish in
+  configured_popup_ownership ();
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
@@ -699,7 +763,7 @@ let run_views ~registry ~profile ~finish =
   Runtime.read_model:=(fun () -> {Model.initial with repo=Some "editor-week-fixture";
     graph_config=Wire.Map [Wire.kw "start-of-week",Wire.Int 0]});
   let popup : Editor_commands.popup =
-    {kind=Cal_insert "";uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
+    {kind=Cal_insert "";configured=None;uuid="calendar-keyboard-owner";from=0;cy=2024;cm=1;cd=31;
      hour=0;tmin=0;x=0.;y=0.;menu=None;rpt=None} in
   Editor_commands.active:=Some popup;Editor_commands.popup_vs:=None;
   Editor_commands.nav_month 1;
@@ -3293,7 +3357,7 @@ let popup_press (ev : Ui_services.ev) =
       (Editor_state.mk_editing ~uuid:"b1" ~buffer:"text"
          ~scope:"main" ~base:"text" ()) });
   let popup : Editor_commands.popup =
-    { kind = Editor_commands.Link_form { image = false; url = ""; label = "" }; uuid = "b1"; from = 0
+    { kind = Editor_commands.Link_form { image = false; url = ""; label = "" }; configured = None; uuid = "b1"; from = 0
     ; cy = 2026; cm = 10; cd = 9; hour = 0; tmin = 0; x = 0.; y = 0.
     ; menu = None; rpt = None } in
   Editor_commands.active := Some popup;

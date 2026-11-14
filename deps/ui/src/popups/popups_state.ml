@@ -115,7 +115,13 @@ type ac =
 
 let draft_editing () = Option.fold ~none:false ~some:Editor_state.is_draft (Editor_state.editing ())
 let draft_ac_kind = function Page_ref | Block_ref -> true | _ -> false
-let ac_current ac = Editor_state.replay_current ac.editor (Editor_state.editing ())
+let ac_current ac =
+  let live = Editor_state.editing () in
+  Editor_state.replay_current ac.editor live
+  && match ac.editor, live with
+     | Some before, Some after -> before.epoch == after.epoch
+         && before.uuid = after.uuid && before.scope = after.scope
+     | _ -> true
 
 let ac_height_limit kind ~flipped available =
   let inset, cap =
@@ -1343,12 +1349,14 @@ let ac_update t ac q =
   then run_node_search t ac
 ;;
 
-let query_closed ac q =
-  match ac.kind with
+let query_closed_kind kind q =
+  match kind with
   | Page_ref | Page_embed -> S.contains q ']'
   | Block_ref -> S.contains q ')'
   | Slash | Tag_search | Template_search | Embed_ref -> S.contains q '\n'
 ;;
+
+let query_closed ac q = query_closed_kind ac.kind q
 
 (* after a buffer change in the open block editor — the model carries
    the new text/caret; [deleted] marks Delete events (the cljs
@@ -1612,6 +1620,7 @@ let apply_tag t ac ~create ~inline title =
       let gen = !(t.gen) and session = !(t.session) in
       let awaiting_lookup () =
         gen = !(t.gen) && session = !(t.session) && repo_v = repo ()
+        && ac_current ac
         && match Editor_state.editing () with
            | Some current ->
                current.epoch == editing.epoch
@@ -1976,10 +1985,81 @@ type configured_effect =
   | Configured_nested_property of Wire.t * Wire.t * Wire.t
   | Configured_closed_value of string * Wire.t
   | Configured_heading of Wire.t
+  | Configured_own_list of bool
+  | Configured_children_list
+
+type configured_ui =
+  | Configured_new_property of string option
+  | Configured_date_picker
+  | Configured_link_form of bool
+
+type configured_checkpoint =
+  { configured_uuid : string
+  ; configured_caret : int
+  ; configured_editor : Editor_state.editing
+  ; configured_repo : string
+  ; configured_route : Model.route
+  ; configured_input_seq : int
+  ; configured_popup_session : int ref
+  ; configured_popup_generation : int
+  }
+
+let configured_checkpoint_current checkpoint =
+  checkpoint.configured_repo = Runtime.repo ()
+  && checkpoint.configured_route = Runtime.route ()
+  && checkpoint.configured_input_seq = !Editor_state.edit_input_seq
+  && checkpoint.configured_popup_generation = !(checkpoint.configured_popup_session)
+  && match Editor_state.editing () with
+     | Some live ->
+         let before = checkpoint.configured_editor in
+         live.uuid = checkpoint.configured_uuid && live.epoch == before.epoch
+         && live.scope = before.scope && live.model.source = before.model.source
+         && live.buffer = before.buffer
+         && live.model.caret = checkpoint.configured_caret
+         && live.model.anchor = before.model.anchor
+         && not (Edit_model.composing live.model)
+     | None -> false
+
+type configured_ui_entry =
+  configured_checkpoint -> current:(unit -> bool) -> configured_ui -> bool
+
+let configured_ui_entry : configured_ui_entry option ref = ref None
+let install_configured_ui entry = configured_ui_entry := Some entry
+
+type configured_terminal =
+  | Configured_search of ac_kind
+  | Configured_exit
+  | Configured_ui of configured_ui
 
 type configured_step =
   | Configured_models of (Edit_model.t -> Edit_model.t) list
   | Configured_effect of configured_effect
+  | Configured_terminal of configured_terminal
+
+let configured_link_form = function
+  | Wire.Array [Wire.Map url; Wire.Map label] ->
+      let first = Wire.Map url and second = Wire.Map label in
+      let command = Wire.get first "command" in
+      let fields expected_id expected_placeholder fields =
+        List.for_all (function
+          | Wire.Keyword "command", value -> Some value = command
+          | Wire.Keyword "id", Wire.Keyword id -> id = expected_id
+          | Wire.Keyword "placeholder", Wire.String text -> text = U.t expected_placeholder
+          | Wire.Keyword "auto-focus", Wire.Bool value -> value = (expected_id = "link")
+          | _ -> false) fields in
+      if Wire.get first "id" <> Some (Wire.kw "link")
+         || Wire.get second "id" <> Some (Wire.kw "label")
+         || Wire.get second "command" <> command
+         || Wire.get first "placeholder" <> Some (Wire.String (U.t "ui/link"))
+         || Wire.get second "placeholder" <> Some (Wire.String (U.t "ui/label"))
+         || Wire.get first "auto-focus" <> Some (Wire.Bool true)
+         || not (fields "link" "ui/link" url && fields "label" "ui/label" label)
+      then None else
+      (match command with
+       | Some (Wire.Keyword "link") -> Some (Configured_link_form false)
+       | Some (Wire.Keyword "image-link") -> Some (Configured_link_form true)
+       | _ -> None)
+  | _ -> None
 
 let configured_property_ref = function
   | Wire.Keyword ident ->
@@ -1994,7 +2074,35 @@ let configured_program ?(at_block_start = false) output =
     match configured_steps ~at_block_start (Wire.Array [value]) with
     | Some models -> Some (Configured_models models)
     | None ->
+      let terminal action = Some (Configured_terminal action) in
+      match value with
+      | Wire.Array [Wire.Keyword "editor/exit"] -> terminal Configured_exit
+      | Wire.Array [Wire.Keyword "editor/search-page"] -> terminal (Configured_search Page_ref)
+      | Wire.Array [Wire.Keyword "editor/search-page-hashtag"] -> terminal (Configured_search Tag_search)
+      | Wire.Array [Wire.Keyword "editor/search-block"]
+      | Wire.Array [Wire.Keyword "editor/search-block"; Wire.Nil] -> terminal (Configured_search Block_ref)
+      | Wire.Array [Wire.Keyword "editor/search-block"; Wire.Keyword "embed"] ->
+          terminal (Configured_search Embed_ref)
+      | Wire.Array [Wire.Keyword "editor/new-property"] ->
+          terminal (Configured_ui (Configured_new_property None))
+      | Wire.Array [Wire.Keyword "editor/set-scheduled"] ->
+          terminal (Configured_ui (Configured_new_property (Some "logseq.property/scheduled")))
+      | Wire.Array [Wire.Keyword "editor/set-deadline"] ->
+          terminal (Configured_ui (Configured_new_property (Some "logseq.property/deadline")))
+      | Wire.Array [Wire.Keyword "editor/show-date-picker"]
+      | Wire.Array [Wire.Keyword "editor/show-date-picker"; Wire.Nil] ->
+          terminal (Configured_ui Configured_date_picker)
+      | Wire.Array [Wire.Keyword "editor/show-input"; options] ->
+          Option.map (fun action -> Configured_terminal (Configured_ui action))
+            (configured_link_form options)
+      | _ ->
         Option.map (fun action -> Configured_effect action) (match value with
+          | Wire.Array [Wire.Keyword "editor/toggle-own-number-list"] ->
+              Some (Configured_own_list true)
+          | Wire.Array [Wire.Keyword "editor/remove-own-number-list"] ->
+              Some (Configured_own_list false)
+          | Wire.Array [Wire.Keyword "editor/toggle-children-number-list"] ->
+              Some Configured_children_list
           | Wire.Array [Wire.Keyword "editor/set-status"; value] ->
               Some (Configured_closed_value ("logseq.property/status", value))
           | Wire.Array [Wire.Keyword "editor/set-priority"; Wire.Nil] ->
@@ -2018,6 +2126,7 @@ let configured_program ?(at_block_start = false) output =
       (configured_steps ~at_block_start output)
   | Wire.Array values ->
       List.fold_right (fun value result -> match step value, result with
+        | Some (Configured_terminal _), Some (_ :: _) -> None
         | Some step, Some steps -> Some (step :: steps)
         | _ -> None) values (Some [])
   | _ -> None
@@ -2046,6 +2155,29 @@ let configured_effect_ops ~current ~repo uuid action =
     match value with None -> Js.Promise.resolve None | Some value -> next value in
   if not (current ()) then Js.Promise.resolve None else
   match action with
+  | Configured_own_list toggle ->
+      let ordered = match Editor_state.find uuid with
+        | Some block -> block.Model.block_order_list = Some "number" | None -> false in
+      Js.Promise.resolve (Some (if not toggle && not ordered then [] else [if ordered then
+        Outliner_ops.remove_block_property uuid "logseq.property/order-list-type"
+      else Outliner_ops.set_block_property uuid "logseq.property/order-list-type"
+        (Wire.String "number")]))
+  | Configured_children_list ->
+      let* wire = Runtime.invoke2 "thread-api/get-block-immediate-children"
+          (Wire.String repo) (Wire.Uuid uuid) in
+      if not (current ()) then Js.Promise.resolve None else
+      let children = match wire with
+        | Wire.Array children | Wire.List children -> children
+        | _ -> invalid_arg "Invalid configured child list response" in
+      let ordered = List.exists (fun child ->
+        Decode.order_list_type_of_wire child = Some "number") children in
+      let ops = List.map (fun child ->
+        let target = match Wire.map_get_uuid child "block/uuid" with
+          | Some uuid -> uuid
+          | None -> invalid_arg "Configured child list target has no block/uuid" in
+        if ordered then Outliner_ops.remove_block_property target "logseq.property/order-list-type"
+        else Outliner_ops.set_block_property target "logseq.property/order-list-type" (Wire.String "number")) children in
+      Js.Promise.resolve (Some ops)
   | Configured_property (property, value) ->
       let*? ident = configured_property_ident ~current ~repo property in
       Js.Promise.resolve (Some [Outliner_ops.set_block_property uuid ident value])
@@ -2093,6 +2225,29 @@ let apply_configured_models uuid steps =
         Outliner_ops.schedule_save uuid model.Edit_model.source;
       Some model
 
+let open_configured_search t checkpoint kind =
+  let model = checkpoint.configured_editor.model in
+  let caret = checkpoint.configured_caret in
+  if Option.fold ~none:false ~some:(( <> ) caret) model.anchor then false else
+  let trigger = trigger_text_of_kind kind in
+  let length = S.length trigger in
+  let prefix = S.sub model.source 0 caret in
+  let start = if length = 0 then Some caret else
+    Option.bind (S.rindex_opt prefix (S.get trigger (length - 1))) (fun index ->
+      let start = index - length + 1 in
+      if start >= 0 && S.sub prefix start length = trigger then Some start else None) in
+  match start with
+  | None -> false
+  | Some start ->
+      let query = S.sub prefix (start + length) (caret - start - length) in
+      if query_closed_kind kind query
+      then false else begin
+        open_ac ~tpos:start ~autopair:false t kind;
+        match (get t).ac with
+        | Some ac -> ac_update t ac query; true
+        | None -> false
+      end
+
 let run_configured t ac ~unsupported steps =
   match Editor_state.editing (), Runtime.capture_reload_origin () with
   | Some editor, Some origin when editor.uuid = ac.auuid
@@ -2120,6 +2275,24 @@ let run_configured t ac ~unsupported steps =
       let rec run = function
         | _ when not (current ()) -> Js.Promise.resolve ()
         | [] -> Editor_sink.focus_input ac.auuid; Js.Promise.resolve ()
+        | [Configured_terminal action] ->
+            let editor = Option.get (Editor_state.editing ()) in
+            let checkpoint =
+              {configured_uuid=ac.auuid; configured_caret=editor.model.caret;
+               configured_editor=editor; configured_repo=origin.reload_repo;
+               configured_route=origin.reload_route; configured_input_seq=input_seq;
+               configured_popup_session=t.session; configured_popup_generation=session} in
+            (match action with
+             | Configured_exit -> Editor_actions.exit_edit ~select:false
+             | Configured_search kind ->
+                 if not (open_configured_search t checkpoint kind) then unsupported ()
+             | Configured_ui action ->
+                 match !configured_ui_entry with
+                 | Some entry -> if not (entry checkpoint ~current action) then unsupported ()
+                 | None -> invalid_arg "Configured UI entries are not installed");
+            Js.Promise.resolve ()
+        | Configured_terminal _ :: _ ->
+            invalid_arg "Configured terminal action escaped structural validation"
         | Configured_models models :: rest ->
             let rec gather models = function
               | Configured_models next :: rest -> gather (next :: models) rest

@@ -35,6 +35,17 @@ source/selection. It does not compare model versions or base text, which may
 legitimately change during an owned save or geometry update. One continuation
 regression table verifies that superseded checkpoints cannot receive late edits.
 
+Numbered-list configured steps use existing typed outliner operations, with a
+fresh, owned child lookup for children lists. Search, exit and supported UI
+steps are terminal lifecycle handoffs: a sequence with any later step remains
+unsupported before execution begins. A closed UI action port installed by
+Editor_commands avoids the Properties_dialog-to-Popups_state module cycle; it
+does not forward strings, events or user functions. Property dialogs retain
+their existing lookup ownership. Configured date/link popups retain the graph,
+route, popup generation, editor epoch, UUID, scope, input sequence and selection
+checkpoint plus their own popup identity. A second ownership regression table
+verifies that stale popup completion leaves the successor editor untouched.
+
 ## Alternatives considered
 
 ### Host-only pinyin conversion
@@ -53,6 +64,8 @@ configured command labels consistently.
 - Palette keyboard ownership and platform modifiers match master.
 - Configured property steps retain master wire semantics and execution order.
 - Superseded configured continuations do not alter another editing checkpoint.
+- Terminal UI/search/exit handoffs never execute a competing trailing step.
+- Configured popup completion cannot overwrite a successor editing checkpoint.
 - Existing native/Web builds and command regression checks pass.
 
 ## Risks
@@ -63,6 +76,9 @@ configured command labels consistently.
   command side effects not covered by the source audit.
 - A configured sequence is not a new transaction protocol: already accepted
   property effects are not rolled back when a later continuation is superseded.
+- Search handoffs require the corresponding existing marker, except block
+  embeds. Date insertion and the canonical link/image-link forms require a
+  collapsed editor selection; arbitrary forms and field overrides are unsupported.
 
 ## Consequences
 
@@ -75,3 +91,7 @@ player-time query exists in the current capability surface. Other unsupported
 configured-command steps remain explicit gaps rather than claims of complete
 command parity. Held-arrow acceleration is not a master behavior: its unused
 acceleration state does not change the constant one-item key-repeat movement.
+Restore-saved-cursor, template search, query conversion, typed-block upsert and comment creation
+remain unsupported configured steps because equivalent, owned typed targets
+have not been established. Named date-picker type arguments and general forms
+also remain unsupported; the new UI port does not claim those capabilities.
