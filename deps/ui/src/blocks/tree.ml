@@ -759,7 +759,7 @@ let row_drop_indicators ~scope uuid =
            ; Ui_components.Prop.inset_left offset
            ; Ui_components.Prop.inset_right 0.
            ; edge ]
-           (box ~height:3 ~background:"hsl(var(--border))" []))
+           (box ~height:3 ~background:"#cccccc" []))
     in
     [ indicator Block_drag.Top 20. (Ui_components.Prop.inset_top 0.)
     ; indicator Block_drag.Sibling 20. (Ui_components.Prop.inset_bottom 0.)
