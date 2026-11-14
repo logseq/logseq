@@ -1,0 +1,18 @@
+(rule
+ (targets quickjs.c quickjs.h quickjs-atom.h quickjs-opcode.h
+          cutils.c cutils.h dtoa.c dtoa.h list.h libregexp.c libregexp.h
+          libregexp-opcode.h libunicode.c libunicode.h libunicode-table.h)
+ (deps fetch.py dependencies.json)
+ (action (run python3 %{dep:fetch.py} %{dep:dependencies.json} .)))
+
+(library
+ (name logseq_plugin_quickjs)
+ (wrapped false)
+ (modes native)
+ (libraries logseq_ui_contracts logseq_ui_shared)
+ (c_library_flags -lm)
+ (foreign_stubs
+  (language c)
+  (names quickjs_stub quickjs cutils dtoa libregexp libunicode)
+  (flags (:standard -Os -ffunction-sections -fdata-sections -D_GNU_SOURCE
+                    "-DCONFIG_VERSION=\"2026-06-04\""))))
