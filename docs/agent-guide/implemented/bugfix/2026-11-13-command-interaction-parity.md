@@ -25,6 +25,16 @@ Dune files remain unchanged. One retained composition-Enter regression table
 protects confirmation from execution; direct mappings use existing contracts,
 source comparison and builds.
 
+Configured slash outputs also support status, priority, heading, property and
+block-property-targeted property steps. The complete output is structurally
+validated before execution. Pure edits remain atomic between property effects;
+property effects use existing outliner flush, accepted-save acknowledgement and
+owned refresh paths. Asynchronous continuation requires the original graph,
+route, popup session, editor epoch, UUID, scope, input sequence and expected
+source/selection. It does not compare model versions or base text, which may
+legitimately change during an owned save or geometry update. One continuation
+regression table verifies that superseded checkpoints cannot receive late edits.
+
 ## Alternatives considered
 
 ### Host-only pinyin conversion
@@ -41,6 +51,8 @@ configured command labels consistently.
 - Slash headings and priorities retain master order and contextual filtering.
 - File results navigate, and Mod+O opens a page URL property or a block URL.
 - Palette keyboard ownership and platform modifiers match master.
+- Configured property steps retain master wire semantics and execution order.
+- Superseded configured continuations do not alter another editing checkpoint.
 - Existing native/Web builds and command regression checks pass.
 
 ## Risks
@@ -49,6 +61,8 @@ configured command labels consistently.
   versions; regeneration must be deliberate. Actual GUI acceptance is separate.
 - This patch does not assert parity for host input dispatch or missing editor
   command side effects not covered by the source audit.
+- A configured sequence is not a new transaction protocol: already accepted
+  property effects are not rolled back when a later continuation is superseded.
 
 ## Consequences
 
@@ -56,5 +70,8 @@ The shared palette consumes composition identity and separate locale/English
 labels. Both platforms use frozen initials data and their existing regex and URL
 capabilities. Home, End and page-navigation keys are no longer palette actions.
 Native/Web builds and the existing suite pass; real GUI acceptance remains
-separate. YouTube timestamp execution and unsupported configured-command steps
-remain explicit follow-up gaps rather than claims of complete command parity.
+separate. YouTube timestamp execution is deferred to the media owner because no
+player-time query exists in the current capability surface. Other unsupported
+configured-command steps remain explicit gaps rather than claims of complete
+command parity. Held-arrow acceleration is not a master behavior: its unused
+acceleration state does not change the constant one-item key-repeat movement.

@@ -1971,6 +1971,187 @@ let configured_steps ?(at_block_start = false) output =
         | _ -> None) steps (Some [])
   | _ -> None
 
+type configured_effect =
+  | Configured_property of Wire.t * Wire.t
+  | Configured_nested_property of Wire.t * Wire.t * Wire.t
+  | Configured_closed_value of string * Wire.t
+  | Configured_heading of Wire.t
+
+type configured_step =
+  | Configured_models of (Edit_model.t -> Edit_model.t) list
+  | Configured_effect of configured_effect
+
+let configured_property_ref = function
+  | Wire.Keyword ident ->
+      (match S.index_opt ident '/' with
+       | Some index -> index > 0 && index < S.length ident - 1
+       | None -> false)
+  | Wire.Int id -> id > 0
+  | _ -> false
+
+let configured_program ?(at_block_start = false) output =
+  let step value =
+    match configured_steps ~at_block_start (Wire.Array [value]) with
+    | Some models -> Some (Configured_models models)
+    | None ->
+        Option.map (fun action -> Configured_effect action) (match value with
+          | Wire.Array [Wire.Keyword "editor/set-status"; value] ->
+              Some (Configured_closed_value ("logseq.property/status", value))
+          | Wire.Array [Wire.Keyword "editor/set-priority"; Wire.Nil] ->
+              Some (Configured_property (Wire.kw "logseq.property/priority",
+                Wire.kw "logseq.property/empty-placeholder"))
+          | Wire.Array [Wire.Keyword "editor/set-priority"; value] ->
+              Some (Configured_closed_value ("logseq.property/priority", value))
+          | Wire.Array [Wire.Keyword "editor/set-heading"; (Wire.Nil | Wire.Int _ as value)] ->
+              Some (Configured_heading value)
+          | Wire.Array [Wire.Keyword "editor/set-property"; ident; value]
+            when configured_property_ref ident ->
+              Some (Configured_property (ident, value))
+          | Wire.Array [Wire.Keyword "editor/set-property-on-block-property";
+              parent; ident; value]
+            when configured_property_ref parent && configured_property_ref ident ->
+              Some (Configured_nested_property (parent, ident, value))
+          | _ -> None)
+  in
+  match output with
+  | Wire.String _ -> Option.map (fun models -> [Configured_models models])
+      (configured_steps ~at_block_start output)
+  | Wire.Array values ->
+      List.fold_right (fun value result -> match step value, result with
+        | Some step, Some steps -> Some (step :: steps)
+        | _ -> None) values (Some [])
+  | _ -> None
+
+let configured_pull ~current ~repo query target =
+  if not (current ()) then Js.Promise.resolve None else
+  let* entity = Runtime.invoke "thread-api/pull" [Wire.String repo; query; target] in
+  Js.Promise.resolve (if current () then Some entity else None)
+
+let configured_property_ident ~current ~repo = function
+  | Wire.Keyword ident -> Js.Promise.resolve (if current () then Some ident else None)
+  | Wire.Int id ->
+      let* entity = configured_pull ~current ~repo
+          (Wire.Array [Wire.kw "db/ident"]) (Wire.Int id) in
+      (match entity with
+       | None -> Js.Promise.resolve None
+       | Some entity ->
+           match Properties_data.getk (Properties_data.untag entity) "db/ident" with
+           | Some ident -> Js.Promise.resolve (Some ident)
+           | None -> invalid_arg "Configured command property has no db/ident")
+  | _ -> invalid_arg "Invalid configured command property reference"
+
+let configured_effect_ops ~current ~repo uuid action =
+  let ( let*? ) pending next =
+    let* value = pending in
+    match value with None -> Js.Promise.resolve None | Some value -> next value in
+  if not (current ()) then Js.Promise.resolve None else
+  match action with
+  | Configured_property (property, value) ->
+      let*? ident = configured_property_ident ~current ~repo property in
+      Js.Promise.resolve (Some [Outliner_ops.set_block_property uuid ident value])
+  | Configured_heading Wire.Nil ->
+      Js.Promise.resolve (Some [Outliner_ops.remove_block_property uuid "logseq.property/heading"])
+  | Configured_heading value ->
+      Js.Promise.resolve (Some [Outliner_ops.set_block_property uuid "logseq.property/heading" value])
+  | Configured_closed_value (ident, value) ->
+      let* values = Properties_data.closed_values (Wire.kw ident) in
+      if not (current ()) then Js.Promise.resolve None else
+      let id = List.find_map (fun entity ->
+        let entity = Properties_data.untag entity in
+        let content = match Wire.get entity "block/title" with
+          | Some Wire.Nil | None -> Wire.get entity "logseq.property/value"
+          | content -> content in
+        if content = Some value then Properties_data.geti entity "db/id" else None)
+          (Wire.elems values) in
+      (match id with
+       | Some id -> Js.Promise.resolve (Some
+           [Outliner_ops.batch_set_property [uuid] ident (Wire.Int id) ~entity_id:true])
+       | None ->
+           Ui_services.log_error ("No entity found for configured closed value", value);
+           Js.Promise.resolve (Some []))
+  | Configured_nested_property (parent, property, value) ->
+      let*? parent = configured_property_ident ~current ~repo parent in
+      let*? ident = configured_property_ident ~current ~repo property in
+      let*? entity = configured_pull ~current ~repo
+          (Wire.Array [Wire.Map [Wire.kw parent, Wire.Array [Wire.kw "block/uuid"]]])
+          (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) in
+      (match Wire.get (Properties_data.untag entity) parent with
+       | None | Some Wire.Nil -> Js.Promise.resolve (Some [])
+       | Some target ->
+           match Properties_data.entity_uuid_of target with
+           | Some target -> Js.Promise.resolve (Some
+               [Outliner_ops.set_block_property target ident value])
+           | None -> invalid_arg "Configured block property has no block/uuid")
+
+let apply_configured_models uuid steps =
+  match Editor_actions.edit_model uuid with
+  | None -> None
+  | Some before ->
+      let model = List.fold_left (fun model step -> step model) before steps in
+      Editor_actions.update_model uuid (fun _ -> model);
+      if before.Edit_model.source <> model.Edit_model.source then
+        Outliner_ops.schedule_save uuid model.Edit_model.source;
+      Some model
+
+let run_configured t ac ~unsupported steps =
+  match Editor_state.editing (), Runtime.capture_reload_origin () with
+  | Some editor, Some origin when editor.uuid = ac.auuid
+      && (match ac.editor with
+          | Some captured -> captured.epoch == editor.epoch && captured.scope = editor.scope
+              && captured.uuid = editor.uuid
+          | None -> false) ->
+      let context = Runtime.model () in
+      let owner = Outliner_ops.refresh_owner origin in
+      let input_seq = !Editor_state.edit_input_seq in
+      let expected = ref editor.model in
+      close_ac t;
+      let session = !(t.session) in
+      let current () =
+        session = !(t.session) && input_seq = !Editor_state.edit_input_seq
+        && Outliner_ops.refresh_current ~owner context
+        && match Editor_state.editing () with
+           | Some live -> live.epoch == editor.epoch && live.uuid = editor.uuid
+               && live.scope = editor.scope && live.model.source = (!expected).source
+               && live.buffer = (!expected).source
+               && live.model.caret = (!expected).caret && live.model.anchor = (!expected).anchor
+               && not (Edit_model.composing live.model)
+           | None -> false
+      in
+      let rec run = function
+        | _ when not (current ()) -> Js.Promise.resolve ()
+        | [] -> Editor_sink.focus_input ac.auuid; Js.Promise.resolve ()
+        | Configured_models models :: rest ->
+            let rec gather models = function
+              | Configured_models next :: rest -> gather (next :: models) rest
+              | rest -> List.concat (List.rev models), rest in
+            let models, rest = gather [models] rest in
+            (try
+               Option.iter (fun model -> expected := model)
+                 (apply_configured_models ac.auuid models);
+               run rest
+             with Unsupported_configured_input -> unsupported (); Js.Promise.resolve ())
+        | Configured_effect action :: rest ->
+            let* ops = configured_effect_ops ~current ~repo:origin.reload_repo ac.auuid action in
+            if not (current ()) then Js.Promise.resolve () else
+            match ops with
+            | None -> Js.Promise.resolve ()
+            | Some [] -> run rest
+            | Some ops ->
+                let* result = Outliner_ops.apply_result_for ~current context ops in
+                if not (current ()) || Option.is_none result then Js.Promise.resolve () else
+                let* () = Outliner_ops.refresh_via_delta ~owner result in
+                let* () = Outliner_ops.require_refresh_success owner in
+                if current () then begin
+                  Properties_state.refresh_entity ac.auuid;
+                  if Dialogs_state.ready () && Dialogs_state.is_open "quick-add" then
+                    Quick_add_state.reload ()
+                end;
+                run rest
+      in
+      Editor_sink.focus_input ac.auuid;
+      run steps
+  | _ -> Js.Promise.resolve ()
+
 let apply_item t ac ~meta it =
   let draft_allowed = match it.ai_act with
     | Emit _ | Noop -> true
@@ -1982,16 +2163,12 @@ let apply_item t ac ~meta it =
       let unsupported () =
         Toast.error (U.t1 "editor.slash/unsupported-configured-command-error" it.ai_label) in
       (match configured_steps ~at_block_start:(ac.tpos = 0) output with
-       | None -> unsupported ()
+       | None ->
+           (match configured_program ~at_block_start:(ac.tpos = 0) output with
+            | None -> unsupported ()
+            | Some steps -> ignore (run_configured t ac ~unsupported steps))
        | Some steps -> (try
-           let before = Option.map (fun model -> model.Edit_model.source)
-               (Editor_actions.edit_model ac.auuid) in
-           Editor_actions.update_model ac.auuid (fun model ->
-             List.fold_left (fun model step -> step model) model steps);
-           Option.iter (fun model ->
-               if before <> Some model.Edit_model.source then
-                 Outliner_ops.schedule_save ac.auuid model.Edit_model.source)
-             (Editor_actions.edit_model ac.auuid);
+           ignore (apply_configured_models ac.auuid steps);
            close_ac t;
            Editor_sink.focus_input ac.auuid
            with Unsupported_configured_input -> unsupported ()))

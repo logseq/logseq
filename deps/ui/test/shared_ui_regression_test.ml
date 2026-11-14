@@ -444,7 +444,94 @@ let settings_date_format ~registry ~profile ~finish =
   in
   next [false, `None; true, `None; false, `Refresh; false, `Navigate]
 
+let configured_continuations finish =
+  let open Promise_ext in
+  let previous_model = !Runtime.read_model and previous_worker = !Runtime.worker in
+  let previous_flush = !Runtime.app_flush and previous_popup = !Popups_state.active in
+  let previous_editor_cell = !Editor_state.st in
+  Editor_state.st := Some (Signal.state (Signal.scheduler ()) (Editor_state.read ()));
+  let previous_input_seq = !Editor_state.edit_input_seq in
+  let previous_pending = !Outliner_ops.pending_save in
+  let previous_timer = !Outliner_ops.save_timer in
+  let previous_history = !Editor_state.history_input_before in
+  Outliner_ops.pending_save := None;
+  Runtime.app_flush := (fun () -> ());
+  let uuid = "configured-continuation-fixture" in
+  let rec next = function
+    | [] ->
+        Runtime.read_model := previous_model;
+        Runtime.worker := previous_worker;
+        Runtime.app_flush := previous_flush;
+        Popups_state.active := previous_popup;
+        Editor_state.st := previous_editor_cell;
+        Editor_state.edit_input_seq := previous_input_seq;
+        Outliner_ops.pending_save := previous_pending;
+        Outliner_ops.save_timer := previous_timer;
+        Editor_state.history_input_before := previous_history;
+        finish ()
+    | transition :: rest ->
+        let model = ref {Model.initial with repo = Some "configured-continuation"} in
+        Runtime.read_model := (fun () -> !model);
+        let editor = Editor_state.mk_editing ~uuid ~scope:"main"
+            ~buffer:"seed" ~base:"seed" ~caret:4 () in
+        Editor_state.set (fun state -> {state with editing = Some editor});
+        let popup = Popups_state.make (Signal.scheduler ()) in
+        let ac : Popups_state.ac =
+          {kind = Slash; x = 0.; y = 0.; cy = 0.; pos_pending = false;
+           flip = None; flipx = None; query = ""; tpos = 0; tlen = 0;
+           items = []; chosen = 0; auuid = uuid; editor = Some editor} in
+        let release = ref (fun () -> ()) in
+        let requested = ref (fun () -> ()) in
+        let dispatched = Js.Promise.make (fun ~resolve ~reject:_ ->
+          requested := (fun () -> let value = () in resolve value [@u])) in
+        Runtime.worker := Some {
+          Worker_client.invoke_fn = (fun name _ ->
+            if name <> "thread-api/pull" then
+              failwith ("Unexpected configured continuation request: " ^ name);
+            Js.Promise.make (fun ~resolve ~reject:_ ->
+              release := (fun () -> resolve (Wire.Map []) [@u]);
+              !requested ()));
+          on_message = (fun _ _ -> ());
+          dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        let steps = Option.get (Popups_state.configured_program (Edn.parse
+          "[[:editor/set-property-on-block-property :user/ref :user/flag true] \
+            [:editor/input \"continued\" {:last-pattern :skip-check}]]")) in
+        let pending = Popups_state.run_configured popup ac
+            ~unsupported:(fun () -> failwith "Supported configured continuation rejected") steps in
+        ignore (Js.Promise.then_ (fun () ->
+          (match transition with
+           | `Unchanged -> ()
+           | `Input ->
+               Editor_actions.update_model uuid (fun _ ->
+                 Edit_model.select (Edit_model.create ~units:editor.model.units "new input")
+                   ~anchor:9 ~focus:9);
+               Editor_state.note_input ()
+           | `Epoch -> Editor_state.set (fun state -> {state with editing = Some
+               (Editor_state.mk_editing ~uuid ~scope:"main" ~buffer:"new session"
+                  ~base:"new session" ~caret:11 ())})
+           | `Scope -> Editor_state.set (fun state ->
+               {state with editing = Some {editor with scope = "right"}})
+           | `Caret -> Editor_actions.set_caret uuid 2
+           | `Popup -> incr popup.session
+           | `Repo -> model := {!model with repo = Some "another-graph"}
+           | `Route -> model := Update.update !model (Action.Navigate_to Model.All_pages));
+          let before = Option.get (Editor_state.editing ()) in
+          !release ();
+          let* () = pending in
+          let after = Option.get (Editor_state.editing ()) in
+          check "Configured continuations only edit their unchanged originating checkpoint"
+            (if transition = `Unchanged then after.buffer = "seedcontinued"
+             else after.buffer = before.buffer && after.model.caret = before.model.caret
+               && after.epoch == before.epoch && after.scope = before.scope);
+          Outliner_ops.cancel_pending_save ();
+          Ui_services.timers_clear_timeout !Outliner_ops.save_timer;
+          next rest;
+          Js.Promise.resolve ()) dispatched)
+  in
+  next [`Unchanged; `Input; `Epoch; `Scope; `Caret; `Popup; `Repo; `Route]
+
 let run_views ~registry ~profile ~finish =
+  let finish () = configured_continuations finish in
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
