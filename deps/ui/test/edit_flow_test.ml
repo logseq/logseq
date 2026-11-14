@@ -1192,6 +1192,51 @@ let test_selected_open (h : host) =
         "Left", (fun () -> Editor_keys.dispatch_command "editor/left"), "b1", 0;
         "Right", (fun () -> Editor_keys.dispatch_command "editor/right"), "b2", 4 ]
 
+let test_scoped_collapse_commands (h : host) =
+  let scope = "collapse-sidebar" in
+  let uuid = "collapse-target" in
+  let other = "collapse-other" in
+  let projected = List.map (fun id ->
+      Test_check.block ~children:[ Test_check.block (id ^ "-child") "child" ] id id)
+      [ uuid; other ] in
+  let unregister = S.register_block_source ~scope ~kind:S.Outliner (fun () -> projected) in
+  let rec run = function
+    | [] ->
+        unregister ();
+        reset_editor ();
+        Js.Promise.resolve ()
+    | (name, command, editing, before, want) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block uuid uuid; Test_check.block other other ];
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        List.iter (fun id ->
+          S.set_collapsed ~scope:"main" id (not before);
+          S.set_collapsed ~scope id (if id = uuid then before else want)) [ uuid; other ];
+        A.select_single_in ~scope uuid;
+        if editing then
+          S.set (fun st -> { st with S.editing = Some
+            (S.mk_editing ~uuid ~buffer:uuid ~base:uuid ~scope ()) })
+        else
+          S.set (fun st -> { st with S.selected = S.String_set.of_list [ uuid; other ] });
+        Editor_keys.dispatch_command command;
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (name ^ " uses the active projection and scoped override")
+          (S.is_collapsed_in ~scope uuid = want
+           && S.is_collapsed_in ~scope other = want
+           && S.is_collapsed_in ~scope:"main" uuid = not before
+           && S.is_collapsed_in ~scope:"main" other = not before);
+        check (name ^ " preserves the entity collapse persistence intent")
+          (List.mem (Ops.collapse_expand [ uuid, want ]) !ops);
+        reset_editor ();
+        run rest
+  in
+  run [ "selected toggle", "editor/toggle-block-children", false, true, false;
+        "editing toggle", "editor/toggle-block-children", true, false, true;
+        "selected collapse", "editor/collapse-block-children", false, false, true;
+        "selected expand", "editor/expand-block-children", false, true, false ]
+
 let test_scoped_indent_target (h : host) =
   let* () = settle h 40 in
   let main = Test_check.block "main-parent" "main" in
@@ -1649,6 +1694,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_property_command_refresh h in
   test_selection_direction h;
   let* () = test_selected_open h in
+  let* () = test_scoped_collapse_commands h in
   let* () = test_scoped_indent_target h in
   let* () = test_move_block_chord h in
   let* () = test_platform_delete h in

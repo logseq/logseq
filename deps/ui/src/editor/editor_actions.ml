@@ -2632,8 +2632,11 @@ let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
 
 (* ---- misc ---- *)
 
+let find_outliner_block ~scope uuid =
+  Option.bind (S.outliner_blocks_in_scope scope) (fun blocks -> S.find_in blocks uuid)
+
 let toggle_collapse ?(scope = "main") uuid =
-  match S.find uuid with
+  match find_outliner_block ~scope uuid with
   | Some b when S.children_of b <> [] ->
       if b.Model.block_default_collapsed
          && not (S.is_collapsed_in ~scope uuid)
@@ -2655,7 +2658,7 @@ let toggle_collapse ?(scope = "main") uuid =
   | _ -> ()
 
 let set_collapsed ?(scope = "main") uuid collapsed =
-  match S.find uuid with
+  match find_outliner_block ~scope uuid with
   | Some b when S.children_of b <> [] ->
       S.set_collapsed ~scope uuid collapsed;
       if not (Ui_services.env_publishing ()) then
@@ -2724,23 +2727,24 @@ let collapse_expand ~collapse () =
    selection toggles all selected by the first block's state, otherwise
    no-op *)
 let toggle_children_collapse () =
-  let cur =
-    match S.editing_uuid () with
-    | Some u -> [ u ]
-    | None -> selected_uuids ()
+  let scope, cur =
+    match S.editing () with
+    | Some e when S.is_draft e -> e.S.scope, []
+    | Some e -> e.S.scope, [ e.S.uuid ]
+    | None -> S.selection_scope (), selected_uuids ()
   in
   match cur with
   | u :: us -> (
-      match S.find u with
+      match find_outliner_block ~scope u with
       | Some b ->
-          let want = not (S.effective_collapsed b) in
+          let want = not (S.effective_collapsed ~scope b) in
           List.iter
             (fun u ->
-              match S.find u with
+              match find_outliner_block ~scope u with
               | Some b
                 when S.children_of b <> []
-                     && S.effective_collapsed b <> want ->
-                  toggle_collapse u
+                     && S.effective_collapsed ~scope b <> want ->
+                  toggle_collapse ~scope u
               | _ -> ())
             (u :: us)
       | None -> ())
