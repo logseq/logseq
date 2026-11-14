@@ -85,13 +85,13 @@ let run path =
     block "00000000-0000-0000-0000-000000000102" first_uuid "a0" "nested"];
     Wire.Nil; Wire.Nil]);
   let today = Dates.today () in
-  let page_row page_uuid title extra = Wire.Map ([
+  let page_row ?(kind = "logseq.class/Page") page_uuid title extra = Wire.Map ([
     Wire.kw "block/uuid", Wire.Uuid page_uuid;
     Wire.kw "block/name", Wire.String (String.lowercase_ascii title);
     Wire.kw "block/title", Wire.String title;
     Wire.kw "block/created-at", Wire.Int 1;
     Wire.kw "block/updated-at", Wire.Int 1;
-    Wire.kw "block/tags", Wire.Set [Wire.kw "logseq.class/Page"]] @ extra) in
+    Wire.kw "block/tags", Wire.Set [Wire.kw kind]] @ extra) in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
     page_row "00000000-0000-0000-0000-000000000103" today
       [Wire.kw "block/journal-day", Wire.Int (Dates.today_journal_day ())];
@@ -110,7 +110,19 @@ let run path =
     op "set-block-property" [Wire.Uuid first_uuid; score; Wire.Int 9];
     op "set-block-property" [Wire.Uuid uuid; score; Wire.Int 11];
     op "set-block-property" [Wire.Uuid "00000000-0000-0000-0000-000000000112";
-      score; Wire.Int 13]]; Wire.Map []]);
+      score; Wire.Int 13];
+    op "upsert-property" [Wire.kw "plugin.property.sdk-probe/checked"; Wire.Map [
+      Wire.kw "logseq.property/type", Wire.kw "checkbox";
+      Wire.kw "logseq.property/scalar-default-value", Wire.Bool true]; Wire.Map []];
+    op "set-block-property" [Wire.Uuid last_uuid;
+      Wire.kw "plugin.property.sdk-probe/checked"; Wire.Bool false]]; Wire.Map []]);
+  let class_uuid = "00000000-0000-0000-0000-000000000114" in
+  let member block_uuid = Wire.Map [Wire.kw "block/uuid", Wire.Uuid block_uuid;
+    Wire.kw "block/tags", Wire.Set [Wire.Array [Wire.kw "block/uuid"; Wire.Uuid class_uuid]]] in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    page_row ~kind:"logseq.class/Tag" class_uuid "SDK probe checklist"
+      [Wire.kw "logseq.property.class/properties", Wire.Set [Wire.kw "plugin.property.sdk-probe/checked"]];
+    member uuid; member first_uuid; member last_uuid]; Wire.Nil; Wire.Nil]);
   let page = match Decode.page_of_summary page with Some page -> page | None -> failwith "page" in
   model := { Model.initial with repo = Some repo; route = Model.Page page.Model.page_title;
     route_page = Some page };

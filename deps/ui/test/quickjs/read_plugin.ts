@@ -218,6 +218,19 @@ const connected = logseq.ready(async (info) => {
     'absent property'
   )
   const properties = await logseq.Editor.getPageProperties('quickjs sdk probe')
+  const checkbox = 'plugin.property.sdk-probe/checked'
+  check(
+    (await logseq.Editor.getBlockProperty(
+      '00000000-0000-0000-0000-000000000100',
+      checkbox
+    )) === true &&
+      (await logseq.Editor.getBlockProperty(
+        '00000000-0000-0000-0000-000000000101',
+        checkbox
+      )) === false &&
+      properties?.[':' + checkbox] === true,
+    'class checkbox default and explicit false override'
+  )
   check(
     properties !== null &&
       JSON.stringify(properties[key]) ===
