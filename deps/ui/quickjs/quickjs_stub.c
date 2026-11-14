@@ -425,8 +425,9 @@ static JSModuleDef *deny_module(JSContext *context, const char *name, void *opaq
 
 static int host_arity(int operation) {
     if (operation < 5) return 0;
-    if (operation == 5 || operation == 6 || operation == 11) return 1;
-    if (operation == 12 || operation == 14) return 3;
+    if (operation == 5 || operation == 6 || operation == 11 || operation == 16 ||
+        operation == 17 || operation == 18 || operation == 22) return 1;
+    if (operation == 12 || operation == 13 || operation == 14 || operation == 19) return 3;
     return 2;
 }
 
@@ -593,10 +594,11 @@ CAMLprim value logseq_quickjs_start(value handle, value slot) {
         "getEditingContext", "getPluginInfo", "getEditingState", "getCurrentBlock",
         "getCurrentPage", "getBlock", "getPage", "datascriptQuery", "log", "registerEditorCommand",
         "getSiblingBlock", "getBlockProperties", "insertBlock", "updateBlock",
-        "upsertBlockProperty", "removeBlockProperty"
+        "upsertBlockProperty", "removeBlockProperty", "getPageBlocksTree", "getBlockChildren",
+        "removeBlock", "moveBlock", "createPage", "renamePage", "deletePage"
     };
     if (JS_IsException(host)) bridge->error = RESOURCE;
-    for (int operation = 0; operation < 16 && bridge->error < 0; operation++) {
+    for (int operation = 0; operation < 23 && bridge->error < 0; operation++) {
         JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation)};
         int arguments = host_arity(operation);
         JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 2, data);

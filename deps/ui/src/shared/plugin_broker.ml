@@ -12,6 +12,8 @@ type read_services = {
   get_page : identity -> (entity option, error) result Ui_task.t;
   sibling_block : sibling_direction -> identity -> (entity option, error) result Ui_task.t;
   block_properties : identity -> (Json.t, error) result Ui_task.t;
+  page_blocks_tree : identity -> (entity list, error) result Ui_task.t;
+  block_children : identity -> (entity list, error) result Ui_task.t;
   query : query -> (Json.t, error) result Ui_task.t;
   log : log_level -> string -> (unit, error) result Ui_task.t;
 }
@@ -100,7 +102,8 @@ let required_capabilities = function
   | Get_plugin_info | Log _ -> []
   | Get_editing_context | Get_editing_state -> [Editor_read]
   | Get_current_block | Get_current_page -> [Editor_read; Graph_read]
-  | Get_block _ | Get_page _ | Get_sibling_block _ | Get_block_properties _ -> [Graph_read]
+  | Get_block _ | Get_page _ | Get_sibling_block _ | Get_block_properties _
+  | Get_page_blocks_tree _ | Get_block_children _ -> [Graph_read]
   | Mutate _ -> [Graph_write]
   | Datascript_query _ -> [Graph_read; Db_query]
   | Register_editor_command _ -> [Editor_command]
@@ -141,6 +144,8 @@ let service t invocation request =
           | Get_block identity -> map (reads.get_block identity) (fun value -> Block value)
           | Get_page identity -> map (reads.get_page identity) (fun value -> Page value)
           | Get_block_properties identity -> map (reads.block_properties identity) (fun value -> Properties value)
+          | Get_page_blocks_tree identity -> map (reads.page_blocks_tree identity) (fun value -> Blocks value)
+          | Get_block_children identity -> map (reads.block_children identity) (fun value -> Blocks value)
           | Get_sibling_block (direction, identity) ->
               map (reads.sibling_block direction identity) (fun value -> Block value)
           | Datascript_query query -> map (reads.query query) (fun value -> Query_result value)

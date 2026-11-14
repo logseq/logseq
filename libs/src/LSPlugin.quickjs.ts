@@ -30,6 +30,18 @@ export interface InsertBlockOptions {
   customUUID?: string
 }
 export type PropertyValue = string | number | boolean
+export type CreatedPage = Pick<PageEntity, 'id' | 'uuid' | 'name'>
+export interface MoveBlockOptions {
+  before?: boolean
+  children?: boolean
+}
+export interface CreatePageOptions {
+  customUUID?: string
+  redirect?: false
+}
+export interface UpdateBlockOptions {
+  properties?: Record<string, PropertyValue | null>
+}
 
 const capabilityNames = [
   'editor_read',
@@ -70,7 +82,22 @@ export interface QuickjsHost {
     content: string,
     options: InsertBlockOptions
   ): Promise<BlockEntity | null>
-  updateBlock(identity: Identity, content: string): Promise<void>
+  updateBlock(
+    identity: Identity,
+    content: string,
+    properties: Record<string, PropertyValue | null>
+  ): Promise<void>
+  getPageBlocksTree(identity: Identity): Promise<BlockEntity[]>
+  getBlockChildren(identity: Identity): Promise<BlockEntity[]>
+  removeBlock(identity: Identity): Promise<void>
+  moveBlock(
+    source: Identity,
+    target: Identity,
+    options: MoveBlockOptions
+  ): Promise<void>
+  createPage(name: string, options: CreatePageOptions): Promise<CreatedPage>
+  renamePage(identity: Identity, name: string): Promise<boolean>
+  deletePage(identity: Identity): Promise<void>
   upsertBlockProperty(
     identity: Identity,
     key: string,
@@ -404,6 +431,73 @@ export const logseq = surface({
     return info
   },
   Editor: surface({
+    getPageBlocksTree(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getPageBlocksTree(key))
+    },
+    getBlockChildren(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.getBlockChildren(key))
+    },
+    removeBlock(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.removeBlock(key))
+    },
+    moveBlock(source: Identity, target: Identity, opts: MoveBlockOptions = {}) {
+      const from = identity(source),
+        to = identity(target),
+        flags = data(opts) as MoveBlockOptions
+      if (
+        !flags ||
+        typeof flags !== 'object' ||
+        Array.isArray(flags) ||
+        Object.entries(flags).some(
+          ([key, value]) =>
+            !['before', 'children'].includes(key) || typeof value !== 'boolean'
+        ) ||
+        (flags.before && flags.children)
+      )
+        failure('Invalid_request')
+      return call((host) => host.moveBlock(from, to, flags))
+    },
+    createPage(
+      name: string,
+      properties?: Record<string, Data>,
+      opts: CreatePageOptions = {}
+    ) {
+      const title = content(name),
+        flags = data(opts) as CreatePageOptions
+      if (!title.trim()) failure('Invalid_request')
+      if (properties !== undefined) {
+        const values = data(properties)
+        if (!values || typeof values !== 'object' || Array.isArray(values))
+          failure('Invalid_request')
+        if (Object.keys(values).length) failure('Unsupported')
+      }
+      if (!flags || typeof flags !== 'object' || Array.isArray(flags))
+        failure('Invalid_request')
+      for (const [key, value] of Object.entries(flags)) {
+        if (key === 'customUUID') {
+          if (typeof value !== 'string') failure('Invalid_request')
+          insertionOptions({ customUUID: value })
+        } else if (key === 'redirect') {
+          if (value !== false) failure('Unsupported')
+        } else if (['journal', 'class', 'schema'].includes(key))
+          failure('Unsupported')
+        else failure('Invalid_request')
+      }
+      return call((host) => host.createPage(title, flags))
+    },
+    renamePage(value: Identity, name: string) {
+      const key = identity(value),
+        title = content(name)
+      if (!title.trim()) failure('Invalid_request')
+      return call((host) => host.renamePage(key, title))
+    },
+    deletePage(value: Identity) {
+      const key = identity(value)
+      return call((host) => host.deletePage(key))
+    },
     getPreviousSiblingBlock(value: Identity) {
       const key = identity(value)
       return call((host) => host.getSiblingBlock('previous', key))
@@ -440,15 +534,35 @@ export const logseq = surface({
         flags = insertionOptions(opts)
       return call((host) => host.insertBlock(key, body, flags))
     },
-    updateBlock(
-      value: Identity,
-      text: string,
-      opts?: { properties?: Record<string, Data> }
-    ) {
+    updateBlock(value: Identity, text: string, opts: UpdateBlockOptions = {}) {
       const key = identity(value),
         body = content(text)
-      emptyOptions(opts, ['properties'])
-      return call((host) => host.updateBlock(key, body))
+      const copy = data(opts)
+      if (!copy || typeof copy !== 'object' || Array.isArray(copy))
+        failure('Invalid_request')
+      for (const name of Object.keys(copy)) {
+        if (name === 'schema') failure('Unsupported')
+        if (name !== 'properties') failure('Invalid_request')
+      }
+      const patch = 'properties' in copy ? copy.properties : {}
+      if (!patch || typeof patch !== 'object' || Array.isArray(patch))
+        failure('Invalid_request')
+      if (Object.keys(patch).length > 32) failure('Resource_limit')
+      for (const [name, value] of Object.entries(patch)) {
+        propertyKey(name)
+        if (
+          value !== null &&
+          !['string', 'number', 'boolean'].includes(typeof value)
+        )
+          failure('Unsupported')
+      }
+      return call((host) =>
+        host.updateBlock(
+          key,
+          body,
+          patch as Record<string, PropertyValue | null>
+        )
+      )
     },
     upsertBlockProperty(
       value: Identity,

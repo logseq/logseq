@@ -14,6 +14,8 @@ type read_services = {
   sibling_block : Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
     (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   block_properties : Plugin_protocol.identity -> (Json.t, Plugin_protocol.error) result Ui_task.t;
+  page_blocks_tree : Plugin_protocol.identity -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
+  block_children : Plugin_protocol.identity -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
   query : Plugin_protocol.query -> (Json.t, Plugin_protocol.error) result Ui_task.t;
   log : Plugin_protocol.log_level -> string -> (unit, Plugin_protocol.error) result Ui_task.t;
 }

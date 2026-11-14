@@ -117,13 +117,17 @@ let run path =
     List.find (fun handle -> command_key (command_metadata handle) = key)
       (Plugin_host.portable_commands ()) in
   let runner = load () in
-  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 9);
+  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 10);
+  let ac = editing "/editor-api-v2" in
+  check "tree, block and page operations preserve the active editor"
+    (task (Popups_state.run_portable_command popup ac (handle "editor-api-v2")) = Ok ()
+     && buffer () = "/editor-api-v2");
   let ac = editing "/editor-api-v1" in
   check "editor graph writes preserve configured ownership and the editing buffer"
     (task (Popups_state.run_portable_command popup ac (handle "editor-api-v1")) = Ok ()
      && buffer () = "/editor-api-v1");
   let changed_uuid = "00000000-0000-0000-0000-000000000107" in
-  let mutation = Plugin_protocol.Mutate (Update_block (Uuid changed_uuid, "must not commit")) in
+  let mutation = Plugin_protocol.Mutate (Update_block (Uuid changed_uuid, "must not commit", [])) in
   List.iter (fun mode ->
     model := initial;
     let services, reads, writes = Plugin_read_services.capture_editor ~id in

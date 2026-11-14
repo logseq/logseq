@@ -14,11 +14,18 @@ type insertion_position = First_child | Last_child | Before | After
 type insert_options
 type property_key
 type property_value = Text_value of string | Number_value of float | Checkbox_value of bool
+type property_patch = (property_key * property_value option) list
+type move_position = Move_before | Move_after | Move_into
 type mutation =
   | Insert_block of identity * string * insert_options
-  | Update_block of identity * string
+  | Update_block of identity * string * property_patch
   | Upsert_block_property of identity * property_key * property_value
   | Remove_block_property of identity * property_key
+  | Remove_block of identity
+  | Move_block of identity * identity * move_position
+  | Create_page of string * string option
+  | Rename_page of identity * string
+  | Delete_page of identity
 type log_level = Log_debug | Log_info | Log_warn | Log_error
 type capability = Editor_read | Editor_command | Graph_read | Db_query | Graph_write
 type request =
@@ -31,6 +38,8 @@ type request =
   | Get_page of identity
   | Get_sibling_block of sibling_direction * identity
   | Get_block_properties of identity
+  | Get_page_blocks_tree of identity
+  | Get_block_children of identity
   | Mutate of mutation
   | Datascript_query of query
   | Log of log_level * string
@@ -47,6 +56,8 @@ type reply =
   | Editor_command_registered
   | Properties of Json.t
   | Mutation_applied
+  | Blocks of entity list
+  | Page_renamed
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type error =
   | Invalid_request

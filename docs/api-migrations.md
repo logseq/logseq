@@ -8,13 +8,33 @@ existing current-page/current-block/block reads. These are typed broker calls,
 not legacy positional worker RPC. See the [SDK contract](../libs/README.quickjs.md#editor-graph-writes)
 for supported insertion options, scalar property values and error codes.
 
+The second batch adds `getPageBlocksTree`, `getBlockChildren`, `removeBlock`,
+`moveBlock`, `createPage`, `renamePage` and `deletePage`. Existing insertion
+supports before/after a sibling UUID through its target identity and placement
+flags. Update now accepts a bounded `properties` patch: scalar values set
+plugin-owned keys, `null` removes them, and omitted keys remain unchanged.
+Tree reads require `graph_read`; every mutation retains `graph_write` and the
+same captured command invocation. All mutations use existing worker outliner
+operations; no worker endpoint or arbitrary transaction channel was added.
+
+Move defaults to after the target, with `before: true` for immediately before or
+`children: true` for first-child placement. Cycles are rejected. Create accepts
+an optional `customUUID`, omitted/empty properties and `redirect: false`; omitted
+redirect also means no navigation in this portable graph-only subset. Nonempty
+initial properties, navigation and journal/class/schema creation are unsupported.
+Rename rejects an existing destination page. Delete recycles rather than erases
+permanently, so worker reads may still access recycled data. Active editing
+blocks/ancestors and the active route page are protected from structural writes.
+Create returns only an `{ id, uuid, name }` receipt, even when reusing a page;
+full entity reads still require `graph_read` through `getPage`.
+
 Reads keep their existing grants. Mutations need the new independent
 `graph_write` grant and an active command invocation with captured application
 write services; registration writes are `Unsupported`. A read-only loader cannot
 load write-granted plugins. `graph_write` is reported in the immutable session
 metadata only when actually granted, and does not grant reads.
 
-This is not full legacy write compatibility. Page names, page renaming,
+This is not full legacy write compatibility. Block API page-name targets,
 currently edited block replacement, inline properties, schema/entity-valued
 property writes and unlisted options are not implemented. Property keys are
 restricted to the calling plugin's namespace rather than arbitrary keywords.

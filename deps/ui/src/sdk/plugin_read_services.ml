@@ -1,6 +1,7 @@
 open Plugin_protocol
 
 exception Rejected of error
+type write_result = Applied | Inserted of string | Page_identity of string | Created | Renamed
 
 let check_wire value =
   let nodes = ref 0 in
@@ -158,6 +159,49 @@ let capture_editor ~id =
                   | _ -> Error Runtime_failure)
           | Ok None -> immediate (fun () -> Ok Json.Null))
   in
+  let entities wire =
+    let value = checked_json Sdk_convert.json_of_wire wire in
+    match value with
+    | Json.Array values ->
+        Array.fold_right (fun value result ->
+          Result.bind result (fun rest -> Result.map (fun entity -> entity :: rest) (entity value))) values (Ok [])
+    | Json.Null -> Ok []
+    | _ -> Error Runtime_failure in
+  let page_blocks_tree identity =
+    match snapshot.Model.repo with
+    | None -> immediate (fun () -> Ok [])
+    | Some repo ->
+        let key = match identity with Entity_id id -> Wire.Int id
+          | Uuid uuid -> Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]
+          | Page_name name -> Wire.String name in
+        await (fun () -> Runtime.invoke3 "thread-api/get-page-blocks-tree"
+          (Wire.String repo) key (Wire.Map [])) entities in
+  let block_children identity =
+    match snapshot.Model.repo, identity with
+    | _, Page_name _ -> immediate (fun () -> Error Invalid_request)
+    | None, _ -> immediate (fun () -> Ok [])
+    | Some repo, _ ->
+        let key = match identity with Entity_id id -> Js.Json.number (float_of_int id)
+          | Uuid uuid -> Js.Json.string uuid | Page_name _ -> assert false in
+        let source = await (fun () -> Sdk_util.get_entity_json_for_repo repo key)
+          (fun block -> Ok (Wire.map_get_int block "db/id")) in
+        Ui_task.bind source (function
+          | Error error -> Ui_task.resolve (Error error)
+          | Ok None -> immediate (fun () -> Ok [])
+          | Ok (Some id) ->
+              let ids = await (fun () -> Runtime.invoke2 "thread-api/q" (Wire.String repo)
+                (Wire.Array [Wire.String "[:find [?e ...] :in $ ?parent :where [?e :block/parent ?parent] (not [?e :logseq.property/created-from-property]) (not [?e :block/closed-value-property]) (not [?e :logseq.property/deleted-at])]";
+                Wire.Int id]))
+                (fun wire -> check_wire wire; Ok (Wire.elems wire)) in
+              Ui_task.bind ids (function
+                | Error error -> Ui_task.resolve (Error error)
+                | Ok ids -> await (fun () ->
+                    let open Promise_ext in
+                    let* blocks = Sdk_util.get_many_for_repo repo ids in
+                    let blocks = List.map (function Some block -> block | None -> raise (Rejected Runtime_failure)) blocks in
+                    let order block = match Wire.map_get_string block "block/order" with
+                      | Some order -> order | None -> raise (Rejected Runtime_failure) in
+                    Js.Promise.resolve (Wire.Array (List.sort (fun a b -> String.compare (order a) (order b)) blocks))) entities)) in
   let apply ~check mutation =
     let cancelled = ref false in
     let failure = ref Runtime_failure in
@@ -170,18 +214,75 @@ let capture_editor ~id =
       let open Promise_ext in
       guard ();
       let repo = match snapshot.Model.repo with Some repo -> repo | None -> stop Invalid_request in
-      let identity = match mutation with
-        | Insert_block (identity, _, _) | Update_block (identity, _)
-        | Upsert_block_property (identity, _, _) | Remove_block_property (identity, _) -> identity in
-      let key = match identity with
-        | Entity_id value -> Js.Json.number (float_of_int value)
-        | Uuid value -> Js.Json.string value
-        | Page_name _ -> stop Invalid_request in
-      let* block = Sdk_util.get_entity_json_for_repo repo key in
-      guard ();
-      let uuid = match Sdk_util.block_uuid_of block with Some uuid -> uuid | None -> stop Invalid_request in
+      let get identity =
+        let key = match identity with
+          | Entity_id value -> Js.Json.number (float_of_int value)
+          | Uuid value | Page_name value -> Js.Json.string value in
+        let* block = Sdk_util.get_entity_json_for_repo repo key in
+        guard ();
+        let uuid = match Sdk_util.block_uuid_of block with Some uuid -> uuid | None -> stop Invalid_request in
+        Js.Promise.resolve (block, uuid) in
+      let parents uuid =
+        let* value = Runtime.invoke3 "thread-api/get-block-parents" (Wire.String repo)
+          (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) (Wire.Int max_nodes) in
+        guard ();
+        let chain = List.filter_map Sdk_util.block_uuid_of (Wire.elems value) in
+        if List.length chain >= max_nodes then stop Resource_limit;
+        check_wire (Wire.Array (List.map (fun uuid -> Wire.Uuid uuid) chain));
+        Js.Promise.resolve chain in
+      let protect uuid =
+        if Option.bind snapshot.Model.route_page (fun page -> page.Model.page_uuid) = Some uuid
+        then stop Unsupported;
+        match editing with
+        | None -> Js.Promise.resolve ()
+        | Some (editor, _) ->
+            if editor.Editor_state.uuid = uuid then stop Unsupported;
+            let* chain = parents editor.uuid in
+            if List.mem uuid chain then stop Unsupported;
+            Js.Promise.resolve () in
+      let property_ops uuid changes =
+        let idents = List.map (fun (key, _) ->
+          "plugin.property." ^ plugin_id_value id ^ "/" ^ property_key_value key) changes in
+        let* existing = Sdk_util.get_many_for_repo repo (List.map Wire.kw idents) in
+        guard ();
+        if List.length existing <> List.length changes then stop Runtime_failure;
+        let ops = List.concat_map (fun (((key, value), ident), existing) ->
+          match value with
+          | None -> (match existing with None -> [] | Some _ ->
+              [Wire.Array [Wire.kw "remove-block-property"; Wire.Array [Wire.Uuid uuid; Wire.kw ident]]])
+          | Some value ->
+              let wire, property_type = match value with
+                | Text_value text -> Wire.String text, "default"
+                | Number_value number -> Wire.Float number, "number"
+                | Checkbox_value flag -> Wire.Bool flag, "checkbox" in
+              let create = match existing with
+                | None -> [Wire.Array [Wire.kw "upsert-property"; Wire.Array [Wire.kw ident;
+                    Wire.Map [Wire.kw "logseq.property/type", Wire.kw property_type;
+                      Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
+                    Wire.Map [Wire.kw "property-name", Wire.String (property_key_value key)]]]]
+                | Some property ->
+                    if Wire.get property "logseq.property/type" <> Some (Wire.kw property_type)
+                       || Wire.get property "db/cardinality" <> Some (Wire.kw "db.cardinality/one")
+                    then stop Unsupported;
+                    [] in
+              create @ [Wire.Array [Wire.kw "set-block-property";
+                Wire.Array [Wire.Uuid uuid; Wire.kw ident; wire]]])
+          (List.combine (List.combine changes idents) existing) in
+        Js.Promise.resolve ops in
+      let page_reply uuid =
+        let* wire = Sdk_util.get_entity_for_repo repo uuid in
+        guard ();
+        match Wire.map_get_int wire "db/id", Sdk_util.block_uuid_of wire,
+              Wire.map_get_string wire "block/name" with
+        | Some id, Some uuid, Some name ->
+            (match entity (Json.Object ["id", Json.Number (float_of_int id);
+                "uuid", Json.String uuid; "name", Json.String name]) with
+             | Ok value -> Js.Promise.resolve (Page (Some value))
+             | Error error -> stop error)
+        | _ -> stop Runtime_failure in
       let* ops, inserted = match mutation with
-        | Insert_block (_, text, options) ->
+        | Insert_block (identity, text, options) ->
+            let* block, uuid = get identity in
             (match insertion_position options with
              | Before | After when Option.is_some (Wire.get block "block/name") -> stop Invalid_request
              | First_child | Last_child | Before | After -> ());
@@ -216,59 +317,98 @@ let capture_editor ~id =
             let insert_opts = Wire.Map [Wire.kw "sibling?", Wire.Bool sibling;
               Wire.kw "keep-uuid?", Wire.Bool true; Wire.kw "outliner-op", Wire.kw "insert-blocks"] in
             Js.Promise.resolve ([Wire.Array [Wire.kw "insert-blocks";
-              Wire.Array [Wire.Array [new_block]; Wire.Uuid target; insert_opts]]], Some insert_uuid)
-        | Update_block (_, text) ->
+              Wire.Array [Wire.Array [new_block]; Wire.Uuid target; insert_opts]]], Inserted insert_uuid)
+        | Update_block (identity, text, properties) ->
+            let* block, uuid = get identity in
             if Option.fold ~none:false ~some:(fun editor -> editor.Editor_state.uuid = uuid)
                  (Editor_state.editing ()) || Option.is_some (Wire.get block "block/name")
             then stop Unsupported;
             let* parsed = Title_refs.parse ~origin_repo:repo text in
-            Js.Promise.resolve ([Wire.Array [Wire.kw "save-block"; Wire.Array [Wire.Map (
+            let* properties = property_ops uuid properties in
+            Js.Promise.resolve (Wire.Array [Wire.kw "save-block"; Wire.Array [Wire.Map (
               [Wire.kw "block/uuid", Wire.Uuid uuid;
                Wire.kw "block/title", Wire.String parsed.Title_refs.title]
-              @ Title_refs.kvs_of_parsed parsed); Wire.Map []]]], None)
-        | Upsert_block_property (_, key, _) | Remove_block_property (_, key) ->
-            let name = property_key_value key in
-            let ident = "plugin.property." ^ plugin_id_value id ^ "/" ^ name in
-            let* properties = Sdk_util.get_many_for_repo repo [Wire.kw ident] in
-            let existing = match properties with [property] -> property | _ -> stop Runtime_failure in
-            let ops = match mutation with
-              | Upsert_block_property (_, _, value) ->
-                  let wire = match value with Text_value text -> Wire.String text
-                    | Number_value number -> Wire.Float number | Checkbox_value flag -> Wire.Bool flag in
-                  let property_type = match value with Text_value _ -> "default"
-                    | Number_value _ -> "number" | Checkbox_value _ -> "checkbox" in
-                  let upsert = match existing with
-                    | None -> [Wire.Array [Wire.kw "upsert-property"; Wire.Array [Wire.kw ident;
-                        Wire.Map [Wire.kw "logseq.property/type", Wire.kw property_type;
-                          Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
-                        Wire.Map [Wire.kw "property-name", Wire.String name]]]]
-                    | Some property ->
-                        if Wire.get property "logseq.property/type" <> Some (Wire.kw property_type)
-                           || Wire.get property "db/cardinality" <> Some (Wire.kw "db.cardinality/one")
-                        then stop Unsupported;
-                        [] in
-                  upsert @ [Wire.Array [Wire.kw "set-block-property";
-                    Wire.Array [Wire.Uuid uuid; Wire.kw ident; wire]]]
-              | Remove_block_property _ ->
-                  (match existing with None -> [] | Some _ ->
-                    [Wire.Array [Wire.kw "remove-block-property"; Wire.Array [Wire.Uuid uuid; Wire.kw ident]]])
-              | Insert_block _ | Update_block _ -> assert false in
-            Js.Promise.resolve (ops, None)
+              @ Title_refs.kvs_of_parsed parsed); Wire.Map []]] :: properties, Applied)
+        | Upsert_block_property (identity, key, value) ->
+            let* _, uuid = get identity in
+            let* ops = property_ops uuid [key, Some value] in Js.Promise.resolve (ops, Applied)
+        | Remove_block_property (identity, key) ->
+            let* _, uuid = get identity in
+            let* ops = property_ops uuid [key, None] in Js.Promise.resolve (ops, Applied)
+        | Remove_block identity ->
+            let* block, uuid = get identity in
+            if Option.is_some (Wire.get block "block/name") then stop Invalid_request;
+            let* () = protect uuid in
+            Js.Promise.resolve ([Wire.Array [Wire.kw "delete-blocks";
+              Wire.Array [Wire.Array [Wire.Uuid uuid]; Wire.Map []]]], Applied)
+        | Move_block (source, target, position) ->
+            let* block, uuid = get source in
+            let* destination, target_uuid = get target in
+            if Option.is_some (Wire.get block "block/name") || uuid = target_uuid then stop Invalid_request;
+            let* () = protect uuid in
+            let* chain = parents target_uuid in
+            if List.mem uuid chain then stop Invalid_request;
+            if position <> Move_into && Option.is_some (Wire.get destination "block/name") then stop Invalid_request;
+            let* target_uuid, sibling = match position with
+              | Move_after -> Js.Promise.resolve (target_uuid, true)
+              | Move_into -> Js.Promise.resolve (target_uuid, false)
+              | Move_before ->
+                  let* left = Runtime.invoke3 "thread-api/get-block-sibling" (Wire.String repo)
+                    (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid target_uuid]) (Wire.kw "left") in
+                  (match Sdk_util.block_uuid_of left with
+                   | Some left -> Js.Promise.resolve (left, true)
+                   | None -> let* parent = Runtime.invoke2 "thread-api/get-block-parent"
+                       (Wire.String repo) (Wire.Uuid target_uuid) in
+                       match Sdk_util.block_uuid_of parent with Some parent -> Js.Promise.resolve (parent, false)
+                       | None -> stop Invalid_request) in
+            let ops = if target_uuid = uuid then [] else [Wire.Array [Wire.kw "move-blocks";
+              Wire.Array [Wire.Array [Wire.Uuid uuid]; Wire.Uuid target_uuid;
+                Wire.Map [Wire.kw "sibling?", Wire.Bool sibling; Wire.kw "outliner-op", Wire.kw "move-blocks"]]]] in
+            Js.Promise.resolve (ops, Applied)
+        | Create_page (title, custom) ->
+            let* existing = Sdk_util.get_entity_for_repo repo title in
+            (match Sdk_util.block_uuid_of existing with
+             | Some uuid -> if Option.is_none (Wire.get existing "block/name") then stop Invalid_request;
+                 Js.Promise.resolve ([], Page_identity uuid)
+             | None ->
+                 let uuid = Option.value custom ~default:(Ui_services.env_random_uuid ()) in
+                 let* existing = Sdk_util.get_entity_for_repo repo uuid in
+                 if existing <> Wire.Nil then stop Invalid_request;
+                 Js.Promise.resolve ([Wire.Array [Wire.kw "create-page"; Wire.Array [Wire.String title;
+                   Wire.Map [Wire.kw "uuid", Wire.Uuid uuid; Wire.kw "split-namespace?", Wire.Bool true]]]], Created))
+        | Rename_page (identity, title) ->
+            let* block, uuid = get identity in
+            if Option.is_none (Wire.get block "block/name") then stop Invalid_request;
+            let* () = protect uuid in
+            let* existing = Sdk_util.get_entity_for_repo repo title in
+            (match Sdk_util.block_uuid_of existing with Some other when other <> uuid -> stop Invalid_request | _ -> ());
+            Js.Promise.resolve ([Wire.Array [Wire.kw "rename-page"; Wire.Array [Wire.Uuid uuid; Wire.String title]]], Renamed)
+        | Delete_page identity ->
+            let* block, uuid = get identity in
+            if Option.is_none (Wire.get block "block/name") then stop Invalid_request;
+            let* () = protect uuid in
+            Js.Promise.resolve ([Wire.Array [Wire.kw "delete-page"; Wire.Array [Wire.Uuid uuid; Wire.Map []]]], Applied)
       in
       guard ();
-      let* _ = match ops with
+      let* result = match ops with
         | [] -> Js.Promise.resolve Wire.Nil
         | _ -> Sdk_util.apply_ops_for_repo ~before_commit:guard ~refresh:false repo ops (Wire.Map []) in
       guard ();
       match inserted with
-      | None -> Js.Promise.resolve Mutation_applied
-      | Some inserted_uuid ->
+      | Applied -> Js.Promise.resolve Mutation_applied
+      | Renamed -> Js.Promise.resolve Page_renamed
+      | Page_identity uuid -> page_reply uuid
+      | Inserted inserted_uuid ->
           let* wire = Sdk_util.get_entity_for_repo repo inserted_uuid in
           guard ();
           (match entity_result Sdk_convert.result_json_of_wire wire with
            | Ok (Some value) -> Js.Promise.resolve (Block (Some value))
            | Ok None -> stop Runtime_failure
            | Error error -> stop error)
+      | Created ->
+          let uuid = match Wire.elems result with [ _; Wire.Uuid uuid ] | [ _; Wire.String uuid ] -> uuid
+            | _ -> stop Runtime_failure in
+          page_reply uuid
     in
     Ui_task.create ~cancel:(fun () -> cancelled := true) (fun ~resolve ~reject:_ ->
       try ignore (Js.Promise.catch (fun _ -> resolve (Error !failure); Js.Promise.resolve ())
@@ -336,6 +476,8 @@ let capture_editor ~id =
     get_page = lookup Sdk_convert.result_json_of_wire;
     sibling_block;
     block_properties;
+    page_blocks_tree;
+    block_children;
     query;
     log = (fun level text -> immediate (fun () ->
       let message = "[plugin:" ^ plugin_id_value id ^ "] " ^ text in

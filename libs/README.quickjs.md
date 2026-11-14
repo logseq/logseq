@@ -82,10 +82,17 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `Editor.getBlock(identity, opts?)`                        | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; no child tree expansion                               |
 | `Editor.getPage(identity, opts?)`                         | `graph_read`                | Numeric entity ID, UUID, `{ uuid }`, or page name; no child tree expansion                    |
 | `Editor.getBlockProperties(identity)`                     | `graph_read`                | Readable own/class-default properties or `null`                                               |
+| `Editor.getPageBlocksTree(identity)`                      | `graph_read`                | Ordered nested page blocks; IDs, UUIDs, or page names                                         |
+| `Editor.getBlockChildren(identity)`                       | `graph_read`                | Ordered direct content children, including collapsed children                                 |
 | `Editor.insertBlock(identity, content, opts?)`            | `graph_write`               | Insert one block during a command invocation                                                  |
-| `Editor.updateBlock(identity, content, opts?)`            | `graph_write`               | Replace a nonediting block title                                                              |
+| `Editor.updateBlock(identity, content, opts?)`            | `graph_write`               | Replace a nonediting block title and patch plugin-owned properties                            |
 | `Editor.upsertBlockProperty(identity, key, value, opts?)` | `graph_write`               | Plugin-owned scalar property                                                                  |
 | `Editor.removeBlockProperty(identity, key)`               | `graph_write`               | Remove a plugin-owned property value                                                          |
+| `Editor.removeBlock(identity)`                            | `graph_write`               | Remove a nonediting block subtree through the outliner                                        |
+| `Editor.moveBlock(source, target, opts?)`                 | `graph_write`               | Move before, after, or into a target                                                          |
+| `Editor.createPage(name, properties?, opts?)`             | `graph_write`               | Create or reuse a page without navigation; empty initial properties only                      |
+| `Editor.renamePage(identity, name)`                       | `graph_write`               | Rename a nonactive page; returns `true`                                                       |
+| `Editor.deletePage(identity)`                             | `graph_write`               | Recycle a nonactive page using the existing outliner operation                                |
 | `DB.datascriptQuery(query, ...inputs)`                    | `graph_read`, `db_query`    | DataScript query with bounded plain-data inputs/results                                       |
 | `Commands.registerEditorCommand(descriptor, handler)`     | `editor_command`            | Activation-time registration; handlers return the closed editor action program                |
 | `console.log/info/warn/error/debug`                       | None                        | Bounded application diagnostics, not a browser console                                        |
@@ -110,9 +117,13 @@ The configured command loader also requires `editor_command`. Registration-time
 writes and invocations without captured write services reject with `Unsupported`.
 The read-only loader rejects write grants. Existing read APIs retain their grants.
 
-The four mutations accept a positive entity ID, UUID or `{ uuid }`, not a page
-name. Missing targets/graphs are `Invalid_request`, not successful no-ops.
-`insertBlock` returns the persisted entity; the other three return no value.
+Block mutations accept a positive entity ID, UUID or `{ uuid }`, not a page
+name. Page rename/delete also accept a page name. Missing mutation targets/graphs
+are `Invalid_request`, not successful no-ops. `insertBlock` and `createPage`
+return the persisted block and a page receipt respectively; `renamePage` returns
+`true`; other writes return no value. The page receipt contains only `{ id, uuid,
+name }`, including on reuse: write authority must not reveal existing page
+properties. Use `getPage` with `graph_read` for the full page entity.
 
 - Insert defaults to the last child. `start: true` inserts the first child;
   `end: true` is an explicit last child. `sibling: true` inserts after the target;
@@ -120,9 +131,24 @@ name. Missing targets/graphs are `Invalid_request`, not successful no-ops.
   and start/end cannot both be true. `customUUID` must be a valid unused UUID.
 - Insert `properties`, `schema` and `autoOrderedList` are `Unsupported`. Unknown
   fields, wrong value types and contradictory positioning are `Invalid_request`.
-- Update accepts omitted/empty options only; `properties` is `Unsupported`.
-  Updating page titles or the currently edited block is `Unsupported`, avoiding
+- Update accepts `properties`, a patch of at most 32 plugin-owned scalar keys.
+  Omitted keys are preserved, `null` removes an own value, and strings/numbers/booleans
+  set values using the same namespace/type restrictions as property upsert.
+  `schema` is `Unsupported`. Updating page titles or the currently edited block is `Unsupported`, avoiding
   overwriting an editor buffer. Use the configured `insertText` action for that buffer.
+- Move defaults to after the target; `{ before: true }` moves immediately before
+  it, and `{ children: true }` moves into it as the first child. The flags cannot
+  both be true. Self/descendant cycles and sibling moves against page roots are
+  `Invalid_request`. Moving page entities through this block API is invalid.
+- Removing/moving the active editing block or one of its ancestors, and
+  renaming/deleting the active route page or an editing ancestor, are `Unsupported`.
+- Create accepts an optional unused `customUUID`. Initial properties must be
+  omitted or empty; use separate property writes otherwise. `redirect` may be
+  omitted or `false`; this graph-only target never changes the route, unlike the
+  legacy default. `redirect: true`, journal/class/schema options and nonempty
+  initial properties are `Unsupported`. Rename rejects collisions with another
+  page. Delete uses the worker's recoverable recycle semantics, not permanent
+  erasure; low-level reads can still inspect recycled entities.
 - Property keys contain 1–64 ASCII letters, digits, `_` or `-`. Writes resolve
   them only inside `plugin.property.<plugin-id>/<key>`, never a built-in or another
   plugin namespace. Reads expose readable colon-prefixed property idents and
@@ -172,7 +198,13 @@ codes as `PluginError`; local SDK validation can throw before a request is sent.
 The application captures the graph before
 invocation and rechecks freshness around the existing worker sibling read.
 
-Not implemented by this target: other block/page writes (including delete/move/rename),
+Tree reads return `[]` for absent graphs/targets and retain the shared response
+size/depth limits. Page trees contain nested `children`; block children are only
+the direct content children, not a flattened descendant walk. The latter uses a
+fixed parent-constrained worker query and batched entity reads, not plugin-supplied
+query text. Both need only `graph_read`. No worker endpoint is added.
+
+Not implemented by this target: batch insertion and unlisted block/page options,
 settings, subscriptions, plugin installation/discovery,
 toolbar/panel/custom renderers, network/timers/files/Git, and browser or OS
 window APIs. DOM, CSS injection, WebView, iframe, and ReactDOM fallbacks are not
