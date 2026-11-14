@@ -1528,6 +1528,7 @@ let queue_racing_key ev uuid =
 module Drag = Block_drag
 
 let drag_state = ref Drag.empty
+let pending_drag_move : Ui_services.ev option ref = ref None
 
 let drag_context () = Runtime.repo (), Runtime.route ()
 
@@ -1539,82 +1540,103 @@ let publish_drag () =
   end
 
 let drag_cancel () =
+  pending_drag_move := None;
   drag_state := Drag.cancel !drag_state;
   publish_drag ()
 
 let drag_reset () =
+  pending_drag_move := None;
   drag_state := Drag.empty;
   publish_drag ()
 
 let arm_drag (ev : Ui_services.ev) =
-  match closest ".bullet-container" ev.Ui_services.target with
-  | Some el -> (
+  match ev.Ui_services.target, closest ".bullet-container" ev.Ui_services.target with
+  | Some hit, Some el -> (
       match el.Ui_services.attr "data-blockid" with
       | Some u when S.find u <> None ->
-          let source = S.drag_owner ~scope:(A.scope_of_el el) u in
+          pending_drag_move := None;
+          let source = S.drag_owner ~scope:(A.scope_of_el hit) u in
           drag_state := Drag.arm ~context:(drag_context ()) ~source
             ~x:ev.Ui_services.x ~y:ev.Ui_services.y
       | _ -> ())
-  | None -> ()
+  | _ -> ()
 
 let native_drag_target ev (src : S.drag_owner) =
-  if readonly_block_target ev.Ui_services.target then None
+  if readonly_block_target ev.Ui_services.target then None, false
   else
-    match closest ".ls-block" (ev.Ui_services.target) with
-    | Some el -> (
+    match ev.Ui_services.target, closest ".ls-block" ev.Ui_services.target with
+    | Some hit, Some el -> (
         match el.Ui_services.attr "data-blockid" with
         | Some t when A.can_drop_dragged_block src.S.uuid t ->
             let left, top, width, height = el.Ui_services.rect () in
-            if el.Ui_services.rect_pending () || width <= 0. || height <= 0.
-            then None
+            let pending = el.Ui_services.rect_pending () in
+            if pending || width <= 0. || height <= 0.
+            then None, pending
             else
-              let scope = A.scope_of_el el in
+              (* Native closest returns a shallow ancestor. The original
+                 hit still owns the complete data-cid container chain. *)
+              let scope = A.scope_of_el hit in
               let first =
                 match S.find_parent_in_scope ~scope t with
                 | Some (_, idx) -> idx = 0
                 | None -> false
               in
               Some (S.drag_owner ~scope t, Drag.zone ~first ~left ~top
-                ~x:ev.Ui_services.x ~y:ev.Ui_services.y)
-        | _ -> None)
-    | None -> None
+                ~x:ev.Ui_services.x ~y:ev.Ui_services.y), false
+        | _ -> None, false)
+    | _ -> None, false
 
 let native_drag_ready () =
   S.ready () && not (Ui_services.env_publishing ())
   && Option.fold ~none:false ~some:(fun (source : S.drag_owner) -> S.find source.S.uuid <> None)
        (Drag.source !drag_state)
 
+let move_native_drag ev =
+  match Drag.source !drag_state with
+  | None -> ()
+  | Some source ->
+      let was_active = Drag.preview !drag_state <> None in
+      let target, pending = native_drag_target ev source in
+      drag_state := Drag.move ~context:(drag_context ())
+        ~x:ev.Ui_services.x ~y:ev.Ui_services.y
+        ~target !drag_state;
+      pending_drag_move :=
+        if pending && Drag.preview !drag_state <> None then Some ev else None;
+      if not was_active && Drag.preview !drag_state <> None then
+        A.begin_block_drag ~scope:source.S.scope source.S.uuid;
+      publish_drag ()
+
 let on_native_pointermove ev =
   if not (native_drag_ready ()) || ev.Ui_services.buttons land 1 = 0 then
     drag_cancel ()
-  else
-    match Drag.source !drag_state with
-    | None -> ()
-    | Some source ->
-        let was_active = Drag.preview !drag_state <> None in
-        drag_state := Drag.move ~context:(drag_context ())
-          ~x:ev.Ui_services.x ~y:ev.Ui_services.y
-          ~target:(native_drag_target ev source) !drag_state;
-        if not was_active && Drag.preview !drag_state <> None then
-          A.begin_block_drag ~scope:source.S.scope source.S.uuid;
-        publish_drag ()
+  else move_native_drag ev
+
+let on_native_node_rect () =
+  match Drag.preview !drag_state, !pending_drag_move with
+  | Some (_, None), Some ev ->
+      if native_drag_ready () then move_native_drag ev else drag_cancel ()
+  | _ -> ()
 
 let on_native_pointerup ev =
-  if ev.Ui_services.button = 0 then
+  if ev.Ui_services.button = 0 then begin
+    pending_drag_move := None;
     if not (native_drag_ready ()) then drag_cancel ()
     else
       match Drag.source !drag_state with
       | None -> ()
       | Some source ->
+          let target, _ = native_drag_target ev source in
           let next, drop = Drag.release ~context:(drag_context ())
-            ~target:(native_drag_target ev source) !drag_state in
+            ~target !drag_state in
           drag_state := next;
           publish_drag ();
           Option.iter (fun ((source : S.drag_owner), (target : S.drag_owner), zone) ->
             A.drop_dragged_block ~alt:ev.Ui_services.alt ~scope:target.S.scope
               source.S.uuid target.S.uuid (Drag.zone_name zone)) drop
+  end
 
 let consume_drag_click () =
+  pending_drag_move := None;
   let next, suppress = Drag.consume_click !drag_state in
   drag_state := next;
   publish_drag ();

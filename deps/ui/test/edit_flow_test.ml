@@ -1393,6 +1393,96 @@ let test_zoom_structure_boundary (h : host) =
   h.restore saved;
   Js.Promise.resolve ()
 
+(* Native closest returns a shallow row. Only the original hit retains
+   the outer container, so asking that row for data-cid loses its scope. *)
+let native_drag_event ~scope ~uuid ~pending ~buttons ~x ~y =
+  let base = Ui_services.dom_body () in
+  let container = { base with Ui_services.attr =
+      (fun name -> if name = "data-cid" then Some scope else None) } in
+  let row = { base with Ui_services.closest = (fun _ -> None);
+    attr = (function "data-blockid" -> Some uuid | "data-editable" -> Some "true" | _ -> None);
+    rect = (fun () -> if !pending then 0., 0., 0., 0. else 0., 0., 200., 24.);
+    rect_pending = (fun () -> !pending) } in
+  let hit = { base with Ui_services.closest = (function
+      | ".ls-block" | ".bullet-container" -> Some row
+      | "[data-cid]" -> Some container
+      | _ -> None) } in
+  { Ui_services.x; y; shift = false; meta = false; ctrl = false;
+    alt = false; composing = false; key = None; key_char = None;
+    buttons; button = 0; repeat = false; movement_x = 0.; movement_y = 0.;
+    default_prevented = false; target = Some hit; touches = [];
+    detail = (fun _ -> None); detail_json = (fun _ -> None);
+    clipboard_get = (fun _ -> "");
+    clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot);
+    clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+    files = []; has_files = false; prevent_default = (fun () -> ());
+    stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
+
+let test_native_drag_rect_reply (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "rect-target" "target";
+                 Test_check.block "rect-source" "source" ];
+  reset_editor ();
+  Editor_keys.drag_reset ();
+  A.select_single_in ~scope:"main" "rect-source";
+  Editor_keys.arm_drag (native_drag_event ~scope:"main" ~uuid:"rect-source"
+    ~pending:(ref false) ~buttons:1 ~x:0. ~y:0.);
+  let pending = ref true in
+  Editor_keys.on_native_pointermove (native_drag_event ~scope:"main" ~uuid:"rect-target"
+    ~pending ~buttons:1 ~x:20. ~y:6.);
+  check "active drag has no target while row measurement is pending"
+    (match S.drag () with Some drag -> drag.S.target = None | None -> false);
+  pending := false;
+  Editor_keys.on_native_node_rect ();
+  check "node-rect reply completes the active preview without another move"
+    (match S.drag () with
+     | Some { S.target = Some (target, Block_drag.Top); _ } ->
+         target.S.scope = "main" && target.S.uuid = "rect-target"
+     | _ -> false);
+  Editor_keys.drag_cancel ();
+  Editor_keys.on_native_node_rect ();
+  check "node-rect reply cannot revive a cancelled drag" (S.drag () = None);
+  Editor_keys.drag_reset ();
+  Js.Promise.resolve ()
+
+let test_native_drag_scoped_drop (h : host) =
+  let* () = settle h 40 in
+  let target = Test_check.block "scoped-target" "target" in
+  let source = Test_check.block ~children:[Test_check.block "scoped-child" "child"]
+      "scoped-source" "source" in
+  stage_page h [ Test_check.block "scoped-first" "first"; target;
+                 Test_check.block "scoped-next" "next"; source ];
+  reset_editor ();
+  Editor_keys.drag_reset ();
+  let unregister = S.register_block_source ~scope:"sidebar" ~kind:S.Outliner
+      (fun () -> [ target; source ]) in
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  Runtime.worker := Some { worker with Worker_client.invoke_fn =
+      (fun name args -> if name = "thread-api/get-block-parent" then
+          Js.Promise.resolve (W.Map [W.Keyword "block/uuid", W.Uuid "target-page"])
+        else worker.Worker_client.invoke_fn name args) };
+  A.select_single_in ~scope:"main" "scoped-source";
+  Editor_keys.arm_drag (native_drag_event ~scope:"main" ~uuid:"scoped-source"
+    ~pending:(ref false) ~buttons:1 ~x:0. ~y:0.);
+  let move = native_drag_event ~scope:"sidebar" ~uuid:"scoped-target"
+      ~pending:(ref false) ~buttons:1 ~x:20. ~y:6. in
+  Editor_keys.on_native_pointermove move;
+  check "duplicate UUID target keeps the sidebar owner and its first-row Top zone"
+    (match S.drag () with
+     | Some { S.target = Some (owner, Block_drag.Top); _ } ->
+         owner.S.scope = "sidebar" && owner.S.uuid = "scoped-target"
+     | _ -> false);
+  Editor_keys.on_native_pointerup { move with Ui_services.buttons = 0 };
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "scoped release emits the existing Top mutation for the target's parent"
+    (!ops = [ Ops.move_blocks_top [ "scoped-source" ] "target-page" ]);
+  unregister ();
+  Editor_keys.drag_reset ();
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_drop_top_owner (h : host) =
   let saved = h.snapshot () in
   let rec run = function
@@ -1565,6 +1655,8 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_text_selection_arrows h in
   test_multi_selection_arrows h;
   let* () = test_zoom_structure_boundary h in
+  let* () = test_native_drag_rect_reply h in
+  let* () = test_native_drag_scoped_drop h in
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
