@@ -1,5 +1,7 @@
 type plugin_id = string
-type callback_id = { owner : int }
+type callback_id = { owner : int; slot : int }
+type command_descriptor = { key : string; label : string }
+type command_handle = { plugin : plugin_id; generation : int; descriptor : command_descriptor }
 type editing_context = { block_uuid : string; text : string }
 type entity = Json.t
 type page_result = Json.t
@@ -19,6 +21,7 @@ type request =
   | Get_page of identity
   | Datascript_query of query
   | Log of log_level * string
+  | Register_editor_command of command_descriptor * callback_id
 type reply =
   | Editing_context of editing_context
   | Plugin_info of plugin_id
@@ -28,6 +31,7 @@ type reply =
   | Current_page of page_result
   | Query_result of Json.t
   | Logged
+  | Editor_command_registered
 type error =
   | Invalid_request
   | Unsupported
@@ -122,9 +126,43 @@ let plugin_id id =
     | _ -> false) id then Ok id
   else Error Invalid_request
 
-let callback_id ~owner = { owner }
+let callback_id ~owner = { owner; slot = 0 }
+let command_callback_id ~owner ~slot =
+  if slot < 1 || slot > max_calls then Error Invalid_request
+  else Ok { owner; slot }
+let callback_slot callback = callback.slot
 let plugin_id_value id = id
 let owns_callback ~owner callback = owner = callback.owner
+
+let command_descriptor value =
+  let* () = validate_value value in
+  match value with
+  | Json.Object fields when List.length fields = 2 ->
+      (match Json.get "key" value, Json.get "label" value with
+      | Some (Json.String key), Some (Json.String label) ->
+          let rec controls index =
+            index < String.length label &&
+            (Char.code label.[index] < 32 || Char.code label.[index] = 127 ||
+             (Char.code label.[index] = 194 && index + 1 < String.length label &&
+              Char.code label.[index + 1] >= 128 && Char.code label.[index + 1] <= 159) ||
+             controls (index + 1)) in
+          if String.length key > 64 || String.length label > 128 then Error Resource_limit
+          else if key = "" || label = "" ||
+            not (String.for_all (function
+              | 'a' .. 'z' | 'A' .. 'Z' | '0' .. '9' | '-' | '_' | '.' -> true
+              | _ -> false) key) ||
+            controls 0
+          then Error Invalid_request
+          else Ok { key; label }
+      | _ -> Error Invalid_request)
+  | _ -> Error Invalid_request
+
+let command_key descriptor = descriptor.key
+let command_label descriptor = descriptor.label
+let command_handle ~id ~generation descriptor = { plugin = id; generation; descriptor }
+let command_plugin handle = handle.plugin
+let command_generation handle = handle.generation
+let command_metadata handle = handle.descriptor
 
 let editing_context ~block_uuid ~text =
   let uuid_valid = String.length block_uuid = 36 &&
@@ -222,7 +260,7 @@ let reply_value = function
   | Plugin_info id -> Json.Object ["id", Json.String id; "runtime", Json.String "quickjs"]
   | Editing_state (Some context) -> editing_context_value context
   | Block (Some entity) | Page (Some entity) -> entity
-  | Editing_state None | Block None | Page None | Logged -> Json.Null
+  | Editing_state None | Block None | Page None | Logged | Editor_command_registered -> Json.Null
   | Current_page value | Query_result value -> value
 
 let program actions =

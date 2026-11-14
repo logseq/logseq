@@ -21,7 +21,8 @@ dune_in() (
 
 dune_in "$worker" build --build-dir="$worker/_build/quickjs-sdk" bin/main.exe
 dune_in "$ui" build --build-dir="$ui/_build/quickjs-sdk" \
-  native/logseq_ui_native.cmxa js_app test/quickjs/sdk_read_probe.exe
+  native/logseq_ui_native.cmxa js_app test/quickjs/sdk_read_probe.exe \
+  test/quickjs/sdk_command_probe.exe
 dune_in "$ui" runtest --build-dir="$ui/_build/quickjs-sdk" test/quickjs
 pnpm --dir "$root/libs" run build:quickjs \
   --env "plugin=$ui/test/quickjs/read_plugin.ts" --env "output=$run/plugin.mjs"
@@ -30,3 +31,12 @@ env -i HOME="$HOME" PATH="$prefix/bin:$PATH" \
   LOGSEQ_UI_STATE_DIR="$run/ui" LOGSEQ_NO_LOGIN_DAEMON=1 \
   LOGSEQ_DB_WORKER_BIN="$worker/_build/quickjs-sdk/default/bin/main.exe" \
   "$ui/_build/quickjs-sdk/default/test/quickjs/sdk_read_probe.exe" "$run/plugin.mjs"
+pnpm --dir "$root/libs" run build:quickjs \
+  --env "plugin=$ui/test/quickjs/command_plugin.ts" --env "output=$run/command.mjs"
+mkdir -p "$run/command-state"
+touch "$run/command-state/.quickjs-sdk-probe"
+env -i HOME="$HOME" PATH="$prefix/bin:$PATH" \
+  LOGSEQ_ROOT_DIR="$run/command-state" LOGSEQ_GRAPHS_DIR="$run/command-graphs" \
+  LOGSEQ_UI_STATE_DIR="$run/command-ui" LOGSEQ_NO_LOGIN_DAEMON=1 \
+  LOGSEQ_DB_WORKER_BIN="$worker/_build/quickjs-sdk/default/bin/main.exe" \
+  "$ui/_build/quickjs-sdk/default/test/quickjs/sdk_command_probe.exe" "$run/command.mjs"

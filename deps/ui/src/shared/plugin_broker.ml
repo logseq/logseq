@@ -20,6 +20,8 @@ type session = {
   capabilities : capability list;
   mutable closed : bool;
   mutable invocations : invocation list;
+  mutable registering : bool;
+  mutable commands : (command_descriptor * callback_id) list;
 }
 and invocation = {
   session : session;
@@ -36,7 +38,31 @@ let require_owner t session =
   if t.identity != session.broker.identity then invalid_arg "Foreign plugin session"
 
 let open_session broker plugin capabilities =
-  { broker; plugin; capabilities; closed = false; invocations = [] }
+  { broker; plugin; capabilities; closed = false; invocations = [];
+    registering = true; commands = [] }
+
+let session_current t session =
+  require_owner t session;
+  not session.closed
+
+let activate_commands t session =
+  require_owner t session;
+  if session.closed then Error Cancelled
+  else if not session.registering then Error Invalid_request
+  else begin session.registering <- false; Ok () end
+
+let commands t session =
+  require_owner t session;
+  if session.closed || session.registering then [] else List.map fst session.commands
+
+let command_callback t session ~key =
+  require_owner t session;
+  if session.closed then Error Cancelled
+  else if not (List.mem Editor_command session.capabilities) then Error Permission_denied
+  else if session.registering then Error Invalid_request
+  else match List.find_opt (fun (descriptor, _) -> command_key descriptor = key) session.commands with
+    | Some (_, callback) -> Ok callback
+    | None -> Error Invalid_request
 
 let begin_invocation ?reads t session services =
   require_owner t session;
@@ -70,6 +96,7 @@ let required_capabilities = function
   | Get_current_block | Get_current_page -> [Editor_read; Graph_read]
   | Get_block _ | Get_page _ -> [Graph_read]
   | Datascript_query _ -> [Graph_read; Db_query]
+  | Register_editor_command _ -> [Editor_command]
 
 let service invocation request =
   let map task f = Ui_task.bind task (fun result -> Ui_task.resolve (Result.map f result)) in
@@ -77,6 +104,18 @@ let service invocation request =
   | Get_editing_context ->
       map (invocation.services.get_editing_context ()) (fun value -> Editing_context value)
   | Get_plugin_info -> Ui_task.resolve (Ok (Plugin_info invocation.session.plugin))
+  | Register_editor_command (descriptor, callback) ->
+      let session = invocation.session in
+      let result =
+        if not session.registering then Error Unsupported
+        else if List.exists (fun (existing, _) -> command_key existing = command_key descriptor)
+                  session.commands then Error Invalid_request
+        else if List.length session.commands >= max_calls then Error Resource_limit
+        else begin
+          session.commands <- session.commands @ [descriptor, callback];
+          Ok Editor_command_registered
+        end in
+      Ui_task.resolve result
   | request ->
       match invocation.reads with
       | None -> Ui_task.resolve (Error Unsupported)
@@ -92,7 +131,7 @@ let service invocation request =
               invocation.diagnostic_bytes <- invocation.diagnostic_bytes + String.length text;
               if invocation.diagnostic_bytes > 8192 then Ui_task.resolve (Error Resource_limit)
               else map (reads.log level text) (fun () -> Logged)
-          | Get_editing_context | Get_plugin_info -> assert false
+          | Get_editing_context | Get_plugin_info | Register_editor_command _ -> assert false
 
 let dispatch t session invocation request =
   match check t session invocation with
@@ -124,5 +163,6 @@ let close_session t session =
   require_owner t session;
   if not session.closed then begin
     session.closed <- true;
+    session.commands <- [];
     List.iter (cancel t) session.invocations
   end
