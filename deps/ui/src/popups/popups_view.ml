@@ -1331,9 +1331,13 @@ let handle_contextmenu st (ev : Ui_services.ev) =
           | Some id ->
               ev.Ui_services.prevent_default ();
               ev.Ui_services.stop_propagation ();
-              (* cljs block-content contextmenu selects the block it
-                 opened on, unless it is already in a multi-selection *)
-              if Editor_state.selection_scope () <> scope
+              (* cljs tests the target's bullet class, not a bullet ancestor. *)
+              let bullet_target =
+                match el.Ui_services.closest ".bullet" with
+                | Some bullet -> el.Ui_services.contains bullet
+                | None -> false
+              in
+              if bullet_target || Editor_state.selection_scope () <> scope
                  || not (Editor_state.is_selected id) then
                 Editor_actions.select_single_in ~scope id;
               close_cm_picker ();
