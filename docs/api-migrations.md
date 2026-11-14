@@ -27,6 +27,8 @@ permanently, so worker reads may still access recycled data. Active editing
 blocks/ancestors and the active route page are protected from structural writes.
 Create returns only an `{ id, uuid, name }` receipt, even when reusing a page;
 full entity reads still require `graph_read` through `getPage`.
+Journal, class and property page deletion is `Unsupported`; their worker paths
+may permanently retract content instead of recycling it.
 
 Reads keep their existing grants. Mutations need the new independent
 `graph_write` grant and an active command invocation with captured application

@@ -85,6 +85,20 @@ let run path =
     Wire.kw "block/parent", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid];
     Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid]] in
   ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [page; block]; Wire.Nil; Wire.Nil]);
+  let special_page name suffix tag fields = Wire.Map (
+    [Wire.kw "block/name", Wire.String name; Wire.kw "block/title", Wire.String name;
+     Wire.kw "block/uuid", Wire.Uuid ("00000000-0000-0000-0000-000000000" ^ suffix);
+     Wire.kw "block/created-at", Wire.Int 1; Wire.kw "block/updated-at", Wire.Int 1;
+     Wire.kw "block/tags", Wire.Set [Wire.kw tag]] @ fields) in
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    special_page "portable class" "111" "logseq.class/Tag"
+      [Wire.kw "db/ident", Wire.kw "user.class/portable";
+       Wire.kw "logseq.property.class/extends", Wire.Set [Wire.kw "logseq.class/Root"]];
+    special_page "portable property" "112" "logseq.class/Property"
+      [Wire.kw "db/ident", Wire.kw "plugin.property.command-probe/protected";
+       Wire.kw "logseq.property/type", Wire.kw "default"];
+    special_page "portable journal" "113" "logseq.class/Journal"
+      [Wire.kw "block/journal-day", Wire.Int 20200101]]; Wire.Nil; Wire.Nil]);
   let page = Option.get (Decode.page_of_summary page) in
   let initial = {Model.initial with repo=Some repo; route=Model.Page page.Model.page_title;
     route_page=Some page} in
@@ -117,7 +131,10 @@ let run path =
     List.find (fun handle -> command_key (command_metadata handle) = key)
       (Plugin_host.portable_commands ()) in
   let runner = load () in
-  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 10);
+  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 11);
+  let ac = editing "/delete-special-pages" in
+  check "special pages cannot be permanently deleted"
+    (task (Popups_state.run_portable_command popup ac (handle "delete-special-pages")) = Ok ());
   let ac = editing "/editor-api-v2" in
   check "tree, block and page operations preserve the active editor"
     (task (Popups_state.run_portable_command popup ac (handle "editor-api-v2")) = Ok ()

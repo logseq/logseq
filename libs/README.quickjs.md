@@ -148,7 +148,9 @@ properties. Use `getPage` with `graph_read` for the full page entity.
   legacy default. `redirect: true`, journal/class/schema options and nonempty
   initial properties are `Unsupported`. Rename rejects collisions with another
   page. Delete uses the worker's recoverable recycle semantics, not permanent
-  erasure; low-level reads can still inspect recycled entities.
+  erasure; low-level reads can still inspect recycled entities. Journal, class and
+  property page deletion is `Unsupported`: their worker paths may permanently
+  retract content instead of recycling it.
 - Property keys contain 1–64 ASCII letters, digits, `_` or `-`. Writes resolve
   them only inside `plugin.property.<plugin-id>/<key>`, never a built-in or another
   plugin namespace. Reads expose readable colon-prefixed property idents and

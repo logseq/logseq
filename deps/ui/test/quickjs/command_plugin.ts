@@ -7,6 +7,30 @@ void logseq.ready(async () => {
   if (++activated !== 1) throw new Error('Repeated activation')
   const register = logseq.Commands.registerEditorCommand
   await register(
+    { key: 'delete-special-pages', label: 'Delete special pages' },
+    async () => {
+      for (const suffix of ['111', '112', '113']) {
+        const uuid = `00000000-0000-0000-0000-000000000${suffix}`
+        let refused = false
+        try {
+          await logseq.Editor.deletePage(uuid)
+        } catch (error) {
+          refused = (error as Error).message.includes('Unsupported')
+        }
+        if (
+          !refused ||
+          !(await logseq.DB.datascriptQuery(
+            `[:find ?page . :where [?page :block/uuid #uuid "${uuid}"]]`
+          ))
+        )
+          throw new Error(
+            'Special page deletion must be refused without data loss'
+          )
+      }
+      return []
+    }
+  )
+  logseq.Commands.registerEditorCommand(
     { key: 'editor-api-v2', label: 'Portable trees and pages' },
     async () => {
       const page = await logseq.Editor.createPage(

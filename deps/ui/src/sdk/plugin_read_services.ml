@@ -386,6 +386,15 @@ let capture_editor ~id =
         | Delete_page identity ->
             let* block, uuid = get identity in
             if Option.is_none (Wire.get block "block/name") then stop Invalid_request;
+            let schema_page = match Wire.get block "block/tags" with
+              | None -> false
+              | Some tags -> List.exists (fun tag ->
+                  match Wire.get tag "db/ident" with
+                  | Some (Wire.Keyword name) | Some (Wire.String name) ->
+                      name = "logseq.class/Tag" || name = "logseq.class/Property"
+                  | _ -> false) (Wire.elems tags) in
+            if schema_page || Option.is_some (Wire.get block "block/journal-day")
+            then stop Unsupported;
             let* () = protect uuid in
             Js.Promise.resolve ([Wire.Array [Wire.kw "delete-page"; Wire.Array [Wire.Uuid uuid; Wire.Map []]]], Applied)
       in
