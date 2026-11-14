@@ -1980,33 +1980,25 @@ let drop_dragged_block src tgt move_to =
     if sources = [] then () else
     match move_to with
     | "top" -> (
-        let parent_uuid =
-          match S.find_parent tgt with
-          | Some (Some p, _) -> p.Model.block_uuid
-          | Some (None, _) -> (
-              (* top-level block: the parent is the containing page —
-                 journals views keep their pages in model.journals
-                 instead of route_page *)
-              match (Runtime.model ()).Model.route_page with
-              | Some page -> page.Model.page_uuid
-              | None ->
-                  List.find_map
-                    (fun (p : Model.page) ->
-                      if
-                        List.exists
-                          (fun (b : Model.block) ->
-                            b.Model.block_uuid = Some tgt)
-                          p.Model.page_blocks
-                      then p.Model.page_uuid
-                      else None)
-                    (Runtime.model ()).Model.journals)
-          | None -> None
-        in
-        match parent_uuid with
-        | Some pu ->
+        match Runtime.capture_reload_origin () with
+        | None -> ()
+        | Some origin ->
+            let opts = Ops.current_history_opts (Wire.Map []) in
             ignore
-              (Ops.apply_and_refresh [ Ops.move_blocks_top sources pu ])
-        | None -> ())
+              (let* parent =
+                 Runtime.invoke2 "thread-api/get-block-parent"
+                   (Wire.String origin.Runtime.reload_repo) (Wire.Uuid tgt)
+               in
+               (* A displayed root may belong to a sidebar page or zoom
+                  block. Resolve its real parent without borrowing the
+                  main page, and retire the drop if its origin changed. *)
+               if not (Runtime.reload_origin_current origin) then
+                 Js.Promise.resolve ()
+               else
+                 match Wire.map_get_uuid parent "block/uuid" with
+                 | Some pu ->
+                     Ops.apply_and_refresh ~opts [ Ops.move_blocks_top sources pu ]
+                 | None -> Js.Promise.resolve ()))
     | "nested" ->
         ignore
           (Ops.apply_and_refresh [ Ops.move_blocks sources tgt ~sibling:false ])

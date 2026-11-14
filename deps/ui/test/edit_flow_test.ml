@@ -1144,6 +1144,51 @@ let test_zoom_structure_boundary (h : host) =
   h.restore saved;
   Js.Promise.resolve ()
 
+let test_drop_top_owner (h : host) =
+  let saved = h.snapshot () in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (name, change_origin, accept) :: rest ->
+        reset_editor ();
+        stage_page h [ Test_check.block "main-only" "unrelated" ];
+        let scope = "drop-owner-test" in
+        let blocks =
+            [ Test_check.block "drop-source" "source";
+              Test_check.block "drop-target" "target" ] in
+        let unregister = S.register_block_source ~scope (fun () -> blocks) in
+        A.begin_block_drag ~scope "drop-source";
+        install_worker ~repo:h.repo h;
+        let release = ref (fun () -> ()) in
+        let parent = Js.Promise.make (fun ~resolve ~reject:_ ->
+            release := (fun () -> resolve
+                (W.Map [ W.Keyword "block/uuid", W.Uuid "sidebar-owner" ]) [@u])) in
+        let worker = Option.get !Runtime.worker in
+        Runtime.worker := Some { worker with Worker_client.invoke_fn =
+          (fun method_name args ->
+            if method_name = "thread-api/get-block-parent" then parent
+            else worker.Worker_client.invoke_fn method_name args) };
+        A.drop_dragged_block "drop-source" "drop-target" "top";
+        let* () = h.wait_ms 25 in
+        check ("top drop awaits its target parent: " ^ name) (!ops = []);
+        change_origin ();
+        !release ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("top drop preserves target owner and origin: " ^ name)
+          (!ops = (if accept then
+              [ Ops.move_blocks_top [ "drop-source" ] "sidebar-owner" ] else []));
+        unregister ();
+        reset_editor ();
+        h.restore saved;
+        run rest
+  in
+  run
+    [ "current", (fun () -> ()), true;
+      "route changed", (fun () ->
+          h.restore { (h.snapshot ()) with Model.route = Model.Block_zoom "elsewhere" }), false;
+      "graph changed", (fun () ->
+          h.restore { (h.snapshot ()) with Model.repo = Some "different-graph" }), false ]
+
 let test_append_owner (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -1210,6 +1255,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   test_selection_direction h;
   let* () = test_scoped_indent_target h in
   let* () = test_zoom_structure_boundary h in
+  let* () = test_drop_top_owner h in
   let* () = test_append_owner h in
   h.restore saved;
   Js.Promise.resolve ()
