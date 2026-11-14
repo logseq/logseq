@@ -1,7 +1,8 @@
 open Plugin_protocol
 
 exception Rejected of error
-type write_result = Applied | Inserted of string | Page_identity of string | Created | Renamed
+type write_result = Applied | Inserted of string | Created_block of string
+  | Created_blocks of string list | Page_identity of string | Created | Renamed
 
 let check_wire value =
   let nodes = ref 0 in
@@ -250,35 +251,136 @@ let capture_editor ~id =
             let* chain = parents editor.uuid in
             if List.mem uuid chain then stop Unsupported;
             Js.Promise.resolve () in
-      let property_ops uuid changes =
-        let idents = List.map (fun (key, _) ->
-          "plugin.property." ^ plugin_id_value id ^ "/" ^ property_key_value key) changes in
-        let* existing = Sdk_util.get_many_for_repo repo (List.map Wire.kw idents) in
+      let property_value = function
+        | Text_value text -> Wire.String text, "default"
+        | Number_value number -> Wire.Float number, "number"
+        | Checkbox_value flag -> Wire.Bool flag, "checkbox" in
+      let property_ident key =
+        "plugin.property." ^ plugin_id_value id ^ "/" ^ property_key_value key in
+      let property_plan requests =
+        let expected = Hashtbl.create max_calls in
+        let keys = ref [] and count = ref 0 in
+        List.iter (fun (_, changes) -> List.iter (fun (key, value) ->
+          incr count;
+          if !count > max_calls then stop Resource_limit;
+          let ident = property_ident key in
+          let kind = Option.map (fun value -> snd (property_value value)) value in
+          match Hashtbl.find_opt expected ident with
+          | None -> Hashtbl.add expected ident kind; keys := (key, ident) :: !keys
+          | Some (Some previous) ->
+              if Option.fold ~none:false ~some:((<>) previous) kind then stop Unsupported
+          | Some None -> Hashtbl.replace expected ident kind) changes) requests;
+        let keys = List.rev !keys in
+        let* existing = Sdk_util.get_many_for_repo repo (List.map (fun (_, ident) -> Wire.kw ident) keys) in
         guard ();
-        if List.length existing <> List.length changes then stop Runtime_failure;
-        let ops = List.concat_map (fun (((key, value), ident), existing) ->
-          match value with
-          | None -> (match existing with None -> [] | Some _ ->
-              [Wire.Array [Wire.kw "remove-block-property"; Wire.Array [Wire.Uuid uuid; Wire.kw ident]]])
-          | Some value ->
-              let wire, property_type = match value with
-                | Text_value text -> Wire.String text, "default"
-                | Number_value number -> Wire.Float number, "number"
-                | Checkbox_value flag -> Wire.Bool flag, "checkbox" in
-              let create = match existing with
-                | None -> [Wire.Array [Wire.kw "upsert-property"; Wire.Array [Wire.kw ident;
-                    Wire.Map [Wire.kw "logseq.property/type", Wire.kw property_type;
-                      Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
-                    Wire.Map [Wire.kw "property-name", Wire.String (property_key_value key)]]]]
-                | Some property ->
-                    if Wire.get property "logseq.property/type" <> Some (Wire.kw property_type)
-                       || Wire.get property "db/cardinality" <> Some (Wire.kw "db.cardinality/one")
-                    then stop Unsupported;
-                    [] in
-              create @ [Wire.Array [Wire.kw "set-block-property";
-                Wire.Array [Wire.Uuid uuid; Wire.kw ident; wire]]])
-          (List.combine (List.combine changes idents) existing) in
-        Js.Promise.resolve ops in
+        if List.length existing <> List.length keys then stop Runtime_failure;
+        let schemas = Hashtbl.create (List.length keys) in
+        let definitions = List.filter_map (fun ((key, ident), existing) ->
+          Hashtbl.add schemas ident existing;
+          match Hashtbl.find expected ident, existing with
+          | None, _ -> None
+          | Some property_type, None -> Some (Wire.Array [Wire.kw "upsert-property";
+              Wire.Array [Wire.kw ident;
+                Wire.Map [Wire.kw "logseq.property/type", Wire.kw property_type;
+                  Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
+                Wire.Map [Wire.kw "property-name", Wire.String (property_key_value key)]]])
+          | Some property_type, Some property ->
+              if Wire.get property "logseq.property/type" <> Some (Wire.kw property_type)
+                 || Wire.get property "db/cardinality" <> Some (Wire.kw "db.cardinality/one")
+              then stop Unsupported;
+              None) (List.combine keys existing) in
+        let assignments = List.concat_map (fun (uuid, changes) ->
+          List.filter_map (fun (key, value) ->
+            let ident = property_ident key in
+            match value with
+            | None when Hashtbl.find schemas ident = None -> None
+            | None -> Some (Wire.Array [Wire.kw "remove-block-property";
+                Wire.Array [Wire.Uuid uuid; Wire.kw ident]])
+            | Some value -> Some (Wire.Array [Wire.kw "set-block-property";
+                Wire.Array [Wire.Uuid uuid; Wire.kw ident; fst (property_value value)]])) changes) requests in
+        Js.Promise.resolve (definitions, assignments) in
+      let property_ops uuid changes =
+        let* definitions, assignments = property_plan [uuid, changes] in
+        Js.Promise.resolve (definitions @ assignments) in
+      let insertion_target identity position =
+        let* block, uuid = get identity in
+        (match position with
+         | Before | After when Option.is_some (Wire.get block "block/name") -> stop Invalid_request
+         | First_child | Last_child | Before | After -> ());
+        let sibling direction = Runtime.invoke3 "thread-api/get-block-sibling"
+          (Wire.String repo) (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) (Wire.kw direction) in
+        let* target = match position with
+          | After -> Js.Promise.resolve (uuid, true)
+          | First_child -> Js.Promise.resolve (uuid, false)
+          | Last_child ->
+              let* last = sibling "last-child" in
+              Js.Promise.resolve (match Sdk_util.block_uuid_of last with
+                | Some target -> target, true | None -> uuid, false)
+          | Before ->
+              let* left = sibling "left" in
+              (match Sdk_util.block_uuid_of left with
+               | Some target -> Js.Promise.resolve (target, true)
+               | None ->
+                   let* parent = Runtime.invoke2 "thread-api/get-block-parent"
+                     (Wire.String repo) (Wire.Uuid uuid) in
+                   match Sdk_util.block_uuid_of parent with
+                   | Some target -> Js.Promise.resolve (target, false)
+                   | None -> stop Invalid_request) in
+        guard ();
+        Js.Promise.resolve target in
+      let fresh_uuid custom =
+        let uuid = match custom with Some uuid -> uuid | None -> Ui_services.env_random_uuid () in
+        (match editing_context ~block_uuid:uuid ~text:"" with Ok _ -> () | Error _ -> stop Runtime_failure);
+        let* existing = Sdk_util.get_entity_for_repo repo uuid in
+        guard ();
+        if existing <> Wire.Nil then stop (match custom with Some _ -> Invalid_request | None -> Runtime_failure);
+        Js.Promise.resolve uuid in
+      let plain_insertion_target target sibling =
+        let* block, _ = get (Uuid target) in
+        let id block = match Wire.map_get_int block "db/id" with
+          | Some id -> Wire.Int id | None -> stop Runtime_failure in
+        let* parent = if sibling then Runtime.invoke2 "thread-api/get-block-parent"
+          (Wire.String repo) (Wire.Uuid target) else Js.Promise.resolve Wire.Nil in
+        guard ();
+        let candidates = id block :: (if parent = Wire.Nil then [] else [id parent]) in
+        let* forbidden = Runtime.invoke2 "thread-api/q" (Wire.String repo) (Wire.Array [
+          Wire.String "[:find [?target ...] :in $ [?target ...] :where (or-join [?target] [?target :logseq.property/created-from-property] [?target :block/closed-value-property] (and [?target :block/parent ?parent] [?parent :logseq.property/default-value ?target]))]";
+          Wire.Array candidates]) in
+        guard ();
+        match forbidden with
+        | Wire.Array [] | Wire.List [] | Wire.Set [] -> Js.Promise.resolve ()
+        | Wire.Array _ | Wire.List _ | Wire.Set _ -> stop Unsupported
+        | _ -> stop Runtime_failure in
+      let parse_title = Title_refs.parser ~origin_repo:repo () in
+      let parse_block uuid parent text =
+        let* parsed = parse_title text in
+        guard ();
+        Js.Promise.resolve (Wire.Map (
+          [Wire.kw "block/title", Wire.String parsed.Title_refs.title;
+           Wire.kw "block/uuid", Wire.Uuid uuid] @
+          (match parent with None -> [] | Some parent ->
+            [Wire.kw "block/parent", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid parent]]) @
+          Title_refs.kvs_of_parsed parsed)) in
+      let insert_op target sibling blocks = Wire.Array [Wire.kw "insert-blocks";
+        Wire.Array [Wire.Array blocks; Wire.Uuid target; Wire.Map [
+          Wire.kw "sibling?", Wire.Bool sibling; Wire.kw "keep-uuid?", Wire.Bool true;
+          Wire.kw "replace-empty-target?", Wire.Bool false;
+          Wire.kw "outliner-op", Wire.kw "insert-blocks"]]] in
+      let single_insert ?(plain = false) identity text options =
+        let* target, sibling = insertion_target identity (insertion_position options) in
+        let* () = if plain then plain_insertion_target target sibling else Js.Promise.resolve () in
+        let* uuid = fresh_uuid (custom_uuid options) in
+        let* block = parse_block uuid None text in
+        Js.Promise.resolve (uuid, insert_op target sibling [block]) in
+      let created_plan target sibling nodes =
+        let* definitions, assignments = property_plan (List.map (fun (uuid, _, properties) ->
+          uuid, List.map (fun (key, value) -> key, Some value) (property_set_entries properties)) nodes) in
+        let receipts = List.map (fun (uuid, _, _) -> uuid) nodes in
+        (match validate_value (reply_value (Blocks_created receipts)) with
+         | Ok () -> () | Error error -> stop error);
+        let ops = match nodes with [] -> [] | _ -> definitions @
+          (insert_op target sibling (List.map (fun (_, block, _) -> block) nodes) :: assignments) in
+        Js.Promise.resolve (ops, receipts) in
       let page_reply uuid =
         let* wire = Sdk_util.get_entity_for_repo repo uuid in
         guard ();
@@ -292,42 +394,53 @@ let capture_editor ~id =
         | _ -> stop Runtime_failure in
       let* ops, inserted = match mutation with
         | Insert_block (identity, text, options) ->
-            let* block, uuid = get identity in
-            (match insertion_position options with
-             | Before | After when Option.is_some (Wire.get block "block/name") -> stop Invalid_request
-             | First_child | Last_child | Before | After -> ());
-            let insert_uuid = match custom_uuid options with
-              | Some value -> value | None -> Ui_services.env_random_uuid () in
-            let* existing = Sdk_util.get_entity_for_repo repo insert_uuid in
-            if existing <> Wire.Nil then stop Invalid_request;
-            let sibling direction = Runtime.invoke3 "thread-api/get-block-sibling"
-              (Wire.String repo) (Wire.Array [Wire.kw "block/uuid"; Wire.Uuid uuid]) (Wire.kw direction) in
-            let* target, sibling = match insertion_position options with
-              | After -> Js.Promise.resolve (uuid, true)
-              | Last_child ->
-                  let* last = sibling "last-child" in
-                  (match Sdk_util.block_uuid_of last with
-                   | Some target -> Js.Promise.resolve (target, true)
-                   | None -> Js.Promise.resolve (uuid, false))
-              | First_child -> Js.Promise.resolve (uuid, false)
-              | Before ->
-                  let* left = sibling "left" in
-                  (match Sdk_util.block_uuid_of left with
-                   | Some target -> Js.Promise.resolve (target, true)
-                   | None ->
-                       let* parent = Runtime.invoke2 "thread-api/get-block-parent"
-                         (Wire.String repo) (Wire.Uuid uuid) in
-                       match Sdk_util.block_uuid_of parent with
-                       | Some target -> Js.Promise.resolve (target, false)
-                       | None -> stop Invalid_request) in
-            let* parsed = Title_refs.parse ~origin_repo:repo text in
-            let new_block = Wire.Map (
-              [Wire.kw "block/title", Wire.String parsed.Title_refs.title;
-               Wire.kw "block/uuid", Wire.Uuid insert_uuid] @ Title_refs.kvs_of_parsed parsed) in
-            let insert_opts = Wire.Map [Wire.kw "sibling?", Wire.Bool sibling;
-              Wire.kw "keep-uuid?", Wire.Bool true; Wire.kw "outliner-op", Wire.kw "insert-blocks"] in
-            Js.Promise.resolve ([Wire.Array [Wire.kw "insert-blocks";
-              Wire.Array [Wire.Array [new_block]; Wire.Uuid target; insert_opts]]], Inserted insert_uuid)
+            let* uuid, op = single_insert identity text options in
+            Js.Promise.resolve ([op], Inserted uuid)
+        | Create_block_with_properties (identity, text, options, properties) ->
+            let* uuid, op = single_insert ~plain:true identity text options in
+            let* definitions, assignments = property_plan [uuid,
+              List.map (fun (key, value) -> key, Some value) (property_set_entries properties)] in
+            Js.Promise.resolve (definitions @ (op :: assignments), Created_block uuid)
+        | Insert_batch_blocks (identity, roots, position) ->
+            let* target, sibling = insertion_target identity position in
+            let* () = plain_insertion_target target sibling in
+            let allocated = Hashtbl.create max_calls in
+            let count = ref 0 in
+            let rec prepare parent result = function
+              | [] -> Js.Promise.resolve result
+              | node :: rest ->
+                  incr count;
+                  if !count > max_calls then stop Resource_limit;
+                  let* uuid = fresh_uuid None in
+                  if Hashtbl.mem allocated uuid then stop Runtime_failure;
+                  Hashtbl.add allocated uuid ();
+                  let* block = parse_block uuid parent (batch_content node) in
+                  let* result = prepare (Some uuid) ((uuid, block, batch_properties node) :: result)
+                    (batch_children node) in
+                  prepare parent result rest in
+            let* nodes = prepare None [] roots in
+            let* ops, receipts = created_plan target sibling (List.rev nodes) in
+            Js.Promise.resolve (ops, Created_blocks receipts)
+        | Insert_page_block (identity, text, edge, properties) ->
+            let* page, uuid = match identity with
+              | Page_name name ->
+                  let* page = Sdk_util.get_by_id_for_repo repo (Wire.String name) in
+                  guard ();
+                  let uuid = match Sdk_util.block_uuid_of page with Some uuid -> uuid | None -> stop Invalid_request in
+                  Js.Promise.resolve (page, uuid)
+              | Entity_id _ | Uuid _ -> get identity in
+            if Option.is_none (Wire.get page "block/name") then stop Invalid_request;
+            let position = match edge with Prepend -> First_child | Append -> Last_child in
+            let* target, sibling = insertion_target (Uuid uuid) position in
+            let* () = plain_insertion_target target sibling in
+            let* uuid = fresh_uuid None in
+            let* block = parse_block uuid None text in
+            let* ops, _ = created_plan target sibling [uuid, block, properties] in
+            Js.Promise.resolve (ops, Created_block uuid)
+        | Patch_block_properties (identity, properties) ->
+            let* _, uuid = get identity in
+            let* ops = property_ops uuid properties in
+            Js.Promise.resolve (ops, Applied)
         | Update_block (identity, text, properties) ->
             let* block, uuid = get identity in
             if Option.fold ~none:false ~some:(fun editor -> editor.Editor_state.uuid = uuid)
@@ -411,10 +524,23 @@ let capture_editor ~id =
       guard ();
       let* result = match ops with
         | [] -> Js.Promise.resolve Wire.Nil
-        | _ -> Sdk_util.apply_ops_for_repo ~before_commit:guard ~refresh:false repo ops (Wire.Map []) in
+        | _ -> Sdk_util.apply_ops_for_repo ~before_commit:guard
+            ~validate_ops:(fun ops -> try check_wire (Wire.Array ops) with Rejected error -> stop error)
+            ~refresh:false repo ops (Wire.Map []) in
       guard ();
+      let confirm_created uuids =
+        if uuids <> [] then
+          match Wire.get result "blocks" with
+          | Some (Wire.Array blocks) when List.length blocks = List.length uuids ->
+              List.iter2 (fun block uuid ->
+                match Sdk_util.block_uuid_of block with
+                | Some actual when String.lowercase_ascii actual = String.lowercase_ascii uuid -> ()
+                | _ -> stop Runtime_failure) blocks uuids
+          | _ -> stop Runtime_failure in
       match inserted with
       | Applied -> Js.Promise.resolve Mutation_applied
+      | Created_block uuid -> confirm_created [uuid]; Js.Promise.resolve (Block_created uuid)
+      | Created_blocks uuids -> confirm_created uuids; Js.Promise.resolve (Blocks_created uuids)
       | Renamed -> Js.Promise.resolve Page_renamed
       | Page_identity uuid -> page_reply uuid
       | Inserted inserted_uuid ->

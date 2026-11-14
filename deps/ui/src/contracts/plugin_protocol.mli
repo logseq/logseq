@@ -15,9 +15,16 @@ type insert_options
 type property_key
 type property_value = Text_value of string | Number_value of float | Checkbox_value of bool
 type property_patch = (property_key * property_value option) list
+type property_set
+type batch_block
+type page_edge = Prepend | Append
 type move_position = Move_before | Move_after | Move_into
 type mutation =
   | Insert_block of identity * string * insert_options
+  | Patch_block_properties of identity * property_patch
+  | Create_block_with_properties of identity * string * insert_options * property_set
+  | Insert_batch_blocks of identity * batch_block list * insertion_position
+  | Insert_page_block of identity * string * page_edge * property_set
   | Update_block of identity * string * property_patch
   | Upsert_block_property of identity * property_key * property_value
   | Remove_block_property of identity * property_key
@@ -59,6 +66,8 @@ type reply =
   | Editor_command_registered
   | Properties of Json.t
   | Mutation_applied
+  | Block_created of string
+  | Blocks_created of string list
   | Blocks of entity list
   | Page_renamed
 type action = Insert_text of string | Show_date_picker | Exit_editing
@@ -103,6 +112,13 @@ val insertion_position : insert_options -> insertion_position
 val custom_uuid : insert_options -> string option
 val property_key : string -> (property_key, error) result
 val property_key_value : property_key -> string
+val property_set : Json.t -> (property_set, error) result
+val property_set_entries : property_set -> (property_key * property_value) list
+val batch_blocks : Json.t -> (batch_block list, error) result
+val batch_options : Json.t -> (insertion_position, error) result
+val batch_content : batch_block -> string
+val batch_properties : batch_block -> property_set
+val batch_children : batch_block -> batch_block list
 val reply_value : reply -> Json.t
 val program : action list -> (program, error) result
 val decode_program : Json.t -> (program, error) result

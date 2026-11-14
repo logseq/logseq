@@ -423,20 +423,12 @@ static JSModuleDef *deny_module(JSContext *context, const char *name, void *opaq
     return NULL;
 }
 
-static int host_arity(int operation) {
-    if (operation < 5) return 0;
-    if (operation == 5 || operation == 6 || operation == 11 || operation == 16 ||
-        operation == 17 || operation == 18 || operation == 22 || operation == 23 || operation == 24) return 1;
-    if (operation == 12 || operation == 13 || operation == 14 || operation == 19) return 3;
-    return 2;
-}
-
 static JSValue host_request(JSContext *context, JSValueConst this_value, int argc,
                             JSValueConst *argv, int magic, JSValue *data) {
     (void)this_value; (void)magic;
     Bridge *bridge = JS_GetContextOpaque(context);
     int operation = JS_VALUE_GET_INT(data[1]);
-    int arguments = host_arity(operation);
+    int arguments = JS_VALUE_GET_INT(data[2]);
     if (argc != arguments)
         return JS_Throw(context, JS_NewString(context, error_names[INVALID]));
     if (!bridge->active || JS_VALUE_GET_INT(data[0]) != bridge->epoch)
@@ -590,22 +582,25 @@ CAMLprim value logseq_quickjs_start(value handle, value slot) {
     bridge->wall_deadline = monotonic() + 1;
     double before = enter(bridge, 0.005);
     JSValue host = JS_NewObjectProto(bridge->context, JS_NULL);
-    static const struct { const char *name; int operation; } methods[] = {
-        {"getEditingContext", 0}, {"getPluginInfo", 1}, {"getEditingState", 2}, {"getCurrentBlock", 3},
-        {"getCurrentPage", 4}, {"getBlock", 5}, {"getPage", 6}, {"datascriptQuery", 7}, {"log", 8},
-        {"registerEditorCommand", 9}, {"getSiblingBlock", 10},
-        {"getBlockProperties", 11}, {"insertBlock", 12}, {"updateBlock", 13},
-        {"upsertBlockProperty", 14}, {"removeBlockProperty", 15},
-        {"getPageBlocksTree", 16}, {"getBlockChildren", 17}, {"removeBlock", 18},
-        {"moveBlock", 19}, {"createPage", 20}, {"renamePage", 21}, {"deletePage", 22},
-        {"getBlockTree", 23}, {"getPageLinkedReferences", 24}
+    static const struct { const char *name; int operation, arguments; } methods[] = {
+        {"getEditingContext", 0, 0}, {"getPluginInfo", 1, 0}, {"getEditingState", 2, 0}, {"getCurrentBlock", 3, 0},
+        {"getCurrentPage", 4, 0}, {"getBlock", 5, 1}, {"getPage", 6, 1}, {"datascriptQuery", 7, 2}, {"log", 8, 2},
+        {"registerEditorCommand", 9, 2}, {"getSiblingBlock", 10, 2},
+        {"getBlockProperties", 11, 1}, {"insertBlock", 12, 3}, {"updateBlock", 13, 3},
+        {"upsertBlockProperty", 14, 3}, {"removeBlockProperty", 15, 2},
+        {"getPageBlocksTree", 16, 1}, {"getBlockChildren", 17, 1}, {"removeBlock", 18, 1},
+        {"moveBlock", 19, 3}, {"createPage", 20, 2}, {"renamePage", 21, 2}, {"deletePage", 22, 1},
+        {"getBlockTree", 23, 1}, {"getPageLinkedReferences", 24, 1},
+        {"patchBlockProperties", 25, 2}, {"createBlockWithProperties", 26, 4},
+        {"insertBatchBlock", 33, 3}, {"insertPageBlock", 34, 4}
     };
     if (JS_IsException(host)) bridge->error = RESOURCE;
     for (size_t method = 0; method < sizeof(methods) / sizeof(methods[0]) && bridge->error < 0; method++) {
         int operation = methods[method].operation;
-        JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation)};
-        int arguments = host_arity(operation);
-        JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 2, data);
+        JSValue data[] = {JS_NewInt32(bridge->context, bridge->epoch), JS_NewInt32(bridge->context, operation),
+            JS_NewInt32(bridge->context, methods[method].arguments)};
+        int arguments = methods[method].arguments;
+        JSValue function = JS_NewCFunctionData(bridge->context, host_request, arguments, 0, 3, data);
         if (JS_IsException(function) || JS_DefinePropertyValueStr(bridge->context, host,
                 methods[method].name, function, JS_PROP_ENUMERABLE) < 0) bridge->error = RESOURCE;
     }
