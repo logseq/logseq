@@ -672,6 +672,8 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
           let p =
             (let* buffer = Ops.title_on_entry uuid (display_title uuid) in
             if context = (Runtime.repo (), Runtime.route ()) then (
+            (* Resolve the end position after title/reference conversion. *)
+            let caret = if caret = -1 then String.length buffer else caret in
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
@@ -1570,6 +1572,12 @@ let selected_snapshot () =
 (* Worker operations consume document order, never UUID sort order. *)
 let selected_uuids () =
   (selected_snapshot ()).uuids
+
+let open_selected_block ~at_end () =
+  let uuids = selected_uuids () in
+  match (if at_end then List.rev uuids else uuids) with
+  | uuid :: _ -> enter_edit ~scope:(S.selection_scope ()) uuid (if at_end then -1 else 0)
+  | [] -> ()
 
 let index_of lst u =
   let rec go i = function

@@ -379,10 +379,14 @@ let wrap_model (m : Edit_model.t) marker =
 
 (* up/down inside the editing model: alt/meta+shift moves the block, mod
    collapses, boundary arrows leave the buffer *)
+let move_block_chord ~shift ~alt ~meta ~ctrl =
+  shift && not ctrl
+  && if Ui_services.env_is_mac () then meta && not alt else alt && not meta
+
 let edit_arrows ~route ~conduit uuid (kev : Edit_model.key_event)
     (m : Edit_model.t) =
   let up = kev.Edit_model.key = "ArrowUp" in
-  if (kev.alt || kev.meta) && kev.shift then (
+  if move_block_chord ~shift:kev.shift ~alt:kev.alt ~meta:kev.meta ~ctrl:kev.ctrl then (
     A.move_blocks_up_down ~uuid up;
     m)
   else if kev.meta || kev.ctrl then (
@@ -455,7 +459,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         let paired = delete_pair m in
         if paired != m then paired else defer ()
     | "Tab" | "Escape" | "Backspace" -> defer ()
-    | "Delete" ->
+    | "Delete" when not (shift || meta || ctrl || kev.alt) ->
         let s, e = A.sel_span_of m in
         if s = e && e = String.length m.Edit_model.source then (
           A.merge_next uuid;
@@ -799,6 +803,7 @@ let on_normal_key ev =
   and alt = ev.Ui_services.alt
   and meta = ev.Ui_services.meta in
   let selected () = S.selection_active () in
+  let move = move_block_chord ~shift ~alt ~meta ~ctrl:ev.Ui_services.ctrl in
   match key with
   | "p" when meta && not shift && selected () ->
       (* cljs :editor/add-property mod+p — the new-property dialog on the
@@ -823,10 +828,11 @@ let on_normal_key ev =
   | "ArrowDown" when alt && not shift ->
       (* editor/select-block-down *)
       ev.Ui_services.prevent_default ();
-      A.move_selection_focus false  | "ArrowUp" when (meta || alt) && shift ->
+      A.move_selection_focus false
+  | "ArrowUp" when move ->
       ev.Ui_services.prevent_default ();
       A.move_blocks_up_down true
-  | "ArrowDown" when (meta || alt) && shift ->
+  | "ArrowDown" when move ->
       ev.Ui_services.prevent_default ();
       A.move_blocks_up_down false
   | "ArrowUp" when mods ev && not shift ->
@@ -867,11 +873,9 @@ let on_normal_key ev =
       match closest ".block-add-button" (ev.Ui_services.target) with
       | Some _ -> ()
       | None -> (
-          match S.anchor () with
-          | Some u when selected () ->
+          if selected () then (
               ev.Ui_services.prevent_default ();
-              A.enter_edit ~scope:(S.selection_scope ()) u 0
-          | _ -> ()))
+              A.open_selected_block ~at_end:true ())))
   | "Escape" ->
       (* cljs: first Escape closes the action-bar popover, the next one
          clears the selection *)
@@ -1363,9 +1367,7 @@ let dispatch_command cid =
   | None, ("editor/up" | "editor/down") ->
       A.move_selection_focus (cid = "editor/up")
   | None, ("editor/left" | "editor/right") ->
-      (match A.selected_uuids () with
-       | uuid :: _ -> A.enter_edit uuid (if cid = "editor/left" then 0 else -1)
-       | [] -> ())
+      A.open_selected_block ~at_end:(cid = "editor/right") ()
   | _ -> ()
 
 let pending_event ev : Edit_input.event option =

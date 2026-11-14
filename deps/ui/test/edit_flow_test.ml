@@ -701,6 +701,29 @@ let test_delete_merge_next (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_modified_delete_boundary (h : host) =
+  let key = EM.key_ev "Delete" in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (name, key) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" "ab"; Test_check.block "b2" "cd" ];
+        set_editing ~uuid:"b1" ~buffer:"ab" ~caret:2 ~base:"ab";
+        install_worker ~repo:h.repo h;
+        Editor_keys.apply_input "b1" (EI.Key (key, false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (name ^ "+Delete preserves the next block")
+          ((editing_now ()).S.buffer = "ab"
+           && (editing_now ()).S.model.EM.caret = 2
+           && Option.is_some (S.find "b2")
+           && not (List.mem "delete-blocks" (op_names ())));
+        reset_editor ();
+        run rest
+  in
+  run [ "Alt", { key with alt = true }; "Ctrl", { key with ctrl = true };
+        "Meta", { key with meta = true }; "Shift", { key with shift = true } ]
+
 (* continuous Delete across block boundaries: the merge is deferred
    until the surface is input-quiet, so a second Delete still in
    flight supersedes it — expected ["first","C","D"], and the
@@ -1078,6 +1101,45 @@ let test_selection_direction (h : host) =
       true, [ "b1"; "b2" ]; false, [ "b2" ] ];
   reset_editor ()
 
+let test_selected_open (h : host) =
+  let scope = "selected-open-sidebar" in
+  let blocks = [ Test_check.block "b1" "first"; Test_check.block "b2" "last" ] in
+  let release = S.register_block_source ~scope (fun () -> blocks) in
+  let enter =
+    { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
+      alt = false; composing = false; key = Some "Enter"; key_char = None;
+      buttons = 0; button = 0; repeat = false; movement_x = 0.; movement_y = 0.;
+      default_prevented = false; target = None; touches = [];
+      detail = (fun _ -> None); detail_json = (fun _ -> None);
+      clipboard_get = (fun _ -> "");
+      clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot);
+      clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+      files = []; has_files = false; prevent_default = (fun () -> ());
+      stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) }
+  in
+  let rec run = function
+    | [] -> release (); Js.Promise.resolve ()
+    | (name, open_selection, uuid, caret) :: rest ->
+        let* () = settle h 40 in
+        stage_page h blocks;
+        install_worker ~repo:h.repo h;
+        reset_editor ();
+        S.set (fun st -> { st with S.selection_scope = scope;
+          selected = S.String_set.of_list [ "b1"; "b2" ]; anchor = Some "b1" });
+        open_selection ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (name ^ " opens the selected endpoint in its scope")
+          (match S.editing () with
+           | Some e -> e.S.uuid = uuid && e.scope = scope && e.model.EM.caret = caret
+           | None -> false);
+        reset_editor ();
+        run rest
+  in
+  run [ "Enter", (fun () -> Editor_keys.on_normal_key enter), "b2", 4;
+        "Left", (fun () -> Editor_keys.dispatch_command "editor/left"), "b1", 0;
+        "Right", (fun () -> Editor_keys.dispatch_command "editor/right"), "b2", 4 ]
+
 let test_scoped_indent_target (h : host) =
   let* () = settle h 40 in
   let main = Test_check.block "main-parent" "main" in
@@ -1102,6 +1164,48 @@ let test_scoped_indent_target (h : host) =
   S.set_collapsed ~scope:"indent-test" "local-parent" false;
   reset_editor ();
   Js.Promise.resolve ()
+
+let test_move_block_chord (h : host) =
+  let mac = Ui_services.env_is_mac () in
+  let cases = List.concat_map (fun (meta, alt, moves) ->
+      List.concat_map (fun editing -> List.map (fun up ->
+          meta, alt, moves, editing, up) [ true; false ]) [ true; false ])
+      [ true, false, mac; false, true, not mac;
+        true, true, false; false, false, false ] in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (meta, alt, moves, editing, up) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" "first";
+                      Test_check.block "b2" "middle"; Test_check.block "b3" "last" ];
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        let key = if up then "ArrowUp" else "ArrowDown" in
+        if editing then (
+          set_editing ~uuid:"b2" ~buffer:"middle" ~caret:3 ~base:"middle";
+          Editor_keys.apply_input "b2" (EI.Key
+            ({ (EM.key_ev key) with shift = true; meta; alt }, false)))
+        else (
+          A.select_single_in ~scope:"main" "b2";
+          Editor_keys.on_normal_key
+            { Ui_services.x = 0.; y = 0.; shift = true; meta; ctrl = false; alt;
+              composing = false; key = Some key; key_char = None;
+              buttons = 0; button = 0; repeat = false; movement_x = 0.; movement_y = 0.;
+              default_prevented = false; target = None; touches = [];
+              detail = (fun _ -> None); detail_json = (fun _ -> None);
+              clipboard_get = (fun _ -> "");
+              clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot);
+              clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+              files = []; has_files = false; prevent_default = (fun () -> ());
+              stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) });
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (Printf.sprintf "move chord mac=%b meta=%b alt=%b editing=%b up=%b"
+            mac meta alt editing up)
+          (List.mem (Ops.move_up_down [ "b2" ] up) !ops = moves);
+        reset_editor ();
+        run rest
+  in run cases
 
 let test_zoom_structure_boundary (h : host) =
   let saved = h.snapshot () in
@@ -1296,6 +1400,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_undo_redo_resync h in
   let* () = test_enter_split h in
   let* () = test_delete_merge_next h in
+  let* () = test_modified_delete_boundary h in
   let* () = test_continuous_delete_xfail h in
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
@@ -1307,7 +1412,9 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
   test_selection_direction h;
+  let* () = test_selected_open h in
   let* () = test_scoped_indent_target h in
+  let* () = test_move_block_chord h in
   let* () = test_zoom_structure_boundary h in
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in
