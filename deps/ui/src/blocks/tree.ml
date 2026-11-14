@@ -482,14 +482,14 @@ let content_el uuid (b : Model.block) : t =
 
 let editor_el ?(cls = "") uuid scope : t = Editor_surface.mount ~cls uuid scope
 
-let content_wrapper uuid (b : Model.block) : t =
+let content_wrapper ~scope ~editable uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
      the editor replaces it directly under .block-row *)
   row ~key:("cw-" ^ uuid)
     ~style_class:"block-content-wrapper" ~grow:1.
     ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
-    [ Jump_state.target ~key:"content" ~uuid
-        ~activate:(fun () -> Editor_actions.enter_edit uuid (-1)) (content_el uuid b)
+    [ Jump_state.target ~enabled:editable ~key:"content" ~uuid
+        ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
 
@@ -515,7 +515,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               (* fenced-code blocks keep their rendered surface while
                  editing — the mounted CodeMirror IS the editor, so the
                  DOM must not swap or the instance is destroyed *)
-              content_wrapper uuid b
+              content_wrapper ~scope ~editable uuid b
           | _ ->
               if editing && editable then
                 (* cljs styles the editor textarea uniline-block.hN —
@@ -528,7 +528,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
                   | None -> ""
                 in
                 editor_el ~cls uuid scope
-              else content_wrapper uuid b))
+              else content_wrapper ~scope ~editable uuid b))
     (* the derivation outlives the mount unless it's owned into the
        row's scope — editing_sig is shared *)
     (Logseq_el.own ctx
@@ -1138,7 +1138,7 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
                                     [ Properties_area.block_left_chips ~scope:"reference" ~uuid
-                                    ; content_wrapper uuid b
+                                    ; content_wrapper ~scope:"ref" ~editable:false uuid b
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
                                         ~gap:4 ~cross:`center

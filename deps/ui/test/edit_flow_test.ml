@@ -1062,6 +1062,41 @@ let test_property_command_refresh (h : host) =
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
 
+let test_append_owner (h : host) =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (scope, owner) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ Test_check.block "b1" "main page block" ];
+        install_worker ~repo:h.repo h;
+        S.set (fun st ->
+            { st with S.selection_scope = "main";
+              selected = S.String_set.singleton "b1";
+              anchor = Some "b1"; action_bar = true });
+        A.append_block ~for_page:owner ~scope ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check (scope ^ " append belongs to its owner, not the main route")
+          (List.exists (function
+             | W.Array [ W.Keyword "insert-blocks";
+                         W.Array [ _; W.Uuid target; opts ] ] ->
+                 target = owner
+                 && W.map_get opts "sibling?" = Some (W.Bool false)
+                 && W.map_get opts "bottom?" = Some (W.Bool true)
+             | _ -> false) !ops);
+        check (scope ^ " append transfers exclusive editing to its container")
+          (match S.editing () with
+           | Some e -> e.S.scope = scope && e.S.model.EM.source = ""
+               && S.String_set.is_empty (S.selected ())
+               && S.anchor () = None && not (S.value ()).S.action_bar
+               && S.selection_scope () = scope
+           | None -> false);
+        reset_editor ();
+        run rest
+  in
+  run [ "sidebar", "sidebar-owner"; "quick-add", "quick-add-owner";
+        "zoom-root", "zoom-owner"; "preview", "preview-owner" ]
+
 (* synchronous stage: pure-model checks that need no app drain *)
 let run (_h : host) =
   test_measure_deferred ();
@@ -1090,5 +1125,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
+  let* () = test_append_owner h in
   h.restore saved;
   Js.Promise.resolve ()

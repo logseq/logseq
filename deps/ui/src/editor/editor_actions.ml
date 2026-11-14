@@ -2890,62 +2890,41 @@ let arrow_edge uuid up =
       | None -> ())
   | None -> ()
 
-(* append a fresh block at the bottom of the current page — or, on
-   journals, at the bottom of the journal item the add-button lives in
-   (its data-parentblockid attr carries the page uuid) *)
-let append_block ?for_page ?(scope = "main") () =
-  let page =
+(* The add-button's owner can be a page or a zoomed block in any scope. *)
+let append_block ?for_page ?(scope = "main") ?(library = false) () =
+  let owner =
     match for_page with
-    | Some u -> (
-        match (Runtime.model ()).Model.journals with
-        | js ->
-            List.find_opt
-              (fun (p : Model.page) -> p.Model.page_uuid = Some u)
-              js)
-    | None -> (Runtime.model ()).Model.route_page
+    | Some uuid -> Some (uuid, library)
+    | None ->
+        Option.bind (Runtime.model ()).Model.route_page (fun p ->
+            Option.map (fun uuid -> (uuid, p.Model.page_is_library))
+              p.Model.page_uuid)
   in
-  let page =
-    match page, (Runtime.model ()).Model.route_page with
-    | Some _ as p, _ -> p
-    | None, p -> p
-  in
-  match page with
+  match owner with
   | None -> ()
-  | Some p -> (
-      match p.Model.page_uuid with
-      | None -> ()
-      | Some puuid ->
-          let new_uuid = Ui_services.env_random_uuid () in
-          let target, sibling =
-            match List.rev p.Model.page_blocks with
-            | last :: _ -> (
-                match last.Model.block_uuid with
-                | Some u -> (u, true)
-                | None -> (puuid, false))
-            | [] -> (puuid, false)
-          in
-          let stage st =
-            { st with
-              S.editing =
-                Some
-                  (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope ~base:"" ())
-            }
-          in
-          (* empty page: editor state is created at the first block_row
-             mount, which happens inside this op's refresh — defer the
-             edit-mode entry into the initial state so the row mounts
-             straight into the editor *)
-          let restore = S.editing () in
-          if S.ready () then S.set stage
-          else S.defer_init stage;
-          with_focus_after ~restore new_uuid 0
-            (Ops.apply_and_refresh
-               [ Ops.insert_blocks
-                   [ Ops.block_map ~title:"" ~page:p.Model.page_is_library
-                       new_uuid
-                   ]
-                   target ~sibling
-               ]))
+  | Some (puuid, library) ->
+      let new_uuid = Ui_services.env_random_uuid () in
+      let stage st =
+        { st with
+          S.editing =
+            Some (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope ~base:"" ())
+        ; selection_scope = scope
+        ; selected = S.String_set.empty
+        ; anchor = None
+        ; action_bar = false
+        }
+      in
+      (* Empty pages initialize editor state when their first row mounts. *)
+      let restore = S.editing () in
+      flush_edit ();
+      if S.ready () then S.set stage
+      else S.defer_init stage;
+      with_focus_after ~restore new_uuid 0
+        (Ops.apply_and_refresh
+           [ Ops.insert_blocks ~bottom:true
+               [ Ops.block_map ~title:"" ~page:library new_uuid ]
+               puuid ~sibling:false
+           ])
 
 (* ---------- quick add (Meta+e, components/quick_add.cljs) ---------- *)
 

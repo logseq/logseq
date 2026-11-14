@@ -1821,6 +1821,7 @@ let on_click ev =
             ev.Ui_services.prevent_default ();
             match uuid_of_prefixed "control-" (el.Ui_services.id ()) with
             | Some u ->
+                A.exit_edit ~select:false;
                 A.toggle_collapse ~scope:(A.scope_of_el el) u
             | None -> ())
         | None -> (
