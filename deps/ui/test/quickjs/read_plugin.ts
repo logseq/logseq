@@ -9,6 +9,10 @@ function check(value: unknown, message: string): asserts value {
 
 const connected = logseq.ready(async (info) => {
   await connected
+  if (info.id === 'sdk-probe-failure') {
+    console.error('initialization failed')
+    throw new Error('expected activation failure')
+  }
   const uuid = '00000000-0000-0000-0000-000000000099'
   check(
     (info.id === 'sdk-probe' || info.id === 'sdk-probe-empty') &&

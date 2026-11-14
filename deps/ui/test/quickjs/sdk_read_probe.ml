@@ -99,6 +99,21 @@ let run path =
   let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
   Plugin_host.unload_read_plugin runner;
   Signal.dispose_scope scope;
+  let failure_id = success (plugin_id "sdk-probe-failure") in
+  let log_reader, log_writer = Unix.pipe () in
+  let original_stderr = Unix.dup Unix.stderr in
+  flush stderr;
+  Unix.dup2 log_writer Unix.stderr;
+  Unix.close log_writer;
+  let failed = Fun.protect
+    ~finally:(fun () -> flush stderr; Unix.dup2 original_stderr Unix.stderr; Unix.close original_stderr)
+    (fun () -> task (Plugin_host.load_read_plugin ~id:failure_id ~grants:[] ~source)) in
+  let log_channel = Unix.in_channel_of_descr log_reader in
+  let diagnostic = Fun.protect ~finally:(fun () -> close_in log_channel)
+    (fun () -> In_channel.input_all log_channel) in
+  check "initialization diagnostics survive failure"
+    (failed = Error Runtime_failure
+     && String.trim diagnostic = "[plugin:sdk-probe-failure] initialization failed");
   print_endline "SDK/QuickJS/application/worker graph contract passed"
 
 let () =

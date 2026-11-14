@@ -345,18 +345,21 @@ export async function activate(host: QuickjsHost): Promise<[]> {
     }
     await Promise.all(initializers)
     while (pending.size) await Promise.all([...pending])
-    while (diagnostics.length) {
-      const entry = diagnostics.shift()!
-      await call((current) => current.log(entry.level, entry.text))
-    }
-    diagnosticBytes = 0
     return []
   } catch (error) {
     for (const registration of registrations.splice(0))
       registration.reject(error)
     throw error
   } finally {
-    activeHost = null
-    activating = false
+    try {
+      while (diagnostics.length) {
+        const entry = diagnostics.shift()!
+        await call((current) => current.log(entry.level, entry.text))
+      }
+      diagnosticBytes = 0
+    } finally {
+      activeHost = null
+      activating = false
+    }
   }
 }
