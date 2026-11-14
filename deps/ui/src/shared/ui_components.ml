@@ -720,7 +720,9 @@ let cmdk_empty ~key children : t =
    unresolved: documented leftover). The fade-in animation and the
    rotated arrow transform remain CSS deco rules; pointer-events stays
    off so the bubble never steals hover from its own trigger. *)
-let tooltip_content ~key ~at ~arrow_x ~above children : t =
+type tooltip_side = [ `top | `bottom | `left ]
+
+let tooltip_content ~key ~at ~arrow_offset ~(side : tooltip_side) children : t =
  fun ctx parent ->
   let viewport = Ui_services.viewport_width_signal
     ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
@@ -747,10 +749,11 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
         ; with_props
             ([ Prop.position `absolute
              ; Prop.pointer_enabled false
-             ; Prop.inset_left arrow_x
              ]
-            @ if above then [ Prop.inset_bottom (-4.) ]
-              else [ Prop.inset_top (-4.) ])
+            @ match side with
+              | `top -> [ Prop.inset_left arrow_offset; Prop.inset_bottom (-4.) ]
+              | `bottom -> [ Prop.inset_left arrow_offset; Prop.inset_top (-4.) ]
+              | `left -> [ Prop.inset_top arrow_offset; Prop.inset_right (-4.) ])
             (box ~key:"arrow" ~style_class:"ui__tooltip-arrow" ~width:8
                ~height:8 ~border_width:1
                ~border_color:"hsl(var(--border))"
