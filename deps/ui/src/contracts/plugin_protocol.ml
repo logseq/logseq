@@ -226,10 +226,10 @@ let capability_name = function
 let reply_value = function
   | Editing_context context -> editing_context_value context
   | Plugin_info (id, capabilities) ->
-      let capabilities = List.sort_uniq Stdlib.compare capabilities in
+      let normalized_capabilities = List.sort_uniq Stdlib.compare capabilities in
       Json.Object ["id", Json.String id; "runtime", Json.String "quickjs";
         "grantedCapabilities", Json.Array (Array.of_list
-          (List.map (fun capability -> Json.String (capability_name capability)) capabilities))]
+          (List.map (fun capability -> Json.String (capability_name capability)) normalized_capabilities))]
   | Editing_state (Some context) -> editing_context_value context
   | Block (Some entity) | Page (Some entity) -> entity
   | Editing_state None | Block None | Page None | Logged -> Json.Null
