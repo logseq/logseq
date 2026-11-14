@@ -23,9 +23,19 @@ type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 type EditingState = { blockUuid: string; text: string } | null
 type PageResult = PageEntity | { name: string; title: string; uuid?: string }
 
+const capabilityNames = [
+  'editor_read',
+  'editor_command',
+  'graph_read',
+  'db_query',
+] as const
+
+export type QuickjsCapability = (typeof capabilityNames)[number]
+
 export interface PortablePluginInfo {
   readonly id: string
   readonly runtime: 'quickjs'
+  readonly grantedCapabilities: readonly QuickjsCapability[]
 }
 
 export interface QuickjsHost {
@@ -187,6 +197,25 @@ function surface<T extends object>(value: T): Readonly<T> {
   })
 }
 
+function pluginInfo(value: PortablePluginInfo): Readonly<PortablePluginInfo> {
+  const grants = value.grantedCapabilities
+  if (!Array.isArray(grants)) failure('Unsupported')
+  if (
+    typeof value.id !== 'string' ||
+    value.runtime !== 'quickjs' ||
+    grants.length > capabilityNames.length ||
+    grants.some((capability) => !capabilityNames.includes(capability)) ||
+    new Set(grants).size !== grants.length
+  ) {
+    failure('Invalid_request')
+  }
+  return surface({
+    id: value.id,
+    runtime: value.runtime,
+    grantedCapabilities: Object.freeze([...grants]),
+  })
+}
+
 let activeHost: QuickjsHost | null = null
 let info: PortablePluginInfo | null = null
 let initialized = false
@@ -323,7 +352,7 @@ export async function activate(host: QuickjsHost): Promise<[]> {
   activating = true
   activeHost = host
   try {
-    info = surface(await call((current) => current.getPluginInfo()))
+    info = pluginInfo(await call((current) => current.getPluginInfo()))
     initialized = true
     const initializers: Promise<unknown>[] = []
     for (const registration of registrations.splice(0)) {

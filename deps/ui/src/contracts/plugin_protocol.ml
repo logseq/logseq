@@ -21,7 +21,7 @@ type request =
   | Log of log_level * string
 type reply =
   | Editing_context of editing_context
-  | Plugin_info of plugin_id
+  | Plugin_info of plugin_id * capability list
   | Editing_state of editing_context option
   | Block of entity option
   | Page of entity option
@@ -217,9 +217,19 @@ let decode_request ~operation value =
   | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8), _ -> Error Invalid_request
   | _ -> Error Unsupported
 
+let capability_name = function
+  | Editor_read -> "editor_read"
+  | Editor_command -> "editor_command"
+  | Graph_read -> "graph_read"
+  | Db_query -> "db_query"
+
 let reply_value = function
   | Editing_context context -> editing_context_value context
-  | Plugin_info id -> Json.Object ["id", Json.String id; "runtime", Json.String "quickjs"]
+  | Plugin_info (id, capabilities) ->
+      let capabilities = List.sort_uniq Stdlib.compare capabilities in
+      Json.Object ["id", Json.String id; "runtime", Json.String "quickjs";
+        "grantedCapabilities", Json.Array (Array.of_list
+          (List.map (fun capability -> Json.String (capability_name capability)) capabilities))]
   | Editing_state (Some context) -> editing_context_value context
   | Block (Some entity) | Page (Some entity) -> entity
   | Editing_state None | Block None | Page None | Logged -> Json.Null

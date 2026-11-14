@@ -13,6 +13,47 @@ const connected = logseq.ready(async (info) => {
     console.error('initialization failed')
     throw new Error('expected activation failure')
   }
+  if (info.id.startsWith('sdk-probe-grants-')) {
+    const mask = Number(info.id.slice('sdk-probe-grants-'.length))
+    const expected = ['editor_read', 'graph_read', 'db_query'].filter(
+      (_, index) => (mask & (1 << index)) !== 0
+    )
+    check(logseq.baseInfo === info, 'shared metadata snapshot')
+    check(
+      JSON.stringify(info.grantedCapabilities) === JSON.stringify(expected),
+      'exact session grants'
+    )
+    check(
+      Object.isFrozen(info) && Object.isFrozen(info.grantedCapabilities),
+      'immutable grant snapshot'
+    )
+    check(
+      !Reflect.set(info.grantedCapabilities, 0, 'editor_command') &&
+        !Reflect.set(info, 'grantedCapabilities', ['editor_command']),
+      'grant mutation rejected'
+    )
+    for (const [allowed, request] of [
+      [(mask & 1) !== 0, () => logseq.Editor.checkEditing()],
+      [(mask & 2) !== 0, () => logseq.Editor.getPage('quickjs sdk probe')],
+      [
+        (mask & 6) === 6,
+        () => logseq.DB.datascriptQuery('[:find ?e :where [?e :block/uuid]]'),
+      ],
+    ] as const) {
+      try {
+        await request()
+        check(allowed, 'ungranted read succeeded')
+      } catch (error) {
+        check(
+          !allowed &&
+            error instanceof Error &&
+            error.message === 'Permission_denied',
+          'grant enforcement'
+        )
+      }
+    }
+    return
+  }
   const uuid = '00000000-0000-0000-0000-000000000099'
   check(
     (info.id === 'sdk-probe' || info.id === 'sdk-probe-empty') &&

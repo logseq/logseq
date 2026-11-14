@@ -83,6 +83,15 @@ let run path =
   let id = success (plugin_id "sdk-probe") in
   let source = source path in
   let grants = [Editor_read; Graph_read; Db_query] in
+  for mask = 0 to 7 do
+    let id = success (plugin_id ("sdk-probe-grants-" ^ string_of_int mask)) in
+    let grants = List.filter_map (fun (bit, capability) ->
+      if mask land bit <> 0 then Some capability else None)
+      [1, Editor_read; 2, Graph_read; 4, Db_query] in
+    let grants = List.rev (grants @ grants) in
+    let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
+    Plugin_host.unload_read_plugin runner
+  done;
   let runner = task (Plugin_host.load_read_plugin ~id ~grants ~source) |> success in
   Plugin_host.unload_read_plugin runner;
   Plugin_host.unload_read_plugin runner;

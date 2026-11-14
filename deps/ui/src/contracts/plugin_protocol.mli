@@ -21,7 +21,7 @@ type request =
   | Log of log_level * string
 type reply =
   | Editing_context of editing_context
-  | Plugin_info of plugin_id
+  | Plugin_info of plugin_id * capability list
   | Editing_state of editing_context option
   | Block of entity option
   | Page of entity option

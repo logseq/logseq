@@ -76,7 +76,8 @@ let service invocation request =
   match request with
   | Get_editing_context ->
       map (invocation.services.get_editing_context ()) (fun value -> Editing_context value)
-  | Get_plugin_info -> Ui_task.resolve (Ok (Plugin_info invocation.session.plugin))
+  | Get_plugin_info -> Ui_task.resolve (Ok (Plugin_info
+      (invocation.session.plugin, invocation.session.capabilities)))
   | request ->
       match invocation.reads with
       | None -> Ui_task.resolve (Error Unsupported)
