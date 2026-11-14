@@ -78,6 +78,12 @@ entity or `null`. They do not flatten descendants or follow visible UI order.
 | `Editor.getEditingBlockContent()`                     | `editor_read`               | Live editing text or `null`                                                                   |
 | `Editor.getCurrentBlock()`                            | `editor_read`, `graph_read` | Current graph entity or `null`                                                                |
 | `Editor.getCurrentPage()`                             | `editor_read`, `graph_read` | Page entity, route summary, or `null`                                                         |
+| `Editor.getCurrentPageBlocksTree()`                   | `editor_read`, `graph_read` | Ordered recursive worker tree for the captured materialized route page, or `[]`               |
+| `Editor.getSelectedBlocks()`                          | `editor_read`, `graph_read` | Selected entities in the owning projection's order, or `[]`                                   |
+| `Editor.getBlockProperty(identity, canonicalIdent)`   | `graph_read`                | Structured property value, including class defaults, or `null`                                |
+| `Editor.getPageProperties(identity)`                  | `graph_read`                | Canonical property map, including class defaults, or `null` for a missing page                |
+| `Editor.getTodayPage()`                               | `graph_read`                | Existing page for the captured application date, or `null`; never creates it                  |
+| `Editor.getAllPages()`                                | `graph_read`                | Bounded, sorted visible-page metadata from the captured graph, or `[]` without a graph        |
 | `Editor.getBlock(identity, opts?)`                    | `graph_read`                | Numeric entity ID, UUID, or `{ uuid }`; no child tree expansion                               |
 | `Editor.getPage(identity, opts?)`                     | `graph_read`                | Numeric entity ID, UUID, `{ uuid }`, or page name; no child tree expansion                    |
 | `DB.datascriptQuery(query, ...inputs)`                | `graph_read`, `db_query`    | DataScript query with bounded plain-data inputs/results                                       |
@@ -89,6 +95,31 @@ identity reads use graph services; active-editor reads also retain the captured
 editing context. A graph/context transition invalidates late replies. Read,
 query, diagnostics, and initialization calls remain subject to the existing
 bridge message, Unicode, depth, size, call, and execution budgets.
+
+The six additional reads are portable extensions, not complete legacy API
+compatibility. Property identifiers are qualified canonical names such as
+`plugin.property.example/score`, with an optional leading `:`; display-name
+resolution is not supported. Property-map keys include the leading `:`.
+Values retain their structured data and references rather than flattening
+them to titles or IDs. Explicit values override inherited class defaults.
+An existing page with no properties yields `{}`; a missing property or target
+yields `null`. A block is not accepted as a page-properties target. Property
+projection is bounded independently of unrelated block content.
+
+Current-page trees exclude page roots and follow worker sibling order, including
+collapsed descendants. Zoomed block roots follow the existing tree endpoint's
+include-root behavior. Entity fields are those supplied by
+the existing tree endpoint; this does not add the separate explicit-block
+children/property hydration surface. Selections follow the captured selection
+scope, not main-page order or sorted UUIDs, and return flat selected entities,
+not a recursive tree. A missing selected entity invalidates the captured read.
+
+The catalog excludes `logseq.property/hide?` pages and contains only ID, UUID,
+name, title, and available creation/update metadata (plus standard DTO title
+aliases). It sorts by case-sensitive UTF-8 title, then entity ID. It does not
+accept a repository argument or return a truncated success when limits are
+exceeded: oversized complete results reject with `Resource_limit`. Today-page
+lookup uses the application date captured at invocation, not a JS/browser clock.
 
 Registered command handlers return `insertText`, `showDatePicker`, or
 `exitEditing` actions, not imperative writes. They use a fresh invocation host
@@ -118,6 +149,15 @@ existing bounded-value/call limits produce `Resource_limit`. JS receives these
 codes as `PluginError`; local SDK validation can throw before a request is sent.
 The application captures the graph before
 invocation and rechecks freshness around the existing worker sibling read.
+
+The same boundary exposes `get_current_page_blocks_tree`, `get_selected_blocks`,
+`get_block_property`, `get_page_properties`, `get_today_page`, and `get_all_pages`.
+Each takes the broker, session and invocation, followed by its typed arguments.
+Construct canonical property names with `Plugin_protocol.property_ident`.
+Lists return typed entity lists; today returns an optional entity; property
+operations return bounded `Json.t` values. Wire methods are respectively
+27–32; 25–26 remain reserved for the separate property-write design. No new
+worker endpoint, write capability, Dune configuration, or mobile host is needed.
 
 Not implemented by this target: imperative block/page/property writes,
 settings, subscriptions, plugin installation/discovery,

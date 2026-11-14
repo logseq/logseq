@@ -56,6 +56,7 @@ let capture ~id =
     editor, Editor_actions.live_buffer editor.Editor_state.uuid) (Editor_state.editing ()) in
   let selected = Editor_actions.selected_uuids () in
   let selection_scope = Editor_state.selection_scope () in
+  let today = Dates.today () in
   let editing_current () =
     match editing, Editor_state.editing () with
     | None, None -> true
@@ -153,6 +154,118 @@ let capture ~id =
              page_result json))
     | _ -> immediate (fun () -> page_result Json.Null)
   in
+  let entities convert wire =
+    match checked_json convert wire with
+    | Json.Null -> Ok []
+    | Json.Array values ->
+        Array.fold_left (fun result value ->
+          Result.bind result (fun values ->
+            Result.map (fun value -> value :: values) (entity value)))
+          (Ok []) values |> Result.map List.rev
+    | _ -> Error Runtime_failure
+  in
+  let current_page_blocks_tree () =
+    match snapshot.Model.repo, snapshot.Model.route_page with
+    | Some repo, Some { Model.page_uuid = Some uuid; _ } ->
+        await (fun () -> Runtime.invoke3 "thread-api/get-page-blocks-tree"
+          (Wire.String repo)
+          (Wire.Uuid uuid) (Wire.Map []))
+          (entities Sdk_convert.json_of_wire)
+    | _ -> immediate (fun () -> Ok [])
+  in
+  let selected_blocks () =
+    match snapshot.Model.repo, selected with
+    | Some repo, _ :: _ ->
+        await (fun () -> Sdk_util.get_many_for_repo repo (List.map (fun uuid ->
+            Wire.Uuid uuid) selected))
+          (fun values ->
+            let wire = Wire.Array (List.map (function
+              | None | Some Wire.Nil -> raise (Rejected Stale_context)
+              | Some value -> value) values) in
+            entities Sdk_convert.json_of_wire wire)
+    | _ -> immediate (fun () -> Ok [])
+  in
+  let property_key = function
+    | Wire.Keyword key | Wire.String key ->
+        if String.starts_with ~prefix:":" key
+        then String.sub key 1 (String.length key - 1) else key
+    | _ -> raise (Rejected Runtime_failure)
+  in
+  let property_fields = function
+    | Wire.Nil -> []
+    | Wire.Map fields -> fields
+    | _ -> raise (Rejected Runtime_failure)
+  in
+  let properties ~page identity project =
+    match identity, snapshot.Model.repo with
+    | Page_name _, _ when not page -> immediate (fun () -> Error Invalid_request)
+    | _, None -> immediate (fun () -> Ok Json.Null)
+    | _, Some repo ->
+        let key = match identity with
+          | Entity_id id -> Js.Json.number (float_of_int id)
+          | Uuid uuid | Page_name uuid -> Js.Json.string uuid in
+        let source = await (fun () -> Sdk_util.get_entity_json_for_repo repo key)
+          (function
+            | Wire.Nil -> Ok None
+            | block ->
+                if page && Option.is_none (Wire.map_get_string block "block/name")
+                then Error Invalid_request
+                else match Wire.map_get_int block "db/id" with
+                  | None -> Error Runtime_failure
+                  | Some id ->
+                      let own = property_fields (Option.value ~default:Wire.Nil
+                        (Wire.get block "block/properties")) in
+                      Ok (Some (id, own))) in
+        Ui_task.bind source (function
+          | Error error -> Ui_task.resolve (Error error)
+          | Ok None -> immediate (fun () -> Ok Json.Null)
+          | Ok (Some (id, own)) ->
+              await (fun () -> Runtime.invoke2 "thread-api/get-block-class-default-properties"
+                (Wire.String repo) (Wire.Int id))
+                (fun defaults ->
+                  let value = project own (property_fields defaults) in
+                  Ok (checked_json Sdk_convert.json_of_wire value)))
+  in
+  let block_property identity key =
+    let key = property_ident_value key in
+    properties ~page:false identity (fun own defaults ->
+      let find fields = List.find_map (fun (name, value) ->
+        if property_key name = key then Some value else None) fields in
+      match find own with
+      | Some value -> value
+      | None -> Option.value ~default:Wire.Nil (find defaults))
+  in
+  let page_properties identity =
+    properties ~page:true identity (fun own defaults ->
+      let keys = Hashtbl.create (List.length own) in
+      List.iter (fun (key, _) -> Hashtbl.replace keys (property_key key) ()) own;
+      let inherited = List.filter (fun (key, _) ->
+        not (Hashtbl.mem keys (property_key key))) defaults in
+      Wire.Map (List.map (fun (key, value) ->
+        Wire.String (":" ^ property_key key), value) (inherited @ own)))
+  in
+  let today_page () = lookup Sdk_convert.result_json_of_wire (Page_name today) in
+  let all_pages () =
+    match snapshot.Model.repo with
+    | None -> immediate (fun () -> Ok [])
+    | Some repo ->
+        await (fun () -> Runtime.invoke2 "thread-api/q" (Wire.String repo)
+          (Wire.Array [Wire.String
+            "[:find [(pull ?page [:db/id :block/uuid :block/name :block/title :block/created-at :block/updated-at]) ...] :where [?page :block/name] [(get-else $ ?page :logseq.property/hide? false) ?hide] [(false? ?hide)]]"]))
+          (fun wire ->
+            check_wire wire;
+            let rows = match wire with
+              | Wire.Array rows | Wire.List rows | Wire.Set rows -> rows
+              | _ -> raise (Rejected Runtime_failure) in
+            let title block = match Wire.map_get_string block "block/title" with
+              | Some title -> title | None -> raise (Rejected Runtime_failure) in
+            let compare_page first second =
+              match String.compare (title first) (title second) with
+              | 0 -> Stdlib.compare (Wire.map_get_int first "db/id") (Wire.map_get_int second "db/id")
+              | order -> order in
+            entities Sdk_convert.result_json_of_wire
+              (Wire.Array (List.sort compare_page rows)))
+  in
   let query request =
     match snapshot.Model.repo with
     | None -> immediate (fun () -> Error Invalid_request)
@@ -194,6 +307,12 @@ let capture ~id =
     get_block = lookup Sdk_convert.json_of_wire;
     get_page = lookup Sdk_convert.result_json_of_wire;
     sibling_block;
+    current_page_blocks_tree;
+    selected_blocks;
+    block_property;
+    page_properties;
+    today_page;
+    all_pages;
     query;
     log = (fun level text -> immediate (fun () ->
       let message = "[plugin:" ^ plugin_id_value id ^ "] " ^ text in

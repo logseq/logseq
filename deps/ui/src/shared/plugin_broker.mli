@@ -13,6 +13,13 @@ type read_services = {
   get_page : Plugin_protocol.identity -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
   sibling_block : Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
     (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  current_page_blocks_tree : unit -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
+  selected_blocks : unit -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
+  block_property : Plugin_protocol.identity -> Plugin_protocol.property_ident ->
+    (Json.t, Plugin_protocol.error) result Ui_task.t;
+  page_properties : Plugin_protocol.identity -> (Json.t, Plugin_protocol.error) result Ui_task.t;
+  today_page : unit -> (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t;
+  all_pages : unit -> (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t;
   query : Plugin_protocol.query -> (Json.t, Plugin_protocol.error) result Ui_task.t;
   log : Plugin_protocol.log_level -> string -> (unit, Plugin_protocol.error) result Ui_task.t;
 }
@@ -30,6 +37,18 @@ val dispatch : t -> session -> invocation -> Plugin_protocol.request ->
   (Plugin_protocol.reply, Plugin_protocol.error) result Ui_task.t
 val get_sibling_block : t -> session -> invocation ->
   direction:Plugin_protocol.sibling_direction -> Plugin_protocol.identity ->
+  (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t
+val get_current_page_blocks_tree : t -> session -> invocation ->
+  (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t
+val get_selected_blocks : t -> session -> invocation ->
+  (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t
+val get_all_pages : t -> session -> invocation ->
+  (Plugin_protocol.entity list, Plugin_protocol.error) result Ui_task.t
+val get_block_property : t -> session -> invocation ->
+  Plugin_protocol.identity -> Plugin_protocol.property_ident -> (Json.t, Plugin_protocol.error) result Ui_task.t
+val get_page_properties : t -> session -> invocation ->
+  Plugin_protocol.identity -> (Json.t, Plugin_protocol.error) result Ui_task.t
+val get_today_page : t -> session -> invocation ->
   (Plugin_protocol.entity option, Plugin_protocol.error) result Ui_task.t
 val accept_program : t -> session -> invocation -> Plugin_protocol.program ->
   (Plugin_protocol.program, Plugin_protocol.error) result

@@ -6,6 +6,7 @@ type editing_context
 type entity
 type page_result
 type query
+type property_ident
 type program
 
 type identity = Entity_id of int | Uuid of string | Page_name of string
@@ -21,6 +22,12 @@ type request =
   | Get_block of identity
   | Get_page of identity
   | Get_sibling_block of sibling_direction * identity
+  | Get_current_page_blocks_tree
+  | Get_selected_blocks
+  | Get_block_property of identity * property_ident
+  | Get_page_properties of identity
+  | Get_today_page
+  | Get_all_pages
   | Datascript_query of query
   | Log of log_level * string
   | Register_editor_command of command_descriptor * callback_id
@@ -32,6 +39,9 @@ type reply =
   | Page of entity option
   | Current_page of page_result
   | Query_result of Json.t
+  | Entity_list of entity list
+  | Property_value of Json.t
+  | Page_properties of Json.t
   | Logged
   | Editor_command_registered
 type action = Insert_text of string | Show_date_picker | Exit_editing
@@ -70,6 +80,8 @@ val page_result : Json.t -> (page_result, error) result
 val query : text:string -> inputs:Json.t array -> (query, error) result
 val query_text : query -> string
 val query_inputs : query -> Json.t array
+val property_ident : string -> (property_ident, error) result
+val property_ident_value : property_ident -> string
 val decode_request : operation:int -> Json.t -> (request, error) result
 val reply_value : reply -> Json.t
 val program : action list -> (program, error) result
