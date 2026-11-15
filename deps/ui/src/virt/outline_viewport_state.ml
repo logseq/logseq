@@ -177,6 +177,13 @@ let create ctx (model : Model.t Signal.signal) =
     Hashtbl.iter (fun _ (_, remove) -> remove ()) sources;
     Hashtbl.clear sources);
   Option.iter (fun native ->
+    (* Virtual owners publish on their own scheduler. Forward binding changes
+       into this application without stabilizing it from the owner callback. *)
+    let source_binding = Lui_virtual.binding native.source in
+    let binding = Signal.state ctx.Lui_ui.ui_scheduler (Signal.sample source_binding) in
+    let binding_signal = own (Signal.value binding) in
+    ignore (Signal.own ctx.Lui_ui.ui_scope
+      (Signal.subscribe ~emit_initial:false source_binding (Signal.set binding)));
     let target_key = own (Signal.map2 (fun editing key -> editing, key)
       (S.editing_sig ()) editing_target) in
     let target_control = own (Signal.map2 (fun pair mounted -> pair, mounted)
@@ -193,7 +200,7 @@ let create ctx (model : Model.t Signal.signal) =
     let demand = own (Signal.cutoff
       (fun (a, source_a) (b, source_b) -> same_editor_intent a b && source_a = source_b)
       (Signal.map2 (fun context binding -> context, binding)
-      context (Lui_virtual.binding native.source))) in
+      context binding_signal)) in
     let attempt = ref None in
     let last_session = ref (Option.map (fun (editing : S.editing) -> editing.epoch) (S.editing ())) in
     let subscription = Signal.subscribe ~emit_initial:true demand
@@ -204,11 +211,8 @@ let create ctx (model : Model.t Signal.signal) =
           | None, None -> true
           | _ -> false in
         last_session := session;
-        if not same_session && Option.is_some session then
-          Option.iter (fun cancel -> cancel ()) !cancel_navigation;
-        Option.iter (fun attempt -> Issued_reveal.cancel native.editing ~attempt) !attempt;
-        attempt := None;
-        match wanted, binding, Lui_virtual.Internal.owner_binding native.source with
+        let supersedes_navigation = not same_session && Option.is_some session in
+        (match wanted, binding, Lui_virtual.Internal.owner_binding native.source with
         | Some intent, Some _, Some _ ->
             let uuid = intent.block and scope = intent.interaction_scope and key = intent.row_key in
             let current () =
@@ -225,8 +229,12 @@ let create ctx (model : Model.t Signal.signal) =
               (Lui_runtime.canonical_node ctx.Lui_ui.ui_application) intent.control in
             attempt := Some (Issued_reveal.issue native.editing ~key ~block:uuid
               ~kind:(Issued_reveal.Editor {require_focus = true; control_node;
-                reveal = Option.is_none !cancel_navigation}) ~current)
-        | _ -> ()) in
+                reveal = supersedes_navigation || Option.is_none !cancel_navigation}) ~current)
+        | _ ->
+            Option.iter (fun attempt -> Issued_reveal.cancel native.editing ~attempt) !attempt;
+            attempt := None);
+        if supersedes_navigation then
+          Option.iter (fun cancel -> cancel ()) !cancel_navigation) in
     ignore (Signal.own ctx.Lui_ui.ui_scope subscription)) native;
   {native; model; projection; rows; row_count; editing_target; navigation_target; scroll_token; request_scroll;
    scroll_target; scroll_completed; row_roots = Hashtbl.create 1;

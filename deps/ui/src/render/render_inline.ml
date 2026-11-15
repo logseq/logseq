@@ -68,8 +68,15 @@ let preview_link inner =
    hover previews (popups_view a[data-ref]) and cljs-parity selectors
    (a.tag[data-ref][data-uuid][draggable] > span; link's
    .lui-link-content satisfies the child span) *)
-let page_link ~(tag : bool) ?label ?uuid_sig name =
+let page_link ~(tag : bool) ?label ?uuid_sig name : t =
+ fun context parent ->
   let name = String.trim name in
+  (* SwiftUI Link activation also comes from keyboard/accessibility actions,
+     where there is no document click to resolve a placeholder href. *)
+  let url target = match Lui_ui.host context with
+    | Lui_protocol.SwiftUIHost ->
+        Runtime.nav_hash ("#/page/" ^ Ui_services.uri_encode_component target)
+    | _ -> "#" in
   let txt =
     match label with
     | Some l when String.trim l <> "" -> l
@@ -103,18 +110,19 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
               "var(--lx-accent-11, var(--ls-link-text-hover-color))" )
         ; Ui_components.Prop.position `relative ]
   in
-  match uuid_sig with
+  (match uuid_sig with
   | None ->
       (* cljs anchors carry the label as a bare text child *)
       hover
-        (link ~url:"#" ~target:`self_ ~style_class:cls
+        (link ~url:(url name) ~target:`self_ ~style_class:cls
            ~data_attrs:(base @ tag_style)
            ~foreground:fg ~text:txt [])
   | Some u_sig ->
       (* cljs sets :data-uuid on the anchor once the page entity resolves;
          attrs apply is replace-semantic so emit the whole set *)
       hover
-        (link ~url:"#" ~target:`self_ ~style_class:cls ~text:txt
+        (link ~url:(reactive (fun uuid -> url (if uuid = "" then name else uuid)) u_sig)
+           ~target:`self_ ~style_class:cls ~text:txt
            ~foreground:fg
            ~data_attrs:
           (reactive
@@ -122,7 +130,7 @@ let page_link ~(tag : bool) ?label ?uuid_sig name =
                tag_style
                @ if u = "" then base else ("data-uuid", u) :: base)
              u_sig)
-           [])
+           [])) context parent
 
 (* ---- pull memoization ----
    Every [[name]]/uuid anchor used to fire its own thread-api/pull per

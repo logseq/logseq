@@ -726,6 +726,12 @@ let platform_event payload =
         Platform.note_keychain_result json
       else if name = "clipboard-write-result" then
         Platform.note_clipboard_write (Yojson.Safe.from_string body)
+      else if name = "navigate" then (
+        let hash = match json with
+          | Js.Json.JObject ["hash", Js.Json.JString hash]
+            when String.starts_with ~prefix:"#/" hash -> hash
+          | _ -> invalid_arg "Invalid native navigation target" in
+        Host.enqueue (fun () -> Platform.set_location_hash hash))
       else if name = "window-close-request" then
         Host.enqueue (fun () ->
           let result ok error =

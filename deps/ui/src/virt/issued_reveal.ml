@@ -69,12 +69,15 @@ let issue producer ~key ~block ~kind ~current =
     && Signal.sample (Lui_virtual.binding producer.source) = Some source
     && Lui_virtual.Internal.owner_binding producer.source = Some owner in
   if not (current ()) then invalid_arg "Issued reveal requires a current application intent";
-  Option.iter (fun (issued : issued) -> cancel producer ~attempt:issued.attempt) producer.current;
   incr serial;
   let issued = { attempt = !serial; key; block; kind; current;
     scroll_token = None;
     retention = Some (Lui_virtual.retain producer.source ~key);
     releasing = None; phase = Awaiting } in
+  (* Retention changes reconcile rows synchronously. Keep the replacement
+     resident before retiring the previous lease, or a cold editor row can
+     unmount and invalidate the control that caused this handoff. *)
+  Option.iter (fun (issued : issued) -> cancel producer ~attempt:issued.attempt) producer.current;
   producer.current <- Some issued;
   (* The app owns its token stream, including scroll requests outside this
      producer. An attempt ID cannot safely substitute for that scroll token. *)

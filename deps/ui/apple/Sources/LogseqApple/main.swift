@@ -229,6 +229,15 @@ struct HostRoot: View {
         .preferredColorScheme(services.preferredScheme)
         .ignoresSafeArea(.container, edges: .top)
         .environment(\.locale, Locale(identifier: services.uiState["lang"] as? String ?? "en"))
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == nil else { return .systemAction }
+            guard let fragment = URLComponents(url: url, resolvingAgainstBaseURL: false)?.percentEncodedFragment else { return .discarded }
+            // Placeholder anchors are handled by document click delegation.
+            if !fragment.isEmpty {
+                services.perform { try services.runtime?.send("navigate", ["hash": "#" + fragment]) }
+            }
+            return .handled
+        })
     }
 }
 

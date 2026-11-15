@@ -1293,6 +1293,7 @@ let on_doc_click st ev =
    | None -> ());
   match click_target "a.page-ref, a.tag" ev with
   | Some el -> (
+      prevent_default ev;
       match
         (* uuid refs ([[uuid]]/((uuid))) carry data-uuid; data-ref holds the
            resolved title, which drifts out of sync on rename. tag chips
