@@ -442,7 +442,7 @@ let all_block_properties_for_repo origin_repo db_id props =
 
 (* dispatch outliner ops; each op entry is [kw-name, [args...]].
    Response is {result: <last op result>, ...} — unwrap it. *)
-let apply_ops_for_repo ?(before_commit = fun () -> ()) ?(refresh = true) origin_repo ops opts =
+let apply_ops_for_repo ?(before_commit = fun () -> ()) ?(validate_ops = fun _ -> ()) ?(refresh = true) origin_repo ops opts =
   let context_revision =
     let entry_model = Runtime.model () in
     if entry_model.Model.repo = Some origin_repo then
@@ -455,6 +455,7 @@ let apply_ops_for_repo ?(before_commit = fun () -> ()) ?(refresh = true) origin_
     && context_revision = Some fresh_model.Model.context_revision
   in
   let* ops = resolve_title_refs_for_repo origin_repo ops in
+  validate_ops ops;
   before_commit ();
   let* w =
     Runtime.invoke3 "thread-api/apply-outliner-ops"

@@ -16,9 +16,16 @@ type insert_options = { position : insertion_position; custom_uuid : string opti
 type property_key = string
 type property_value = Text_value of string | Number_value of float | Checkbox_value of bool
 type property_patch = (property_key * property_value option) list
+type property_set = (property_key * property_value) list
+type batch_block = { content : string; properties : property_set; children : batch_block list }
+type page_edge = Prepend | Append
 type move_position = Move_before | Move_after | Move_into
 type mutation =
   | Insert_block of identity * string * insert_options
+  | Patch_block_properties of identity * property_patch
+  | Create_block_with_properties of identity * string * insert_options * property_set
+  | Insert_batch_blocks of identity * batch_block list * insertion_position
+  | Insert_page_block of identity * string * page_edge * property_set
   | Update_block of identity * string * property_patch
   | Upsert_block_property of identity * property_key * property_value
   | Remove_block_property of identity * property_key
@@ -69,6 +76,8 @@ type reply =
   | Editor_command_registered
   | Properties of Json.t
   | Mutation_applied
+  | Block_created of string
+  | Blocks_created of string list
   | Blocks of entity list
   | Page_renamed
 type error =
@@ -322,6 +331,7 @@ let decode_property_value = function
   | Json.Array _ | Json.Object _ -> Error Unsupported
 
 let property_patch value =
+  let* () = validate_value value in
   match value with
   | Json.Object fields when List.length fields <= max_calls ->
       let rec collect result = function
@@ -334,6 +344,64 @@ let property_patch value =
       collect [] fields
   | Json.Object _ -> Error Resource_limit
   | _ -> Error Invalid_request
+
+let property_set value =
+  let* fields = property_patch value in
+  let rec collect result = function
+    | [] -> Ok (List.rev result)
+    | (key, Some value) :: rest -> collect ((key, value) :: result) rest
+    | (_, None) :: _ -> Error Invalid_request in
+  collect [] fields
+
+let property_set_entries value = value
+
+let batch_content block = block.content
+let batch_properties block = block.properties
+let batch_children block = block.children
+
+let batch_options value =
+  let* () = validate_value value in
+  match value with
+  | Json.Object fields ->
+      let rec check = function
+        | [] -> Ok ()
+        | ("keepUUID", Json.Bool true) :: _ -> Error Unsupported
+        | (("before" | "sibling" | "keepUUID"), Json.Bool _) :: rest -> check rest
+        | (("before" | "sibling" | "keepUUID"), _) :: _ -> Error Invalid_request
+        | (("uuid" | "customUUID"), _) :: _ -> Error Unsupported
+        | _ -> Error Invalid_request in
+      let* () = check fields in
+      Ok (if Json.get "before" value = Some (Json.Bool true) then Before
+          else if Json.get "sibling" value = Some (Json.Bool true) then After else Last_child)
+  | _ -> Error Invalid_request
+
+let batch_blocks value =
+  let* () = validate_value value in
+  let count = ref 0 and assignments = ref 0 in
+  let rec roots = function
+    | Json.Array nodes ->
+        let rec collect result index =
+          if index = Array.length nodes then Ok (List.rev result)
+          else let* node = node nodes.(index) in collect (node :: result) (index + 1) in
+        collect [] 0
+    | _ -> Error Invalid_request
+  and node value =
+    incr count;
+    if !count > max_calls then Error Resource_limit
+    else match value with
+    | Json.Object fields ->
+        if List.exists (fun (key, _) -> key = "uuid" || key = "customUUID") fields then Error Unsupported
+        else if List.length fields <> 3 || List.exists (fun (key, _) ->
+          key <> "content" && key <> "properties" && key <> "children") fields then Error Invalid_request
+        else (match Json.get "content" value, Json.get "properties" value, Json.get "children" value with
+          | Some (Json.String content), Some properties, Some children ->
+              let* properties = property_set properties in
+              assignments := !assignments + List.length properties;
+              if !assignments > max_calls then Error Resource_limit
+              else let* children = roots children in Ok { content; properties; children }
+          | _ -> Error Invalid_request)
+    | _ -> Error Invalid_request in
+  roots value
 
 let page_title text =
   if String.trim text = "" || String.exists (fun c -> Char.code c < 32 || c = '\127') text
@@ -377,6 +445,26 @@ let decode_request ~operation value =
       let* identity = decode_identity ~page:false value in Ok (Get_block_tree identity)
   | 24, Json.Array [|value|] ->
       let* identity = decode_identity ~page:true value in Ok (Get_page_linked_references identity)
+  | 25, Json.Array [|value; properties|] ->
+      let* identity = decode_identity ~page:false value in
+      let* properties = property_patch properties in
+      Ok (Mutate (Patch_block_properties (identity, properties)))
+  | 26, Json.Array [|value; Json.String text; options; properties|] ->
+      let* identity = decode_identity ~page:false value in
+      let* options = insert_options options in
+      let* properties = property_set properties in
+      Ok (Mutate (Create_block_with_properties (identity, text, options, properties)))
+  | 33, Json.Array [|value; roots; options|] ->
+      let* identity = decode_identity ~page:false value in
+      let* roots = batch_blocks roots in
+      let* position = batch_options options in
+      Ok (Mutate (Insert_batch_blocks (identity, roots, position)))
+  | 34, Json.Array [|value; Json.String text; Json.String edge; properties|] ->
+      let* identity = decode_identity ~page:true value in
+      let* edge = match edge with "prepend" -> Ok Prepend | "append" -> Ok Append
+        | _ -> Error Invalid_request in
+      let* properties = property_set properties in
+      Ok (Mutate (Insert_page_block (identity, text, edge, properties)))
   | 7, Json.Array [|Json.String text; Json.Array inputs|] ->
       let* query = query ~text ~inputs in Ok (Datascript_query query)
   | 27, Json.Array [||] -> Ok Get_current_page_blocks_tree
@@ -439,7 +527,7 @@ let decode_request ~operation value =
         | "error" -> Ok (Log (Log_error, text))
         | _ -> Error Invalid_request)
   | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 14 | 15
-     | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 27 | 28 | 29 | 30 | 31 | 32), _ -> Error Invalid_request
+     | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 | 32 | 33 | 34), _ -> Error Invalid_request
   | _ -> Error Unsupported
 
 let capability_name = function
@@ -467,6 +555,9 @@ let reply_value = function
   | Property_value value | Page_properties value -> value
   | Entity_list values | Blocks values -> Json.Array (Array.of_list values)
   | Mutation_applied -> Json.Null
+  | Block_created uuid -> Json.Object ["uuid", Json.String uuid]
+  | Blocks_created uuids -> Json.Array (Array.of_list (List.map (fun uuid ->
+      Json.Object ["uuid", Json.String uuid]) uuids))
   | Page_renamed -> Json.Bool true
 
 let program actions =

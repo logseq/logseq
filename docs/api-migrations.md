@@ -1,5 +1,61 @@
 # Plugin API Migrations
 
+## QuickJS property patches and plain-block creation
+
+The DOM-free `Editor` adds `setBlockProperties`, `patchBlockProperties`,
+`createBlock`, `insertBatchBlock`, `prependBlockInPage` and `appendBlockInPage`.
+Every method requires `graph_write` in an active captured command invocation;
+internal target/schema lookups do not require or grant `graph_read`.
+
+`setBlockProperties` merges scalar assignments, preserving omitted keys. Patch
+uses `null` to remove an assignment; initial properties reject `null`. Empty
+maps are validated no-ops. Keys remain case-sensitive ASCII leaf names in the
+trusted session's `plugin.property.<plugin-id>/<key>` namespace. Values are finite
+numbers, strings and booleans; schemas remain cardinality-one
+default/number/checkbox. No schema migration or reference-valued write is added.
+
+Creation returns only `{ uuid }`, never a hydrated entity. Batch returns one
+receipt per node in preorder, preserving root/child order. A node's multiline
+content stays one block. UUIDs are host-generated except `createBlock`'s validated
+optional `customUUID`; batch `keepUUID: true`, node UUIDs and custom UUIDs are
+unsupported. Batch defaults to the target's last child, `sibling: true` means
+after it, and `before: true` takes precedence and means before it. A page cannot
+be a before/after target. Empty batch input still validates authority and placement.
+
+Page-edge methods require an explicit existing page name, UUID, `{ uuid }` or
+positive ID, and insert one first/last direct child. They never create a missing
+target page, navigate, or infer today's page. Plain-block creation does not author
+property-value/default-value/closed-value structures. Content references and tags
+still use the normal parser and outliner path. One mutation shares newly minted
+reference definitions across its new nodes: repeated missing bare and bracketed
+hashtags reuse one case-sensitive tag-class identity. Existing references retain
+normal UUID/exact-title lookup semantics. Staging never spans mutations or repositories.
+
+```ts
+const created = await logseq.Editor.createBlock(parentUuid, 'Task', {
+  properties: { priority: 2, done: false },
+})
+await logseq.Editor.patchBlockProperties(created.uuid, { priority: null })
+const receipts = await logseq.Editor.insertBatchBlock(parentUuid, {
+  content: 'Parent', children: [{ content: 'Child' }],
+}) // [parent receipt, child receipt], not legacy entities
+await logseq.Editor.appendBlockInPage('Project', 'Last block')
+```
+
+Each creation call preflights the entire schema set and submits one bounded
+semantic outliner operation list. A batch allows at most 32 new nodes and 32
+aggregate property assignments, with at most 32 keys per map; existing string,
+message, depth and invocation limits also apply to the expanded plan. Requests
+are rejected rather than truncated or split. Missing schemas are prepared once
+per key, and incompatible types across nodes fail before submission. An accepted
+write is not rolled back if a later cancellation/freshness check rejects delivery.
+
+Wire IDs are append-only: 25 is property patch (arity 2), 26 is create with
+properties (arity 4), 33 is batch insert (arity 3), and 34 is shared page-edge
+insert (arity 4). Set reuses 25; prepend/append share 34. Existing IDs, including
+the separately allocated captured-read range 27–32, are not renumbered. No batch-6
+alias, new worker endpoint, raw transaction channel or platform host is added.
+
 ## QuickJS captured tree, selection, property and page reads
 
 Rebundle against the matching QuickJS host to use these portable extensions:
@@ -42,13 +98,12 @@ property lookup semantics. Reference and many-valued defaults continue to use
 
 Shared OCaml callers use the corresponding `Plugin_broker.get_*` functions
 and `Plugin_protocol.property_ident`. Wire methods 27–32 are additive; 25–26
-remain reserved for the separately approved property-write design. This slice
+implement the separately approved property-write design above. This read slice
 adds no property mutation, worker endpoint or mobile host and does not depend
 on the independently reviewed explicit tree/query or graph-write surfaces.
 See the [QuickJS inventory](../libs/README.quickjs.md) for exact limits and
 tree-field boundaries. Native headless evidence is not Web/WASM or mobile
 runtime validation.
-
 ## QuickJS editor API v1
 
 The DOM-free editor surface now includes `getBlockProperties`, `insertBlock`,

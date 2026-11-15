@@ -99,6 +99,19 @@ let run path =
        Wire.kw "logseq.property/type", Wire.kw "default"];
     special_page "portable journal" "113" "logseq.class/Journal"
       [Wire.kw "block/journal-day", Wire.Int 20200101]]; Wire.Nil; Wire.Nil]);
+  ignore (invoke "thread-api/transact" [Wire.String repo; Wire.Array [
+    special_page "portable url" "114" "logseq.class/Property"
+      [Wire.kw "db/ident", Wire.kw "plugin.property.command-probe/url";
+       Wire.kw "logseq.property/type", Wire.kw "url";
+       Wire.kw "db/cardinality", Wire.kw "db.cardinality/one"];
+    Wire.Map [Wire.kw "block/uuid", Wire.Uuid "00000000-0000-0000-0000-000000000115";
+      Wire.kw "block/title", Wire.String "https://example.com";
+      Wire.kw "block/created-at", Wire.Int 1; Wire.kw "block/updated-at", Wire.Int 1;
+      Wire.kw "block/order", Wire.String "a1";
+      Wire.kw "block/parent", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid];
+      Wire.kw "block/page", Wire.Array [Wire.kw "block/uuid"; Wire.Uuid page_uuid];
+      Wire.kw "logseq.property/created-from-property", Wire.kw "plugin.property.command-probe/url"]];
+    Wire.Nil; Wire.Nil]);
   let page = Option.get (Decode.page_of_summary page) in
   let initial = {Model.initial with repo=Some repo; route=Model.Page page.Model.page_title;
     route_page=Some page} in
@@ -131,7 +144,11 @@ let run path =
     List.find (fun handle -> command_key (command_metadata handle) = key)
       (Plugin_host.portable_commands ()) in
   let runner = load () in
-  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 11);
+  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 12);
+  let ac = editing "/portable-batch" in
+  check "portable creation preserves ordered receipts, schema atomicity and the active buffer"
+    (task (Popups_state.run_portable_command popup ac (handle "portable-batch")) = Ok ()
+     && buffer () = "/portable-batch");
   let ac = editing "/delete-special-pages" in
   check "special pages cannot be permanently deleted"
     (task (Popups_state.run_portable_command popup ac (handle "delete-special-pages")) = Ok ());

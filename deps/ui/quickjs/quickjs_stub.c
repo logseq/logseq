@@ -593,9 +593,11 @@ CAMLprim value logseq_quickjs_start(value handle, value slot) {
         {"getPageBlocksTree", 16, 1}, {"getBlockChildren", 17, 1}, {"removeBlock", 18, 1},
         {"moveBlock", 19, 3}, {"createPage", 20, 2}, {"renamePage", 21, 2}, {"deletePage", 22, 1},
         {"getBlockTree", 23, 1}, {"getPageLinkedReferences", 24, 1},
+        {"patchBlockProperties", 25, 2}, {"createBlockWithProperties", 26, 4},
         {"getCurrentPageBlocksTree", 27, 0}, {"getSelectedBlocks", 28, 0},
         {"getBlockProperty", 29, 2}, {"getPageProperties", 30, 1},
-        {"getTodayPage", 31, 0}, {"getAllPages", 32, 0}
+        {"getTodayPage", 31, 0}, {"getAllPages", 32, 0},
+        {"insertBatchBlock", 33, 3}, {"insertPageBlock", 34, 4}
     };
     if (JS_IsException(host)) bridge->error = RESOURCE;
     for (size_t i = 0; i < sizeof(methods) / sizeof(methods[0]) && bridge->error < 0; i++) {
