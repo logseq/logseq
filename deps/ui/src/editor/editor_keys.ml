@@ -2207,6 +2207,14 @@ let installed = State_cell.Once.make ()
 
 let install_once () =
   State_cell.Once.run installed (fun () ->
+    List.iter (fun name ->
+      Ui_services.dom_on_document_event ~capture:true name
+        Runtime.observe_appearance_buttons)
+      ["pointerdown"; "pointermove"; "pointerup"];
+    if Ui_services.env_native_drag () then
+      List.iter (fun name ->
+        Ui_services.dom_on_document_event ~capture:true name
+          Runtime.observe_appearance_buttons) ["keydown"; "keyup"];
     Ui_services.dom_on_document_event ~capture:true "keydown" on_global_key;
     Ui_services.dom_on_document_event ~capture:true "keydown" on_keydown;
     Ui_services.dom_on_document_event ~capture:true "paste" on_paste;

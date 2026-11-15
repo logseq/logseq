@@ -16,6 +16,12 @@ struct EditorSink: NSViewRepresentable {
         return input
     }
     func updateNSView(_ input: NativeEditorInput, context: Context) {
+        if input.services !== services || input.extensionContext?.nodeID != self.context.nodeID
+            || input.incarnation != services.incarnations[self.context.nodeID]
+            || input.block != self.context.string("block-id") {
+            input.releaseVirtualRegistration()
+            input.services?.issuedReveals.untrack(input)
+        }
         input.extensionContext = self.context; input.services = services
         input.incarnation = services.incarnations[self.context.nodeID]
         input.block = self.context.string("block-id") ?? ""
@@ -23,6 +29,7 @@ struct EditorSink: NSViewRepresentable {
         services.views[self.context.nodeID] = WeakView(input)
         input.setAccessibilityIdentifier(self.context.string("accessibility-identifier") ?? "logseq-editor-\(input.block)")
         input.synchronize()
+        services.issuedReveals.track(input)
         if let focused = services.focusIntents[input.block] {
             DispatchQueue.main.async { [weak input] in
                 guard let input, input.window != nil,
@@ -31,12 +38,48 @@ struct EditorSink: NSViewRepresentable {
             }
         }
     }
+    static func dismantleNSView(_ input: NativeEditorInput, coordinator: ()) {
+        input.releaseVirtualRegistration()
+        input.services?.issuedReveals.untrack(input)
+        if let services = input.services, let node = input.extensionContext?.nodeID,
+           services.views[node]?.value === input { services.views.removeValue(forKey: node) }
+        if let services = input.services, services.editors[input.block]?.value === input {
+            services.editors.removeValue(forKey: input.block)
+        }
+    }
 }
 
 // Only an input conduit. The source and selection are read from OCaml;
 // every edit is an intent and NSTextView's local undo manager is disabled.
 @MainActor
 final class NativeEditorInput: NSTextView {
+    private var virtualRegistration: LUIVirtualNativeRegistration?
+    private weak var virtualBackend: LUIAppleBackend?
+
+    func retainVirtualRegistration(_ registration: LUIVirtualNativeRegistration, backend: LUIAppleBackend) {
+        if virtualRegistration !== registration || virtualBackend !== backend {
+            releaseVirtualRegistration()
+            virtualRegistration = registration
+            virtualBackend = backend
+        }
+    }
+
+    func releaseVirtualRegistration() {
+        if let virtualRegistration { virtualBackend?.unregisterVirtualNativeView(virtualRegistration) }
+        virtualRegistration = nil
+        virtualBackend = nil
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { releaseVirtualRegistration() }
+        services?.issuedReveals.schedule()
+    }
+
+    override func layout() {
+        super.layout()
+        services?.issuedReveals.schedule()
+    }
     var extensionContext: LUIAppleExtensionViewContext?
     weak var services: PlatformServices?
     var block = ""
@@ -67,7 +110,7 @@ final class NativeEditorInput: NSTextView {
     }
     override func becomeFirstResponder() -> Bool {
         let accepted = super.becomeFirstResponder()
-        if accepted { send("focus"); synchronize() }
+        if accepted { send("focus"); synchronize(); services?.issuedReveals.schedule() }
         return accepted
     }
     override func resignFirstResponder() -> Bool {

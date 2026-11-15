@@ -60,6 +60,18 @@
 (rule
  (copy ../src/blocks/tree.ml tree.ml))
 (rule
+ (copy ../src/virt/outliner_projection.ml outliner_projection.ml))
+(rule
+ (copy ../src/virt/issued_reveal.ml issued_reveal.ml))
+(rule
+ (copy ../src/virt/issued_reveal.mli issued_reveal.mli))
+(rule
+ (copy ../src/virt/outline_viewport_state.ml outline_viewport_state.ml))
+(rule
+ (copy ../src/virt/navigation_reveal.ml navigation_reveal.ml))
+(rule
+ (copy ../src/virt/flat_outliner.ml flat_outliner.ml))
+(rule
  (copy ../src/cards/cards_state.ml cards_state.ml))
 (rule
  (copy ../src/cards/cards_view.ml cards_view.ml))

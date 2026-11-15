@@ -77,34 +77,7 @@ let route_anchor () = Ui_services.nav_hash_query_param "anchor"
    scroll and flash block-highlight for 4s. Rows inside collapsed or
    lazily mounted subtrees appear after the route commits — poll like
    cljs wait-for-anchor-element! *)
-let anchor_timer = ref 0
-
-let rec poll_anchor anchor n =
-  match Ui_services.dom_by_id anchor with
-  | Some el ->
-      el.Ui_services.scroll_into_view ();
-      if String.length anchor > 36 then
-        let tail =
-          String.sub anchor (String.length anchor - 36) 36
-        in
-        if Wire.is_uuid_string tail then
-          Editor_actions.select_single tail
-        else (
-          el.Ui_services.add_class "block-highlight";
-          anchor_timer :=
-            Ui_services.timers_timeout
-              (fun () ->
-                el.Ui_services.remove_class "block-highlight")
-              4000)
-  | None ->
-      if n < 120 then
-        anchor_timer :=
-          Ui_services.timers_timeout (fun () -> poll_anchor anchor (n + 1))
-            50
-
-let jump_to_anchor anchor =
-  Ui_services.timers_clear_timeout !anchor_timer;
-  poll_anchor anchor 0
+let jump_to_anchor = Navigation_reveal.jump
 
 let fetch_blocks ?(source_repo = repo ())
     ?(current =
@@ -830,6 +803,7 @@ let load_route (route : Model.route) =
       ()
 
 let rec resolve () =
+  Navigation_reveal.cancel ();
   Ui_services.perf_mark "router:resolve";
   let route = parse_hash () in
   (match Runtime.route () with

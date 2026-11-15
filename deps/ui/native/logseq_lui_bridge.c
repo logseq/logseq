@@ -120,6 +120,30 @@ static int emit_patch(const char *where, value result) {
   return 1;
 }
 
+/* App-owned issued producer. The SDK's opaque retention channel is unchanged. */
+LUI_EXPORT int32_t logseq_issued_reveals_utf8(
+    logseq_platform_request_callback receive) {
+  if (!runtime_started || receive == NULL) return 0;
+  int accepted = 0;
+  caml_leave_blocking_section();
+  CAMLparam0();
+  CAMLlocal1(result);
+  const value *handler = caml_named_value("logseq_issued_reveals");
+  if (handler != NULL) {
+    result = caml_callback_exn(*handler, Val_unit);
+    if (Is_exception_result(result)) {
+      report_ocaml_exception("logseq_issued_reveals", result);
+    } else if (emit_patch("logseq_issued_reveals", Field(result, 1))) {
+      value demands = Field(result, 0);
+      receive(String_val(demands), (int32_t)caml_string_length(demands));
+      accepted = 1;
+    }
+  }
+  CAMLdrop;
+  caml_enter_blocking_section();
+  return accepted;
+}
+
 static value copy_bytes(const char *data, int32_t length) {
   value text = caml_alloc_string((mlsize_t)length);
   memcpy(Bytes_val(text), data, (size_t)length);

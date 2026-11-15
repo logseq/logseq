@@ -6,7 +6,7 @@ let package = Package(
     platforms: [.macOS(.v14)],
     products: [.executable(name: "logseq-apple", targets: ["LogseqApple"])],
     dependencies: [
-        .package(url: "https://github.com/logseq/lui.git", revision: "bc89138b7c44804ab5c0cf72e833635c85261db1")
+        .package(url: "https://github.com/logseq/lui.git", revision: "3a3fcc929ffd6c844525bfc919bf3180d4eff2c5")
     ],
     targets: [
         .executableTarget(name: "LogseqApple", dependencies: [

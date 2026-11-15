@@ -130,12 +130,6 @@ let row_attrs_sig ~scope ~depth ~editable uuid (b : Model.block) =
     (fun v -> row_attrs_of ~scope ~depth ~editable uuid b v)
     (S.collapse_sig ())
 
-let row_attrs_sig_of ~scope ~depth ~editable (bs : Model.block Signal.signal) =
-  Signal.map2
-    (fun (b : Model.block) (v : S.collapse_view) ->
-      let uuid = Option.value b.block_uuid ~default:"" in
-      row_attrs_of ~scope ~depth ~editable uuid b v)
-    bs (S.collapse_sig ())
 let collapsed_sig ~scope (b : Model.block) =
   let uuid = Option.value b.block_uuid ~default:"" in
   Signal.map
@@ -177,14 +171,16 @@ let bullet_size ~library (b : Model.block) =
     | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
     | _ -> 16
 
+let children_indent ~library b =
+  22 + bullet_size ~library b / 2 - 1
+  - (if b.Model.block_order_list = Some "number" then 3 else 0)
+
 let children_container ~library uuid (bs : Model.block Signal.signal) content =
-  let indent b = 22 + bullet_size ~library b / 2 - 1
-    - (if b.Model.block_order_list = Some "number" then 3 else 0) in
   (* Center the one-pixel guide on the bullet, including odd icon sizes. *)
   let guide_left b =
     let size = bullet_size ~library b in
     float_of_int size /. 2. -. float_of_int (size / 2) +. 0.5 in
-  Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive indent bs)
+  Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive (children_indent ~library) bs)
   (Ui_components.with_props
     [ Ui_components.Prop.position `relative; Ui_components.Prop.padding_top 2 ]
     (row ~key:("children-" ^ uuid) ~style_class:"block-children-container"
@@ -724,11 +720,15 @@ let content_wrap key (b : Model.block) children =
    unavailable at module-init time *)
 let () = Asset_dom.install ()
 
-let comments_row ~scope ~depth ~editable ~library (bs : Model.block Signal.signal) : t =
+let comments_row ?depth_signal ?(flat = false) ~scope ~depth ~editable ~library
+    (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let block = Signal.get bs in
   let uuid = Option.value block.block_uuid ~default:"" in
   let key = block_key block in
+  let depth_signal = match depth_signal with
+    | Some source -> source
+    | None -> Signal.constant ctx.Lui_ui.ui_scheduler depth in
   (track_mounted_row ~scope block
     (with_editor_font
       (Ui_parts.string_prop Lui_protocol.StyleClass
@@ -740,7 +740,11 @@ let comments_row ~scope ~depth ~editable ~library (bs : Model.block Signal.signa
           ~background:(reactive (fun selection ->
               if S.is_selected_in_view ~scope uuid selection then "var(--ls-block-highlight-color)"
               else "transparent") (S.selection_sig ()))
-          ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
+          ~data_attrs:(reactive (fun (b : Model.block) collapse depth ->
+              let attrs = row_attrs_of ~scope ~depth ~editable
+                (Option.value b.block_uuid ~default:"") b collapse in
+              if flat then ("data-cid", scope) :: attrs else attrs)
+            bs (S.collapse_sig ()) depth_signal)
           [ row ~style_class:"block-main-container" ~gap:4 ~min_height:24
               [ reactive (control_wrap ~scope ~library uuid) bs
               ; column ~grow:1. ~min_width:0 [Comments_view.area_el ~scope bs] ] ]))))
@@ -896,11 +900,14 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
    rebuilt only when the row's own block record changes *)
-and row_sig ~depth ~editable ~library ~virtualize scope
+and row_sig ?depth_signal ?(flat = false) ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let b0 = Signal.get bs in
   let key = block_key b0 in
+  let depth_signal = match depth_signal with
+    | Some source -> source
+    | None -> Signal.constant ctx.Lui_ui.ui_scheduler depth in
   (* the record isn't the only input to row_main: Render resolves
      [[uuid]]/((uuid))/#[[uuid]] refs through Render_inline's pull cache
      at mount, and an untouched record keeps its mount on every
@@ -935,7 +942,11 @@ and row_sig ~depth ~editable ~library ~virtualize scope
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
        ~corner_radius:4
-       ~data_attrs_signal:(row_attrs_sig_of ~scope ~depth ~editable bs)
+       ~data_attrs:(reactive (fun (b : Model.block) collapse depth ->
+           let attrs = row_attrs_of ~scope ~depth ~editable
+             (Option.value b.block_uuid ~default:"") b collapse in
+           if flat then ("data-cid", scope) :: attrs else attrs)
+         bs (S.collapse_sig ()) depth_signal)
     ([ reactive
         ~equal:
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
@@ -963,7 +974,8 @@ and row_sig ~depth ~editable ~library ~virtualize scope
                 bs))
         (Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:""))
-    ; row_children ~depth ~editable ~library ~virtualize scope bs
+    ; (if flat then Logseq_el.nothing
+       else row_children ~depth ~editable ~library ~virtualize scope bs)
     ] @ row_drop_indicators ~scope
           (Option.value b0.Model.block_uuid ~default:"")))))))
     ctx parent
@@ -995,13 +1007,15 @@ and row_children ~depth ~editable ~library ~virtualize scope
 
 and block_row_sig
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    ?(virtualize = false) (bs : Model.block Signal.signal) : t =
+    ?(virtualize = false) ?depth_signal ?(flat = false)
+    (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   S.ensure ctx;
   let b0 = Signal.get bs in
   (if b0.Model.block_is_comments_area then
-     comments_row ~scope ~depth ~editable ~library bs
-   else row_sig ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
+     comments_row ?depth_signal ~flat ~scope ~depth ~editable ~library bs
+   else row_sig ?depth_signal ~flat ~depth
+     ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
     ctx parent
 
 (* rough rendered height of an unmounted subtree — cljs
@@ -1316,3 +1330,8 @@ let () = Render_state.page_embed := page_embed
 let () =
   Render_state.block_row_static :=
     (fun b -> block_row_static b)
+
+(* Named signal arguments let a projected row borrow its live block and
+   depth through the reactive prop form without remounting its editor. *)
+let projected_block_row ~scope ~library ~depth_signal ~source =
+  block_row_sig ~scope ~library ~flat:true ~depth_signal source

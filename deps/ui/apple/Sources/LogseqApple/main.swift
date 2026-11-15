@@ -87,6 +87,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         try services.mountVisibleLazyRows()
         try services.flushImageSizes()
         try input?.afterFrame()
+        try services.issuedReveals.poll()
     }
     func apply(_ json: String, snapshot: Bool) throws {
         if let path = ProcessInfo.processInfo.environment["LOGSEQ_APPLE_TRACE_PATCHES"] {

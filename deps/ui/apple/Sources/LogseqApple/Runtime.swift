@@ -19,6 +19,7 @@ typealias ScrollCall = @convention(c) (Int64, Int64, UnsafePointer<CChar>?) -> I
 typealias PointerCall = @convention(c) (Int64, Double, Double, Int32, Int32, UnsafePointer<CChar>?) -> Int32
 typealias ExtensionCall = @convention(c) (Int64, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32) -> Int32
 typealias SnapshotCall = @convention(c) (UnsafePointer<CChar>?, Int32, BytesCallback?) -> Int32
+typealias IssuedRevealsCall = @convention(c) (BytesCallback?) -> Int32
 
 nonisolated(unsafe) var activeRuntime: NativeRuntime?
 nonisolated(unsafe) private var snapshotResult: String?
@@ -79,6 +80,10 @@ final class NativeRuntime {
             throw HostError("dlopen: \(String(cString: dlerror()))")
         }
         self.library = library
+        guard let issued = dlsym(library, "logseq_issued_reveals_utf8") else {
+            throw HostError("Missing application issued reveal producer")
+        }
+        symbols["issued_reveals"] = issued
         // Resolve the complete application ABI before initializing OCaml.
         let names = ["start", "pump", "resync", "stop", "root_node", "platform_event", "document_event_utf8", "editor_snapshot_utf8", "press", "press_ex", "long_press", "double_press", "appear", "load", "navigate_previous", "navigate_next", "text_changed_utf8", "picked_utf8", "submit", "dismiss", "toggle_changed", "radio_changed", "slider_changed", "scroll_edges", "scroll_completed", "visible_range", "virtual_window", "virtual_retention_utf8", "virtual_viewport_version", "extension_event_utf8", "press_detail", "pointer_down", "pointer_up", "pointer_move", "pointer_cancel", "pointer_enter", "pointer_leave", "context_menu_press"]
         for name in names {
@@ -196,6 +201,16 @@ final class NativeRuntime {
         try check(block.withCString { function("editor_snapshot_utf8", SnapshotCall.self)($0, Int32(block.utf8.count), snapshotReceiver) }, "editor snapshot")
         guard let text = snapshotResult, let data = text.data(using: .utf8) else { throw HostError("Missing editor snapshot") }
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: Any]
+    }
+
+    func issuedReveals() throws -> [IssuedEditorReveal] {
+        guard started else { return [] }
+        snapshotResult = nil
+        try check(function("issued_reveals", IssuedRevealsCall.self)(snapshotReceiver), "issued reveals")
+        guard let text = snapshotResult else { throw HostError("Missing issued reveal result") }
+        let demands = try JSONDecoder().decode([IssuedEditorReveal].self, from: Data(text.utf8))
+        try drain()
+        return demands
     }
 
     func node(_ name: String, _ id: Int) throws { try check(function(name, NodeCall.self)(Int64(id)), name) }

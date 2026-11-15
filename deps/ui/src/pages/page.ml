@@ -983,204 +983,78 @@ let page_wrap_cls (m : Model.t) (page : Model.page) : string =
   ^ (if page.page_is_tag || page.page_is_property then " is-node-page"
      else "")
 
-(* journal item backed by the journals signal — the outer keyed
-   collection keeps the item mounted across publishes, a title reactive
-   repaints title/icon/tag edits, the block list is the same keyed
-   collection the page route uses (a delta splice repaints only the
-   touched rows), and the refs section repaints when page_linked_refs
-   changes. cljs journal-item > page-inner:
-   .cp__page-inner-wrap.is-journals containing the same editable
-   db-page-title row as a page; the last item drops its separator
-   border via .journal-last-item *)
-let journal_item_sig (ms : Model.t Signal.signal)
-    (ps : Model.page Signal.signal) : t =
+(* Section chrome is ordinary row content. Every displayed block, including
+   descendants, is supplied separately by the one main outline projection. *)
+let journal_section ms ~footer ~source : t =
  fun ctx parent ->
-  S.ensure ctx;
-  let p0 = Signal.get ps in
-  let key =
-    Option.value p0.Model.page_uuid ~default:p0.Model.page_title
-  in
-  let is_last () =
-    match List.rev (Signal.get ms).Model.journals with
-    | last :: _ -> last.Model.page_uuid = (Signal.get ps).Model.page_uuid
-    | [] -> false
-  in
+  let section = Signal.get source in
+  let p0 = section.Outliner_projection.page in
+  let ps = Signal.own_signal ctx.Lui_ui.ui_scope
+      (Signal.map (fun section -> section.Outliner_projection.page) source) in
   let title_eq ((a : Model.page), ea) ((b : Model.page), eb) =
     ea = eb
-    && a.Model.page_title = b.Model.page_title
-    && a.Model.page_icon = b.Model.page_icon
+    && a.page_title = b.page_title && a.page_icon = b.page_icon
     && Model.page_node_icon a = Model.page_node_icon b
-    && a.Model.page_tags = b.Model.page_tags
-    && a.Model.page_tag_idents = b.Model.page_tag_idents
-    && a.Model.page_tag_uuids = b.Model.page_tag_uuids
-    && a.Model.page_tag_db_ids = b.Model.page_tag_db_ids
-    && a.Model.page_is_tag = b.Model.page_is_tag
-    && a.Model.page_is_property = b.Model.page_is_property
-    && a.Model.page_db_collapsable = b.Model.page_db_collapsable
-    && a.Model.page_uuid = b.Model.page_uuid
+    && a.page_tags = b.page_tags && a.page_tag_idents = b.page_tag_idents
+    && a.page_tag_uuids = b.page_tag_uuids && a.page_tag_db_ids = b.page_tag_db_ids
+    && a.page_is_tag = b.page_is_tag && a.page_is_property = b.page_is_property
+    && a.page_db_collapsable = b.page_db_collapsable && a.page_uuid = b.page_uuid
   in
-  (* every derivation off ps/ms is owned into the item's scope —
-     otherwise each mounted journal leaves live subscribers on the
-     shared model signal *)
-  let blocks_sig =
-    Logseq_el.own ctx
-      (Signal.map (fun (p : Model.page) -> p.Model.page_blocks) ps)
-  in
-  let nonempty =
-    Logseq_el.own ctx (Signal.map (fun bs -> bs <> []) blocks_sig)
-  in
-  let jrefs_eq (a : Model.page) (b : Model.page) =
-    a.Model.page_uuid = b.Model.page_uuid
-    && is_today_journal a = is_today_journal b
-  in
-  let is_first () =
-    match (Signal.get ms).Model.journals with
-    | first :: _ ->
-        first.Model.page_uuid = (Signal.get ps).Model.page_uuid
-    | [] -> false
-  in
-  Ui_parts.class_signal
-    (Logseq_el.own ctx (Signal.map2 (fun _ _ -> ()) ps ms))
-    (fun _ ->
-      "journal-item content"
-      ^ if is_last () then " journal-last-item" else "")
-    (column ~key:("ji-" ^ key)
-       ~data_attrs:
-         [ ( "style"
-           , "overflow-anchor:none;"
-             ^
-             if is_first () then "padding-top:0;min-height:500px"
-             else "min-height:250px"
-             ^ ";padding-bottom:102px"
-             ^
-             if is_last () then ""
-             else
-               ";border-bottom:1px solid \
-                var(--lx-gray-04, var(--ls-border-color))" )
-         ]
-    [ (* data-page-tags is the page-wrap plugin contract *)
-      Ui_parts.class_signal ps (fun p -> page_wrap_cls (Signal.get ms) p)
-        (column ~key:("jiw-" ^ key)
-        ~padding_horizontal:8
-        ~data_attrs:(reactive page_wrap_attrs ps)
-        [ Ui_components.with_props
-                [ Ui_components.Prop.position `relative
-                ; Ui_components.Prop.padding_bottom 64 ]
-                (column ~key:("jip-" ^ key) ~gap:32
-                   ~style_class:"page-inner"
-            [ title_ctx_row ~key:("jit-" ^ key) p0
-                [ reactive ~equal:title_eq
-                    (fun (p, editing_title) ->
-                      page_title_el
-                        { (Signal.get ms) with
-                          Model.editing_title = editing_title }
-                        p)
-                    (Logseq_el.own ctx
-                       (Signal.map2
-                          (fun (p : Model.page) (m : Model.t) ->
-                            (p, m.Model.editing_title))
-                          ps ms))
-                ; pagebar_slots_el p0
-                ]
-            ; Ui_components.with_props
-                    [ Ui_components.Prop.overflow `hidden ]
-                    (column ~key:"page-blocks" ~style_class:"ls-page-blocks"
-                       ~min_height:60 ~margin_top:16 ~margin_left:(-20)
-                [ Ui_components.with_props
-                    [ Ui_components.Prop.position `relative ]
-                    (box ~key:"page-blocks-inner"
-                       ~style_class:"page-blocks-inner"
-                       ~data_attrs:
-                         [ ("data-cid", "main"); ("data-pu", key) ]
-                    (* cljs plain-block-list emits no .blocks-list-wrap
-                       on empty pages *)
-                    [ Lui_elements.if_ ~test:nonempty
-                        (box ~key:"blw"
-                           ~style_class:"blocks-list-wrap"
-                           ~data_attrs:
-                             [ ("data-level", "0")
-                             ; ("style", "position:relative") ]
-                           [ Lazy_children.lazy_rows ~source:blocks_sig
-                               ~active_key:(Some (Logseq_el.own ctx
-                                 (Signal.map (function
-                                   | Some (uuid, "main") -> Some uuid
-                                   | _ -> None) (S.editing_target_sig ()))))
-                               ~key:Tree.block_key ~cmp:String.compare
-                               ~estimate_height:(fun b ->
-                                 32. +. Tree.estimate_children_height b)
-                               ~mount:(Tree.block_row_sig ~scope:"main")
-                           ])
-                    ; (* cljs journal-page mounts add-button inside
-                         .page-blocks-inner per day *)
-                      Add_button.el ~puuid:key
-                        ~previous_blank:(reactive
-                          (Add_button.previous_blank ~scope:"main")
-                          blocks_sig (S.collapse_sig ()))
-                        ~flags:(fun ectx ->
-                          Logseq_el.own ectx
-                            (Signal.map (fun has -> (has, false)) nonempty)) ()
-                    ])
-                ])
-            ])
-        ; column ~key:("jrefs-w-" ^ key) ~gap:32 ~margin_left:4
-            (* cljs journal-page: #today-queries div on the today item,
-               then one .fade-in.delay refs section (unlinked refs are
-               suppressed on the home route) *)
-            [ reactive ~equal:jrefs_eq
-                (fun (p : Model.page) ->
-                  column ~key:("jrefs-i-" ^ key) ~gap:32
-                    ((if is_today_journal p then
-                        [ box ~key:"tq"
-                            ~accessibility_identifier:"today-queries" [] ]
+  let title_source = Signal.own_signal ctx.Lui_ui.ui_scope
+      (Signal.map2 (fun page (model : Model.t) -> page, model.editing_title) ps ms) in
+  let chrome =
+    if not footer then
+      Ui_components.with_props [Ui_components.Prop.padding_bottom 48]
+      (column ~key:"journal-heading"
+        [ title_ctx_row ~key:"journal-title" p0
+            [ reactive ~equal:title_eq
+                (fun (page, editing_title) ->
+                  page_title_el {(Signal.get ms) with Model.editing_title} page)
+                title_source
+            ; pagebar_slots_el p0 ] ])
+    else
+      Ui_components.with_props [Ui_components.Prop.padding_bottom 102]
+      (column ~key:"journal-footer"
+        [ Ui_components.with_props [Ui_components.Prop.padding_bottom 64]
+          (column ~key:"journal-add" ~margin_left:(-20)
+            ~style_class:"page-blocks-inner"
+            ~data_attrs:(reactive (fun (page : Model.page) ->
+              ("data-cid", section.scope) ::
+              (match page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> [])) ps)
+            [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
+                ~previous_blank:(reactive
+                  (fun (page : Model.page) collapse ->
+                    Add_button.previous_blank ~scope:section.scope page.page_blocks collapse)
+                  ps (S.collapse_sig ()))
+                ~flags:(fun context -> Signal.own_signal context.Lui_ui.ui_scope
+                  (Signal.map (fun (page : Model.page) -> page.page_blocks <> [], false) ps)) () ])
+        ; column ~key:"journal-references" ~gap:32 ~margin_left:4
+            [ reactive
+                ~equal:(fun (a : Model.page) (b : Model.page) ->
+                  a.page_uuid = b.page_uuid && is_today_journal a = is_today_journal b)
+                (fun page ->
+                  column ~key:"journal-reference-content" ~gap:32
+                    ((if is_today_journal page then
+                        [box ~key:"today-queries" ~accessibility_identifier:"today-queries" []]
                       else [])
-                    @ [ box ~key:"jrefs-f"
-                          [ journal_references_view p ]
-                      ]))
-                ps
-            ]
-        ])
-    ])
-    ctx parent
+                     @ [journal_references_view page])) ps ] ])
+  in
+  (Ui_parts.class_signal ps (fun page -> page_wrap_cls (Signal.get ms) page)
+    (column ~key:"journal-section" ~padding_horizontal:8 ~min_width:0
+      ~data_attrs:(reactive page_wrap_attrs ps) [chrome])) ctx parent
 
-(* cljs all-journals mounts a Virtuoso scroller with custom-scroll-parent:
-   #journals > div > div > div[data-testid=virtuoso-item-list] > div >
-   journal-item. We keep the same scaffolding and virtualize the outer
-   day list through Virt_list — a changed day row remounts on splice
-   (virtual rows re-render whole items); each day's inner block list
-   stays the keyed Lazy_children collection, so an outliner op only
-   repaints the touched day. *)
 let journals_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
-  let journals_sig =
-    Logseq_el.own ctx
-      (Signal.map (fun (m : Model.t) -> m.Model.journals) ms)
-  in
-  (box ~key:"journals" ~accessibility_identifier:"journals"
-    ~grow:1. ~min_width:0
-    ~data_attrs:[ ("style", "overflow-anchor:none;height:100%") ]
-    [ box ~key:"js"
-        [ box ~key:"jvp"
-            [ box ~key:"jil"
-                ~accessibility_identifier:"virtuoso-item-list"
-                ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
-                [ Lui_elements.if_
-                    ~test:
-                      (Logseq_el.own ctx
-                         (Signal.map (fun js -> js = []) journals_sig))
-                    (box ~key:"jp" ~padding:24
-                       ~style_class:"journal-item-placeholder" [])
-                ; Virt_list.rows_sig
-                    ~key:(fun (p : Model.page) ->
-                      Option.value p.Model.page_uuid ~default:p.Model.page_title)
-                    ~cmp:String.compare ~mount:(journal_item_sig ms)
-                    ~initial_rows:4 ~estimate_size:(fun _ -> 800.)
-                    ~on_end:(fun () -> ignore (!Runtime.journals_load_more ()))
-                    journals_sig
-                ]
-            ]
-        ]
-    ])
-    ctx parent
+  let outline = Outline_viewport_state.ensure ctx ms in
+  (column ~key:"journals" ~accessibility_identifier:"journals"
+    ~grow:1. ~min_width:0 ~style_class:"content"
+    [ if_ ~test:(reactive (fun rows -> rows = []) outline.rows)
+        (box ~key:"journal-placeholder" ~padding:24
+          ~style_class:"journal-item-placeholder" [])
+    ; Flat_outliner.view ~state:outline ~library:false
+        ~header:(journal_section ms ~footer:false)
+        ~footer:(journal_section ms ~footer:true)
+        ~on_end:(fun () -> ignore (!Runtime.journals_load_more ())) () ]) ctx parent
 
 let not_found_view name : t =
   column ~key:"not-found" ~style_class:"page"
@@ -1543,45 +1417,49 @@ let page_tabs_el (m : Model.t) : t =
 let page_view_ms (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let m0 = Signal.get ms in
+  let outline = Outline_viewport_state.ensure ctx ms in
   let scope = scope_of_route m0.route in
-  let library =
-    m0.route = Model.Library
-    ||
-    (match m0.route_page with
-     | Some p -> p.page_is_library
-     | None -> false)
+  let library = m0.route = Model.Library ||
+    (match m0.route_page with Some page -> page.page_is_library | None -> false) in
+  let header ~source:_ =
+    Ui_components.with_props [Ui_components.Prop.padding_bottom 48]
+    (column ~key:"page-heading" ~gap:32
+      [ reactive ~equal:top_eq top_view ms
+      ; reactive
+          ~equal:(fun (a : Model.t) (b : Model.t) ->
+            let key model = Option.map (fun page ->
+              page.Model.page_uuid, page.page_is_tag, page.page_is_property) model.Model.route_page in
+            key a = key b)
+          page_tabs_el ms ])
   in
-  let puuid =
-    match m0.route_page with
-    | Some p -> p.page_uuid
-    | None -> None
+  let footer ~source : t =
+   fun context parent ->
+    let section = Signal.get source in
+    let flags = Signal.own_signal context.Lui_ui.ui_scope
+        (Signal.map (fun section ->
+          let page = section.Outliner_projection.page in
+          if is_block_route page then
+            (match page.page_blocks with block :: _ -> S.children_of block <> [], true | [] -> false, true)
+          else page.page_blocks <> [], false) source) in
+    (column ~key:"page-footer"
+      [ Ui_components.with_props [Ui_components.Prop.padding_bottom 64]
+        (column ~key:"page-add" ~margin_left:(-20)
+          ~style_class:"page-blocks-inner"
+          ~data_attrs:(("data-cid", scope) ::
+            (match section.page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> []))
+          [ Add_button.el ?puuid:section.page.page_uuid ~scope ~library
+              ~previous_blank:(reactive (fun section collapse ->
+                Add_button.previous_blank ~scope section.Outliner_projection.page.page_blocks collapse)
+                source (S.collapse_sig ()))
+              ~flags:(fun _ -> flags) () ])
+      ; reactive ~equal:linked_refs_eq linked_refs_el ms
+      ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms ]) context parent
   in
-  (* the class signal rides Ui_parts.class_signal (kinds take only a
-     static ~style_class); the dynamic data-page-tags wrap attrs ride
-     ~data_attrs_signal *)
   (Ui_parts.class_signal ms page_cls
-     (column ~key:"page" ~data_attrs:(reactive wrap_attrs_of ms)
-        ~padding_horizontal:8
-        [ Ui_components.with_props
-            [ Ui_components.Prop.position `relative
-            ; Ui_components.Prop.padding_bottom 64 ]
-            (column ~key:"page-inner" ~gap:32
-            ~style_class:"page-inner"
-            [ reactive ~equal:top_eq top_view ms
-            ; reactive
-                ~equal:(fun a b ->
-                  let tabs_key (m : Model.t) = Option.map
-                    (fun p -> p.Model.page_uuid, p.Model.page_is_tag,
-                              p.Model.page_is_property) m.Model.route_page in
-                  tabs_key a = tabs_key b)
-                page_tabs_el ms
-            ; blocks_area ~scope ~library ?puuid ms
-            ])
-        ; reactive ~equal:linked_refs_eq linked_refs_el ms
-        ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms
-        ; Selection_bar.view ~model:ms ()
-        ]))
-    ctx parent
+    (column ~key:"page" ~min_width:0 ~padding_horizontal:8
+      ~data_attrs:(reactive wrap_attrs_of ms)
+      [ Flat_outliner.view ~state:outline ~library ~header ~footer ()
+      ; Selection_bar.view ~model:ms () ])) ctx parent
 
 (* the route-root dynamic segment — page routes keep the region mounted
    across data publishes (the keyed/reactive segments inside repaint

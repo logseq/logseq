@@ -261,6 +261,60 @@ let send action =
   ignore (dispatch_action action);
   flush_now ()
 
+(* Physical ownership outlives a canceled drag. Only physical button samples
+   change it; Escape and pointer-cancel do not authorize another popup open. *)
+let appearance_buttons = ref 0
+let observe_appearance_buttons (ev : Ui_services.ev) =
+  appearance_buttons := ev.buttons
+
+let appearance_guard_scope : Signal.scope option ref = ref None
+let appearance_hidden :
+    (Ui_services.el * float * (string option * Model.route * int)) option ref = ref None
+
+let install_appearance_guard ~scope =
+  if not (Option.fold ~none:false ~some:(fun current -> current == scope)
+      !appearance_guard_scope) then begin
+    appearance_guard_scope := Some scope;
+    appearance_hidden := None;
+    Signal.on_dispose scope (fun () ->
+      if Option.fold ~none:false ~some:(fun current -> current == scope)
+          !appearance_guard_scope then begin
+        appearance_guard_scope := None;
+        appearance_hidden := None
+      end)
+  end
+
+let appearance_target () = Ui_services.dom_by_id "toolbar-dots-btn"
+
+let dismiss_appearance () =
+  let current = model () in
+  if current.Model.appearance then begin
+    appearance_hidden := Option.map (fun target ->
+      target, Ui_services.time_now () +. 150.,
+      (current.repo, current.route, current.context_revision)) (appearance_target ());
+    send (Action.Appearance_set false)
+  end
+
+let toggle_appearance () =
+  let current = model () in
+  if current.Model.appearance then send (Action.Appearance_set false)
+  else if !appearance_buttons = 0 then begin
+    let suppressed =
+      match !appearance_hidden, appearance_target () with
+      | Some (owner, until, context), Some target
+        when (current.repo, current.route, current.context_revision) = context
+             && owner.connected () && target.connected ()
+             && Ui_services.time_now () < until && owner.contains target ->
+          appearance_hidden := None;
+          true
+      | Some (_, until, _), _ when Ui_services.time_now () >= until ->
+          appearance_hidden := None;
+          false
+      | _ -> false
+    in
+    if not suppressed then send (Action.Appearance_set true)
+  end
+
 let send_with_publication action =
   let publication =
     Update.capture_publication action (fun () -> dispatch_action action)

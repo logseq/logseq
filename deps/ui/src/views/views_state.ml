@@ -118,6 +118,7 @@ type vstate =
 
 type inst =
   { id : int
+  ; virtualize : bool
   ; kind : inst_kind
   ; feature : feature
   ; owner : W.t (* [:views] resource owner lookup *)
@@ -189,6 +190,7 @@ let next_id = ref 0
 let make ~sched ~kind ~feature ~owner : inst =
   incr next_id;
   { id = !next_id
+  ; virtualize = true
   ; kind
   ; feature
   ; owner

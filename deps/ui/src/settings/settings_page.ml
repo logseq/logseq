@@ -1437,7 +1437,7 @@ let appearance_body ms : t =
           ~anchor_alignment_offset:(-5.5)
           ~anchor_offset:0. ~width:622 ~role:`dialog
           ~on_dismiss:(fun _ ->
-            Runtime.send (Action.Appearance_set false))
+            Runtime.dismiss_appearance ())
           ~style_class:"ui__dropdown-menu-content appearance-popup"
           ~min_width:192
           [ column ~key:"appearance_settings"
