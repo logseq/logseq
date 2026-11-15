@@ -266,24 +266,32 @@
     (is (true? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text "xy"} true))))
     (is (true? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text ""} true))))))
 
-(deftest pending-new-block-delete-on-backspace-ignores-source-caret-until-landed-test
-  (let [empty-source #js {:value "" :selectionStart 0}
+(deftest pending-new-block-delete-on-backspace-ignores-source-caret-until-editor-moves-test
+  (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
+        new-id #uuid "22222222-2222-2222-2222-222222222222"
+        pending {:typed-text "" :source-uuid source-id}
+        empty-source #js {:value "" :selectionStart 0}
         new-block-start #js {:value "xy" :selectionStart 0}
         new-block-end #js {:value "xy" :selectionStart 2}]
-    (testing "before landing, caret 0 on the empty source is not a delete"
+    (testing "caret 0 on the source block is not a delete, including during a queued Tab indent"
       (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   {:typed-text "" :editor-landed? false}
-                   (fake-keydown empty-source))))
+                   pending source-id (fake-keydown empty-source))))
       (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   {:typed-text "xy"}
+                   (assoc pending :tab-indent? true :typed-text "xy")
+                   source-id
                    (fake-keydown empty-source)))))
-    (testing "after landing, caret 0 on the new block deletes it"
-      (is (true? (#'editor/pending-new-block-delete-on-backspace?
-                  {:typed-text "xy" :editor-landed? true}
-                  (fake-keydown new-block-start)))))
-    (testing "after landing, caret at the end of typed text trims instead"
+    (testing "no current edit block is not a delete"
       (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   {:typed-text "xy" :editor-landed? true}
+                   pending nil (fake-keydown empty-source)))))
+    (testing "after the editor has moved onto the new block, caret 0 deletes it"
+      (is (true? (#'editor/pending-new-block-delete-on-backspace?
+                  (assoc pending :typed-text "xy")
+                  new-id
+                  (fake-keydown new-block-start)))))
+    (testing "after the editor has moved, caret at the end of typed text trims instead"
+      (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                   (assoc pending :typed-text "xy")
+                   new-id
                    (fake-keydown new-block-end)))))))
 
 (deftest backspace-pending-new-block-state-matches-enter-sequences-test
@@ -304,18 +312,16 @@
         (is (= "x" (:typed-text (pending-new-block-state))))
         (is (nil? (:delete? (pending-new-block-state))))))))
 
-(deftest mark-pending-new-block-editor-landed-enables-caret-delete-test
-  (with-pending-new-block!
-    (fn []
-      (let [at-start (fake-keydown #js {:value "" :selectionStart 0})]
-        (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                     (pending-new-block-state)
-                     at-start)))
-        (#'editor/mark-pending-new-block-editor-landed!)
-        (is (true? (:editor-landed? (pending-new-block-state))))
-        (is (true? (#'editor/pending-new-block-delete-on-backspace?
-                    (pending-new-block-state)
-                    at-start)))))))
+(deftest start-pending-new-block-records-the-source-uuid-test
+  (let [source-id #uuid "11111111-1111-1111-1111-111111111111"]
+    (with-redefs [state/get-edit-block (constantly {:block/uuid source-id})]
+      (with-pending-new-block!
+        (fn []
+          (is (= source-id (:source-uuid (pending-new-block-state))))
+          (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                       (pending-new-block-state)
+                       source-id
+                       (fake-keydown #js {:value "" :selectionStart 0})))))))))
 
 (deftest enter-while-insert-is-pending-is-dropped-test
   (let [calls (atom [])
