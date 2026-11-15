@@ -1,5 +1,54 @@
 # Plugin API Migrations
 
+## QuickJS captured tree, selection, property and page reads
+
+Rebundle against the matching QuickJS host to use these portable extensions:
+
+```ts
+const tree = await logseq.Editor.getCurrentPageBlocksTree()
+const selected = await logseq.Editor.getSelectedBlocks()
+const score = await logseq.Editor.getBlockProperty(blockUuid, 'plugin.property.example/score')
+const properties = await logseq.Editor.getPageProperties('Example')
+const today = await logseq.Editor.getTodayPage()
+const pages = await logseq.Editor.getAllPages()
+```
+
+The first two need both `editor_read` and `graph_read`; the remaining four need
+only `graph_read`. They reuse the invocation's captured application services,
+check freshness before and after asynchronous reads, and cannot select another
+graph. No write, command or DB-query grant is implied or required.
+
+Empty trees/selections and absent-graph catalogs return `[]`. Missing entities,
+properties and today pages return `null`; an existing property-free page returns
+`{}`. Today lookup never creates a journal. Selections use their owning
+projection's order. The page catalog excludes hidden pages, projects metadata
+only and sorts by UTF-8 title then entity ID; it has no repository argument.
+Its return type is `PortablePageMetadata[]`: ID, UUID, name and title, with
+optional creation/update timestamps, not legacy file-page fields such as
+`format`, `type` or `journal?`.
+
+Property names must be canonical qualified identifiers, optionally prefixed by
+`:`. Property-map keys retain that prefix; values retain structured references
+and arrays, with explicit properties overriding inherited defaults. Reads do
+not flatten values to titles or IDs. Unsupported arguments reject rather than
+silently approximating legacy behavior. The existing permission, stale-context,
+cancellation and resource error codes still apply, including complete-result
+limits instead of silent truncation.
+
+The existing `thread-api/get-block-class-default-properties` worker read now
+uses `logseq.property/scalar-default-value` for checkbox schemas, matching
+property lookup semantics. Reference and many-valued defaults continue to use
+`logseq.property/default-value`.
+
+Shared OCaml callers use the corresponding `Plugin_broker.get_*` functions
+and `Plugin_protocol.property_ident`. Wire methods 27–32 are additive; 25–26
+remain reserved for the separately approved property-write design. This slice
+adds no property mutation, worker endpoint or mobile host and does not depend
+on the independently reviewed explicit tree/query or graph-write surfaces.
+See the [QuickJS inventory](../libs/README.quickjs.md) for exact limits and
+tree-field boundaries. Native headless evidence is not Web/WASM or mobile
+runtime validation.
+
 ## QuickJS editor API v1
 
 The DOM-free editor surface now includes `getBlockProperties`, `insertBlock`,

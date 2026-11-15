@@ -6,6 +6,7 @@ type editing_context = { block_uuid : string; text : string }
 type entity = Json.t
 type page_result = Json.t
 type query = { text : string; inputs : Json.t array }
+type property_ident = string
 type action = Insert_text of string | Show_date_picker | Exit_editing
 type program = action list
 type identity = Entity_id of int | Uuid of string | Page_name of string
@@ -39,6 +40,12 @@ type request =
   | Get_page of identity
   | Get_page_linked_references of identity
   | Get_sibling_block of sibling_direction * identity
+  | Get_current_page_blocks_tree
+  | Get_selected_blocks
+  | Get_block_property of identity * property_ident
+  | Get_page_properties of identity
+  | Get_today_page
+  | Get_all_pages
   | Get_block_properties of identity
   | Get_page_blocks_tree of identity
   | Get_block_children of identity
@@ -55,6 +62,9 @@ type reply =
   | Page_linked_references of (entity * entity list) list option
   | Current_page of page_result
   | Query_result of Json.t
+  | Entity_list of entity list
+  | Property_value of Json.t
+  | Page_properties of Json.t
   | Logged
   | Editor_command_registered
   | Properties of Json.t
@@ -245,6 +255,18 @@ let page_result value =
 let query_text query = query.text
 let query_inputs query = Array.copy query.inputs
 
+let property_ident value =
+  let* () = validate_value (Json.String value) in
+  let value = if String.starts_with ~prefix:":" value
+    then String.sub value 1 (String.length value - 1) else value in
+  let valid part = part <> "" && String.for_all
+    (fun c -> c > ' ' && c <> '\127' && c <> ':') part in
+  match String.split_on_char '/' value with
+  | [namespace; name] when valid namespace && valid name -> Ok value
+  | _ -> Error Invalid_request
+
+let property_ident_value value = value
+
 let decode_identity ~page = function
   | Json.Number id when id >= 1. && id <= 2147483647. && Float.floor id = id ->
       Ok (Entity_id (int_of_float id))
@@ -357,6 +379,15 @@ let decode_request ~operation value =
       let* identity = decode_identity ~page:true value in Ok (Get_page_linked_references identity)
   | 7, Json.Array [|Json.String text; Json.Array inputs|] ->
       let* query = query ~text ~inputs in Ok (Datascript_query query)
+  | 27, Json.Array [||] -> Ok Get_current_page_blocks_tree
+  | 28, Json.Array [||] -> Ok Get_selected_blocks
+  | 29, Json.Array [|value; Json.String key|] ->
+      let* identity = decode_identity ~page:false value in
+      let* key = property_ident key in Ok (Get_block_property (identity, key))
+  | 30, Json.Array [|value|] ->
+      let* identity = decode_identity ~page:true value in Ok (Get_page_properties identity)
+  | 31, Json.Array [||] -> Ok Get_today_page
+  | 32, Json.Array [||] -> Ok Get_all_pages
   | 10, Json.Array [|Json.String direction; value|] ->
       let* relation = match direction with
         | "previous" -> Ok Previous_sibling
@@ -408,7 +439,7 @@ let decode_request ~operation value =
         | "error" -> Ok (Log (Log_error, text))
         | _ -> Error Invalid_request)
   | (0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 10 | 11 | 12 | 13 | 14 | 15
-     | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24), _ -> Error Invalid_request
+     | 16 | 17 | 18 | 19 | 20 | 21 | 22 | 23 | 24 | 27 | 28 | 29 | 30 | 31 | 32), _ -> Error Invalid_request
   | _ -> Error Unsupported
 
 let capability_name = function
@@ -432,9 +463,10 @@ let reply_value = function
       Json.Array (Array.of_list (List.map (fun (page, blocks) ->
         Json.Array [|page; Json.Array (Array.of_list blocks)|]) groups))
   | Editing_state None | Block None | Page None | Logged | Editor_command_registered -> Json.Null
-  | Current_page value | Query_result value | Properties value -> value
+  | Current_page value | Query_result value | Properties value
+  | Property_value value | Page_properties value -> value
+  | Entity_list values | Blocks values -> Json.Array (Array.of_list values)
   | Mutation_applied -> Json.Null
-  | Blocks entities -> Json.Array (Array.of_list entities)
   | Page_renamed -> Json.Bool true
 
 let program actions =

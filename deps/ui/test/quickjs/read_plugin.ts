@@ -4,7 +4,10 @@ import type { logseq as portable } from '../../../../libs/src/LSPlugin.quickjs'
 declare const logseq: typeof portable
 
 function check(value: unknown, message: string): asserts value {
-  if (!value) throw new Error(message)
+  if (!value) {
+    console.error(message)
+    throw new Error(message)
+  }
 }
 
 const connected = logseq.ready(async (info) => {
@@ -32,43 +35,61 @@ const connected = logseq.ready(async (info) => {
         !Reflect.set(info, 'grantedCapabilities', ['editor_command']),
       'grant mutation rejected'
     )
-    for (const [allowed, request] of [
-      [(mask & 1) !== 0, () => logseq.Editor.checkEditing()],
-      [(mask & 2) !== 0, () => logseq.Editor.getPage('quickjs sdk probe')],
+    for (const [index, [allowed, request]] of (
       [
-        (mask & 2) !== 0,
-        () =>
-          logseq.Editor.getBlock('00000000-0000-0000-0000-000000000100', {
-            includeChildren: true,
-          }),
-      ],
-      [
-        (mask & 2) !== 0,
-        () => logseq.Editor.getPageLinkedReferences('quickjs sdk probe'),
-      ],
-      [
-        (mask & 6) === 6,
-        () => logseq.DB.q('[:find ?e :where [?e :block/uuid]]'),
-      ],
-      [
-        (mask & 2) !== 0,
-        () =>
-          logseq.Editor.getPreviousSiblingBlock(
-            '00000000-0000-0000-0000-000000000101'
-          ),
-      ],
-      [
-        (mask & 2) !== 0,
-        () =>
-          logseq.Editor.getNextSiblingBlock(
-            '00000000-0000-0000-0000-000000000100'
-          ),
-      ],
-      [
-        (mask & 6) === 6,
-        () => logseq.DB.datascriptQuery('[:find ?e :where [?e :block/uuid]]'),
-      ],
-    ] as const) {
+        [(mask & 1) !== 0, () => logseq.Editor.checkEditing()],
+        [(mask & 2) !== 0, () => logseq.Editor.getPage('quickjs sdk probe')],
+        [(mask & 3) === 3, () => logseq.Editor.getCurrentPageBlocksTree()],
+        [(mask & 3) === 3, () => logseq.Editor.getSelectedBlocks()],
+        [
+          (mask & 2) !== 0,
+          () =>
+            logseq.Editor.getBlockProperty(
+              '00000000-0000-0000-0000-000000000100',
+              'plugin.property.sdk-probe/score'
+            ),
+        ],
+        [
+          (mask & 2) !== 0,
+          () => logseq.Editor.getPageProperties('quickjs sdk probe'),
+        ],
+        [(mask & 2) !== 0, () => logseq.Editor.getTodayPage()],
+        [(mask & 2) !== 0, () => logseq.Editor.getAllPages()],
+        [
+          (mask & 2) !== 0,
+          () =>
+            logseq.Editor.getPreviousSiblingBlock(
+              '00000000-0000-0000-0000-000000000101'
+            ),
+        ],
+        [
+          (mask & 2) !== 0,
+          () =>
+            logseq.Editor.getNextSiblingBlock(
+              '00000000-0000-0000-0000-000000000100'
+            ),
+        ],
+        [
+          (mask & 6) === 6,
+          () => logseq.DB.datascriptQuery('[:find ?e :where [?e :block/uuid]]'),
+        ],
+        [
+          (mask & 2) !== 0,
+          () =>
+            logseq.Editor.getBlock('00000000-0000-0000-0000-000000000100', {
+              includeChildren: true,
+            }),
+        ],
+        [
+          (mask & 2) !== 0,
+          () => logseq.Editor.getPageLinkedReferences('quickjs sdk probe'),
+        ],
+        [
+          (mask & 6) === 6,
+          () => logseq.DB.q('[:find ?e :where [?e :block/uuid]]'),
+        ],
+      ] as const
+    ).entries()) {
       try {
         await request()
         check(allowed, 'ungranted read succeeded')
@@ -77,13 +98,108 @@ const connected = logseq.ready(async (info) => {
           !allowed &&
             error instanceof Error &&
             error.message === 'Permission_denied',
-          'grant enforcement'
+          `grant enforcement ${index}: ${String(error)}`
         )
       }
     }
     return
   }
   const uuid = '00000000-0000-0000-0000-000000000099'
+  const firstUuid = '00000000-0000-0000-0000-000000000100'
+  const lastUuid = '00000000-0000-0000-0000-000000000101'
+  if (info.id === 'sdk-probe-selection') {
+    const selected = await logseq.Editor.getSelectedBlocks()
+    check(
+      selected.map((block) => block.uuid).join(',') ===
+        '00000000-0000-0000-0000-000000000101,00000000-0000-0000-0000-000000000100',
+      'selection follows its owning projection, not UUID or main-page order'
+    )
+    const pageEntity = await logseq.Editor.getBlock(uuid)
+    const currentTree = await logseq.Editor.getCurrentPageBlocksTree()
+    const currentChild = currentTree[0]?.children?.[0]
+    check(
+      currentTree.map((block) => block.uuid).join(',') ===
+        '00000000-0000-0000-0000-000000000100,00000000-0000-0000-0000-000000000101' &&
+        typeof currentChild === 'object' &&
+        currentChild !== null &&
+        !Array.isArray(currentChild) &&
+        currentChild.uuid === '00000000-0000-0000-0000-000000000102',
+      'complete ordered current-page tree'
+    )
+    const key = ':plugin.property.sdk-probe/score'
+    const first = await logseq.Editor.getBlock(
+      '00000000-0000-0000-0000-000000000100'
+    )
+    const value = await logseq.Editor.getBlockProperty(
+      '00000000-0000-0000-0000-000000000100',
+      key
+    )
+    check(
+      Array.isArray(value) &&
+        value.length === 2 &&
+        JSON.stringify(value) === JSON.stringify(first?.properties?.[key]),
+      'canonical property read preserves the structured value'
+    )
+    check(
+      (await logseq.Editor.getBlockProperty(
+        uuid,
+        'plugin.property.sdk-probe/missing'
+      )) === null,
+      'absent property'
+    )
+    const properties =
+      await logseq.Editor.getPageProperties('quickjs sdk probe')
+    const checkbox = 'plugin.property.sdk-probe/checked'
+    check(
+      (await logseq.Editor.getBlockProperty(
+        '00000000-0000-0000-0000-000000000100',
+        checkbox
+      )) === true &&
+        (await logseq.Editor.getBlockProperty(
+          '00000000-0000-0000-0000-000000000101',
+          checkbox
+        )) === false &&
+        properties?.[':' + checkbox] === true,
+      'class checkbox default and explicit false override'
+    )
+    check(
+      properties !== null &&
+        JSON.stringify(properties[key]) ===
+          JSON.stringify(pageEntity?.properties?.[key]),
+      'page properties use canonical keys'
+    )
+    check(
+      (await logseq.Editor.getPageProperties('missing sdk page')) === null,
+      'absent page properties'
+    )
+    const today = await logseq.Editor.getTodayPage()
+    check(
+      today?.uuid === '00000000-0000-0000-0000-000000000120',
+      'today lookup without creation'
+    )
+    const pages = await logseq.Editor.getAllPages()
+    check(
+      pages.some((page) => page.uuid === uuid) &&
+        pages.some((page) => page.uuid === today.uuid) &&
+        !pages.some(
+          (page) => page.uuid === '00000000-0000-0000-0000-000000000111'
+        ) &&
+        pages.every(
+          (page, index) =>
+            index === 0 || String(pages[index - 1].title) <= String(page.title)
+        ),
+      'deterministic current-graph catalog excludes hidden pages'
+    )
+    const projected = await logseq.Editor.getBlockProperty(
+      '00000000-0000-0000-0000-000000000112',
+      key
+    )
+    check(
+      Array.isArray(projected) && projected.length === 1,
+      'unrelated large title is not projected'
+    )
+    return
+  }
   check(
     (info.id === 'sdk-probe' || info.id === 'sdk-probe-empty') &&
       info.runtime === 'quickjs',
@@ -104,6 +220,27 @@ const connected = logseq.ready(async (info) => {
     )
     check((await logseq.Editor.getCurrentBlock()) === null, 'absent block')
     check((await logseq.Editor.getCurrentPage()) === null, 'absent page')
+    check(
+      (await logseq.Editor.getCurrentPageBlocksTree()).length === 0,
+      'empty tree'
+    )
+    check(
+      (await logseq.Editor.getSelectedBlocks()).length === 0,
+      'empty selection'
+    )
+    check((await logseq.Editor.getAllPages()).length === 0, 'no graph catalog')
+    check((await logseq.Editor.getTodayPage()) === null, 'no graph today page')
+    check(
+      (await logseq.Editor.getPageProperties(uuid)) === null,
+      'no graph properties'
+    )
+    check(
+      (await logseq.Editor.getBlockProperty(
+        uuid,
+        'plugin.property.sdk-probe/score'
+      )) === null,
+      'no graph property'
+    )
     check((await logseq.Editor.getBlock(uuid)) === null, 'no graph block')
     check((await logseq.Editor.getPage('missing')) === null, 'no graph page')
     check(
@@ -151,9 +288,12 @@ const connected = logseq.ready(async (info) => {
     (await logseq.Editor.getPage('quickjs sdk probe'))?.id === block.id,
     'page name'
   )
-  check((await logseq.Editor.getPage(block.id))?.uuid === uuid, 'page ID')
-  const firstUuid = '00000000-0000-0000-0000-000000000100'
-  const lastUuid = '00000000-0000-0000-0000-000000000101'
+  const pageById = await logseq.Editor.getPage(block.id)
+  check(pageById?.uuid === uuid, 'page ID')
+  check(
+    (await logseq.Editor.getSelectedBlocks()).length === 0,
+    'empty selection with editing'
+  )
   const previous = await logseq.Editor.getPreviousSiblingBlock(lastUuid)
   const next = await logseq.Editor.getNextSiblingBlock({ uuid: firstUuid })
   check(
@@ -184,7 +324,7 @@ const connected = logseq.ready(async (info) => {
     { includeChildren: true }
   )
   check(
-    tree?.properties?.[':plugin.property.sdk-probe/score']?.[
+    tree?.properties?.[':plugin.property.sdk-probe/tree-score']?.[
       ':logseq.property/value'
     ] === 7,
     'tree properties'
@@ -202,10 +342,10 @@ const connected = logseq.ready(async (info) => {
   const grandchild = child.children?.[0]
   check(grandchild && !Array.isArray(grandchild), 'recursive block entity')
   check(
-    child.properties?.[':plugin.property.sdk-probe/score']?.[
+    child.properties?.[':plugin.property.sdk-probe/tree-score']?.[
       ':logseq.property/value'
     ] === 11 &&
-      grandchild.properties?.[':plugin.property.sdk-probe/score']?.[
+      grandchild.properties?.[':plugin.property.sdk-probe/tree-score']?.[
         ':logseq.property/value'
       ] === 13,
     'descendant properties'
@@ -249,6 +389,26 @@ const connected = logseq.ready(async (info) => {
     JSON.stringify(roundtrip) === JSON.stringify([inputs]),
     'variadic inputs'
   )
+  for (const invalid of ['score', 'a/b/c', ':a/with space']) {
+    try {
+      await logseq.Editor.getBlockProperty(uuid, invalid)
+      throw new Error('invalid property identifier accepted')
+    } catch (error) {
+      check(
+        error instanceof Error && error.message === 'Invalid_request',
+        'canonical identifiers only'
+      )
+    }
+  }
+  try {
+    await Reflect.apply(logseq.Editor.getAllPages, null, ['another graph'])
+    throw new Error('cross-graph argument accepted')
+  } catch (error) {
+    check(
+      error instanceof Error && error.message === 'Unsupported',
+      'no cross-graph catalog argument'
+    )
+  }
   let unsupported = false
   try {
     Reflect.get(logseq.DB, 'transact')
