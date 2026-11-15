@@ -192,42 +192,6 @@ let () =
   Fest.Promise.test "save-e2ee-password-uses-secret-storage-in-browser-runtime-test"
     (save_secret_test ~runtime:"browser" ~owner_source:"");
 
-  Fest.Promise.test "save-e2ee-password-uses-native-storage-in-capacitor-runtime-test"
-    (fun () ->
-      let native_calls = ref [] in
-      let secret_calls = ref [] in
-      let encrypt_calls = ref [] in
-      stub_state ~refresh_token:(Some "refresh-from-state") ~id_token:None
-        ~access_token:None ();
-      platform_env_fn := (fun () -> env "browser" "capacitor");
-      encrypt_text_by_text_password_fn :=
-        (fun refresh_token password ->
-          encrypt_calls := !encrypt_calls @ [ (refresh_token, password) ];
-          pure (kwm [ ("cipher", Wire.String "payload") ]));
-      Sync_ui_request.ui_request_fn :=
-        (fun action payload ?hint:_ ?timeout_ms:_ () ->
-          native_calls := !native_calls @ [ (action, payload) ];
-          pure (kwm [ ("supported?", Wire.Bool true) ]));
-      secret_save_fn :=
-        (fun ~key text ->
-          secret_calls := !secret_calls @ [ (key, text) ];
-          pure ());
-      promise_of_task (!save_e2ee_password_fn "password")
-      |> Js.Promise.then_ (fun _ ->
-             eq !encrypt_calls [ ("refresh-from-state", "password") ];
-             eq (List.length !native_calls) 1;
-             let action, payload = List.hd !native_calls in
-             eq action (Wire.Keyword "native-save-e2ee-password");
-             eq (Wire.get "key" payload) (Some (Wire.String "logseq-encrypted-password"));
-             Fest.expect
-             |> Fest.ok
-                  (match Wire.get "encrypted-text" payload with
-                   | Some (Wire.String _) -> true
-                   | _ -> false);
-             eq !secret_calls [];
-             reset_hooks ();
-             Js.Promise.resolve ()));
-
   Fest.Promise.test "save-e2ee-password-uses-secret-storage-in-node-runtime-test"
     (save_secret_test ~runtime:"node" ~owner_source:"cli");
 
@@ -274,36 +238,6 @@ let () =
   Fest.Promise.test "read-e2ee-password-uses-secret-storage-in-browser-runtime-test"
     (read_secret_test ~runtime:"browser" ~owner_source:"");
 
-  Fest.Promise.test "read-e2ee-password-uses-native-storage-in-capacitor-runtime-test"
-    (fun () ->
-      let native_calls = ref [] in
-      let secret_calls = ref [] in
-      platform_env_fn := (fun () -> env "browser" "capacitor");
-      Sync_ui_request.ui_request_fn :=
-        (fun action payload ?hint:_ ?timeout_ms:_ () ->
-          native_calls := !native_calls @ [ (action, payload) ];
-          pure
-            (kwm
-               [ ("supported?", Wire.Bool true);
-                 ( "encrypted-text",
-                   Wire.String (transit_write (kwm [ ("cipher", Wire.String "payload") ]))
-                 ) ]));
-      secret_read_fn :=
-        (fun ~key ->
-          secret_calls := !secret_calls @ [ key ];
-          pure (Some (transit_write (kwm [ ("cipher", Wire.String "legacy") ]))));
-      decrypt_text_by_text_password_fn :=
-        (fun _refresh_token _data -> pure "decrypted-password");
-      promise_of_task (!read_e2ee_password_fn (Some "refresh-token"))
-      |> Js.Promise.then_ (fun password ->
-             str_eq password "decrypted-password";
-             eq !native_calls
-               [ ( Wire.Keyword "native-get-e2ee-password",
-                   kwm [ ("key", Wire.String "logseq-encrypted-password") ] ) ];
-             eq !secret_calls [];
-             reset_hooks ();
-             Js.Promise.resolve ()));
-
   Fest.Promise.test "read-e2ee-password-uses-secret-storage-in-node-runtime-test"
     (read_secret_test ~runtime:"node" ~owner_source:"cli");
 
@@ -327,36 +261,6 @@ let () =
         (fun _refresh_token _data -> error (ex_info "should-not-decrypt" []));
       expect_rejection (!read_e2ee_password_fn (Some "refresh-token")) (fun e ->
           eq !secret_read_calls 1;
-          eq !file_read_calls 0;
-          Fest.expect |> Fest.ok (code_in_missing_or "code" e);
-          reset_hooks ()));
-
-  Fest.Promise.test
-    "read-e2ee-password-capacitor-missing-native-secret-does-not-fallback-to-worker-storage-test"
-    (fun () ->
-      let native_read_calls = ref 0 in
-      let secret_read_calls = ref 0 in
-      let file_read_calls = ref 0 in
-      platform_env_fn := (fun () -> env "browser" "capacitor");
-      Sync_ui_request.ui_request_fn :=
-        (fun action payload ?hint:_ ?timeout_ms:_ () ->
-          incr native_read_calls;
-          eq action (Wire.Keyword "native-get-e2ee-password");
-          eq payload (kwm [ ("key", Wire.String "logseq-encrypted-password") ]);
-          pure (kwm [ ("supported?", Wire.Bool true); ("encrypted-text", Wire.Nil) ]));
-      secret_read_fn :=
-        (fun ~key:_ ->
-          incr secret_read_calls;
-          pure (Some (transit_write (kwm [ ("cipher", Wire.String "legacy") ]))));
-      read_text_fn :=
-        (fun _path ->
-          incr file_read_calls;
-          pure (transit_write (kwm [ ("cipher", Wire.String "legacy-file") ])));
-      decrypt_text_by_text_password_fn :=
-        (fun _refresh_token _data -> error (ex_info "should-not-decrypt" []));
-      expect_rejection (!read_e2ee_password_fn (Some "refresh-token")) (fun e ->
-          eq !native_read_calls 1;
-          eq !secret_read_calls 0;
           eq !file_read_calls 0;
           Fest.expect |> Fest.ok (code_in_missing_or "code" e);
           reset_hooks ()));
@@ -655,125 +559,6 @@ let () =
              eq !fail_calls [];
              reset_hooks ();
              Js.Promise.resolve ()));
-
-  Fest.Promise.test
-    "decrypt-private-key-capacitor-missing-native-secret-prompts-and-saves-test" (fun () ->
-      let fail_calls = ref [] in
-      let decrypt_calls = ref [] in
-      let ui_calls = ref [] in
-      let save_calls = ref [] in
-      stub_state ~refresh_token:(Some "refresh-token") ~id_token:None
-        ~access_token:None ();
-      platform_env_fn := (fun () -> env "browser" "capacitor");
-      secret_read_fn := (fun ~key:_ -> error (ex_info "should-not-read-worker-secret" []));
-      secret_save_fn :=
-        (fun ~key:_ _text -> error (ex_info "should-not-save-worker-secret" []));
-      read_text_fn := (fun _path -> error (ex_info "should-not-read-browser-file" []));
-      Sync_ui_request.ui_request_fn :=
-        (fun action payload ?hint:_ ?timeout_ms:_ () ->
-          ui_calls := !ui_calls @ [ (action, payload) ];
-          match action with
-          | Wire.Keyword "native-get-e2ee-password" ->
-              pure
-                (kwm [ ("supported?", Wire.Bool true); ("encrypted-text", Wire.Nil) ])
-          | Wire.Keyword "request-e2ee-password" ->
-              pure (kwm [ ("password", Wire.String "ui-password") ])
-          | Wire.Keyword "native-save-e2ee-password" ->
-              save_calls := !save_calls @ [ payload ];
-              pure (kwm [ ("supported?", Wire.Bool true) ])
-          | _ -> error (ex_info "unexpected-action" []));
-      fail_missing_e2ee_password_fn :=
-        (fun data ->
-          fail_calls := !fail_calls @ [ data ];
-          raise (ex_info "missing-e2ee-password" (Wire.as_map (kwm data))));
-      transit_read_fn := (fun _ -> Wire.Keyword "encrypted-private-key");
-      decrypt_private_key_crypt_fn :=
-        (fun password encrypted_private_key ->
-          decrypt_calls := !decrypt_calls @ [ (password, encrypted_private_key) ];
-          pure (Wire.Keyword "private-key"));
-      encrypt_text_by_text_password_fn :=
-        (fun refresh_token password ->
-          pure
-            (kwm
-               [ ("cipher", Wire.Array [ Wire.String refresh_token; Wire.String password ]) ]));
-      transit_write_fn := pr_str;
-      promise_of_task
-        (!decrypt_private_key_fn (default_decrypt_private_key_opts ())
-           "encrypted-private-key-str")
-      |> Js.Promise.then_ (fun private_key ->
-             eq private_key (Wire.Keyword "private-key");
-             eq !ui_calls
-               [ ( Wire.Keyword "native-get-e2ee-password",
-                   kwm [ ("key", Wire.String "logseq-encrypted-password") ] );
-                 ( Wire.Keyword "request-e2ee-password",
-                   kwm [ ("reason", Wire.Keyword "decrypt-user-rsa-private-key") ] );
-                 ( Wire.Keyword "native-save-e2ee-password",
-                   kwm
-                     [ ("key", Wire.String "logseq-encrypted-password");
-                       ( "encrypted-text",
-                         Wire.String
-                           (pr_str
-                              (kwm
-                                 [ ( "cipher",
-                                     Wire.Array
-                                       [ Wire.String "refresh-token";
-                                         Wire.String "ui-password" ] ) ])) ) ] ) ];
-             eq !decrypt_calls
-               [ ("ui-password", Wire.Keyword "encrypted-private-key") ];
-             eq !save_calls
-               [ kwm
-                   [ ("key", Wire.String "logseq-encrypted-password");
-                     ( "encrypted-text",
-                       Wire.String
-                         (pr_str
-                            (kwm
-                               [ ( "cipher",
-                                   Wire.Array
-                                     [ Wire.String "refresh-token";
-                                       Wire.String "ui-password" ] ) ])) ) ] ];
-             eq !fail_calls [];
-             reset_hooks ();
-             Js.Promise.resolve ()));
-
-  Fest.Promise.test "decrypt-private-key-capacitor-wrong-ui-password-prompts-once-test"
-    (fun () ->
-      let ui_calls = ref [] in
-      let save_calls = ref [] in
-      stub_state ~refresh_token:(Some "refresh-token") ~id_token:None
-        ~access_token:None ();
-      platform_env_fn := (fun () -> env "browser" "capacitor");
-      Sync_ui_request.ui_request_fn :=
-        (fun action payload ?hint:_ ?timeout_ms:_ () ->
-          ui_calls := !ui_calls @ [ (action, payload) ];
-          match action with
-          | Wire.Keyword "native-get-e2ee-password" ->
-              pure
-                (kwm [ ("supported?", Wire.Bool true); ("encrypted-text", Wire.Nil) ])
-          | Wire.Keyword "request-e2ee-password" ->
-              pure (kwm [ ("password", Wire.String "wrong-password") ])
-          | Wire.Keyword "native-save-e2ee-password" ->
-              save_calls := !save_calls @ [ payload ];
-              pure (kwm [ ("supported?", Wire.Bool true) ])
-          | _ -> error (ex_info "unexpected-action" []));
-      transit_read_fn := (fun _ -> Wire.Keyword "encrypted-private-key");
-      decrypt_private_key_crypt_fn :=
-        (fun _password _encrypted_private_key ->
-          error (ex_info "decrypt-private-key" []));
-      encrypt_text_by_text_password_fn :=
-        (fun _refresh_token _password ->
-          pure (kwm [ ("cipher", Wire.String "should-not-save") ]));
-      expect_rejection
-        (!decrypt_private_key_fn (default_decrypt_private_key_opts ())
-           "encrypted-private-key-str")
-        (fun e ->
-          str_eq (exn_message e) "decrypt-private-key";
-          eq !ui_calls
-            [ ( Wire.Keyword "native-get-e2ee-password",
-                kwm [ ("key", Wire.String "logseq-encrypted-password") ] );
-              ( Wire.Keyword "request-e2ee-password",
-                kwm [ ("reason", Wire.Keyword "decrypt-user-rsa-private-key") ] ) ];
-          eq !save_calls [];
-          reset_hooks ()));
 
   Fest.Promise.test "preflight-upload-does-not-retry-rejected-password-request-test"
     (fun () ->

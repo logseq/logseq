@@ -42,7 +42,6 @@ let () =
         Fest.equal (Runtime_env.owner_source ()) owner Fest.expect;
         Fest.equal (Runtime_env.publishing ()) publishing Fest.expect)
         [ "?electron=true", "electron", false
-        ; "?capacitor=true&publishing=true", "capacitor", true
         ; "?electron=false&publishing=false", "browser", false ]
     in
     match run () with

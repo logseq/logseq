@@ -153,9 +153,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     // Relative base: sqlite-wasm resolves its vfs worker + wasm URLs
-    // off import.meta.url, so assets land next to db-worker.js and the
-    // same URLs work under the app's origin and under Capacitor's
-    // scheme on mobile. ES format + code splitting: mobile Safari
+    // off import.meta.url, so assets land next to db-worker.js under
+    // the app's origin. ES format + code splitting: mobile Safari
     // workers overflow their small stack compiling a single multi-MB
     // classic script (RangeError before the first statement runs);
     // module workers parse chunk files independently.

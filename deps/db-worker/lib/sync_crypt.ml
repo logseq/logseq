@@ -738,32 +738,16 @@ let save_e2ee_password_impl (password : string) : unit t =
         (!encrypt_text_by_text_password_fn (Option.get refresh_token) password)
         (fun result ->
           let text = transit_write result in
-              if native_desktop_runtime () then
-                bind
-                  (Sync_ui_request.request_ui (Wire.keyword "native-save-e2ee-password")
-                    (Wire.kw_map [ "key", str e2ee_password_secret_key;
-                                   "encrypted-text", str text ]) ())
-                  (fun result ->
-                    match Wire.get "supported?" result with
-                    | Some (Wire.Bool true) -> pure ()
-                    | _ -> error (ex_info "Native OS keychain is required"
-                        [ Wire.keyword "code", str "db-sync/keychain-error" ]))
-              else if capacitor_runtime () then
-            catch
-              (bind
-                 (Sync_ui_request.request_ui (Wire.keyword "native-save-e2ee-password")
-                    (Wire.kw_map
-                       [ ("key", str e2ee_password_secret_key);
-                         ("encrypted-text", str text) ])
-                    ())
-                 (fun resp ->
-                   match Wire.get "supported?" resp with
-                   | Some (Wire.Bool true) -> pure ()
-                   | _ -> !secret_save_fn ~key:e2ee_password_secret_key text))
-              (fun e ->
-                Worker_log.warn "db-sync/save-e2ee-password-native-failed"
-                  [ ("error", exn_message e) ];
-                !secret_save_fn ~key:e2ee_password_secret_key text)
+          if native_desktop_runtime () then
+            bind
+              (Sync_ui_request.request_ui (Wire.keyword "native-save-e2ee-password")
+                (Wire.kw_map [ "key", str e2ee_password_secret_key;
+                               "encrypted-text", str text ]) ())
+              (fun result ->
+                match Wire.get "supported?" result with
+                | Some (Wire.Bool true) -> pure ()
+                | _ -> error (ex_info "Native OS keychain is required"
+                    [ Wire.keyword "code", str "db-sync/keychain-error" ]))
           else !secret_save_fn ~key:e2ee_password_secret_key text))
 
 let save_e2ee_password_fn : (string -> unit t) ref = ref save_e2ee_password_impl
@@ -789,23 +773,6 @@ let read_e2ee_password_text_impl (refresh_token : string option) : string option
             | Some (Wire.Bool true), Some Wire.Nil -> pure None
             | _ -> error (ex_info "Invalid native keychain response"
                 [ Wire.keyword "code", str "db-sync/keychain-error" ]))
-      else if capacitor_runtime () then
-        bind
-          (catch
-             (Sync_ui_request.request_ui (Wire.keyword "native-get-e2ee-password")
-                (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
-                ())
-             (fun e ->
-               Worker_log.warn "db-sync/read-e2ee-password-native-failed"
-                 [ ("error", exn_message e) ];
-               pure (Wire.kw_map [ ("supported?", Wire.Bool false) ])))
-          (fun result ->
-            match Wire.get "supported?" result with
-            | Some (Wire.Bool true) ->
-                pure
-                  (Wire.as_string
-                     (Option.value (Wire.get "encrypted-text" result) ~default:Wire.Nil))
-            | _ -> read_platform_e2ee_password_text ())
       else read_platform_e2ee_password_text ())
 
 let read_e2ee_password_text_fn : (string option -> string option t) ref =
@@ -839,33 +806,15 @@ let read_e2ee_password refresh_token : string t =
 let read_e2ee_password_fn : (string option -> string t) ref = ref read_e2ee_password
 
 let clear_e2ee_password_impl () : unit t =
-      if native_desktop_runtime () then
-        bind
-          (Sync_ui_request.request_ui (Wire.keyword "native-delete-e2ee-password")
-            (Wire.kw_map [ "key", str e2ee_password_secret_key ]) ())
-          (fun result ->
-            match Wire.get "supported?" result with
-            | Some (Wire.Bool true) -> pure ()
-            | _ -> error (ex_info "Native OS keychain is required"
-                [ Wire.keyword "code", str "db-sync/keychain-error" ]))
-      else if capacitor_runtime () then
+  if native_desktop_runtime () then
     bind
-      (catch
-         (Sync_ui_request.request_ui (Wire.keyword "native-delete-e2ee-password")
-            (Wire.kw_map [ ("key", str e2ee_password_secret_key) ])
-            ())
-         (fun e ->
-           Worker_log.warn "db-sync/delete-e2ee-password-native-failed"
-             [ ("error", exn_message e) ];
-           pure Wire.Nil))
-      (fun resp ->
-        match Wire.get "supported?" resp with
+      (Sync_ui_request.request_ui (Wire.keyword "native-delete-e2ee-password")
+        (Wire.kw_map [ "key", str e2ee_password_secret_key ]) ())
+      (fun result ->
+        match Wire.get "supported?" result with
         | Some (Wire.Bool true) -> pure ()
-        | _ ->
-            catch (!secret_delete_fn ~key:e2ee_password_secret_key) (fun e ->
-                Worker_log.warn "db-sync/delete-e2ee-password-secret-failed"
-                  [ ("error", exn_message e) ];
-                pure ()))
+        | _ -> error (ex_info "Native OS keychain is required"
+            [ Wire.keyword "code", str "db-sync/keychain-error" ]))
   else
     catch (!secret_delete_fn ~key:e2ee_password_secret_key) (fun e ->
         Worker_log.warn "db-sync/delete-e2ee-password-secret-failed"

@@ -27,9 +27,6 @@ let platform_env () = !platform_env_fn ()
 let browser_runtime () = String.equal (platform_env ()).runtime "browser"
 let owner_source () = (platform_env ()).owner_source
 
-let capacitor_runtime () =
-  browser_runtime () && String.equal (owner_source ()) "capacitor"
-
 let native_desktop_runtime () =
   Runtime_env.kind () = Runtime_env.Native
   && String.equal (owner_source ()) "electron"

@@ -170,7 +170,7 @@ let create () =
   else
     let worker =
       Comlink.new_module_worker
-        "js/db-worker.js?electron=false&capacitor=false&publishing=false"
+        "js/db-worker.js"
         (Comlink.module_worker_opts ())
     in
     set_worker_fs worker;
