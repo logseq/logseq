@@ -7,13 +7,22 @@ const BLOCKED_GENERIC_COMMANDS = new Set(["login", "logout", "completion", "agen
 
 const graphParam = z.string().min(1).describe("Local graph name (as shown by list_local_graphs)");
 const targetParams = {
-  target_page: z.string().optional().describe("Insert under this page (created if missing)"),
-  target_uuid: z.string().optional().describe("Insert relative to this block/page UUID"),
-  target_id: z.number().int().positive().optional().describe("Insert relative to this db/id"),
+  target_page: z
+    .string()
+    .optional()
+    .describe(
+      "Page NAME (e.g. 'Deep Equilibrium Models') to write into. This is the parameter to use to write to a " +
+        "specific page; it is created if missing. If no target_* is given, the block goes to TODAY'S JOURNAL.",
+    ),
+  target_uuid: z.string().optional().describe("UUID of a block or page to insert relative to"),
+  target_id: z.number().int().positive().optional().describe("db/id of a block or page to insert relative to"),
   pos: z
     .enum(["first-child", "last-child", "sibling"])
     .optional()
-    .describe("Position relative to the target (sibling requires target_uuid or target_id)"),
+    .describe(
+      "Position relative to the target. Default: last-child. 'sibling' requires target_uuid or target_id " +
+        "(not target_page).",
+    ),
 };
 const tagMutationParams = {
   update_tags: z.array(z.string()).optional().describe("Tags to add (tags must already exist)"),
@@ -86,7 +95,10 @@ function exactlyOne(input, keys) {
 
 export function registerTools(server, manager) {
   const tool = (name, config, handler) => {
-    server.registerTool(name, config, async (input) => {
+    // Strict: unknown parameters (e.g. `page` instead of `target_page`) are rejected instead of being
+    // silently dropped, which would make a write fall back to its default target.
+    const strictConfig = { ...config, inputSchema: z.object(config.inputSchema ?? {}).strict() };
+    server.registerTool(name, strictConfig, async (input) => {
       const startedAt = Date.now();
       // Only the tool name and graph are logged; arguments may contain notes.
       const fields = { tool: name, graph: input?.graph };
@@ -267,8 +279,11 @@ export function registerTools(server, manager) {
     {
       title: "Insert blocks",
       description:
-        "Create a block tree from Markdown bullets (indentation = children). Defaults to today's journal " +
-        "when no target is given. `key:: value` lines set existing properties; [[Page]] and #tag create links.",
+        "Create a block tree from Markdown bullets (indentation = children). To write into a specific page, " +
+        "pass its name in `target_page`. WARNING: with no target_page/target_uuid/target_id the blocks are " +
+        "written to TODAY'S JOURNAL, not to any page mentioned in the markdown. Unknown parameters are " +
+        "rejected. Afterwards, verify the destination with `show` (page) and check the result ids. " +
+        "`key:: value` lines set existing properties; [[Page]] and #tag create links.",
       inputSchema: {
         graph: graphParam,
         markdown: z.string().min(1).describe("e.g. '- Parent\\n  - Child\\n- Sibling'"),
@@ -464,5 +479,7 @@ export const SERVER_INSTRUCTIONS = [
   "read/write tools with the graph name. Prefer task tools for tasks, insert_blocks with Markdown bullets for",
   "structured content, and explicit update_tags instead of #hashtags in content. Tags must exist before",
   "being associated (create them with logseq_cli ['upsert','tag','--name','X']). Read the",
-  "logseq://skill/logseq-cli resource for detailed CLI semantics.",
+  "logseq://skill/logseq-cli resource for detailed CLI semantics. Writes without an explicit target go to",
+  "today's journal: to write into a page always pass target_page (the page name), and verify the",
+  "destination afterwards with show.",
 ].join(" ");

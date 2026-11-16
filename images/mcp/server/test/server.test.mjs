@@ -155,6 +155,19 @@ test("insert_blocks passes markdown starting with a dash as a single option", as
   });
 });
 
+test("insert_blocks rejects unknown parameters instead of writing to the journal", async () => {
+  await withClient(async (client) => {
+    const callsBefore = readState().calls.length;
+    const result = await client.callTool({
+      name: "insert_blocks",
+      arguments: { graph: "notes", markdown: "- x", page: "Deep Equilibrium Models" },
+    });
+    assert.equal(result.isError, true);
+    assert.match(JSON.stringify(result.content), /page/);
+    assert.equal(readState().calls.length, callsBefore);
+  });
+});
+
 test("open_graph reports CLI errors", async () => {
   await withClient(async (client) => {
     const result = await call(client, "open_graph", { graph: "missing" });
