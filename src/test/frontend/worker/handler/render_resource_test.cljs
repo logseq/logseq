@@ -1969,6 +1969,34 @@
                                 [class-visible-child]
                                 response))))
 
+(deftest class-page-membership-isolates-missing-child-uuid-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn class-page class-visible-child]} (render-resource-fixture)
+          class-id (entity-id @conn class-page)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/tx-id 21
+                     :block/title "UUID-less class child"
+                     :block/page class-id
+                     :block/parent class-id
+                     :block/order "c0"
+                     :block/created-at 1}])
+      (let [child-id (ffirst (d/q '[:find ?e
+                                    :where [?e :block/title "UUID-less class child"]]
+                                  @conn))
+            resource-key [:page-membership class-page :class]
+            error-item (block-handler/child-integrity-error-item class-page child-id)
+            response (call-resource api conn resource-key)]
+        (assert-resource-envelope @conn
+                                  resource-key
+                                  #{[:entity class-page]
+                                    [:children class-page]
+                                    [:class-membership class-page]}
+                                  [class-visible-child error-item]
+                                  response)
+        (is (true? (:block.temp/integrity-error? error-item)))
+        (is (= child-id (:db/id error-item)))))))
+
 (deftest stale-class-page-membership-returns-direct-children-after-tag-conversion-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn class-page class-visible-child class-filtered-child]}

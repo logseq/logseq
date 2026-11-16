@@ -289,13 +289,28 @@
             #{[:page-lookup normalized-page-lookup]})]
       [watch-keys block-uuid])))
 
+(defn- direct-child-rows
+  "Outline membership rows: UUID-bearing entities plus integrity-error
+   placeholders for UUID-less children. Special-page filters apply only to
+   entities; placeholders stay so the outline cannot look intact."
+  [db page-uuid]
+  (mapv (fn [[child]]
+          (if (uuid? child)
+            (common/entity-by-uuid! db :child-uuid child)
+            child))
+        (:items (block-handler/direct-children-membership db page-uuid))))
+
 (defn- direct-child-entities
   [db page-uuid]
   (into []
-        (keep (fn [[child]]
-                (when (uuid? child)
-                  (common/entity-by-uuid! db :child-uuid child))))
-        (:items (block-handler/direct-children-membership db page-uuid))))
+        (remove block-handler/integrity-error-item?)
+        (direct-child-rows db page-uuid)))
+
+(defn- membership-child-id
+  [row]
+  (if (block-handler/integrity-error-item? row)
+    row
+    (:block/uuid row)))
 
 (defn- comment-thread?
   [entity]
@@ -351,7 +366,7 @@
   [db resource-key _runtime]
   (let [[_ page-uuid membership-kind current-user-uuid] resource-key
         page (common/entity-by-uuid! db :page-uuid page-uuid)
-        children (direct-child-entities db page-uuid)]
+        children (direct-child-rows db page-uuid)]
     (case membership-kind
       :class
       (do
@@ -362,9 +377,10 @@
          (->> children
               ;; A class membership resource can remain subscribed for the
               ;; transaction that converts its class to a page.
-              (remove #(and (ldb/class? page)
+              (remove #(and (not (block-handler/integrity-error-item? %))
+                            (ldb/class? page)
                             (tagged-with-page? % (:db/id page))))
-              (mapv :block/uuid))])
+              (mapv membership-child-id))])
 
       :property
       (do
@@ -377,9 +393,10 @@
              [:children page-uuid]
              [:property-membership property-ident]}
            (->> children
-                (remove #(some? (property-handler/entity-direct-value
-                                 db (:db/id %) property-ident)))
-                (mapv :block/uuid))]))
+                (remove #(and (not (block-handler/integrity-error-item? %))
+                              (some? (property-handler/entity-direct-value
+                                      db (:db/id %) property-ident))))
+                (mapv membership-child-id))]))
 
       :quick-add
       (do
@@ -395,12 +412,13 @@
              [:attr :logseq.property/created-by-ref]}
            (->> children
                 (filter (fn [child]
-                          (let [creator-id
-                                (property-handler/entity-direct-value
-                                 db child :logseq.property/created-by-ref)]
-                            (or (nil? creator-id)
-                                (= current-user-id creator-id)))))
-                (mapv :block/uuid))]))
+                          (or (block-handler/integrity-error-item? child)
+                              (let [creator-id
+                                    (property-handler/entity-direct-value
+                                     db child :logseq.property/created-by-ref)]
+                                (or (nil? creator-id)
+                                    (= current-user-id creator-id))))))
+                (mapv membership-child-id))]))
 
       (common/fail! "Unsupported page membership kind"
              {:membership-kind membership-kind

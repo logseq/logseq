@@ -293,9 +293,23 @@
       (some? (eavt-scalar db eid :logseq.property/deleted-at)) true
       :else (recur (eavt-scalar db eid :block/parent) (conj seen eid)))))
 
+(defn child-integrity-error-item
+  "Transit-safe membership identity for a persisted child missing :block/uuid.
+   Shared by snapshot reads and renderer deltas so a later repair can replace
+   the same placeholder instead of inserting beside it."
+  [parent-uuid child-id]
+  {:block.temp/integrity-error? true
+   :db/id child-id
+   :parent-uuid parent-uuid
+   :missing [:block/uuid]})
+
+(defn integrity-error-item?
+  [item]
+  (and (map? item) (true? (:block.temp/integrity-error? item))))
+
 (defn- membership-item
   [{:keys [block/uuid block/order] :as row}]
-  (if (:block.temp/integrity-error? row)
+  (if (integrity-error-item? row)
     [(select-keys row [:block.temp/integrity-error? :db/id :parent-uuid :missing])
      order]
     [uuid order]))
@@ -332,12 +346,9 @@
                       {:db-id e
                        :parent-uuid parent-uuid
                        :missing [:block/uuid]})
-            {:db/id e
-             :block.temp/integrity-error? true
-             :parent-uuid parent-uuid
-             :missing [:block/uuid]
-             :block/order order
-             :block/collapsed? true}))))))
+            (assoc (child-integrity-error-item parent-uuid e)
+                   :block/order order
+                   :block/collapsed? true)))))))
 
 (defn- resolve-parent-id
   [db parent-uuid]

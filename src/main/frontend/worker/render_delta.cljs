@@ -2,12 +2,14 @@
   "Builds the incremental render delta (block replacements, tombstones, and
    children patches) published to the renderer after each transaction."
   (:require [clojure.set :as set]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [frontend.worker.handler.block :as block-handler]))
 
 (def ^:private membership-affecting-attrs
   #{:block/closed-value-property
     :block/order
     :block/parent
+    :block/uuid
     :logseq.property/created-from-property
     :logseq.property/deleted-at})
 
@@ -84,13 +86,13 @@
               parent-uuid (:block/uuid parent)
               order (:block/order entity)]
           (when (some? order)
-            (when-not (uuid? block-uuid)
-              (fail! "Invalid child UUID"
-                     {:entity-id entity-id :block-uuid block-uuid}))
             (when-not (uuid? parent-uuid)
               (fail! "Invalid parent UUID"
                      {:entity-id entity-id :parent-uuid parent-uuid}))
-            {:block-uuid block-uuid
+            {:block-uuid (if (uuid? block-uuid)
+                           block-uuid
+                           (block-handler/child-integrity-error-item
+                            parent-uuid entity-id))
              :parent-uuid parent-uuid
              :order order}))))))
 

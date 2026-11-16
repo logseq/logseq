@@ -40,6 +40,7 @@
   #{:block/closed-value-property
     :block/order
     :block/parent
+    :block/uuid
     :logseq.property/created-from-property
     :logseq.property/deleted-at})
 

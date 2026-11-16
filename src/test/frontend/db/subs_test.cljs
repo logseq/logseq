@@ -564,6 +564,42 @@
                   (is (= 195 (:db/id (second (:value snapshot)))))
                   (unsubscribe))))))))
 
+(deftest children-snapshot-replaces-integrity-error-item-on-uuid-repair-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               child-a (random-uuid)
+               child-c (random-uuid)
+               repaired (random-uuid)
+               error-item {:block.temp/integrity-error? true
+                           :db/id 195
+                           :parent-uuid parent-uuid
+                           :missing [:block/uuid]}]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested]
+                              (p/resolved
+                               (children-patch 1 requested 10
+                                               [[child-a "a0"]
+                                                [error-item "a1"]
+                                                [child-c "a2"]])))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        _ (is (= [child-a error-item child-c]
+                                 (:value (subs/children-snapshot parent-uuid))))
+                        _ (subs/apply-delta!
+                           (delta 2
+                                  {:children
+                                   {parent-uuid
+                                    {:base-rev 1
+                                     :rev 2
+                                     :remove [[error-item "a1"]]
+                                     :upsert [[repaired "a1"]]}}}))]
+                  (is (= [child-a repaired child-c]
+                         (:value (subs/children-snapshot parent-uuid)))
+                      "Repairing a UUID must replace the placeholder, not insert beside it.")
+                  (unsubscribe))))))))
+
 (deftest matching-child-patch-applies-atomically-and-orders-membership-test
   (async done
          (let [parent-uuid (random-uuid)

@@ -1,6 +1,7 @@
 (ns frontend.worker.render-delta-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.worker.handler.block :as block-handler]
             [frontend.worker.render-delta :as render-delta]))
 
 (def ^:private schema
@@ -326,6 +327,46 @@
                             (build-delta report
                                          {:blocks {block-uuid valid-block}
                                           :deleted-block-uuids #{block-uuid}}))))))
+
+(deftest uuid-repair-replaces-integrity-error-membership-item-test
+  (let [parent-uuid (random-uuid)
+        repaired-uuid (random-uuid)
+        db-before (db-with-blocks [{:db/id 1
+                                    :block/uuid parent-uuid
+                                    :block/tx-id 10}
+                                   {:db/id 2
+                                    :block/title "Child B"
+                                    :block/parent 1
+                                    :block/order "a1"
+                                    :block/tx-id 10}])
+        error-item (block-handler/child-integrity-error-item parent-uuid 2)
+        report (tx-report db-before [[:db/add 2 :block/uuid repaired-uuid]
+                                     [:db/add 2 :block/tx-id 11]])
+        delta (build-delta report
+                           {:blocks {repaired-uuid
+                                     (block repaired-uuid 11 "Child B")}})]
+    (is (= {parent-uuid {:remove [[error-item "a1"]]
+                         :upsert [[repaired-uuid "a1"]]}}
+           (membership-operations (:children delta)))
+        "Assigning a UUID must replace the placeholder, not insert beside it.")))
+
+(deftest uuid-less-child-order-change-keeps-integrity-error-item-test
+  (let [parent-uuid (random-uuid)
+        db-before (db-with-blocks [{:db/id 1
+                                    :block/uuid parent-uuid
+                                    :block/tx-id 10}
+                                   {:db/id 2
+                                    :block/title "Child B"
+                                    :block/parent 1
+                                    :block/order "a1"
+                                    :block/tx-id 10}])
+        error-item (block-handler/child-integrity-error-item parent-uuid 2)
+        report (tx-report db-before [[:db/add 2 :block/order "a3"]])
+        delta (build-delta report {})]
+    (is (= {parent-uuid {:remove [[error-item "a1"]]
+                         :upsert [[error-item "a3"]]}}
+           (membership-operations (:children delta)))
+        "Order edits of a UUID-less child must not fail the renderer delta.")))
 
 (deftest structural-owner-does-not-require-a-new-transaction-id-test
   (let [parent-uuid (random-uuid)
