@@ -36,4 +36,15 @@ cp -R "$repo_root/node_modules/katex/dist/fonts" "$resources/katex/"
 swift build --package-path "$host_root" -c release >&2
 swift_bin=$(swift build --package-path "$host_root" -c release --show-bin-path)
 install -m 755 "$swift_bin/logseq-apple" "$output/logseq-apple"
+lui_checkout="$host_root/Packages/lui"
+if [[ ! -d $lui_checkout ]]; then lui_checkout="$host_root/.build/checkouts/lui"; fi
+lui_checkout=$(cd "$lui_checkout" && pwd -P)
+node "$lui_checkout/tooling/lui_build_receipt.mjs" write \
+  --artifact "$output/logseq-apple" --root "$lui_checkout" \
+  --command 'bash deps/ui/apple/build.sh' --input platform/apple --input Package.swift
+node "$lui_checkout/tooling/lui_build_receipt.mjs" write \
+  --artifact "$output" --root "$repo_root" \
+  --command 'bash deps/ui/apple/build.sh' \
+  --input deps/ui/apple --input deps/ui/native --input deps/ui/src \
+  --input deps/ui/shims --input deps/ui/subs
 printf '%s\n' "$output/logseq-apple"

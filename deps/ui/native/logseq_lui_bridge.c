@@ -644,6 +644,30 @@ LUI_EXPORT int32_t lui_ocaml_document_event_utf8(const char *data,
   return accepted;
 }
 
+LUI_EXPORT int32_t lui_ocaml_agent_utf8(const char *request, int32_t length,
+                                       lui_patch_callback reply) {
+  if (!runtime_started || request == NULL || length < 0 || reply == NULL)
+    return 0;
+  int accepted = 0;
+  caml_leave_blocking_section();
+  CAMLparam0();
+  CAMLlocal2(input, result);
+  const value *handler = caml_named_value("lui_ocaml_agent");
+  if (handler != NULL) {
+    input = copy_bytes(request, length);
+    result = caml_callback_exn(*handler, input);
+    if (Is_exception_result(result)) {
+      report_ocaml_exception("lui_ocaml_agent", result);
+    } else if (emit_patch("lui_ocaml_agent", Field(result, 1))) {
+      reply(String_val(Field(result, 0)));
+      accepted = 1;
+    }
+  }
+  CAMLdrop;
+  caml_enter_blocking_section();
+  return accepted;
+}
+
 LUI_EXPORT int32_t lui_ocaml_stop(void) {
   int result = 0;
   caml_leave_blocking_section();

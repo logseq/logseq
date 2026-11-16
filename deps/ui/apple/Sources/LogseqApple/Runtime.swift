@@ -20,9 +20,14 @@ typealias PointerCall = @convention(c) (Int64, Double, Double, Int32, Int32, Uns
 typealias ExtensionCall = @convention(c) (Int64, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32, UnsafePointer<CChar>?, Int32) -> Int32
 typealias SnapshotCall = @convention(c) (UnsafePointer<CChar>?, Int32, BytesCallback?) -> Int32
 typealias IssuedRevealsCall = @convention(c) (BytesCallback?) -> Int32
+typealias AgentCall = @convention(c) (UnsafePointer<CChar>?, Int32, PatchCallback?) -> Int32
 
 nonisolated(unsafe) var activeRuntime: NativeRuntime?
 nonisolated(unsafe) private var snapshotResult: String?
+nonisolated(unsafe) private var agentResult: String?
+private let agentReceiver: PatchCallback = { data in
+    agentResult = data.map { String(cString: $0) }
+}
 private let patches: PatchCallback = { data in
     guard let data else { return }
     let text = String(cString: data)
@@ -80,6 +85,10 @@ final class NativeRuntime {
             throw HostError("dlopen: \(String(cString: dlerror()))")
         }
         self.library = library
+        guard let agent = dlsym(library, "lui_ocaml_agent_utf8") else {
+            throw HostError("Missing native agent interface")
+        }
+        symbols["agent"] = agent
         guard let issued = dlsym(library, "logseq_issued_reveals_utf8") else {
             throw HostError("Missing application issued reveal producer")
         }
@@ -201,6 +210,21 @@ final class NativeRuntime {
         try check(block.withCString { function("editor_snapshot_utf8", SnapshotCall.self)($0, Int32(block.utf8.count), snapshotReceiver) }, "editor snapshot")
         guard let text = snapshotResult, let data = text.data(using: .utf8) else { throw HostError("Missing editor snapshot") }
         return try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: Any]
+    }
+
+    func agent(_ request: String) throws -> String {
+        guard started else { throw HostError("Agent request before runtime startup") }
+        agentResult = nil
+        let accepted = request.withCString {
+            function("agent", AgentCall.self)($0, Int32(request.utf8.count), agentReceiver)
+        }
+        let reply = agentResult
+        agentResult = nil
+        try check(accepted, "agent")
+        try drain()
+        schedulePump()
+        guard accepted == 1, let reply else { throw HostError("Native agent request refused") }
+        return reply
     }
 
     func issuedReveals() throws -> [IssuedEditorReveal] {
