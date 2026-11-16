@@ -7,5 +7,7 @@
   :block/name      {:doc "block name, lowercase, only page-blocks have this attr"}
   :block/raw-title {:doc "like `:block/title`,
                           but when eval `(:block/raw-title block-entity)`, return raw title of this block"}
+  :block.temp/integrity-error?
+  {:doc "Renderer membership item for a persisted child missing required identity. Not a DB attribute."}
   :kv/value        {:doc "Used to store key-value, the value could be anything,
                           e.g. {:db/ident :logseq.kv/xxx :kv/value value}"})

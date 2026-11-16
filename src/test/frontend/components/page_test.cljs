@@ -256,3 +256,36 @@
                   (is (= 1 @membership-loads)
                       "Valid incremental patches never refetch the list.")
                   (unmount! mounted))))))))
+
+(deftest normal-page-isolates-missing-child-uuid-item-test
+  (async done
+         (let [page-uuid (random-uuid)
+               child-a (random-uuid)
+               child-c (random-uuid)
+               error-item {:block.temp/integrity-error? true
+                           :db/id 195
+                           :parent-uuid page-uuid
+                           :missing [:block/uuid]}]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-block
+                            (fn [_graph-id _requested-uuid]
+                              (p/resolved
+                               (block-patch
+                                1 {page-uuid (block page-uuid 1 "Page")})))
+                            subs/<load-children
+                            (fn [_graph-id requested-uuid]
+                              (p/resolved
+                               (children-patch
+                                1 requested-uuid 1
+                                [[child-a "a0"]
+                                 [error-item "a1"]
+                                 [child-c "a2"]])))]
+              (let [mounted (mount-normal-page! page-uuid)]
+                (p/let [_ (p/delay 0)]
+                  (is (= [child-a error-item child-c]
+                         (:root-uuids @(:last-render mounted)))
+                      "The page still renders siblings and keeps the defective row.")
+                  (is (= page-uuid
+                         (get-in @(:last-render mounted) [:page :block/uuid])))
+                  (unmount! mounted))))))))

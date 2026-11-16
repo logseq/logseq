@@ -2321,6 +2321,74 @@
         (is (= before after)
             "A leftover :block/name entity without :block/uuid must not fail All Pages.")))))
 
+(deftest render-snapshots-isolate-missing-direct-child-uuid-test
+  (let [api (get @thread-api/*thread-apis :thread-api/get-render-snapshots)]
+    (if-not api
+      (is false "Missing thread API: get-render-snapshots")
+      (let [conn (db-test/create-conn)
+            page-uuid (random-uuid)
+            parent-uuid (random-uuid)
+            child-a (random-uuid)
+            child-c (random-uuid)]
+        (d/transact! conn
+                     [{:db/id -1
+                       :block/uuid page-uuid
+                       :block/tx-id 20
+                       :block/title "Page"
+                       :block/name "page"
+                       :block/tags :logseq.class/Page}
+                      {:db/id -2
+                       :block/uuid parent-uuid
+                       :block/tx-id 20
+                       :block/title "Parent"
+                       :block/page -1
+                       :block/parent -1
+                       :block/order "a0"}
+                      {:block/uuid child-a
+                       :block/tx-id 20
+                       :block/title "Child A"
+                       :block/page -1
+                       :block/parent -2
+                       :block/order "a0"}
+                      {:db/id -3
+                       :block/tx-id 20
+                       :block/title "Child B"
+                       :block/page -1
+                       :block/parent -2
+                       :block/order "a1"
+                       :block/created-at 1}
+                      {:block/uuid child-c
+                       :block/tx-id 20
+                       :block/title "Child C"
+                       :block/page -1
+                       :block/parent -2
+                       :block/order "a2"}])
+        (let [child-b-id (ffirst (d/q '[:find ?e :where [?e :block/title "Child B"]] @conn))]
+          (with-redefs [worker-state/get-datascript-conn (constantly conn)]
+            (let [parent-snap (api test-repo {:blocks [] :children [parent-uuid] :resources []})
+                  page-snap (api test-repo {:blocks [] :children [page-uuid] :resources []})
+                  parent-items (get-in parent-snap [:slots [:children parent-uuid] :items])
+                  error-item (ffirst (filter (comp map? first) parent-items))]
+              (is (map? parent-snap)
+                  "a UUID-less child must not fail the parent children snapshot")
+              (is (map? page-snap)
+                  "a UUID-less grandchild must not fail the page children snapshot")
+              (is (= 3 (count parent-items)))
+              (is (= [child-a "a0"] (first parent-items)))
+              (is (= [child-c "a2"] (last parent-items)))
+              (is (true? (:block.temp/integrity-error? error-item)))
+              (is (= child-b-id (:db/id error-item)))
+              (is (= parent-uuid (:parent-uuid error-item)))
+              (is (= [:block/uuid] (:missing error-item)))
+              (is (= child-a
+                     (get-in parent-snap [:slots [:block child-a] :value :block/uuid])))
+              (is (= child-c
+                     (get-in parent-snap [:slots [:block child-c] :value :block/uuid])))
+              (is (= parent-uuid
+                     (get-in parent-snap [:slots [:block parent-uuid] :value :block/uuid])))
+              (is (= parent-uuid
+                     (get-in page-snap [:slots [:block parent-uuid] :value :block/uuid]))))))))))
+
 (deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn view-row]} (render-resource-fixture)

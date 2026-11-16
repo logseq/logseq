@@ -537,6 +537,33 @@
             "An older graph revision must also be ignored.")
         (unsubscribe)))))
 
+(deftest children-snapshot-isolates-missing-child-uuid-item-test
+  (async done
+         (let [parent-uuid (random-uuid)
+               child-a (random-uuid)
+               child-c (random-uuid)
+               error-item {:block.temp/integrity-error? true
+                           :db/id 195
+                           :parent-uuid parent-uuid
+                           :missing [:block/uuid]}]
+           (finish-async!
+            done
+            (p/with-redefs [subs/<load-children
+                            (fn [_graph-id requested]
+                              (p/resolved
+                               (children-patch 1 requested 10
+                                               [[child-a "a0"]
+                                                [error-item "a1"]
+                                                [child-c "a2"]])))]
+              (let [unsubscribe (subs/subscribe-children! parent-uuid (fn []))]
+                (p/let [_ (p/delay 0)
+                        snapshot (subs/children-snapshot parent-uuid)]
+                  (is (= :ready (:status snapshot)))
+                  (is (= [child-a error-item child-c] (:value snapshot)))
+                  (is (true? (subs/integrity-error-item? (second (:value snapshot)))))
+                  (is (= 195 (:db/id (second (:value snapshot)))))
+                  (unsubscribe))))))))
+
 (deftest matching-child-patch-applies-atomically-and-orders-membership-test
   (async done
          (let [parent-uuid (random-uuid)

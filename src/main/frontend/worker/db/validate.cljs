@@ -24,8 +24,7 @@
        (:block/page entity)
        (:block/parent entity)
        (string? (:block/order entity))
-       (int? (:block/created-at entity))
-       (int? (:block/updated-at entity))))
+       (int? (:block/created-at entity))))
 
 (defn- normal-page-missing-updated-at?
   [entity dispatch-key]
@@ -104,7 +103,10 @@
                                 (not (de/entity? (:logseq.property/created-by-ref entity))))
                            [[:db/retractEntity (:db/id entity)]]
                            (block-missing-uuid? entity)
-                           [[:db/add (:db/id entity) :block/uuid (random-uuid)]]
+                           (cond-> [[:db/add (:db/id entity) :block/uuid (random-uuid)]]
+                             (nil? (:block/updated-at entity))
+                             (conj [:db/add (:db/id entity) :block/updated-at
+                                    (:block/created-at entity)]))
                            (vector? (:logseq.property/value entity))
                            [[:db/retractEntity (:db/id entity)]]
                            (and (:block/tx-id entity) (nil? (:block/title entity)))

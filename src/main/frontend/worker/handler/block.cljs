@@ -12,6 +12,7 @@
    [frontend.worker.plain-value :as worker-plain]
    [frontend.worker.state :as worker-state]
    [frontend.worker.sync.client-op :as client-op]
+   [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
    [logseq.db.common.initial-data :as common-initial-data]
@@ -292,6 +293,13 @@
       (some? (eavt-scalar db eid :logseq.property/deleted-at)) true
       :else (recur (eavt-scalar db eid :block/parent) (conj seen eid)))))
 
+(defn- membership-item
+  [{:keys [block/uuid block/order] :as row}]
+  (if (:block.temp/integrity-error? row)
+    [(select-keys row [:block.temp/integrity-error? :db/id :parent-uuid :missing])
+     order]
+    [uuid order]))
+
 (defn- membership-row
   [db parent-uuid parent-recycled? {:keys [e]}]
   (let [attrs (membership-row-attr-map db e)]
@@ -301,10 +309,6 @@
                   (contains? attrs :logseq.property/created-from-property))
       (let [child-uuid (:block/uuid attrs)
             order (:block/order attrs)]
-        (when-not (uuid? child-uuid)
-          (fail-render-read! "Invalid direct-child UUID"
-                             {:parent-uuid parent-uuid
-                              :block-uuid child-uuid}))
         ;; :block/order is {:optional true} for pages in normal-page, so a
         ;; parented page may legitimately have none. Sort those first,
         ;; matching ldb/sort-by-order, rather than failing the whole
@@ -312,12 +316,28 @@
         (when-not (or (nil? order) (string? order))
           (fail-render-read! "Invalid direct-child order"
                              {:parent-uuid parent-uuid
+                              :db-id e
                               :block-uuid child-uuid
                               :block-order order}))
-        {:db/id e
-         :block/uuid child-uuid
-         :block/order order
-         :block/collapsed? (true? (:block/collapsed? attrs))}))))
+        (if (uuid? child-uuid)
+          {:db/id e
+           :block/uuid child-uuid
+           :block/order order
+           :block/collapsed? (true? (:block/collapsed? attrs))}
+          (do
+            ;; A persisted child can lose :block/uuid (db-test#1537). Isolate
+            ;; that row: do not mint an identity on read, do not drop it, and
+            ;; do not fail the rest of the membership.
+            (log/warn :renderer/direct-child-missing-uuid
+                      {:db-id e
+                       :parent-uuid parent-uuid
+                       :missing [:block/uuid]})
+            {:db/id e
+             :block.temp/integrity-error? true
+             :parent-uuid parent-uuid
+             :missing [:block/uuid]
+             :block/order order
+             :block/collapsed? true}))))))
 
 (defn- resolve-parent-id
   [db parent-uuid]
@@ -351,7 +371,7 @@
                            (recycled-chain? db parent-id))]
     {:basis-rev (render-basis-rev db)
      :parent-tx-id parent-tx-id
-     :items (mapv (juxt :block/uuid :block/order) rows)}))
+     :items (mapv membership-item rows)}))
 
 (defn open-children-tree
   "Membership for expanded nodes of the subtree, visited in document order (a
@@ -382,6 +402,7 @@
                    ;; the stack pops the first child first (document order).
                    open-children
                    (into [] (comp (remove :block/collapsed?)
+                                  (filter :block/uuid)
                                   (map (fn [row] [(:db/id row) (:block/uuid row) false])))
                          (rseq rows))]
                (recur (into pending open-children)
@@ -389,7 +410,7 @@
                       (dec remaining)
                       (assoc children parent-uuid
                              {:parent-tx-id parent-tx-id
-                              :items (mapv (juxt :block/uuid :block/order) rows)})))))
+                              :items (mapv membership-item rows)})))))
          children)))))
 
 (defn document-order-uuids
@@ -401,7 +422,9 @@
          result []]
     (if (and (pos? n) (seq pending))
       (let [uuid (first pending)
-            items (mapv first (:items (get children uuid)))]
+            items (into []
+                        (keep (fn [[id]] (when (uuid? id) id)))
+                        (:items (get children uuid)))]
         (recur (concat items (rest pending))
                (dec n)
                (conj result uuid)))
@@ -411,7 +434,8 @@
   [db root-uuid]
   (let [children (open-children-tree db root-uuid)
         block-uuids (into #{root-uuid}
-                          (mapcat (fn [{:keys [items]}] (map first items)))
+                          (mapcat (fn [{:keys [items]}]
+                                    (keep (fn [[id]] (when (uuid? id) id)) items)))
                           (vals children))
         blocks (:blocks (canonical-blocks db (vec block-uuids)))
         root-membership (get children root-uuid)]

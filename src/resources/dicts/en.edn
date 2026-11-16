@@ -156,6 +156,8 @@
  :block.comments/save-error "Failed to save comment."
  :block.comments/yesterday-at "Yesterday at {1}"
 
+ :block.integrity/missing-uuid "This outline row is missing required identity data (entity {1}, parent {2}, missing {3})."
+
  :block.macro/embed-deprecated "{{embed}} is deprecated. Use '/Node embed' command instead."
  :block.macro/namespace-deprecated "{{namespace}} is deprecated. Use the {1} feature instead."
  :block.macro/query-deprecated "{{query}} is deprecated. Use '/Query' command instead."

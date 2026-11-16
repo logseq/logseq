@@ -291,8 +291,10 @@
 
 (defn- direct-child-entities
   [db page-uuid]
-  (mapv (fn [[child-uuid]]
-          (common/entity-by-uuid! db :child-uuid child-uuid))
+  (into []
+        (keep (fn [[child]]
+                (when (uuid? child)
+                  (common/entity-by-uuid! db :child-uuid child))))
         (:items (block-handler/direct-children-membership db page-uuid))))
 
 (defn- comment-thread?

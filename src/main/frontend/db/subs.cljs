@@ -165,14 +165,22 @@
   (require-revision! :block/tx-id (:block/tx-id block))
   block)
 
+(defn integrity-error-item?
+  "Whether a children-slot item is a privacy-safe integrity placeholder
+   for a persisted child that is missing required identity."
+  [item]
+  (and (map? item) (true? (:block.temp/integrity-error? item))))
+
 (defn- child-items!
   [parent-uuid items]
   (->> items
-       (map (fn [[child-uuid order :as item]]
+       (map (fn [[child order :as item]]
               (when-not (and (= 2 (count item)) (string? order))
                 (throw (ex-info "Invalid direct-child item"
                                 {:parent-uuid parent-uuid :item item})))
-              [(require-uuid! :block/uuid child-uuid) order]))
+              (if (integrity-error-item? child)
+                [child order]
+                [(require-uuid! :block/uuid child) order])))
        (sort-by second)
        vec))
 
