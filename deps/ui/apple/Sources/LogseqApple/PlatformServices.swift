@@ -19,14 +19,18 @@ final class PlatformServices {
     @ObservationIgnored var views: [Int: WeakView] = [:]
     @ObservationIgnored var frames: [Int: CGRect] = [:]
     @ObservationIgnored var editors: [String: WeakView] = [:]
-    var focusIntents: [String: Bool] = [:]
+    @ObservationIgnored var editorFocusTimes: [String: Double] = [:]
+    @ObservationIgnored var editorRequestTimes: [String: Double] = [:]
+    @ObservationIgnored var editorMountTimes: [String: Double] = [:]
+    @ObservationIgnored var editorAttachTimes: [String: Double] = [:]
+    @ObservationIgnored var focusIntents: [String: Bool] = [:]
     var uiState: [String: Any] = [:]
     var snapshots: [String: [String: String]] = [:]
     var graphContext: [String: String] = [:]
     @ObservationIgnored var onCloseReady: ((Bool) -> Void)?
     @ObservationIgnored var onError: ((Error) -> Void)?
     @ObservationIgnored var onEditCommand: ((String) -> Void)?
-    private(set) var incarnations: [Int: UInt64] = [:]
+    @ObservationIgnored private(set) var incarnations: [Int: UInt64] = [:]
     @ObservationIgnored private var nextIncarnation: UInt64 = 0
     var performanceVisible = false
     var performanceText = ""
@@ -69,6 +73,9 @@ final class PlatformServices {
     }
     func perform(_ body: () throws -> Void) { do { try body() } catch { onError?(error) } }
     func requestEditorFocus(_ block: String, _ focused: Bool) {
+        if focused, ProcessInfo.processInfo.environment["LOGSEQ_APPLE_PERF"] == "1", editorRequestTimes[block] == nil {
+            editorRequestTimes[block] = Date.timeIntervalSinceReferenceDate + 978307200
+        }
         focusIntents[block] = focused
         guard let editor = editors[block]?.value, let window = editor.window else { return }
         let accepted = focused ? window.makeFirstResponder(editor)
@@ -86,6 +93,8 @@ final class PlatformServices {
         stopLazyMountObservation()
         nodes.removeAll(); parents.removeAll(); children.removeAll(); views.removeAll(); frames.removeAll(); incarnations.removeAll()
         editors.removeAll(); focusIntents.removeAll()
+        editorFocusTimes.removeAll(); editorRequestTimes.removeAll()
+        editorMountTimes.removeAll(); editorAttachTimes.removeAll()
     }
     func applied(_ batch: [String: Any]) throws {
         for op in batch["ops"] as? [[String: Any]] ?? [] {

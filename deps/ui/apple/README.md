@@ -95,6 +95,37 @@ the trace includes document content and should only be shared after inspection.
 
 ## Architecture
 
+### LUI agent diagnostics
+
+Enable the loopback endpoint explicitly when launching a development build:
+
+```sh
+LUI_AGENT_LISTEN=127.0.0.1:49380 LUI_AGENT_BACKGROUND=1 \
+LOGSEQ_ROOT_DIR=/tmp/logseq-apple-test LOGSEQ_UI_STATE_DIR=/tmp/logseq-apple-ui \
+bash deps/ui/apple/run.sh
+node /path/to/lui/tooling/lui_agent.mjs --tcp 127.0.0.1:49380 \
+  --artifact deps/ui/_build/apple --json hello
+```
+
+`LUI_AGENT_BACKGROUND=1` opens the app's window without activating the app. Agent
+commands dispatch through the live OCaml application and apply their patches
+before replying. For example, `ext ext:logseq-editor logseq-editor key
+'{"key":"Enter","code":"Enter"}'` splits the active editor. Semantic commands
+do not synthesize physical keyboard events or exercise document capture.
+
+The same endpoint also accepts JSON requests with `op` set to `host-state`
+(attached editors and the actual first responder), `host-screenshot` (requires
+an absolute `path`, captures only this window), `host-resize` (positive finite
+`width` and `height` in content points), `host-commit` (layout/display),
+`host-document` (requires `name` and a `payload` object), `host-resync`
+(authoritative presentation snapshot), or `host-quit` (normal
+save/quit). `LOGSEQ_APPLE_PERF=1` adds host stage timings and editor lifecycle
+timestamps. These diagnostics are disabled by default.
+
+Build receipts cover both the app output directory and the LUI Swift sources.
+When editing a local LUI dependency, also run `lui_build_receipt.mjs check
+--artifact deps/ui/_build/apple/logseq-apple` to check that dependency's receipt.
+
 `NativeRuntime` resolves the complete Logseq C ABI with `dlopen`, starts OCaml
 with the macOS/SwiftUI profile, queues callbacks, and drains them on the main
 actor. OCaml wakeups schedule `lui_ocaml_pump`; timers remain OCaml-owned. The

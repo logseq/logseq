@@ -7,6 +7,9 @@ struct EditorSink: NSViewRepresentable {
     let context: LUIAppleExtensionViewContext
     let services: PlatformServices
     func makeNSView(context: Context) -> NativeEditorInput {
+        if ProcessInfo.processInfo.environment["LOGSEQ_APPLE_PERF"] == "1", let block = self.context.string("block-id") {
+            services.editorMountTimes[block] = Date.timeIntervalSinceReferenceDate + 978307200
+        }
         let input = NativeEditorInput()
         input.drawsBackground = false; input.textColor = .clear
         input.insertionPointColor = .clear
@@ -16,6 +19,8 @@ struct EditorSink: NSViewRepresentable {
         return input
     }
     func updateNSView(_ input: NativeEditorInput, context: Context) {
+        let finish = hostTiming("editor.update")
+        defer { finish() }
         if input.services !== services || input.extensionContext?.nodeID != self.context.nodeID
             || input.incarnation != services.incarnations[self.context.nodeID]
             || input.block != self.context.string("block-id") {
@@ -72,7 +77,17 @@ final class NativeEditorInput: NSTextView {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        if window != nil, ProcessInfo.processInfo.environment["LOGSEQ_APPLE_PERF"] == "1", services?.editorAttachTimes[block] == nil {
+            services?.editorAttachTimes[block] = Date.timeIntervalSinceReferenceDate + 978307200
+        }
         if window == nil { releaseVirtualRegistration() }
+        else if services?.focusIntents[block] != nil {
+            onMainRunLoop { [weak self] in
+                guard let self, self.window != nil,
+                      let focused = self.services?.focusIntents[self.block] else { return }
+                self.services?.requestEditorFocus(self.block, focused)
+            }
+        }
         services?.issuedReveals.schedule()
     }
 
@@ -109,8 +124,17 @@ final class NativeEditorInput: NSTextView {
         }
     }
     override func becomeFirstResponder() -> Bool {
+        let finish = hostTiming("editor.focus")
+        defer { finish() }
         let accepted = super.becomeFirstResponder()
-        if accepted { send("focus"); synchronize(); services?.issuedReveals.schedule() }
+        if accepted {
+            if ProcessInfo.processInfo.environment["LOGSEQ_APPLE_PERF"] == "1" {
+                if services?.editorFocusTimes[block] == nil {
+                    services?.editorFocusTimes[block] = Date.timeIntervalSinceReferenceDate + 978307200
+                }
+            }
+            send("focus"); synchronize(); services?.issuedReveals.schedule()
+        }
         return accepted
     }
     override func resignFirstResponder() -> Bool {

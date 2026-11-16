@@ -660,6 +660,8 @@ let extension_event node identifier name values =
                perf_mark "ext.dispatch" t0;
                let t1 = perf_ms () in
                ignore (Lui_app.flush app);
+               Editor_actions.focus_pending ();
+               ignore (Lui_app.flush app);
                perf_mark "ext.flush" t1
            | Some _ -> invalid_arg "Extension identifier does not match the mounted node"
            | None -> ())
@@ -924,6 +926,14 @@ module Ffi = struct
     let prevented, batches = document_event name json in
     prevented, encode_batches batches
   let root_node = root_node
+  let agent request =
+    with_entry_lock (fun () ->
+      let app = Option.get !current_app in
+      let target = Lui_agent.app_target ~host:"Logseq Apple" app in
+      let reply = Lui_agent.handle target request in
+      Editor_actions.focus_pending ();
+      ignore (Lui_app.flush app);
+      reply, encode_batches (take_patches_dbg "agent"))
   let issued_reveals () =
     with_entry_lock (fun () ->
       if not (Issued_reveal.has_editor_work ()) then "[]", ""
@@ -993,5 +1003,6 @@ let () =
   Callback.register "lui_ocaml_dispose" Ffi.dispose;
   Callback.register "lui_ocaml_root_node" Ffi.root_node;
   Callback.register "lui_ocaml_editor_snapshot" Ffi.editor_snapshot;
+  Callback.register "lui_ocaml_agent" Ffi.agent;
   Callback.register "logseq_issued_reveals" Ffi.issued_reveals;
   Callback.register "lui_ocaml_resync" Ffi.resync

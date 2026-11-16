@@ -17,6 +17,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var closing = false
     var closeReady = false
     var quitting = false
+    var agentServer: LUIAgentServer?
     private var patchTrace: FileHandle?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -51,7 +52,16 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
             appearanceObserver = DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name("AppleInterfaceThemeChangedNotification"), object: nil, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.services.perform { try self?.publishAppearance() } }
             }
-            window?.makeKeyAndOrderFront(nil); NSApp.activate()
+            agentServer = try LUIAgentServer.startFromEnvironment { [weak self] request in
+                guard let self else { return #"{"ok":false,"error":"Host stopped"}"# }
+                do { return try self.answerAgent(request) }
+                catch { return try! jsonString(["ok": false, "error": String(describing: error)]) }
+            }
+            if ProcessInfo.processInfo.environment["LUI_AGENT_BACKGROUND"] == "1" {
+                window?.orderFront(nil)
+            } else {
+                window?.makeKeyAndOrderFront(nil); NSApp.activate()
+            }
             NSLog("Logseq Apple ready: %@", backend?.debugModelCounts ?? "no retained root")
         } catch { fail(error) }
     }
@@ -81,6 +91,8 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         backend.onEvent = { [weak self] event in self?.services.perform { try self?.input?.backendEvent(event) } }
     }
     func afterFrame() throws {
+        let finish = hostTiming("afterFrame")
+        defer { finish() }
         guard !services.closed, !services.applyingPatches else { return }
         try services.editorGeometry.flush()
         services.scrolling.flush()
@@ -90,6 +102,8 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         try services.issuedReveals.poll()
     }
     func apply(_ json: String, snapshot: Bool) throws {
+        let finish = hostTiming("apply bytes=\(json.utf8.count)")
+        defer { finish() }
         if let path = ProcessInfo.processInfo.environment["LOGSEQ_APPLE_TRACE_PATCHES"] {
             if patchTrace == nil {
                 try Data().write(to: URL(fileURLWithPath: path), options: .atomic)
@@ -172,6 +186,7 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationWillTerminate(_ notification: Notification) {
+        agentServer?.stop()
         window?.delegate = nil
         backend?.onEvent = nil
         if let monitor { NSEvent.removeMonitor(monitor) }
@@ -266,6 +281,6 @@ func prepareEnvironment() throws {
 
 let application = NSApplication.shared
 let delegate = LogseqHost()
-application.setActivationPolicy(.regular)
+application.setActivationPolicy(ProcessInfo.processInfo.environment["LUI_AGENT_BACKGROUND"] == "1" ? .accessory : .regular)
 application.delegate = delegate
 application.run()
