@@ -1054,6 +1054,79 @@
     (is (nil? (ls-api-call! :editor.getBlock block-uuid)))
     (assert/assert-have-count (str "#ls-block-" block-uuid) 0)))
 
+(defn- press-keys-in-one-turn!
+  "Dispatch the keys in a single JS turn so they arrive while Enter's insert
+  is still pending in the db worker. Playwright's default slow-mo would
+  otherwise wait long enough for the insert to land between keys."
+  [keys]
+  (w/eval-js
+   "s => {
+      const keys = JSON.parse(s);
+      const keyCodeOf = (key) => {
+        if (key === 'Enter') return 13;
+        if (key === 'Backspace') return 8;
+        if (key === 'Tab') return 9;
+        if (key === 'Escape') return 27;
+        return key.toUpperCase().charCodeAt(0);
+      };
+      const codeOf = (key) => key.length === 1 ? ('Key' + key.toUpperCase()) : key;
+      const target = document.activeElement;
+      for (const key of keys) {
+        const keyCode = keyCodeOf(key);
+        const fire = (type) => {
+          const event = document.createEvent('Events');
+          event.initEvent(type, true, true);
+          event.key = key;
+          event.code = codeOf(key);
+          event.keyCode = keyCode;
+          event.which = keyCode;
+          target.dispatchEvent(event);
+        };
+        fire('keydown');
+        fire('keyup');
+      }
+    }"
+   (json/write-value-as-string keys)))
+
+(defn- page-block-titles
+  [page-name]
+  (mapv (fn [block]
+          (or (get block "content") (get block "title") ""))
+        (ls-api-call! :editor.getPageBlocksTree page-name)))
+
+(defn- fast-pending-insert-keys-leave-titles
+  [keys]
+  (assert/assert-editor-mode)
+  (let [page-name (p/get-page-name)]
+    (press-keys-in-one-turn! keys)
+    (util/wait-timeout 2500)
+    (util/exit-edit)
+    (page-block-titles page-name)))
+
+(deftest fast-enter-enter-backspace-keeps-the-new-empty-block-test
+  (testing "Enter, Enter, Backspace on an empty block while the insert is pending keeps two empty blocks"
+    (is (= ["" ""]
+           (fast-pending-insert-keys-leave-titles ["Enter" "Enter" "Backspace"])))))
+
+(deftest fast-enter-xy-backspace-keeps-typed-text-on-the-new-block-test
+  (testing "Enter, x, y, Backspace on an empty block while the insert is pending keeps the trimmed text on the new block"
+    (is (= ["" "x"]
+           (fast-pending-insert-keys-leave-titles ["Enter" "x" "y" "Backspace"])))))
+
+(deftest fast-enter-tab-backspace-keeps-the-indented-block-test
+  (testing "Enter, Tab, Backspace while insert and indent are pending keeps the new block nested"
+    (assert/assert-editor-mode)
+    (let [page-name (p/get-page-name)]
+      (press-keys-in-one-turn! ["Enter" "Tab" "Backspace"])
+      (util/wait-timeout 2500)
+      (util/exit-edit)
+      (let [tree (ls-api-call! :editor.getPageBlocksTree page-name)
+            child-titles (mapv (fn [block]
+                                 (or (get block "content") (get block "title") ""))
+                               (get (first tree) "children"))]
+        (is (= [""] (page-block-titles page-name)))
+        (is (= [""] child-titles))))))
+
 (deftest today-queries-render-without-resource-errors
   (let [page (ls-api-call! :editor.createJournalPage
                            (str (java.time.Instant/now)))]

@@ -317,7 +317,9 @@
 
 (defn- start-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+  (state/set-state! :editor/pending-new-block
+                    {:typed-text ""
+                     :source-uuid (:block/uuid (state/get-edit-block))}))
 
 (defn- pending-new-block
   []
@@ -339,15 +341,39 @@
     (state/update-state! :editor/pending-new-block
                          #(assoc % :tab-indent? indent?))))
 
+(defn- pending-new-block-delete-on-backspace?
+  "Backspace deletes the pending block only once the editor has moved off
+  the source block and the caret is at 0. Until then .-target is still the
+  source textarea (an empty source always reports caret 0), including
+  while a queued Tab indent is still in flight."
+  [pending current-edit-uuid e]
+  (boolean
+   (and (:source-uuid pending)
+        current-edit-uuid
+        (not= current-edit-uuid (:source-uuid pending))
+        (zero? (util/get-selection-start (.-target e))))))
+
+(defn- apply-pending-new-block-backspace
+  "Before landing, Backspace trims the last buffered character and is a no-op
+  when there is nothing to trim (it does not delete the in-flight block).
+  After landing, caret 0 still deletes the new block."
+  [pending delete-block?]
+  (cond
+    delete-block?
+    (assoc pending :delete? true)
+
+    (seq (:typed-text pending))
+    (assoc pending :typed-text (subs (:typed-text pending) 0 (dec (count (:typed-text pending)))))
+
+    :else
+    pending))
+
 (defn- backspace-pending-new-block!
   [delete-block?]
   (when (pending-new-block?)
     (state/update-state!
      :editor/pending-new-block
-     (fn [{:keys [typed-text] :as pending}]
-       (if (and (seq typed-text) (not delete-block?))
-         (assoc pending :typed-text (subs typed-text 0 (dec (count typed-text))))
-         (assoc pending :delete? true))))))
+     #(apply-pending-new-block-backspace % delete-block?))))
 
 (defn- clear-pending-new-block!
   []
@@ -3006,7 +3032,11 @@
       (pending-new-block?)
       (do
         (util/stop e)
-        (backspace-pending-new-block! (zero? (util/get-selection-start (.-target e)))))
+        (backspace-pending-new-block!
+         (pending-new-block-delete-on-backspace?
+          (pending-new-block)
+          (:block/uuid (state/get-edit-block))
+          e)))
 
       (= input element)
       (let [id (state/get-edit-input-id)
