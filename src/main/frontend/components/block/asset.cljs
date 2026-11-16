@@ -6,7 +6,8 @@
   without assuming that the URL itself contains a file extension."
   (:require [clojure.string :as string]
             [frontend.util :as util]
-            [logseq.common.config :as common-config]))
+            [logseq.common.config :as common-config]
+            [logseq.db.frontend.asset :as db-asset]))
 
 (defn- asset-type->keyword
   "Coerces `asset-type` from an asset entity into a lowercase keyword.
@@ -35,8 +36,11 @@
     ext (str "." (name ext))))
 
 (defn asset-file-name
+  "Asset file path relative to the graph's assets dir."
   [asset-block]
-  (str (:block/uuid asset-block) "." (:logseq.property.asset/type asset-block)))
+  (db-asset/asset-file-path (:block/uuid asset-block)
+                            (:logseq.property.asset/type asset-block)
+                            (:logseq.property.asset/plugin-id asset-block)))
 
 (defn asset-relative-path
   [asset-block]

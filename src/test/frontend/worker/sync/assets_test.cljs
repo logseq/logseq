@@ -10,6 +10,7 @@
             [frontend.worker.sync.client-op :as client-op]
             [frontend.worker.sync.presence :as sync-presence]
             [logseq.db :as ldb]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.schema :as db-schema]
             [promesa.core :as p]))
 
@@ -342,6 +343,61 @@
                                 (set @stat-calls)))
                          (is (= [[repo graph-id missing-uuid "png"]]
                                 @download-calls))))
+               (p/catch (fn [error]
+                          (is false (str "unexpected error: " error))))
+               (p/finally done)))))
+
+(deftest asset-file-path-uses-plugin-storage-test
+  (let [asset-uuid (random-uuid)]
+    (is (= (str asset-uuid ".png") (db-asset/asset-file-path asset-uuid "png" nil)))
+    (is (= (str "storages/my-plugin_1.x/" asset-uuid ".png")
+           (db-asset/asset-file-path asset-uuid "png" "my-plugin_1.x")))
+    (doseq [bad ["" "." ".." "../x" "a/b" "a\\b" ".hidden"]]
+      (is (thrown-with-msg? js/Error #"Invalid asset plugin-id"
+                            (db-asset/asset-file-path asset-uuid "png" bad))
+          bad))))
+
+(deftest download-missing-remote-assets-uses-plugin-storage-path-test
+  (async done
+         (let [repo "asset-plugin-repo"
+               graph-id "graph-1"
+               plugin-uuid (random-uuid)
+               bad-uuid (random-uuid)
+               conn (d/create-conn db-schema/schema)
+               stat-calls (atom [])
+               download-calls (atom [])]
+           (ldb/transact!
+            conn
+            [{:db/ident :logseq.class/Asset}
+             {:block/uuid plugin-uuid
+              :block/tags #{:logseq.class/Asset}
+              :logseq.property.asset/type "jpg"
+              :logseq.property.asset/checksum "plugin-checksum"
+              :logseq.property.asset/remote-metadata {:checksum "plugin-checksum" :type "jpg"}
+              :logseq.property.asset/plugin-id "my-plugin"}
+             {:block/uuid bad-uuid
+              :block/tags #{:logseq.class/Asset}
+              :logseq.property.asset/type "jpg"
+              :logseq.property.asset/checksum "bad-checksum"
+              :logseq.property.asset/remote-metadata {:checksum "bad-checksum" :type "jpg"}
+              :logseq.property.asset/plugin-id "../../escape"}])
+           (-> (p/with-redefs [worker-state/get-datascript-conn (fn [_repo] conn)
+                               platform/current (fn [] {})
+                               platform/asset-stat
+                               (fn [_platform repo' file-name]
+                                 (swap! stat-calls conj [repo' file-name])
+                                 (p/resolved nil))
+                               sync-assets/log-request-asset-download-failed! (fn [& _args] nil)
+                               sync-assets/download-remote-asset!
+                               (fn [& args]
+                                 (swap! download-calls conj args)
+                                 (p/resolved nil))]
+                 (sync-assets/download-missing-remote-assets! repo graph-id))
+               (p/then (fn [result]
+                         (is (= {:total 2 :downloaded 1 :skipped-existing 0 :failed 1} result)
+                             "plugin assets download into their storage dir; unsafe plugin ids fail")
+                         (is (= [[repo (str "storages/my-plugin/" plugin-uuid ".jpg")]] @stat-calls))
+                         (is (= [[repo graph-id plugin-uuid "jpg"]] @download-calls))))
                (p/catch (fn [error]
                           (is false (str "unexpected error: " error))))
                (p/finally done)))))

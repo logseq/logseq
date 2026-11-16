@@ -1488,6 +1488,7 @@
  :property.built-in/asset-external-url "External URL"
  :property.built-in/asset-height "Image height"
  :property.built-in/asset-last-visit-page "Last visit page"
+ :property.built-in/asset-plugin-id "Asset storage plugin"
  :property.built-in/asset-remote-metadata "File remote metadata"
  :property.built-in/asset-resize-metadata "Asset resize metadata"
  :property.built-in/asset-size "File Size"

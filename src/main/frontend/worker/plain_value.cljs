@@ -57,6 +57,9 @@
         (:logseq.property.asset/external-url entity)
         (assoc :logseq.property.asset/external-url
                (:logseq.property.asset/external-url entity))
+        (:logseq.property.asset/plugin-id entity)
+        (assoc :logseq.property.asset/plugin-id
+               (:logseq.property.asset/plugin-id entity))
         (:db/ident entity)
         (assoc :db/ident (:db/ident entity))
         (seq class-extends)

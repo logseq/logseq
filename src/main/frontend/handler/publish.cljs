@@ -13,6 +13,7 @@
             [frontend.util :as util]
             [logseq.common.path :as path]
             [logseq.db :as ldb]
+            [logseq.db.frontend.asset :as db-asset]
             [promesa.core :as p]))
 
 (defn <sha256-hex
@@ -253,7 +254,9 @@
     (if (or (not (string? asset-type)) (string/blank? asset-type) external-url (nil? asset-uuid))
       (p/resolved nil)
       (p/let [repo-dir (config/get-repo-dir repo)
-              asset-path (path/path-join "assets" (str asset-uuid "." asset-type))
+              asset-path (path/path-join "assets" (db-asset/asset-file-path
+                                                   asset-uuid asset-type
+                                                   (:logseq.property.asset/plugin-id asset)))
               content (fs/read-file-raw repo-dir asset-path {})
               content-type (asset-content-type asset-type)]
         (if (image-asset? asset-type)

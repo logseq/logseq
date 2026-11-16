@@ -6,6 +6,7 @@
             [datascript.impl.entity :as de]
             [logseq.db.common.entity-plus :as entity-plus]
             [logseq.db.common.order :as db-order]
+            [logseq.db.frontend.asset :as db-asset]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]
@@ -514,7 +515,8 @@
      [:logseq.property.asset/size :int]
      [:logseq.property.asset/width {:optional true} :int]
      [:logseq.property.asset/height {:optional true} :int]
-     [:logseq.property.asset/align {:optional true} :keyword]]
+     [:logseq.property.asset/align {:optional true} :keyword]
+     [:logseq.property.asset/plugin-id {:optional true} [:re db-asset/plugin-id-pattern]]]
     block-attrs
     page-or-block-attrs)))
 

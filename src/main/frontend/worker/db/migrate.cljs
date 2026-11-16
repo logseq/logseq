@@ -168,7 +168,8 @@
    ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]
    ["65.35" {:delete-properties [:block/scheduled :block/deadline :block/marker
                                  :block/priority :block/properties-text-values
-                                 :block/invalid-properties]}]])
+                                 :block/invalid-properties]}]
+   ["65.36" {:properties [:logseq.property.asset/plugin-id]}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

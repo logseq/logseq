@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [electron.ipc :as ipc]
             [frontend.commands :as commands]
+            [frontend.components.block.asset :as block-asset]
             [frontend.components.block.comments-model :as comments-model]
             [frontend.components.editor :as editor]
             [frontend.components.export :as export]
@@ -32,7 +33,6 @@
             [frontend.util.url :as url-util]
             [goog.dom :as gdom]
             [goog.object :as gobj]
-            [logseq.common.config :as common-config]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
@@ -313,23 +313,13 @@
             {:key "Show asset in folder"
              :on-click (fn [_e]
                          (let [assets-dir (config/get-current-repo-assets-root)
-                               repo-dir (config/get-repo-dir (state/get-current-repo))
-                               ext (:logseq.property.asset/type block)
                                ext-url (:logseq.property.asset/external-url block)
-                               file-path (cond
-                                           ;; Plugin-sourced asset stored under assets/storages/<plugin-id>/...
-                                           (and (not (string/blank? ext-url))
-                                                (common-config/local-relative-asset? ext-url))
-                                           (path/path-join repo-dir (string/replace ext-url #"^[./]+" ""))
-
+                               file-path (if (and (not (string/blank? ext-url))
+                                                  (path/absolute? ext-url))
                                            ;; External file outside the graph:
                                            ;; absolute path or file:///assets:// URL
-                                           (and (not (string/blank? ext-url))
-                                                (path/absolute? ext-url))
                                            (path/file-url-or-path->path ext-url)
-
-                                           :else
-                                           (path/path-join assets-dir (str (:block/uuid block) (when ext (str "." (name ext))))))]
+                                           (path/path-join assets-dir (block-asset/asset-file-name block)))]
                            (-> (fs/file-exists? file-path)
                                (p/then (fn [exists?]
                                          (if exists?

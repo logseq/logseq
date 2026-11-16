@@ -14,6 +14,7 @@
    [logseq.common.config :as common-config]
    [logseq.common.util :as common-util]
    [logseq.db :as ldb]
+   [logseq.db.frontend.asset :as db-asset]
    [promesa.core :as p]))
 
 (def max-asset-size (* 100 1024 1024))
@@ -33,8 +34,22 @@
     (p/resolved nil)))
 
 (defn- asset-file-name
-  [asset-uuid asset-type]
-  (str asset-uuid "." asset-type))
+  [repo asset-id asset-type]
+  (db-asset/asset-file-path
+   asset-id asset-type
+   (some-> (worker-state/get-datascript-conn repo)
+           deref
+           (d/entity [:block/uuid (uuid (str asset-id))])
+           :logseq.property.asset/plugin-id)))
+
+(defn- <asset-file-name
+  "Rejects instead of throwing: a throw inside a promesa callback rejects every
+  other callback queued on the same promise in that tick."
+  [repo asset-id asset-type]
+  (try
+    (p/resolved (asset-file-name repo asset-id asset-type))
+    (catch :default e
+      (p/rejected e))))
 
 (defn- ->uint8
   [payload]
@@ -83,10 +98,10 @@
                :total total}}))
 
 (defn- missing-asset-upload-file
-  [asset-id asset-type]
+  [repo asset-id asset-type]
   {:asset-id asset-id
    :asset-type asset-type
-   :file (str common-config/local-assets-dir "/" (asset-file-name asset-id asset-type))})
+   :file (str common-config/local-assets-dir "/" (asset-file-name repo asset-id asset-type))})
 
 (defn- mark-missing-asset-upload-file!
   [repo asset-id asset-type]
@@ -95,7 +110,7 @@
          (fn [files]
            (assoc (or files {})
                   asset-id
-                  (missing-asset-upload-file asset-id asset-type))))
+                  (missing-asset-upload-file repo asset-id asset-type))))
   nil)
 
 (defn- clear-missing-asset-upload-file!
@@ -129,16 +144,13 @@
 
 (defn- <read-asset-bytes
   [repo asset-id asset-type]
-  (platform/asset-read-bytes! (platform/current)
-                              repo
-                              (asset-file-name asset-id asset-type)))
+  (p/let [file-name (<asset-file-name repo asset-id asset-type)]
+    (platform/asset-read-bytes! (platform/current) repo file-name)))
 
 (defn- <write-asset-bytes!
   [repo asset-id asset-type payload]
-  (p/let [_ (platform/asset-write-bytes! (platform/current)
-                                         repo
-                                         (asset-file-name asset-id asset-type)
-                                         payload)]
+  (p/let [file-name (<asset-file-name repo asset-id asset-type)
+          _ (platform/asset-write-bytes! (platform/current) repo file-name payload)]
     (mark-asset-write-finish! repo asset-id)
     nil))
 
@@ -424,9 +436,8 @@
                   should-download? (and (seq asset-type)
                                         (:logseq.property.asset/remote-metadata ent))]
               (-> (p/let [meta (when should-download?
-                                 (platform/asset-stat (platform/current)
-                                                      repo
-                                                      (asset-file-name asset-id asset-type)))
+                                 (p/let [file-name (<asset-file-name repo asset-id asset-type)]
+                                   (platform/asset-stat (platform/current) repo file-name)))
                           missing-local? (and should-download? (nil? meta))
                           _ (when missing-local?
                               (download-remote-asset! repo graph-id asset-uuid asset-type))
@@ -482,9 +493,8 @@
         worker (fn worker []
                  (if-let [{:keys [asset-uuid asset-type]} (pop-queue!)]
                    (let [asset-id (str asset-uuid)]
-                     (-> (p/let [meta (platform/asset-stat current-platform
-                                                           repo
-                                                           (asset-file-name asset-id asset-type))
+                     (-> (p/let [file-name (<asset-file-name repo asset-id asset-type)
+                                 meta (platform/asset-stat current-platform repo file-name)
                                  _ (if meta
                                      (do
                                        (swap! result update :skipped-existing inc)
