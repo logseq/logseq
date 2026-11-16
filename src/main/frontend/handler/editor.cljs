@@ -1031,6 +1031,34 @@
       :else
       (delete-block-aux! block edit-block-f))))
 
+(defonce ^:private *pending-editor-move
+  ;; The running ArrowUp/ArrowDown move into another block (move-cross-boundary-up-down),
+  ;; until the editor is on that block. It first saves the block it leaves and loads the
+  ;; one it enters, two worker round trips (a second or more on a busy worker); until
+  ;; then the editor is still on the block it leaves.
+  (atom nil))
+
+(defn- track-editor-move!
+  "Registers the move that `p` finishes as running; returns `p`."
+  [p]
+  (let [;; settles when the move is done or failed, never rejects
+        settled (-> (p/resolved p) (p/catch (constantly nil)))]
+    (reset! *pending-editor-move settled)
+    (p/then settled (fn [_]
+                      (when (identical? @*pending-editor-move settled)
+                        (reset! *pending-editor-move nil))))
+    p))
+
+(defn- after-pending-editor-move
+  "Runs `f` once the running ArrowUp/ArrowDown move, if any, has put the editor on
+  the block it moves to: a Delete or Backspace pressed right after ArrowUp joins the
+  block the user moved to, not the one being left (Delete at the end of the last
+  block did nothing, and the move then landed)."
+  [f]
+  (if-let [pending @*pending-editor-move]
+    (p/then pending (fn [_] (f)))
+    (f)))
+
 (defonce ^:private *pending-block-delete
   ;; The running delete-block-inner! (Backspace at the start of a block,
   ;; Delete at its end), until it has moved the editor to the joined block.
@@ -2853,6 +2881,19 @@
           (edit-block! block 0 {:container-id container-id
                                 :direction direction}))))))
 
+(defn- stay-at-block-edge!
+  "ArrowUp/Down with no block to move to: the cursor goes to the start or end of
+  the block, or the block is selected when nothing is edited."
+  [direction input current-block]
+  (case direction
+    :up (if input
+          (cursor/move-cursor-to input 0)
+          (when current-block
+            (util/scroll-to-block current-block)
+            (state/exit-editing-and-set-selected-blocks! [current-block])))
+    :down (when input
+            (cursor/move-cursor-to-end input))))
+
 (defn move-cross-boundary-up-down
   [direction move-opts]
   (let [input (if (contains? move-opts :input)
@@ -2884,7 +2925,8 @@
                                            (nil? (property-value-inner-block property-value-container)))]
         (if sibling-block
           (let [value (state/get-edit-content)]
-            (p/do!
+            (track-editor-move!
+             (p/do!
              (when (and
                     uuid
                     (not (state/block-component-editing?))
@@ -2944,15 +2986,8 @@
                        (if (entity/journal? page)
                          (state/exit-editing-and-set-selected-blocks! [sibling-block])
                          (edit!)))
-                     (edit!)))))))
-          (case direction
-            :up (if input
-                  (cursor/move-cursor-to input 0)
-                  (when current-block
-                    (util/scroll-to-block current-block)
-                    (state/exit-editing-and-set-selected-blocks! [current-block])))
-            :down (when input
-                    (cursor/move-cursor-to-end input))))))))
+                     (edit!))))))))
+          (stay-at-block-edge! direction input current-block))))))
 
 (defn keydown-up-down-handler
   [direction {:keys [_pos] :as move-opts}]
@@ -3731,12 +3766,16 @@
   [e]
   (when (and (state/editing?) (state/get-input))
     (util/stop e)
-    (keydown-delete-handler e)))
+    (after-pending-editor-move #(keydown-delete-handler e))))
 
 (defn editor-backspace
   [e]
   (when (state/editing?)
-    (keydown-backspace-handler false e)))
+    (if @*pending-editor-move
+      (do (util/stop e)
+          ;; the native Backspace is stopped: its handler deletes on its own
+          (after-pending-editor-move #(when (state/editing?) (keydown-backspace-handler false e))))
+      (keydown-backspace-handler false e))))
 
 (defn- in-page-preview?
   []

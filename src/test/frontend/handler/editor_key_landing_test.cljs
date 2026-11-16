@@ -143,3 +143,56 @@
                (is (= 4 (:db/id (:current-block @joined)))))))
           (p/catch (fn [error] (is false (str error))))
           (p/finally done)))))
+
+(defn- <keys-during-a-pending-move
+  "Presses `press!` (Delete or Backspace) while an ArrowUp move is still saving and
+  loading; returns the calls of the key's handler before and after the move lands."
+  [press!]
+  (let [move (p/deferred)
+        calls (atom [])
+        [event _] (key-event "Delete")
+        originals [state/editing? state/get-input editor/keydown-delete-handler editor/keydown-backspace-handler]
+        restore! (fn []
+                   (let [[editing? get-input delete-handler backspace-handler] originals]
+                     (set! state/editing? editing?)
+                     (set! state/get-input get-input)
+                     (set! editor/keydown-delete-handler delete-handler)
+                     (set! editor/keydown-backspace-handler backspace-handler)))]
+    ;; set! rather than with-redefs: the key's handler runs after the move lands
+    (set! state/editing? (constantly true))
+    (set! state/get-input (constantly #js {:value "b2"}))
+    (set! editor/keydown-delete-handler (fn [_e] (swap! calls conj :delete)))
+    (set! editor/keydown-backspace-handler (fn [_cut? _e] (swap! calls conj :backspace)))
+    (#'editor/track-editor-move! move)
+    (let [pressed (press! event)
+          before @calls]
+      (p/resolve! move nil)
+      (-> (p/then pressed (fn [_] [before @calls]))
+          (p/finally restore!)))))
+
+(deftest delete-pressed-during-an-arrow-move-joins-the-block-moved-to-test
+  (async done
+    (-> (<keys-during-a-pending-move editor/editor-delete)
+        (p/then (fn [[before after]]
+                  (is (= [] before) "the Delete waits while the editor is still on the block it leaves")
+                  (is (= [:delete] after) "and acts once the editor is on the block moved to")))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
+
+(deftest backspace-pressed-during-an-arrow-move-waits-for-it-test
+  (async done
+    (-> (<keys-during-a-pending-move editor/editor-backspace)
+        (p/then (fn [[before after]]
+                  (is (= [] before))
+                  (is (= [:backspace] after))))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
+
+(deftest delete-without-a-pending-move-acts-at-once-test
+  (let [calls (atom [])
+        [event _] (key-event "Delete")]
+    (with-redefs [state/editing? (constantly true)
+                  state/get-input (constantly #js {:value "b2"})
+                  editor/keydown-delete-handler (fn [_e] (swap! calls conj :delete))]
+      (editor/editor-delete event)
+      (is (= [:delete] @calls)))))
