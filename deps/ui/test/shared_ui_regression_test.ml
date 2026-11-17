@@ -596,10 +596,13 @@ let configured_popup_ownership () =
 
 let page_disclosure ~registry ~profile =
   let previous_flush = !Runtime.app_flush in
+  let previous_hidden = !Properties_state.show_hidden in
   let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
   Fun.protect ~finally:(fun () ->
     Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+    Properties_state.show_hidden := previous_hidden;
     Runtime.app_flush := previous_flush) (fun () ->
+    Properties_state.show_hidden := false;
     List.iter (fun is_tag ->
       Editor_state.st := None; Editor_state.field_sigs_opt := None;
       let uuid = if is_tag then "disclosure-tag" else "disclosure-journal" in
@@ -619,6 +622,16 @@ let page_disclosure ~registry ~profile =
       check "Page disclosure is hidden before title hover" (not (visible ()));
       S.dispatch session (P.PointerEnter (title_row ()).M.id);
       check "Only collapsable page titles reveal their disclosure" (visible ()=is_tag);
+      if not is_tag then begin
+        let area = Hashtbl.find Properties_state.areas (Properties_area.page_key uuid) in
+        Runtime.signal_set area.Properties_state.a_state
+          {Properties_state.empty_area_data with hidden=[Wire.Nil]};
+        S.flush session;
+        check "Live property data reveals disclosure without a DOM attribute read" (visible ());
+        Runtime.signal_set area.Properties_state.a_state Properties_state.empty_area_data;
+        S.flush session;
+        check "Removing the last property hides disclosure while still hovered" (not (visible ()))
+      end;
       if is_tag then begin
         let press () =
           S.press session (control ()).M.id;
@@ -1552,6 +1565,77 @@ let run_views ~registry ~profile ~finish =
             next rest;Js.Promise.resolve ()) (Js.Promise.resolve ()))
     in next [false,false,false;true,false,false;false,true,false;true,true,false;true,false,true]
   in
+  let batch_property_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_dialog = !Properties_dialog.current
+    and previous_signal = !Properties_dialog.current_sig
+    and previous_scope = !Properties_dialog.open_scope
+    and previous_close = !Properties_dialog.current_on_close in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "batch-property-fixture"});
+    Properties_dialog.current := None;
+    Properties_dialog.current_sig := None;
+    Properties_dialog.open_scope := None;
+    let operations = ref [] and dismissed = ref 0 in
+    ignore (Fake_worker.install (fun name args ->
+      if name="thread-api/apply-outliner-ops" then (
+        operations := Wire.elems (List.nth args 1) @ !operations;
+        Wire.Map [Wire.kw "result",Wire.Nil])
+      else Wire.Nil));
+    let target : Properties_dialog.target =
+      {uuid="batch-first";uuids=["batch-first";"batch-second"];
+       db_id=None;is_tag=false;title=""} in
+    let prop = Wire.Map [Wire.kw "db/ident",Wire.kw "fixture/batch-flag";
+      Wire.kw "block/title",Wire.String "Flag";
+      Wire.kw "logseq.property/type",Wire.kw "checkbox"] in
+    let picker = mount (fun _ -> Properties_dialog.view) in
+    let rec next = function
+      | [] ->
+          ignore (Lui_app.dispose picker.S.app);
+          Properties_dialog.current := previous_dialog;
+          Properties_dialog.current_sig := previous_signal;
+          Properties_dialog.open_scope := previous_scope;
+          Properties_dialog.current_on_close := previous_close;
+          Runtime.worker := previous_worker;
+          Runtime.read_model := previous_model;
+          done_ ()
+      | value :: rest ->
+          operations := [];
+          Properties_dialog.open_at ~on_close:(fun () -> incr dismissed)
+            ~remove:false ~phase:Properties_dialog.Prop_select
+            (Properties_dialog.Anchor_rect (120.,80.,104.,32.)) target;
+          Properties_dialog.property_chosen (Option.get !Properties_dialog.current) prop;
+          S.flush picker;
+          check "Choosing a batch checkbox property does not write a default"
+            (!operations=[] && match !Properties_dialog.current with
+             | Some {d_phase=Properties_dialog.Value_edit _;_} -> true | _ -> false);
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            S.flush picker;
+            let popup=List.find (fun n -> n.M.kind="popover") (nodes picker) in
+            check "Batch property pickers keep the toolbar trigger rectangle"
+              (M.string_prop popup "anchor-rect"=Some "120. 80. 104. 32."
+               && M.string_prop popup "anchor"=Some "below"
+               && M.string_prop popup "anchor-alignment"=Some "start");
+            check "Batch property pickers have one compact surface without a modal card"
+              (not (List.exists (fun n -> n.M.kind="dialog" || n.M.kind="card") (nodes picker))
+               && List.exists (fun n -> n.M.kind="text-field"
+                    && Hashtbl.find_opt n.M.props "height"=Some (P.IntValue 32)) (nodes picker));
+            let choices=List.filter (fun n -> n.M.kind="list-item") (nodes picker) in
+            check "Batch checkbox properties offer both explicit boolean values" (List.length choices=2);
+            let label=I18n.t (if value then "ui/true" else "ui/false") in
+            let choice=List.find (fun n -> M.string_prop n "key"=Some label) choices in
+            S.press picker choice.M.id;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check "A batch boolean choice writes exactly once to the complete selection"
+                (match !operations with
+                 | [Wire.Array [Wire.Keyword "batch-set-property";
+                     Wire.Array [Wire.List [Wire.Uuid "batch-first";Wire.Uuid "batch-second"];
+                       Wire.Keyword "fixture/batch-flag";Wire.Bool actual;_]]] -> actual=value
+                 | _ -> false);
+              check "A scalar batch choice closes its picker and restores the action bar once"
+                (not (Properties_dialog.is_open ()) && !dismissed=(if value then 1 else 2));
+              next rest) 0)) 0)
+    in next [true;false]
+  in
   let property_picker_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     let previous_dialog = !Properties_dialog.current in
@@ -1963,8 +2047,8 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    property_picker_check (fun () -> property_text_many_check
-      (fun () -> property_value_completion_check (fun () -> next [false,false;false,true;true,false;true,true])))
+    batch_property_check (fun () -> property_picker_check (fun () -> property_text_many_check
+      (fun () -> property_value_completion_check (fun () -> next [false,false;false,true;true,false;true,true]))))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in

@@ -12,6 +12,7 @@ external titlebar_press : int -> float -> float -> bool * bool
   = "logseq_native_test_titlebar_press"
 external control_gesture : int -> float -> float -> bool * bool
   = "logseq_native_test_control_gesture"
+external titlebar_click : int -> bool * bool * bool = "logseq_native_test_titlebar_click"
 
 let menu_runtime_regression () =
   if Host_platform.is_macos then begin
@@ -669,7 +670,11 @@ let () =
     check "AppKit must not move the window during a control press" locked;
     check "Mouse release must restore the window's original movability" restored;
     Native_window.set_drag_regions id regions;
-    print_endline "native titlebar press ownership and gesture lock: OK"
+    let pressed, small_motion, cancelled = titlebar_click id in
+    check "A stationary titlebar press must not move the window" pressed;
+    check "Pointer jitter must not start a titlebar drag" small_motion;
+    check "Titlebar release must cancel its pending drag and retain the movement threshold" cancelled;
+    print_endline "native titlebar click threshold, ownership and gesture lock: OK"
   end;
   check "An invisible window is eligible for rendering"
     (not (Native_window.presentable (Lui_sdl3.get_window_id window)));

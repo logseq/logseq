@@ -139,9 +139,10 @@ selected. Core Animation presentation timing is not yet measured; its displayed
 FPS is not an acceptance result. The dialog button opens a live metrics split.
 Scrollbars start hidden, appear during scrolling, and hide after 800 ms without movement.
 
-On macOS, window dragging is selected from the titlebar region at mouse-down;
-header controls retain ordinary button input even after hovering a drag region.
-Window movement stays locked for a control's press/release gesture. Hover paint
+On macOS, automatic titlebar dragging is disabled before mouse input arrives.
+A press in a draggable header region starts a native window drag only after
+four points of pointer movement; controls retain ordinary button input.
+Stationary presses and pointer jitter leave the window in place. Hover paint
 includes the owning control's descendants, so icons and labels do not interrupt
 the button, navigation-item or bullet background.
 Sidebar dropdowns use retained trigger anchors, viewport collision handling and
@@ -150,6 +151,12 @@ the owning trigger again closes its menu. Open menus, popups and dialogs suppres
 chrome tooltips, including delayed tooltip callbacks. Page-title disclosure is
 hover-only for collapsable titles; arrow direction and page properties update
 together when the title is expanded or collapsed.
+Selection-toolbar property and tag pickers await the trigger's measured rectangle
+before replacing the toolbar with a compact anchored popup. Batch checkbox
+properties offer explicit True/False choices without writing an initial value.
+Long form labels wrap within their measured width on the native text path.
+Completely transparent popup frames emit no chrome or backdrop paint, preventing
+the blank-shell flash at the start of dialog entrance animations.
 
 Software frame pacing uses interruptible SDL waits. Mailbox and input events
 can wake the loop before the next display deadline; those wakeups retain the

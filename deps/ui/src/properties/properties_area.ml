@@ -758,6 +758,11 @@ let page_fetch ~uuid ~is_tag ~db_id (publish : S.area_data -> unit) :
                            ; bidi };
   Js.Promise.resolve ()
 
+let page_state context (page : Model.page) =
+  let uuid = Option.get page.page_uuid in
+  S.area_state context ~key:(page_key uuid)
+    ~fetch:(page_fetch ~uuid ~is_tag:page.page_is_tag ~db_id:page.page_db_id)
+
 let page_ctx ~scope (p : Model.page) key uuid : V.ctx =
   { owner_key = key
   ; jump_owner = Jump_state.owner ~scope ~container:uuid
@@ -779,11 +784,7 @@ let page_area ~scope (p : Model.page) : t =
   else
     let () = Editor_state.ensure context in
     let key = page_key uuid in
-    let st =
-      S.area_state context ~key
-        ~fetch:(page_fetch ~uuid ~is_tag:p.Model.page_is_tag
-                  ~db_id:p.Model.page_db_id)
-    in
+    let st = page_state context p in
     (* cljs db-properties-cp is a child of the title .ls-block only
        while the title isn't collapsed *)
     let node =

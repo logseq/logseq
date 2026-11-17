@@ -5058,6 +5058,33 @@ let () =
   print_endline "native styled line height: OK"
 
 let () =
+  List.iter (fun scale ->
+    let store = Lui_store.create () in
+    let scene = Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:128 ~h:128)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:128 ~h:128) in
+    let engine = Text_engine.create ~scene:(fun () -> scene)
+      ~scale:(fun () -> scale) ~store:(fun () -> store) in
+    let caption = "Expand block references automatically when zoom-in" in
+    List.iter (Lui_store.apply_op store)
+      [CreateNode (830001,Label);CreateNode (830002,Button);
+       SetProp (830001,FontSize,StringValue "14px");
+       SetProp (830001,LineHeight,StringValue "20px");
+       SetProp (830002,FontSize,StringValue "14px")];
+    let rect = Lui_scene.rect 0. 0. (160.*.scale) (100.*.scale) in
+    let label,_,_ = Text_engine.text_layout engine 830001 rect caption in
+    check "Settings labels must wrap at their offered grid-column width"
+      (abs_float (label.lay_wrap-.(160.*.scale+.1.)/.scale)<0.01
+       && label.lay_height>20. && Array.length label.lay_lines>1);
+    let _,measured_height = Text_engine.measure_text ~width:(161.*.scale) engine 830001 caption in
+    check "Settings label paint and measured line heights must agree"
+      (abs_float (measured_height-.label.lay_height*.scale)<0.01);
+    let button,_,_ = Text_engine.text_layout engine 830002 rect caption in
+    check "Ordinary control captions retain single-line layout"
+      (button.lay_width>160.)) [1.;2.];
+  print_endline "native settings label wrapping: OK"
+
+let () =
   let first = Filename.temp_file "native-image-" ".png"
   and second = Filename.temp_file "native-image-" ".png" in
   let pressure =

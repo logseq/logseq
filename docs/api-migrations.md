@@ -1,5 +1,34 @@
 # Plugin API Migrations
 
+## Experimental native interaction corrections
+
+The experimental macOS host disables automatic titlebar movement before input
+delivery. A stationary header press leaves the window in place; dragging a blank
+header region starts native window dragging after four points of movement.
+Controls keep their normal press behavior. No application migration is required.
+
+Selection-toolbar Set tags, Set property and Unset property now use compact
+popups below their measured trigger rectangles instead of centered dialogs.
+Measurements complete before the toolbar unmounts, and stale measurements cannot
+open a picker after the selection changes. Batch checkbox property selection now
+opens explicit True/False choices instead of immediately assigning `false`.
+
+Internal property callers may pass a measured placement when opening a known
+property; omitted placement preserves the centered command fallback:
+
+```ocaml
+Properties_dialog.open_for_block_with_property ~scope
+  ~placement:(Properties_dialog.Anchor_rect (x, y, width, height))
+  ~uuids first_uuid ~ident:"block/tags"
+```
+
+Page-title disclosure eligibility reacts to loaded property data as well as page
+metadata. Tooltip layer guards use the runtime generation counter without local
+shadowing. Native form labels now use the same wrapping width for measurement and
+painting; buttons retain single-line captions.
+The pinned native renderer also skips completely transparent popup frames, so
+opening cmdk or Settings no longer paints an opaque blank shell before fading in.
+
 ## QuickJS property patches and plain-block creation
 
 The DOM-free `Editor` adds `setBlockProperties`, `patchBlockProperties`,
