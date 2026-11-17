@@ -1,0 +1,87 @@
+# Logseq MCP server for CasaOS.
+#
+# Paste this into CasaOS -> App Store -> Custom Install -> Import (Docker
+# Compose). Before clicking Install, fill in LOGSEQ_USERNAME, LOGSEQ_PASSWORD
+# and LOGSEQ_E2EE_PASSWORD in the environment section of the install dialog.
+#
+# The MCP endpoint is http://<casaos-host>:8080/mcp (put nginx / Tailscale in
+# front of it as usual).
+name: logseq-mcp
+
+services:
+  logseq-mcp:
+    image: ghcr.io/ssamdav/logseq-selfhost-mcp:latest
+    container_name: logseq-mcp
+    restart: unless-stopped
+    # Give the db-worker-node processes time to close their SQLite files.
+    stop_grace_period: 30s
+    ports:
+      - target: 8080
+        published: "8080"
+        protocol: tcp
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Self-hosted Logseq Sync server, reached through the port it publishes on
+      # the CasaOS host. Change 8787 if your sync app publishes another port.
+      LOGSEQ_SYNC_URL: http://host.docker.internal:8787
+      LOGSEQ_USERNAME: you@example.com
+      LOGSEQ_PASSWORD: change-me
+      LOGSEQ_E2EE_PASSWORD: change-me
+      LOGSEQ_GRAPHS: ""
+      MCP_TOKEN: ""
+      WORKER_LOG_LEVEL: warn
+    volumes:
+      - type: bind
+        source: /DATA/AppData/logseq-mcp
+        target: /data
+    x-casaos:
+      envs:
+        - container: LOGSEQ_SYNC_URL
+          description:
+            en_us: Self-hosted Logseq Sync server URL (default reaches host port 8787)
+        - container: LOGSEQ_USERNAME
+          description:
+            en_us: Logseq account email
+        - container: LOGSEQ_PASSWORD
+          description:
+            en_us: Logseq account password
+        - container: LOGSEQ_E2EE_PASSWORD
+          description:
+            en_us: Encryption password (Logseq app -> Settings -> Encryption)
+        - container: LOGSEQ_GRAPHS
+          description:
+            en_us: Optional comma-separated graphs to open on startup
+        - container: MCP_TOKEN
+          description:
+            en_us: Optional bearer token for /mcp (leave empty on Tailscale)
+        - container: WORKER_LOG_LEVEL
+          description:
+            en_us: Sync worker logs shown in the app logs (off, warn, all)
+      ports:
+        - container: "8080"
+          description:
+            en_us: MCP endpoint (/mcp) and health check (/health)
+      volumes:
+        - container: /data
+          description:
+            en_us: Downloaded graphs, login state and MCP state
+
+x-casaos:
+  architectures:
+    - amd64
+    - arm64
+  main: logseq-mcp
+  author: SSamDav
+  developer: SSamDav
+  category: Productivity
+  icon: https://raw.githubusercontent.com/logseq/logseq/master/resources/icon.png
+  tagline:
+    en_us: MCP server for your self-hosted, synced Logseq graphs
+  description:
+    en_us: Headless Logseq CLI synced with the self-hosted Logseq Sync server, exposed as an MCP server.
+  title:
+    en_us: Logseq MCP
+  scheme: http
+  port_map: "8080"
+  index: /health
