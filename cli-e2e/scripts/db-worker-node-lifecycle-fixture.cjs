@@ -93,9 +93,13 @@ const mode = args[args.indexOf('--mode') + 1];
       return;
     }
     if (request.url === '/healthz') {
-      response.end(JSON.stringify({ ...identity, 'root-dir': runtime.root, host: '127.0.0.1',
+      const send = () => response.end(JSON.stringify({ ...identity, 'root-dir': runtime.root, host: '127.0.0.1',
         port: server.address().port, status: 'ready',
         ...(option('--health-field') ? { [option('--health-field')]: JSON.parse(option('--health-value')) } : {}) }));
+      if (mode === 'slow-health' && fs.existsSync(path.join(root, 'delay-health'))) {
+        fs.writeFileSync(path.join(root, 'health-requested'), 'yes');
+        setTimeout(send, 1500);
+      } else send();
     } else if (request.url === '/v1/shutdown') {
       response.end('{}');
       if (mode === 'stubborn') {

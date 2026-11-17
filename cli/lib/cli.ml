@@ -288,6 +288,13 @@ let parse_args : type marker.
  fun app state ->
   match state with
   | Raw_argv_state input -> (
+      let options, positional = parse_tokens input.argv in
+      let mode = output_mode_of_options options in
+      match Cli_parse.validate_graph_option options with
+      | Error err ->
+          set_pending_error_output mode err;
+          Error err
+      | Ok () -> (
       let input =
         match input.stdin with
         | Some _ -> input
@@ -295,8 +302,6 @@ let parse_args : type marker.
             { input with stdin = Some (read_stdin_all ()) }
         | None -> input
       in
-      let options, positional = parse_tokens input.argv in
-      let mode = output_mode_of_options options in
       let help =
         if option_present "version" options then None
         else help_group app.registry options positional
@@ -311,7 +316,7 @@ let parse_args : type marker.
           | Ok request -> Ok (Parsed_argv_state (input, request))
           | Error err ->
               set_pending_error_output mode err;
-              Error err))
+              Error err)))
   | _ -> .
 
 let resolve_request_config app request input =

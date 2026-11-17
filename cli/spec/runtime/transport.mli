@@ -165,6 +165,13 @@ val thread_api_q :
   query:Melange_edn_melange.vector Melange_edn_melange.t ->
   Melange_edn_melange.any Cli_effect.t
 
+val thread_api_query_custom :
+  invoke_config ->
+  repo:Cli_primitive.repo ->
+  query:Melange_edn_melange.map Melange_edn_melange.t ->
+  context:Melange_edn_melange.map Melange_edn_melange.t ->
+  Melange_edn_melange.any Cli_effect.t
+
 val thread_api_set_db_sync_config :
   invoke_config ->
   config:Melange_edn_melange.map Melange_edn_melange.t ->

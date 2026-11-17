@@ -146,17 +146,6 @@ let edn_option_get fields name =
       if Edn_util.as_keyword key = Some name then Some value else None)
     fields
 
-(* thread-api/import-* return {:error msg} inside an otherwise-ok
-   response when the input fails endpoint-side validation — surface it
-   as a real CLI error instead of reporting success on a no-op import. *)
-let import_response_error value =
-  match Edn_util.as_map value with
-  | Some fields -> (
-      match edn_option_get fields "error" with
-      | Some v -> Edn_util.as_string v
-      | None -> None)
-  | None -> None
-
 let edn_option_path = function
   | [ key ] -> key
   | path -> "[" ^ String.concat " " path ^ "]"
@@ -1128,6 +1117,22 @@ let execute_graph_export mode _graph repo opts config =
                  ~path:output_path) (fun _ ->
                 pure (graph_export_message mode config output_path))))
 
+let graph_import_rejection result =
+  let error =
+    match Edn_util.tagged_error_value result with
+    | Some _ as error -> error
+    | None -> Edn_util.get result "error"
+  in
+  match error with
+  | Some error when not (Edn_util.is_null error) ->
+      let message =
+        Edn_util.worker_error_message
+          ~default_message:(Melange_edn_melange.to_edn_string error)
+          error
+      in
+      Some (Error.make Error.Graph_validation_failed message)
+  | _ -> None
+
 let execute_graph_import mode graph repo opts config =
   let open Cli_effect in
   let new_graph = not (graph_exists config graph) in
@@ -1165,16 +1170,13 @@ let execute_graph_import mode graph repo opts config =
                               Transport.thread_api_import_db_binary
                                 invoke_config ~repo ~data:input_data)
                           (fun result ->
-                            match import_response_error result with
-                            | Some msg ->
+                            match graph_import_rejection result with
+                            | Some err ->
                                 pure
                                   (Cli_result.error
-                                     ~command:Command_id.Graph_import mode
-                                     (Error.make Error.Graph_validation_failed
-                                        msg))
-                            | None -> (
-                                bind
-                                  (Server_runtime.restart_server config repo)
+                                     ~command:Command_id.Graph_import mode err)
+                            | None ->
+                                bind (Server_runtime.restart_server config repo)
                                   (function
                                   | Error err ->
                                       pure
@@ -1184,7 +1186,7 @@ let execute_graph_import mode graph repo opts config =
                                   | Ok _ ->
                                       pure
                                         (graph_import_message mode config graph
-                                           opts new_graph))))))
+                                           opts new_graph)))))
           in
           bind (Server_runtime.stop_server config repo) (function
             | Error err when err.Error.code = Error.Server_not_found ->

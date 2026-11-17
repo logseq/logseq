@@ -323,11 +323,17 @@
              result))))
       (:filters filters)))))
 
+(defn- positive-eid?
+  "Datascript entid only accepts positive integers. 0 and negatives throw
+  'Expected number or lookup ref for entity id'."
+  [eid]
+  (and (integer? eid) (pos? eid)))
+
 (defn- ->filter-match-id
   [db v]
   (cond
     (nil? v) nil
-    (number? v) v
+    (positive-eid? v) v
     (uuid? v) (some-> (d/entity db [:block/uuid v]) :db/id)
     (de/entity? v) (:db/id v)
     (and (map? v) (contains? v :db/id)) (:db/id v)
@@ -427,12 +433,15 @@
 
 (defn- indexed-attr-value
   [db eid attr]
-  (when-let [datom (first (d/datoms db :eavt eid attr))]
-    (:v datom)))
+  (when (positive-eid? eid)
+    (when-let [datom (first (d/datoms db :eavt eid attr))]
+      (:v datom))))
 
 (defn- indexed-attr-values
   [db eid attr]
-  (mapv :v (d/datoms db :eavt eid attr)))
+  (if (positive-eid? eid)
+    (mapv :v (d/datoms db :eavt eid attr))
+    []))
 
 (defn- attr-keyword
   [db eid attr]
@@ -503,7 +512,7 @@
     (nil? v) nil
     (uuid? v) (uuid->eid db v)
     (keyword? v) (ident-eid db v)
-    (number? v) v
+    (positive-eid? v) v
     (de/entity? v) (:db/id v)
     (and (map? v) (contains? v :db/id)) (:db/id v)
     :else nil))
@@ -517,7 +526,7 @@
     (keyword? v)
     (some-> (ident-eid db v) (->> (ref-value-content db)))
 
-    (and (integer? v) (indexed-attr-value db v :block/uuid))
+    (and (positive-eid? v) (indexed-attr-value db v :block/uuid))
     (ref-value-content db v)
 
     (de/entity? v)
@@ -810,13 +819,19 @@
 (defn- compile-filter-clause
   [db [property-ident operator match]]
   (let [schema (property-attr-schema db property-ident)
-        match-set? (set? match)]
+        match-set? (set? match)
+        ;; Non-ref values (e.g. :raw-number File Size) are literals. Looking
+        ;; them up as eids treats 0 as entity id 0 and throws.
+        resolve-ref-match? (and (:ref? schema)
+                                match-set?
+                                (seq match)
+                                (not (contains? match :empty)))]
     {:schema schema
      :operator operator
      :match match
-     :match-eids (when (and match-set? (seq match) (not (contains? match :empty)))
+     :match-eids (when resolve-ref-match?
                    (into #{} (keep #(match-item->id db %)) match))
-     :match-contents (when (and match-set? (seq match) (not (contains? match :empty)))
+     :match-contents (when resolve-ref-match?
                        (into #{} (keep #(match-item-content db %)) match))
      :journal-day (when (#{:date-before :date-after} operator)
                     (match-journal-day db match))

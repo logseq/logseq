@@ -91,12 +91,13 @@
   [db entity lookup tags]
   (let [this-tags (set (map :db/ident tags))]
     (some (fn [another-id]
-            (let [another-tags (set (map :db/ident (:block/tags (d/entity db another-id))))
+            (when-not (entity-util/recycled? (d/entity db another-id))
+              (let [another-tags (set (map :db/ident (:block/tags (d/entity db another-id))))
                   common-tags (set/intersection this-tags another-tags)]
               (when-not (and (= common-tags #{:logseq.class/Page})
                              (> (count this-tags) 1)
                              (> (count another-tags) 1))
-                common-tags)))
+                common-tags))))
           (d/q (find-other-ids-with-title-and-tags entity)
                db
                (:db/id entity)

@@ -337,11 +337,7 @@ let prepare_worker_runtime invoke_config config =
       Transport.thread_api_sync_app_state invoke_config ~auth_state >>= fun _ ->
       set_sync_config ()
 
-let unquote_transit_value = function
-  | Melange_edn_melange.Any
-      (Melange_edn_melange.Tagged (("transit/quote" | "'"), value)) ->
-      value
-  | value -> value
+let unquote_transit_value = Edn_util.unquote_transit_value
 
 let result_value result =
   let result = unquote_transit_value result in
@@ -468,11 +464,7 @@ let graphs_value graphs =
     | _, Some graphs -> Edn_util.vector_vec graphs
     | _ -> Edn_util.vector_vec (Vec.of_array [| graphs |])
 
-let tagged_error_value value =
-  match unquote_transit_value value with
-  | Melange_edn_melange.Any (Melange_edn_melange.Tagged ("error", value)) ->
-      Some value
-  | _ -> None
+let tagged_error_value = Edn_util.tagged_error_value
 
 let remote_graphs_error graphs =
   match tagged_error_value graphs with
@@ -482,16 +474,7 @@ let remote_graphs_error graphs =
       | Some values -> Vec.find_map tagged_error_value values
       | None -> None)
 
-let worker_error_message ~default_message value =
-  let message =
-    match Edn_util.get_string value "message" with
-    | Some message -> message
-    | None -> (
-        match Edn_util.as_string_like value with
-        | Some message -> message
-        | None -> default_message)
-  in
-  message
+let worker_error_message = Edn_util.worker_error_message
 
 let worker_error ~code ~default_message value =
   Error.make ~context:value code (worker_error_message ~default_message value)
@@ -1090,8 +1073,14 @@ let invoke_download_graph mode _config invoke_config repo graph_id graph_e2ee
         ~graph_id ~graph_e2ee
     >>= fun result ->
       Cli_effect.pure
-        (Cli_result.ok ~command:Command_id.Sync_download mode
-           (Raw (result_value result))) )
+        (match tagged_error_value result with
+        | Some value ->
+            Cli_result.error ~command:Command_id.Sync_download mode
+              (worker_error ~code:Error.Exception
+                 ~default_message:"sync download failed" value)
+        | None ->
+            Cli_result.ok ~command:Command_id.Sync_download mode
+              (Raw (result_value result))) )
     (fun () ->
       match subscription with
       | Some subscription -> subscription.Transport.close ()

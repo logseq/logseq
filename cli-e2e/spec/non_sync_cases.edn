@@ -40,7 +40,12 @@
    :expect {:exit 0},
    :cmds ["{{cli}} completion {{completion-selector}}"]}},
  :cases
- [{:id "global-help",
+ [{:id "block-metadata-refs",
+   :cmds ["node --test cli-e2e/scripts/block_metadata_refs_test.cjs"],
+   :expect {:exit 0},
+   :covers {:commands ["upsert block" "upsert task" "query"]},
+   :tags [:block :task :property :regression]}
+  {:id "global-help",
    :cmds ["{{cli}} --help"],
    :expect
    {:exit 0,
@@ -288,6 +293,12 @@
       "--order"]}},
    :tags [:upsert :list :smoke],
    :extends :non-sync/graph-json-env}
+  {:id "task-repeat-journal-refs",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/repeating_task_refs.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}}"],
+   :expect {:exit 0,
+            :stdout-contains ["Repeating task journal refs follow both dates and survive restart"]},
+   :tags [:upsert :task :query]}
   {:id "task-upsert-clear-properties-json",
    :setup
    ["{{cli}} --root-dir {{root-dir-arg}} --config {{config-path-arg}} --output json upsert task --graph {{graph-arg}} --page TaskHome --status todo --priority high --scheduled '2026-02-10T08:00:00.000Z' --deadline '2026-02-12T18:00:00.000Z' >/dev/null"],
@@ -434,6 +445,18 @@
      :list ["--fields" "--limit" "--sort" "--order"]}},
    :tags [:upsert :list],
    :extends :non-sync/graph-json-env}
+  {:id "page-rename",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/page_rename.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}}"],
+   :expect {:exit 0},
+   :covers {:commands ["upsert page"], :options {:upsert ["--id" "--page" "--rename" "--update-properties"]}},
+   :tags [:upsert :page]}
+  {:id "block-update-page-refs",
+   :extends :non-sync/graph-json-env,
+   :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/block_update_refs.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}}"],
+   :expect {:exit 0, :stdout-contains ["block update page refs: passed"]},
+   :covers {:commands ["upsert block" "query" "server restart"], :options {:upsert ["--id" "--uuid" "--content"]}},
+   :tags [:upsert :refs]}
   {:id "created-entity-result-metadata",
    :extends :non-sync/graph-json-env,
    :cmds ["python3 '{{repo-root}}/cli-e2e/scripts/created_entity_results.py' --cli '{{repo-root}}/static/logseq-cli.js' --root-dir {{root-dir-arg}} --config {{config-path-arg}} --graph {{graph-arg}} --case metadata"],
