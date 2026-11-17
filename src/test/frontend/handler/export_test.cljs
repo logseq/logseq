@@ -432,6 +432,92 @@
             (is false (str error))
             (cleanup!)))))))
 
+(deftest truncate-old-versioned-files-prunes-excess-files-test
+  (async done
+    (let [removed (atom [])
+          mock-files (mapv (fn [i]
+                             #js {:name (str (+ 1000 i) ".db.sqlite")
+                                  :handle #js {:remove (fn []
+                                                        (swap! removed conj (str "handle:" (+ 1000 i) ".db.sqlite"))
+                                                        (p/resolved nil))}})
+                           (range 15))
+          mock-dir #js {:removeEntry (fn [name]
+                                       (swap! removed conj name)
+                                       (p/resolved nil))}
+          original-get-files browser-utils/getFiles]
+      (set! browser-utils/getFiles
+            (fn [_dir _recursive]
+              (p/resolved mock-files)))
+      (letfn [(cleanup! []
+                (set! browser-utils/getFiles original-get-files)
+                (done))]
+        (-> (export/truncate-old-versioned-files! mock-dir)
+            (p/then
+             (fn [_]
+               (is (= 3 (count @removed)) "Should remove 3 oldest files when 15 files exist")
+               (is (= #{"1000.db.sqlite" "1001.db.sqlite" "1002.db.sqlite"} (set @removed)))
+               (is (= ["1002.db.sqlite" "1001.db.sqlite" "1000.db.sqlite"] @removed)
+                   "Prunes in descending order of age after dropping latest 12")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
+(deftest truncate-old-versioned-files-no-op-when-under-limit-test
+  (async done
+    (let [removed (atom [])
+          mock-files (mapv (fn [i]
+                             #js {:name (str (+ 1000 i) ".db.sqlite")
+                                  :handle #js {:remove (fn []
+                                                        (swap! removed conj (str (+ 1000 i) ".db.sqlite"))
+                                                        (p/resolved nil))}})
+                           (range 10))
+          mock-dir #js {:removeEntry (fn [name]
+                                       (swap! removed conj name)
+                                       (p/resolved nil))}
+          original-get-files browser-utils/getFiles]
+      (set! browser-utils/getFiles
+            (fn [_dir _recursive]
+              (p/resolved mock-files)))
+      (letfn [(cleanup! []
+                (set! browser-utils/getFiles original-get-files)
+                (done))]
+        (-> (export/truncate-old-versioned-files! mock-dir)
+            (p/then
+             (fn [_]
+               (is (empty? @removed) "Should not remove any files when <= 12 files exist")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
+(deftest truncate-old-versioned-files-fallback-to-handle-remove-test
+  (async done
+    (let [removed (atom [])
+          mock-files (mapv (fn [i]
+                             #js {:name (str (+ 1000 i) ".db.sqlite")
+                                  :handle #js {:remove (fn []
+                                                        (swap! removed conj (str (+ 1000 i) ".db.sqlite"))
+                                                        (p/resolved nil))}})
+                           (range 14))
+          mock-dir #js {}
+          original-get-files browser-utils/getFiles]
+      (set! browser-utils/getFiles
+            (fn [_dir _recursive]
+              (p/resolved mock-files)))
+      (letfn [(cleanup! []
+                (set! browser-utils/getFiles original-get-files)
+                (done))]
+        (-> (export/truncate-old-versioned-files! mock-dir)
+            (p/then
+             (fn [_]
+               (is (= 2 (count @removed)) "Should remove 2 oldest files when 14 files exist")
+               (is (= #{"1000.db.sqlite" "1001.db.sqlite"} (set @removed)))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
 (deftest export-blocks-as-markdown-without-properties
   (async done
     (p/let [first-content (<export-blocks-as-markdown
