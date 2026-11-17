@@ -53,6 +53,18 @@ let bracket s =
     ~data_attrs:[ ("style", "opacity:0.3;display:inline-flex") ]
     ~value:s []
 
+let show_brackets model =
+  match Wire.get model.Model.graph_config "ui/show-brackets?" with
+  | None -> true
+  | Some (Wire.Bool show) -> show
+  | Some _ -> invalid_arg "Expected boolean graph config: ui/show-brackets?"
+
+let bracket_if_shown model_source s =
+  if_ ~test:(reactive
+    (fun model -> show_brackets model)
+    model_source)
+    (bracket s)
+
 (* cljs page-reference wraps the anchor in .preview-ref-link —
    logseq-span hosts, not text: children of a text node never draw on
    hosts that treat text as a leaf (native) *)
@@ -1434,7 +1446,7 @@ and try_match ~find ~refs ~self s i : (t * int * run_spec) option =
   | '\n' -> Some (text ~value:"\n" [], 1, Rs_plain)
   | _ -> None
 
-(* [[page]] / [label](url) *)
+(* [[page]] / [label]([[page]]) / [label](url) *)
 and try_bracket ~find ~refs ~self s i =
   if Str_util.starts_at s i "[[" then
     match find (i + 2) "]]" with
@@ -1453,22 +1465,43 @@ and try_bracket ~find ~refs ~self s i =
         | k when k > j + 2 ->
             let label = sub s (i + 1) (j - i - 1) in
             let url = sub s (j + 2) (k - j - 2) in
-            Some
-              ( external_link url (parse ~refs ~self label)
-              , k + 1 - i
-              , Rs_atomic ((if label = "" then url else label), "ed-link") )
+            let page_ref_target =
+              let target_url = String.trim url in
+              let len = String.length target_url in
+              if len > 4 && Str_util.starts_at target_url 0 "[["
+                 && Str_util.ends_with target_url "]]"
+              then
+                let target = String.trim (String.sub target_url 2 (len - 4)) in
+                if target = "" then None else Some target
+              else None
+            in
+            (match page_ref_target with
+             | Some target ->
+                 let alias_label =
+                   if String.trim label = "" then None else Some label
+                 in
+                 Some
+                   ( page_ref ?label:alias_label ~refs ~self target
+                   , k + 1 - i
+                   , Rs_atomic
+                       (Option.value alias_label ~default:target, "ed-page-ref") )
+             | None ->
+                 Some
+                   ( external_link url (parse ~refs ~self label)
+                   , k + 1 - i
+                   , Rs_atomic ((if label = "" then url else label), "ed-link") ))
         | _ -> None)
     | _ -> None
 
 (* span.page-reference[data-ref] with bracket spans around a.page-ref;
    uuid targets resolve via thread-api/pull and re-parse the resolved
    title (cljs page-reference/page-reference-content). *)
-and page_ref ?(tag = false) ~refs ~self name =
+and page_ref ?(tag = false) ?label ~refs ~self name =
   let name = String.trim name in
   if Wire.is_uuid_string name then
     if List.mem name refs then text []
     else if tag then resolved_tag_ref ~refs ~self name
-    else resolved_ref ~refs ~self name
+    else resolved_ref ?label ~refs ~self name
   else
     (* cljs data-ref is the resolved entity uuid, not the written name *)
     fun context parent ->
@@ -1477,13 +1510,14 @@ and page_ref ?(tag = false) ~refs ~self name =
     if tag then
       preview_link (page_link ~tag:true ~uuid_sig name) context parent
     else
+      let model_source = Runtime.model_signal () in
       D.el ~tag:"span" ~style_class:"page-reference"
         ~attrs_signal_v:
           (Logseq_el.attrs_signal uuid_sig
              (fun u -> [ ("data-ref", if u = "" then name else u) ]))
-        [ bracket "[["
-        ; preview_link (page_link ~tag:false ~uuid_sig name)
-        ; bracket "]]" ]
+        [ bracket_if_shown model_source "[["
+        ; preview_link (page_link ~tag:false ?label ~uuid_sig name)
+        ; bracket_if_shown model_source "]]" ]
         context parent
 
 (* [[uuid]] — resolved via thread-api/pull.  cljs drops the
@@ -1491,12 +1525,14 @@ and page_ref ?(tag = false) ~refs ~self name =
    a bare a.page-ref.broken holding the literal [[uuid]] text.  Resolved
    pages render their title as plain text; block titles are re-parsed
    with the ref chain extended. *)
-and resolved_ref ~refs ~self uuid : t =
+and resolved_ref ?label ~refs ~self uuid : t =
  fun context parent ->
   let st =
     uuid_meta_state context uuid ~fallback:(plain_ref_meta "" true false)
       ~miss:(Some (plain_ref_meta uuid true false)) ()
   in
+  let alias_label = label in
+  let model_source = Runtime.model_signal () in
   let child_refs =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
@@ -1511,10 +1547,13 @@ and resolved_ref ~refs ~self uuid : t =
       | _ ->
       (* data-ref/data-uuid/tabindex/draggable are delegated-event +
          dnd hooks (a.page-ref) *)
-      if title = "" then
+      let data_ref =
+        if title = "" then uuid else String.lowercase_ascii title
+      in
+      if title = "" && alias_label = None then
         (* pull in flight — keep the chrome so the row does not shift *)
         text ~style_class:"page-reference"
-          ~data_attrs:[ ("data-ref", uuid) ] []
+          ~data_attrs:[ ("data-ref", data_ref) ] []
       else if title = uuid then
         Ui_components.with_props
           [ Ui_components.Prop.position `relative ]
@@ -1526,31 +1565,39 @@ and resolved_ref ~refs ~self uuid : t =
       else
         (* .page-reference:hover in lui-core.css carries the hover bg;
            a typed HoverBackground prop cannot reach a dom node *)
-        (D.el ~tag:"span" ~style_class:"page-reference"
+        let reference_link =
+          preview_link
+            (Ui_components.with_props
+               [ ( Ui_components.Prop.hover_foreground
+                     "var(--lx-accent-11, \
+                      var(--ls-link-text-hover-color))" )
+               ; Ui_components.Prop.position `relative ]
+               (link ~url:"#" ~target:`self_
+                  ~style_class:"page-ref"
+                  ~foreground:
+                    "var(--lx-accent-11, var(--ls-link-text-color))"
+                  ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
+                              ; ("draggable", "true")
+                              ; ("data-ref", data_ref) ]
+                  (match alias_label with
+                   | Some label -> [ text ~value:label [] ]
+                   | None when is_page -> [ text ~value:title [] ]
+                   | None ->
+                       [ row ~display:`contents
+                           (if is_math then [ katex_el ~block:false ~display:false (first_line title) ]
+                            else parse ~refs:child_refs ~self:uuid (first_line title)) ])))
+        in
+        let children =
+          [ bracket_if_shown model_source "[["
+          ; reference_link
+          ; bracket_if_shown model_source "]]" ]
+        in
+        D.el ~tag:"span" ~style_class:"page-reference"
           ~attrs:
-            [ ("data-ref", String.lowercase_ascii title)
+            [ ("data-ref", data_ref)
             ; ("style", "border-radius:4px;transition:background 0.15s")
             ]
-          [ bracket "[["
-          ; preview_link
-              (Ui_components.with_props
-                 [ ( Ui_components.Prop.hover_foreground
-                       "var(--lx-accent-11, \
-                        var(--ls-link-text-hover-color))" )
-                 ; Ui_components.Prop.position `relative ]
-                 (link ~url:"#" ~target:`self_
-                    ~style_class:"page-ref"
-                    ~foreground:
-                      "var(--lx-accent-11, var(--ls-link-text-color))"
-                    ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
-                                ; ("draggable", "true")
-                                ; ( "data-ref"
-                                  , String.lowercase_ascii title ) ]
-                    (if is_page then [ text ~value:title [] ]
-                     else [ row ~display:`contents
-                              (if is_math then [ katex_el ~block:false ~display:false (first_line title) ]
-                               else parse ~refs:child_refs ~self:uuid (first_line title)) ])))
-          ; bracket "]]" ]))
+          children)
     (Signal.value st))
     context parent
 

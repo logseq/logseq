@@ -111,7 +111,7 @@ let set_items st items =
 
 (* the live model signal — stored at init so document-event handlers
    read current model state without a shadow ref of their own *)
-let model_signal : Model.t Signal.signal option ref = ref None
+let model_signal = Runtime.model_source
 
 let model () =
   match !model_signal with

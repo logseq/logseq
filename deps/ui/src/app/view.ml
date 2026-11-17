@@ -10,6 +10,11 @@ let font_family ~apple () =
 
 let view _context model_source _send : t =
  fun ctx parent ->
+  Runtime.model_source := Some model_source;
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    match !Runtime.model_source with
+    | Some source when source == model_source -> Runtime.model_source := None
+    | _ -> ());
   Runtime.install_appearance_guard ~scope:ctx.Lui_ui.ui_state_scope;
   Settings_state.ensure ctx;
   ignore (Outline_viewport_state.ensure ctx model_source);

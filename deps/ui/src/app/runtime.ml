@@ -12,6 +12,13 @@ let read_model : (unit -> Model.t) ref = ref (fun () -> Model.initial)
 
 let model () = !read_model ()
 
+let model_source : Model.t Signal.signal option ref = ref None
+
+let model_signal () =
+  match !model_source with
+  | Some source -> source
+  | None -> invalid_arg "The app model signal is not initialized"
+
 let repo () = Option.value (model ()).Model.repo ~default:""
 
 let route () = (model ()).Model.route

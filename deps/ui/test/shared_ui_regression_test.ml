@@ -130,6 +130,125 @@ let localization () =
     check "Timestamp choices resolve the initialized locale"
       (List.exists (fun (_,label) -> label="Translated Custom date") (I18n.timestamp_options ())))
 
+let show_brackets_rendering ~registry ~profile =
+  let previous_model = !Runtime.read_model
+  and previous_sidebar_model_source = !Sidebar_state.model_signal in
+  let repo = "show-brackets-rendering-fixture" in
+  let uuid = "00000000-0000-0000-0000-000000000001" in
+  let nested_uuid = "00000000-0000-0000-0000-000000000002" in
+  let config enabled =
+    Wire.Map [Wire.kw "ui/show-brackets?", Wire.Bool enabled]
+  in
+  let current = ref {Model.initial with repo=Some repo; graph_config=Wire.Map []} in
+  Runtime.read_model := (fun () -> !current);
+  Render_inline.prime_ref_metas ["Show Brackets Target", uuid];
+  Render_inline.prime_pull_meta ~name:"Show Brackets Nested Block"
+    ~uuid:nested_uuid
+    ~entity:(Wire.Map
+      [Wire.kw "block/uuid", Wire.Uuid nested_uuid;
+       Wire.kw "block/title", Wire.String
+         "Baseline journal: review [[Show Brackets Target]]"]);
+  let session = S.mount ~registry ~profile ~initial:!current
+    ~reducer:(fun model action ->
+      let updated = Update.update model action in
+      current := updated;
+      updated)
+    ~view:(fun _ model_source _ ->
+      Sidebar_state.model_signal := Some model_source;
+      Lui_elements.row
+        (Render_inline.parse ~self:"show-brackets-page"
+           ("[[Show Brackets Target]] [[" ^ uuid ^ "]] [[" ^ nested_uuid ^ "]] "
+            ^ "[Atlas alias]([[Show Brackets Target]]) "
+            ^ "[UUID alias]([[" ^ uuid ^ "]]) "
+            ^ "[Website](https://example.com)"))) () in
+  let bracket_count () =
+    List.fold_left (fun count node ->
+      match M.string_prop node "text" with
+      | Some "[[" | Some "]]" -> count + 1
+      | _ -> count) 0 (nodes session)
+  in
+  let reference_link_ids () =
+    nodes session
+    |> List.filter (fun node ->
+      node.M.kind = "link" && M.string_prop node "url" = Some "#")
+    |> List.map (fun node -> node.M.id)
+    |> List.sort Int.compare
+  in
+  let data_attr node key =
+    match M.string_prop node "data-attrs" with
+    | Some attrs -> List.assoc_opt key (P.data_attrs_decode attrs)
+    | None -> None
+  in
+  let rec text_content node =
+    match M.string_prop node "text" with
+    | Some text -> text
+    | None ->
+        String.concat ""
+          (List.map text_content (M.children session.S.tree node.M.id))
+  in
+  let alias_link label =
+    List.find_opt (fun node ->
+      node.M.kind = "link" && text_content node = label)
+      (nodes session)
+  in
+  let is_page_alias label =
+    match alias_link label with
+    | Some node ->
+        class_has node "page-ref"
+        && M.string_prop node "url" = Some "#"
+        && data_attr node "data-ref" = Some "show brackets target"
+        && data_attr node "data-uuid" = Some uuid
+    | None -> false
+  in
+  let check_brackets expected label =
+    let actual = bracket_count () in
+    check (Printf.sprintf "%s (expected %d, got %d)" label expected actual)
+      (actual = expected)
+  in
+  Fun.protect
+    ~finally:(fun () ->
+      ignore (Lui_app.dispose session.S.app);
+      Runtime.read_model := previous_model;
+      Sidebar_state.model_signal := previous_sidebar_model_source)
+    (fun () ->
+      let link_ids = reference_link_ids () in
+      check "Reference and alias links are mounted" (List.length link_ids = 6);
+      check_brackets 12 "Show brackets defaults to visible for page aliases";
+      check "Name-target alias renders as an internal page reference"
+        (is_page_alias "Atlas alias");
+      check "UUID-target alias renders as an internal page reference"
+        (is_page_alias "UUID alias");
+      check "External Markdown URLs remain external links"
+        (List.exists (fun node ->
+           node.M.kind = "link" && class_has node "external-link"
+           && M.string_prop node "url" = Some "https://example.com")
+           (nodes session));
+      let publish enabled =
+        ignore (Lui_app.send session.S.app
+          (Action.Graph_config_loaded (repo, config enabled)));
+        S.flush session
+      in
+      publish false;
+      check_brackets 0 "Show brackets off hides delimiters in resolved block titles";
+      check "Show brackets off preserves page alias labels"
+        (is_page_alias "Atlas alias" && is_page_alias "UUID alias");
+      check "Show brackets off retains reference link identities"
+        (reference_link_ids () = link_ids);
+      publish true;
+      check_brackets 12 "Show brackets on restores page-alias delimiters";
+      check "Show brackets on preserves page alias labels"
+        (is_page_alias "Atlas alias" && is_page_alias "UUID alias");
+      check "Show brackets on retains reference link identities"
+        (reference_link_ids () = link_ids);
+      check "Show brackets rejects a non-boolean graph setting"
+        (try
+           ignore (Lui_app.send session.S.app
+             (Action.Graph_config_loaded
+               (repo, Wire.Map [Wire.kw "ui/show-brackets?", Wire.String "false"])));
+           S.flush session;
+           false
+         with Invalid_argument _ -> true))
+
 let settings_config ~registry ~profile ~finish =
   let previous_settings = !Settings_state.st and previous_model = !Runtime.read_model
   and previous_worker = !Runtime.worker and previous_flush = !Runtime.app_flush
@@ -655,6 +774,7 @@ let page_disclosure ~registry ~profile =
 
 let run_views ~registry ~profile ~finish =
   page_disclosure ~registry ~profile;
+  show_brackets_rendering ~registry ~profile;
   let finish () = configured_continuations finish in
   configured_popup_ownership ();
   table_resize_transaction ();
