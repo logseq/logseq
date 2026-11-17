@@ -120,7 +120,7 @@
          (notification/show! (t :nav/cannot-go-to-internal-page) :warning)
          (if-let [source-uuid (and (not ignore-alias?) (:alias-source-uuid route-info))]
            (p/let [source-route-info (<page-route-info source-uuid)]
-             (when (:eligible-for-recent? source-route-info)
+             (when (:route/eligible-for-recent? source-route-info)
                (recent-handler/add-page-to-recent! (:page-id source-route-info) click-from-recent?))
              (let [m (cond->
                       (merge-query-params
@@ -137,7 +137,7 @@
                        (assoc :push push))]
                (redirect! m)))
            (do
-             (when (:eligible-for-recent? route-info)
+             (when (:route/eligible-for-recent? route-info)
                (recent-handler/add-page-to-recent! (:page-id route-info) click-from-recent?))
              (let [m (cond->
                       (merge-query-params

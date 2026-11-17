@@ -142,7 +142,7 @@
                              {:page-id 43
                               :page-uuid source-uuid
                               :page-title "Source"
-                              :eligible-for-recent? true}
+                              :route/eligible-for-recent? true}
 
                              nil))
 

@@ -3989,7 +3989,7 @@
          (is (= {:page-id (:db/id alias-page)
                  :page-uuid alias-uuid
                  :page-title "Alias"
-                 :eligible-for-recent? true
+                 :route/eligible-for-recent? true
                  :hidden? false
                  :property? false
                  :built-in? false
@@ -4000,7 +4000,7 @@
          (is (= {:page-id (:db/id heading-block)
                  :page-uuid heading-uuid
                  :page-title "Heading Block"
-                 :eligible-for-recent? false
+                 :route/eligible-for-recent? false
                  :hidden? false
                  :property? false
                  :built-in? false
@@ -4011,7 +4011,7 @@
          (is (= {:page-id (:db/id hidden-page)
                  :page-uuid hidden-uuid
                  :page-title "Hidden"
-                 :eligible-for-recent? false
+                 :route/eligible-for-recent? false
                  :hidden? true
                  :property? false
                  :built-in? false
