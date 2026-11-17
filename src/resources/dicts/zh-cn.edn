@@ -1888,6 +1888,7 @@
  :sync/creating-remote-graph "正在创建远程图谱..."
  :sync/downloading "下载中..."
  :sync/downloading-graph "正在下载 {1}……"
+ :sync/failed-local-changes-warning "部分本地更改无法同步。用于恢复的数据已保存在此设备上。"
  :sync/graph-count-exceed-limit "同步图谱数量超出限制"
  :sync/invitation-sent "邀请已发送！"
  :sync/last-synced-time-label "上次同步时间：{1}"
