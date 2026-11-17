@@ -147,7 +147,9 @@ final class LogseqHost: NSObject, NSApplicationDelegate, NSWindowDelegate {
         guard let backend, let root = backend.rootIDs.first else { return }
         if hostedRoot != root {
             hostedRoot = root
-            window?.contentView = NSHostingView(rootView: HostRoot(backend: backend, root: root, services: services))
+            let view = HostRoot(backend: backend, root: root, services: services)
+            window?.contentView = ProcessInfo.processInfo.environment["LOGSEQ_APPLE_PERF"] == "1"
+                ? TracedHostingView(rootView: view) : NSHostingView(rootView: view)
         }
         services.performanceText = backend.debugModelCounts
     }
