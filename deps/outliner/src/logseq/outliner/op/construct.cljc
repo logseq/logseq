@@ -90,7 +90,17 @@
    (sanitize-ref-value db nil v))
   ([db tx-data v]
    (cond
-     (vector? v) (stable-entity-ref-with-tx-data db tx-data v)
+     (and (vector? v) (= 2 (count v)) (keyword? (first v)))
+     (stable-entity-ref-with-tx-data db tx-data v)
+
+     (vector? v)
+     (mapv (fn [ref-value]
+             ;; Reference maps carry creation data for replay.
+             (if (or (map? ref-value) (de/entity? ref-value))
+               ref-value
+               (stable-entity-ref-with-tx-data db tx-data ref-value)))
+           v)
+
      (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
      :else (stable-entity-ref-with-tx-data db tx-data v))))
 
