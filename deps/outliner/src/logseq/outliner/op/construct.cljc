@@ -90,7 +90,7 @@
    (sanitize-ref-value db nil v))
   ([db tx-data v]
    (cond
-     (and (vector? v) (= 2 (count v)) (keyword? (first v)))
+     (and (vector? v) (= 2 (count v)) (get-in db [:schema (first v) :db/unique]))
      (stable-entity-ref-with-tx-data db tx-data v)
 
      (vector? v)

@@ -82,11 +82,13 @@
         _ (d/transact! source tags)
         _ (d/transact! peer [{:block/uuid (random-uuid) :block/title "Peer-only entity"}])
         _ (d/transact! peer tags)
+        task-uuid (:block/uuid (d/entity @source :logseq.class/Task))
         tag-id (:db/id (d/entity @source [:block/uuid tag-uuid]))
         other-tag-id (:db/id (d/entity @source [:block/uuid other-tag-uuid]))]
     (doseq [[tag-refs expected-tags]
             [[[tag-id] #{tag-uuid}]
              [[tag-id other-tag-id] #{tag-uuid other-tag-uuid}]
+             [[:logseq.class/Task tag-id] #{task-uuid tag-uuid}]
              [[[:block/uuid tag-uuid]] #{tag-uuid}]
              [[:block/uuid tag-uuid] #{tag-uuid}]
              [[] #{}]]]
