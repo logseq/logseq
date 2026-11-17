@@ -28,6 +28,7 @@
 (defn rtc-state->detail-info
   [state]
   {:pending-local-ops (:unpushed-block-update-count state)
+   :failed-local-ops (:failed-local-ops-count state)
    :pending-asset-ops (:pending-asset-ops-count state)
    :missing-asset-upload-files (:missing-asset-upload-files state)
    :pending-server-ops (or (:pending-server-ops-count state)
@@ -96,10 +97,11 @@
              :label-key :sync/assets-downloading}))))
 
 (defn indicator-button-class
-  [{:keys [online? rtc-state pending-local-ops pending-asset-ops pending-server-ops]}]
-  (let [open? (and online? (= :open rtc-state))
+  [{:keys [online? rtc-state pending-local-ops failed-local-ops pending-asset-ops pending-server-ops]}]
+  (let [failed? (pos? (or failed-local-ops 0))
+        open? (and online? (= :open rtc-state))
         syncing? (and open? (pos? (or pending-server-ops 0)))
-        idle? (and open?
+        idle? (and open? (not failed?)
                    (zero? (or pending-local-ops 0))
                    (zero? (or pending-asset-ops 0))
                    (zero? (or pending-server-ops 0)))
@@ -109,7 +111,8 @@
                        open? (conj "on")
                        syncing? (conj "syncing")
                        idle? (conj "idle")
-                       queuing? (conj "queuing")))))
+                       queuing? (conj "queuing")
+                       failed? (conj "failed")))))
 
 (defn- asset-status-label
   [label-key]
@@ -198,7 +201,7 @@
         detail-info (use-detail-info)
         {:keys [graph-uuid local-tx remote-tx local-checksum remote-checksum rtc-state
                 download-logs upload-logs misc-logs pending-local-ops pending-asset-ops
-                missing-asset-upload-files pending-server-ops]}
+                missing-asset-upload-files pending-server-ops failed-local-ops]}
         detail-info
         asset-rows (asset-status-rows {:pending-asset-ops pending-asset-ops
                                        :missing-asset-upload-files missing-asset-upload-files
@@ -206,6 +209,8 @@
     [:div.rtc-info.flex.flex-col.gap-1.p-2.text-gray-11
      [:div.font-medium.mb-2 (t (if online? :sync/online :sync/offline))]
      [:div [:span.font-medium.mr-1 (or pending-local-ops 0)] (t :sync/pending-local-changes)]
+     (when (pos? (or failed-local-ops 0))
+       [:div.font-medium (t :sync/failed-local-changes-warning)])
      (for [{:keys [count label-key]} asset-rows]
        [:div {:key (name label-key)}
         [:span.font-medium.mr-1 count]
@@ -251,6 +256,7 @@
         online?                     (rfx/use-sub [:network/online?])
         rtc-state                   (:rtc-state detail-info)
         unpushed-block-update-count (:pending-local-ops detail-info)
+        failed-local-ops            (:failed-local-ops detail-info)
         pending-asset-ops           (:pending-asset-ops detail-info)
         pending-server-ops          (:pending-server-ops detail-info)
         {:keys [local-tx remote-tx]} detail-info]
@@ -266,6 +272,7 @@
                                        {:online? online?
                                         :rtc-state rtc-state
                                         :pending-local-ops unpushed-block-update-count
+                                        :failed-local-ops failed-local-ops
                                         :pending-asset-ops pending-asset-ops
                                         :pending-server-ops pending-server-ops})})]]))
 

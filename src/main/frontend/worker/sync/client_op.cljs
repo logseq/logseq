@@ -58,6 +58,8 @@
        ")"))
 (def ^:private pending-index-sql
   "create index if not exists idx_client_ops_pending_created on client_ops(kind, pending, created_at, id)")
+(def ^:private failed-index-sql
+  "create index if not exists idx_client_ops_failed on client_ops(id) where kind = 'tx' and failed = 1")
 (def ^:private asset-index-sql
   "create index if not exists idx_client_ops_asset_uuid on client_ops(kind, asset_uuid)")
 (def ^:private sync-conflicts-table-sql
@@ -239,6 +241,7 @@
          (sqlite-run! tx client-ops-table-sql [])
          (sqlite-run! tx sync-conflicts-table-sql [])
          (sqlite-run! tx pending-index-sql [])
+         (sqlite-run! tx failed-index-sql [])
          (sqlite-run! tx asset-index-sql [])
          (sqlite-run! tx sync-conflicts-block-index-sql [])))
       (try
@@ -320,6 +323,12 @@
                    0)]
       (swap! *repo->pending-local-tx-count assoc repo count')
       count')))
+
+(defn get-failed-local-tx-count
+  [repo]
+  (if-let [store (sqlite-store-or-throw repo)]
+    (aget (sqlite-row store "select count(*) as c from client_ops where kind = 'tx' and failed = 1" []) "c")
+    0))
 
 (defn adjust-pending-local-tx-count!
   [repo delta]
@@ -665,7 +674,7 @@
     (let [protected-tx-ids (set protected-tx-ids)
           tx-id-rows (sqlite-rows store
                                   (str "select tx_id from client_ops "
-                                       "where kind = 'tx' and pending = 0 and tx_id is not null")
+                                       "where kind = 'tx' and pending = 0 and failed = 0 and tx_id is not null")
                                   [])
           removable-tx-ids (->> tx-id-rows
                                 (keep (fn [row]

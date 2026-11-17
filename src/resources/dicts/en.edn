@@ -1888,6 +1888,7 @@
  :sync/creating-remote-graph "Creating remote graph..."
  :sync/downloading "Downloading..."
  :sync/downloading-graph "Downloading {1} ..."
+ :sync/failed-local-changes-warning "Some local changes could not sync. Recovery data is saved on this device."
  :sync/graph-count-exceed-limit "Sync graph count exceed limit"
  :sync/invitation-sent "Invitation sent!"
  :sync/last-synced-time-label "Last synced time: {1}"

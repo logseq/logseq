@@ -58,3 +58,9 @@
     (is (not (re-find #"," class-name)))
     (is (= #{"cloud" "on" "idle"}
            (set (.split class-name " "))))))
+
+(deftest indicator-shows-local-sync-failures-while-offline
+  (is (= "cloud failed"
+         (indicator/indicator-button-class
+          (assoc (indicator/rtc-state->detail-info {:failed-local-ops-count 1})
+                 :online? false)))))

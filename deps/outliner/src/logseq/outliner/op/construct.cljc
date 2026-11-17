@@ -101,7 +101,15 @@
                (stable-entity-ref-with-tx-data db tx-data ref-value)))
            v)
 
-     (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
+     (or (set? v) (sequential? v))
+     (into #{} (map (fn [ref-value]
+                      (let [uuid (:block/uuid ref-value)]
+                        (if (and (map? ref-value)
+                                 (uuid? uuid)
+                                 (nil? (d/entity db [:block/uuid uuid])))
+                          (dissoc ref-value :db/id)
+                          (stable-entity-ref-with-tx-data db tx-data ref-value)))))
+           v)
      :else (stable-entity-ref-with-tx-data db tx-data v))))
 
 (defn- sanitize-upsert-property-schema
@@ -213,6 +221,20 @@
                                                      (or (get missing-ref-by-lookup block-ref)
                                                          block-ref))]
                                    (map rewrite-ref v)))
+        block-refs (:block/refs block)
+        block (if (some nil? block-refs)
+                (do
+                  (when-not (and (seq refs)
+                                 (every? #(uuid? (:block/uuid %)) refs)
+                                 (every? #(string? (:block/title %)) missing-refs))
+                    (throw (ex-info "Cannot recover nil block refs without reference metadata"
+                                    {:block/uuid (:block/uuid block)})))
+                  ;; Several missing references can collapse into one nil in a set.
+                  (assoc block :block/refs
+                         (into (into #{} (remove nil?) block-refs)
+                               (map (fn [ref-entity] [:block/uuid (:block/uuid ref-entity)]))
+                               refs)))
+                block)
         block' (cond-> block
                  (seq retracted-refs)
                  (update :block/title
