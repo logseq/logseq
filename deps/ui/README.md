@@ -2,12 +2,13 @@
 
 The application logic is OCaml. Web uses Melange and the LUI DOM backend.
 `native/` contains the OCaml application library and OS-service adapters,
-not a renderer. The `native_embed` shared-library build and native database
-worker remain available for native hosts. Electron retains its desktop
+not a renderer. The native database worker and typed in-process application
+entry remain available for native hosts. Electron retains its desktop
 release path, including Windows and Linux builds.
 `ocaml_host/` provides an additional **experimental** self-drawn OCaml desktop
 host. It links the current `logseq_ui_native` application library and keeps
-the existing WebView, Apple/mobile and Electron entry points unchanged.
+the existing WebView and Electron entry points. LUI's Apple/iOS and Android
+SDK backends remain maintained independently.
 
 ## Setup
 
@@ -31,7 +32,7 @@ hidden by a fallback install.
 
 Native builds need a C/C++ toolchain, `pkg-config`, SQLite, libffi and GMP;
 macOS also needs Xcode command-line tools. The experimental self-drawn renderer
-additionally needs SDL2/SDL2_ttf, tsdl, tgls and the native renderer dependencies
+additionally needs SDL3, its pinned OCaml binding, tgls and the renderer dependencies
 declared by the pinned LUI SDK.
 
 ## Experimental OCaml native desktop
@@ -70,25 +71,17 @@ Native services compile source links to the worker's canonical codec and
 native Regexp implementation. Checkouts must preserve these symbolic links;
 Windows checkout and packaging behavior still require platform validation.
 
-## macOS desktop (SwiftUI host)
+## Desktop host migration
 
-`apple/` is a SwiftPM executable host that embeds the OCaml app through
-`liblogseq_ui.dylib` and renders it with `LUIAppleBackend` (SwiftUI,
-`NavigationSplitView` sidebar, native titlebar). Windows and Linux keep the
-Electron path; this host targets macOS only.
-
-```sh
-pnpm ui:apple:build    # dylib + db-worker + resources + swift release binary
-pnpm ui:apple:run      # build then launch
-pnpm ui:apple:package  # logseq-apple.app bundle (dylibbundler + ad-hoc sign)
-```
-
-The Swift and OCaml sides must pin the same LUI revision: `Package.swift`'s
-`revision` must equal the pin in `scripts/install-opam-deps.sh`, and
-`build.sh` refuses to build otherwise. Run disposable graphs against
-`LOGSEQ_ROOT_DIR`/`LOGSEQ_UI_STATE_DIR`; see `apple/README.md` for the
-packaging and diagnostics (`LOGSEQ_DUMP`, `LOGSEQ_APPLE_TRACE_PATCHES`)
-details.
+The previous macOS-only SwiftUI desktop host, its Swift package, C/dylib
+embedding bridge and `ui:apple:*` commands have been removed. Replace
+`pnpm ui:apple:build` and `pnpm ui:apple:run` with
+`pnpm ui:native:experimental:build` and `pnpm ui:native:experimental:run`.
+The native builder produces `LogseqNative.app` with its worker and resources;
+there is no separate Swift package or Swift/OCaml pin pairing.
+The native renderer remains experimental. WebView and Electron releases retain
+their existing build commands. This removes the Logseq macOS desktop host only;
+it does not retire LUI's Apple/iOS, Android or Web backends.
 
 ## Web
 
@@ -121,14 +114,14 @@ python3 deps/ui/desktop/build.py --lui-source /absolute/path/to/lui \
 open _build/desktop-web/release/Logseq.app
 ```
 
-Use the LUI revision pinned by `scripts/install-opam-deps.sh` and
-`apple/Package.swift`. The desktop frontend has an isolated build directory;
+Use the LUI revision pinned by `scripts/install-opam-deps.sh`. The desktop
+frontend has an isolated build directory;
 its bundle and package stages reject browser SQLite/WASM code or resources.
 The packager omits source maps and Node dependencies, externalizes inline
 bootstrap scripts for the host CSP, bundles the native worker and its dynamic
 libraries with dylibbundler, then signs the complete app and creates a DMG.
-App identity is `com.logseq.desktop.web`. Apple native and Electron paths remain
-available; ordinary browser builds retain their existing database worker.
+App identity is `com.logseq.desktop.web`. The experimental OCaml native and
+Electron paths remain available; ordinary browser builds retain their existing database worker.
 
 Native desktop data defaults to
 `~/Library/Application Support/com.logseq.desktop.web/native`, with graph SQLite

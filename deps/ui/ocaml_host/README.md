@@ -1,8 +1,8 @@
 # OCaml native host (experimental)
 
 **Status: experimental.** This optional self-drawn host does not replace the
-WebView desktop, Apple/mobile or Electron paths. Its native renderer comes from
-the pinned LUI SDK. The host links the current `logseq_ui_native` application
+WebView desktop or Electron paths. LUI mobile backends remain maintained.
+Its native renderer comes from the pinned LUI SDK. The host links the current `logseq_ui_native` application
 library directly; it does not restore an older copy of the application logic.
 
 The application name and bundle identifier explicitly identify this backend

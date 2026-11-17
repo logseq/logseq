@@ -137,7 +137,7 @@ jobs:
         run: pnpm gulp:build
 
   macos:
-    name: Apple host build (macOS)
+    name: Experimental native host (macOS)
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -150,7 +150,7 @@ jobs:
 
       - name: System deps
         run: |
-          brew install pkg-config gmp libffi dylibbundler sdl3
+          brew install pkg-config sqlite3 gmp libffi dylibbundler sdl3
           echo "SDL3_LIBRARY=$(brew --prefix sdl3)/lib/libSDL3.dylib" >> "$GITHUB_ENV"
 
       - uses: pnpm/action-setup@v4
@@ -226,15 +226,18 @@ jobs:
           (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
           sh deps/ui/scripts/check-quickjs-sdk.sh
 
-      - name: Build Apple host
-        run: bash deps/ui/apple/build.sh
+      - name: Test experimental native host
+        run: opam exec -- dune runtest --root deps/ui ocaml_host -j 1
 
-      - name: Package Logseq.app
-        run: bash deps/ui/apple/package.sh
+      - name: Build experimental native release
+        run: python3 deps/ui/ocaml_host/build.py
+
+      - name: Archive native application
+        run: ditto -c -k --sequesterRsrc --keepParent deps/ui/_build/native-experimental/LogseqNative.app deps/ui/_build/native-experimental/LogseqNative-macos-arm64.zip
 
       - name: Upload macOS package
         uses: actions/upload-artifact@v4
         with:
-          name: logseq-macos-arm64
-          path: deps/ui/_build/packages/Logseq-macos-*.zip
+          name: logseq-native-experimental-macos-arm64
+          path: deps/ui/_build/native-experimental/LogseqNative-macos-arm64.zip
           if-no-files-found: error

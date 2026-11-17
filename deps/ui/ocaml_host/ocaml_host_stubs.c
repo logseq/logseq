@@ -1,6 +1,6 @@
 /* C stubs for the OCaml native host executable.
 
-   In-process twin of native/logseq_lui_bridge.c's outbound channel:
+   Outbound channel for the in-process OCaml application:
    instead of bouncing to function pointers the host installs,
    the wakeup and platform-request trampolines call back into OCaml
    through named values the Bridge module registers at startup. The

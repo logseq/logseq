@@ -6,8 +6,7 @@
    The web adapter owns the CodeMirror mount/unmount lifecycle (block
    role mounts the vendored CM5 on an interior textarea; query role
    builds the fake-CM contenteditable surface). On the native backends
-   the extension registers with a platform-gated impl — see
-   LogseqExtensions.swift / LogseqCodeMirror.swift for the native host.
+   the extension shares its event schema with the OCaml host.
 
    Emits one event kind:
      cm-event {name: string (required), value/key: string (optional)} *)
@@ -25,7 +24,6 @@ let native_profile =
 
 let native_profiles =
   [ native_profile
-  ; { Lui_protocol.profile_os = MacOS; Lui_protocol.profile_host = SwiftUIHost }
   ; { Lui_protocol.profile_os = LinuxOS; Lui_protocol.profile_host = GenericHost }
   ; { Lui_protocol.profile_os = WindowsOS
     ; Lui_protocol.profile_host = GenericHost

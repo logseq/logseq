@@ -218,25 +218,8 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            | Some url when url <> "" -> url
            | _ -> asset_source file
          in
-         let media_tag =
-           if Lui_ui.host context <> Lui_protocol.SwiftUIHost then None
-           else
-             match ext with
-             | "mp3" | "ogg" | "mpeg" | "wav" | "m4a" | "flac"
-             | "wma" | "aac" -> Some "audio"
-             | "webm" when Str_util.starts_with b.Model.block_title "Audio-" ->
-                 Some "audio"
-             | "mp4" | "webm" | "mov" | "flv" | "avi" | "mkv" ->
-                 Some "video"
-             | _ -> None
-         in
-         match media_tag with
-         | Some tag ->
-             Logseq_el.el ~key:("asset-" ^ tag ^ "-" ^ uuid) ~tag
-               ~attrs:[ ("src", source); ("controls", "") ] []
-         | None ->
-             Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source
-               ~alt:file ~max_height:800 []) ] context parent
+         Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source
+           ~alt:file ~max_height:800 []) ] context parent
 
 let content_view = block_view
 

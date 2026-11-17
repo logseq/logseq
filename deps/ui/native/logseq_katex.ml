@@ -1,7 +1,4 @@
-(* SwiftUI hosts render this platform widget with bundled KaTeX. Other
-   native hosts retain their existing source-text presentation. *)
-open Lui_protocol
-
+(* Native hosts present math source text without a browser renderer. *)
 let identifier = "logseq-katex"
 
 let schema =
@@ -17,21 +14,10 @@ let schema =
 
 let register registry = Lui_extension.register_component registry schema
 
-let el ?key ~block ~display ~tex () : Lui_elements.t =
+let el ?key ~block ~display:_ ~tex () : Lui_elements.t =
  fun context parent ->
-  if Lui_ui.host context = SwiftUIHost then begin
-    let node = Lui_ui.extension context identifier in
-    Option.iter (Lui_ui.key context node) key;
-    Lui_ui.extension_property context node "tex" (StringValue tex);
-    Lui_ui.extension_property context node "display" (BoolValue display);
-    Lui_ui.extension_property context node "inline" (BoolValue (not block));
-    Lui_ui.extension_property context node "style-class"
-      (StringValue (if block then "latex" else "latex-inline"));
-    Option.iter (fun p -> Lui_ui.append context p node) parent;
-    node
-  end else
-    let source =
-      if block then Lui_elements.column ?key ~style_class:"latex"
-        [ Lui_elements.text ~value:tex [] ]
-      else Lui_elements.text ?key ~style_class:"latex-inline" ~value:tex []
-    in source context parent
+  let source =
+    if block then Lui_elements.column ?key ~style_class:"latex"
+      [ Lui_elements.text ~value:tex [] ]
+    else Lui_elements.text ?key ~style_class:"latex-inline" ~value:tex []
+  in source context parent
