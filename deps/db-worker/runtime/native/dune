@@ -4,8 +4,7 @@
  (modes native byte)
  (foreign_stubs
   (language c)
-  (names node_process_stubs file_stat_stubs zvec_stubs)
-  (include_dirs zvec))
+  (names node_process_stubs file_stat_stubs))
  (libraries
   mldoc
   angstrom

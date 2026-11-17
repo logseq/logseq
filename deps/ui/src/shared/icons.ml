@@ -305,6 +305,24 @@ let app_icons ?(ext = []) () : string Lui_protocol.String_map.t =
     (enc base @ ext @ enc (custom_icons @ extension_icons @ status_icons @ priority_icons))
 ;;
 
+(* Resolve only the icon requested by a mounted Web node. Custom assets
+   retain precedence over the extension pack and the canonical catalog. *)
+type app_icon_asset = Uri of string | Svg_data of bool * Icon_tabler_data.children
+
+let resolve_app_icon ?(ext = fun _ -> None) () =
+  let overrides = custom_icons @ extension_icons @ status_icons @ priority_icons in
+  fun name ->
+    match List.assoc_opt name overrides with
+    | Some svg -> Some (Uri (data_uri_of_svg svg))
+    | None ->
+      match ext name with
+      | Some uri -> Some (Uri uri)
+      | None ->
+        match Icon_tabler_data.tabler_children name with
+        | [] -> None
+        | kids -> Some (Svg_data (is_filled name, kids))
+;;
+
 let status_color name =
   match kebab name with
   | "backlog" -> Some "#c7c7c7"

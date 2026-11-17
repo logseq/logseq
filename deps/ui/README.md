@@ -93,7 +93,7 @@ worker, SQLite WASM binary or SQLite WASM loader is shipped.
 
 ```sh
 pnpm gulp:build
-opam exec -- dune build --root deps/db-worker --profile release js_api bin/main.exe bin/libzvec_c_api.dylib
+opam exec -- dune build --root deps/db-worker --profile release js_api bin/main.exe
 opam exec -- dune build --root deps/ui --profile release js_app
 pnpm exec vite build --config deps/ui/vite.config.mjs --mode desktop
 python3 deps/ui/desktop/build.py --lui-source /absolute/path/to/lui \
@@ -140,3 +140,11 @@ reopening the graph after restart with the same persisted page UUID. The fixture
 rejected browser Worker construction. Package verification rejects WASM files
 and SQLite browser loader code; a stale browser asset was rejected during this
 check. Distribution signing/notarization still requires application credentials.
+
+Release and desktop builds disable UI interaction samples (`__uiPerf`) and
+editor/navigation timing traces. Development builds retain this instrumentation.
+Web icons resolve on demand; picker rows release their view scopes outside the
+viewport. These changes do not resolve all observed renderer memory growth.
+Native and Node distributions no longer include a vector backend or zvec SDK.
+Existing graph SQLite data and full-text search remain available; old vector
+index directories are left untouched but are not opened.

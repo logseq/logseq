@@ -86,3 +86,48 @@ let app_icons () : (string * string) list =
                          (markup_of_react (f (icon_props 24.))) )
                | None -> None
              else None)
+
+(* Index names without invoking SVG factories. A requested icon is encoded
+   at render time; scrolling does not retain an expanded catalog. *)
+let resolver () =
+  let factories = Hashtbl.create 32 in
+  (match Js.Undefined.toOption tabler_icons_u with
+   | None -> ()
+   | Some dict ->
+     Array.iter (fun (key, factory) ->
+       if String.starts_with ~prefix:"Icon" key then
+         Hashtbl.replace factories
+           (Icons.kebab (String.sub key 4 (String.length key - 4))) factory)
+       (Js.Dict.entries dict));
+  fun name ->
+    Option.map (fun factory ->
+      Icons.data_uri_of_svg (markup_of_react (factory (icon_props 24.))))
+      (Hashtbl.find_opt factories name)
+
+(* Convert dynamic catalog data at the Web boundary. The renderer accepts
+   only shape and attribute constructors, so SVG cannot add active content. *)
+let web_asset = function
+  | Icons.Uri uri -> Lui_web_types.Icon_url uri
+  | Icons.Svg_data (filled, children) ->
+    let open Lui_web_types in
+    let tag = function
+      | "path" -> Svg_path | "rect" -> Svg_rect | "circle" -> Svg_circle
+      | "ellipse" -> Svg_ellipse | "line" -> Svg_line | "polyline" -> Svg_polyline
+      | "polygon" -> Svg_polygon
+      | name -> invalid_arg ("Unsupported catalog SVG shape: " ^ name) in
+    let attribute = function
+      | "d" -> Svg_d | "points" -> Svg_points | "x" -> Svg_x | "y" -> Svg_y
+      | "x1" -> Svg_x1 | "y1" -> Svg_y1 | "x2" -> Svg_x2 | "y2" -> Svg_y2
+      | "cx" -> Svg_cx | "cy" -> Svg_cy | "r" -> Svg_r | "rx" -> Svg_rx | "ry" -> Svg_ry
+      | "width" -> Svg_width | "height" -> Svg_height | "fill" -> Svg_fill
+      | "stroke" -> Svg_stroke | "stroke-width" -> Svg_stroke_width
+      | "stroke-linecap" -> Svg_stroke_linecap | "stroke-linejoin" -> Svg_stroke_linejoin
+      | "stroke-miterlimit" -> Svg_stroke_miterlimit | "fill-rule" -> Svg_fill_rule
+      | "clip-rule" -> Svg_clip_rule | "opacity" -> Svg_opacity
+      | "fill-opacity" -> Svg_fill_opacity | "stroke-opacity" -> Svg_stroke_opacity
+      | "transform" -> Svg_transform | "stroke-dasharray" -> Svg_stroke_dasharray
+      | "stroke-dashoffset" -> Svg_stroke_dashoffset
+      | name -> invalid_arg ("Unsupported catalog SVG attribute: " ^ name) in
+    Icon_svg {svg_view_box = "0 0 24 24"; svg_filled = filled;
+      svg_shapes = List.map (fun (name, attrs) -> tag name,
+        List.map (fun (name, value) -> attribute name, value) attrs) children}

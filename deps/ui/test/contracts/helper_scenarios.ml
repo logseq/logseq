@@ -278,5 +278,13 @@ let run () =
     (Lui_protocol.String_map.find_opt "puzzle" (Icons.app_icons ())
      = Some (Icons.data_uri_of_svg (Icons.svg_of_children ~size:24. "puzzle"
          (Icon_tabler_data.tabler_children "puzzle"))));
+  let resolve = Icons.resolve_app_icon () in
+  check "on-demand canonical icons match the registry"
+    (resolve "puzzle" = Some (Icons.Svg_data (false, Icon_tabler_data.tabler_children "puzzle")));
+  check "missing icon requests remain absent" (resolve "missing" = None);
+  let resolve = Icons.resolve_app_icon ~ext:(fun name ->
+    if name = "puzzle" || name = "logseq-logo" then Some "extension-url" else None) () in
+  check "extension icons override the canonical catalog" (resolve "puzzle" = Some (Icons.Uri "extension-url"));
+  check "custom icons override extensions" (resolve "logseq-logo" <> Some (Icons.Uri "extension-url"));
   check "icon names populated" (Array.length Icon_picker_names.items > 1000);
   check "version app set" (String.length Version.app > 0)

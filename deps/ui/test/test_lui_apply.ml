@@ -572,9 +572,20 @@ let test_icon_palette_search_lifecycle () =
     let find predicate = Hashtbl.fold (fun id node found ->
       match found with Some _ -> found | None -> if predicate id node then Some id else None)
       renderer.T.web_store.T.retained_nodes None |> Option.get in
+    let window first last =
+      let windows = Hashtbl.fold (fun id node acc ->
+        if Store.standard_kind node = Some Wv.VirtualList then
+          match prop id Wv.VirtualGeneration with
+          | Some (Wv.IntValue epoch) -> (id, epoch) :: acc
+          | _ -> acc
+        else acc) renderer.T.web_store.T.retained_nodes [] in
+      List.iter (fun (id, epoch) ->
+        ignore (Lui_app.dispatch_event app (Wv.VirtualWindow (id, epoch, first, last, [])))) windows;
+      ignore (Lui_app.flush app) in
     let send event =
       ignore (Lui_app.dispatch_event app event);
       ignore (Lui_app.flush app);
+      window 0 12;
       Runtime.flush_pending := false in
     let trigger () = find (fun id _ ->
       match prop id Wv.StyleClass with
@@ -587,6 +598,15 @@ let test_icon_palette_search_lifecycle () =
     let icons_tab = find (fun id _ -> prop id Wv.TextValue = Some (Wv.StringValue "Icons")) in
     let icons_tab = button_owner icons_tab in
     send (Wv.ToggleChanged (icons_tab, true));
+    let count () = Hashtbl.length renderer.T.web_store.T.retained_nodes in
+    let first_window_count = count () in
+    window 500 512;
+    check "scrolling the full icon catalog releases earlier row scopes"
+      (count () <= first_window_count + 30
+       && not (Hashtbl.fold (fun id _ found -> found ||
+         prop id Wv.AccessibilityLabel = Some (Wv.StringValue "123"))
+         renderer.T.web_store.T.retained_nodes false));
+    window 0 12;
     for _ = 1 to 3 do
       send (Wv.Press (trigger ()));
       let preset = find (fun id _ -> prop id Wv.BackgroundValue = Some (Wv.StringValue "#5e69d2")) in

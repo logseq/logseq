@@ -4,6 +4,10 @@
 
 let ( let* ) promise f = Js.Promise.then_ f promise
 
+(* Vite release and desktop builds define logseq_dev=false. *)
+let dev_build : bool =
+  [%mel.raw "typeof logseq_dev !== 'undefined' && logseq_dev"]
+
 let keychain_request _action _payload =
   Js.Promise.resolve (Wire.Map [ Wire.kw "supported?", Wire.Bool false ])
 
@@ -134,7 +138,7 @@ let fmt_time ms = date_to_localedate (make_date ms)
 
 external perf_now : unit -> float = "now" [@@mel.scope "performance"]
 
-let perf_mark : string -> unit =
+let perf_mark_raw : string -> unit =
   [%mel.raw
     "function (n) { \
        var t = performance.now(); \
@@ -142,12 +146,16 @@ let perf_mark : string -> unit =
        if (window.__editorPerf && n.indexOf('editor:') === 0) \
          console.debug('PERF editor', n, t); }"]
 
+let perf_mark name = if dev_build then perf_mark_raw name
+
 let perf_time (name : string) (f : unit -> 'a) : 'a =
-  let t0 = perf_now () in
-  let r = f () in
-  if perf_now () -. t0 > 1.0 then
-    perf_mark (name ^ ":" ^ string_of_float (perf_now () -. t0));
-  r
+  if not dev_build then f ()
+  else
+    let t0 = perf_now () in
+    let result = f () in
+    let elapsed = perf_now () -. t0 in
+    if elapsed > 1.0 then perf_mark (name ^ ":" ^ string_of_float elapsed);
+    result
 
 external error_message :
   Js.Promise.error -> string Js.Nullable.t = "message" [@@mel.get]
@@ -420,9 +428,3 @@ let strip_db_prefix repo =
   if String.length repo >= n && String.sub repo 0 n = prefix then
     String.sub repo n (String.length repo - n)
   else repo
-
-(* cljs config/dev? = dev-release? || goog.DEBUG — true in every build
-   we ship (the vite bundle has no separate release config). Injected via
-   vite `define`; guarded so the node test runner (no define) is safe. *)
-let dev_build : bool =
-  [%mel.raw "typeof logseq_dev !== 'undefined' && logseq_dev"]

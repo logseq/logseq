@@ -167,49 +167,11 @@ let () =
     with_server ~headers:"Content-Encoding: gzip\r\nContent-Length: 3\r\n" [0., "abc"] (fun url ->
       check "raw body with stale gzip header passes through"
         (await (Http_bytes.send_stream (stream url) (fun _ _ read -> collect read)) = "abc")));
-  if Sys.getenv_opt "LOGSEQ_TEST_NATIVE_VECTORS" = Some "1" then begin
-    test "native embedding" (fun () ->
-      let body = "{\"data\":[{\"index\":1,\"embedding\":[0,1]},{\"index\":0,\"embedding\":[1,0]}]}" in
-      with_server ~headers:(Printf.sprintf "Content-Length: %d\r\n" (String.length body)) [0., body]
-        (fun url ->
-          Unix.putenv "LOGSEQ_EMBEDDINGS_URL" url;
-          check "native embedding capability enabled" (Embedding.enabled ());
-          check "embedding responses follow input order"
-            (await (Embedding.embed_texts ["first"; "second"]) = [[|1.; 0.|]; [|0.; 1.|]])));
-    test "native vector index" (fun () ->
-      let path = Filename.temp_file "worker-vector-" "" in
-      Sys.remove path;
-      Fun.protect ~finally:(fun () -> ignore (await (File_sys.remove path))) (fun () ->
-        match await (Vector_index.open_index ~path ~dimension:3) with
-        | None -> check "native vector backend opens an index" false
-        | Some index ->
-          Fun.protect ~finally:(fun () -> Vector_index.close index) (fun () ->
-            let docs = [
-              { Vector_index.id = "one"; page = "页面"; embedding = [|1.; 0.; 0.|]; vector_title = Some "First" };
-              { Vector_index.id = "two"; page = "other"; embedding = [|0.; 1.; 0.|]; vector_title = None }] in
-            Vector_index.upsert index docs;
-            let results = Vector_index.query index ~embedding:[|1.; 0.; 0.|] ~limit:2 ~page:None in
-            check "vector search ranks and preserves fields"
-              (match results with first :: _ -> first.Vector_index.id = "one" && first.page = Some "页面"
-                && first.vector_title = Some "First" && abs_float (first.vector_score -. 1.) < 0.0001 | _ -> false);
-            check "page-scoped vector search"
-              (List.map (fun (item : Vector_index.query_result) -> item.id)
-                (Vector_index.query index ~embedding:[|1.; 0.; 0.|] ~limit:2 ~page:(Some "other")) = ["two"]);
-            Vector_index.delete index ["one"];
-            check "vector delete persists"
-              (List.length (Vector_index.query index ~embedding:[|1.; 0.; 0.|] ~limit:10 ~page:None) = 1);
-            Worker_state.set_vector_index "platform-vector-test" index;
-            Endpoint_lifecycle.close_db_aux "platform-vector-test";
-            check "graph close drops its vector handle"
-              (Worker_state.vector_index "platform-vector-test" = None);
-            let reopened = Option.get (await (Vector_index.open_index ~path ~dimension:3)) in
-            Fun.protect ~finally:(fun () -> Vector_index.close reopened) (fun () ->
-              check "vector close releases locks and flushes data"
-                (List.length (Vector_index.query reopened ~embedding:[|1.; 0.; 0.|] ~limit:10 ~page:None) = 1);
-              Vector_index.truncate reopened;
-              check "vector truncate recreates an empty index"
-                (Vector_index.query reopened ~embedding:[|1.; 0.; 0.|] ~limit:10 ~page:None = [])))))
-  end;
+  test "native vector capability is unavailable" (fun () ->
+    check "native embedding generation is disabled" (not (Embedding.enabled ()));
+    check "no embedding model is advertised" (Embedding.model_id () = None);
+    check "vector indexes are unavailable"
+      (await (Vector_index.open_index ~path:"/unused" ~dimension:384) = None));
   test "native credentials require the secure host" (fun () ->
     let directory = Filename.temp_file "worker-secret-boundary-" "" in
     Sys.remove directory;

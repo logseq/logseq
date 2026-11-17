@@ -53,14 +53,14 @@ export function capabilities() {
   });
 }
 
-test("Node retains a lazy external zvec backend", async () => {
+test("Node has no vector backend", async () => {
   const result = await build({
     configFile: resolve(root, "vite.config.mjs"), mode: "node", logLevel: "error",
     build: { write: false, minify: false,
       lib: { entry: resolve(runtime, "vector_index.js"), formats: ["cjs"] } },
   });
   const chunk = [result].flat().flatMap(result => result.output).find(item => item.type === "chunk");
-  assert.match(chunk.code, /require\(["']@zvec\/zvec["']\)/);
+  assert(!chunk.code.includes("@zvec/"));
   assert(!Object.keys(chunk.modules).some(id => id.includes("@zvec/")));
   assert(!Object.keys(chunk.modules).some(id => id.endsWith("vector_index_browser.js")));
   const require = createRequire(import.meta.url);
@@ -70,5 +70,9 @@ test("Node retains a lazy external zvec backend", async () => {
     module, exports: module.exports, process, console, URL, URLSearchParams,
     require(id) { requests.push(id); return require(id); },
   });
-  assert(!requests.some(id => id.startsWith("@zvec/")), "loading the Node backend must not initialize zvec");
+  assert(!requests.some(id => id.startsWith("@zvec/")), "Node must not load a vector backend");
+  const effect = createRequire(import.meta.url)(resolve(runtime, "db_worker_effect.js"));
+  let index = "pending";
+  effect.on_any(module.exports.open_index("/unused", 384), value => { index = value; }, error => { throw error; });
+  assert.equal(index, undefined);
 });

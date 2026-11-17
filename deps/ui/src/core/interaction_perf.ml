@@ -1,8 +1,8 @@
 (* Interaction latency instrumentation: stage timings for one dispatch/flush
    cycle pushed onto window.__uiPerf so the bench harness can read them.
 
-   Cost is one small JS object per op plus a handful of performance.now()
-   calls — always on. Stage boundaries:
+   Enabled only in development builds. Release builds do not collect
+   samples or read the profiling clock. Stage boundaries:
 
      dispatch  — Lui_app.dispatch_event (event -> enqueued effects)
      send      — Lui_app.send (reducer + publish)
@@ -45,7 +45,7 @@ let current =
   ; mounted_nodes = 0
   }
 
-let enabled = ref true
+let enabled = ref Platform.dev_build
 
 (* Nested samples fold into the outermost one: a Runtime.send inside an
    event's stabilize re-enters begin_op, and resetting the shared record
@@ -90,9 +90,11 @@ let note_flush ms (d : Lui_runtime.flush_diagnostics) =
   end
 
 let time f =
-  let t0 = perf_now () in
-  let r = f () in
-  (r, perf_now () -. t0)
+  if not !enabled then f (), 0.
+  else
+    let t0 = perf_now () in
+    let r = f () in
+    (r, perf_now () -. t0)
 
 (* melange record -> JS object literal; field names are the __uiPerf keys *)
 type js_sample =

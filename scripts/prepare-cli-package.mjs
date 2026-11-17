@@ -64,11 +64,6 @@ const assertFreshCliRuntime = () => {
 
 const dependencyNames = [
   "@js-joda/core",
-  "@zvec/bindings-darwin-arm64",
-  "@zvec/bindings-linux-arm64",
-  "@zvec/bindings-linux-x64",
-  "@zvec/bindings-win32-x64",
-  "@zvec/zvec",
   "better-sqlite3",
   "fs-extra",
   "jszip",

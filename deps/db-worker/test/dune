@@ -116,6 +116,4 @@
 
 (rule
  (alias runtest)
- (enabled_if (= %{env:LOGSEQ_TEST_NATIVE_VECTORS=0} 1))
- (deps test_vector_interop.mjs)
- (action (run node %{dep:test_vector_interop.mjs} %{exe:test_vector_native.exe})))
+ (action (run %{exe:test_vector_native.exe})))

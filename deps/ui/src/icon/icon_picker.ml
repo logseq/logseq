@@ -264,60 +264,33 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         | row, rest -> row :: chunks n rest)
   in
 
-  (* Windowed grid: the first [eager_rows] rows mount immediately; the
-     rest mount in groups of [group_rows] behind Lazy_children
-     placeholders sized to the group height, so the ~6200-icon table
-     only mounts what scrolls near the viewport instead of being
-     truncated. Row = 36px cell + 2x4px vertical padding. *)
-  let row_h = 44. and eager_rows = 8 and group_rows = 6 in
-  let grid_rows label items =
-    let rows =
-      List.map
-        (fun r -> grid ~columns:9 ~gap:0 ~min_width:0 ~padding_vertical:4 r)
-        (chunks 9 items)
-    in
-    let rec split i acc = function
-      | [] -> (List.rev acc, [])
-      | rest when i = 0 -> (List.rev acc, rest)
-      | x :: tl -> split (i - 1) (x :: acc) tl
-    in
-    let eager, rest = split eager_rows [] rows in
-    let groups = chunks group_rows rest in
-    eager
-    @ List.mapi
-        (fun i grp ->
-          let key = Printf.sprintf "ig-%s-%d" label i in
-          Lazy_children.lazy_children ~key ~uuid:key
-            ~min_height:(row_h *. float_of_int (List.length grp))
-            ~render:(fun () -> column ~gap:0 grp))
-        groups
+  (* Keep item data in the source, and construct cells only for the live
+     viewport. Leaving rows release their scopes, tooltips and DOM nodes. *)
+  let section label items =
+    (`Heading label) :: List.map (fun items -> `Cells items) (chunks 9 items)
   in
-
-  (* items are chunked into rows of 9: the web fallback relied on
-     flex-wrap, which the native layout engine ignores — a single
-     unwrapped row shrink-compresses every cell to a few px *)
-  let pane_section label (items : t list) : t =
-    column ~padding_horizontal:8 ~min_width:0
-      [ box ~style_class:"hd"
-          [ text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
-              ~font_size:"0.75rem" ~font_weight:500
-              ~foreground:"hsl(var(--muted-foreground))"
-              [] ]
-      ; column ~gap:0 (grid_rows label items) ]
-  in
-
-  let used_item_btns () : t list =
+  let used_item_data () =
     used_items ()
     |> List.map (fun (typ, id, name) ->
-           if typ = "emoji" then item_btn (Emoji_item (id, name))
-           else
-             match
-               List.find_opt
-                 (fun (d, _) -> icon_id d = id)
-                 (icon_items ())
-             with
-             | Some (d, k) -> item_btn (Tabler_item (d, k))
-             | None -> item_btn (Tabler_item (name, Icons.kebab name)))
+      if typ = "emoji" then Emoji_item (id, name)
+      else match List.find_opt (fun (display, _) -> icon_id display = id) (icon_items ()) with
+      | Some (display, name) -> Tabler_item (display, name)
+      | None -> Tabler_item (name, Icons.kebab name))
+  in
+  let emoji_items entries = List.map (fun (id, name) -> Emoji_item (id, name)) entries in
+  let tabler_items entries = List.map (fun (display, name) -> Tabler_item (display, name)) entries in
+  let used_section items =
+    if items = [] then [] else section (I.t "ui/frequently-used") items
+  in
+  let render_row = function
+    | `Heading label ->
+      row ~height:44 ~padding_horizontal:8 ~cross:`center
+        [text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
+          ~font_size:"0.75rem" ~font_weight:500
+          ~foreground:"hsl(var(--muted-foreground))" []]
+    | `Cells items ->
+      grid ~columns:9 ~gap:0 ~height:44 ~min_width:0
+        ~padding_horizontal:8 ~padding_vertical:4 (List.map item_btn items)
   in
 
   let set_tab t =
@@ -365,73 +338,35 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   in
 
   let content_view (s : pstate) : t =
-    if String.trim s.q = "" then (
-      match s.tab with
-      | Tab_all ->
-          let used = used_item_btns () in
-          column ~gap:4
-            [ Ui_components.with_props [Ui_components.Prop.padding_bottom 40] (column
-                ((if used = [] then []
-                  else
-                    [ pane_section
-                        (I.t "ui/frequently-used") used ])
-                @ [ pane_section
-                      (I.tf "icon/emojis-count"
-                         [ string_of_int (Emoji_mart.emoji_count ()) ])
-                      (List.map
-                         (fun (id, n) -> item_btn (Emoji_item (id, n)))
-                         (take 32 (Emoji_mart.all_emojis ())))
-                  ; pane_section
-                      (I.tf "icon/icons-count"
-                         [ string_of_int (List.length (icon_items ())) ])
-                      (List.map
-                         (fun (d, k) -> item_btn (Tabler_item (d, k)))
-                         (take 48 (icon_items ()))) ])) ]
-      | Tab_emoji ->
-          (* cljs emojis-cp renders its own flex-1 flex-col gap-1 div
-             inside the outer one *)
-          let used =
-            used_items ()
-            |> List.filter (fun (t, _, _) -> t = "emoji")
-            |> List.map (fun (_, id, name) -> item_btn (Emoji_item (id, name)))
-          in
-          column ~gap:4
-            [ column ~gap:4
-                ((if used = [] then []
-                  else
-                    [ pane_section
-                        (I.t "ui/frequently-used") used ])
-                @ [ pane_section
-                      (I.tf "icon/emojis-count"
-                         [ string_of_int (Emoji_mart.emoji_count ()) ])
-                      (List.map
-                         (fun (id, n) -> item_btn (Emoji_item (id, n)))
-                         (Emoji_mart.all_emojis ())) ]) ]
-      | Tab_icon ->
-          (* the unfiltered table is ~6200 icons: pane_section windows
-             the grid (lazy row groups) instead of capping it *)
-          column ~gap:4
-            [ pane_section
-                (I.tf "icon/icons-count"
-                   [ string_of_int (List.length (icon_items ())) ])
-                (List.map
-                   (fun (d, k) -> item_btn (Tabler_item (d, k)))
-                   (icon_items ())) ])
-    else
-      let icons =
-        if s.tab = Tab_emoji then []
-        else List.map (fun (d, k) -> Tabler_item (d, k)) (search_icons s.q)
-      in
-      let items =
-        List.map (fun (id, name) -> Emoji_item (id, name)) s.emoji_results
-        @ icons
-      in
-      column ~gap:4
-        (if items = [] then []
-         else
-           [ pane_section
-               (I.tf "icon/matched-count" [ string_of_int (List.length items) ])
-               (List.map item_btn items) ])
+    let rows =
+      if String.trim s.q = "" then
+        match s.tab with
+        | Tab_all ->
+          used_section (used_item_data ())
+          @ section (I.tf "icon/emojis-count" [string_of_int (Emoji_mart.emoji_count ())])
+              (emoji_items (take 32 (Emoji_mart.all_emojis ())))
+          @ section (I.tf "icon/icons-count" [string_of_int (Array.length Icon_picker_names.items)])
+              (tabler_items (take 48 (icon_items ())))
+        | Tab_emoji ->
+          used_section (List.filter (function Emoji_item _ -> true | _ -> false) (used_item_data ()))
+          @ section (I.tf "icon/emojis-count" [string_of_int (Emoji_mart.emoji_count ())])
+              (emoji_items (Emoji_mart.all_emojis ()))
+        | Tab_icon ->
+          section (I.tf "icon/icons-count" [string_of_int (Array.length Icon_picker_names.items)])
+            (tabler_items (icon_items ()))
+      else
+        let icons = if s.tab = Tab_emoji then [] else tabler_items (search_icons s.q) in
+        let items = emoji_items s.emoji_results @ icons in
+        if items = [] then []
+        else section (I.tf "icon/matched-count" [string_of_int (List.length items)]) items
+    in
+    let source = Signal.constant sched (List.mapi (fun index row -> index, row) rows) in
+    virtual_list ~key:("bd-" ^ tab_name s.tab ^ "-" ^ s.q)
+      ~style_class:("bd " ^ tab_name s.tab) ~grow:1. ~min_height:0
+      ~padding_horizontal:4 ~padding_vertical:4 ~item_extent:44. ~overscan:2
+      [virtual_rows ~source ~key:fst ~cmp:Int.compare
+        ~mount:(fun row -> box ~height:44 ~min_width:0
+          [reactive (fun (_, value) -> render_row value) row]) ()]
   in
 
   let tabs =
@@ -479,7 +414,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                                  "var(--lx-gray-01, var(--ls-primary-background-color, \
                                   hsl(var(--popover))))"
                                ~text:label
-                               ~checked_signal:(Signal.map (fun s -> s.tab = t) sv)
+                               ~checked_signal:(reactive (fun s -> s.tab = t) sv)
                                ~on_toggle:(fun _ -> set_tab t) ())
                            tabs)) ] ]
           (* cljs hides the color picker on the emoji tab *)
@@ -539,17 +474,11 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       (Ui_services.dom_query ".cp__emoji-icon-picker input"))
                   ())
              sv ]
-     ; Ui_parts.class_signal sv
-         (fun s -> "bd " ^ tab_name s.tab)
-         (scroll ~key:"bd" ~orientation:`vertical ~grow:1.
-            ~padding_horizontal:4 ~padding_vertical:4
-            [ column ~min_width:0
-                [ reactive
-                    ~equal:(fun (a : pstate) b ->
-                       a.q = b.q && a.tab = b.tab
-                       && a.preset = b.preset
-                       && a.emoji_results = b.emoji_results)
-                    content_view sv ] ]) ]))
+     ; reactive
+         ~equal:(fun (a : pstate) b ->
+           a.q = b.q && a.tab = b.tab && a.preset = b.preset
+           && a.emoji_results = b.emoji_results)
+         content_view sv ]))
     context parent
 ;;
 

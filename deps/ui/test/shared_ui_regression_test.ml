@@ -2339,6 +2339,11 @@ let run_views ~registry ~profile ~finish =
   check "selecting a preset closes the palette" (presets () = []);
   eqs "selected icon color is persisted" "#6e7b8b"
     (Option.value (Ui_services.storage_get "ls-icon-color-preset") ~default:"");
+  List.iter (fun n ->
+    if n.M.kind = "virtual-list" then
+      match Hashtbl.find_opt n.M.props "virtual-generation" with
+      | Some (P.IntValue epoch) -> S.dispatch picker (P.VirtualWindow (n.M.id, epoch, 0, 20, []))
+      | _ -> ()) (nodes picker);
   let icon = List.find_opt (fun n -> class_has n "ls-emoji-cell") (buttons ()) in
   (match icon with
    | Some n -> S.press picker n.M.id;

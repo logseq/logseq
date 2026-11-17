@@ -40,6 +40,19 @@ def prepare_frontend(destination):
         if (static / directory).is_dir():
             shutil.copytree(static / directory, destination / directory,
                 ignore=shutil.ignore_patterns("*.map", "*.wasm", "db-worker.js", "main.js", "chunks", "assets", "w-*.js"))
+    # System WebViews support WOFF2. Keep a single copy of the legacy
+    # icon font instead of shipping its EOT, TTF and WOFF equivalents.
+    font_css = destination / "css/tabler-icons.min.css"
+    if font_css.exists():
+        def woff2_only(match):
+            face = match.group(0)
+            source = re.search(r'url\([^)]+\.woff2[^)]*\)\s*format\([^)]+\)', face)
+            if source is None:
+                raise ValueError("Tabler icon font has no WOFF2 source")
+            return re.sub(r"src:[^;}]+;?", "", face)[:-1].rstrip(";") + ";src:" + source.group(0) + "}"
+        font_css.write_text(re.sub(r"@font-face\{[^}]+\}", woff2_only, font_css.read_text()))
+        for suffix in ["eot", "ttf", "woff"]:
+            (destination / f"css/fonts/tabler-icons.{suffix}").unlink(missing_ok=True)
     shutil.copytree(native_js, destination / "js", dirs_exist_ok=True,
                     ignore=shutil.ignore_patterns("*.map"))
     html = (static / "index.html").read_text()
@@ -98,11 +111,13 @@ def main():
     info.write_bytes(plistlib.dumps(metadata))
     native = ROOT / "deps/db-worker/_build/default/bin"
     worker = binaries / "logseq-db-worker"
-    vector = binaries / "libzvec_c_api.dylib"
     shutil.copy2(native / "main.exe", worker)
-    shutil.copy2(native / "libzvec_c_api.dylib", vector)
-    run("dylibbundler", "-b", "-od", "-x", worker, "-x", vector,
+    worker.chmod(worker.stat().st_mode | 0o200)
+    run("strip", "-S", worker)
+    run("dylibbundler", "-b", "-od", "-x", worker,
         "-d", app / "Contents/Frameworks", "-p", "@executable_path/../Frameworks/")
+    if any("zvec" in path.name.lower() for path in app.rglob("*")):
+        raise ValueError("Vector backend binaries are forbidden in desktop packages")
     for binary in [*binaries.iterdir(), *(app / "Contents/Frameworks").iterdir()]:
         if binary.is_file():
             sign = ["codesign", "--force", "--options", "runtime" if arguments.identity else "0",

@@ -39,7 +39,7 @@ const nodeBuiltins = [
 
 // runtime deps of the electron main bundle that must resolve from
 // node_modules at runtime inside the packaged app: native modules
-// (keytar, zvec), @logseq/graph-lifecycle (loaded through a dynamic
+// (keytar), @logseq/graph-lifecycle (loaded through a dynamic
 // require() the bundler cannot trace), and fastify which emits
 // dynamic ajv requires of its own.
 // Everything else (electron-log, zod, mldoc, ...) is bundled into
@@ -53,12 +53,6 @@ const electronRuntimeDeps = [
   "abort-controller",
   "fastify",
   "keytar",
-  "@zvec/bindings-darwin-arm64",
-  "@zvec/bindings-darwin-x64",
-  "@zvec/bindings-linux-arm64",
-  "@zvec/bindings-linux-x64",
-  "@zvec/bindings-win32-x64",
-  "@zvec/zvec",
 ];
 
 const nodeExternalsStub = resolve(
@@ -138,9 +132,9 @@ export default defineConfig(({ mode }) => {
         minify: true,
         sourcemap: false,
         rollupOptions: {
-          // Native modules stay runtime requires. Zvec and keytar load
-          // lazily only when the corresponding capability is used.
-          external: (id) => id === "keytar" || id.startsWith("@zvec/") || nodeBuiltins.includes(id),
+          // Keytar stays a runtime require and loads only when its
+          // credential capability is used.
+          external: (id) => id === "keytar" || nodeBuiltins.includes(id),
           output: {
             exports: "auto",
             codeSplitting: false,
