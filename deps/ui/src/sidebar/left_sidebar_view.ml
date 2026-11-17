@@ -52,7 +52,7 @@ let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
    .shui-shortcut-combo.shui-shortcut-glow > kbd*, pushed to the row end
    (cljs ml-auto pl-2) *)
 let menu_sc caps =
-  row ~key:"sc" ~main:`end_ ~cross:`center
+  row ~key:"sc" ~main:`end_ ~cross:`center ~grow:1.
     [ Ui_components.shortcut_combo ~key:"sc-box" ~glow:true
         (List.concat
            (List.mapi
