@@ -2,6 +2,7 @@
   (:require [cljs.test :refer [deftest are testing is]]
             [datascript.core :as d]
             [logseq.common.uuid :as common-uuid]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db.test.helper :as db-test]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]))
@@ -202,3 +203,59 @@
       "- [~~k~~](a.md)" "k"
       "- [**k**](a.md)" "k"
       "- [*k*](a.md)" "k")))
+
+(def ^:private journal-formatter date-time-util/default-journal-title-formatter)
+(def ^:private jan-1-2024-uuid (common-uuid/gen-uuid :journal-page-uuid 20240101))
+
+(defn- parse-db-block
+  "Same extract path wrap-parse-block uses for DB graphs."
+  [title]
+  (let [content (str "- " title)
+        ast (gp-mldoc/->edn content (gp-mldoc/default-config :markdown))]
+    (first (gp-block/extract-blocks ast content :markdown
+                                    {:date-formatter journal-formatter
+                                     :db-graph-mode? true
+                                     :block-pattern "-"
+                                     :user-config {}}))))
+
+(deftest db-class-page-name-does-not-become-a-journal
+  (let [conn (db-test/create-conn)]
+    (doseq [title ["2024-01-01" "Jan 1st, 2024" "jan 1st, 2024"]]
+      (let [page (gp-block/page-name->map title @conn false journal-formatter {:class? true})]
+        (is (= title (:block/title page))
+            (str "Class title stays " (pr-str title)))
+        (is (nil? (:block/journal-day page)))
+        (is (nil? (:block.temp/original-page-name page)))
+        (is (not= jan-1-2024-uuid (:block/uuid page)))
+        (is (= [:logseq.class/Tag] (:block/tags page)))))
+    (testing "non-journal-like class titles are unchanged"
+      (doseq [title ["20240101" "jan 1st, 2024x"]]
+        (let [page (gp-block/page-name->map title @conn false journal-formatter {:class? true})]
+          (is (= title (:block/title page)))
+          (is (nil? (:block/journal-day page)))
+          (is (= [:logseq.class/Tag] (:block/tags page))))))
+    (testing "a date page ref is still a journal"
+      (let [page (gp-block/page-name->map "2024-01-01" @conn false journal-formatter)]
+        (is (= 20240101 (:block/journal-day page)))
+        (is (= jan-1-2024-uuid (:block/uuid page)))
+        (is (= [:logseq.class/Journal] (:block/tags page)))))))
+
+(deftest db-hashtag-date-extract-does-not-create-journal-classes
+  (doseq [title ["#2024-01-01" "#[[2024-01-01]]"]]
+    (let [block (parse-db-block title)
+          tags (:block/tags block)]
+      (is (seq tags) (str "Parses a tag from " title))
+      (doseq [tag tags]
+        (is (nil? (:block/journal-day tag))
+            (str title " tag is not a journal"))
+        (is (nil? (:block.temp/original-page-name tag)))
+        (is (not= jan-1-2024-uuid (:block/uuid tag)))
+        (is (not= "journal" (:block/type tag))))))
+  (testing "#x[[Jan 1st, 2024]] does not create a journal-attributed class"
+    (let [block (parse-db-block "#x[[Jan 1st, 2024]]")
+          tags (:block/tags block)]
+      (is (seq tags))
+      (doseq [tag tags]
+        (is (nil? (:block/journal-day tag)))
+        (is (not= jan-1-2024-uuid (:block/uuid tag)))
+        (is (not= "journal" (:block/type tag)))))))

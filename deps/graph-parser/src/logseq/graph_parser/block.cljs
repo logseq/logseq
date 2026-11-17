@@ -326,6 +326,9 @@
    {:keys [with-timestamp? page-uuid from-page class? skip-existing-page-check? skip-journal?]}]
   (let [db-based? (entity-plus/db-based-graph? db)
         original-page-name (common-util/remove-boundary-slashes original-page-name)
+        ;; DB classes are not journals. Date-like tag titles must keep a normal
+        ;; class identity instead of journal-day / journal uuid / original-page-name.
+        skip-journal? (or skip-journal? (and class? db-based?))
         [original-page-name' page-name journal-day]
         (if skip-journal?
           [original-page-name (common-util/page-name-sanity-lc original-page-name) nil]
@@ -447,7 +450,7 @@
        (not (common-date/valid-journal-title-with-slash? page))))
 
 (defn- ref->map
-  [db *col {:keys [date-formatter *name->id tag? db-based? structured-tags]}]
+  [db *col {:keys [date-formatter *name->id tag? db-based? structured-tags skip-journal-for-tags?]}]
   (let [col (distinct (remove string/blank? @*col))
         children-pages (->> (mapcat (fn [p]
                                       (let [p (if (map? p)
@@ -474,7 +477,9 @@
                     tag?
                     (or (contains? structured-tags item) tag?))]
          (when-not macro?
-           (let [m (page-name->map item db true date-formatter {:class? tag?})
+           (let [m (page-name->map item db true date-formatter
+                                   {:class? tag?
+                                    :skip-journal? (and tag? skip-journal-for-tags?)})
                  result (cond->> m
                           (and db-based? tag? (not (:db/ident m)))
                           (db-class/build-new-class db))
@@ -492,9 +497,10 @@
                result))))) col)))
 
 (defn- with-page-refs-and-tags
-  [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags]
+  [{:keys [title body tags refs marker priority] :as block} db date-formatter {:keys [structured-tags skip-journal-for-tags?]
                                                                                :or {structured-tags #{}}}]
   (let [db-based? (and (entity-plus/db-based-graph? db) (not @*export-to-db-graph?))
+        skip-journal-for-tags? (or skip-journal-for-tags? db-based?)
         refs (->> (concat tags refs (when-not db-based? [marker priority]))
                   (remove string/blank?)
                   (distinct))
@@ -524,6 +530,7 @@
           ref->map-options {:db-based? db-based?
                             :date-formatter date-formatter
                             :*name->id *name->id
+                            :skip-journal-for-tags? skip-journal-for-tags?
                             :structured-tags (set @*structured-tags)}
           refs (->> (ref->map db *refs ref->map-options)
                     (remove nil?)
@@ -727,7 +734,8 @@
         block (-> block
                   (assoc :body body)
                   (with-page-block-refs db date-formatter
-                    (cond-> {} (seq block-tags) (assoc :structured-tags block-tags))))
+                    (cond-> {:skip-journal-for-tags? db-based?}
+                      (seq block-tags) (assoc :structured-tags block-tags))))
         block (if db-based? block
                   (-> block
                       (update :tags (fn [tags] (map #(assoc % :block/format format) tags)))
