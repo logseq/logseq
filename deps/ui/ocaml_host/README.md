@@ -141,6 +141,9 @@ Scrollbars start hidden, appear during scrolling, and hide after 800 ms without 
 
 On macOS, window dragging is selected from the titlebar region at mouse-down;
 header controls retain ordinary button input even after hovering a drag region.
+Window movement stays locked for a control's press/release gesture. Hover paint
+includes the owning control's descendants, so icons and labels do not interrupt
+the button, navigation-item or bullet background.
 Sidebar dropdowns use retained trigger anchors, viewport collision handling and
 shared menu chrome. Context menus retain the context-click rectangle. Pressing
 the owning trigger again closes its menu. Open menus, popups and dialogs suppress
