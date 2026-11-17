@@ -70,6 +70,47 @@
               (is (not (ldb/asset? replayed)))
               (is (empty? (:block/_parent replayed))))))))))
 
+(deftest insert-history-replays-vector-tag-refs-across-databases
+  (let [tag-uuid (random-uuid)
+        other-tag-uuid (random-uuid)
+        tags [{:block/uuid tag-uuid :block/title "Finance Ledger"
+               :block/name "finance ledger" :block/tags :logseq.class/Tag}
+              {:block/uuid other-tag-uuid :block/title "Expense"
+               :block/name "expense" :block/tags :logseq.class/Tag}]
+        source (db-test/create-conn)
+        peer (db-test/create-conn)
+        _ (d/transact! source tags)
+        _ (d/transact! peer [{:block/uuid (random-uuid) :block/title "Peer-only entity"}])
+        _ (d/transact! peer tags)
+        task-uuid (:block/uuid (d/entity @source :logseq.class/Task))
+        tag-id (:db/id (d/entity @source [:block/uuid tag-uuid]))
+        other-tag-id (:db/id (d/entity @source [:block/uuid other-tag-uuid]))]
+    (doseq [[tag-refs expected-tags]
+            [[[tag-id] #{tag-uuid}]
+             [[tag-id other-tag-id] #{tag-uuid other-tag-uuid}]
+             [[:logseq.class/Task tag-id] #{task-uuid tag-uuid}]
+             [[[:block/uuid tag-uuid]] #{tag-uuid}]
+             [[:block/uuid tag-uuid] #{tag-uuid}]
+             [[] #{}]]]
+      (testing (str "tag refs " tag-refs)
+        (let [conn (d/conn-from-db @source)
+              replay-conn (d/conn-from-db @peer)
+              block-uuid (random-uuid)
+              reports (atom [])]
+          (d/listen! conn ::tag-history #(swap! reports conj %))
+          (outliner-core/insert-blocks!
+           conn [{:block/uuid block-uuid :block/title "" :block/tags tag-refs}]
+           (d/entity @conn [:block/uuid tag-uuid])
+           {:sibling? false :keep-uuid? true :replace-empty-target? false})
+          (let [{:keys [db-before db-after tx-data tx-meta]} (last @reports)
+                {:keys [forward-outliner-ops]}
+                (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)]
+            (outliner-op/apply-ops! replay-conn forward-outliner-ops {})
+            (let [block (d/entity @replay-conn [:block/uuid block-uuid])]
+              (is (= expected-tags (set (map :block/uuid (:block/tags block)))))
+              (is (= "" (:block/title block)))
+              (is (= tag-uuid (:block/uuid (:block/parent block)))))))))))
+
 (defn- run-direct-outdent
   [conn block]
   (let [{:keys [tx-data]}
