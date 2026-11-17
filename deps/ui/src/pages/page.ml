@@ -1013,34 +1013,38 @@ let journal_section ms ~footer ~source : t =
                 title_source
             ; pagebar_slots_el p0 ] ])
     else
-      Ui_components.with_props [Ui_components.Prop.padding_bottom 102]
-      (column ~key:"journal-footer"
-        [ Ui_components.with_props [Ui_components.Prop.padding_bottom 64]
-          (column ~key:"journal-add" ~margin_left:(-20)
-            ~style_class:"page-blocks-inner"
-            ~data_attrs:(reactive (fun (page : Model.page) ->
-              ("data-cid", section.scope) ::
-              (match page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> [])) ps)
-            [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
-                ~previous_blank:(reactive
-                  (fun (page : Model.page) collapse ->
-                    Add_button.previous_blank ~scope:section.scope page.page_blocks collapse)
-                  ps (S.collapse_sig ()))
-                ~flags:(fun context -> Signal.own_signal context.Lui_ui.ui_scope
-                  (Signal.map (fun (page : Model.page) -> page.page_blocks <> [], false) ps)) () ])
-        ; column ~key:"journal-references" ~gap:32 ~margin_left:4
-            [ reactive
-                ~equal:(fun (a : Model.page) (b : Model.page) ->
-                  a.page_uuid = b.page_uuid && is_today_journal a = is_today_journal b)
-                (fun page ->
-                  column ~key:"journal-reference-content" ~gap:32
-                    ((if is_today_journal page then
-                        [box ~key:"today-queries" ~accessibility_identifier:"today-queries" []]
-                      else [])
-                     @ [journal_references_view page])) ps ] ])
+      column ~key:"journal-footer" ~margin_horizontal:(-8)
+        [ Ui_components.with_props [Ui_components.Prop.padding_bottom 102]
+          (column ~key:"journal-footer-content" ~padding_horizontal:8
+            [ Ui_components.with_props [Ui_components.Prop.padding_bottom 64]
+              (column ~key:"journal-add" ~margin_left:(-20)
+                ~style_class:"page-blocks-inner"
+                ~data_attrs:(reactive (fun (page : Model.page) ->
+                  ("data-cid", section.scope) ::
+                  (match page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> [])) ps)
+                [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
+                    ~previous_blank:(reactive
+                      (fun (page : Model.page) collapse ->
+                        Add_button.previous_blank ~scope:section.scope page.page_blocks collapse)
+                      ps (S.collapse_sig ()))
+                    ~flags:(fun context -> Signal.own_signal context.Lui_ui.ui_scope
+                      (Signal.map (fun (page : Model.page) -> page.page_blocks <> [], false) ps)) () ])
+            ; column ~key:"journal-references" ~gap:32 ~margin_left:4
+                [ reactive
+                    ~equal:(fun (a : Model.page) (b : Model.page) ->
+                      a.page_uuid = b.page_uuid && is_today_journal a = is_today_journal b)
+                    (fun page ->
+                      column ~key:"journal-reference-content" ~gap:32
+                        ((if is_today_journal page then
+                            [box ~key:"today-queries" ~accessibility_identifier:"today-queries" []]
+                          else [])
+                         @ [journal_references_view page])) ps ] ])
+        ; if_ ~test:(reactive (fun section -> not section.Outliner_projection.is_last) source)
+            (box ~key:"journal-separator" ~height:1
+              ~background:"hsl(var(--border))" []) ]
   in
   (Ui_parts.class_signal ps (fun page -> page_wrap_cls (Signal.get ms) page)
-    (column ~key:"journal-section" ~padding_horizontal:8 ~min_width:0
+    (column ~key:"journal-section" ~padding_horizontal:0 ~min_width:0
       ~data_attrs:(reactive page_wrap_attrs ps) [chrome])) ctx parent
 
 let journals_view_ms (ms : Model.t Signal.signal) : t =
@@ -1051,7 +1055,7 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
     [ if_ ~test:(reactive (fun rows -> rows = []) outline.rows)
         (box ~key:"journal-placeholder" ~padding:24
           ~style_class:"journal-item-placeholder" [])
-    ; Flat_outliner.view ~state:outline ~library:false
+    ; Flat_outliner.view ~state:outline ~library:false ~padding_horizontal:8
         ~header:(journal_section ms ~footer:false)
         ~footer:(journal_section ms ~footer:true)
         ~on_end:(fun () -> ignore (!Runtime.journals_load_more ())) () ]) ctx parent

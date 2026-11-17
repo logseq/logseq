@@ -79,9 +79,11 @@ let block_row ~state ~library ~source : t =
                 ~source:(reactive (fun row -> (block_of_row row).block) source)) ]))
     ctx parent
 
-let view ~state ~library ~header ~footer ?(on_end = fun () -> ()) () : t =
+let view ~state ~library ~header ~footer ?(padding_horizontal = 0)
+    ?(on_end = fun () -> ()) () : t =
  fun ctx parent ->
   let root = column ~key:"main-outline" ~min_width:0
+      ~padding_horizontal
       ~style_class:"blocks-list-wrap" ~data_attrs:["data-level", "0"] [] ctx parent in
   Outline_viewport_state.register_rows ctx state root;
   let mount source =
