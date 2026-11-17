@@ -18,8 +18,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
 #if defined(__APPLE__)
 #include <Security/Security.h>
 #endif
@@ -121,21 +120,38 @@ typedef struct {
   double *regions;
   size_t count;
   Uint32 window_id;
-  SDL_threadID thread;
+  SDL_ThreadID thread;
   int watching;
   int repainting;
 } LogseqWindowState;
 
+static void *logseq_get_window_data(SDL_Window *window, const char *key) {
+  return SDL_GetPointerProperty(SDL_GetWindowProperties(window), key, NULL);
+}
+
+static void logseq_set_window_data(SDL_Window *window, const char *key, void *data) {
+  if (!SDL_SetPointerProperty(SDL_GetWindowProperties(window), key, data))
+    caml_failwith(SDL_GetError());
+}
+
+#if defined(__APPLE__)
+static void *logseq_cocoa_window(SDL_Window *window) {
+  if (!window) return NULL;
+  return SDL_GetPointerProperty(SDL_GetWindowProperties(window),
+                               SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+}
+#endif
+
 static const char *logseq_window_key = "logseq-native-window";
 
 static LogseqWindowState *logseq_window_state(SDL_Window *window) {
-  LogseqWindowState *state = SDL_GetWindowData(window, logseq_window_key);
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
   if (!state) {
     state = calloc(1, sizeof(*state));
     if (!state) caml_raise_out_of_memory();
     state->window_id = SDL_GetWindowID(window);
-    state->thread = SDL_ThreadID();
-    SDL_SetWindowData(window, logseq_window_key, state);
+    state->thread = SDL_GetCurrentThreadID();
+    logseq_set_window_data(window, logseq_window_key, state);
   }
   return state;
 }
@@ -168,20 +184,19 @@ CAMLprim value logseq_native_drag_regions(value id, value regions) {
   state->regions = copy;
   state->count = count;
   if (SDL_SetWindowHitTest(window, count ? logseq_hit_test : NULL,
-                          count ? state : NULL) < 0)
+                          count ? state : NULL) == false)
     caml_failwith(SDL_GetError());
   if (!count && !state->watching) {
-    SDL_SetWindowData(window, logseq_window_key, NULL);
+    logseq_set_window_data(window, logseq_window_key, NULL);
     free(state);
   }
   CAMLreturn(Val_unit);
 }
 
-static int logseq_expose_watch(void *userdata, SDL_Event *event) {
+static bool logseq_expose_watch(void *userdata, SDL_Event *event) {
   LogseqWindowState *state = userdata;
-  if (SDL_ThreadID() == state->thread && !state->repainting &&
-      event->type == SDL_WINDOWEVENT && event->window.windowID == state->window_id &&
-      event->window.event == SDL_WINDOWEVENT_EXPOSED) {
+  if (SDL_GetCurrentThreadID() == state->thread && !state->repainting &&
+      event->type == SDL_EVENT_WINDOW_EXPOSED && event->window.windowID == state->window_id) {
     /* SDL can invoke this while its blocking event wait releases the runtime. */
     bool acquire = Caml_state_opt == NULL;
     if (acquire) caml_acquire_runtime_system();
@@ -202,9 +217,9 @@ CAMLprim value logseq_native_watch_expose(value id, value enabled) {
   LogseqWindowState *state = logseq_window_state(window);
   if (Bool_val(enabled) && !state->watching) {
     state->watching = 1;
-    SDL_AddEventWatch(logseq_expose_watch, state);
+    if (!SDL_AddEventWatch(logseq_expose_watch, state)) caml_failwith(SDL_GetError());
   } else if (!Bool_val(enabled) && state->watching) {
-    SDL_DelEventWatch(logseq_expose_watch, state);
+    SDL_RemoveEventWatch(logseq_expose_watch, state);
     state->watching = 0;
   }
   CAMLreturn(Val_unit);
@@ -214,13 +229,12 @@ CAMLprim value logseq_native_watch_expose(value id, value enabled) {
 CAMLprim value logseq_native_test_expose_unlocked(value id) {
   CAMLparam1(id);
   SDL_Event event = {0};
-  event.type = SDL_WINDOWEVENT;
+  event.type = SDL_EVENT_WINDOW_EXPOSED;
   event.window.windowID = Int_val(id);
-  event.window.event = SDL_WINDOWEVENT_EXPOSED;
   caml_release_runtime_system();
-  int result = SDL_PushEvent(&event);
+  bool result = SDL_PushEvent(&event);
   caml_acquire_runtime_system();
-  if (result < 0) caml_failwith(SDL_GetError());
+  if (!result) caml_failwith(SDL_GetError());
   CAMLreturn(Val_unit);
 }
 
@@ -230,14 +244,14 @@ CAMLprim value logseq_native_notify_event_loop(value unit_v) {
   CAMLparam1(unit_v);
   if (SDL_WasInit(SDL_INIT_EVENTS)) {
     SDL_Event event = {0};
-    event.type = SDL_USEREVENT;
+    event.type = SDL_EVENT_USER;
     event.user.code = 0x4c53574b;
     /* Event watches can enter OCaml while SDL holds its watcher mutex.
        Never wait for that mutex while retaining the runtime lock. */
     caml_release_runtime_system();
-    int result = SDL_PushEvent(&event);
+    bool result = SDL_PushEvent(&event);
     caml_acquire_runtime_system();
-    if (result < 0) caml_failwith(SDL_GetError());
+    if (!result) caml_failwith(SDL_GetError());
   }
   CAMLreturn(Val_unit);
 }
@@ -351,9 +365,8 @@ CAMLprim value logseq_native_memory_usage(value unit_v) {
 CAMLprim value logseq_native_window_presentable(value id_v) {
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
   if (!window) caml_invalid_argument("Presentation requires a live window");
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(window, &info)) caml_failwith(SDL_GetError());
-  id native_window = (id)info.info.cocoa.window;
+  if (!logseq_cocoa_window(window)) caml_failwith(SDL_GetError());
+  id native_window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   unsigned long state = ((unsigned long (*)(id, SEL))objc_msgSend)(native_window,
                                                    sel_registerName("occlusionState"));
   return Val_bool((state & (1UL << 1)) != 0);
@@ -671,10 +684,8 @@ CAMLprim void logseq_native_titlebar_blend(void) {
    consecutive sizes into a doubled ghost. Disable implicit actions on
    every CAMetalLayer under the content view so frames swap atomically. */
 CAMLprim void logseq_native_metal_noanim(value id_v) {
-  SDL_SysWMinfo info;
-  SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) return;
-  id window = (id)info.info.cocoa.window;
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)))) return;
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
   if (content == nil) return;
   Class metal = objc_getClass("CAMetalLayer");
@@ -734,11 +745,9 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
   double height = header_h, left = traffic_x + 2.0 * (button_size + button_gap)
                                    + button_size + after_gap,
          right = 0.0;
-  SDL_SysWMinfo info;
-  SDL_VERSION(&info.version);
   SDL_Window *sdl = SDL_GetWindowFromID(Int_val(id_v));
-  if (sdl && SDL_GetWindowWMInfo(sdl, &info)) {
-    id window = (id)info.info.cocoa.window;
+  if (logseq_cocoa_window(sdl)) {
+    id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
     typedef struct { double x, y, w, h; } tb_rect;
     /* Electron hiddenInset parity: an empty NSToolbar is what grows the
        titlebar natively, so AppKit positions the traffic lights itself —
@@ -806,11 +815,9 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
 }
 
 CAMLprim value logseq_native_input_chain(value id_v) {
-  SDL_SysWMinfo info;
-  SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info))
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v))))
     caml_failwith(SDL_GetError());
-  id window = (id)info.info.cocoa.window;
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   id listener = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("delegate"));
   id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
   id next = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("nextResponder"));
@@ -818,18 +825,16 @@ CAMLprim value logseq_native_input_chain(value id_v) {
   return Val_bool(next == listener && window_next == listener);
 }
 CAMLprim value logseq_native_window_opaque(value id_v) {
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
-  id window = (id)info.info.cocoa.window;
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)))) caml_failwith(SDL_GetError());
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   return Val_bool(((int (*)(id, SEL))objc_msgSend)(window, sel_registerName("isOpaque")));
 }
 
 CAMLprim value logseq_native_has_sidebar_material(value id_v) {
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)))) caml_failwith(SDL_GetError());
   Class material = objc_getClass("LogseqSidebarMaterial");
   if (material == Nil) return Val_false;
-  id window = (id)info.info.cocoa.window;
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
   id frame = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("superview"));
   id children = ((id (*)(id, SEL))objc_msgSend)(frame, sel_registerName("subviews"));
@@ -1111,13 +1116,12 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
   extern void *objc_autoreleasePoolPush(void);
   extern void objc_autoreleasePoolPop(void *);
   void *pool = objc_autoreleasePoolPush();
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(window, logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(window, logseq_software_key);
   if (!surface) {
-    SDL_SysWMinfo info; SDL_VERSION(&info.version);
-    if (!SDL_GetWindowWMInfo(window, &info)) caml_failwith(SDL_GetError());
+      if (!logseq_cocoa_window(window)) caml_failwith(SDL_GetError());
     surface = calloc(1, sizeof(*surface));
     if (!surface) caml_raise_out_of_memory();
-    id native_window = (id)info.info.cocoa.window;
+    id native_window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
     id content = ((id (*)(id, SEL))objc_msgSend)(native_window, sel_registerName("contentView"));
     ls_nsrect bounds = ((ls_nsrect (*)(id, SEL))objc_msgSend)(content, sel_registerName("bounds"));
     id view = ((id (*)(Class, SEL))objc_msgSend)(logseq_software_class(), sel_registerName("alloc"));
@@ -1128,7 +1132,7 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
     ((void (*)(id, SEL, int))objc_msgSend)(view, sel_registerName("setWantsLayer:"), 1);
     ((void (*)(id, SEL, id))objc_msgSend)(content, sel_registerName("addSubview:"), view);
     surface->view = view;
-    SDL_SetWindowData(window, logseq_software_key, surface);
+    logseq_set_window_data(window, logseq_software_key, surface);
   }
   if (surface->w != w || surface->h != h || surface->rows != rows) {
     logseq_software_clear(surface);
@@ -1151,7 +1155,7 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
 
 CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   CAMLparam2(id_v, band_v);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   int y0 = Int_val(Field(band_v,0)), h = Int_val(Field(band_v,1));
   int stride = Int_val(Field(band_v,2));
@@ -1243,7 +1247,7 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
 
 CAMLprim value logseq_native_software_present(value id_v) {
   CAMLparam1(id_v);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   for (int i=0; i<surface->count; i++)
     if (!surface->bands[i].ready) caml_invalid_argument("Software frame is incomplete");
@@ -1284,14 +1288,14 @@ CAMLprim value logseq_native_software_present(value id_v) {
 }
 
 CAMLprim value logseq_native_software_owned_bytes(value id_v) {
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   return Val_long(surface ? surface->owned_bytes : 0);
 }
 
 /* Resource identities for presentation ownership regressions. */
 CAMLprim value logseq_native_software_image_ids(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(ids);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   ids = caml_alloc(surface->count * 5, 0);
   for (int i=0; i<surface->count; i++) {
@@ -1306,7 +1310,7 @@ CAMLprim value logseq_native_software_image_ids(value id_v) {
 
 CAMLprim value logseq_native_software_read(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(out);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   for (int i=0; i<surface->count; i++)
     if (!surface->bands[i].ready) caml_invalid_argument("Software frame is incomplete");
@@ -1344,7 +1348,7 @@ CAMLprim value logseq_native_software_read(value id_v) {
 /* Diagnostic readback through Core Animation's actual layer composition. */
 CAMLprim value logseq_native_software_composite(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(out);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   out = caml_alloc_string((size_t)surface->w * surface->h * 4);
   memset(Bytes_val(out), 0, caml_string_length(out));
@@ -1363,7 +1367,7 @@ CAMLprim value logseq_native_software_composite(value id_v) {
 }
 
 CAMLprim value logseq_native_software_hit(value id_v) {
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   LogseqPoint point = {2.,2.};
   id hit = ((id (*)(id, SEL, LogseqPoint))objc_msgSend)(surface->view, sel_registerName("hitTest:"), point);
@@ -1372,12 +1376,12 @@ CAMLprim value logseq_native_software_hit(value id_v) {
 
 CAMLprim value logseq_native_software_dispose(value id_v) {
   SDL_Window *window = logseq_software_window(id_v);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(window, logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(window, logseq_software_key);
   if (surface) {
     logseq_software_clear(surface);
     ((void (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("removeFromSuperview"));
     ((void (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("release"));
-    SDL_SetWindowData(window, logseq_software_key, NULL);
+    logseq_set_window_data(window, logseq_software_key, NULL);
     free(surface);
   }
   return Val_unit;
@@ -2660,7 +2664,7 @@ CAMLprim value logseq_native_memory_usage(value unit_v) {
 CAMLprim value logseq_native_window_presentable(value id_v) {
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
   if (!window) caml_invalid_argument("Presentation requires a live window");
-  Uint32 flags = SDL_GetWindowFlags(window);
+  SDL_WindowFlags flags = SDL_GetWindowFlags(window);
   return Val_bool(!(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)));
 }
 

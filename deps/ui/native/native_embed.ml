@@ -826,12 +826,14 @@ let keyboard_event node payload values =
     (* Document and conduit dispatch form one input transaction. Async
        completions must not remount the target between those phases. *)
     Platform.emit_event "keydown" (Js.Json.parseExn payload);
+    let prevented = !Platform.default_prevented in
     Option.iter (fun app ->
       (match Lui_runtime.extension_identifier (Lui_app.runtime app) node with
-       | Some "logseq-editor" ->
+       | Some "logseq-editor" when not prevented ->
          ignore (Lui_app.dispatch_event app
            (Lui_protocol.ExtensionEvent (node,"logseq-editor","key",
              decode_extension_values values)))
+       | Some "logseq-editor" -> ()
        | Some _ -> invalid_arg "Keyboard target is not an editor conduit"
        | None -> ());
       ignore (Lui_app.flush app)) !current_app;

@@ -61,13 +61,13 @@ external has_sidebar_material : int -> bool = "logseq_native_has_sidebar_materia
 
 let software_memory_regression () =
   let sdl_ok = function Ok x -> x | Error (`Msg message) -> failwith message in
-  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
-  let window = sdl_ok (Tsdl.Sdl.create_window "Native software memory regression"
-    ~w:1440 ~h:900 Tsdl.Sdl.Window.allow_highdpi) in
-  let id = Tsdl.Sdl.get_window_id window in
+  sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);
+  let window = sdl_ok (Lui_sdl3.create_window "Native software memory regression"
+    ~w:1440 ~h:900 Lui_sdl3.Window.high_pixel_density) in
+  let id = Lui_sdl3.get_window_id window in
   Native_window.software_begin id (2880,1800,64);
   let band = Bytes.make (2880*64*4) '\255' in
-  let event = Tsdl.Sdl.Event.create () in
+  let event = Lui_sdl3.Event.create () in
   let peak = ref 0 in
   for frame=0 to 119 do
     for index=0 to 28 do
@@ -75,7 +75,7 @@ let software_memory_regression () =
       Native_window.software_tile id (y,min 64 (1800-y),2880*4,band)
     done;
     Native_window.software_present id;
-    while Tsdl.Sdl.poll_event (Some event) do () done;
+    while Lui_sdl3.poll_event (Some event) do () done;
     let footprint,rss,lifetime_peak = Native_window.memory_usage () in
     peak := Int.max !peak lifetime_peak;
     check "Software presentation exceeded the external 200 MB safety limit"
@@ -84,8 +84,8 @@ let software_memory_regression () =
   done;
   Printf.printf "Full-size software presentation peak: %d bytes\n%!" !peak;
   Native_window.software_dispose id;
-  Tsdl.Sdl.destroy_window window;
-  Tsdl.Sdl.quit ();
+  Lui_sdl3.destroy_window window;
+  Lui_sdl3.quit ();
   check "Software presentation exceeded its 100 MB isolation budget"
     (!peak <= 100_000_000)
 
@@ -203,18 +203,18 @@ let software_upload_budget () =
     | Ok value -> value
     | Error (`Msg message) -> failwith message
   in
-  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
+  sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);
   let window =
     sdl_ok
-      (Tsdl.Sdl.create_window "Native software upload budget" ~w:1440 ~h:932
-         Tsdl.Sdl.Window.hidden)
+      (Lui_sdl3.create_window "Native software upload budget" ~w:1440 ~h:932
+         Lui_sdl3.Window.hidden)
   in
   Fun.protect
     ~finally:(fun () ->
-      Tsdl.Sdl.destroy_window window;
-      Tsdl.Sdl.quit ())
+      Lui_sdl3.destroy_window window;
+      Lui_sdl3.quit ())
     (fun () ->
-      let id = Tsdl.Sdl.get_window_id window in
+      let id = Lui_sdl3.get_window_id window in
       let width = 2880 and height = 1864 and rows = 64 in
       Native_window.software_begin id (width, height, rows);
       Fun.protect
@@ -439,10 +439,10 @@ let software_band_reuse_regression id =
 let software_scene_replay ~tiled path duration =
   let scene : Lui_scene.t = In_channel.with_open_bin path Marshal.from_channel in
   let sdl_ok = function Ok x -> x | Error (`Msg message) -> failwith message in
-  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
-  let window = sdl_ok (Tsdl.Sdl.create_window "Native scene replay"
-    ~w:1440 ~h:900 Tsdl.Sdl.Window.allow_highdpi) in
-  let id = Tsdl.Sdl.get_window_id window in
+  sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);
+  let window = sdl_ok (Lui_sdl3.create_window "Native scene replay"
+    ~w:1440 ~h:900 Lui_sdl3.Window.high_pixel_density) in
+  let id = Lui_sdl3.get_window_id window in
   let rows = if tiled then Lui_raster.Tile_renderer.band_height else scene.height in
   Native_window.software_begin id (scene.width,scene.height,rows);
   let upload_seconds = ref 0. in
@@ -464,7 +464,7 @@ let software_scene_replay ~tiled path duration =
        (fun () -> Lui_raster.Renderer.release renderer))
     end in
   let glyphs = scene.glyphs in
-  let event = Tsdl.Sdl.Event.create () in
+  let event = Lui_sdl3.Event.create () in
   let started = Unix.gettimeofday () in
   let capacity = int_of_float (Float.ceil (duration *. 120.)) + 1 in
   let samples = Array.make capacity 0.
@@ -485,7 +485,7 @@ let software_scene_replay ~tiled path duration =
     samples.(!frame) <- (presented -. before) *. 1000.;
     draw_samples.(!frame) <- (drawn -. before -. !upload_seconds) *. 1000.;
     present_samples.(!frame) <- (presented -. drawn +. !upload_seconds) *. 1000.;
-    while Tsdl.Sdl.poll_event (Some event) do () done;
+    while Lui_sdl3.poll_event (Some event) do () done;
     let footprint,rss,lifetime_peak = Native_window.memory_usage () in
     peak := Int.max !peak lifetime_peak;
     check "Scene replay exceeded the external 200 MB safety limit"
@@ -505,14 +505,14 @@ let software_scene_replay ~tiled path duration =
     (percentile 0.99 samples) (percentile 0.95 draw_samples) (percentile 0.95 present_samples);
   Native_window.software_dispose id;
   release ();
-  Tsdl.Sdl.destroy_window window;
-  Tsdl.Sdl.quit ()
+  Lui_sdl3.destroy_window window;
+  Lui_sdl3.quit ()
 
 let expose_notification_child () =
   let sdl_ok = function Ok value -> value | Error (`Msg message) -> failwith message in
-  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
-  let window=sdl_ok (Tsdl.Sdl.create_window "Native expose notification regression"
-    ~w:64 ~h:64 Tsdl.Sdl.Window.hidden) in
+  sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);
+  let window=sdl_ok (Lui_sdl3.create_window "Native expose notification regression"
+    ~w:64 ~h:64 Lui_sdl3.Window.hidden) in
   let ready=Atomic.make 0 in
   Native_window.install window (fun () ->
     Atomic.incr ready;
@@ -522,12 +522,12 @@ let expose_notification_child () =
       while Atomic.get ready < turn do Thread.yield () done;
       Bridge.notify_event_loop ()
     done) () in
-  for _=1 to 20 do expose_unlocked (Tsdl.Sdl.get_window_id window) done;
+  for _=1 to 20 do expose_unlocked (Lui_sdl3.get_window_id window) done;
   Thread.join notifier;
   check "Expose notifications lost a repaint" (Atomic.get ready=20);
   Native_window.dispose window;
-  Tsdl.Sdl.destroy_window window;
-  Tsdl.Sdl.quit ()
+  Lui_sdl3.destroy_window window;
+  Lui_sdl3.quit ()
 
 let expose_notification_regression () =
   let child=Unix.create_process Sys.executable_name
@@ -643,18 +643,18 @@ let () =
   let inactive=Native_window.drag_regions ~store ~rect_of:overlay_rect ~scale:2. ~blocked:[] in
   check "An inert retained shade blocks titlebar dragging" (draggable inactive 200. 20.);
   let sdl_ok = function Ok x -> x | Error (`Msg message) -> failwith message in
-  sdl_ok (Tsdl.Sdl.init Tsdl.Sdl.Init.video);
-  let window = sdl_ok (Tsdl.Sdl.create_window "Native window regression"
-      ~w:400 ~h:300 Tsdl.Sdl.Window.hidden) in
+  sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);
+  let window = sdl_ok (Lui_sdl3.create_window "Native window regression"
+      ~w:400 ~h:300 Lui_sdl3.Window.hidden) in
   check "An invisible window is eligible for rendering"
-    (not (Native_window.presentable (Tsdl.Sdl.get_window_id window)));
+    (not (Native_window.presentable (Lui_sdl3.get_window_id window)));
   if Host_platform.is_macos then begin
     check "SDL listener is missing before titlebar customization"
-      (input_chain (Tsdl.Sdl.get_window_id window));
+      (input_chain (Lui_sdl3.get_window_id window));
     blend_titlebar ();
     check "Titlebar customization detached SDL's mouse event responder"
-      (input_chain (Tsdl.Sdl.get_window_id window));
-    let window_id = Tsdl.Sdl.get_window_id window in
+      (input_chain (Lui_sdl3.get_window_id window));
+    let window_id = Lui_sdl3.get_window_id window in
     check "Titlebar customization must preserve opaque window composition"
       (window_opaque window_id);
     check "Titlebar customization must preserve the application sidebar surface"
@@ -700,9 +700,9 @@ let () =
     Native_window.software_dispose window_id;
     check "Software disposal retained pixel ownership"
       (Native_window.software_owned_bytes window_id = 0);
-    let width,height = Tsdl.Sdl.gl_get_drawable_size window in
+    let width,height = Lui_sdl3.get_window_size_in_pixels window in
     let before_metal = physical_footprint () in
-    let renderer = match Lui_metal.init_window (Tsdl.Sdl.unsafe_ptr_of_window window) with
+    let renderer = match Lui_metal.init_window (Lui_sdl3.unsafe_ptr_of_window window) with
       | Ok renderer -> renderer | Error message -> failwith message in
     let errors = ref [] in
     let verify message condition = if not condition then errors := message :: !errors in
@@ -755,131 +755,132 @@ let () =
     List.iter prerr_endline (List.rev !errors);
     check "Native drawable memory regression" (!errors = [])
   end;
-  Tsdl.Sdl.start_text_input ();
-  let input = Native_window.text_input () in
+  Lui_sdl3.start_text_input window;
+  let input = Native_window.text_input window in
   Native_window.hold_pointer input true;
   Native_window.request_text_input input false;
   check "Focus loss changes the AppKit responder between mouse down and up"
-    (Tsdl.Sdl.is_text_input_active ());
+    (Lui_sdl3.is_text_input_active window);
   Native_window.hold_pointer input false;
   check "Text input remains active after the pointer gesture finishes"
-    (not (Tsdl.Sdl.is_text_input_active ()));
+    (not (Lui_sdl3.is_text_input_active window));
   Native_window.hold_pointer input true;
   Native_window.request_text_input input true;
   Native_window.request_text_input input false;
   Native_window.hold_pointer input false;
   check "A cancelled focus transition starts stale text input"
-    (not (Tsdl.Sdl.is_text_input_active ()));
+    (not (Lui_sdl3.is_text_input_active window));
+  let other = sdl_ok (Lui_sdl3.create_window "Independent text input"
+      ~w:64 ~h:64 Lui_sdl3.Window.hidden) in
+  Fun.protect ~finally:(fun () -> Lui_sdl3.destroy_window other) (fun () ->
+    Lui_sdl3.start_text_input other;
+    Native_window.request_text_input input true;
+    Native_window.request_text_input input false;
+    check "One window stopped another window's text input"
+      (Lui_sdl3.is_text_input_active other);
+    check "The owning window failed to stop text input"
+      (not (Lui_sdl3.is_text_input_active window));
+    Lui_sdl3.stop_text_input other);
   let repaints = ref 0 in
   Native_window.install window (fun () -> incr repaints);
-  let event = Tsdl.Sdl.Event.create () in
-  Tsdl.Sdl.Event.set event Tsdl.Sdl.Event.typ Tsdl.Sdl.Event.window_event;
-  Tsdl.Sdl.Event.set event Tsdl.Sdl.Event.window_window_id (Tsdl.Sdl.get_window_id window);
-  Tsdl.Sdl.Event.set event Tsdl.Sdl.Event.window_event_id Tsdl.Sdl.Event.window_event_exposed;
-  ignore (sdl_ok (Tsdl.Sdl.push_event event));
+  Lui_sdl3.push_expose_event window;
   check "Live resize waits for the blocked polling loop before painting" (!repaints=1);
-  let foreign = Thread.create (fun () -> ignore (sdl_ok (Tsdl.Sdl.push_event event))) () in
+  let foreign = Thread.create (fun () -> Lui_sdl3.push_expose_event window) () in
   Thread.join foreign;
   check "A foreign SDL thread entered the window repaint callback" (!repaints=1);
-  expose_unlocked (Tsdl.Sdl.get_window_id window);
+  expose_unlocked (Lui_sdl3.get_window_id window);
   check "An idle expose failed to reacquire the runtime before repainting" (!repaints=2);
   Native_window.install window (fun () ->
     incr repaints;
     ignore (Sys.opaque_identity (Bytes.make 128 'x'));
-    ignore (sdl_ok (Tsdl.Sdl.push_event event)));
-  expose_unlocked (Tsdl.Sdl.get_window_id window);
+    Lui_sdl3.push_expose_event window);
+  expose_unlocked (Lui_sdl3.get_window_id window);
   check "A nested expose reentered the current repaint" (!repaints=3);
   Gc.minor ();
   Native_window.dispose window;
-  ignore (sdl_ok (Tsdl.Sdl.push_event event));
-  expose_unlocked (Tsdl.Sdl.get_window_id window);
+  Lui_sdl3.push_expose_event window;
+  expose_unlocked (Lui_sdl3.get_window_id window);
   check "Disposed window retained its live resize callback" (!repaints=3);
   menu_runtime_regression ();
-  Tsdl.Sdl.destroy_window window;
-  Tsdl.Sdl.quit ();
+  Lui_sdl3.destroy_window window;
+  Lui_sdl3.quit ();
   print_endline "native window drag and live resize: OK"
 
 
 let () =
-  let module S = Tsdl.Sdl in
+  let module S = Lui_sdl3 in
   let module I = Lui_window.Input in
   let old_mods = S.get_mod_state () in
   Fun.protect ~finally:(fun () -> S.set_mod_state old_mods) (fun () ->
     let failures = ref [] in
     let expect name condition = if not condition then failures := name :: !failures in
-    let event kind = let e = S.Event.create () in S.Event.set e S.Event.typ kind; e in
-    let key state kind keymod =
-      let e = event kind in
-      S.Event.set e S.Event.keyboard_scancode S.Scancode.lshift;
-      S.Event.set e S.Event.keyboard_keymod keymod;
-      S.Event.set e S.Event.keyboard_repeat 0;
-      Native_window.input_of_event state e in
-    let mouse state kind =
-      let e = event kind in
-      S.Event.set e S.Event.mouse_button_x 216;
-      S.Event.set e S.Event.mouse_button_y 342;
-      S.Event.set e S.Event.mouse_button_button S.Button.left;
-      S.Event.set e S.Event.mouse_button_clicks 1;
-      Native_window.input_of_event state e in
-    let text state =
-      let e = event S.Event.text_input in
-      S.Event.set e S.Event.text_input_text "x";
-      Native_window.input_of_event state e in
-    let wheel state =
-      let e = event S.Event.mouse_wheel in
-      S.Event.set e S.Event.mouse_wheel_x 1;
-      S.Event.set e S.Event.mouse_wheel_y 2;
-      Native_window.input_of_event state e in
+    let event kind = S.Event.of_event (S.Event.make kind) in
+    let key state ~down keymod =
+      let payload = S.Event.{scancode=S.Scancode.lshift; keymod; repeat=false} in
+      Native_window.input_of_event state
+        (event (if down then S.Event.Key_down payload else S.Event.Key_up payload)) in
+    let mouse state ~down =
+      let payload = S.Event.{x=216.25; y=342.5; button=1; clicks=1} in
+      Native_window.input_of_event state
+        (event (if down then S.Event.Mouse_button_down payload else S.Event.Mouse_button_up payload)) in
+    let text state = Native_window.input_of_event state (event (S.Event.Text_input "x")) in
+    let wheel state = Native_window.input_of_event state (event (S.Event.Mouse_wheel (1.25, 2.5))) in
     let mods = function
       | Some (I.Button_down (_,_,_,_,m) | I.Button_up (_,_,_,m)
               | I.Wheel_mods (_,_,m)) -> m
       | _ -> failwith "Expected a pointer input" in
     let state = Native_window.input_state ~keymod:0 in
+    expect "SDL3 pointer coordinates lost their fractional precision"
+      (match mouse state ~down:true with
+       | Some (I.Button_down (x,y,_,_,_)) -> x = 216.25 && y = 342.5
+       | _ -> false);
+    expect "SDL3 wheel deltas lost their fractional precision"
+      (match wheel state with
+       | Some (I.Wheel_mods (x,y,_)) -> x = 1.25 && y = 2.5
+       | _ -> false);
     (* SDL has already pumped the later release, but the application's
        dequeue position is still before it. *)
     S.set_mod_state 0;
-    ignore (key state S.Event.key_down S.Kmod.lshift);
+    ignore (key state ~down:true S.Kmod.lshift);
     expect "Queued Shift mouse-down loses its modifier to a later release"
-      (mods (mouse state S.Event.mouse_button_down)).I.shift;
+      (mods (mouse state ~down:true)).I.shift;
     expect "Queued Shift mouse-up loses its modifier to a later release"
-      (mods (mouse state S.Event.mouse_button_up)).I.shift;
+      (mods (mouse state ~down:false)).I.shift;
     expect "Document pointer events disagree with the queued Shift state"
       (Native_window.current_modifiers state).I.shift;
-    ignore (key state S.Event.key_up 0);
+    ignore (key state ~down:false 0);
     S.set_mod_state S.Kmod.lshift;
     expect "A released modifier leaks from future global state into a click"
-      (not (mods (mouse state S.Event.mouse_button_up)).I.shift);
+      (not (mods (mouse state ~down:false)).I.shift);
     expect "A released modifier leaks into document pointer events"
       (not (Native_window.current_modifiers state).I.shift);
     S.set_mod_state 0;
-    ignore (key state S.Event.key_down S.Kmod.lctrl);
+    ignore (key state ~down:true S.Kmod.lctrl);
     expect "A queued Ctrl shortcut also inserts its committed text"
       (text state = None);
     expect "A queued modified wheel reads future keyboard state"
       (mods (wheel state)).I.ctrl;
-    ignore (key state S.Event.key_up 0);
+    ignore (key state ~down:false 0);
     S.set_mod_state S.Kmod.lctrl;
     expect "Plain typing after release is suppressed by a future Ctrl press"
       (text state = Some (I.Text_input "x"));
     S.set_mod_state 0;
-    ignore (key state S.Event.key_down (S.Kmod.lctrl lor S.Kmod.ralt));
+    ignore (key state ~down:true (S.Kmod.lctrl lor S.Kmod.ralt));
     expect "AltGr text must remain admissible" (text state = Some (I.Text_input "x"));
-    ignore (key state S.Event.key_down S.Kmod.lgui);
+    ignore (key state ~down:true S.Kmod.lgui);
     expect "A queued Meta shortcut also inserts its committed text" (text state = None);
     let initial = Native_window.input_state ~keymod:S.Kmod.lshift in
     expect "The initial held modifier is not preserved"
-      (mods (mouse initial S.Event.mouse_button_down)).I.shift;
-    let loss = event S.Event.window_event in
-    S.Event.set loss S.Event.window_event_id S.Event.window_event_focus_lost;
+      (mods (mouse initial ~down:true)).I.shift;
+    let loss = event (S.Event.Window (Focus_lost, 0, 0)) in
     ignore (Native_window.input_of_event initial loss);
     S.set_mod_state S.Kmod.lshift;
     expect "Focus loss leaves a stale modifier on later input"
-      (not (mods (mouse initial S.Event.mouse_button_up)).I.shift);
-    let gain = event S.Event.window_event in
-    S.Event.set gain S.Event.window_event_id S.Event.window_event_focus_gained;
+      (not (mods (mouse initial ~down:false)).I.shift);
+    let gain = event (S.Event.Window (Focus_gained, 0, 0)) in
     ignore (Native_window.input_of_event initial gain);
     expect "Focus gain does not recover a modifier held outside the window"
-      (mods (mouse initial S.Event.mouse_button_down)).I.shift;
+      (mods (mouse initial ~down:true)).I.shift;
     List.iter prerr_endline (List.rev !failures);
     check "Native queued input modifier semantics" (!failures = []));
   print_endline "native queued input modifiers: OK"

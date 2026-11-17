@@ -17,14 +17,14 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "flags=$(pkg-config --cflags sdl2) || exit; case '%{system}' in linux) flags=\"$flags $(pkg-config --cflags fontconfig)\" || exit;; esac; printf '(%s)' \"$flags\""))))
+    "flags=$(pkg-config --cflags sdl3) || exit; case '%{system}' in linux) flags=\"$flags $(pkg-config --cflags fontconfig)\" || exit;; esac; printf '(%s)' \"$flags\""))))
 
 (rule
  (target host_link_flags.sexp)
  (action
   (with-stdout-to %{target}
    (bash
-    "case '%{system}' in macosx) printf '(-cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
+    "printf '('; case '%{system}' in macosx) printf ' -cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface';; linux) flags=$(pkg-config --libs fontconfig) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done;; esac; flags=$(pkg-config --libs sdl3) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')'"))))
 
 (rule
  (copy ../native/native_embed.ml native_embed.ml))
@@ -69,7 +69,7 @@
    lui.gpu
    lui.svg
    lui.theme
-   tsdl
+   lui.sdl3
    ocaml-signal
    unix
    threads.posix)
@@ -110,7 +110,7 @@
  (wrapped false)
  (modules native_embed bridge native_window)
  (library_flags (:include host_link_flags.sexp))
- (libraries logseq_ui_native logseq_native_interaction tsdl)
+ (libraries logseq_ui_native logseq_native_interaction lui.sdl3)
  (foreign_stubs
   (language c)
   (names ocaml_host_stubs)
