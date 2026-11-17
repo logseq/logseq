@@ -16,10 +16,6 @@ module P = Lui_protocol
 
 let t = Sidebar_state.t
 
-let sidebar_gutter context =
-  if Lui_ui.platform context = P.MacOS && Lui_ui.host context = P.SwiftUIHost
-  then 0 else 12
-
 (* Container activation must opt into Press as well as pointer details;
    otherwise a passive text or icon leaf can own the native click. *)
 let arm_press ~on_press_detail (elem : Lui_elements.t) : Lui_elements.t =
@@ -106,9 +102,14 @@ let nav_edit_menu st =
       [])
   in
   box ~key:"nav-edit-menu"
-    [ menu_box ~key:"menu-box" ~extra_cls:"" ~at:(16., 96.)
-        ~min_width:180 ~dismiss:(fun _ -> Sidebar_state.close_menu st)
-        (List.map mk nav_labels) ]
+    [ Ui_components.menu_surface
+        (popover ~key:"menu-box" ~role:`menu
+          ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4.
+          ~anchor_target:"nav-edit-trigger" ~min_width:180
+          ~transition:Ui_components.popover_transition
+          ~style_class:"ui__dropdown-menu-content"
+          ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+          (List.map mk nav_labels)) ]
 
 (* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
 
@@ -372,11 +373,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
       (icon_ icon_name)
   in
   let leading =
-    if Lui_ui.platform context = P.MacOS && Lui_ui.host context = P.SwiftUIHost then
-      [ row ~key:"nav-label" ~grow:1. ~min_width:0 ~cross:`center
-          [ icon; text ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ] ]
-    else
-      [ icon; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
+    [ icon; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
   in
   box ~key ~style_class:(class_ ^ act)
     [ (match on_shift_click with
@@ -480,7 +477,7 @@ let nav_group ms st =
   if not (Cards_state.Due_count.ready ()) then ()
   else Cards_state.update_due_count ();
   let nav_hov = Signal.state ctx.Lui_ui.ui_scheduler false in
-  box ~key:"nav-group" ~padding_horizontal:(sidebar_gutter ctx)
+  box ~key:"nav-group" ~padding_horizontal:12
     ~style_class:"sidebar-content-group is-expand"
     [ column ~key:"nav-inner" ~style_class:"sidebar-content-group-inner"
         [ Ui_components.with_props
@@ -529,7 +526,7 @@ let nav_group ms st =
                           [ Ui_components.Prop.position `relative
                           ; Ui_components.Prop.inset_top (-2.)
                           ; Ui_components.Prop.opacity 0.8 ]
-                          (row ~style_class:"as-edit"
+                          (row ~style_class:"as-edit" ~accessibility_identifier:"nav-edit-trigger"
                              [ Ui_components.with_props
                                  [ Ui_components.Prop.margin_left 7 ]
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
@@ -894,7 +891,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
         else r
     | None -> t "graph.switch/select-prompt"
   in
-  box ~key:"gsel" ~padding_horizontal:(sidebar_gutter context)
+  box ~key:"gsel" ~padding_horizontal:12
     [ row ~key:"gsel-box" ~cross:`center ~main:`space_between
         ~style_class:"cp__graphs-selector"
         (* data-tooltip="" suppresses the hover tooltip: the service
@@ -966,8 +963,8 @@ let contents (ms : Model.t Signal.signal) : t =
   Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.padding_top 4
-    ; Ui_components.Prop.padding_left (sidebar_gutter context)
-    ; Ui_components.Prop.padding_right (sidebar_gutter context) ]
+    ; Ui_components.Prop.padding_left 12
+    ; Ui_components.Prop.padding_right 12 ]
     (scroll ~key:"ls-contents" ~grow:1. ~min_height:0 ~orientation:`vertical
        ~accessibility_identifier:"left-sidebar-scroll"
        ~style_class:"sidebar-contents-container"

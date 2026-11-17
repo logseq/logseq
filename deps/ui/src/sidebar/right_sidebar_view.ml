@@ -105,31 +105,25 @@ let item_menu st (it : Sidebar_state.item) =
   let page_ =
     it.Sidebar_state.kind = "page" || it.Sidebar_state.kind = "contents"
   in
-  let sep key =
-    box ~key ~opacity:0.5
-      [ divider ~key:"d" ~style_class:"menu-separator" ~margin_vertical:4
-          ~data_attrs:
-            [ ("style", "border-top:1px solid hsl(var(--border))") ]
-          [] ]
-  in
-  (* cljs popup-show!: element-anchored dropdown — centered on the
-     target (ls-anchor-cx), flipping above when the space below runs
-     out (ls-anchor-top lifts it by its own height) *)
-  let ax, atop, abot = !Sidebar_state.im_xy in
-  let flip = Popups_state.anchor_above atop abot in
-  let w = 160. in
-  let x =
-    Float.max ((w /. 2.) +. 5.)
-      (Float.min ax (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
-  in
-  popover ~key:("imenu-" ^ it.key)
-    ~at:(x, if flip then atop else abot)
-    ~role:`menu ~min_width:160
-    ~transition:Ui_components.popover_transition
-    ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-    ~style_class:
-      ("ui__dropdown-menu-content ls-anchor-cx"
-      ^ if flip then " ls-anchor-top" else "")
+  let sep key = Menu_item.separator ~mv:4 ~mh:0 ~key in
+  let surface children =
+    let anchor = !Sidebar_state.im_anchor in
+    match anchor with
+    | Sidebar_state.Item_trigger ->
+        popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:160
+          ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4.
+          ~anchor_target:("sbi-more-" ^ it.key)
+          ~transition:Ui_components.popover_transition
+          ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+          ~style_class:"ui__dropdown-menu-content" children
+    | Sidebar_state.Item_rect rect ->
+        popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:160
+          ~anchor:`below ~anchor_alignment:`center ~anchor_rect:rect
+          ~transition:Ui_components.popover_transition
+          ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+          ~style_class:"ui__dropdown-menu-content" children in
+  Ui_components.menu_surface
+  (surface
     (menu_item st (t "ui/close")
        (fun () -> Sidebar_state.remove_item st it.key)
      :: (if multi then
@@ -162,7 +156,7 @@ let item_menu st (it : Sidebar_state.item) =
           [ sep "s3"
           ; menu_item st (t "sidebar.right/open-as-page")
               (fun () -> Sidebar_state.open_as_page st it) ]
-        else []))
+        else [])))
 
 let item_menu_host st (it : Sidebar_state.item) =
   reactive
@@ -362,17 +356,7 @@ let item_header st idx (it : Sidebar_state.item) =
             ~style_class:"sidebar-item-more"
             ~width:32 ~height:32 ~padding:0
             ~foreground:"hsl(var(--muted-foreground))"
-            (* press events carry no pointer coordinates — anchor the
-               menu at the button's rect instead of click clientX/Y *)
-            ~on_press:(fun _ ->
-              let ax, atop, abot =
-                match
-                  Ui_services.dom_by_id ("sbi-more-" ^ it.key)
-                with
-                | Some el -> Popups_state.anchor_of_el el
-                | None -> Popups_state.anchor_at_point ~x:0. ~y:0.
-              in
-              Sidebar_state.toggle_item_menu st it.key ~ax ~atop ~abot)
+            ~on_press:(fun _ -> Sidebar_state.toggle_item_menu st it.key)
             [ Icons.icon ~size:16. "dots" ]
         ; Ui_components.button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center

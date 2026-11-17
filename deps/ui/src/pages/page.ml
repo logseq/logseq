@@ -471,13 +471,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   let uuid = Option.value page.page_uuid ~default:"" in
   (* cljs db-page-title: tag/class pages render collapsed by default; the
      fold state lives in the same collapsed/expanded sets as blocks *)
-  let title_collapsed =
-    (not (S.is_expanded uuid)) && (S.is_collapsed uuid || page.page_is_tag)
+  let collapse = S.collapse_sig () in
+  let title_collapsed (state : S.collapse_view) =
+    not (S.String_set.mem uuid state.cv_expanded)
+    && (S.String_set.mem uuid state.cv_collapsed || page.page_is_tag)
   in
   let toggle_title_collapse () =
+    Editor_actions.blur_commit ();
     if S.ready () then
       S.set (fun (st : S.t) ->
-          if title_collapsed then
+          if not (S.String_set.mem uuid st.S.expanded)
+             && (S.String_set.mem uuid st.S.collapsed || page.page_is_tag) then
             { st with
               S.collapsed = S.String_set.remove uuid st.S.collapsed
             ; S.expanded = S.String_set.add uuid st.S.expanded
@@ -488,23 +492,14 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ; S.expanded = S.String_set.remove uuid st.S.expanded
             })
   in
-  (* cljs collapsable? on a page-title row = db-collapsable? on the page
-     entity (any non-internal property keys, e.g. a page property) — the
-     fold arrow shows on hover when this or an already-collapsed title
-     holds. Live-read the attr too: the mounted properties area keeps
-     data-db-collapsable in sync with the page's live property rows *)
-  let collapsable_title () =
-    page.Model.page_db_collapsable || page.Model.page_is_tag
-    || title_collapsed
-    ||
-    (match Ui_services.dom_query ".ls-page-title .ls-block" with
-     | Some tb ->
-         tb.Ui_services.attr "data-db-collapsable" = Some "true"
-     | None -> false)
-  in
+  let properties = match page.page_uuid with
+    | Some _ -> Signal.value (Properties_area.page_state ctx page)
+    | None -> Signal.constant ctx.Lui_ui.ui_scheduler Properties_state.empty_area_data in
+  let collapsable_title (data : Properties_state.area_data) =
+    page.page_db_collapsable || page.page_is_tag || data.rows <> [] || data.hidden <> [] in
   (* cljs *control-show? atom: the fold caret appears only while the
      pointer is over the title row, and only for collapsable titles *)
-  let caret_hover = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let caret_hover = Signal.state (Signal.signal_owner collapse) false in
   (* cljs shows .ls-page-title-actions on .block-content-wrapper:hover
      with delay-300 (opacity 0 at rest); no stylesheet on native
      backends, so pointer enter/leave feeds a 300ms reveal timer that
@@ -574,65 +569,65 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                    ^ if icon_el = None then " ls-pt-no-icon" else "")
                 ~margin_left:(if icon_el = None then -30 else -36)
                 ~on_pointer_enter:(fun _ ->
-                  if collapsable_title () then (
-                    Signal.set caret_hover true;
-                    Runtime.flush ()))
+                  Signal.set caret_hover true;
+                  Runtime.flush ())
                 ~on_pointer_leave:(fun _ ->
                   if Runtime.signal_get caret_hover then (
                     Signal.set caret_hover false;
                     Runtime.flush ()))
-                [ row ~key:"pt-ctrl" ~cross:`center ~width:24 ~height:24
-                    ~data_attrs:
-                      [ ( "style"
-                        , "position:relative;top:calc((\
-                           var(--ls-page-title-size, 32px) * 1.38 - 24px)\
-                           / 2)" )
-                      ]
-                    ~style_class:
-                      ("is-with-icon"
-                      ^ (if title_collapsed then " bullet-closed" else "")
-                      ^ " bullet-hidden block-control-wrap")
-                    [ (let cs =
-                          Ui_parts.class_signal
-                            (Signal.value caret_hover)
-                            (fun hover ->
-                              (if hover then "" else "control-hide")
-                              ^ " rotating-arrow"
-                              ^
-                              if title_collapsed then " collapsed"
-                              else " not-collapsed")
-                            (box ~key:"pt-ra"
-                               ~style_class:
-                                 ("control-hide rotating-arrow"
-                                  ^ if title_collapsed then " collapsed"
-                                    else " not-collapsed")
-                               [ Ui_parts.rotating_arrow "pt-arw" ])
-                        in
-                        Ui_parts.pressable
+                [ reactive ~equal:(fun before after -> collapsable_title before = collapsable_title after)
+                    (fun data ->
+                    let collapsable = collapsable_title data in
+                    Ui_parts.string_prop Lui_protocol.StyleClass
+                    ~value:(reactive
+                      (fun state -> "is-with-icon"
+                        ^ (if title_collapsed state then " bullet-closed" else "")
+                        ^ " bullet-hidden block-control-wrap") collapse)
+                    (row ~key:"pt-ctrl" ~cross:`center ~width:24 ~height:24
+                      ~margin_top:(if Ui_services.env_native_block_controls () then 10 else 0)
+                      ~data_attrs:
+                        [ ( "style"
+                          , "position:relative;top:calc((\
+                             var(--ls-page-title-size, 32px) * 1.38 - 24px)\
+                             / 2)" ) ]
+                      [ Ui_parts.pressable
                           ~on_press:(fun _ ->
-                            if collapsable_title () then
-                              toggle_title_collapse ())
+                            if collapsable || (not (S.is_expanded uuid) && S.is_collapsed uuid)
+                            then toggle_title_collapse ())
                           (Ui_components.with_props
-                             [ Ui_components.Prop.pressed_opacity 0.3 ]
-                             (Ui_parts.prop_signal Lui_protocol.Cursor
-                                (Signal.value caret_hover)
-                                (fun h -> if h then "pointer" else "default")
-                                (box ~key:"pt-ca"
-                                   ~style_class:"block-control"
+                            [Ui_components.Prop.pressed_opacity 0.3]
+                            (Ui_parts.string_prop Lui_protocol.Cursor
+                              ~value:(reactive
+                                (fun hover -> if hover && collapsable then "pointer" else "default")
+                                (Signal.value caret_hover))
+                              (box ~key:"pt-ca" ~style_class:"block-control"
                                 ~accessibility_identifier:("control-" ^ uuid)
-                                ~min_width:22 ~min_height:22
-                                ~opacity:0.4
-                                ~data_attrs:
-                               [ ( "style"
-                                 , "font-size:0.875rem;\
-                                    line-height:1.42857;\
-                                    margin-top:1px;\
-                                    padding:0.125rem;\
-                                    user-select:none;\
-                                    cursor:default" )
-                               ]
-                             [ cs ]))))
-                     ]
+                                ~min_width:22 ~min_height:22 ~padding:2 ~margin_top:1
+                                ~opacity:0.4 ~foreground:"var(--ls-primary-text-color)"
+                                [ Ui_parts.string_prop Lui_protocol.StyleClass
+                                    ~value:(reactive
+                                      (fun hover state ->
+                                        (if hover && (collapsable || title_collapsed state) then "" else "control-hide ")
+                                        ^ "rotating-arrow"
+                                        ^ if title_collapsed state then " collapsed" else " not-collapsed")
+                                      (Signal.value caret_hover) collapse)
+                                    (box ~key:"pt-ra"
+                                      ~opacity:(reactive
+                                        (fun hover state ->
+                                          if hover && (collapsable || title_collapsed state)
+                                          then 1. else 0.)
+                                        (Signal.value caret_hover) collapse)
+                                      [ reactive
+                                          (fun state ->
+                                            if title_collapsed state
+                                               || not (Ui_services.env_native_block_controls ()) then
+                                              Ui_parts.rotating_arrow "pt-arw"
+                                            else
+                                              icon ~key:"pt-arw" ~point_size:13
+                                                ~name:(`app "rotating-arrow-down") [])
+                                          collapse ]) ])))
+                      ])) properties
+
         ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch ~min_width:0
             ~data_attrs:[ ("style", "width:100%") ]
             [ column ~key:"pt-col2" ~cross:`stretch

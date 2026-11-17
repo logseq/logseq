@@ -60,6 +60,9 @@ def build(output, lui_source=None):
             shutil.copytree(source, resources / name)
         info = {"backend": "experimental-ocaml-native", "experimental": True,
                 "database": "native-sqlite",
+                "window_runtime": "SDL3",
+                "window_runtime_version": subprocess.check_output(
+                    ["pkg-config", "--modversion", "sdl3"], text=True).strip(),
                 "logseq_revision": subprocess.check_output(
                     ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "logseq_dirty": bool(subprocess.check_output(
@@ -80,21 +83,26 @@ def build(output, lui_source=None):
             for binary in [host, worker]:
                 binary.chmod(binary.stat().st_mode | 0o200)
                 run("strip", "-S", binary)
-            dynamic_libraries = []
-            sdl2_library = Path(subprocess.check_output(
-                ["pkg-config", "--variable=libdir", "sdl2"], text=True).strip()) / "libSDL2.dylib"
-            if b"sdl2-compat:" in sdl2_library.read_bytes():
-                # SDL2's compatibility layer loads SDL3 dynamically, beyond otool's dependency list.
-                sdl3_library = Path(subprocess.check_output(
-                    ["pkg-config", "--variable=libdir", "sdl3"], text=True).strip()) / "libSDL3.dylib"
-                frameworks = contents / "Frameworks"
-                frameworks.mkdir(exist_ok=True)
-                bundled_sdl3 = frameworks / "libSDL3.dylib"
-                shutil.copy2(sdl3_library, bundled_sdl3)
-                bundled_sdl3.chmod(bundled_sdl3.stat().st_mode | 0o200)
-                dynamic_libraries.extend(["-x", bundled_sdl3])
-            run("dylibbundler", "-b", "-cd", "-x", host, "-x", worker, *dynamic_libraries,
+            dependencies = subprocess.check_output(["otool", "-L", host], text=True)
+            if "libSDL3" not in dependencies:
+                raise ValueError("The native host must link SDL3 so its runtime can be bundled")
+            run("dylibbundler", "-b", "-cd", "-x", host, "-x", worker,
                 "-d", contents / "Frameworks", "-p", "@executable_path/../Frameworks/")
+            frameworks = contents / "Frameworks"
+            runtimes = [path for path in frameworks.glob("libSDL3*.dylib") if not path.is_symlink()]
+            if len(runtimes) != 1:
+                raise ValueError("The release must contain exactly one SDL3 runtime")
+            alias = frameworks / "libSDL3.dylib"
+            if alias != runtimes[0] and not alias.exists():
+                alias.symlink_to(runtimes[0].name)
+            for binary in [host, worker, *frameworks.glob("*.dylib")]:
+                dependencies = subprocess.check_output(["otool", "-L", binary], text=True)
+                if "libSDL2" in dependencies:
+                    raise ValueError("SDL2 is forbidden in SDL3 native releases")
+                for line in dependencies.splitlines()[1:]:
+                    dependency = line.strip().split(" (", 1)[0]
+                    if not dependency.startswith(("/System/Library/", "/usr/lib/", "@")):
+                        raise ValueError(f"Unbundled runtime dependency: {dependency}")
             # The worker lives under Resources, one level below Contents.
             run("codesign", "--force", "--deep", "--sign", "-", staged)
             run("codesign", "--verify", "--deep", "--strict", staged)

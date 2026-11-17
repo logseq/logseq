@@ -1,6 +1,6 @@
 /* C stubs for the OCaml native host executable.
 
-   In-process twin of native/logseq_lui_bridge.c's outbound channel:
+   Outbound channel for the in-process OCaml application:
    instead of bouncing to function pointers the host installs,
    the wakeup and platform-request trampolines call back into OCaml
    through named values the Bridge module registers at startup. The
@@ -18,8 +18,7 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
-#include <SDL.h>
-#include <SDL_syswm.h>
+#include <SDL3/SDL.h>
 #if defined(__APPLE__)
 #include <Security/Security.h>
 #endif
@@ -121,21 +120,40 @@ typedef struct {
   double *regions;
   size_t count;
   Uint32 window_id;
-  SDL_threadID thread;
+  SDL_ThreadID thread;
   int watching;
   int repainting;
+  void *titlebar_down;
+  double titlebar_down_x, titlebar_down_y;
 } LogseqWindowState;
+
+static void *logseq_get_window_data(SDL_Window *window, const char *key) {
+  return SDL_GetPointerProperty(SDL_GetWindowProperties(window), key, NULL);
+}
+
+static void logseq_set_window_data(SDL_Window *window, const char *key, void *data) {
+  if (!SDL_SetPointerProperty(SDL_GetWindowProperties(window), key, data))
+    caml_failwith(SDL_GetError());
+}
+
+#if defined(__APPLE__)
+static void *logseq_cocoa_window(SDL_Window *window) {
+  if (!window) return NULL;
+  return SDL_GetPointerProperty(SDL_GetWindowProperties(window),
+                               SDL_PROP_WINDOW_COCOA_WINDOW_POINTER, NULL);
+}
+#endif
 
 static const char *logseq_window_key = "logseq-native-window";
 
 static LogseqWindowState *logseq_window_state(SDL_Window *window) {
-  LogseqWindowState *state = SDL_GetWindowData(window, logseq_window_key);
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
   if (!state) {
     state = calloc(1, sizeof(*state));
     if (!state) caml_raise_out_of_memory();
     state->window_id = SDL_GetWindowID(window);
-    state->thread = SDL_ThreadID();
-    SDL_SetWindowData(window, logseq_window_key, state);
+    state->thread = SDL_GetCurrentThreadID();
+    logseq_set_window_data(window, logseq_window_key, state);
   }
   return state;
 }
@@ -154,6 +172,11 @@ static SDL_HitTestResult logseq_hit_test(SDL_Window *window,
   return SDL_HITTEST_NORMAL;
 }
 
+#if defined(__APPLE__)
+static void logseq_install_window_dragging(SDL_Window *window);
+static void logseq_cancel_titlebar_drag(LogseqWindowState *state);
+#endif
+
 CAMLprim value logseq_native_drag_regions(value id, value regions) {
   CAMLparam2(id, regions);
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id));
@@ -167,21 +190,37 @@ CAMLprim value logseq_native_drag_regions(value id, value regions) {
   free(state->regions);
   state->regions = copy;
   state->count = count;
-  if (SDL_SetWindowHitTest(window, count ? logseq_hit_test : NULL,
-                          count ? state : NULL) < 0)
+#if defined(__APPLE__)
+  /* Cocoa's background-drag flag tracks the previous mouse event. Route
+     titlebar presses before AppKit selects a drag responder instead. */
+  logseq_install_window_dragging(window);
+  if (!SDL_SetWindowHitTest(window, NULL, NULL))
     caml_failwith(SDL_GetError());
+#else
+  if (SDL_SetWindowHitTest(window, count ? logseq_hit_test : NULL,
+                          count ? state : NULL) == false)
+    caml_failwith(SDL_GetError());
+#endif
   if (!count && !state->watching) {
-    SDL_SetWindowData(window, logseq_window_key, NULL);
+#if defined(__APPLE__)
+    logseq_cancel_titlebar_drag(state);
+#endif
+    logseq_set_window_data(window, logseq_window_key, NULL);
     free(state);
   }
   CAMLreturn(Val_unit);
 }
 
-static int logseq_expose_watch(void *userdata, SDL_Event *event) {
+static bool logseq_expose_watch(void *userdata, SDL_Event *event) {
   LogseqWindowState *state = userdata;
-  if (SDL_ThreadID() == state->thread && !state->repainting &&
-      event->type == SDL_WINDOWEVENT && event->window.windowID == state->window_id &&
-      event->window.event == SDL_WINDOWEVENT_EXPOSED) {
+#if defined(__APPLE__)
+  if (SDL_GetCurrentThreadID() == state->thread && event->type == SDL_EVENT_WINDOW_FOCUS_LOST
+      && event->window.windowID == state->window_id) {
+    logseq_cancel_titlebar_drag(state);
+  }
+#endif
+  if (SDL_GetCurrentThreadID() == state->thread && !state->repainting &&
+      event->type == SDL_EVENT_WINDOW_EXPOSED && event->window.windowID == state->window_id) {
     /* SDL can invoke this while its blocking event wait releases the runtime. */
     bool acquire = Caml_state_opt == NULL;
     if (acquire) caml_acquire_runtime_system();
@@ -202,9 +241,9 @@ CAMLprim value logseq_native_watch_expose(value id, value enabled) {
   LogseqWindowState *state = logseq_window_state(window);
   if (Bool_val(enabled) && !state->watching) {
     state->watching = 1;
-    SDL_AddEventWatch(logseq_expose_watch, state);
+    if (!SDL_AddEventWatch(logseq_expose_watch, state)) caml_failwith(SDL_GetError());
   } else if (!Bool_val(enabled) && state->watching) {
-    SDL_DelEventWatch(logseq_expose_watch, state);
+    SDL_RemoveEventWatch(logseq_expose_watch, state);
     state->watching = 0;
   }
   CAMLreturn(Val_unit);
@@ -214,13 +253,12 @@ CAMLprim value logseq_native_watch_expose(value id, value enabled) {
 CAMLprim value logseq_native_test_expose_unlocked(value id) {
   CAMLparam1(id);
   SDL_Event event = {0};
-  event.type = SDL_WINDOWEVENT;
+  event.type = SDL_EVENT_WINDOW_EXPOSED;
   event.window.windowID = Int_val(id);
-  event.window.event = SDL_WINDOWEVENT_EXPOSED;
   caml_release_runtime_system();
-  int result = SDL_PushEvent(&event);
+  bool result = SDL_PushEvent(&event);
   caml_acquire_runtime_system();
-  if (result < 0) caml_failwith(SDL_GetError());
+  if (!result) caml_failwith(SDL_GetError());
   CAMLreturn(Val_unit);
 }
 
@@ -230,14 +268,14 @@ CAMLprim value logseq_native_notify_event_loop(value unit_v) {
   CAMLparam1(unit_v);
   if (SDL_WasInit(SDL_INIT_EVENTS)) {
     SDL_Event event = {0};
-    event.type = SDL_USEREVENT;
+    event.type = SDL_EVENT_USER;
     event.user.code = 0x4c53574b;
     /* Event watches can enter OCaml while SDL holds its watcher mutex.
        Never wait for that mutex while retaining the runtime lock. */
     caml_release_runtime_system();
-    int result = SDL_PushEvent(&event);
+    bool result = SDL_PushEvent(&event);
     caml_acquire_runtime_system();
-    if (result < 0) caml_failwith(SDL_GetError());
+    if (!result) caml_failwith(SDL_GetError());
   }
   CAMLreturn(Val_unit);
 }
@@ -351,9 +389,8 @@ CAMLprim value logseq_native_memory_usage(value unit_v) {
 CAMLprim value logseq_native_window_presentable(value id_v) {
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
   if (!window) caml_invalid_argument("Presentation requires a live window");
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(window, &info)) caml_failwith(SDL_GetError());
-  id native_window = (id)info.info.cocoa.window;
+  if (!logseq_cocoa_window(window)) caml_failwith(SDL_GetError());
+  id native_window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   unsigned long state = ((unsigned long (*)(id, SEL))objc_msgSend)(native_window,
                                                    sel_registerName("occlusionState"));
   return Val_bool((state & (1UL << 1)) != 0);
@@ -623,6 +660,196 @@ CAMLprim void logseq_native_app_op(value tag) {
   ((void (*)(id, SEL, id))objc_msgSend)(target, op, nil);
 }
 
+/* A titlebar gesture belongs to the region at mouse-down, regardless of
+   the pointer's previous hover position or movement after the press. */
+static bool logseq_titlebar_press(SDL_Window *window, id event) {
+  id cocoa = (id)logseq_cocoa_window(window);
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      cocoa, sel_registerName("setMovableByWindowBackground:"), 0);
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+  if (!state || !state->count) return false;
+  typedef struct { double x, y; } point_t;
+  point_t location = ((point_t (*)(id, SEL))objc_msgSend)(
+      event, sel_registerName("locationInWindow"));
+  typedef struct { double x, y, w, h; } rect_t;
+  for (long index = 0; index < 3; index++) {
+    id button = ((id (*)(id, SEL, long))objc_msgSend)(
+        cocoa, sel_registerName("standardWindowButton:"), index);
+    if (button && !((bool (*)(id, SEL))objc_msgSend)(button, sel_registerName("isHidden"))) {
+      rect_t bounds = ((rect_t (*)(id, SEL))objc_msgSend)(button, sel_registerName("bounds"));
+      rect_t frame = ((rect_t (*)(id, SEL, rect_t, id))objc_msgSend)(
+          button, sel_registerName("convertRect:toView:"), bounds, nil);
+      if (location.x >= frame.x && location.y >= frame.y &&
+          location.x < frame.x + frame.w && location.y < frame.y + frame.h)
+        return false;
+    }
+  }
+  int height;
+  SDL_GetWindowSize(window, NULL, &height);
+  const SDL_Point point = {(int)floor(location.x), (int)floor(height - location.y)};
+  return logseq_hit_test(window, &point, state) == SDL_HITTEST_DRAGGABLE;
+}
+
+static void logseq_cancel_titlebar_drag(LogseqWindowState *state) {
+  if (state->titlebar_down) {
+    ((void (*)(id, SEL))objc_msgSend)((id)state->titlebar_down, sel_registerName("release"));
+    state->titlebar_down = NULL;
+  }
+}
+
+static bool logseq_titlebar_drag_ready(LogseqWindowState *state, id event) {
+  typedef struct { double x, y; } point_t;
+  point_t location = ((point_t (*)(id, SEL))objc_msgSend)(event, sel_registerName("locationInWindow"));
+  const double threshold = 4.0;
+  double dx = location.x - state->titlebar_down_x;
+  double dy = location.y - state->titlebar_down_y;
+  return dx*dx + dy*dy >= threshold*threshold;
+}
+
+static IMP logseq_window_send_event_parent;
+static void logseq_window_send_event(id self, SEL selector, id event) {
+  long type = ((long (*)(id, SEL))objc_msgSend)(event, sel_registerName("type"));
+  if (type == 1 || type == 2 || type == 6 /* left mouse down/up/drag */) {
+    int count = 0;
+    SDL_Window **windows = SDL_GetWindows(&count);
+    SDL_Window *window = NULL;
+    for (int i = 0; i < count; i++) {
+      if ((id)logseq_cocoa_window(windows[i]) == self) {
+        window = windows[i];
+        break;
+      }
+    }
+    SDL_free(windows);
+    if (window) {
+      if (type == 1) {
+        LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+        if (state) logseq_cancel_titlebar_drag(state);
+        if (state && logseq_titlebar_press(window, event)) {
+          typedef struct { double x, y; } point_t;
+          point_t location = ((point_t (*)(id, SEL))objc_msgSend)(event, sel_registerName("locationInWindow"));
+          state->titlebar_down = ((id (*)(id, SEL))objc_msgSend)(event, sel_registerName("retain"));
+          state->titlebar_down_x = location.x;
+          state->titlebar_down_y = location.y;
+          return;
+        }
+      } else {
+        LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+        if (state && state->titlebar_down) {
+          if (type == 2) logseq_cancel_titlebar_drag(state);
+          else if (logseq_titlebar_drag_ready(state, event)) {
+            /* Hand the original press to the Window Server only after real
+               motion. A stationary press must not initiate a native drag. */
+            id down = (id)state->titlebar_down;
+            state->titlebar_down = NULL;
+            ((void (*)(id, SEL, id))objc_msgSend)(
+                self, sel_registerName("performWindowDragWithEvent:"), down);
+            ((void (*)(id, SEL))objc_msgSend)(down, sel_registerName("release"));
+          }
+          return;
+        }
+      }
+    }
+  }
+  ((void (*)(id, SEL, id))logseq_window_send_event_parent)(self, selector, event);
+}
+
+static void logseq_install_window_dragging(SDL_Window *window) {
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_failwith("Native titlebar requires a Cocoa window");
+  if (!logseq_window_send_event_parent) {
+    /* SDL registers KVO observers on its window. Preserve that instance's
+       runtime class and observer bookkeeping when installing the route. */
+    Class cls = objc_getClass("SDL3Window");
+    SEL selector = sel_registerName("sendEvent:");
+    Method method = class_getInstanceMethod(cls, selector);
+    if (!method) caml_failwith("SDL Cocoa window event routing is unavailable");
+    logseq_window_send_event_parent = method_getImplementation(method);
+    class_replaceMethod(cls, selector, (IMP)logseq_window_send_event,
+                        method_getTypeEncoding(method));
+  }
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      cocoa, sel_registerName("setMovableByWindowBackground:"), 0);
+  /* Window Server can begin native titlebar tracking before sendEvent:.
+     Opt out before the gesture; only our explicit drag handoff may move it. */
+  ((void (*)(id, SEL, int))objc_msgSend)(cocoa, sel_registerName("setMovable:"), 0);
+}
+
+static id logseq_test_mouse_event(SDL_Window *window, unsigned long type, double x, double y) {
+  id cocoa = (id)logseq_cocoa_window(window);
+  int height;
+  SDL_GetWindowSize(window, NULL, &height);
+  typedef struct { double x, y; } point_t;
+  point_t point = {x, height - y};
+  long number = ((long (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("windowNumber"));
+  id event = ((id (*)(Class, SEL, unsigned long, point_t, unsigned long,
+      double, long, id, long, long, float))objc_msgSend)(objc_getClass("NSEvent"),
+      sel_registerName("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
+      type, point, 0UL, 0., number, nil, 1L, 1L, 1.f);
+  return event;
+}
+
+CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_v) {
+  CAMLparam3(id_v, x_v, y_v);
+  CAMLlocal1(result);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_invalid_argument("Titlebar test requires a Cocoa window");
+  id event = logseq_test_mouse_event(window, 1UL, Double_val(x_v), Double_val(y_v));
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      cocoa, sel_registerName("setMovableByWindowBackground:"), 1);
+  bool draggable = logseq_titlebar_press(window, event);
+  bool background = ((bool (*)(id, SEL))objc_msgSend)(
+      cocoa, sel_registerName("isMovableByWindowBackground"));
+  result = caml_alloc_tuple(2);
+  Store_field(result, 0, Val_bool(draggable));
+  Store_field(result, 1, Val_bool(background));
+  CAMLreturn(result);
+}
+
+CAMLprim value logseq_native_test_control_gesture(value id_v, value x_v, value y_v) {
+  CAMLparam3(id_v, x_v, y_v);
+  CAMLlocal1(result);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_invalid_argument("Control gesture test requires a Cocoa window");
+  bool before = ((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  id down = logseq_test_mouse_event(window, 1UL, Double_val(x_v), Double_val(y_v));
+  id up = logseq_test_mouse_event(window, 2UL, Double_val(x_v), Double_val(y_v));
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, sel_registerName("sendEvent:"), down);
+  bool during = ((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, sel_registerName("sendEvent:"), up);
+  bool after = ((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  result = caml_alloc_tuple(2);
+  Store_field(result, 0, Val_bool(!during));
+  Store_field(result, 1, Val_bool(after == before));
+  CAMLreturn(result);
+}
+
+CAMLprim value logseq_native_test_titlebar_click(value id_v) {
+  CAMLparam1(id_v); CAMLlocal1(result);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_invalid_argument("Titlebar click test requires a Cocoa window");
+  typedef struct { double x, y, w, h; } rect_t;
+  rect_t before = ((rect_t (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("frame"));
+  bool automatic_drag_disabled = !((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  SEL send = sel_registerName("sendEvent:");
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, send, logseq_test_mouse_event(window, 1UL, 200., 20.));
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+  rect_t pressed = ((rect_t (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("frame"));
+  bool waiting = automatic_drag_disabled && state->titlebar_down != NULL;
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, send, logseq_test_mouse_event(window, 6UL, 201., 21.));
+  rect_t moved = ((rect_t (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("frame"));
+  bool small_motion = state->titlebar_down != NULL;
+  bool ready = logseq_titlebar_drag_ready(state, logseq_test_mouse_event(window, 6UL, 204., 20.));
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, send, logseq_test_mouse_event(window, 2UL, 201., 21.));
+  result = caml_alloc_tuple(3);
+  Store_field(result, 0, Val_bool(waiting && pressed.x == before.x && pressed.y == before.y));
+  Store_field(result, 1, Val_bool(small_motion && moved.x == before.x && moved.y == before.y));
+  Store_field(result, 2, Val_bool(ready && state->titlebar_down == NULL));
+  CAMLreturn(result);
+}
+
 /* Blend the app header into the title bar: content covers the full
    window and the title bar becomes transparent and untitled, like
    Electron's `titleBarStyle: hiddenInset`. The app's .cp__header row
@@ -663,6 +890,7 @@ CAMLprim void logseq_native_titlebar_blend(void) {
         1L /* NSWindowTitleHidden */);
     ((void (*)(id, SEL, int))objc_msgSend)(
         w, sel_registerName("setMovableByWindowBackground:"), 0);
+    ((void (*)(id, SEL, int))objc_msgSend)(w, sel_registerName("setMovable:"), 0);
   }
 }
 
@@ -671,10 +899,8 @@ CAMLprim void logseq_native_titlebar_blend(void) {
    consecutive sizes into a doubled ghost. Disable implicit actions on
    every CAMetalLayer under the content view so frames swap atomically. */
 CAMLprim void logseq_native_metal_noanim(value id_v) {
-  SDL_SysWMinfo info;
-  SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) return;
-  id window = (id)info.info.cocoa.window;
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)))) return;
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
   if (content == nil) return;
   Class metal = objc_getClass("CAMetalLayer");
@@ -734,11 +960,9 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
   double height = header_h, left = traffic_x + 2.0 * (button_size + button_gap)
                                    + button_size + after_gap,
          right = 0.0;
-  SDL_SysWMinfo info;
-  SDL_VERSION(&info.version);
   SDL_Window *sdl = SDL_GetWindowFromID(Int_val(id_v));
-  if (sdl && SDL_GetWindowWMInfo(sdl, &info)) {
-    id window = (id)info.info.cocoa.window;
+  if (logseq_cocoa_window(sdl)) {
+    id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
     typedef struct { double x, y, w, h; } tb_rect;
     /* Electron hiddenInset parity: an empty NSToolbar is what grows the
        titlebar natively, so AppKit positions the traffic lights itself —
@@ -806,11 +1030,9 @@ CAMLprim value logseq_native_titlebar_insets(value id_v) {
 }
 
 CAMLprim value logseq_native_input_chain(value id_v) {
-  SDL_SysWMinfo info;
-  SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info))
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v))))
     caml_failwith(SDL_GetError());
-  id window = (id)info.info.cocoa.window;
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   id listener = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("delegate"));
   id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
   id next = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("nextResponder"));
@@ -818,18 +1040,16 @@ CAMLprim value logseq_native_input_chain(value id_v) {
   return Val_bool(next == listener && window_next == listener);
 }
 CAMLprim value logseq_native_window_opaque(value id_v) {
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
-  id window = (id)info.info.cocoa.window;
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)))) caml_failwith(SDL_GetError());
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   return Val_bool(((int (*)(id, SEL))objc_msgSend)(window, sel_registerName("isOpaque")));
 }
 
 CAMLprim value logseq_native_has_sidebar_material(value id_v) {
-  SDL_SysWMinfo info; SDL_VERSION(&info.version);
-  if (!SDL_GetWindowWMInfo(SDL_GetWindowFromID(Int_val(id_v)), &info)) caml_failwith(SDL_GetError());
+  if (!logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)))) caml_failwith(SDL_GetError());
   Class material = objc_getClass("LogseqSidebarMaterial");
   if (material == Nil) return Val_false;
-  id window = (id)info.info.cocoa.window;
+  id window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
   id content = ((id (*)(id, SEL))objc_msgSend)(window, sel_registerName("contentView"));
   id frame = ((id (*)(id, SEL))objc_msgSend)(content, sel_registerName("superview"));
   id children = ((id (*)(id, SEL))objc_msgSend)(frame, sel_registerName("subviews"));
@@ -1111,13 +1331,12 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
   extern void *objc_autoreleasePoolPush(void);
   extern void objc_autoreleasePoolPop(void *);
   void *pool = objc_autoreleasePoolPush();
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(window, logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(window, logseq_software_key);
   if (!surface) {
-    SDL_SysWMinfo info; SDL_VERSION(&info.version);
-    if (!SDL_GetWindowWMInfo(window, &info)) caml_failwith(SDL_GetError());
+      if (!logseq_cocoa_window(window)) caml_failwith(SDL_GetError());
     surface = calloc(1, sizeof(*surface));
     if (!surface) caml_raise_out_of_memory();
-    id native_window = (id)info.info.cocoa.window;
+    id native_window = (id)logseq_cocoa_window(SDL_GetWindowFromID(Int_val(id_v)));
     id content = ((id (*)(id, SEL))objc_msgSend)(native_window, sel_registerName("contentView"));
     ls_nsrect bounds = ((ls_nsrect (*)(id, SEL))objc_msgSend)(content, sel_registerName("bounds"));
     id view = ((id (*)(Class, SEL))objc_msgSend)(logseq_software_class(), sel_registerName("alloc"));
@@ -1128,7 +1347,7 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
     ((void (*)(id, SEL, int))objc_msgSend)(view, sel_registerName("setWantsLayer:"), 1);
     ((void (*)(id, SEL, id))objc_msgSend)(content, sel_registerName("addSubview:"), view);
     surface->view = view;
-    SDL_SetWindowData(window, logseq_software_key, surface);
+    logseq_set_window_data(window, logseq_software_key, surface);
   }
   if (surface->w != w || surface->h != h || surface->rows != rows) {
     logseq_software_clear(surface);
@@ -1151,7 +1370,7 @@ CAMLprim value logseq_native_software_begin(value id_v, value dimensions) {
 
 CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
   CAMLparam2(id_v, band_v);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   int y0 = Int_val(Field(band_v,0)), h = Int_val(Field(band_v,1));
   int stride = Int_val(Field(band_v,2));
@@ -1243,7 +1462,7 @@ CAMLprim value logseq_native_software_tile(value id_v, value band_v) {
 
 CAMLprim value logseq_native_software_present(value id_v) {
   CAMLparam1(id_v);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   for (int i=0; i<surface->count; i++)
     if (!surface->bands[i].ready) caml_invalid_argument("Software frame is incomplete");
@@ -1284,14 +1503,14 @@ CAMLprim value logseq_native_software_present(value id_v) {
 }
 
 CAMLprim value logseq_native_software_owned_bytes(value id_v) {
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   return Val_long(surface ? surface->owned_bytes : 0);
 }
 
 /* Resource identities for presentation ownership regressions. */
 CAMLprim value logseq_native_software_image_ids(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(ids);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   ids = caml_alloc(surface->count * 5, 0);
   for (int i=0; i<surface->count; i++) {
@@ -1306,7 +1525,7 @@ CAMLprim value logseq_native_software_image_ids(value id_v) {
 
 CAMLprim value logseq_native_software_read(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(out);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   for (int i=0; i<surface->count; i++)
     if (!surface->bands[i].ready) caml_invalid_argument("Software frame is incomplete");
@@ -1344,7 +1563,7 @@ CAMLprim value logseq_native_software_read(value id_v) {
 /* Diagnostic readback through Core Animation's actual layer composition. */
 CAMLprim value logseq_native_software_composite(value id_v) {
   CAMLparam1(id_v); CAMLlocal1(out);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   out = caml_alloc_string((size_t)surface->w * surface->h * 4);
   memset(Bytes_val(out), 0, caml_string_length(out));
@@ -1363,7 +1582,7 @@ CAMLprim value logseq_native_software_composite(value id_v) {
 }
 
 CAMLprim value logseq_native_software_hit(value id_v) {
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(logseq_software_window(id_v), logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(logseq_software_window(id_v), logseq_software_key);
   if (!surface) caml_invalid_argument("Software surface is not initialized");
   LogseqPoint point = {2.,2.};
   id hit = ((id (*)(id, SEL, LogseqPoint))objc_msgSend)(surface->view, sel_registerName("hitTest:"), point);
@@ -1372,12 +1591,12 @@ CAMLprim value logseq_native_software_hit(value id_v) {
 
 CAMLprim value logseq_native_software_dispose(value id_v) {
   SDL_Window *window = logseq_software_window(id_v);
-  LogseqSoftwareSurface *surface = SDL_GetWindowData(window, logseq_software_key);
+  LogseqSoftwareSurface *surface = logseq_get_window_data(window, logseq_software_key);
   if (surface) {
     logseq_software_clear(surface);
     ((void (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("removeFromSuperview"));
     ((void (*)(id, SEL))objc_msgSend)(surface->view, sel_registerName("release"));
-    SDL_SetWindowData(window, logseq_software_key, NULL);
+    logseq_set_window_data(window, logseq_software_key, NULL);
     free(surface);
   }
   return Val_unit;
@@ -2660,7 +2879,7 @@ CAMLprim value logseq_native_memory_usage(value unit_v) {
 CAMLprim value logseq_native_window_presentable(value id_v) {
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
   if (!window) caml_invalid_argument("Presentation requires a live window");
-  Uint32 flags = SDL_GetWindowFlags(window);
+  SDL_WindowFlags flags = SDL_GetWindowFlags(window);
   return Val_bool(!(flags & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)));
 }
 
@@ -2706,6 +2925,21 @@ CAMLprim value logseq_native_software_dispose(value id) {
 CAMLprim value logseq_native_activate(value unit) {
   (void)unit;
   return Val_unit;
+}
+
+CAMLprim value logseq_native_test_titlebar_click(value id_v) {
+  (void)id_v;
+  caml_failwith("Cocoa titlebar click tests require macOS");
+}
+
+CAMLprim value logseq_native_test_control_gesture(value id_v, value x_v, value y_v) {
+  (void)id_v; (void)x_v; (void)y_v;
+  caml_failwith("Cocoa control gesture tests require macOS");
+}
+
+CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_v) {
+  (void)id_v; (void)x_v; (void)y_v;
+  caml_failwith("Cocoa titlebar press tests require macOS");
 }
 
 CAMLprim value logseq_native_titlebar_blend(value unit) {
@@ -2824,6 +3058,23 @@ CAMLprim value logseq_native_test_menu_key_action(value tag, value key,
   caml_invalid_argument("Native menu dispatch requires macOS");
 #endif
   CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_prefers_dark(value unit_v) {
+  CAMLparam1(unit_v);
+#if defined(__APPLE__)
+  CAMLlocal1(result);
+  CFPropertyListRef style = CFPreferencesCopyValue(CFSTR("AppleInterfaceStyle"),
+      kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+  bool dark = style && CFGetTypeID(style) == CFStringGetTypeID()
+      && CFEqual(style, CFSTR("Dark"));
+  if (style) CFRelease(style);
+  result = caml_alloc(1, 0);
+  Store_field(result, 0, Val_bool(dark));
+  CAMLreturn(result);
+#else
+  CAMLreturn(Val_none);
+#endif
 }
 
 CAMLprim value logseq_native_reduced_motion(value unit_v) {

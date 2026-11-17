@@ -311,7 +311,7 @@ let el_key (el : element) : string =
 
 (* ---------- view-mutation overlay ----------
 
-   dom-ops (set-attr/set-class/set-text) mutate the rendered SwiftUI tree
+   dom-ops (set-attr/set-class/set-text) mutate the rendered native tree
    but not runtime node props, so snapshot providers never see them.
    Matching and attribute reads merge this overlay, keyed by node-id;
    attr values are string option — None is a removal tombstone. *)

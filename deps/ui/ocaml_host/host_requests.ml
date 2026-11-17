@@ -741,7 +741,7 @@ let editor_caret_key () =
     let sink = Ui.focused e.ui in
     (match Lui_store.string_prop e.store sink "block-id",
            Lui_store.int_prop e.store sink "caret" with
-     | Some bid, Some off when off >= 0 -> Some (bid, off)
+     | Some bid, Some off when off >= 0 && not (Editor_actions.initial_click_pending bid) -> Some (bid, off)
      | _ -> None)
 
 (* Draw the model caret using the same current glyph geometry used by
@@ -753,7 +753,7 @@ let editor_caret_ops ~color =
     let sink = Ui.focused e.ui in
     match Lui_store.string_prop e.store sink "block-id",
           Lui_store.int_prop e.store sink "caret" with
-    | Some bid, Some off when off >= 0 ->
+    | Some bid, Some off when off >= 0 && not (Editor_actions.initial_click_pending bid) ->
       (match ed_ctx e bid with
        | None -> []
        | Some ctx ->

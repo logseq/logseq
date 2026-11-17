@@ -144,7 +144,7 @@ let run path =
     List.find (fun handle -> command_key (command_metadata handle) = key)
       (Plugin_host.portable_commands ()) in
   let runner = load () in
-  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 12);
+  check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 15);
   let ac = editing "/portable-batch" in
   check "portable creation preserves ordered receipts, schema atomicity and the active buffer"
     (task (Popups_state.run_portable_command popup ac (handle "portable-batch")) = Ok ()
@@ -152,10 +152,17 @@ let run path =
   let ac = editing "/delete-special-pages" in
   check "special pages cannot be permanently deleted"
     (task (Popups_state.run_portable_command popup ac (handle "delete-special-pages")) = Ok ());
-  let ac = editing "/editor-api-v2" in
-  check "tree, block and page operations preserve the active editor"
-    (task (Popups_state.run_portable_command popup ac (handle "editor-api-v2")) = Ok ()
-     && buffer () = "/editor-api-v2");
+  (* Each command must fit the production invocation budget, even when the
+     worker is slower than a local development machine. *)
+  List.iter (fun key ->
+    let text = "/" ^ key in
+    let ac = editing text in
+    (match task (Popups_state.run_portable_command popup ac (handle key)) with
+     | Ok () -> ()
+     | Error error -> failwith (key ^ ": " ^ error_name error));
+    check (key ^ " preserves the active editor") (buffer () = text))
+    ["editor-api-v2"; "editor-api-v2-read-patch";
+     "editor-api-v2-move"; "editor-api-v2-delete"];
   let ac = editing "/editor-api-v1" in
   check "editor graph writes preserve configured ownership and the editing buffer"
     (task (Popups_state.run_portable_command popup ac (handle "editor-api-v1")) = Ok ()

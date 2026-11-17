@@ -1,8 +1,8 @@
 # OCaml native host (experimental)
 
 **Status: experimental.** This optional self-drawn host does not replace the
-WebView desktop, Apple/mobile or Electron paths. Its native renderer comes from
-the pinned LUI SDK. The host links the current `logseq_ui_native` application
+WebView desktop or Electron paths. LUI mobile backends remain maintained.
+Its native renderer comes from the pinned LUI SDK. The host links the current `logseq_ui_native` application
 library directly; it does not restore an older copy of the application logic.
 
 The application name and bundle identifier explicitly identify this backend
@@ -43,13 +43,14 @@ For an uninstalled local SDK, use
 It builds the SDK into its isolated Dune install tree without repinning the
 active opam switch. Build metadata records the application revision and whether its checkout is dirty,
 plus the SDK revision and checkout state when a local SDK is supplied. Generated packages live in `deps/ui/_build/native-experimental`.
-The macOS builder includes dynamically loaded SDL3 when Homebrew supplies
-SDL2 through `sdl2-compat`. Credential requests use the macOS Keychain; Linux
+The macOS builder embeds SDL3 directly in `Contents/Frameworks`, checks that
+no SDL2 or development-machine dependencies remain, and signs the bundle.
+End users do not need to install SDL3. Credential requests use the macOS Keychain; Linux
 currently reports credential storage as unsupported instead of leaving promises pending.
 
 Linux needs the development packages listed in the workflow, including
-Pango, Cairo, Fontconfig, SDL2, SDL2_ttf, OpenGL, SQLite, libffi, and GMP.
-On macOS, install `pkg-config sqlite3 sdl2 sdl2_ttf libffi gmp` with Homebrew.
+Pango, Cairo, Fontconfig, SDL3, OpenGL, SQLite, libffi, and GMP.
+On macOS, install `pkg-config sqlite3 sdl3 libffi gmp` with Homebrew.
 Select Xcode 16.2 or a newer supported SDK before installing the OCaml
 dependencies. The current LUI Metal backend uses `MTLCompileOptions.mathMode`,
 which is absent from Xcode 15.4's SDK. CI runs on macOS 15 with Xcode 16.2
@@ -138,6 +139,32 @@ selected. Core Animation presentation timing is not yet measured; its displayed
 FPS is not an acceptance result. The dialog button opens a live metrics split.
 Scrollbars start hidden, appear during scrolling, and hide after 800 ms without movement.
 
+On macOS, automatic titlebar dragging is disabled before mouse input arrives.
+A press in a draggable header region starts a native window drag only after
+four points of pointer movement; controls retain ordinary button input.
+Stationary presses and pointer jitter leave the window in place. Hover paint
+includes the owning control's descendants, so icons and labels do not interrupt
+the button, navigation-item or bullet background.
+Sidebar dropdowns use retained trigger anchors, viewport collision handling and
+shared menu chrome. Context menus retain the context-click rectangle. Pressing
+the owning trigger again closes its menu. Open menus, popups and dialogs suppress
+chrome tooltips, including delayed tooltip callbacks. Page-title disclosure is
+hover-only for collapsable titles; arrow direction and page properties update
+together when the title is expanded or collapsed.
+Selection-toolbar property and tag pickers await the trigger's measured rectangle
+before replacing the toolbar with a compact anchored popup. Batch checkbox
+properties offer explicit True/False choices without writing an initial value.
+Long form labels wrap within their measured width on the native text path.
+Completely transparent popup frames emit no chrome or backdrop paint, preventing
+the blank-shell flash at the start of dialog entrance animations.
+
+Software frame pacing uses interruptible SDL waits. Mailbox and input events
+can wake the loop before the next display deadline; those wakeups retain the
+deadline and coalesce view updates before layout and paint. The 120 Hz pacing
+target and the platform's vsync path are unchanged. macOS reads its system
+theme directly from Core Foundation preferences without launching `defaults`.
+Linux continues to retain the application's selected theme.
+
 Set `LOGSEQ_NATIVE_METRICS` to a JSONL file path to retain phase timings,
 actual presentation intervals, and received key/text counters. Input
 latency measures the SDL event timestamp to host-frame completion;
@@ -172,19 +199,25 @@ application first so other Metal test processes do not compete for the
 same GPU. The default Metal suite includes the native modal composition;
 captured-scene replay remains available for diagnosing a specific graph.
 
-On macOS 26.4, the installed SDL2-compat 2.32.74 backed by SDL3 3.4.18
-reproduces stale coordinates for positioned automated pointer events.
-The same executable receives the intended coordinates with official SDL
-2.32.10. This comparison isolates an input-library difference; it does not
-establish that physical mouse input has the same defect.
+The experimental host uses the SDL3 OCaml binding pinned by LUI. Mouse
+coordinates and wheel deltas retain fractional precision; event latency uses
+nanosecond timestamps. Text input and IME rectangles belong to their specific
+SDL3 window. The event adapter copies text and drop strings before another
+event can invalidate their native storage.
+Pointer coordinates and movement deltas use JSON number encoding, including
+whole numbers; OCaml float display strings are not valid wire encodings.
 
-Package the tested SDL2 library in
-`Contents/Frameworks/libSDL2-2.0.0.dylib`. Inspect `otool -L` on the copied
-bundle executable, then use `install_name_tool -change` to replace its
-actual SDL dependency with
-`@executable_path/../Frameworks/libSDL2-2.0.0.dylib`. Sign the copied library
-and executable after this change. Repeat when replacing the executable:
-a fresh Dune binary links the switch's installed SDL dependency. Do not
-modify Homebrew's links or rely on a development-only `DYLD_LIBRARY_PATH`.
-Verify the running process loads the bundled library before native pointer
-acceptance; a README or header version alone does not prove this.
+Document key handlers run before the editor conduit. A handler that consumes
+an editing shortcut must prevent its default action; the host then skips the
+conduit delivery, so navigation and deletion occur once per keydown. An initial
+block click keeps the native caret hidden until its hit-tested offset is ready,
+matching the shared editor overlay's pending-focus behavior.
+Empty block titles use a zero-width single-line placeholder, so entering or
+leaving edit mode preserves the same line height as a one-line text block.
+
+The macOS builder packages the linked SDL3 runtime and its dependencies in
+`Contents/Frameworks`, adds the runtime-loading alias, and verifies the signed
+bundle. Inspect the running process's loaded-library paths during acceptance:
+all SDL3 mappings must come from this bundle, with no SDL2 compatibility layer.
+Do not modify Homebrew's links or rely on a development-only
+`DYLD_LIBRARY_PATH` or `SDL3_LIBRARY` for release launches.

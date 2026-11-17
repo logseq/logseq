@@ -128,7 +128,19 @@ void logseq.ready(async () => {
       return []
     }
   )
-  logseq.Commands.registerEditorCommand(
+  let treeFixture:
+    | {
+        page: { uuid: string; id: number }
+        first: { uuid: string }
+        second: { uuid: string }
+        nested: { uuid: string }
+      }
+    | undefined
+  const fixture = () => {
+    if (!treeFixture) throw new Error('Tree fixture has not been created')
+    return treeFixture
+  }
+  await register(
     { key: 'editor-api-v2', label: 'Portable trees and pages' },
     async () => {
       const page = await logseq.Editor.createPage(
@@ -151,7 +163,18 @@ void logseq.ready(async () => {
       })
       const nested = await logseq.Editor.insertBlock(first.uuid, 'nested')
       if (!second || !nested) throw new Error('Nested insertion')
-      let tree = await logseq.Editor.getPageBlocksTree(page.uuid)
+      treeFixture = { page, first, second, nested }
+      return []
+    }
+  )
+  await register(
+    {
+      key: 'editor-api-v2-read-patch',
+      label: 'Portable tree reads and patches',
+    },
+    async () => {
+      const { page, first, second, nested } = fixture()
+      const tree = await logseq.Editor.getPageBlocksTree(page.uuid)
       if (
         tree.length !== 2 ||
         tree[0]?.uuid !== first.uuid ||
@@ -177,6 +200,14 @@ void logseq.ready(async () => {
         properties?.[':plugin.property.command-probe/flag'] !== true
       )
         throw new Error('Property patch merge')
+      return []
+    }
+  )
+  await register(
+    { key: 'editor-api-v2-move', label: 'Portable tree moves' },
+    async () => {
+      const { page, first, second, nested } = fixture()
+      let tree
       await logseq.Editor.moveBlock(second.uuid, first.uuid, { before: true })
       tree = await logseq.Editor.getPageBlocksTree(page.id)
       if (tree[0]?.uuid !== second.uuid) throw new Error('Move before')
@@ -200,8 +231,18 @@ void logseq.ready(async () => {
         if (!(error instanceof Error) || error.message !== 'Invalid_request')
           throw error
       }
+      return []
+    }
+  )
+  await register(
+    {
+      key: 'editor-api-v2-delete',
+      label: 'Portable page and subtree deletion',
+    },
+    async () => {
+      const { page, first, second } = fixture()
       await logseq.Editor.removeBlock(first.uuid)
-      tree = await logseq.Editor.getPageBlocksTree(page.uuid)
+      const tree = await logseq.Editor.getPageBlocksTree(page.uuid)
       if (tree.length !== 1 || tree[0]?.uuid !== second.uuid)
         throw new Error('Subtree removal')
       if (!(await logseq.Editor.renamePage(page.uuid, 'portable renamed')))

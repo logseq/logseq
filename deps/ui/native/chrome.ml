@@ -17,10 +17,6 @@
 
 open Lui_elements
 
-let apple_host context =
-  Lui_ui.platform context = Lui_protocol.MacOS
-  && Lui_ui.host context = Lui_protocol.SwiftUIHost
-
 (* the web twin mounts #skip-to-main (a11y skip link, CSS-hidden until
    :focus) — dropped here: the native host has no tab-focus reveal
    and the button
@@ -46,7 +42,7 @@ let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ])
 
-(* Non-SwiftUI hosts mount the sidebar toggle in the leading toolbar. *)
+(* The sidebar toggle belongs beside search in the leading toolbar. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
   icon_btn ~key ~acc:"left-menu" ~icon_name:"layout-sidebar"
     ~label:(I18n.t "header/toggle-left-sidebar")
@@ -177,31 +173,17 @@ let leading_toolbar ~key ~state ~controls : t =
  fun context parent ->
   let inset = Host.titlebar_left_signal
     ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
-  if apple_host context then
-    (* Only a collapsed sidebar puts detail controls beside the traffic
-       lights and the native 32-point sidebar toggle, with an 8-point gap. *)
-    Ui_parts.int_prop Lui_protocol.MarginLeft
-      ~value:(reactive (fun (m : Model.t) left ->
-        if m.left_sidebar_open then 0 else left + 40) state inset)
-      (row ~key ~height:48 ~min_height:48 ~cross:`center
-        (controls ())) context parent
-  else
-    Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
-      ~safe_area_signal:inset ~padding_horizontal:0 ~state
-      ~is_open:(fun _ -> false) ~controls context parent
+  Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
+    ~safe_area_signal:inset ~padding_horizontal:0 ~state
+    ~is_open:(fun _ -> false) ~controls context parent
 
-(* NavigationSplitView supplies the macOS SwiftUI sidebar toggle.
-   Other hosts keep it beside search in the leading toolbar. *)
+(* Sidebar and search controls share the leading toolbar. *)
 let leading_controls () =
   [ left_menu_btn (); search_btn () ]
 
 let topbar (ms : Model.t Signal.signal) : t =
  fun context parent ->
-  let controls () =
-    if apple_host context then
-      [ search_btn () ]
-    else leading_controls ()
-  in
+  let controls = leading_controls in
   row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~min_height:48
@@ -298,7 +280,7 @@ let right_sidebar (ms : Model.t Signal.signal) : t =
      (Ui_parts.int_prop Lui_protocol.MaxWidth
        ~value:(reactive (fun width -> if width>=640. then int_of_float (width*.Sidebar_state.right_fraction_max) else 0) viewport)
        (box ~key:"right-sidebar" ~accessibility_identifier:"right-sidebar"
-          ?container_relative_frame:(if apple_host context then None else Some `both)
+          ~container_relative_frame:`both
           ~inert:(reactive (fun (m : Model.t) width -> not m.right_sidebar_open || width<640.) ms viewport)
           ~min_height:0 ~style_class:"cp__right-sidebar closed"
           [Ui_components.with_props [Ui_components.Prop.overflow `hidden]
@@ -339,14 +321,13 @@ let left_sidebar (ms : Model.t Signal.signal) : t =
        (Ui_parts.int_prop Lui_protocol.MaxWidth
          ~value:(reactive (fun width -> if width<640. then int_of_float width else Sidebar_state.left_width_max) viewport)
         (Ui_components.with_props
-           ((if apple_host context then [] else [Ui_components.Prop.width_viewport 1.])
-            @ [Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.])
+           [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.inset_top 0.;Ui_components.Prop.inset_left 0.]
          (box ~key:"left-sidebar" ~accessibility_identifier:"left-sidebar"
-            ?container_relative_frame:(if apple_host context then None else Some `vertical)
+            ~container_relative_frame:`vertical
             ~inert:(reactive (fun (m : Model.t) -> not m.left_sidebar_open) ms)
             ~min_height:0 ~style_class:"cp__sidebar-left-layout"
             [split ~key:"sidebar-reveal"
-               ?container_relative_frame:(if apple_host context then None else Some `both)
+               ~container_relative_frame:`both
                ~resize_handle_width:0 ~gap:0
                ~first_width:(reactive (fun (m : Model.t) width window ->
                  if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
@@ -357,33 +338,6 @@ let left_sidebar (ms : Model.t Signal.signal) : t =
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (content : t) : t =
  fun context parent ->
-  if apple_host context then
-    (* The Apple backend maps an ordinary fractional Split to
-       NavigationSplitView. Custom handle props select its manual renderer. *)
-    let available (m : Model.t) right viewport =
-      if m.right_sidebar_open then Float.max 1. (viewport *. (1. -. right))
-      else Float.max 1. viewport in
-    split ~key:"left-split" ~grow:1. ~gap:0
-      ~value:(reactive
-        (fun (m : Model.t) width right viewport ->
-          if m.left_sidebar_open then width /. available m right viewport else 0.0001)
-        ms (Signal.value st.Sidebar_state.left_width)
-        (Signal.value st.Sidebar_state.right_fraction)
-        (Signal.value st.Sidebar_state.viewport_w))
-      ~on_resize:(function
-        | Lui_protocol.ValueChanged (node, fraction) ->
-            let m = Runtime.model () in
-            let open_ = fraction > 0.001 in
-            if open_ <> m.Model.left_sidebar_open then
-              Runtime.send Action.Toggle_left_sidebar;
-            if open_ then
-              let viewport = Runtime.signal_get st.Sidebar_state.viewport_w in
-              let right = Runtime.signal_get st.Sidebar_state.right_fraction in
-              Sidebar_state.on_left_split_resize st
-                (Lui_protocol.ValueChanged (node, fraction *. available m right viewport))
-        | _ -> ())
-      (left_sidebar ms) content context parent
-  else
   split ~key:"left-split" ~grow:1.
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
     ~first_width:
@@ -442,8 +396,7 @@ let main_scroll (ms : Model.t Signal.signal) : t =
                       | Model.Journals | Model.Home -> spacer ~key:"content-end" []
                       | _ -> spacer ~key:"content-end" ~height:120 []) ms ] ] ] ]) ctx parent
 
-(* Native NavigationSplitView owns the sidebar's titlebar and safe area;
-   app controls belong in its detail column, not above both columns. *)
+(* The detail column contains the page and its document event carrier. *)
 let detail_column (ms : Model.t Signal.signal) : t =
  fun context parent ->
   Ui_parts.class_signal ms
@@ -452,12 +405,11 @@ let detail_column (ms : Model.t Signal.signal) : t =
     (column ~key:"left-container"
        ~accessibility_identifier:"left-container" ~grow:1.
        ~min_height:0
-       ((if apple_host context then [topbar ms] else []) @
        [ (* invisible logseq-dom carrier: hosts forward
             document events through this extension node *)
          Logseq_el.carrier
        ; hidden_chrome ms
-       ; main_scroll ms ])) context parent
+       ; main_scroll ms ]) context parent
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
    menus), dialogs and toasts mount here (single shared container;
@@ -540,7 +492,7 @@ let help_area (ms : Model.t Signal.signal) : t =
    hits a retained-store crash on the swap). *)
 let not_found_page : t =
  fun context parent ->
-  ((* .cp__not-found (stylesheet / Swift style entry) carries the
+  ((* .cp__not-found (shared native stylesheet) carries the
      fixed-overlay positioning the inline style used to *)
   column ~key:"nf-full" ~main:`center ~cross:`center
     ~style_class:"cp__not-found"
@@ -562,15 +514,12 @@ let shell_contents (ms : Model.t Signal.signal) : t =
  fun context parent ->
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
-    [ (* Other hosts retain a window-level header; macOS SwiftUI lets
-         NavigationSplitView own the sidebar's full window height. *)
-      column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        ((if apple_host context then [] else [topbar ms]) @
-        [ row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+    [ column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
+        [ topbar ms; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
             [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
              Pdf.container_el ~key:"asc" ~id:"app-single-container";
              Host_metrics.panel ()]
-        ; performance_bar () ])
+        ; performance_bar () ]
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->

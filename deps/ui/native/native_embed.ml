@@ -1,6 +1,5 @@
 (* Native app entry — same assembly as js_app/main.ml. In-process
-   entries return typed patch batches. Cross-language callbacks encode
-   those values only at the C bridge boundary. *)
+   entries return typed patch batches to the OCaml desktop host. *)
 
 external wakeup : unit -> unit = "logseq_lui_wakeup"
 external platform_request : string -> unit = "logseq_lui_platform_request"
@@ -47,7 +46,7 @@ let current_app : (Model.t, Action.t) Lui_app.reducer_app option ref = ref None
 
 (* ---------- document queries over the LUI extension tree ----------
 
-   Element snapshots carry the same shape the Swift LogseqDOMSnapshot
+   Element snapshots carry the same shape a native DOM snapshot
    emits so Dom_ext's selector engine treats them identically. "#ref" is
    the DOM id when present, else a node-<id> handle the host registry
    resolves for dom-ops. *)
@@ -821,17 +820,21 @@ let document_event name payload =
      | None -> invalid_arg "Document event before application initialization");
     prevented, take_patches_dbg "document")
 
+let json_number value = Yojson.Safe.to_string ~std:true (`Float value)
+
 let keyboard_event node payload values =
   with_entry_lock (fun () ->
     (* Document and conduit dispatch form one input transaction. Async
        completions must not remount the target between those phases. *)
     Platform.emit_event "keydown" (Js.Json.parseExn payload);
+    let prevented = !Platform.default_prevented in
     Option.iter (fun app ->
       (match Lui_runtime.extension_identifier (Lui_app.runtime app) node with
-       | Some "logseq-editor" ->
+       | Some "logseq-editor" when not prevented ->
          ignore (Lui_app.dispatch_event app
            (Lui_protocol.ExtensionEvent (node,"logseq-editor","key",
              decode_extension_values values)))
+       | Some "logseq-editor" -> ()
        | Some _ -> invalid_arg "Keyboard target is not an editor conduit"
        | None -> ());
       ignore (Lui_app.flush app)) !current_app;
@@ -867,142 +870,3 @@ let resync _ =
       Queue.add
         (Lui_runtime.resync_batch (Lui_app.runtime app)) pending_batches;
       take_patches ())
-
-(* Preserve the wire ABI for hosts that cross the C bridge. *)
-module Ffi = struct
-  let encode_batches batches =
-    match batches with
-    | [] -> ""
-    | _ ->
-      let buffer = Buffer.create 4096 in
-      Buffer.add_char buffer '[';
-      List.iteri (fun i batch ->
-        if i > 0 then Buffer.add_char buffer ',';
-        Buffer.add_string buffer (Lui_wire.encode_batch batch)) batches;
-      Buffer.add_char buffer ']';
-      Buffer.contents buffer
-
-  let initialize platform_code host_code payload = encode_batches (initialize platform_code host_code payload)
-  let appear node = encode_batches (appear node)
-  let load node = encode_batches (load node)
-  let press node = encode_batches (press node)
-  let press_ex node modifiers = encode_batches (press_ex node modifiers)
-  let long_press node = encode_batches (long_press node)
-  let text_changed node text = encode_batches (text_changed node text)
-  let submit node = encode_batches (submit node)
-  let dismiss node = encode_batches (dismiss node)
-  let double_press node = encode_batches (double_press node)
-  let press_detail node x y modifiers button target_class = encode_batches (press_detail node x y modifiers button target_class)
-  let pointer_down node x y modifiers button target_class = encode_batches (pointer_down node x y modifiers button target_class)
-  let pointer_up node x y modifiers button target_class = encode_batches (pointer_up node x y modifiers button target_class)
-  let pointer_move node x y modifiers button target_class = encode_batches (pointer_move node x y modifiers button target_class)
-  let pointer_cancel node x y modifiers button target_class = encode_batches (pointer_cancel node x y modifiers button target_class)
-  let pointer_enter node = encode_batches (pointer_enter node)
-  let pointer_leave node = encode_batches (pointer_leave node)
-  let context_menu_press node x y modifiers button target_class = encode_batches (context_menu_press node x y modifiers button target_class)
-  let toggle_changed node checked = encode_batches (toggle_changed node checked)
-  let toggle_changed_detail node checked modifiers = encode_batches (toggle_changed_detail node checked modifiers)
-  let radio_changed node = encode_batches (radio_changed node)
-  let slider_changed node value = encode_batches (slider_changed node value)
-  let scroll_completed node token outcome = encode_batches (scroll_completed node token outcome)
-  let visible_range node first last = encode_batches (visible_range node first last)
-  let virtual_window node generation first last pins = encode_batches (virtual_window node generation first last pins)
-  let virtual_retention owner ticket receipt = encode_batches (virtual_retention owner ticket receipt)
-  let picked node payload = encode_batches (picked node payload)
-  let navigate_previous node = encode_batches (navigate_previous node)
-  let navigate_next node = encode_batches (navigate_next node)
-  let navigation_key node key shift = encode_batches (navigation_key node key shift)
-  let scroll_edges node at_start at_end = encode_batches (scroll_edges node at_start at_end)
-  let extension_event node identifier name values = encode_batches (extension_event node identifier name values)
-  let pump () = encode_batches (pump ())
-  let dispose () = encode_batches (dispose ())
-  let resync target = encode_batches (resync target)
-  let platform_event = platform_event
-  let document_event payload =
-    let separator = String.index payload '\n' in
-    let name = String.sub payload 0 separator in
-    let json = String.sub payload (separator + 1)
-        (String.length payload - separator - 1) in
-    let prevented, batches = document_event name json in
-    prevented, encode_batches batches
-  let root_node = root_node
-  let agent request =
-    with_entry_lock (fun () ->
-      let app = Option.get !current_app in
-      let target = Lui_agent.app_target ~host:"Logseq Apple" app in
-      let reply = Lui_agent.handle target request in
-      Editor_actions.focus_pending ();
-      ignore (Lui_app.flush app);
-      reply, encode_batches (take_patches_dbg "agent"))
-  let issued_reveals () =
-    with_entry_lock (fun () ->
-      if not (Issued_reveal.has_editor_work ()) then "[]", ""
-      else begin
-        (* Commit projection/bindings before reading the producer. Release uses
-           the current SDK receipt; publish its metadata through ordinary patches. *)
-        Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app;
-        let demands = `List (List.map (fun (d : Issued_reveal.demand) ->
-          `Assoc ["scope", `String d.scope; "attempt", `Int d.attempt;
-            "source", `Int d.source_node; "lease", `Int d.source_lease;
-            "owner", `Int d.owner_node; "epoch", `Int d.owner_epoch;
-            "ticket", `Int d.ticket; "key", `String d.key;
-            "block", `String d.block; "requireFocus", `Bool d.require_focus;
-            "control", `Int d.control_node])
-          (Issued_reveal.poll ())) in
-        Option.iter (fun app -> ignore (Lui_app.flush app)) !current_app;
-        Yojson.Safe.to_string demands, encode_batches (take_patches_dbg "issued-reveals")
-      end)
-  let editor_snapshot block_id =
-    with_entry_lock (fun () ->
-      match Editor_state.editing () with
-      | Some editing when editing.uuid = block_id ->
-        let model = Edit_model.display_model editing.model in
-        Yojson.Basic.to_string (`Assoc
-          [ "source", `String model.source
-          ; "anchor", `Int (Option.value model.anchor ~default:model.caret)
-          ; "caret", `Int model.caret ])
-      | _ -> "null")
-end
-
-let () =
-  Callback.register "lui_ocaml_init" Ffi.initialize;
-  Callback.register "lui_ocaml_document_event" Ffi.document_event;
-  Callback.register "lui_ocaml_appear" Ffi.appear;
-  Callback.register "lui_ocaml_load" Ffi.load;
-  Callback.register "lui_ocaml_press" Ffi.press;
-  Callback.register "lui_ocaml_press_ex" Ffi.press_ex;
-  Callback.register "lui_ocaml_long_press" Ffi.long_press;
-  Callback.register "lui_ocaml_text_changed" Ffi.text_changed;
-  Callback.register "lui_ocaml_submit" Ffi.submit;
-  Callback.register "lui_ocaml_dismiss" Ffi.dismiss;
-  Callback.register "lui_ocaml_double_press" Ffi.double_press;
-  Callback.register "lui_ocaml_press_detail" Ffi.press_detail;
-  Callback.register "lui_ocaml_pointer_down" Ffi.pointer_down;
-  Callback.register "lui_ocaml_pointer_up" Ffi.pointer_up;
-  Callback.register "lui_ocaml_pointer_move" Ffi.pointer_move;
-  Callback.register "lui_ocaml_pointer_cancel" Ffi.pointer_cancel;
-  Callback.register "lui_ocaml_pointer_enter" Ffi.pointer_enter;
-  Callback.register "lui_ocaml_pointer_leave" Ffi.pointer_leave;
-  Callback.register "lui_ocaml_context_menu_press" Ffi.context_menu_press;
-  Callback.register "lui_ocaml_toggle_changed" Ffi.toggle_changed;
-  Callback.register "lui_ocaml_toggle_changed_detail" Ffi.toggle_changed_detail;
-  Callback.register "lui_ocaml_radio_changed" Ffi.radio_changed;
-  Callback.register "lui_ocaml_slider_changed" Ffi.slider_changed;
-  Callback.register "lui_ocaml_scroll_completed" Ffi.scroll_completed;
-  Callback.register "lui_ocaml_visible_range" Ffi.visible_range;
-  Callback.register "lui_ocaml_virtual_window" Ffi.virtual_window;
-  Callback.register "lui_ocaml_virtual_retention_utf8" Ffi.virtual_retention;
-  Callback.register "lui_ocaml_picked" Ffi.picked;
-  Callback.register "lui_ocaml_navigate_previous" Ffi.navigate_previous;
-  Callback.register "lui_ocaml_navigate_next" Ffi.navigate_next;
-  Callback.register "lui_ocaml_navigation_key" Ffi.navigation_key;
-  Callback.register "lui_ocaml_scroll_edges" Ffi.scroll_edges;
-  Callback.register "lui_ocaml_extension_event" Ffi.extension_event;
-  Callback.register "lui_ocaml_pump" Ffi.pump;
-  Callback.register "lui_ocaml_platform_event" Ffi.platform_event;
-  Callback.register "lui_ocaml_dispose" Ffi.dispose;
-  Callback.register "lui_ocaml_root_node" Ffi.root_node;
-  Callback.register "lui_ocaml_editor_snapshot" Ffi.editor_snapshot;
-  Callback.register "lui_ocaml_agent" Ffi.agent;
-  Callback.register "logseq_issued_reveals" Ffi.issued_reveals;
-  Callback.register "lui_ocaml_resync" Ffi.resync

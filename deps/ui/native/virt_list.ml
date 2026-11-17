@@ -1,6 +1,6 @@
 (* Native twin of virt/virt_list.ml — emits every row as a real child
    (children spine identical to the web backend / master) and lets the
-   SwiftUI LazyVStack virtualize at render time: views materialize only
+   OCaml host virtualize at render time: views materialize only
    when scrolled into view, the same model as logseq/chat.
 
    The data-virt-count attribute selects the lazy column path on the
@@ -16,19 +16,17 @@ let enabled_min ~virtualize ~min count =
 
 let enabled ~virtualize count = enabled_min ~virtualize ~min:64 count
 
-(* the native host's eager rows sit inside one shared taffy layout, so the Swift
-   spine's 48-row warmup is far above its cold-start budget — a single
+(* the native host's eager rows sit inside one shared taffy layout, so the
+   viewport's full warmup is far above its cold-start budget — a single
    viewport of eager rows keeps the first frame cheap; the lazy-mount
    sweep fills in the overscan margin right after paint *)
 let clamp_initial_rows ctx n =
   if n >= 0 && Lui_ui.host ctx = Lui_protocol.GenericHost then min n 16 else n
 
-(* Only hosts with a native lazy spine (SwiftUI LazyVStack, the OCaml
-   host spine) can deliver "lazy-mount"/"virt-end" dom-events; on every
-   other host rows must mount eagerly. *)
+(* The OCaml host delivers lazy-mount and virt-end notifications. *)
 let lazy_spine ctx =
   match Lui_ui.host ctx with
-  | Lui_protocol.GenericHost | Lui_protocol.SwiftUIHost -> true
+  | Lui_protocol.GenericHost -> true
   | _ -> false
 
 let lazy_row ?node_key ?(style_class="") ?(pinned=fun () -> false)

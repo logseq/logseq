@@ -768,15 +768,15 @@ let () =
   Native_embed.with_entry_lock (fun () ->
     Queue.clear Native_embed.pending_batches;
     List.iter (fun batch -> ignore (Native_embed.enqueue_batch batch)) expected);
-  let actual = Patch_decode.batches_of_string (Native_embed.Ffi.pump ()) in
-  check "Cross-language transport changed batch order, generations, or values" (actual=expected);
+  let actual = Native_embed.pump () in
+  check "In-process transport changed batch order, generations, or values" (actual=expected);
   let store = Lui_store.create () in
   List.iter (Lui_store.apply_batch store) actual;
   check "Transport lost a later text update"
     (Lui_store.string_prop store 900001 "text" = Some "updated");
   check "Transport lost mounted children" (Lui_store.node_count store=513);
-  check "Empty cross-language transport changed its no-work result" (Native_embed.Ffi.pump ()="");
-  print_endline "native patch wire boundary: OK"
+  check "Empty in-process transport changed its no-work result" (Native_embed.pump ()=[]);
+  print_endline "native typed patch queue: OK"
 
 let () =
   let batches = transport_batches () in
@@ -954,7 +954,20 @@ let () =
   (match Host_requests.ed_ctx moved_env "block" with
    | Some ctx -> check "Cached editor context must follow scroll geometry" (ctx.ox=120. && ctx.oy=260.)
    | None -> failwith "Editor context disappeared");
-  print_endline "native editor wrapped geometry: OK"
+  let old_env = !Host_requests.env and old_pending = !Editor_state.pending_focus in
+  let request = Editor_actions.make_focus_request ~click:(0., 125., 205.) "block" 10 in
+  Fun.protect ~finally:(fun () ->
+      Host_requests.env := old_env; Editor_state.pending_focus := old_pending) (fun () ->
+    Host_requests.env := Some env;
+    Lui_store.apply_op store (SetExtensionProp (21,"caret",IntValue 10));
+    Editor_state.pending_focus := Some request;
+    check "An unresolved initial click must not paint the temporary end caret"
+      (Host_requests.editor_caret_key ()=None
+       && Host_requests.editor_caret_ops ~color:(Lui_scene.color 0 0 0 255)=[]);
+    request.Editor_state.focus_click <- None;
+    check "Resolving the initial click must restore the native caret"
+      (Host_requests.editor_caret_key ()=Some ("block",10)));
+  print_endline "native editor wrapped geometry and initial click caret: OK"
 
 let () =
   let store = Lui_store.create () and ui = Lui_window.Ui.create () in
@@ -2751,10 +2764,17 @@ let () =
 
 let () =
   let received = ref 0 and store = Lui_store.create () in
+  let current_model = ref (Edit_model.create "") in
+  let apply_input input =
+    incr received;
+    current_model := Edit_input.handle ~route:Edit_input.no_route
+      ~conduit:Edit_input.no_conduit !current_model input
+  in
   let branches = ref None in
   let old_app = !Native_embed.current_app
   and old_target = !Platform.event_target_of in
-  let old_capture = Hashtbl.find_opt Platform.capture_listeners "keydown" in
+  let old_capture = Hashtbl.find_opt Platform.capture_listeners "keydown"
+  and old_pointer = Hashtbl.find_opt Platform.capture_listeners "mousemove" in
   let app = Native_embed.with_entry_lock (fun () ->
     let registry = Lui_extension.registry () in
     Logseq_editor.register registry;
@@ -2771,7 +2791,7 @@ let () =
             (Edit_model.create "key regression") in
           Edit_view.view ~model
             ~frame:(Signal.constant context.Lui_ui.ui_scheduler Edit_input.empty_frame)
-            ~block_id ~cls:"" ~on_input:(fun _ -> incr received))) in
+            ~block_id ~cls:"" ~on_input:apply_input)) in
     Native_embed.current_app := Some app;
     Platform.event_target_of := (fun id -> Some (Native_embed.ext_snapshot (Lui_app.runtime app) id));
     Hashtbl.replace Platform.capture_listeners "keydown" [];
@@ -2786,9 +2806,10 @@ let () =
     Native_embed.with_entry_lock (fun () -> ignore (Lui_app.dispose app));
     Native_embed.current_app := old_app;
     Platform.event_target_of := old_target;
-    match old_capture with
-    | Some listeners -> Hashtbl.replace Platform.capture_listeners "keydown" listeners
-    | None -> Hashtbl.remove Platform.capture_listeners "keydown") (fun () ->
+    List.iter (fun (name, previous) -> match previous with
+      | Some listeners -> Hashtbl.replace Platform.capture_listeners name listeners
+      | None -> Hashtbl.remove Platform.capture_listeners name)
+      ["keydown",old_capture; "mousemove",old_pointer]) (fun () ->
       let original = editor_id () in
       Hashtbl.replace Platform.capture_listeners "keydown" [fun _ ->
         Host.enqueue (fun () -> Signal.set (Option.get !branches) [1]; ignore (Lui_app.flush app))];
@@ -2803,8 +2824,44 @@ let () =
       Hashtbl.replace Platform.capture_listeners "keydown" [fun _ ->
         incr received; Signal.set (Option.get !branches) [2]; ignore (Lui_app.flush app)];
       ignore (key next);
-      check "A document-owned key was also delivered to a disposed editor" (!received=3));
-  print_endline "native atomic editor key delivery: OK"
+      check "A document-owned key was also delivered to a disposed editor" (!received=3);
+      let next = editor_id () in
+      List.iter (fun consumed -> List.iter (fun (name, expected_source, expected_caret) ->
+        current_model := Edit_model.select (Edit_model.create "abcdef") ~anchor:3 ~focus:3;
+        let before = !received in
+        Hashtbl.replace Platform.capture_listeners "keydown"
+          (if consumed then [fun _ ->
+            apply_input (Edit_input.Key (Edit_model.key_ev name, false));
+            Platform.request_prevent ()] else []);
+        ignore (Native_embed.keyboard_event next
+          (Printf.sprintf "{\"nodeId\":%d,\"key\":\"%s\"}" next name)
+          (Printf.sprintf "{\"key\":\"%s\"}" name));
+        check (name ^ " must be delivered exactly once") (!received=before+1);
+        check (name ^ " must edit exactly one character")
+          ((!current_model).Edit_model.source=expected_source
+           && (!current_model).Edit_model.caret=expected_caret))
+        ["ArrowLeft","abcdef",2; "ArrowRight","abcdef",4; "Backspace","abdef",2])
+        [false;true];
+      let pointer = ref None in
+      Hashtbl.replace Platform.capture_listeners "mousemove" [fun payload -> pointer:=Some payload];
+      List.iter (fun (x,y,dx,dy) ->
+        pointer := None;
+        let number = Native_embed.json_number in
+        Native_embed.platform_event (Printf.sprintf
+          "mousemove\n{\"nodeId\":%d,\"clientX\":%s,\"clientY\":%s,\"movementX\":%s,\"movementY\":%s}"
+          next (number x) (number y) (number dx) (number dy));
+        ignore (Native_embed.pump ());
+        let payload = Option.get !pointer in
+        let event = Ui_dom_native.ev_of payload in
+        check "Pointer JSON must preserve its target and coordinates"
+          (Option.is_some event.Ui_services.target && event.x=x && event.y=y);
+        let field name = match payload with
+          | Js.Json.JObject fields -> Js.Json.decodeNumber (List.assoc name fields)
+          | _ -> None in
+        check "Pointer JSON must preserve integer and fractional movement"
+          (field "movementX"=Some dx && field "movementY"=Some dy))
+        [216.,342.,0.,-8.; 216.123456789,342.5,0.25,-1.5; 0.,0.,1e-8,0.]);
+  print_endline "native atomic editor key delivery and pointer JSON: OK"
 
 let () =
   let store = Lui_store.create () in
@@ -4999,6 +5056,33 @@ let () =
   check "Native styled line height across measure, paint, caret and hit testing"
     (!failures = []);
   print_endline "native styled line height: OK"
+
+let () =
+  List.iter (fun scale ->
+    let store = Lui_store.create () in
+    let scene = Lui_scene.create
+      ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:128 ~h:128)
+      ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:128 ~h:128) in
+    let engine = Text_engine.create ~scene:(fun () -> scene)
+      ~scale:(fun () -> scale) ~store:(fun () -> store) in
+    let caption = "Expand block references automatically when zoom-in" in
+    List.iter (Lui_store.apply_op store)
+      [CreateNode (830001,Label);CreateNode (830002,Button);
+       SetProp (830001,FontSize,StringValue "14px");
+       SetProp (830001,LineHeight,StringValue "20px");
+       SetProp (830002,FontSize,StringValue "14px")];
+    let rect = Lui_scene.rect 0. 0. (160.*.scale) (100.*.scale) in
+    let label,_,_ = Text_engine.text_layout engine 830001 rect caption in
+    check "Settings labels must wrap at their offered grid-column width"
+      (abs_float (label.lay_wrap-.(160.*.scale+.1.)/.scale)<0.01
+       && label.lay_height>20. && Array.length label.lay_lines>1);
+    let _,measured_height = Text_engine.measure_text ~width:(161.*.scale) engine 830001 caption in
+    check "Settings label paint and measured line heights must agree"
+      (abs_float (measured_height-.label.lay_height*.scale)<0.01);
+    let button,_,_ = Text_engine.text_layout engine 830002 rect caption in
+    check "Ordinary control captions retain single-line layout"
+      (button.lay_width>160.)) [1.;2.];
+  print_endline "native settings label wrapping: OK"
 
 let () =
   let first = Filename.temp_file "native-image-" ".png"
@@ -10430,6 +10514,52 @@ let () = with_test_entry (fun () ->
     List.iter prerr_endline (List.rev !failures);
     check "Table titles edit in place and commit through the shared rich-text editor" (!failures=[]);
     print_endline "table inline rich-text editing lifecycle: OK"))
+
+let () = with_test_entry (fun () ->
+  List.iter (fun scale ->
+    let host_ref = ref None in
+    let host () = Option.get !host_ref in
+    let engine = lazy (Text_engine.create ~scene:(fun () -> Lui_host.scene (host ()))
+      ~scale:(fun () -> scale) ~store:(fun () -> Lui_host.store (host ()))) in
+    let hooks = {Lui_paint.default_hooks with
+      text_flow=(fun id width -> Text_engine.text_flow (Lazy.force engine) id width);
+      text_flow_ops=(fun context id rect color -> Text_engine.text_flow_ops (Lazy.force engine) context id rect color);
+      text_ops=(fun id rect color text -> Text_engine.text_ops (Lazy.force engine) id rect color text)} in
+    let h = Lui_host.create ~hooks ~layout:(module Lui_layout)
+      ~measure:(fun id text offered _ -> Some (Text_engine.measure_text
+        ~width:(Host_interaction.measure_width offered) (Lazy.force engine) id text))
+      ~renderer:{Lui_host.name="empty-block-height";render=(fun _ -> Bytes.empty)}
+      ~width:(int_of_float (400.*.scale)) ~height:(int_of_float (300.*.scale)) ~scale () in
+    host_ref := Some h;
+    let registry = Lui_extension.registry () in
+    Logseq_el.register_all registry; Logseq_katex.register registry;
+    Logseq_codemirror.register registry; Logseq_editor.register registry;
+    let app = Lui_app.create_with_extensions (Lui_host.backend h (profile MacOS GenericHost))
+      registry () (fun () () -> ()) (fun context _ _ ->
+        reset_view_state (); Editor_state.ensure context;
+        let sample ~editing label source =
+          let view = if editing then
+              Edit_view.view ~block_id:label ~cls:"" ~on_input:(fun _ -> ())
+                ~model:(Signal.constant context.Lui_ui.ui_scheduler (Edit_model.create source))
+                ~frame:(Signal.constant context.Lui_ui.ui_scheduler Edit_input.empty_frame)
+            else Tree.content_el label (Model.empty_block ~uuid:label ~title:source ~is_page:false) in
+          Lui_elements.row ~accessibility_identifier:label [view] in
+        Ui_components.with_props [Ui_components.Prop.font_size "16px"; Ui_components.Prop.line_height "24px"]
+          (Lui_elements.column [sample ~editing:false "empty-read" "";
+            sample ~editing:false "single-read" "x";
+            sample ~editing:true "empty-edit" "";
+            sample ~editing:true "single-edit" "x"])) in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+      ignore (Lui_app.start app); ignore (Lui_app.flush app); ignore (Lui_host.repaint h);
+      let store = Lui_host.store h in
+      List.iter (fun label ->
+        let node = List.find (fun id -> Lui_store.string_prop store id "accessibility-identifier"=Some label)
+          (Lui_store.preorder store) in
+        let rect = Option.get (Lui_host.layout_rect h node) in
+        check (Printf.sprintf "%s must occupy one line at scale %.0f, got %.1f" label scale rect.Lui_scene.h)
+          (abs_float (rect.h-.24.*.scale)<0.1))
+        ["empty-read";"single-read";"empty-edit";"single-edit"])) [1.;2.];
+  print_endline "native empty block read/edit single-line height: OK")
 
 let () = with_test_entry (fun () ->
   let failures=ref [] in
