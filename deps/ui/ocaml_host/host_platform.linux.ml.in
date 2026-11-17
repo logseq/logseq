@@ -1,0 +1,34 @@
+(* Selected by dune for the Linux native host. *)
+let is_macos = false
+let platform_code = 4
+
+(* Desktop appearance notifications are not exposed by lui.shell_linux
+   yet. Keep the app's selected theme instead of reporting a made-up
+   system preference. *)
+let prefers_dark () = None
+
+module Text = struct
+  include Lui_text_pango
+
+  (* Pango exposes premultiplied BGRA; LUI's shared color atlas and
+     OpenGL renderer consume premultiplied RGBA. Coverage masks are
+     already in the atlas format. *)
+  let rasterize ?scale ?dx ?shade font id =
+    match Lui_text_pango.rasterize ?scale ?dx ?shade font id with
+    | Some bitmap when bitmap.color ->
+      let pixels = Bytes.copy bitmap.pixels in
+      for i = 0 to bitmap.w * bitmap.h - 1 do
+        let offset = i * 4 in
+        let blue = Bytes.get pixels offset in
+        Bytes.set pixels offset (Bytes.get pixels (offset + 2));
+        Bytes.set pixels (offset + 2) blue
+      done;
+      Some { bitmap with pixels }
+    | bitmap -> bitmap
+end
+
+module Shell = struct
+  include Lui_shell_linux
+
+  let pump () = ignore (Lui_shell_linux.pump ())
+end

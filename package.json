@@ -83,6 +83,9 @@
     "ui:apple:build": "bash deps/ui/apple/build.sh",
     "ui:apple:run": "bash deps/ui/apple/run.sh",
     "ui:apple:package": "bash deps/ui/apple/package.sh",
+    "ui:native:experimental:build": "python3 deps/ui/ocaml_host/build.py",
+    "ui:native:experimental:run": "bash deps/ui/ocaml_host/run.sh",
+    "ui:native:experimental:test": "cd deps/ui && opam exec -- dune runtest ocaml_host -j 1",
     "test:db-worker": "cd deps/db-worker && opam exec -- dune runtest",
     "test:ui": "node --test scripts/test-ui-style-scopes.mjs && cd deps/ui && opam exec -- dune build test && node _build/default/test/ui_test/test/test_main.js && opam exec -- dune runtest test/contracts"
   },

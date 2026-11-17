@@ -5,6 +5,9 @@ The application logic is OCaml. Web uses Melange and the LUI DOM backend.
 not a renderer. The `native_embed` shared-library build and native database
 worker remain available for native hosts. Electron retains its desktop
 release path, including Windows and Linux builds.
+`ocaml_host/` provides an additional **experimental** self-drawn OCaml desktop
+host. It links the current `logseq_ui_native` application library and keeps
+the existing WebView, Apple/mobile and Electron entry points unchanged.
 
 ## Setup
 
@@ -22,13 +25,30 @@ pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
 The root Node dependencies are required even for desktop: Dune's theme
 generators import `postcss`. UI and worker dependencies are not a replacement
 for that root install. Select an opam switch before running the installers.
-The UI installer pins LUI to an explicit revision and installs an
-explicit non-SDL dependency set; errors are not hidden by a fallback install.
+The UI installer pins LUI to an explicit revision; dependency errors are not
+hidden by a fallback install.
 `markup` supports native HTML-to-Markdown conversion.
 
 Native builds need a C/C++ toolchain, `pkg-config`, SQLite, libffi and GMP;
-macOS also needs Xcode command-line tools. SDL, tsdl and tgls are not
-dependencies.
+macOS also needs Xcode command-line tools. The experimental self-drawn renderer
+additionally needs SDL2/SDL2_ttf, tsdl, tgls and the native renderer dependencies
+declared by the pinned LUI SDK.
+
+## Experimental OCaml native desktop
+
+```sh
+pnpm ui:native:experimental:build
+LOGSEQ_ROOT_DIR=/tmp/logseq-native-test LOGSEQ_UI_STATE_DIR=/tmp/logseq-native-ui \
+  pnpm ui:native:experimental:run
+pnpm ui:native:experimental:test
+```
+
+This renderer is experimental and is not selected by the normal desktop
+release commands. On macOS its app title, bundle identifier and build metadata
+identify the experimental backend. The builder stages the native SQLite worker,
+resources and dynamic libraries and verifies an ad-hoc code signature. SQLite
+WASM and zvec are excluded. See [the host guide](ocaml_host/README.md) for
+local SDK builds, platform requirements and qualification limits.
 
 ## Native graph storage
 

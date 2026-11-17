@@ -1,0 +1,169 @@
+
+; Experimental self-drawn host. Share the current native application and
+; generated modules, while selecting the generic SDL host profile.
+
+(rule
+ (target host_platform.ml)
+ (enabled_if (= %{system} macosx))
+ (action (copy host_platform.macos.ml.in %{target})))
+
+(rule
+ (target host_platform.ml)
+ (enabled_if (= %{system} linux))
+ (action (copy host_platform.linux.ml.in %{target})))
+
+(rule
+ (target host_c_flags.sexp)
+ (action
+  (with-stdout-to %{target}
+   (bash
+    "flags=$(pkg-config --cflags sdl2) || exit; case '%{system}' in linux) flags=\"$flags $(pkg-config --cflags fontconfig)\" || exit;; esac; printf '(%s)' \"$flags\""))))
+
+(rule
+ (target host_link_flags.sexp)
+ (action
+  (with-stdout-to %{target}
+   (bash
+    "case '%{system}' in macosx) printf '(-cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface)';; linux) flags=$(pkg-config --libs fontconfig) || exit; printf '('; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')';; *) printf '()';; esac"))))
+
+(rule
+ (copy ../native/native_embed.ml native_embed.ml))
+
+(rule
+ (copy ../test/handbook_scenarios.ml handbook_scenarios.ml))
+
+(library
+ (name logseq_ocaml_host_platform)
+ (wrapped false)
+ (modules host_platform)
+ (libraries lui.text lui.text_pango lui.shell lui.shell_linux unix)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(test
+ (name host_platform_test)
+ (modules host_platform_test)
+ (libraries logseq_ocaml_host_platform)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(executable
+ (name logseq_native)
+ (modules logseq_native)
+ (libraries logseq_native_host_services logseq_ui_native logseq_ocaml_host_platform logseq_native_entry logseq_native_interaction logseq_renderer_metrics
+   lui
+   lui.store
+   lui.scene
+   lui.paint
+   lui.host
+   lui.window
+   lui.layout
+   lui.shell
+   lui.shell_linux
+   lui.a11y
+   lui.ime
+   lui.text
+   lui.text_pango
+   lui.gl
+   lui.metal
+   lui.raster
+   lui.blit
+   lui.gpu
+   lui.svg
+   lui.theme
+   tsdl
+   ocaml-signal
+   unix
+   threads.posix)
+ (modes native)
+ (enabled_if (or (= %{system} macosx) (= %{system} linux))))
+
+(library
+ (name logseq_native_host_services)
+ (wrapped false)
+ (modules patch_decode host_requests theme_vars host_builtin_icons host_icons host_image host_images text_engine)
+ (libraries logseq_ui_native logseq_ocaml_host_platform logseq_native_entry
+   logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
+   lui.layout lui.text lui.svg lui.theme lui.ime lui.resource_loaders imagelib yojson str unix))
+
+(test
+ (name host_requests_test)
+ (modules host_requests_test)
+ (preprocess (pps lui.ppx))
+ (deps ../assets/tabler-children.json)
+ (action
+  (setenv LOGSEQ_ICON_DATA %{dep:../assets/tabler-children.json}
+   (run %{test})))
+ (libraries logseq_native_host_services))
+
+(test
+ (name native_fetch_test)
+ (modules native_fetch_test)
+ (libraries logseq_ui_native))
+
+(test
+ (name handbook_data_test)
+ (modules handbook_data_test handbook_scenarios)
+ (preprocess (pps lui.ppx))
+ (libraries logseq_ui_native))
+
+(library
+ (name logseq_native_entry)
+ (wrapped false)
+ (modules native_embed bridge native_window)
+ (library_flags (:include host_link_flags.sexp))
+ (libraries logseq_ui_native logseq_native_interaction tsdl)
+ (foreign_stubs
+  (language c)
+  (names ocaml_host_stubs)
+  (flags (:standard (:include host_c_flags.sexp)))))
+
+(test
+ (name native_lifecycle_test)
+ (modules native_lifecycle_test)
+ (libraries logseq_native_entry))
+
+(test
+ (name native_dictionary_test)
+ (modules native_dictionary_test)
+ (deps (universe))
+ (action
+  (run python3 -c
+   "import os, subprocess, sys, tempfile\nwith tempfile.TemporaryDirectory(prefix='native-dictionary-test-') as root:\n env = dict(os.environ, LOGSEQ_ROOT_DIR=root + '/graphs', LOGSEQ_UI_STATE_DIR=root + '/state', LOGSEQ_NO_LOGIN_DAEMON='1')\n dictionaries = os.path.join(os.environ['DUNE_SOURCEROOT'], '../../resources/dicts')\n sys.exit(subprocess.call([sys.argv[1], dictionaries], env=env))"
+   %{exe:native_dictionary_test.exe}))
+ (libraries logseq_native_entry))
+
+(test
+ (name native_window_test)
+ (modules native_window_test)
+ (libraries logseq_native_entry logseq_ocaml_host_platform lui.metal lui.scene lui.raster))
+
+(library
+ (name logseq_native_interaction)
+ (wrapped false)
+ (modules host_interaction)
+ (libraries lui.store lui.scene lui.host lui.window))
+
+(test
+ (name host_interaction_test)
+ (modules host_interaction_test)
+ (libraries logseq_native_interaction lui.layout))
+
+(library
+ (name logseq_renderer_metrics)
+ (wrapped false)
+ (modules renderer_metrics)
+ (libraries lui.scene))
+
+(test
+ (name renderer_metrics_test)
+ (modules renderer_metrics_test)
+ (libraries logseq_renderer_metrics))
+
+(rule
+ (alias runtest)
+ (deps native_acceptance.py native_acceptance_test.py)
+ (action (run python3 -m unittest native_acceptance_test)))
+
+(test
+ (name host_images_test)
+ (modules host_images_test)
+ (libraries logseq_native_host_services lui.resource_loaders imagelib))
