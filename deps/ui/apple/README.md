@@ -118,9 +118,25 @@ The same endpoint also accepts JSON requests with `op` set to `host-state`
 an absolute `path`, captures only this window), `host-resize` (positive finite
 `width` and `height` in content points), `host-commit` (layout/display),
 `host-document` (requires `name` and a `payload` object), `host-resync`
-(authoritative presentation snapshot), or `host-quit` (normal
-save/quit). `LOGSEQ_APPLE_PERF=1` adds host stage timings and editor lifecycle
-timestamps. These diagnostics are disabled by default.
+(authoritative presentation snapshot), or `host-quit` (normal save/quit).
+`host-scroll` accepts a retained scroll `node` and finite `top` in logical
+points. `host-geometry` accepts a retained `node` and returns its reported frame
+and committed text frame when available.
+
+`host-native-state` reports the app's native scroll viewports, document sizes,
+scrollbar knobs and owned windows. Optional `x`/`y` returns the AppKit hit-test
+ancestry at a point. `host-native-click` accepts `x`/`y`;
+`host-native-drag` also requires `toX`/`toY`. Coordinates are top-left logical
+content points. An optional `window` selects an owned window number reported by
+`host-native-state`, allowing popup controls to be exercised. These operations
+post AppKit pointer events through the normal input path; a dispatched reply
+requires subsequent state verification and does not establish hardware input.
+
+`LOGSEQ_APPLE_PERF=1` adds host stage timings and editor lifecycle timestamps.
+With that flag, `host-trace-begin`/`host-trace-end` delimit a one-second trace of
+host layout, drawing callbacks and main-run-loop activity. Focus acceptance and
+layout callbacks do not prove that a frame was presented on screen. All agent
+diagnostics require the explicitly enabled endpoint.
 
 Build receipts cover both the app output directory and the LUI Swift sources.
 When editing a local LUI dependency, also run `lui_build_receipt.mjs check
