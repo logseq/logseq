@@ -2830,6 +2830,23 @@ CAMLprim value logseq_native_test_menu_key_action(value tag, value key,
   CAMLreturn(Val_unit);
 }
 
+CAMLprim value logseq_native_prefers_dark(value unit_v) {
+  CAMLparam1(unit_v);
+#if defined(__APPLE__)
+  CAMLlocal1(result);
+  CFPropertyListRef style = CFPreferencesCopyValue(CFSTR("AppleInterfaceStyle"),
+      kCFPreferencesAnyApplication, kCFPreferencesCurrentUser, kCFPreferencesAnyHost);
+  bool dark = style && CFGetTypeID(style) == CFStringGetTypeID()
+      && CFEqual(style, CFSTR("Dark"));
+  if (style) CFRelease(style);
+  result = caml_alloc(1, 0);
+  Store_field(result, 0, Val_bool(dark));
+  CAMLreturn(result);
+#else
+  CAMLreturn(Val_none);
+#endif
+}
+
 CAMLprim value logseq_native_reduced_motion(value unit_v) {
   (void)unit_v;
 #ifdef __APPLE__

@@ -2,11 +2,6 @@
 let is_macos = false
 let platform_code = 4
 
-(* Desktop appearance notifications are not exposed by lui.shell_linux
-   yet. Keep the app's selected theme instead of reporting a made-up
-   system preference. *)
-let prefers_dark () = None
-
 module Text = struct
   include Lui_text_pango
 

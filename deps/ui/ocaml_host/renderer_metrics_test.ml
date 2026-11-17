@@ -91,6 +91,16 @@ let () =
     (abs_float (deadline -. (1. +. 1. /. 120.)) < 0.000001);
   check "Scheduler queues obsolete frames after a long reflow"
     (Renderer_metrics.next_deadline ~previous:1. ~now:1.1 >= 1.1);
+  let next = ref 0. and frames = ref 0 in
+  for wake = 1 to 4000 do
+    let now = float wake /. 4000. in
+    if Renderer_metrics.frame_due ~vsync:false ~deadline:!next ~now then incr frames;
+    next := Renderer_metrics.next_deadline ~previous:!next ~now
+  done;
+  check "Mailbox bursts must not bypass the frame rate limit or postpone frames"
+    (!frames >= 118 && !frames <= 121);
+  check "Vsync presentation must retain its own frame pacing"
+    (Renderer_metrics.frame_due ~vsync:true ~deadline:2. ~now:1.);
   check "Quiet native loops must wait for an event independent of repaint count"
     (Renderer_metrics.idle_timeout ~dirty:false ~now:10. ~last_busy:0. = Some 1000);
   check "Recent activity must keep mailbox chains responsive"
@@ -171,10 +181,13 @@ let () =
   check "Cached metrics hide a newly recorded maximum"
     ((Renderer_metrics.phase_summary active Presentation_interval).maximum = 100.);
   ignore (Renderer_metrics.snapshot active ~now:10.);
-  let before = (Gc.quick_stat ()).Gc.minor_words in
+  (* Include allocations made since the last minor collection. *)
+  let before = Gc.allocated_bytes () in
   for _ = 1 to 100 do ignore (Renderer_metrics.snapshot active ~now:10.) done;
+  let allocated = Gc.allocated_bytes () -. before in
+  Printf.printf "Idle metrics exports allocated %.0f bytes/snapshot\n%!" (allocated /. 100.);
   check "Idle export reformats unchanged phase histories"
-    ((Gc.quick_stat ()).Gc.minor_words -. before < 250000.);
+    (allocated < 250000. *. float (Sys.word_size / 8));
   let before = (Gc.quick_stat ()).Gc.minor_words in
   for _ = 1 to 100 do
     Renderer_metrics.record_phase active Presentation_interval 12.;
