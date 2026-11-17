@@ -26,7 +26,7 @@ jobs:
       - name: System deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev
+          sudo apt-get install -y pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev
 
       - uses: pnpm/action-setup@v4
         with:
@@ -123,10 +123,11 @@ jobs:
       - name: dune runtest (deps/ui)
         working-directory: deps/ui
         env:
-          SDL_VIDEO_DRIVER: dummy
+          SDL_VIDEO_DRIVER: x11
+          OCAMLRUNPARAM: b
         run: |
           fc-match --format '%{family} | %{file}\n' 'sans:charset=4e2d'
-          opam exec -- dune runtest
+          xvfb-run -a opam exec -- dune runtest
 
       - name: db-worker bundle
         run: pnpm db-worker:build
