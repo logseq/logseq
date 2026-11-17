@@ -139,6 +139,13 @@ selected. Core Animation presentation timing is not yet measured; its displayed
 FPS is not an acceptance result. The dialog button opens a live metrics split.
 Scrollbars start hidden, appear during scrolling, and hide after 800 ms without movement.
 
+Software frame pacing uses interruptible SDL waits. Mailbox and input events
+can wake the loop before the next display deadline; those wakeups retain the
+deadline and coalesce view updates before layout and paint. The 120 Hz pacing
+target and the platform's vsync path are unchanged. macOS reads its system
+theme directly from Core Foundation preferences without launching `defaults`.
+Linux continues to retain the application's selected theme.
+
 Set `LOGSEQ_NATIVE_METRICS` to a JSONL file path to retain phase timings,
 actual presentation intervals, and received key/text counters. Input
 latency measures the SDL event timestamp to host-frame completion;

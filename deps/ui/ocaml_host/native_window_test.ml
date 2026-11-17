@@ -59,6 +59,11 @@ external software_composite : int -> bytes = "logseq_native_software_composite"
 external software_image_ids : int -> int array = "logseq_native_software_image_ids"
 external has_sidebar_material : int -> bool = "logseq_native_has_sidebar_material"
 
+let () =
+  check "System theme availability must match the native platform"
+    (Option.is_some (Native_window.prefers_dark ()) = Host_platform.is_macos);
+  print_endline "native system theme lookup: OK"
+
 let software_memory_regression () =
   let sdl_ok = function Ok x -> x | Error (`Msg message) -> failwith message in
   sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);

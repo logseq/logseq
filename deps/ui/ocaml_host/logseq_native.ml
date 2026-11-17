@@ -2039,7 +2039,7 @@ let () =
     (fun dark ->
        Native_embed.platform_event
          (Printf.sprintf "appearance\n{\"dark\":%b}" dark))
-    (Host_platform.prefers_dark ());
+    (Native_window.prefers_dark ());
   Daemon_client.boot_mark "appearance pushed";
   push_window_size ();
   Daemon_client.boot_mark "size pushed";
@@ -2461,7 +2461,9 @@ let () =
     let dirty = Host_interaction.should_paint ~replay:replay_mode ~visible:can_present
       ~backing:use_cocoa ~dirty:(Ui.want_frame ui host || !host_req_repaint) in
     let retry = presentation.Host_interaction.pending in
-    if dirty then begin
+    let frame_due = Renderer_metrics.frame_due ~vsync
+      ~deadline:!frame_deadline ~now:(perf_s ()) in
+    if dirty && frame_due then begin
       paint_frame ();
       (* A caret blink must not keep the loop in its post-input fast poll. *)
       if ordinary_dirty then last_busy := t0;
@@ -2470,7 +2472,8 @@ let () =
         dbg "frame %d ops=%d" !frame
           (List.length (Lui_host.scene host).Lui_scene.ops);
     end
-    else if Host_interaction.can_render ~replay:replay_mode ~visible:can_present
+    else if not dirty && frame_due
+        && Host_interaction.can_render ~replay:replay_mode ~visible:can_present
         ~backing:use_cocoa && (Host_interaction.presentation_due presentation
              || Renderer_metrics.panel_due metrics ~now:(perf_s ()) ~last_render:!last_render)
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin
@@ -2566,7 +2569,11 @@ let () =
     | None when not vsync ->
         frame_deadline := Renderer_metrics.next_deadline ~previous:!frame_deadline ~now;
         let remaining = !frame_deadline -. now in
-        if remaining > 0. then Thread.delay remaining
+        (* Process mailbox and input wakeups immediately, retaining the current
+           display deadline so bursts coalesce into one layout and paint. *)
+        if remaining > 0. then
+          ignore (Sdl.wait_event_timeout None
+            (max 1 (int_of_float (ceil (remaining *. 1000.)))))
     | None when not dirty -> Sdl.delay 1
     | None -> ()
 
