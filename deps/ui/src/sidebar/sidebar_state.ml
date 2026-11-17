@@ -165,13 +165,6 @@ let open_lp_menu st ~target ~recent ~ax ~atop ~abot =
   lp_ctx := Some (target, recent, ax, atop, abot);
   Runtime.signal_set st.open_menu ("lp-" ^ target)
 
-(* row dots-button variant: press again closes (see toggle_menu);
-   contextmenu keeps open_lp_menu — right-click moves/re-opens *)
-let toggle_lp_menu st ~target ~recent ~ax ~atop ~abot =
-  lp_ctx := Some (target, recent, ax, atop, abot);
-  toggle_menu st ("lp-" ^ target)
-;;
-
 let click_target sel (ev : Ui_services.ev) =
   match ev.Ui_services.target with
   | Some tgt -> tgt.Ui_services.closest sel
@@ -1399,7 +1392,7 @@ let init (ms : Model.t Signal.signal) : t =
           | Some u -> open_uuid st u
           | None -> ());
       Ui_services.dom_on_document_event "click" (on_doc_click st);
-      Ui_services.dom_on_document_event "contextmenu" (on_doc_contextmenu st);
+      Ui_services.dom_on_document_event ~capture:true "contextmenu" (on_doc_contextmenu st);
       Ui_services.dom_on_document_event "keydown" (on_doc_keydown st);
       Ui_services.dom_on_document_event "touchstart" on_doc_touchstart;
       Ui_services.dom_on_document_event "touchmove" on_doc_touchmove;

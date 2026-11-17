@@ -428,6 +428,8 @@ let test_selection_bar_arrows () =
       let button = Web_dom.create_element "button" in
       Web_dom.el_append_child bar button;
       let ordinary = Web_dom.create_element "button" in
+      let focusable = Web_dom.create_element "div" in
+      Web_dom.el_set_attr focusable "tabindex" "0";
       let input = Web_dom.create_element "input" in
       Web_dom.el_append_child bar input;
       let press ?(shift = true) target key =
@@ -461,7 +463,8 @@ let test_selection_bar_arrows () =
         ["ordinary button Shift+Up", ordinary, true, "ArrowUp";
          "toolbar plain Up", button, false, "ArrowUp";
          "toolbar Enter", button, false, "Enter";
-         "toolbar input Shift+Up", input, true, "ArrowUp"];
+         "toolbar input Shift+Up", input, true, "ArrowUp";
+         "focusable container Shift+Up", focusable, true, "ArrowUp"];
       E.set (fun st -> { st with E.action_bar = false });
       press button "ArrowUp";
       check "hidden toolbar does not own selection arrows" (selected ["gamma"; "delta"]);
@@ -588,6 +591,7 @@ let test_context_menu () =
   (match !Popups_state.active with
    | Some t ->
        Popups_state.open_cm ~scope:"main" t ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+       Editor_state.notify_edit_exit "b1";
        flush ();
        let menu =
          find_where (fun n -> has_tok n "ls-context-menu-content")

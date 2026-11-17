@@ -9,6 +9,22 @@
    fixed-size lists). *)
 
 open Lui_elements
+
+type section_measurements =
+  { spacing_for : string -> float Signal.signal
+  ; on_row_measure : string -> string -> string -> float -> unit
+  ; on_width_change : float -> unit
+  ; observe_eager : Lui_ui.ui_context -> root_id:string -> unit
+  }
+
+let section_spacings ctx ~minimum:_ ~(rows : Outliner_projection.row list Signal.signal) =
+  ignore rows;
+  let spacing_for _ = Signal.constant ctx.Lui_ui.ui_scheduler 0. in
+  { spacing_for
+  ; on_row_measure = (fun _ _ _ _ -> ())
+  ; on_width_change = (fun _ -> ())
+  ; observe_eager = (fun _ ~root_id:_ -> ())
+  }
 module D = Logseq_el
 
 let enabled_min ~virtualize ~min count =
@@ -196,11 +212,15 @@ let list ?(scroll_parent_id = "main-content-container") ?(overscan = 5)
    is what keeps outliner ops cheap on huge pages (a single-block edit
    must not re-emit the whole stream). *)
 let rows_sig ~key ~cmp ~mount ?(on_end = fun () -> ())
-    ?(initial_rows = -1) ?overscan ~estimate_size
+    ?(initial_rows = -1) ?overscan
+    ?(on_projection_measure = fun (_ : string) (_ : string) (_ : string) (_ : float) -> ())
+    ?(on_projection_width = fun (_ : float) -> ()) ~estimate_size
     (source : 'a list Signal.signal) : t =
  fun ctx parent ->
   (* rows are real children on this backend; overscan is a windowing concept *)
   ignore overscan;
+  ignore on_projection_measure;
+  ignore on_projection_width;
   let sched = ctx.Lui_ui.ui_scheduler in
   let count_sig = Signal.map List.length source in
   let attrs_sig =

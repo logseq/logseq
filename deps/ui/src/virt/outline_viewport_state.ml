@@ -51,6 +51,12 @@ type t =
 
 let presentation_serial = ref 0
 
+let fresh_presentation_id () =
+  if !presentation_serial = max_int then
+    invalid_arg "Outline presentation space exhausted";
+  incr presentation_serial;
+  !presentation_serial
+
 let scope_of_route = function
   | Model.Block_zoom uuid -> "zoom-" ^ uuid
   | _ -> "main"
@@ -142,9 +148,7 @@ let create ctx (model : Model.t Signal.signal) =
     | Lui_protocol.SwiftUIHost ->
         let owner = Lui_virtual.create_owner () in
         let source = Lui_virtual.root_source owner ~key:"main-outline" in
-        if !presentation_serial = max_int then invalid_arg "Outline presentation space exhausted";
-        incr presentation_serial;
-        let scope = "outline:" ^ string_of_int !presentation_serial in
+        let scope = "outline:" ^ string_of_int (fresh_presentation_id ()) in
         let navigation = Issued_reveal.create ~scope:(scope ^ ":navigation") ~source ~request_scroll in
         let editing = Issued_reveal.create ~scope:(scope ^ ":editing") ~source ~request_scroll in
         (* Separate obligations borrow the same root. A read-only navigation

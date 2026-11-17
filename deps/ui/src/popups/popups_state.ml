@@ -267,6 +267,8 @@ let ac_open () =
 let inside (el : Ui_services.el) =
   el.Ui_services.closest ".cp__overlays" <> None
   || el.Ui_services.closest ".lui-popup-portal" <> None
+  || el.Ui_services.closest
+       "[data-popup-owner=\"block-context-menu\"]" <> None
   || el.Ui_services.closest "#date-time-picker, .ls-editor-link-form" <> None
   || Properties_state.overlay_contains el
 
@@ -333,7 +335,7 @@ let close_pv t = set_pv t None
 
 let () = Editor_state.on_edit_exit (fun _uuid ->
     match !active with
-    | Some t -> update t (fun _ -> { ac = None; cm = None; pv = None })
+    | Some t -> update t (fun v -> { v with ac = None; pv = None })
     | None -> ())
 
 (* title + blocks of the page a .preview-ref-link points at — same bare

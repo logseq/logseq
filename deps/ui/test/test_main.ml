@@ -2918,6 +2918,19 @@ let mk_ac kind =
   ; items = []; chosen = 0; auuid = ""; editor = None }
 
 let test_popups_state () =
+  let base = Ui_services.dom_body () in
+  let owned_picker =
+    { base with
+      Ui_services.closest =
+        (function
+        | "[data-popup-owner=\"block-context-menu\"]" -> Some base
+        | _ -> None) }
+  in
+  let outside = { base with Ui_services.closest = (fun _ -> None) } in
+  check "nested context-menu picker retains popup ownership"
+    (Popups_state.inside owned_picker);
+  check "unrelated outside target remains outside popup ownership"
+    (not (Popups_state.inside outside));
   List.iter (fun (name, units, source, caret, text, options, expected) ->
     let model = Edit_model.create ~units source in
     let model = Edit_model.select model ~anchor:caret ~focus:caret in
@@ -4657,6 +4670,15 @@ let test_scan_gate () =
    test/contracts/helper_scenarios.ml ---- *)
 
 let test_pure_helpers () =
+  let submenu_corridor child_bounds point =
+    Popups_view.cm_submenu_corridor_contains ~side:"right" ~child_bounds
+      ~leave:(150., 115.) ~point
+  in
+  check "submenu safe travel follows child bounds"
+    (submenu_corridor (300., 100., 240., 300.) (230., 150.)
+     && not (submenu_corridor (300., 100., 240., 300.) (150., 250.))
+     && not (submenu_corridor (300., 100., 240., 300.) (390., 150.))
+     && submenu_corridor (420., 100., 240., 300.) (390., 150.));
   (* Fuzzy: Unicode normalization on the shared path *)
   check "fuzzy nfkc fullwidth"
     (Fuzzy.fuzzy_search ~extract:Fun.id ~limit:9 [ "full-width"; "x" ]

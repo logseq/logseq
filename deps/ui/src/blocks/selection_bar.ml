@@ -338,34 +338,46 @@ and node ~model () : t =
                        popover ~transition:Ui_components.popover_transition
                          ~key:"sbar" ~anchor_target:("ls-block-" ^ anchor)
                          ~anchor:`above ~anchor_alignment:`start
-                         ~anchor_offset:8. ~style_class:"selection-action-bar"
+                         ~anchor_offset:0. ~margin_left:(-5) ~padding:0
+                         ~background:"transparent" ~border_width:0 ~corner_radius:0
+                         ~style_class:"selection-action-bar"
                          ~data_attrs:[ ("data-keep-selection", "true") ]
-                         [
-                           Uc.action_bar_capsule ~key:"sbg"
-                             ~border_color:"hsl(var(--border))" ~border_width:1
-                             (row ~key:"sbr" ~gap:0 ~cross:`stretch
+                         [ Uc.action_bar_capsule ~key:"sbg"
+                             (Ui_components.with_props
+                                [ Ui_components.Prop.overflow `hidden ]
+                                (row ~key:"sbr" ~gap:0 ~cross:`stretch
+                                   ~corner_radius:6
                                 ((* cljs shui segmented bar: tags/comment/delete/
                            more are icon-only cells; copy and the
                            property actions keep their text labels;
-                           thin dividers separate every cell *)
+                           adjacent bordered cells overlap *)
                                  let snapshot = selection_context model sel in
                                  let sbtn ~key ~label ?icon ?text ~on_press () =
-                                   Ui_components.button ~key ~variant:`ghost
-                                     ~accessibility_identifier:key
-                                     ~size:`sm ~label ?icon ?text
-                                     ~on_press:(fun ev ->
-                                       if selection_matches snapshot sel then
-                                         on_press ev)
-                                     []
-                                 in
-                                 let sep k =
-                                   divider ~key:k ~orientation:`vertical []
+                                   let children =
+                                     match icon with
+                                     | Some name -> [ Icons.icon ~size:13. name ]
+                                     | None -> []
+                                   in
+                                   Ui_components.with_props
+                                     [ Ui_components.Prop.font_size "12px"
+                                     ; Ui_components.Prop.line_height "16px" ]
+                                     (Ui_components.button ~key ~variant:`ghost
+                                        ~accessibility_identifier:key
+                                        ~size:`sm ~label ?text ~height:32
+                                        ~padding_horizontal:8 ~padding_vertical:0
+                                        ~background:"hsl(var(--background))"
+                                        ~border_color:"hsl(var(--border))"
+                                        ~border_width:1 ~corner_radius:0
+                                        ~on_press:(fun ev ->
+                                          if selection_matches snapshot sel then
+                                            on_press ev)
+                                        children)
                                  in
                                  let items =
                                    [
                                      sbtn ~key:"sb-tag"
                                        ~label:(I18n.t "property/set-tags")
-                                       ~icon:(`app "hash")
+                                       ~icon:"hash"
                                        ~on_press:(fun _ ->
                                          open_tags ~scope:owner_scope ~trigger:"sb-tag" sel)
                                        ();
@@ -378,7 +390,7 @@ and node ~model () : t =
                                             ~label:
                                               (I18n.t
                                                  "block.comments/add-comment")
-                                            ~icon:(`app "message-circle")
+                                            ~icon:"message-circle"
                                             ~on_press:(fun _ ->
                                               Comments.ensure_for targets)
                                             ();
@@ -410,7 +422,7 @@ and node ~model () : t =
                                           sbtn ~key:"sb-del"
                                             ~label:
                                               (I18n.t "editor/delete-selection")
-                                            ~icon:(`app "trash")
+                                            ~icon:"trash"
                                             ~on_press:(fun _ ->
                                               Editor_actions.delete_selection ())
                                             ();
@@ -419,7 +431,7 @@ and node ~model () : t =
                                    @ [
                                        sbtn ~key:"sb-mor"
                                          ~label:(I18n.t "ui/show-more")
-                                         ~icon:(`app "dots")
+                                         ~icon:"dots"
                                          ~on_press:(fun _ ->
                                            (* cljs: the bar's dots menu is a dropdown
                                   anchored to the trigger button — the last
@@ -446,15 +458,13 @@ and node ~model () : t =
                                          ();
                                      ]
                                  in
-                                 List.concat_map
-                                   (fun (i, item) ->
-                                     if i = 0 then [ item ]
-                                     else
-                                       [
-                                         sep (Printf.sprintf "sb-sep-%d" i);
-                                         item;
-                                       ])
-                                   (List.mapi (fun i it -> (i, it)) items)));
+                                   List.mapi
+                                     (fun i item ->
+                                       Ui_components.with_props
+                                         [ Ui_components.Prop.margin_left
+                                             (if i = 0 then 0 else -1) ]
+                                         item)
+                                     items)));
                          ])))
      (S.signal ()) popup cmdk (Signal.value dialog) model)
     ctx parent

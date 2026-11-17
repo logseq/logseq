@@ -26,7 +26,7 @@ let block_attrs row =
     | _ -> None in
   [ "data-projection-owner", row.scope
   ; "data-projection-key", P.key (P.Block row)
-  ; "data-projection-section", row.section.section_key
+  ; "data-projection-section", P.key (P.Header row.section)
   ; "data-projection-depth", string_of_int row.depth
   ; "data-projection-parent", Option.value parent ~default:""
   ] @ (match row.section.page.Model.page_uuid with
@@ -79,10 +79,21 @@ let block_row ~state ~library ~source : t =
                 ~source:(reactive (fun row -> (block_of_row row).block) source)) ]))
     ctx parent
 
-let view ~state ~library ~header ~footer ?(padding_horizontal = 0)
+let view ~state ~library ~header ~footer ?section_minimum_height
+    ?(padding_horizontal = 0)
     ?(on_end = fun () -> ()) () : t =
  fun ctx parent ->
-  let root = column ~key:"main-outline" ~min_width:0
+  let measurements = match state.Outline_viewport_state.native, section_minimum_height with
+    | None, Some minimum ->
+        let root_id =
+          "main-outline-journal-measure-"
+          ^ string_of_int (Outline_viewport_state.fresh_presentation_id ())
+        in
+        Some (root_id, Virt_list.section_spacings ctx ~minimum ~rows:state.rows)
+    | _ -> None in
+  let root = column ~key:"main-outline"
+      ?accessibility_identifier:(Option.map fst measurements)
+      ~min_width:0
       ~padding_horizontal
       ~style_class:"blocks-list-wrap" ~data_attrs:["data-level", "0"] [] ctx parent in
   Outline_viewport_state.register_rows ctx state root;
@@ -91,11 +102,19 @@ let view ~state ~library ~header ~footer ?(padding_horizontal = 0)
     let content = match initial with
     | P.Block _ -> block_row ~state ~library ~source
     | P.Header _ -> header ~source:(reactive section_of_row source)
-    | P.Footer _ -> footer ~source:(reactive section_of_row source) in
+    | P.Footer section ->
+        footer ~source:(reactive section_of_row source)
+          ~spacing:(Option.map
+            (fun (_, section_measurements) ->
+              section_measurements.Virt_list.spacing_for
+                (P.key (P.Header section)))
+            measurements) in
     match initial with
     | P.Block _ -> content
-    | P.Header _ | P.Footer _ -> column ~key:(P.key initial) ~min_width:0
-        ~data_attrs:["data-projection-key", P.key initial]
+    | P.Header section | P.Footer section ->
+        column ~key:(P.key initial) ~min_width:0
+        ~data_attrs:[ "data-projection-key", P.key initial
+                    ; "data-projection-section", P.key (P.Header section) ]
         [Outline_viewport_state.row_occurrence state ~key:(P.key initial) content] in
   let list = match state.Outline_viewport_state.native with
   | Some native ->
@@ -116,12 +135,28 @@ let view ~state ~library ~header ~footer ?(padding_horizontal = 0)
             ~cmp:String.compare ~mount () ]
   | None ->
       let windowed count = Virt_list.enabled ~virtualize:true count in
+      let eager_rows : t = fun rows_ctx rows_parent ->
+        Option.iter
+          (fun (root_id, section_measurements) ->
+            section_measurements.Virt_list.observe_eager rows_ctx ~root_id)
+          measurements;
+        keyed ~source:state.rows ~key:P.key ~cmp:String.compare ~mount
+          rows_ctx rows_parent
+      in
       reactive ~equal:(fun a b -> windowed a = windowed b)
         (fun count ->
           if windowed count then
             Virt_list.rows_sig ~key:P.key ~cmp:String.compare ~mount
+              ?on_projection_measure:
+                (Option.map (fun (_, section_measurements) ->
+                   section_measurements.Virt_list.on_row_measure)
+                   measurements)
+              ?on_projection_width:
+                (Option.map (fun (_, section_measurements) ->
+                   section_measurements.Virt_list.on_width_change)
+                   measurements)
               ~estimate_size:(fun _ -> 32.) ~on_end state.rows
-          else keyed ~source:state.rows ~key:P.key ~cmp:String.compare ~mount)
+          else eager_rows)
         state.row_count
   in
   ignore (list ctx (Some root));

@@ -5296,7 +5296,6 @@ let () = with_test_entry (fun () ->
     let store = Lui_store.create () in
     let backend = {backend_profile=profile MacOS GenericHost;
       apply_batch=(fun batch -> Lui_store.apply_batch store batch; true)} in
-    let sidebar = ref None in
     let page = Option.get (Decode.page_of_summary
       (Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid "menu-page";
                  Wire.Keyword "block/title",Wire.String "Menu page"])) in
@@ -5308,62 +5307,110 @@ let () = with_test_entry (fun () ->
            nav_tag_titles=state []; items=state []; block_sources=Hashtbl.create 8;
            open_menu=state ""; groups_collapsed=state [];
            left_width=state 246.; right_fraction=state 0.3; viewport_w=state 240.} in
-        sidebar := Some st;
-        Lui_elements.column ~width:240 ~height:100
+        (* Leave room for a real outside-click target below the anchored menu. *)
+        Lui_elements.column ~width:240 ~height:640
           [Left_sidebar_view.page_item_el st page
              ~li_class:(if recent then "recent-item" else "favorite-item")
              ~recent ~key:"menu-page-row"]) in
     ignore (Lui_app.start app); ignore (Lui_app.flush app);
-    let st = Option.get !sidebar in
     let layout = Lui_layout.create () in
-    Lui_layout.sync ~scale:1. ~width:240. ~height:100. layout store;
     let rects = W.Rects.create () in
-    List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
-      (Lui_layout.rect layout id)) (Lui_store.preorder store);
+    let ui = W.Ui.create () in
+    W.Ui.set_scale ui 1.;
+    let refresh_rects () =
+      Lui_layout.sync ~scale:1. ~hidden:(W.Ui.hidden ui store)
+        ~width:240. ~height:640. layout store;
+      Hashtbl.reset rects;
+      List.iter (fun id -> Option.iter (Hashtbl.replace rects id)
+        (Lui_layout.rect layout id)) (Lui_store.preorder store);
+      (* Model the native MenuTrigger hit cell supplied by its sizing box. *)
+      List.iter (fun id ->
+        if Lui_store.kind store id = "menu-trigger" then
+          match Lui_store.parent store id with
+          | Some cell
+            when Lui_store.kind store cell = "box"
+              && Lui_store.child_ids store cell = [id] ->
+            Option.iter (Hashtbl.replace rects id) (Lui_layout.rect layout cell)
+          | _ -> ()) (Lui_store.preorder store) in
+    refresh_rects ();
     let has_class id name =
       match Lui_store.string_prop store id "style-class" with
       | Some value -> List.mem name (String.split_on_char ' ' value)
       | None -> false in
     let find name = List.find (fun id -> has_class id name) (Lui_store.preorder store) in
-    let menu = find "sidebar-page-actions"
-    and entry = Option.get (Lui_store.parent store (find "link-item")) in
-    let ui = W.Ui.create () in
-    W.Ui.set_scale ui 1.;
+    let entry = Option.get (Lui_store.parent store (find "link-item")) in
+    let more_button = List.find (fun id ->
+      Lui_store.string_prop store id "accessibility-identifier" =
+        Some "sidebar-page-actions-menu-page") (Lui_store.preorder store) in
+    let click_at x y mods =
+      let moved = W.Ui.handle ui store rects (W.Input.Move (x,y)) in
+      let down = W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,mods)) in
+      let up = W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,mods)) in
+      moved @ down @ up in
     let click id mods =
       let r = W.Rects.get rects id in
-      let x,y = r.Lui_scene.x +. r.w /. 2.,r.y +. r.h /. 2. in
-      ignore (W.Ui.handle ui store rects (W.Input.Move (x,y)));
-      ignore (W.Ui.handle ui store rects (W.Input.Button_down (x,y,W.Input.Left,1,mods)));
-      W.Ui.handle ui store rects (W.Input.Button_up (x,y,W.Input.Left,mods)) in
+      click_at (r.Lui_scene.x +. r.w /. 2.) (r.y +. r.h /. 2.) mods in
     let details acts = List.filter_map (function
       | W.Dispatch (PressDetail (id,d)) -> Some (id,d)
       | _ -> None) acts in
     let deliver acts = List.iter (function
       | W.Dispatch event -> ignore (Lui_app.dispatch_event app event)
-      | _ -> ()) acts; ignore (Lui_app.flush app) in
+      | _ -> ()) acts;
+      ignore (Lui_app.flush app);
+      refresh_rects () in
+    let popup_menu () =
+      List.find_opt (fun id ->
+        Lui_store.kind store id = "dropdown-menu"
+        && Lui_store.parent store id = Some more_button) (Lui_store.preorder store) in
+    let popup_visible () =
+      let ids = Lui_store.preorder store in
+      match popup_menu () with
+      | None -> false
+      | Some menu ->
+        W.Ui.open_menu ui = menu
+        && List.exists (fun id ->
+          Lui_store.kind store id = "menu-item"
+          && Lui_store.string_prop store id "text" = Some (I18n.t "sidebar.right/open")) ids in
+    let reaches_page_navigation acts = List.exists (function
+      | W.Dispatch (Press id) when id = entry -> true
+      | W.Dispatch (PressDetail (id, _)) when id = entry -> true
+      | W.Dispatch (PointerUp (id, _)) when id = entry -> true
+      | _ -> false) acts in
     List.iter (fun mods ->
-      Runtime.signal_set st.open_menu "";
-      let acts = click menu mods in
-      let targets = List.map fst (details acts) in
+      let acts = click more_button mods in
       expect "Sidebar more-button click must not reach a page navigation handler"
-        (targets = [menu]);
-      (* Dispatch only the menu-owned events: a failing ownership check must
-         not navigate the surrounding test application's graph. *)
-      deliver (List.filter (function
-        | W.Dispatch event -> Lui_protocol.event_node event = menu
-        | _ -> false) acts);
-      expect "Sidebar more-button click must open its menu"
-        (Runtime.signal_get st.open_menu = "lp-menu-page");
-      deliver (List.filter (function
-        | W.Dispatch event -> Lui_protocol.event_node event = menu
-        | _ -> false) (click menu mods));
-      expect "Sidebar more-button second click must close its menu"
-        (Runtime.signal_get st.open_menu = ""))
+        (not (reaches_page_navigation acts));
+      deliver acts;
+      expect "Sidebar more-button click must open its owned popup" (popup_visible ());
+      let second_acts = click more_button mods in
+      expect "Sidebar more-button second click must not reach page navigation"
+        (not (reaches_page_navigation second_acts));
+      deliver second_acts;
+      expect "Sidebar more-button second click must close its popup"
+        (not (popup_visible ()));
+      let reopen_acts = click more_button mods in
+      deliver reopen_acts;
+      expect "Sidebar more-button must reopen its popup" (popup_visible ());
+      deliver (click_at 12. 500. W.Input.mods_none);
+      expect "Sidebar outside click must close its popup" (not (popup_visible ()));
+      let reopen_acts = click more_button mods in
+      deliver reopen_acts;
+      expect "Sidebar more-button must reopen after outside dismissal" (popup_visible ());
+      deliver (W.Ui.handle ui store rects
+        (W.Input.Key_down (W.Input.Escape, W.Input.mods_none, false)));
+      expect "Sidebar Escape must close its popup" (not (popup_visible ())))
       [W.Input.mods_none; {W.Input.mods_none with shift=true}];
+    W.Ui.set_focused ~kbd:true ui store more_button;
+    deliver (W.Ui.handle ui store rects
+      (W.Input.Key_down (W.Input.Return, W.Input.mods_none, false)));
+    expect "Sidebar dots keyboard activation must open its popup" (popup_visible ());
+    deliver (W.Ui.handle ui store rects
+      (W.Input.Key_down (W.Input.Escape, W.Input.mods_none, false)));
+    expect "Sidebar dots keyboard Escape must close its popup" (not (popup_visible ()));
     List.iter (fun target ->
       let ds = details (click target {W.Input.mods_none with shift=true}) in
-      expect "Sidebar title and file icon must retain one page navigation target"
-        (match ds with [(id,d)] -> id=entry && d.modifiers land 2 <> 0 | _ -> false))
+      expect "Sidebar title and file icon must retain their Shift page-navigation target"
+        (List.exists (fun (id,d) -> id=entry && d.modifiers land 2 <> 0) ds))
       [find "page-title"; find "page-icon"];
     ignore (Lui_app.dispose app)) [false;true];
   List.iter prerr_endline (List.rev !failures);

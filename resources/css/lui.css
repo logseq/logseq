@@ -1,9 +1,16 @@
-/* Vendored LUI Web stylesheet source. Compile through the application CSS build. */
+/* Vendored from logseq/lui at 4cd54451a495d45cd0b5d016a60c8f4c5a61392d. */
 @import "tailwindcss" source(none);
 
 @custom-variant dark (&:where(.dark, .dark *, [data-kb-theme=dark], [data-kb-theme=dark] *));
 
 :root {
+  --lui-radius: 0.5rem;
+}
+
+:root,
+[data-kb-theme="light"],
+[data-kb-theme="system"] {
+  color-scheme: light;
   --lui-background: oklch(1 0 0);
   --lui-foreground: oklch(0.145 0 0);
   --lui-card: oklch(1 0 0);
@@ -26,11 +33,13 @@
   --lui-input: oklch(0.922 0 0);
   --lui-border: oklch(0.922 0 0);
   --lui-ring: oklch(0.708 0 0);
-  --lui-radius: 0.5rem;
+  --lui-modal-shade: rgb(0 0 0 / 20%);
+  --lui-popup-shadow: 0.25rem 0.25rem 0 rgb(0 0 0 / 12%);
 }
 
-.dark,
+.dark:not([data-kb-theme]),
 [data-kb-theme="dark"] {
+  color-scheme: dark;
   --lui-background: oklch(0.145 0 0);
   --lui-foreground: oklch(0.985 0 0);
   --lui-card: oklch(0.145 0 0);
@@ -53,6 +62,65 @@
   --lui-input: oklch(0.269 0 0);
   --lui-border: oklch(0.269 0 0);
   --lui-ring: oklch(0.439 0 0);
+  --lui-modal-shade: rgb(0 0 0 / 50%);
+  --lui-popup-shadow: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  [data-kb-theme="system"] {
+    color-scheme: dark;
+    --lui-background: oklch(0.145 0 0);
+    --lui-foreground: oklch(0.985 0 0);
+    --lui-card: oklch(0.145 0 0);
+    --lui-card-foreground: oklch(0.985 0 0);
+    --lui-primary: oklch(0.985 0 0);
+    --lui-primary-foreground: oklch(0.205 0 0);
+    --lui-secondary: oklch(0.269 0 0);
+    --lui-secondary-foreground: oklch(0.985 0 0);
+    --lui-accent: oklch(0.269 0 0);
+    --lui-accent-foreground: oklch(0.985 0 0);
+    --lui-muted-foreground: oklch(0.708 0 0);
+    --lui-destructive: oklch(0.396 0.141 25.723);
+    --lui-destructive-foreground: oklch(0.637 0.237 25.331);
+    --lui-error: oklch(0.26 0.0886 26.05);
+    --lui-error-foreground: oklch(0.64 0.2082 25.38);
+    --lui-success: oklch(0.26 0.0487 172.54);
+    --lui-success-foreground: oklch(0.69 0.1481 162.37);
+    --lui-warning: oklch(0.29 0.0638 53.82);
+    --lui-warning-foreground: oklch(0.71 0.186 48.13);
+    --lui-input: oklch(0.269 0 0);
+    --lui-border: oklch(0.269 0 0);
+    --lui-ring: oklch(0.439 0 0);
+    --lui-modal-shade: rgb(0 0 0 / 50%);
+    --lui-popup-shadow: none;
+  }
+}
+
+/* Tailwind aliases must resolve at the scope, not at the document root. */
+.dark,
+[data-kb-theme] {
+  --color-background: var(--lui-background);
+  --color-foreground: var(--lui-foreground);
+  --color-card: var(--lui-card);
+  --color-card-foreground: var(--lui-card-foreground);
+  --color-primary: var(--lui-primary);
+  --color-primary-foreground: var(--lui-primary-foreground);
+  --color-secondary: var(--lui-secondary);
+  --color-secondary-foreground: var(--lui-secondary-foreground);
+  --color-accent: var(--lui-accent);
+  --color-accent-foreground: var(--lui-accent-foreground);
+  --color-muted-foreground: var(--lui-muted-foreground);
+  --color-destructive: var(--lui-destructive);
+  --color-destructive-foreground: var(--lui-destructive-foreground);
+  --color-error: var(--lui-error);
+  --color-error-foreground: var(--lui-error-foreground);
+  --color-success: var(--lui-success);
+  --color-success-foreground: var(--lui-success-foreground);
+  --color-warning: var(--lui-warning);
+  --color-warning-foreground: var(--lui-warning-foreground);
+  --color-input: var(--lui-input);
+  --color-border: var(--lui-border);
+  --color-ring: var(--lui-ring);
 }
 
 body {
@@ -173,9 +241,14 @@ body {
     @apply flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm ring-offset-background;
   }
 
-  .lui-list-item:hover,
   .lui-list-item[data-selected] {
     @apply bg-accent text-accent-foreground;
+  }
+
+  @media (hover: hover) {
+    .lui-list-item:hover:not(:disabled, [data-disabled]) {
+      @apply bg-accent text-accent-foreground;
+    }
   }
 
   .lui-list-item:focus-visible {
@@ -201,9 +274,14 @@ body {
     @apply transition-colors;
   }
 
-  .lui-table-row:has(> .lui-table-cell[data-pressable]):hover,
   .lui-table-row[data-selected] {
     @apply bg-accent text-accent-foreground;
+  }
+
+  @media (hover: hover) {
+    .lui-table-row:has(> .lui-table-cell[data-pressable]):hover {
+      @apply bg-accent text-accent-foreground;
+    }
   }
 
   .lui-table-cell {
@@ -231,9 +309,14 @@ body {
     @apply rounded-md outline-0 transition-colors;
   }
 
-  .lui-tree-item:hover,
   .lui-tree-item[data-selected] {
     @apply bg-accent text-accent-foreground;
+  }
+
+  @media (hover: hover) {
+    .lui-tree-item:hover:not([aria-disabled="true"]) {
+      @apply bg-accent text-accent-foreground;
+    }
   }
 
   .lui-tree-item:focus-visible {
@@ -401,11 +484,15 @@ body {
 
   .lui-split {
     @apply relative grid overflow-hidden;
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .lui-split-panes {
     @apply grid size-full;
+    min-inline-size: 0;
+    min-block-size: 0;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
   }
 
   .lui-split-divider {
@@ -428,6 +515,8 @@ body {
     .lui-dialog,
     .lui-sheet,
     .lui-dropdown-menu,
+    .lui-popover,
+    .lui-context-menu,
     .lui-tooltip[data-anchor],
     .lui-accordion-content,
     .lui-accordion-chevron {
@@ -620,11 +709,28 @@ body {
   }
 
   .lui-accordion-summary {
-    @apply flex w-full cursor-pointer items-center justify-between bg-transparent py-4 text-left text-sm font-medium outline-none;
+    @apply flex w-full cursor-pointer items-center justify-between gap-4 border-0 bg-transparent px-3 py-2 text-left text-sm font-normal outline-none;
+    font-family: inherit;
+    color: inherit;
+  }
+
+  @media (hover: hover) {
+    .lui-accordion-summary:hover:not(:disabled, [data-disabled]) {
+      @apply bg-accent text-accent-foreground;
+    }
+  }
+
+  .lui-accordion-summary:focus-visible {
+    @apply relative z-[1] outline-2 outline-offset-[-2px] outline-foreground;
+  }
+
+  .lui-accordion-summary:disabled,
+  .lui-accordion-summary[data-disabled] {
+    @apply cursor-not-allowed text-muted-foreground;
   }
 
   .lui-accordion-chevron {
-    @apply size-4 shrink-0 transition-transform duration-200;
+    @apply size-4 shrink-0 transition-transform duration-100 ease-out;
   }
 
   .lui-accordion[data-open] .lui-accordion-chevron {
@@ -632,9 +738,13 @@ body {
   }
 
   .lui-accordion-content {
-    @apply overflow-hidden pb-4 pt-0 text-sm;
+    @apply overflow-hidden text-sm;
     height: var(--lui-accordion-panel-height, auto);
     transition: height 150ms ease-out;
+  }
+
+  .lui-accordion-body {
+    @apply flow-root pb-4;
   }
 
   .lui-accordion-content[data-starting-style],
@@ -753,8 +863,9 @@ body {
   }
 
   .lui-modal-backdrop {
-    @apply absolute inset-0 bg-black/50;
+    @apply absolute inset-0;
     z-index: 0;
+    background-color: var(--lui-modal-shade);
     opacity: var(--drawer-swipe-progress, 1);
     transition: opacity 150ms ease-out;
   }
@@ -769,20 +880,27 @@ body {
   }
 
   .lui-dialog {
-    @apply fixed inset-0 m-auto grid rounded-xl border bg-card text-card-foreground shadow-lg;
+    @apply fixed grid content-start gap-4 rounded-xl border border-border bg-card p-4 text-card-foreground shadow-lg;
     z-index: 1;
-    max-height: calc(100dvh - 2rem);
+    /* Center in the visual viewport, above a simulated keyboard, and keep a
+       too-tall dialog scrollable instead of sliding its top off screen. */
+    top: calc(var(--lui-visual-top, 0px) + (var(--lui-visual-height, 100dvh) - var(--lui-keyboard-height, 0px)) / 2);
+    left: 50%;
+    width: min(24rem, calc(100vw - 3rem));
+    max-width: calc(100vw - 3rem);
+    max-height: calc(var(--lui-visual-height, 100dvh) - var(--lui-keyboard-height, 0px) - 2rem);
+    margin: 0;
     overflow: auto;
     overscroll-behavior: contain;
     opacity: 1;
-    transform: scale(1);
-    transition: transform 200ms ease-out, opacity 200ms ease-out;
+    transform: translate(-50%, -50%) scale(1);
+    transition: transform 100ms ease-out, opacity 100ms ease-out;
   }
 
   .lui-dialog[data-starting-style],
   .lui-dialog[data-ending-style] {
     opacity: 0;
-    transform: scale(0.95);
+    transform: translate(-50%, -50%) scale(0.98);
   }
 
   .lui-dialog-title {
@@ -871,6 +989,22 @@ body {
     @apply text-sm font-medium leading-none;
   }
 
+  .lui-number-stepper {
+    @apply inline-flex items-center gap-2 text-sm;
+  }
+
+  .lui-number-stepper-control {
+    @apply h-10 w-24 rounded-md border border-input bg-transparent px-3 text-sm;
+  }
+
+  .lui-number-stepper-control:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2;
+  }
+
+  .lui-number-stepper-control:disabled {
+    @apply cursor-not-allowed opacity-50;
+  }
+
   .lui-text-field,
   .lui-input,
   .lui-search-field,
@@ -933,11 +1067,28 @@ body {
   }
 
   .lui-select {
-    @apply inline-flex h-10 min-w-40 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background;
+    @apply inline-flex h-10 min-w-40 items-center justify-between gap-2 rounded-md border border-input bg-background px-3 py-2 text-left text-sm ring-offset-background;
   }
 
   .lui-select-value {
     @apply min-w-0 truncate;
+  }
+
+  .lui-select[data-placeholder] .lui-select-value {
+    @apply text-muted-foreground;
+  }
+
+  @media (hover: hover) {
+    .lui-select:hover:not(:disabled, [data-disabled]),
+    .lui-combobox:hover:not([data-disabled]) {
+      @apply bg-accent;
+    }
+  }
+
+  .lui-select:active:not(:disabled, [data-disabled]),
+  .lui-select[aria-expanded="true"]:not(:disabled, [data-disabled]),
+  .lui-combobox:has([aria-expanded="true"]) {
+    @apply border-ring bg-accent;
   }
 
   .lui-select::after,
@@ -974,6 +1125,12 @@ body {
     @apply inline-flex h-full items-center justify-center px-2;
   }
 
+  @media (hover: hover) {
+    .lui-combobox-trigger:hover:not(:disabled) {
+      @apply bg-accent;
+    }
+  }
+
   .lui-popup-portal {
     position: fixed;
     inset: 0;
@@ -1004,13 +1161,13 @@ body {
     background: var(--lui-background);
     color: var(--lui-foreground);
     padding: 0.25rem;
-    box-shadow: 0.25rem 0.25rem 0 var(--lui-foreground);
+    box-shadow: var(--lui-popup-shadow);
     pointer-events: auto;
     z-index: 1;
-    transform-origin: center;
+    transform-origin: var(--transform-origin, center);
     transition-property: opacity, transform;
-    transition-duration: 150ms;
-    transition-timing-function: ease;
+    transition-duration: 100ms;
+    transition-timing-function: ease-out;
   }
 
   .lui-dropdown-menu:not([data-open]):not([data-ending-style]) {
@@ -1024,7 +1181,7 @@ body {
   .lui-dropdown-menu[data-starting-style],
   .lui-dropdown-menu[data-ending-style] {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.98);
   }
 
   .lui-combobox-status {
@@ -1042,12 +1199,17 @@ body {
     max-height: var(--lui-popup-available-height, calc(100vh - 1rem));
     max-width: var(--lui-popup-available-width, calc(100vw - 1rem));
     overflow: auto;
+    border: 1px solid var(--lui-foreground);
+    border-radius: 0;
+    background: var(--lui-background);
+    color: var(--lui-foreground);
+    box-shadow: var(--lui-popup-shadow);
     pointer-events: auto;
     z-index: 1;
-    transform-origin: center;
+    transform-origin: var(--transform-origin, center);
     transition-property: opacity, transform;
-    transition-duration: 150ms;
-    transition-timing-function: ease;
+    transition-duration: 100ms;
+    transition-timing-function: ease-out;
   }
 
   .lui-popover[role="menu"] {
@@ -1065,7 +1227,7 @@ body {
   .lui-popover[data-starting-style],
   .lui-popover[data-ending-style] {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.98);
   }
 
   /* cover mode: a popover with no position props spans the viewport */
@@ -1082,7 +1244,16 @@ body {
   }
 
   .lui-context-menu {
-    @apply fixed hidden flex-col overflow-auto rounded-md border bg-card p-1 text-card-foreground shadow-md;
+    position: fixed;
+    display: none;
+    flex-direction: column;
+    overflow: auto;
+    border: 1px solid var(--lui-foreground);
+    border-radius: 0;
+    background: var(--lui-background);
+    color: var(--lui-foreground);
+    padding: 0.25rem;
+    box-shadow: var(--lui-popup-shadow);
     pointer-events: auto;
     --lui-layer-base: 100;
     z-index: calc(var(--lui-layer-base) + var(--lui-layer-index, 0));
@@ -1091,8 +1262,8 @@ body {
     min-width: min(10rem, var(--lui-popup-available-width, calc(100vw - 1rem)));
     opacity: 1;
     transform: scale(1);
-    transform-origin: center;
-    transition: opacity 150ms ease, transform 150ms ease;
+    transform-origin: var(--transform-origin, center);
+    transition: opacity 100ms ease-out, transform 100ms ease-out;
   }
 
   .lui-context-menu[data-open],
@@ -1107,7 +1278,7 @@ body {
   .lui-context-menu[data-starting-style],
   .lui-context-menu[data-ending-style] {
     opacity: 0;
-    transform: scale(0.95);
+    transform: scale(0.98);
   }
 
   .lui-menu-item {
@@ -1116,21 +1287,44 @@ body {
     border-radius: 0;
   }
 
-  .lui-menu-item:hover,
-  .lui-menu-item:focus-visible,
-  .lui-menu-item[data-highlighted] {
+  .lui-menu-item[data-selected]:not([data-highlighted]) {
+    background-color: var(--color-accent);
+    color: var(--color-accent-foreground);
+  }
+
+  .lui-menu-item[aria-expanded="true"]:not([data-highlighted], :disabled, [data-disabled]) {
     @apply bg-accent text-accent-foreground;
   }
 
-  .lui-menu-item[data-submenu-trigger]::after {
-    content: "›";
-    margin-left: auto;
-    font-size: 1rem;
-    line-height: 1;
+  .lui-menu-item[data-variant="destructive"]:not(:disabled, [data-disabled], [aria-disabled="true"]) {
+    color: var(--color-destructive);
   }
 
-  .lui-menu-item:disabled {
-    @apply pointer-events-none opacity-50;
+  .lui-menu-item[data-submenu-trigger]::after {
+    content: "";
+    width: 1rem;
+    height: 1rem;
+    margin-left: auto;
+    background-color: currentColor;
+    mask: url("./icons/chevron-right.svg") center / contain no-repeat;
+    -webkit-mask: url("./icons/chevron-right.svg") center / contain no-repeat;
+  }
+
+  [dir="rtl"] .lui-menu-item[data-submenu-trigger]::after {
+    transform: scaleX(-1);
+  }
+
+  :is(.lui-dropdown-menu, .lui-context-menu, .lui-popover) > .lui-separator {
+    width: auto;
+    height: 1px;
+    margin: 0.25rem;
+    background: var(--lui-foreground);
+  }
+
+  .lui-menu-item:disabled,
+  .lui-menu-item[data-disabled],
+  .lui-menu-item[aria-disabled="true"] {
+    @apply cursor-not-allowed text-muted-foreground;
   }
 
   .lui-menu-item-icon,
@@ -1138,13 +1332,30 @@ body {
     @apply size-4 shrink-0;
   }
 
-  .lui-menu-item-icon:not([data-name]),
+  .lui-menu-item-icon:not([data-name]) {
+    @apply hidden;
+  }
+
   .lui-menu-item:not([data-selected]) .lui-menu-item-check {
-    @apply invisible;
+    @apply hidden;
+  }
+
+  :is(.lui-dropdown-menu, .lui-context-menu, .lui-popover):has(.lui-menu-item[data-selected])
+    .lui-menu-item:not([data-selected]) .lui-menu-item-check {
+    @apply invisible block;
+  }
+
+  .lui-menu-item-shortcut {
+    @apply ml-auto text-xs text-muted-foreground;
+  }
+
+  .lui-menu-item:is([data-highlighted], :focus-visible, :hover) .lui-menu-item-shortcut,
+  .lui-menu-item[data-variant="destructive"] .lui-menu-item-shortcut {
+    color: inherit;
   }
 
   .lui-menu-item-label {
-    @apply flex-1;
+    @apply min-w-0 flex-1;
   }
 
   .lui-checkbox {
@@ -1179,6 +1390,7 @@ body {
     @apply block h-2 w-1 rotate-45 border-b-2 border-r-2;
     top: 0.125rem;
     left: 0.3125rem;
+    border-color: var(--color-primary-foreground);
   }
 
   .lui-switch {
@@ -1280,12 +1492,14 @@ body {
     @apply shrink-0 border-0 bg-border;
   }
 
+  .lui-separator:not([data-orientation]),
   .lui-separator[data-orientation="horizontal"] {
     @apply h-px w-full;
   }
 
   .lui-separator[data-orientation="vertical"] {
-    @apply h-full w-px;
+    @apply h-full self-stretch w-px;
+    min-height: 1em;
   }
 
   .lui-skeleton {
@@ -1394,7 +1608,7 @@ body {
   }
 
   .lui-button:disabled {
-    @apply pointer-events-none opacity-50;
+    @apply cursor-not-allowed opacity-50;
   }
 
   .lui-button[data-disabled] {
@@ -1410,6 +1624,10 @@ body {
   .lui-search-field[data-disabled],
   .lui-combobox-control[data-disabled] {
     @apply cursor-not-allowed opacity-50;
+  }
+
+  .lui-button-label:empty {
+    @apply hidden;
   }
 
   .lui-button-icon {
@@ -1449,48 +1667,65 @@ body {
   }
 
   .lui-button[data-variant="default"] {
-    @apply bg-background text-foreground;
-  }
-
-  .lui-button[data-variant="default"]:hover {
-    @apply bg-accent text-accent-foreground;
+    @apply border border-input bg-background text-foreground;
   }
 
   .lui-button[data-variant="primary"] {
     @apply bg-primary text-primary-foreground;
   }
 
-  .lui-button[data-variant="primary"]:hover {
-    @apply bg-primary/90;
-  }
-
   .lui-button[data-variant="destructive"] {
     @apply bg-destructive text-destructive-foreground;
-  }
-
-  .lui-button[data-variant="destructive"]:hover {
-    @apply bg-destructive/90;
   }
 
   .lui-button[data-variant="outline"] {
     @apply border border-input;
   }
 
-  .lui-button[data-variant="outline"]:hover,
-  .lui-button[data-variant="ghost"]:hover {
-    @apply bg-accent text-accent-foreground;
-  }
-
   .lui-button[data-variant="secondary"] {
     @apply bg-secondary text-secondary-foreground;
   }
 
-  .lui-button[data-variant="secondary"]:hover {
-    @apply bg-secondary/80;
-  }
-
   .lui-button[data-variant="ghost"] {
     @apply bg-transparent text-foreground;
+  }
+
+  @media (hover: hover) {
+    .lui-button[data-variant="default"]:hover:not(:disabled, [data-disabled]),
+    .lui-button[data-variant="outline"]:hover:not(:disabled, [data-disabled]),
+    .lui-button[data-variant="ghost"]:hover:not(:disabled, [data-disabled]) {
+      @apply bg-accent text-accent-foreground;
+    }
+
+    .lui-button[data-variant="primary"]:hover:not(:disabled, [data-disabled]) {
+      @apply bg-primary/90;
+    }
+
+    .lui-button[data-variant="destructive"]:hover:not(:disabled, [data-disabled]) {
+      @apply bg-destructive/90;
+    }
+
+    .lui-button[data-variant="secondary"]:hover:not(:disabled, [data-disabled]) {
+      @apply bg-secondary/80;
+    }
+  }
+
+  .lui-button[data-variant="default"]:active:not(:disabled, [data-disabled]),
+  .lui-button[data-variant="outline"]:active:not(:disabled, [data-disabled]),
+  .lui-button[data-variant="ghost"]:active:not(:disabled, [data-disabled]) {
+    background-color: var(--lui-border);
+  }
+
+  .lui-button[data-variant="primary"]:active:not(:disabled, [data-disabled]) {
+    @apply bg-primary/80;
+  }
+
+  .lui-button[data-variant="destructive"]:active:not(:disabled, [data-disabled]) {
+    @apply bg-destructive/80;
+  }
+
+  .lui-button[data-variant="secondary"]:active:not(:disabled, [data-disabled]) {
+    @apply bg-secondary/70;
   }
 
   .lui-button[data-selected] {
@@ -1513,12 +1748,32 @@ body {
     @apply inline-flex h-9 cursor-pointer items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors;
   }
 
+  @media (hover: hover) {
+    .lui-toggle:hover:not(:disabled, [data-disabled], [aria-pressed="true"]) {
+      @apply bg-accent text-accent-foreground;
+    }
+  }
+
+  .lui-toggle:active:not(:disabled, [data-disabled]) {
+    background-color: var(--lui-border);
+  }
+
   .lui-toggle[aria-pressed="true"] {
-    @apply bg-accent text-accent-foreground;
+    background-color: var(--lui-foreground);
+    color: var(--lui-background);
+  }
+
+  .lui-toggle:focus-visible {
+    @apply outline-2 outline-offset-2 outline-foreground;
+  }
+
+  .lui-toggle:disabled,
+  .lui-toggle[data-disabled] {
+    @apply cursor-not-allowed text-muted-foreground opacity-100;
   }
 
   .lui-radio-group {
-    @apply flex items-center gap-2;
+    @apply flex flex-col items-start gap-1;
   }
 
   .lui-radio {
@@ -1535,6 +1790,11 @@ body {
 
   .lui-radio-control:focus-visible {
     @apply outline-none ring-2 ring-ring ring-offset-2;
+  }
+
+  .lui-radio-control:disabled,
+  .lui-radio-control[data-disabled] {
+    @apply cursor-not-allowed opacity-50;
   }
 
   @media (pointer: coarse) {
@@ -1558,9 +1818,41 @@ body {
   }
 
   .lui-slider {
-    @apply w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50;
+    @apply h-6 w-full cursor-pointer accent-primary disabled:cursor-not-allowed disabled:opacity-50;
   }
 
+  .lui-slider::-webkit-slider-thumb {
+    appearance: none;
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid var(--lui-foreground);
+    border-radius: 0;
+    background: var(--lui-background);
+  }
+
+  .lui-slider::-moz-range-thumb {
+    width: 1rem;
+    height: 1rem;
+    border: 1px solid var(--lui-foreground);
+    border-radius: 0;
+    background: var(--lui-background);
+  }
+
+  .lui-slider:focus-visible::-webkit-slider-thumb,
+  .lui-slider:focus-visible::-moz-range-thumb {
+    outline: 2px solid var(--lui-foreground);
+    outline-offset: 2px;
+  }
+
+  [data-lui-platform="ios"] .lui-slider::-webkit-slider-thumb,
+  [data-lui-platform="ios"] .lui-slider::-moz-range-thumb,
+  [data-lui-platform="android"] .lui-slider::-webkit-slider-thumb,
+  [data-lui-platform="android"] .lui-slider::-moz-range-thumb {
+    border-radius: 9999px;
+    border-color: var(--lui-platform-accent);
+  }
+
+  .lui-button:not([data-size]),
   .lui-button[data-size="default"] {
     @apply h-10 px-4 py-2;
   }
@@ -1607,11 +1899,13 @@ body {
   }
 
   .lui-tabs > .lui-button {
-    @apply h-8 rounded-md bg-transparent px-3 py-1 text-sm shadow-none;
+    @apply h-8 rounded-md border-0 bg-transparent px-3 py-1 text-sm shadow-none;
   }
 
-  .lui-tabs > .lui-button:hover {
-    @apply bg-background/60 text-foreground;
+  @media (hover: hover) {
+    .lui-tabs > .lui-button:hover:not(:disabled, [data-disabled]) {
+      @apply bg-background/60 text-foreground;
+    }
   }
 
   .lui-tabs > .lui-button[data-selected] {
@@ -1656,6 +1950,15 @@ body {
   border-radius: var(--lui-platform-control-radius);
   font-size: 17px;
   font-weight: 600;
+}
+
+[data-lui-platform="ios"] .lui-button[data-size="sm"] {
+  font-size: 15px;
+}
+
+[data-lui-platform="ios"] .lui-button[data-size="icon"] {
+  width: 44px;
+  padding: 0;
 }
 
 [data-lui-platform="ios"] .lui-toggle-group > .lui-button {
@@ -1760,6 +2063,9 @@ body {
 
 .lui-popup-portal[data-lui-form-factor] .lui-dialog {
   position: absolute;
+  top: calc(50% - var(--lui-keyboard-height, 0px) / 2);
+  max-width: calc(100% - 2rem);
+  max-height: calc(100% - var(--lui-keyboard-height, 0px) - 2rem);
 }
 
 .lui-popup-portal[data-lui-form-factor="phone"] .lui-sheet {
@@ -1811,12 +2117,22 @@ body {
   transform: translateX(100%);
 }
 
-/* Simulated on-screen keyboard: the simulator marks data-lui-keyboard while
-   a text entry holds focus and reserves --lui-keyboard-height at the bottom
-   of the device viewport, so the keyboard chrome is drawn in that space —
-   above app content and the modal backdrop, below presented surfaces. */
+/* Reserve keyboard space without pretending to provide an interactive IME. */
+.lui-popup-portal[data-lui-keyboard="visible"]::before,
 .lui-popup-portal[data-lui-keyboard="visible"] .lui-modal-layer::before {
-  content: "";
+  content: "Simulated keyboard · Use your keyboard to type";
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  color: var(--color-muted-foreground);
+  background: var(--color-secondary);
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+  text-align: center;
+}
+
+.lui-popup-portal[data-lui-keyboard="visible"] .lui-modal-layer::before {
   position: absolute;
   left: 0;
   right: 0;
@@ -1824,21 +2140,11 @@ body {
   z-index: 1;
   height: var(--lui-keyboard-height, 0px);
   pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgb(255 255 255 / 8%) 0 30px,
-      rgb(0 0 0 / 12%) 30px 34px
-    ),
-    rgb(38 38 42 / 92%);
-  border-top: 1px solid rgb(0 0 0 / 35%);
-  box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
 }
 
 /* The same keyboard chrome outside a modal presentation: anchored to the
    device viewport's bottom edge and painted beneath any presented layer. */
 .lui-popup-portal[data-lui-keyboard="visible"]::before {
-  content: "";
   position: absolute;
   left: 50%;
   transform: translateX(-50%);
@@ -1852,15 +2158,6 @@ body {
   );
   height: var(--lui-keyboard-height, 0px);
   pointer-events: none;
-  background:
-    repeating-linear-gradient(
-      to bottom,
-      rgb(255 255 255 / 8%) 0 30px,
-      rgb(0 0 0 / 12%) 30px 34px
-    ),
-    rgb(38 38 42 / 92%);
-  border-top: 1px solid rgb(0 0 0 / 35%);
-  box-shadow: 0 -8px 24px rgb(0 0 0 / 18%);
 }
 
 .lui-simulator-map {
@@ -2228,8 +2525,37 @@ body {
   :where([class*="lui-"]:focus-within) {
     --lui-current-focus-within-bg: var(--lui-focus-within-bg);
     --lui-current-focus-within-border: var(--lui-focus-within-border);
-    background-color: var(--lui-focus-within-bg, revert-layer);
-    border-color: var(--lui-focus-within-border, revert-layer);
+    background-color: var(--lui-focus-within-bg,
+      var(--lui-current-selected-bg,
+        var(--lui-current-pressed-bg, var(--lui-current-hover-bg, revert-layer))));
+    border-color: var(--lui-focus-within-border, var(--lui-current-hover-border, revert-layer));
+  }
+
+  /* Default menu highlight is the Base UI inverted row. An authored
+     hover-background stays in the inline style and keeps the ordinary
+     fallback text color, so a custom light highlight does not turn white. */
+  .lui-menu-item:is([data-highlighted], :focus-visible):not(:disabled, [data-disabled], [aria-disabled="true"], [style*="--lui-hover-bg"]) {
+    background-color: var(--lui-foreground);
+    color: var(--lui-background);
+  }
+
+  @media (hover: hover) {
+    .lui-menu-item:hover:not(:disabled, [data-disabled], [aria-disabled="true"], [style*="--lui-hover-bg"]) {
+      background-color: var(--lui-foreground);
+      color: var(--lui-background);
+    }
+  }
+
+  .lui-menu-item[data-variant="destructive"]:is([data-highlighted], :focus-visible):not(:disabled, [data-disabled], [aria-disabled="true"], [style*="--lui-hover-bg"]) {
+    background-color: var(--color-destructive);
+    color: var(--color-destructive-foreground);
+  }
+
+  @media (hover: hover) {
+    .lui-menu-item[data-variant="destructive"]:hover:not(:disabled, [data-disabled], [aria-disabled="true"], [style*="--lui-hover-bg"]) {
+      background-color: var(--color-destructive);
+      color: var(--color-destructive-foreground);
+    }
   }
 
 }

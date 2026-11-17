@@ -29,6 +29,8 @@ let mods ev = ev.Ui_services.ctrl || ev.Ui_services.meta
 let non_editor_control_target target =
   closest ".ed-input, .CodeMirror, .code-editor" target = None
   && (is_editable_target target
+      || (closest "[tabindex=\"0\"]" target <> None
+          && closest ".ls-block, .editor-wrapper" target = None)
       || closest
            "button, a[href], input, textarea, select, \
             [role='button'], [role='link'], [role='checkbox'], [role='radio'], \

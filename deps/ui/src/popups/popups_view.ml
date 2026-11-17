@@ -530,24 +530,9 @@ let ac_popover (st : S.t) : t =
 
 (* -- context menu ---------------------------------------------------- *)
 
-(* run_* + close_cm_picker live before the menu rows so item on_press
-   handlers can call them *)
-
-(* the icon/emoji picker mounts as an overlay outside the menu DOM —
-   track its view-overlay key so closing the sub or the whole menu
-   removes it like the base-ui sub-content *)
-let cm_picker_key : string option ref = ref None
-
-let close_cm_picker () =
-  match !cm_picker_key with
-  | Some key ->
-      cm_picker_key := None;
-      Properties_state.remove_view_overlay key
-  | None -> ()
-
-let run_cm_item st l = close_cm_picker (); S.run_cm_item st l
-let run_cm_color st l = close_cm_picker (); S.run_cm_color st l
-let run_cm_heading st l = close_cm_picker (); S.run_cm_heading st l
+let run_cm_item st l = S.run_cm_item st l
+let run_cm_color st l = S.run_cm_color st l
+let run_cm_heading st l = S.run_cm_heading st l
 ;;
 
 let cm_highlighted key (v : S.view) =
@@ -576,14 +561,30 @@ let focus_cm_item st ~sub idx item =
       it.Ui_services.scroll_into_view_nearest ())
     (Ui_services.dom_by_id (cm_item_id ~sub idx item))
 
-(* the sub-open routine is defined next to open_cm_picker far below;
+(* the sub-open routine is defined next to cm_open_sub_at far below;
    the sub-trigger's press handler goes through this ref so the row
    can stay above it in the file *)
 let cm_press_open_ref : (S.t -> Ui_services.el -> unit) ref =
   ref (fun _st _trg -> ())
 
+type cm_hover_state =
+  { timer : int option ref
+  ; leave_point : (float * float) option ref
+  }
+
+let cm_hover_cancellers : (S.t * (unit -> unit)) list ref = ref []
+
+let cm_cancel_pending st =
+  match List.find_opt (fun (owner, _) -> owner == st) !cm_hover_cancellers with
+  | Some (_, cancel) -> cancel ()
+  | None -> ()
+
+let cm_close_sub st =
+  cm_cancel_pending st;
+  S.close_cm_sub st
+
 let close_cm st =
-  close_cm_picker ();
+  cm_cancel_pending st;
   S.close_cm st
 
 let cm_color_row (st : S.t) : t =
@@ -665,6 +666,8 @@ let cm_heading_row (st : S.t) : t =
 (* shui/shortcut root for :combo (binding has "+") and :separate styles —
    row kinds + Ui_components keycaps like cmdk_view; a text/box nest
    stacked the keycaps vertically over the item label. *)
+let cm_menu_item_gap = 4
+
 let cm_shortcut_el (binding, caps) : t =
   let combo = String.contains binding '+' in
   let cells =
@@ -681,18 +684,21 @@ let cm_shortcut_el (binding, caps) : t =
                  ~value:(cap) ])
          caps)
   in
-  (* web: ml-auto pl-2, content padded to px-2 — cross:center keeps the
-     keys centered in the now-32px row *)
-  row ~key:"sc" ~style_class:"ls-cm-sc" ~main:`end_ ~cross:`center ~grow:1.
-    ~margin_right:8
-    ~data_attrs:[ ("style", "padding-left:0.5rem") ]
-    [ (if combo then
-         Ui_components.shortcut_combo ~key:"sc-box" ~glow:true cells
-       else
-         Ui_components.shortcut_separate ~key:"sc-box" ~glow:false cells)
-    ]
+  Ui_components.with_props [Ui_components.Prop.padding_left 8]
+    (row ~key:"sc" ~style_class:"ls-cm-sc" ~main:`end_ ~cross:`center ~grow:1.
+       ~min_height:21
+       [ (if combo then
+            Ui_components.shortcut_combo ~key:"sc-box" ~glow:true cells
+          else
+            Ui_components.shortcut_separate ~key:"sc-box" ~glow:false cells)
+       ])
 
 let cm_item_cls = "ui__dropdown-menu-item"
+;;
+
+let cm_item_chrome element =
+  Ui_components.with_props [Ui_components.Prop.line_height "20px"]
+    (Menu_item.chrome element)
 ;;
 
 let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
@@ -705,8 +711,8 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
     [ reactive
       (function
       | S.Ci_sep ->
-          box ~key:"sepw" ~opacity:0.8
-            [ Menu_item.separator ~key:"sep" ~mv:4 ~mh:(-4) ]
+          box ~key:"sepw" ~opacity:0.8 ~margin_horizontal:(-4)
+            [ Menu_item.separator ~key:"sep" ~mv:4 ~mh:0 ]
       | S.Ci_colors -> cm_color_row st
       | S.Ci_headings -> cm_heading_row st
       | S.Ci_sub (label, _sub) ->
@@ -715,7 +721,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
              doubles as click-to-open and, just as importantly, marks
              the row interactive so hit-testing reaches it — without
              it the row is hit-transparent and hover can never fire *)
-          Menu_item.chrome
+          cm_item_chrome
             (Ui_components.with_props [Ui_components.Prop.accessibility_label label]
             (menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
@@ -739,8 +745,8 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
               | _ -> ())
             [ Menu_item.submenu_content ~label ]))
       | S.Ci_item (label, scut, cmd) ->
-          Menu_item.chrome (menu_item ~key:"item" ~style_class:cm_item_cls
-            ~gap:4
+          cm_item_chrome (menu_item ~key:"item" ~style_class:cm_item_cls
+            ~gap:cm_menu_item_gap
             ~accessibility_identifier:("cm-item-" ^ string_of_int idx)
             ~background:(reactive (cm_item_background (S.Main_item idx)) vs)
             ~data_attrs:(reactive (cm_item_attrs (S.Main_item idx)
@@ -757,8 +763,8 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
 let cm_sub_item_el (st : S.t) idx (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
-      Menu_item.chrome (menu_item ~key:"sub-item" ~style_class:cm_item_cls
-        ~gap:4
+      cm_item_chrome (menu_item ~key:"sub-item" ~style_class:cm_item_cls
+        ~gap:cm_menu_item_gap
         ~accessibility_identifier:("cm-sub-item-" ^ string_of_int idx)
         ~background:(reactive (cm_item_background (S.Sub_item idx)) (Signal.value st.S.vs))
         ~data_attrs:(reactive (cm_item_attrs (S.Sub_item idx)
@@ -771,36 +777,70 @@ let cm_sub_item_el (st : S.t) idx (it : S.cm_item) : t =
   | _ -> spacer ~key:"x" []
 ;;
 
-(* dropdown-menu-sub-content for Sub_menu entries — popover ~at the
-   trigger's right edge (coords stored on hover in cm.sub_xy); nested
-   popovers layer above their parent popup automatically *)
-let cm_sub_el (st : S.t) (x : float) (y : float) (items : S.cm_item list)
-    : t =
-  Ui_components.with_props [ Ui_components.sub_card_shadow ]
-    (popover ~transition:Ui_components.popover_transition ~key:"cm-sub" ~at:(x, y) ~role:`menu ~min_width:128
-       ~accessibility_identifier:"block-context-submenu"
-       ~padding:4
-       ~border_color:"hsl(var(--border))" ~border_width:1
-       ~corner_radius:6
-       ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
-       ~style_class:"ui__dropdown-menu-sub-content"
-       ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
-       ~on_dismiss:(fun _ -> S.close_cm_sub st)
-       [ box ~key:"w" (List.mapi (cm_sub_item_el st) items) ])
+(* Menu and picker children remain in the parent popover tree so popup
+   dismissal and Escape follow the nested layer ownership. *)
+let cm_sub_el (st : S.t) (idx : int) (x : float) (y : float)
+    (block_id : string) (multi : bool) (sub : S.cm_sub) : t =
+  match sub with
+  | S.Sub_menu items ->
+      Ui_components.menu_surface
+        (popover ~transition:Ui_components.popover_transition ~key:"cm-sub"
+           ~at:(x, y) ~role:`menu ~min_width:128 ~min_height:0
+           ~accessibility_identifier:"block-context-submenu"
+           ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
+           ~style_class:"ui__dropdown-menu-sub-content"
+           ~data_attrs:[ ("tabindex", "-1"); ("data-keep-selection", "") ]
+           ~on_dismiss:(fun _ -> cm_close_sub st)
+           [ box ~key:"w" ~min_height:0
+               (List.mapi (cm_sub_item_el st) items) ])
+  | S.Sub_picker picker ->
+      let uuids =
+        if multi && Ui_services.dom_selected_block_uuids () <> [] then
+          Ui_services.dom_selected_block_uuids ()
+        else [ block_id ]
+      in
+      let on_chosen choice =
+        (match picker, choice with
+         | S.Picker_icon, choice ->
+             List.iter (fun uuid -> Page.set_icon uuid choice) uuids
+         | S.Picker_emoji, Icon_picker.Emoji id ->
+             List.iter (fun uuid -> Comments_view.toggle_reaction uuid id) uuids
+         | S.Picker_emoji, _ -> ());
+        close_cm st
+      in
+      Ui_components.with_props [ Ui_components.card_shadow ]
+        (popover ~transition:Ui_components.popover_transition
+           ~key:"cm-sub-picker" ~role:`dialog ~padding:0
+           ~anchor_target:("cm-sub-" ^ string_of_int idx) ~anchor:`right
+           ~anchor_alignment:`start ~anchor_offset:(-4.)
+           ~anchor_alignment_offset:(-4.)
+           ~background:"hsl(var(--popover))"
+           ~foreground:"hsl(var(--popover-foreground))"
+           ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
+           ~available_height:
+             (Float.max (Ui_services.dom_viewport_height () -. y -. 8.) 120.)
+           ~style_class:"ui__popover-content ls-icon-picker"
+           ~data_attrs:
+             [ ("data-keep-selection", "true")
+             ; ("data-popup-owner", "block-context-menu") ]
+           ~on_dismiss:(fun _ -> cm_close_sub st)
+           [ Icon_picker.picker_view ~del:false
+               ~emoji_only:(picker = S.Picker_emoji) ~on_chosen
+               ~close:(fun () -> cm_close_sub st) ])
 ;;
 
-(* (idx, x, y, items) while a Sub_menu is open; None otherwise — the
-   tuple feeds reactive so the submenu mounts lazily with live coords *)
+(* Keep only values needed to position/apply a child so highlight changes
+   do not remount an open picker. *)
 let cm_sub_state (st : S.t)
-    : (int * float * float * S.cm_item list) option Signal.signal =
+    : (int * float * float * string * bool * S.cm_sub) option Signal.signal =
   Signal.map
     (fun (v : S.view) ->
       match v.S.cm with
       | Some m when m.S.sub_open >= 0 -> (
           let x, y = m.S.sub_xy in
           match List.nth_opt m.S.entries m.S.sub_open with
-          | Some (S.Ci_sub (_, S.Sub_menu items)) ->
-              Some (m.S.sub_open, x, y, items)
+          | Some (S.Ci_sub (_, sub)) ->
+              Some (m.S.sub_open, x, y, m.S.block_id, m.S.multi, sub)
           | _ -> None)
       | _ -> None)
     (Signal.value (st.S.vs))
@@ -877,27 +917,25 @@ let cm_popover (st : S.t) : t =
            | None -> [])
          (Signal.value (st.S.vs)))
   in
-  (* cljs as-dropdown? context menu: dropdown-menu-content merged with
-     the content-props class (280px ls-context-menu-content, 240px
-     ls-tag-menu for block-tag popups); the items sit in a flat
-     div[data-keep-selection], not a second card *)
+  (* The shared menu surface keeps normal and tag menus flat; widths
+     remain 280px and 240px respectively. *)
   let vs = (Signal.value (st.S.vs)) in
   (Ui_parts.class_signal vs
      (fun (v : S.view) ->
-       "ui__dropdown-menu-content ls-context-menu-content ls-anchor-cx"
+       "ls-context-menu-content ls-anchor-cx"
        ^
        (match v.S.cm with
         | Some m ->
             (if m.S.tag <> None then " ls-tag-menu" else "")
             ^ (if m.S.flip then " ls-anchor-top" else "")
         | _ -> ""))
-     (Ui_components.with_props [ Ui_components.card_shadow ]
-        (Ui_parts.int_prop P.WidthValue
+   (Ui_parts.int_prop P.WidthValue
            ~value:(reactive (fun (v : S.view) ->
              match v.S.cm with
              | Some m when m.S.tag <> None -> 240
              | _ -> 280) vs)
-           (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~padding:4
+           (Ui_components.menu_surface
+             (popover ~transition:Ui_components.popover_transition ~key:"cm" ~role:`menu ~min_width:128 ~min_height:0
               ~accessibility_identifier:"block-context-menu"
               ~on_appear:(fun _ ->
                 match (S.get st).S.cm with
@@ -910,8 +948,6 @@ let cm_popover (st : S.t) : t =
                            | _ -> None)
                          cm.S.entries)
                 | _ -> ())
-              ~border_color:"hsl(var(--border))" ~border_width:1
-              ~corner_radius:6
               ~at_signal:
           (Logseq_el.own context
              (Signal.map
@@ -945,7 +981,7 @@ let cm_popover (st : S.t) : t =
                 vs))
               ~data_attrs:[ ("data-keep-selection", "") ]
               ~on_dismiss:(fun _ -> close_cm st)
-              [ box ~key:"cm-wrap"
+              [ box ~key:"cm-wrap" ~min_height:0
             [ keyed ~source:entries_sig
                 ~key:(fun ((i, _) : int * S.cm_item) -> i)
                 ~cmp:Stdlib.compare
@@ -957,7 +993,8 @@ let cm_popover (st : S.t) : t =
                 [ reactive
                     (fun sub ->
                       match sub with
-                      | Some (_, x, y, items) -> cm_sub_el st x y items
+                      | Some (idx, x, y, block_id, multi, sub) ->
+                          cm_sub_el st idx x y block_id multi sub
                       | None -> Logseq_el.nothing)
                     (Logseq_el.own context (cm_sub_state st)) ]
               ]))))
@@ -1246,6 +1283,11 @@ let menu_keydown st (ev : Ui_services.ev) =
 ;;
 
 let handle_keydown st (ev : Ui_services.ev) =
+  (match ev.Ui_services.key with
+   | Some ("ArrowDown" | "ArrowUp" | "ArrowLeft" | "ArrowRight"
+          | "Home" | "End" | "Enter" | "Escape" | "Tab") ->
+       cm_cancel_pending st
+   | _ -> ());
   if ev.Ui_services.composing then ()
   else if S.ac_keydown st ev then (
     ev.Ui_services.prevent_default ();
@@ -1260,8 +1302,7 @@ let handle_keydown st (ev : Ui_services.ev) =
     | Some "Escape" when (S.get st).S.cm <> None ->
         (match (S.get st).S.cm with
          | Some cm when cm.S.sub_open >= 0 ->
-             close_cm_picker ();
-             S.close_cm_sub st;
+             cm_close_sub st;
              Option.iter (fun trigger -> trigger.Ui_services.focus ())
                (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int cm.S.sub_open))
          | _ -> close_cm st);
@@ -1298,7 +1339,6 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               | Some bid ->
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
-                  close_cm_picker ();
                   let title =
                     match chip.Ui_services.attr "data-tag-title" with
                     | Some r -> r
@@ -1340,7 +1380,6 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               if bullet_target || Editor_state.selection_scope () <> scope
                  || not (Editor_state.is_selected id) then
                 Editor_actions.select_single_in ~scope id;
-              close_cm_picker ();
               (* cljs popup-show! re-anchors the menu to the event
                  target element (centered, dropping from its bottom
                  edge), not the raw pointer *)
@@ -1374,7 +1413,6 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                        its native equivalent *)
                     ev.Ui_services.prevent_default ();
                     ev.Ui_services.stop_propagation ();
-                    close_cm_picker ();
                     let ax, atop, abot =
                       S.anchor_at_point ~x:ev.Ui_services.x
                         ~y:ev.Ui_services.y
@@ -1395,7 +1433,6 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                 when List.exists (fun u -> u = id) sel ->
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
-                  close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~scope ~ax ~atop ~abot ~block_id:first
                     ~multi:(List.length sel >= 2)
@@ -1409,7 +1446,6 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                      live, and a block select would hide it) *)
                   ev.Ui_services.prevent_default ();
                   ev.Ui_services.stop_propagation ();
-                  close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~scope ~ax ~atop ~abot ~block_id:id ~multi:false
               | Some id, _
@@ -1420,7 +1456,6 @@ let handle_contextmenu st (ev : Ui_services.ev) =
                   if Editor_state.selection_scope () <> scope
                      || not (Editor_state.is_selected id) then
                     Editor_actions.select_single_in ~scope id;
-                  close_cm_picker ();
                   let ax, atop, abot = S.anchor_of_ev ev el in
                   S.open_cm st ~scope ~ax ~atop ~abot ~block_id:id ~multi:false
               | _ -> ())
@@ -1479,47 +1514,12 @@ let handle_block_picker _st (ev : Ui_services.ev) =
 (* Set icon / Add reaction sub-triggers open the icon picker to the
    right of the menu (base-ui inline-end placement); the choice applies
    to every selected block for the multi-select menu *)
-let open_cm_picker (st : S.t) (pk : S.cm_picker)
-    (anchor : Ui_services.el) (cm : S.cm) =
-  let uuids =
-    if cm.S.multi && Ui_services.dom_selected_block_uuids () <> [] then
-      Ui_services.dom_selected_block_uuids ()
-    else [ cm.S.block_id ]
-  in
-  close_cm_picker ();
-  match pk with
-  | S.Picker_icon ->
-      cm_picker_key :=
-        Some
-          (Icon_picker.open_picker_with_opts ~anchor ~del:false
-             ~opts:{ Icon_picker.emoji_only = false; sub = true }
-             ~on_chosen:(fun c ->
-               List.iter (fun u -> Page.set_icon u c) uuids;
-               close_cm st))
-  | S.Picker_emoji ->
-      cm_picker_key :=
-        Some
-          (Icon_picker.open_picker_with_opts ~anchor ~del:false
-             ~opts:{ Icon_picker.emoji_only = true; sub = true }
-             ~on_chosen:(fun c ->
-               (match c with
-                | Icon_picker.Emoji id ->
-                    List.iter
-                      (fun u -> Comments_view.toggle_reaction u id)
-                      uuids
-                | _ -> ());
-               close_cm st))
-;;
-
-let cm_open_sub_at st (trg : Ui_services.el) (cm : S.cm) (idx : int) =
-  close_cm_picker ();
+let cm_open_sub_at st (trg : Ui_services.el) (idx : int) =
+  cm_cancel_pending st;
   match S.cm_sub_at st idx with
-  | Some (S.Sub_menu _) ->
+  | Some (S.Sub_menu _ | S.Sub_picker _) ->
       let tx, ty, tw, _th = trg.Ui_services.rect () in
       S.open_cm_sub st ~index:idx ~x:(tx +. tw -. 4.) ~y:(ty -. 4.)
-  | Some (S.Sub_picker pk) ->
-      S.open_cm_sub st ~index:idx ~x:0. ~y:0.;
-      open_cm_picker st pk trg cm
   | None -> ()
 ;;
 
@@ -1529,36 +1529,145 @@ let _ =
   cm_press_open_ref :=
     fun st trg ->
       match trg.Ui_services.attr "data-cm-sub", (S.get st).S.cm with
-      | Some s, Some cm -> (
+      | Some s, Some _ -> (
           match int_of_string_opt s with
-          | Some idx -> cm_open_sub_at st trg cm idx
+          | Some idx -> cm_open_sub_at st trg idx
           | None -> ())
       | _ -> ()
 ;;
 
-let cm_hover st (el : Ui_services.el) =
-  (match el.Ui_services.closest "[data-cm-sub]" with
-  | Some trg -> (
-      match trg.Ui_services.attr "data-cm-sub" with
-      | Some s -> (
-          match int_of_string_opt s, (S.get st).S.cm with
-          | Some idx, Some cm when cm.S.sub_open <> idx ->
-              cm_open_sub_at st trg cm idx
-          | Some _, _ | None, _ -> ())
-      | None -> ())
-  | None ->
-      (* hovering a regular item inside the menu closes the open submenu *)
-      if (S.get st).S.cm <> None
-         && el.Ui_services.closest ".ls-context-menu-content" <> None
-         && el.Ui_services.closest ".ui__dropdown-menu-sub-content" = None then (
-        S.close_cm_sub st;
-        close_cm_picker ()))
+let cm_point_in_triangle point_x point_y ax ay bx by cx cy =
+  let cross x1 y1 x2 y2 =
+    (x1 *. y2) -. (y1 *. x2)
+  in
+  let cross_a = cross (bx -. ax) (by -. ay) (point_x -. ax) (point_y -. ay) in
+  let cross_b = cross (cx -. bx) (cy -. by) (point_x -. bx) (point_y -. by) in
+  let cross_c = cross (ax -. cx) (ay -. cy) (point_x -. cx) (point_y -. cy) in
+  let has_negative = cross_a < 0. || cross_b < 0. || cross_c < 0. in
+  let has_positive = cross_a > 0. || cross_b > 0. || cross_c > 0. in
+  not (has_negative && has_positive)
+
+let cm_submenu_corridor_contains ~side ~child_bounds:(left, top, width, height)
+    ~leave:(leave_x, leave_y) ~point:(point_x, point_y) =
+  let right = left +. width in
+  let bottom = top +. height in
+  let buffer = 4. in
+  match side with
+  | "left" ->
+      cm_point_in_triangle point_x point_y (leave_x +. buffer) leave_y right
+        (top -. buffer) right (bottom +. buffer)
+  | "above" ->
+      cm_point_in_triangle point_x point_y leave_x (leave_y +. buffer)
+        (left -. buffer) bottom (right +. buffer) bottom
+  | "below" ->
+      cm_point_in_triangle point_x point_y leave_x (leave_y -. buffer)
+        (left -. buffer) top (right +. buffer) top
+  | _ ->
+      cm_point_in_triangle point_x point_y (leave_x -. buffer) leave_y left
+        (top -. buffer) left (bottom +. buffer)
+
+let cm_submenu_surface st idx =
+  match S.cm_sub_at st idx with
+  | Some (S.Sub_picker _) ->
+      Ui_services.dom_query "[data-popup-owner='block-context-menu']"
+  | Some (S.Sub_menu _) -> Ui_services.dom_by_id "block-context-submenu"
+  | None -> None
+
+let cm_submenu_corridor st idx leave point =
+  match
+    ( Ui_services.dom_by_id ("cm-sub-" ^ string_of_int idx)
+    , cm_submenu_surface st idx )
+  with
+  | Some trigger, Some surface
+    when not (trigger.Ui_services.rect_pending ())
+         && not (surface.Ui_services.rect_pending ()) ->
+      let tx, ty, tw, th = trigger.Ui_services.rect () in
+      let sx, sy, sw, sh = surface.Ui_services.rect () in
+      if sw <= 0. || sh <= 0. then false
+      else
+        let side =
+          match surface.Ui_services.attr "data-side" with
+          | Some side -> side
+          | None ->
+              if sx >= tx +. tw then "right"
+              else if sx +. sw <= tx then "left"
+              else if sy >= ty +. th then "below"
+              else "above"
+        in
+        cm_submenu_corridor_contains ~side ~child_bounds:(sx, sy, sw, sh)
+          ~leave ~point
+  | _ -> false
+
+let cm_hover_cancel_timer hover =
+  Option.iter Ui_services.timers_clear_timeout !(hover.timer);
+  hover.timer := None
+
+let cm_hover_cancel hover =
+  cm_hover_cancel_timer hover;
+  hover.leave_point := None
+
+let cm_hover_schedule st hover next =
+  cm_hover_cancel_timer hover;
+  hover.timer :=
+    Some
+      (Ui_services.timers_timeout
+         (fun () ->
+           hover.timer := None;
+           match (S.get st).S.cm with
+           | Some cm when cm.S.sub_open >= 0 ->
+               (match next with
+                | Some idx when idx <> cm.S.sub_open ->
+                    Option.iter (fun trg -> cm_open_sub_at st trg idx)
+                      (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int idx))
+                | Some _ -> ()
+                | None -> cm_close_sub st)
+           | Some _ ->
+               (match next with
+                | Some idx ->
+                    Option.iter (fun trg -> cm_open_sub_at st trg idx)
+                      (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int idx))
+                | None -> ())
+           | None -> ())
+         120)
+
+let cm_hover st hover (el : Ui_services.el) point =
+  let child_surface =
+    el.Ui_services.closest "#block-context-submenu, [data-popup-owner='block-context-menu']"
+  in
+  let candidate =
+    Option.bind (el.Ui_services.closest "[data-cm-sub]") (fun trg ->
+      Option.bind (trg.Ui_services.attr "data-cm-sub") (fun index ->
+        Option.map (fun idx -> (trg, idx)) (int_of_string_opt index)))
+  in
+  match (S.get st).S.cm with
+  | None -> cm_hover_cancel hover
+  | Some _cm when child_surface <> None ->
+      cm_hover_cancel_timer hover;
+      hover.leave_point := None
+  | Some cm when cm.S.sub_open < 0 ->
+      (match candidate with
+       | Some (trg, idx) -> cm_open_sub_at st trg idx
+       | None -> ())
+  | Some cm ->
+      let in_corridor =
+        Option.fold ~none:false
+          ~some:(fun leave -> cm_submenu_corridor st cm.S.sub_open leave point)
+          !(hover.leave_point)
+      in
+      (match candidate with
+       | Some (_trg, idx) when idx = cm.S.sub_open ->
+           cm_hover_cancel_timer hover;
+           hover.leave_point := Some point
+       | Some (_, _idx) when in_corridor -> cm_hover_cancel_timer hover
+       | Some (_, idx) -> cm_hover_schedule st hover (Some idx)
+       | None when in_corridor -> cm_hover_cancel_timer hover
+       | None -> cm_hover_schedule st hover None)
 ;;
 
-let handle_mousemove st (ev : Ui_services.ev) =
+let handle_mousemove st hover (ev : Ui_services.ev) =
   match ev.Ui_services.target with
   | Some el -> (
-      cm_hover st el;
+      cm_hover st hover el (ev.Ui_services.x, ev.Ui_services.y);
       cm_highlight st el;
       (match el.Ui_services.closest ".menu-link-wrap" with
        | Some wrap -> (
@@ -1567,7 +1676,7 @@ let handle_mousemove st (ev : Ui_services.ev) =
            | None -> ())
        | None -> ());
       pv_track st el)
-  | None -> ()
+  | None -> cm_hover_cancel hover
 ;;
 
 (* preventDefault on popup mousedown so clicking a menu item never
@@ -1582,6 +1691,11 @@ let handle_mousedown _st (ev : Ui_services.ev) =
 
 let install_listeners context st =
   let scope = context.Lui_ui.ui_scope in
+  let hover = { timer = ref None; leave_point = ref None } in
+  let cancel_hover () = cm_hover_cancel hover in
+  cm_hover_cancellers :=
+    (st, cancel_hover)
+    :: List.filter (fun (owner, _) -> owner != st) !cm_hover_cancellers;
   Ui_services.dom_subscribe_document_event ~scope ~capture:true "keydown"
     (handle_keydown st);
   Ui_services.dom_subscribe_document_event ~scope ~capture:true "contextmenu"
@@ -1590,7 +1704,8 @@ let install_listeners context st =
     (handle_click st);
   Ui_services.dom_subscribe_document_event ~scope ~capture:true "mousedown"
     (handle_mousedown st);
-  Ui_services.dom_subscribe_document_event ~scope "mousemove" (handle_mousemove st);
+  Ui_services.dom_subscribe_document_event ~scope "mousemove"
+    (handle_mousemove st hover);
   Ui_services.dom_subscribe_document_event ~scope ~capture:true "ls:block-picker"
     (handle_block_picker st);
   (* the preview survives its trigger element (popup lives in the overlay
@@ -1601,6 +1716,9 @@ let install_listeners context st =
       close_cm st;
       close_pv st);
   Signal.on_dispose scope (fun () ->
+      cancel_hover ();
+      cm_hover_cancellers :=
+        List.filter (fun (owner, _) -> owner != st) !cm_hover_cancellers;
       S.invalidate_ac st;
       pv_cancel_show ();
       pv_cancel_hide ();

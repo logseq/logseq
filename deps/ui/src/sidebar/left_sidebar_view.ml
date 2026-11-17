@@ -52,7 +52,7 @@ let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
    .shui-shortcut-combo.shui-shortcut-glow > kbd*, pushed to the row end
    (cljs ml-auto pl-2) *)
 let menu_sc caps =
-  row ~key:"sc" ~grow:1. ~main:`end_ ~cross:`center ~padding_horizontal:8
+  row ~key:"sc" ~main:`end_ ~cross:`center
     [ Ui_components.shortcut_combo ~key:"sc-box" ~glow:true
         (List.concat
            (List.mapi
@@ -174,33 +174,33 @@ let plugins_menu st =
 (* cljs left_sidebar.cljs x-menu-content: dropdown at the pointer with
    "Unfavorite" (favorites only) + "Open in sidebar", icons and keycap
    shortcuts; content-props class w-60 *)
-let lp_menu st =
-  let item label icon_name caps on_click =
-    Ui_parts.pressable
-      ~on_press:(fun _ ->
-        Sidebar_state.close_menu st;
-        on_click ())
-      (row ~key:("lp-" ^ label) ~cross:`center ~corner_radius:2
-         ~padding_horizontal:8 ~padding_vertical:6
-         ~style_class:"ui__dropdown-menu-item"
-         ~data_attrs:[ ("role", "menuitem") ]
-         ([ icon_ ~attrs:[ ("style", "padding-right:4px") ] icon_name
-          ; text ~value:label [] ]
-         @ (match caps with [] -> [] | _ -> [ menu_sc caps ])))
+let lp_menu_items st ~close ~target ~recent =
+  let item key label icon_name caps on_click =
+    Ui_components.with_props [Ui_components.Prop.height 33]
+      (Menu_item.el ~key:("lp-" ^ key) ~label
+         ~icon:(Icons.name_ref icon_name)
+         ~after:(match caps with [] -> [] | _ -> [ menu_sc caps ])
+         ~on_click:(fun () -> close (); on_click ()) ())
   in
+  (if recent then []
+   else
+     [ item "unfavorite" (t "page/unfavorite") "star-off"
+         (Keymap_record.keycaps "mod+shift+f")
+         (fun () ->
+           if Wire.is_uuid_string target then Sidebar_state.unfavorite st target)
+     ])
+  @ [ item "open-sidebar" (t "sidebar.right/open") "layout-sidebar-right"
+        [ {js|⇧|js}; "Click" ]
+        (fun () -> Sidebar_state.open_ref st target) ]
+;;
+
+let lp_menu st =
   match !Sidebar_state.lp_ctx with
   | None -> spacer ~key:"lp-none" []
   | Some (target, recent, ax, atop, abot) ->
       let items =
-        (if recent then []
-         else
-           [ item (t "page/unfavorite") "star-off" (Keymap_record.keycaps "mod+shift+f")
-               (fun () ->
-                 if Wire.is_uuid_string target then
-                   Sidebar_state.unfavorite st target) ])
-        @ [ item (t "sidebar.right/open") "layout-sidebar-right"
-              [ {js|⇧|js}; "Click" ]
-              (fun () -> Sidebar_state.open_ref st target) ]
+        lp_menu_items st ~target ~recent
+          ~close:(fun () -> Sidebar_state.close_menu st)
       in
       (* cljs popup-show! anchors the dropdown to the event target:
          centered on it below (ls-anchor-cx translates the positioner
@@ -213,14 +213,14 @@ let lp_menu st =
           (Float.min ax
              (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
       in
-      popover ~key:"lp-menu" ~at:(x, if flip then atop else abot)
-        ~role:`menu
-        ~transition:Ui_components.popover_transition
-        ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
-        ~style_class:
-          ("ui__dropdown-menu-content w-60 ls-anchor-cx"
-          ^ if flip then " ls-anchor-top" else "")
-        items
+      Ui_components.menu_surface
+        (dropdown_menu ~key:"lp-menu" ~at:(x, if flip then atop else abot)
+           ~transition:Ui_components.popover_transition
+           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+           ~style_class:
+             ("ui__dropdown-menu-content w-60 ls-anchor-cx"
+             ^ if flip then " ls-anchor-top" else "")
+           items)
 ;;
 
 (* ---------- repos dropdown (cljs graphs-selector popup) ---------- *)
@@ -316,7 +316,8 @@ let repos_menu_content st (m : Model.t) : t =
 
 let repos_menu st (ms : Model.t Signal.signal) : t =
   Ui_components.menu_surface (popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
-    ~anchor_offset:0. ~role:`menu ~min_width:300 ~max_width:400
+    ~anchor_offset:0. ~anchor_alignment_offset:(-4.)
+    ~role:`menu ~min_width:300 ~max_width:400
     ~padding_horizontal:8
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
@@ -629,33 +630,19 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     | Some u -> u
     | None -> p.Model.page_title
   in
-  (* Keep navigation and the menu as sibling interaction targets. Click
-     details bubble on both hosts, so the row wrapper must stay passive.
-     The data-lp-* attributes also feed the document context-menu handler. *)
-  let open_lp d =
-    (* cljs anchors the dots dropdown to the button element,
-       not the press point *)
-    let ax, atop, abot =
-      match
-        Option.bind (Ui_services.dom_element_at d.Lui_protocol.x d.y)
-          (fun hit ->
-            match hit.Ui_services.closest ".sidebar-page-actions" with
-            | Some btn -> Some btn
-            | None -> Some hit)
-      with
-      | Some btn -> Popups_state.anchor_of_el btn
-      | None ->
-        Popups_state.anchor_at_point ~x:d.Lui_protocol.x ~y:d.y
-    in
-    Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax ~atop
-      ~abot
-  in
+  (* The row remains passive; the dots menu owns its own trigger and popup. *)
   fun ctx parent ->
    let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
    let focused = Signal.state ctx.Lui_ui.ui_scheduler false in
    let always_visible = Ui_services.env_native_block_controls () in
-   let visible hovered focused open_menu =
-     always_visible || hovered || focused || open_menu = "lp-" ^ lp_ref in
+   let focus_within =
+     if always_visible then None
+     else Some (fun within -> Signal.set focused within)
+   in
+   let visible hovered focused = always_visible || hovered || focused in
+   let page_menu_items =
+     lp_menu_items st ~target:lp_ref ~recent ~close:(fun () -> ())
+   in
    Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.font_weight 500
@@ -665,7 +652,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
       ~data_attrs:[("tabindex", "0")]
       ~on_pointer_enter:(fun _ -> Signal.set hovered true)
       ~on_pointer_leave:(fun _ -> Signal.set hovered false)
-      ~on_focus_within:(fun within -> Signal.set focused within)
+      ?on_focus_within:focus_within
     [ Ui_components.with_props
         [ Ui_components.Prop.opacity 0.8
         ; Ui_components.Prop.hover_opacity 1.
@@ -706,35 +693,21 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             [ Ui_components.Prop.position `absolute
             ; Ui_components.Prop.inset_top 0.
             ; Ui_components.Prop.inset_right 4. ]
-          (Ui_parts.string_prop Lui_protocol.DisplayValue
-            ~value:(reactive (fun hovered focused open_menu ->
-              if visible hovered focused open_menu then "inline-flex" else "none")
-              (Signal.value hovered) (Signal.value focused) (Signal.value st.Sidebar_state.open_menu))
+          (Ui_parts.float_prop Lui_protocol.Opacity
+            ~value:(reactive (fun hovered focused ->
+              if visible hovered focused then 1. else 0.)
+              (Signal.value hovered) (Signal.value focused))
             (row ~key:"sidebar-page-actions" ~cross:`center
-              [ Ui_components.with_props
-                [ Ui_components.Prop.cursor `pointer
-                ; Ui_components.Prop.user_select `none
-                ; Ui_components.Prop.opacity 0.4
-                ; Ui_components.Prop.hover_opacity 0.8
-                ; Ui_components.Prop.pressed_opacity 1.
-                ; Ui_components.Prop.disabled_opacity 0.5
-                ; ( Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)" )
-                ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
-                ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
-              (Ui_components.button ~variant:`ghost ~size:`icon
-               ~label:(t "ui/show-more")
-               ~width:28 ~height:28 ~padding_vertical:4 ~corner_radius:4
-               ~padding_horizontal:6
-               ~style_class:"sidebar-page-actions ui__button"
-               (* The detail handler anchors the menu. *)
-               ~on_press:(fun _ -> ())
-               ~on_press_detail:(fun ev ->
-                 match ev with
-                 | Lui_protocol.PressDetail (_, d) -> open_lp d
-                 | _ -> ())
-               ~data_attrs:
-                 [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
-               [ Icons.icon ~size:18. "dots" ]) ]))
+              [ box ~width:32 ~height:32
+                [ menu_trigger ~key:"sidebar-page-actions-trigger"
+                  ~label:(t "ui/show-more")
+                  ~accessibility_identifier:("sidebar-page-actions-" ^ lp_ref)
+                  ~icon:(`app "dots")
+                  ~style_class:"capsule sidebar-page-actions ui__button"
+                  ~data_attrs:[("style", "transform:scale(0.75);font-size:0.875rem")]
+                  [ Ui_components.menu_card ~key:"sidebar-page-actions-menu"
+                      ~cls:"w-60" ~anchor:`below ~anchor_alignment:`center
+                      ~on_dismiss:(fun _ -> ()) page_menu_items ] ] ]))
         ]) ctx parent
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
