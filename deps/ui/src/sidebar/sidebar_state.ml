@@ -1231,17 +1231,18 @@ let close_menu st = Runtime.signal_set st.open_menu ""
    bottom-left corner (cljs popup-show! align :start) *)
 (* anchor for the right-sidebar item actions menu — (cx, top, bottom)
    of the event target, matching cljs popup-show! *)
-let im_xy : (float * float * float) ref = ref (0., 0., 0.)
+type item_menu_anchor = Item_trigger | Item_rect of (float * float * float * float)
+let im_anchor = ref Item_trigger
 
 let open_item_menu st key ~ax ~atop ~abot =
-  im_xy := (ax, atop, abot);
+  im_anchor := Item_rect (ax, atop, 0., abot -. atop);
   Runtime.signal_set st.open_menu ("item-" ^ key)
 
 (* same toggle contract as toggle_menu, for the item-actions dots
    button; contextmenu callers keep open_item_menu since a right-click
    is a move/re-open gesture, not a toggle *)
-let toggle_item_menu st key ~ax ~atop ~abot =
-  im_xy := (ax, atop, abot);
+let toggle_item_menu st key =
+  im_anchor := Item_trigger;
   toggle_menu st ("item-" ^ key)
 
 (* cljs left_sidebar.cljs x-menu-content: right-click or the dots

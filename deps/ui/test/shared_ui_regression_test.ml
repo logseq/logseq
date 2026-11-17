@@ -594,7 +594,54 @@ let configured_popup_ownership () =
       Runtime.editor_popup_open := false)
       [`Unchanged; `Epoch; `Scope; `Input; `Source; `Caret; `Popup; `Autocomplete; `Repo; `Route]) [false;true])
 
+let page_disclosure ~registry ~profile =
+  let previous_flush = !Runtime.app_flush in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+    Runtime.app_flush := previous_flush) (fun () ->
+    List.iter (fun is_tag ->
+      Editor_state.st := None; Editor_state.field_sigs_opt := None;
+      let uuid = if is_tag then "disclosure-tag" else "disclosure-journal" in
+      let page = {(Test_check.page []) with Model.page_uuid=Some uuid;
+        page_is_tag=is_tag} in
+      let session = S.mount ~registry ~profile ~initial:Model.initial
+        ~reducer:(fun model () -> model)
+        ~view:(fun context _ _ ->
+          ignore (Properties_state.area_state context
+            ~key:(Properties_area.page_key uuid) ~fetch:(fun _ -> Js.Promise.resolve ()));
+          Page.page_title_el Model.initial page) () in
+      Runtime.app_flush := (fun () -> S.flush session);
+      let arrow () = List.find (fun node -> class_has node "rotating-arrow") (nodes session) in
+      let title_row () = List.find (fun node -> class_has node "is-page-title-row") (nodes session) in
+      let control () = List.find (fun node -> M.string_prop node "accessibility-identifier"=Some ("control-" ^ uuid)) (nodes session) in
+      let visible () = Hashtbl.find_opt (arrow ()).M.props "opacity"=Some (P.FloatValue 1.) in
+      check "Page disclosure is hidden before title hover" (not (visible ()));
+      S.dispatch session (P.PointerEnter (title_row ()).M.id);
+      check "Only collapsable page titles reveal their disclosure" (visible ()=is_tag);
+      if is_tag then begin
+        let press () =
+          S.press session (control ()).M.id;
+          S.flush session in
+        check "Class titles start collapsed" (class_has (arrow ()) "collapsed");
+        press ();
+        check "Page disclosure updates its direction after expanding"
+          (class_has (arrow ()) "not-collapsed");
+        check "Expanding a page title reveals its property area"
+          (List.exists (fun node -> class_has node "ls-page-properties") (nodes session));
+        press ();
+        check "Repeated page disclosure presses collapse the title again"
+          (class_has (arrow ()) "collapsed");
+        check "Collapsing a page title removes its property area"
+          (not (List.exists (fun node -> class_has node "ls-page-properties") (nodes session)))
+      end;
+      S.dispatch session (P.PointerLeave (title_row ()).M.id);
+      check "Page disclosure hides when the pointer leaves" (not (visible ()));
+      ignore (Lui_app.dispose session.S.app);
+      Hashtbl.remove Properties_state.areas (Properties_area.page_key uuid)) [false;true])
+
 let run_views ~registry ~profile ~finish =
+  page_disclosure ~registry ~profile;
   let finish () = configured_continuations finish in
   configured_popup_ownership ();
   table_resize_transaction ();
@@ -2474,9 +2521,20 @@ let run_views ~registry ~profile ~finish =
       rect_pending=(fun () -> !trigger_pending)} in el in
   let button = trigger 901 "button" ["aria-label","Search"] in
   let toolbar = trigger 902 "div" ["role","toolbar";"aria-label","Selection actions"] in
+  let tip_layer = ref None in
   let tooltip = mount (fun ms ->
+    let layers = List.init 3 (fun _ -> Signal.state (Signal.signal_owner ms) false) in
+    tip_layer := Some layers;
     Tooltip.state:=Some (Signal.state (Signal.signal_owner ms) None);
-    Tooltip.armed_on:=None;Tooltip.timer:= -1;Tooltip.el) in
+    Tooltip.armed_on:=None;Tooltip.timer:= -1;
+    let open Lui_elements in
+    column [Tooltip.el;
+      if_ ~test:(Signal.value (List.nth layers 0)) (popover ~role:`menu ~at:(10.,10.) []);
+      if_ ~test:(Signal.value (List.nth layers 1)) (dialog ~text:"Tooltip dialog fixture" []);
+      if_ ~test:(Signal.value (List.nth layers 2)) (popover ~role:`dialog ~at:(10.,10.) [])]) in
+  let set_tip_layer kind =
+    List.iteri (fun index state -> Signal.set state (index + 1 = kind)) (Option.get !tip_layer);
+    S.flush tooltip in
   Runtime.app_flush:=(fun () -> incr flushes;S.flush tooltip);
   let move target = Tooltip.on_mousemove {(key_event "") with key=None;target} in
   let fire () = let ready=List.rev !pending in pending:=[];List.iter (fun (_,f) -> f ()) ready in
@@ -2552,7 +2610,20 @@ let run_views ~registry ~profile ~finish =
     let explicit = trigger 904 "div" ["aria-label","Name";"data-tooltip","Explicit tip"] in
     move (Some explicit);fire ();
     check "explicit tooltip text can describe a non-button and owns its label"
-      (Option.map (fun t -> t.Tooltip.tip_label) (shown ())=Some "Explicit tip"));
+      (Option.map (fun t -> t.Tooltip.tip_label) (shown ())=Some "Explicit tip");
+    List.iter (fun kind ->
+      Tooltip.hide (); pending:=[];
+      move (Some button);
+      let stale = List.map snd !pending in
+      set_tip_layer kind;
+      move (Some button); fire ();
+      List.iter (fun callback -> callback ()) stale;
+      check "An open menu, popup or dialog suppresses trigger tooltips and stale timers"
+        (shown ()=None && !pending=[]);
+      set_tip_layer 0;
+      move (Some button); fire ();
+      check "Closing the surface restores normal tooltip delay and display" (shown ()<>None))
+      [1;2;3]);
   let keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
   check "keycap modifier glyphs are ready for the host text runtime"
     (Keymap_record.keycaps "meta+shift+k" =

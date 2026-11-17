@@ -8,6 +8,8 @@ external install_menus : unit -> unit = "logseq_native_install_menus"
 external menu_action : int -> bool -> unit = "logseq_native_test_menu_action"
 external menu_key_action : int -> string -> int -> string -> int -> unit
   = "logseq_native_test_menu_key_action"
+external titlebar_press : int -> float -> float -> bool * bool
+  = "logseq_native_test_titlebar_press"
 
 let menu_runtime_regression () =
   if Host_platform.is_macos then begin
@@ -651,6 +653,16 @@ let () =
   sdl_ok (Lui_sdl3.init Lui_sdl3.Init.video);
   let window = sdl_ok (Lui_sdl3.create_window "Native window regression"
       ~w:400 ~h:300 Lui_sdl3.Window.hidden) in
+  Native_window.set_drag_regions (Lui_sdl3.get_window_id window) regions;
+  if Host_platform.is_macos then begin
+    List.iter (fun (x,y,expected) ->
+      let draggable, background = titlebar_press (Lui_sdl3.get_window_id window) x y in
+      check "Titlebar presses must use their origin, not the previous hover region"
+        (draggable = expected && not background))
+      [200.,20.,true;20.,20.,false;200.,20.,true;8.,8.,false;
+       39.,39.,false;200.,100.,false];
+    print_endline "native titlebar press ownership: OK"
+  end;
   check "An invisible window is eligible for rendering"
     (not (Native_window.presentable (Lui_sdl3.get_window_id window)));
   if Host_platform.is_macos then begin

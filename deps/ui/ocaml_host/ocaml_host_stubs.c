@@ -170,6 +170,10 @@ static SDL_HitTestResult logseq_hit_test(SDL_Window *window,
   return SDL_HITTEST_NORMAL;
 }
 
+#if defined(__APPLE__)
+static void logseq_install_window_dragging(SDL_Window *window);
+#endif
+
 CAMLprim value logseq_native_drag_regions(value id, value regions) {
   CAMLparam2(id, regions);
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id));
@@ -183,9 +187,17 @@ CAMLprim value logseq_native_drag_regions(value id, value regions) {
   free(state->regions);
   state->regions = copy;
   state->count = count;
+#if defined(__APPLE__)
+  /* Cocoa's background-drag flag tracks the previous mouse event. Route
+     titlebar presses before AppKit selects a drag responder instead. */
+  logseq_install_window_dragging(window);
+  if (!SDL_SetWindowHitTest(window, NULL, NULL))
+    caml_failwith(SDL_GetError());
+#else
   if (SDL_SetWindowHitTest(window, count ? logseq_hit_test : NULL,
                           count ? state : NULL) == false)
     caml_failwith(SDL_GetError());
+#endif
   if (!count && !state->watching) {
     logseq_set_window_data(window, logseq_window_key, NULL);
     free(state);
@@ -634,6 +646,103 @@ CAMLprim void logseq_native_app_op(value tag) {
   }
   if (target == nil) return;
   ((void (*)(id, SEL, id))objc_msgSend)(target, op, nil);
+}
+
+/* A titlebar gesture belongs to the region at mouse-down, regardless of
+   the pointer's previous hover position or movement after the press. */
+static bool logseq_titlebar_press(SDL_Window *window, id event) {
+  id cocoa = (id)logseq_cocoa_window(window);
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      cocoa, sel_registerName("setMovableByWindowBackground:"), 0);
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+  if (!state || !state->count) return false;
+  typedef struct { double x, y; } point_t;
+  point_t location = ((point_t (*)(id, SEL))objc_msgSend)(
+      event, sel_registerName("locationInWindow"));
+  typedef struct { double x, y, w, h; } rect_t;
+  for (long index = 0; index < 3; index++) {
+    id button = ((id (*)(id, SEL, long))objc_msgSend)(
+        cocoa, sel_registerName("standardWindowButton:"), index);
+    if (button && !((bool (*)(id, SEL))objc_msgSend)(button, sel_registerName("isHidden"))) {
+      rect_t bounds = ((rect_t (*)(id, SEL))objc_msgSend)(button, sel_registerName("bounds"));
+      rect_t frame = ((rect_t (*)(id, SEL, rect_t, id))objc_msgSend)(
+          button, sel_registerName("convertRect:toView:"), bounds, nil);
+      if (location.x >= frame.x && location.y >= frame.y &&
+          location.x < frame.x + frame.w && location.y < frame.y + frame.h)
+        return false;
+    }
+  }
+  int height;
+  SDL_GetWindowSize(window, NULL, &height);
+  const SDL_Point point = {(int)floor(location.x), (int)floor(height - location.y)};
+  return logseq_hit_test(window, &point, state) == SDL_HITTEST_DRAGGABLE;
+}
+
+static IMP logseq_window_send_event_parent;
+static void logseq_window_send_event(id self, SEL selector, id event) {
+  long type = ((long (*)(id, SEL))objc_msgSend)(event, sel_registerName("type"));
+  if (type == 1 /* NSEventTypeLeftMouseDown */) {
+    int count = 0;
+    SDL_Window **windows = SDL_GetWindows(&count);
+    SDL_Window *window = NULL;
+    for (int i = 0; i < count; i++) {
+      if ((id)logseq_cocoa_window(windows[i]) == self) {
+        window = windows[i];
+        break;
+      }
+    }
+    SDL_free(windows);
+    if (window && logseq_titlebar_press(window, event)) {
+      ((void (*)(id, SEL, id))objc_msgSend)(
+          self, sel_registerName("performWindowDragWithEvent:"), event);
+      return;
+    }
+  }
+  ((void (*)(id, SEL, id))logseq_window_send_event_parent)(self, selector, event);
+}
+
+static void logseq_install_window_dragging(SDL_Window *window) {
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_failwith("Native titlebar requires a Cocoa window");
+  if (!logseq_window_send_event_parent) {
+    /* SDL registers KVO observers on its window. Preserve that instance's
+       runtime class and observer bookkeeping when installing the route. */
+    Class cls = objc_getClass("SDL3Window");
+    SEL selector = sel_registerName("sendEvent:");
+    Method method = class_getInstanceMethod(cls, selector);
+    if (!method) caml_failwith("SDL Cocoa window event routing is unavailable");
+    logseq_window_send_event_parent = method_getImplementation(method);
+    class_replaceMethod(cls, selector, (IMP)logseq_window_send_event,
+                        method_getTypeEncoding(method));
+  }
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      cocoa, sel_registerName("setMovableByWindowBackground:"), 0);
+}
+
+CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_v) {
+  CAMLparam3(id_v, x_v, y_v);
+  CAMLlocal1(result);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_invalid_argument("Titlebar test requires a Cocoa window");
+  int height;
+  SDL_GetWindowSize(window, NULL, &height);
+  typedef struct { double x, y; } point_t;
+  point_t point = {Double_val(x_v), height - Double_val(y_v)};
+  long number = ((long (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("windowNumber"));
+  id event = ((id (*)(Class, SEL, unsigned long, point_t, unsigned long,
+      double, long, id, long, long, float))objc_msgSend)(objc_getClass("NSEvent"),
+      sel_registerName("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
+      1UL, point, 0UL, 0., number, nil, 1L, 1L, 1.f);
+  ((void (*)(id, SEL, int))objc_msgSend)(
+      cocoa, sel_registerName("setMovableByWindowBackground:"), 1);
+  bool draggable = logseq_titlebar_press(window, event);
+  bool background = ((bool (*)(id, SEL))objc_msgSend)(
+      cocoa, sel_registerName("isMovableByWindowBackground"));
+  result = caml_alloc_tuple(2);
+  Store_field(result, 0, Val_bool(draggable));
+  Store_field(result, 1, Val_bool(background));
+  CAMLreturn(result);
 }
 
 /* Blend the app header into the title bar: content covers the full
@@ -2710,6 +2819,11 @@ CAMLprim value logseq_native_software_dispose(value id) {
 CAMLprim value logseq_native_activate(value unit) {
   (void)unit;
   return Val_unit;
+}
+
+CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_v) {
+  (void)id_v; (void)x_v; (void)y_v;
+  caml_failwith("Cocoa titlebar press tests require macOS");
 }
 
 CAMLprim value logseq_native_titlebar_blend(value unit) {

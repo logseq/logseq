@@ -102,9 +102,14 @@ let nav_edit_menu st =
       [])
   in
   box ~key:"nav-edit-menu"
-    [ menu_box ~key:"menu-box" ~extra_cls:"" ~at:(16., 96.)
-        ~min_width:180 ~dismiss:(fun _ -> Sidebar_state.close_menu st)
-        (List.map mk nav_labels) ]
+    [ Ui_components.menu_surface
+        (popover ~key:"menu-box" ~role:`menu
+          ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4.
+          ~anchor_target:"nav-edit-trigger" ~min_width:180
+          ~transition:Ui_components.popover_transition
+          ~style_class:"ui__dropdown-menu-content"
+          ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
+          (List.map mk nav_labels)) ]
 
 (* ---------- plugins dropdown (toolbar-plugins-manager) ---------- *)
 
@@ -521,7 +526,7 @@ let nav_group ms st =
                           [ Ui_components.Prop.position `relative
                           ; Ui_components.Prop.inset_top (-2.)
                           ; Ui_components.Prop.opacity 0.8 ]
-                          (row ~style_class:"as-edit"
+                          (row ~style_class:"as-edit" ~accessibility_identifier:"nav-edit-trigger"
                              [ Ui_components.with_props
                                  [ Ui_components.Prop.margin_left 7 ]
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
