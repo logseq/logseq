@@ -153,9 +153,11 @@ let run path =
   check "special pages cannot be permanently deleted"
     (task (Popups_state.run_portable_command popup ac (handle "delete-special-pages")) = Ok ());
   let ac = editing "/editor-api-v2" in
+  (match task (Popups_state.run_portable_command popup ac (handle "editor-api-v2")) with
+   | Ok () -> ()
+   | Error error -> failwith ("editor-api-v2: " ^ error_name error));
   check "tree, block and page operations preserve the active editor"
-    (task (Popups_state.run_portable_command popup ac (handle "editor-api-v2")) = Ok ()
-     && buffer () = "/editor-api-v2");
+    (buffer () = "/editor-api-v2");
   let ac = editing "/editor-api-v1" in
   check "editor graph writes preserve configured ownership and the editing buffer"
     (task (Popups_state.run_portable_command popup ac (handle "editor-api-v1")) = Ok ()
