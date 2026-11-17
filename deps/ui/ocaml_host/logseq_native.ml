@@ -1332,8 +1332,8 @@ let () =
     ; ("altKey", jbool m.Input.alt) ]
   in
   let pointer_fields ~x ~y ~button ~buttons ~mods ~extra =
-    [ ("clientX", string_of_float x)
-    ; ("clientY", string_of_float y)
+    [ ("clientX", Native_embed.json_number x)
+    ; ("clientY", Native_embed.json_number y)
     ; ("button", string_of_int button)
     ; ("buttons", string_of_int buttons) ]
     @ mods_fields mods @ extra
@@ -1446,8 +1446,8 @@ let () =
       last_move_emit := (node, now);
       let fields =
         pointer_fields ~x ~y ~button:0 ~buttons:!dom_buttons ~mods
-          ~extra:[ ("movementX", string_of_float rx)
-                 ; ("movementY", string_of_float ry) ]
+          ~extra:[ ("movementX", Native_embed.json_number rx)
+                 ; ("movementY", Native_embed.json_number ry) ]
       in
       emit_dom "mousemove" node fields;
       emit_dom "pointermove" node fields
