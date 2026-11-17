@@ -410,7 +410,7 @@
    {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number
            command only-breakline?]
     :as _option}]
-  (when-let [input (gdom/getElement id)]
+  (when-let [input (and id (string? value) (gdom/getElement id))]
     (let [last-pattern (when-not (= last-pattern :skip-check)
                          (when-not backward-truncate-number
                            (or last-pattern command-trigger)))
@@ -707,7 +707,9 @@
 (defmethod handle-step :youtube/insert-timestamp [[_]]
   (let [input-id (state/get-edit-input-id)
         macro (youtube/gen-youtube-ts-macro)]
-    (insert! input-id macro {})))
+    (if macro
+      (insert! input-id macro {})
+      (restore-state))))
 
 (defmethod handle-step :editor/toggle-children-number-list [[_]]
   (when-let [block (state/get-edit-block)]

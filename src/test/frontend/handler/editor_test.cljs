@@ -10,6 +10,7 @@
             [frontend.db.subs :as db-subs]
             [frontend.db.transact :as db-transact]
             [frontend.db.utils :as db-utils]
+            [frontend.extensions.video.youtube :as youtube]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor]
@@ -3605,3 +3606,32 @@
                   dom/attr (constantly nil)]
       (is (nil? (#'editor/select-parent-block-node page-child parent-uuid))
           "keeps the current selection when the parent is only drawn in another view"))))
+
+(deftest handle-step-youtube-insert-timestamp-safely-handles-nil-macro-test
+  (let [restored? (atom false)
+        inserted? (atom false)]
+    (with-redefs [state/get-edit-input-id (constantly "mock-input-id")
+                  youtube/gen-youtube-ts-macro (constantly nil)
+                  commands/insert! (fn [& _] (reset! inserted? true))
+                  commands/restore-state (fn [] (reset! restored? true))]
+      (commands/handle-step [:youtube/insert-timestamp])
+      (is (true? @restored?) "Calls restore-state when no YouTube video is active")
+      (is (false? @inserted?) "Does not attempt to insert nil content"))))
+
+(deftest handle-step-youtube-insert-timestamp-inserts-when-macro-present-test
+  (let [restored? (atom false)
+        inserted-val (atom nil)]
+    (with-redefs [state/get-edit-input-id (constantly "mock-input-id")
+                  youtube/gen-youtube-ts-macro (constantly "{{youtube-timestamp 45}}")
+                  commands/insert! (fn [_id val _opts] (reset! inserted-val val))
+                  commands/restore-state (fn [] (reset! restored? true))]
+      (commands/handle-step [:youtube/insert-timestamp])
+      (is (false? @restored?))
+      (is (= "{{youtube-timestamp 45}}" @inserted-val)))))
+
+(deftest insert-safely-ignores-nil-value-test
+  (let [content-set? (atom false)]
+    (with-redefs [gdom/getElement (constantly (js-obj "value" "some text"))
+                  state/set-block-content-and-last-pos! (fn [& _] (reset! content-set? true))]
+      (commands/insert! "mock-input-id" nil {})
+      (is (false? @content-set?) "insert! should not modify block content when value is nil"))))
