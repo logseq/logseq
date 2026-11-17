@@ -650,12 +650,20 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
     Sidebar_state.toggle_lp_menu st ~target:lp_ref ~recent ~ax ~atop
       ~abot
   in
-  Ui_components.with_props
+  fun ctx parent ->
+   let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
+   let focused = Signal.state ctx.Lui_ui.ui_scheduler false in
+   let visible hovered focused open_menu =
+     hovered || focused || open_menu = "lp-" ^ lp_ref in
+   Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.font_weight 500
     ; Ui_components.Prop.cursor `pointer
     ; Ui_components.Prop.user_select `none ]
     (column ~key ~style_class:li_class
+      ~on_pointer_enter:(fun _ -> Signal.set hovered true)
+      ~on_pointer_leave:(fun _ -> Signal.set hovered false)
+      ~on_focus_within:(fun within -> Signal.set focused within)
     [ Ui_components.with_props
         [ Ui_components.Prop.opacity 0.8
         ; Ui_components.Prop.hover_opacity 1.
@@ -695,17 +703,23 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
         ; Ui_components.with_props
             [ Ui_components.Prop.position `absolute
             ; Ui_components.Prop.inset_top 0.
-            ; Ui_components.Prop.inset_right 4.
-            ; Ui_components.Prop.cursor `pointer
-            ; Ui_components.Prop.user_select `none
-            ; Ui_components.Prop.opacity 0.4
-            ; Ui_components.Prop.hover_opacity 0.8
-            ; Ui_components.Prop.pressed_opacity 1.
-            ; Ui_components.Prop.disabled_opacity 0.5
-            ; ( Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)" )
-            ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
-            ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
-            (Ui_components.button ~variant:`ghost ~size:`icon
+            ; Ui_components.Prop.inset_right 4. ]
+          (Ui_parts.string_prop Lui_protocol.DisplayValue
+            ~value:(reactive (fun hovered focused open_menu ->
+              if visible hovered focused open_menu then "inline-flex" else "none")
+              (Signal.value hovered) (Signal.value focused) (Signal.value st.Sidebar_state.open_menu))
+            (row ~key:"sidebar-page-actions" ~cross:`center
+              [ Ui_components.with_props
+                [ Ui_components.Prop.cursor `pointer
+                ; Ui_components.Prop.user_select `none
+                ; Ui_components.Prop.opacity 0.4
+                ; Ui_components.Prop.hover_opacity 0.8
+                ; Ui_components.Prop.pressed_opacity 1.
+                ; Ui_components.Prop.disabled_opacity 0.5
+                ; ( Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)" )
+                ; ( Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" )
+                ; ( Ui_components.Prop.focus_shadow "0 0 0 2px hsl(var(--ring))" ) ]
+              (Ui_components.button ~variant:`ghost ~size:`icon
                ~label:(t "ui/show-more")
                ~width:28 ~height:28 ~padding_vertical:4 ~corner_radius:4
                ~padding_horizontal:6
@@ -718,8 +732,8 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                  | _ -> ())
                ~data_attrs:
                  [ ("style", "transform:scale(0.75);font-size:0.875rem") ]
-               [ Icons.icon ~size:18. "dots" ])
-        ])
+               [ Icons.icon ~size:18. "dots" ]) ]))
+        ]) ctx parent
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
    child — favorites passes a child only when non-empty, recent always

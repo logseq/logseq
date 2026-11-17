@@ -70,15 +70,16 @@ let journal_key (page : Model.page) =
 let sections (model : Model.t) =
   match model.route with
   | Model.Journals | Model.Home ->
-      List.map (fun page ->
-        {Outliner_projection.section_key = journal_key page; repository = model.repo; scope = "main"; page})
-        model.journals
+      let last_index = List.length model.journals - 1 in
+      List.mapi (fun index page ->
+        {Outliner_projection.section_key = journal_key page; repository = model.repo;
+         scope = "main"; page; is_last = index = last_index}) model.journals
   | Model.Page "Recycle" -> []
   | (Model.Page _ | Model.Block_zoom _ | Model.Library) as route ->
       (match model.route_page with
        | Some page ->
            [{Outliner_projection.section_key = route_section_key route;
-             repository = model.repo; scope = scope_of_route route; page}]
+             repository = model.repo; scope = scope_of_route route; page; is_last = true}]
        | None -> [])
   | _ -> []
 

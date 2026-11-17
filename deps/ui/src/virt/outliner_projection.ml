@@ -6,6 +6,7 @@ type section =
   ; repository : string option
   ; scope : string
   ; page : Model.page
+  ; is_last : bool
   }
 
 type ancestor = { ancestor_block : Model.block; ancestor_scope : string }
