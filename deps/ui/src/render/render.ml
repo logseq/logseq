@@ -536,7 +536,7 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
         if rest = "" then
           D.el ~key:"btw-empty" ~tag:"span"
             ~style_class:"block-title-wrap"
-            [ text ~key:"btw-empty-line" ~value:"\n" [] ]
+            [ text ~key:"btw-empty-line" ~value:{js|​|js} [] ]
         else wrap ~self ~wrap_attrs ~prefix rest
 
 

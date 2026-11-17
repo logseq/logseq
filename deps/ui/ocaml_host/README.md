@@ -178,12 +178,16 @@ coordinates and wheel deltas retain fractional precision; event latency uses
 nanosecond timestamps. Text input and IME rectangles belong to their specific
 SDL3 window. The event adapter copies text and drop strings before another
 event can invalidate their native storage.
+Pointer coordinates and movement deltas use JSON number encoding, including
+whole numbers; OCaml float display strings are not valid wire encodings.
 
 Document key handlers run before the editor conduit. A handler that consumes
 an editing shortcut must prevent its default action; the host then skips the
 conduit delivery, so navigation and deletion occur once per keydown. An initial
 block click keeps the native caret hidden until its hit-tested offset is ready,
 matching the shared editor overlay's pending-focus behavior.
+Empty block titles use a zero-width single-line placeholder, so entering or
+leaving edit mode preserves the same line height as a one-line text block.
 
 The macOS builder packages the linked SDL3 runtime and its dependencies in
 `Contents/Frameworks`, adds the runtime-loading alias, and verifies the signed

@@ -821,6 +821,8 @@ let document_event name payload =
      | None -> invalid_arg "Document event before application initialization");
     prevented, take_patches_dbg "document")
 
+let json_number value = Yojson.Safe.to_string ~std:true (`Float value)
+
 let keyboard_event node payload values =
   with_entry_lock (fun () ->
     (* Document and conduit dispatch form one input transaction. Async
