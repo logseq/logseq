@@ -585,12 +585,6 @@
   transition: opacity 200ms ease-out, transform 200ms ease-out;
 }
 
-.lui-dialog[data-starting-style],
-.lui-dialog[data-ending-style] {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
 /* title-less dialogs still emit an empty .lui-dialog-title row and a
    .lui-modal-decoration sibling — as grid items each costs the 1rem
    dialog gap even at 0 height; dropping them keeps the card flush */

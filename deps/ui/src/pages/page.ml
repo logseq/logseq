@@ -980,7 +980,7 @@ let page_wrap_cls (m : Model.t) (page : Model.page) : string =
 
 (* Section chrome is ordinary row content. Every displayed block, including
    descendants, is supplied separately by the one main outline projection. *)
-let journal_section ms ~footer ~source : t =
+let journal_section ms ~footer ?spacing ~source : t =
  fun ctx parent ->
   let section = Signal.get source in
   let p0 = section.Outliner_projection.page in
@@ -1009,34 +1009,42 @@ let journal_section ms ~footer ~source : t =
             ; pagebar_slots_el p0 ] ])
     else
       column ~key:"journal-footer" ~margin_horizontal:(-8)
-        [ Ui_components.with_props [Ui_components.Prop.padding_bottom 102]
-          (column ~key:"journal-footer-content" ~padding_horizontal:8
-            [ Ui_components.with_props [Ui_components.Prop.padding_bottom 64]
-              (column ~key:"journal-add" ~margin_left:(-20)
-                ~style_class:"page-blocks-inner"
-                ~data_attrs:(reactive (fun (page : Model.page) ->
-                  ("data-cid", section.scope) ::
-                  (match page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> [])) ps)
-                [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
-                    ~previous_blank:(reactive
-                      (fun (page : Model.page) collapse ->
-                        Add_button.previous_blank ~scope:section.scope page.page_blocks collapse)
-                      ps (S.collapse_sig ()))
-                    ~flags:(fun context -> Signal.own_signal context.Lui_ui.ui_scope
-                      (Signal.map (fun (page : Model.page) -> page.page_blocks <> [], false) ps)) () ])
-            ; column ~key:"journal-references" ~gap:32 ~margin_left:4
-                [ reactive
-                    ~equal:(fun (a : Model.page) (b : Model.page) ->
-                      a.page_uuid = b.page_uuid && is_today_journal a = is_today_journal b)
-                    (fun page ->
-                      column ~key:"journal-reference-content" ~gap:32
-                        ((if is_today_journal page then
-                            [box ~key:"today-queries" ~accessibility_identifier:"today-queries" []]
-                          else [])
-                         @ [journal_references_view page])) ps ] ])
-        ; if_ ~test:(reactive (fun section -> not section.Outliner_projection.is_last) source)
-            (box ~key:"journal-separator" ~height:1
-              ~background:"hsl(var(--border))" []) ]
+        ([ Ui_components.with_props [Ui_components.Prop.padding_bottom 102]
+             (column ~key:"journal-footer-content" ~padding_horizontal:8
+               [ Ui_components.with_props [Ui_components.Prop.padding_bottom 64]
+                   (column ~key:"journal-add" ~margin_left:(-20)
+                     ~style_class:"page-blocks-inner"
+                     ~data_attrs:(reactive (fun (page : Model.page) ->
+                       ("data-cid", section.scope) ::
+                       (match page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> [])) ps)
+                     [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
+                         ~previous_blank:(reactive
+                           (fun (page : Model.page) collapse ->
+                             Add_button.previous_blank ~scope:section.scope page.page_blocks collapse)
+                           ps (S.collapse_sig ()))
+                         ~flags:(fun context -> Signal.own_signal context.Lui_ui.ui_scope
+                           (Signal.map (fun (page : Model.page) -> page.page_blocks <> [], false) ps)) () ])
+               ; column ~key:"journal-references" ~gap:32 ~margin_left:4
+                   [ reactive
+                       ~equal:(fun (a : Model.page) (b : Model.page) ->
+                         a.page_uuid = b.page_uuid && is_today_journal a = is_today_journal b)
+                       (fun page ->
+                         column ~key:"journal-reference-content" ~gap:32
+                           ((if is_today_journal page then
+                               [box ~key:"today-queries" ~accessibility_identifier:"today-queries" []]
+                             else [])
+                            @ [journal_references_view page])) ps ] ]) ]
+         @ (match spacing with
+           | None -> []
+           | Some spacing ->
+                [ if_ ~test:(reactive (fun value -> value > 0.25) spacing)
+                    (Ui_parts.int_prop Lui_protocol.HeightValue
+                       ~value:(reactive (fun value -> int_of_float (Float.ceil value)) spacing)
+                       (box ~key:"journal-min-height-spacer" ~min_height:0
+                          ~data_attrs:["data-projection-spacer", ""] [])) ])
+         @ [ if_ ~test:(reactive (fun section -> not section.Outliner_projection.is_last) source)
+               (box ~key:"journal-separator" ~height:1
+                  ~background:"hsl(var(--border))" []) ])
   in
   (Ui_parts.class_signal ps (fun page -> page_wrap_cls (Signal.get ms) page)
     (column ~key:"journal-section" ~padding_horizontal:0 ~min_width:0
@@ -1051,8 +1059,11 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
         (box ~key:"journal-placeholder" ~padding:24
           ~style_class:"journal-item-placeholder" [])
     ; Flat_outliner.view ~state:outline ~library:false ~padding_horizontal:8
-        ~header:(journal_section ms ~footer:false)
-        ~footer:(journal_section ms ~footer:true)
+        ~section_minimum_height:500.
+        ~header:(fun ~source ->
+          journal_section ms ~footer:false ?spacing:None ~source)
+        ~footer:(fun ~source ~spacing ->
+          journal_section ms ~footer:true ?spacing ~source)
         ~on_end:(fun () -> ignore (!Runtime.journals_load_more ())) () ]) ctx parent
 
 let not_found_view name : t =
@@ -1457,7 +1468,8 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
   (Ui_parts.class_signal ms page_cls
     (column ~key:"page" ~min_width:0 ~padding_horizontal:8
       ~data_attrs:(reactive wrap_attrs_of ms)
-      [ Flat_outliner.view ~state:outline ~library ~header ~footer ()
+      [ Flat_outliner.view ~state:outline ~library ~header
+          ~footer:(fun ~source ~spacing:_ -> footer ~source) ()
       ; Selection_bar.view ~model:ms () ])) ctx parent
 
 (* the route-root dynamic segment — page routes keep the region mounted

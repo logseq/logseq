@@ -149,17 +149,32 @@ external rect_top : Js.Json.t -> float = "top" [@@mel.get]
 
 external rect_height : Js.Json.t -> float = "height" [@@mel.get]
 
+external rect_width : Js.Json.t -> float = "width" [@@mel.get]
+
+external get_attr : element -> string -> string option = "getAttribute"
+  [@@mel.send] [@@mel.return nullable]
+
+external query_selector : element -> string -> element option = "querySelector"
+  [@@mel.send] [@@mel.return nullable]
+
+external node_type : element -> int = "nodeType" [@@mel.get]
+
 external scroll_top : element -> float = "scrollTop" [@@mel.get]
 
 type mutation_observer
 type observe_opts
 type mutation_record
+type resize_observer
+type resize_entry
 
 external new_observer_records :
   (mutation_record array -> unit) -> mutation_observer
   = "MutationObserver" [@@mel.new]
 
 external rec_added : mutation_record -> Js.Json.t = "addedNodes"
+  [@@mel.get]
+
+external rec_removed : mutation_record -> Js.Json.t = "removedNodes"
   [@@mel.get]
 
 external observe_opts : childList:bool -> subtree:bool -> observe_opts
@@ -170,6 +185,20 @@ external observe :
   [@@mel.send]
 
 external disconnect : mutation_observer -> unit = "disconnect"
+  [@@mel.send]
+
+external new_resize_observer : (resize_entry array -> unit) -> resize_observer
+  = "ResizeObserver" [@@mel.new]
+
+external entry_target : resize_entry -> element = "target" [@@mel.get]
+
+external resize_observe : resize_observer -> element -> unit = "observe"
+  [@@mel.send]
+
+external resize_unobserve : resize_observer -> element -> unit = "unobserve"
+  [@@mel.send]
+
+external resize_disconnect : resize_observer -> unit = "disconnect"
   [@@mel.send]
 
 external set_timeout_id : (unit -> unit) -> int -> int = "setTimeout"
@@ -219,6 +248,8 @@ let id_counter = ref 0
 let fresh_id () =
   incr id_counter;
   "ls-virt-" ^ string_of_int !id_counter
+
+let flush_now () = Runtime.flush_now ()
 
 (* ?virtualized=true forces windowing — both the Virt_list gate and the
    visibility sync key off it (cljs use-virtual-list-opts) *)
@@ -312,6 +343,149 @@ let measure_rows list_el (v : V.t) =
      pointer-down range selection (cljs virtuoso items-rendered) *)
   sync ()
 
+let projection_row_selector = "[data-projection-key][data-projection-section]"
+
+let projection_row element =
+  match get_attr element "data-projection-key" with
+  | Some _ -> Some element
+  | None -> query_selector element projection_row_selector
+
+let measure_projection_row on_measure element height =
+  match projection_row element with
+  | None -> ()
+  | Some row ->
+      (match get_attr row "data-projection-key",
+             get_attr row "data-projection-section" with
+       | Some key, Some section ->
+           let kind =
+             if String.length key >= 7 && String.sub key 0 7 = "header:" then "header"
+             else if String.length key >= 7 && String.sub key 0 7 = "footer:" then "footer"
+             else "block"
+           in
+           let spacer_height =
+             match query_selector element "[data-projection-spacer]" with
+             | Some spacer -> rect_height (bounding_rect spacer)
+             | None -> 0.
+           in
+           on_measure key section kind (Float.max 0. (height -. spacer_height))
+       | _ -> ())
+
+let observe_projection_rows (ctx : Lui_ui.ui_context) ~root_id ~on_measure ~on_width_change =
+  let active = ref true in
+  let attach_timer = ref (-1) and sync_timer = ref (-1) in
+  let cleanup = ref (fun () -> ()) in
+  let attach () =
+    match get_by_id root_id with
+    | None -> ()
+    | Some root ->
+        let observed : (string, element) Hashtbl.t = Hashtbl.create 64 in
+        let last_width = ref None in
+        let measure element =
+          measure_projection_row on_measure element
+            (rect_height (bounding_rect element))
+        in
+        let notify_width () =
+          let width = rect_width (bounding_rect root) in
+          match !last_width with
+          | Some previous when Float.abs (width -. previous) <= 0.5 -> false
+          | _ ->
+              last_width := Some width;
+              on_width_change width;
+              true
+        in
+        let resize =
+          new_resize_observer (fun entries ->
+            let width_changed = ref false in
+            Array.iter
+              (fun entry ->
+                if entry_target entry == root then
+                  width_changed := notify_width () || !width_changed)
+              entries;
+            if !width_changed then Hashtbl.iter (fun _ row -> measure row) observed;
+            Array.iter
+              (fun entry ->
+                let target = entry_target entry in
+                if target != root then measure target)
+              entries)
+        in
+        let sync_rows () =
+          if !active then begin
+            let present = Hashtbl.create 64 in
+            let rows = nl_to_array (query_selector_all root projection_row_selector) in
+            Array.iter
+              (fun row ->
+                match get_attr row "data-projection-key" with
+                | None -> ()
+                | Some key ->
+                    Hashtbl.replace present key ();
+                    (match Hashtbl.find_opt observed key with
+                     | Some previous when previous == row -> ()
+                     | Some previous ->
+                         resize_unobserve resize previous;
+                         resize_observe resize row;
+                         Hashtbl.replace observed key row;
+                         measure row
+                     | None ->
+                         resize_observe resize row;
+                         Hashtbl.replace observed key row;
+                         measure row))
+              rows;
+            let stale =
+              Hashtbl.fold
+                (fun key _ stale ->
+                  if Hashtbl.mem present key then stale else key :: stale)
+                observed []
+            in
+            List.iter
+              (fun key ->
+                match Hashtbl.find_opt observed key with
+                | None -> ()
+                | Some row ->
+                    resize_unobserve resize row;
+                    Hashtbl.remove observed key)
+              stale
+          end
+        in
+        let schedule_sync () =
+          if !sync_timer < 0 then
+            sync_timer := set_timeout_id
+              (fun () -> sync_timer := -1; sync_rows ()) 0
+        in
+        let contains_projection_row node =
+          node_type node = 1
+          && (get_attr node "data-projection-key" <> None
+              || Array.length
+                   (nl_to_array (query_selector_all node projection_row_selector)) > 0)
+        in
+        let mutations =
+          new_observer_records (fun records ->
+            let relevant =
+              Array.exists
+                (fun record ->
+                  let nodes =
+                    Array.append (nl_to_array (rec_added record))
+                      (nl_to_array (rec_removed record))
+                  in
+                  Array.exists contains_projection_row nodes)
+                records
+            in
+            if relevant then schedule_sync ())
+        in
+        observe mutations root (observe_opts ~childList:true ~subtree:true);
+        resize_observe resize root;
+        sync_rows ();
+        cleanup := (fun () ->
+          resize_disconnect resize;
+          disconnect mutations;
+          Hashtbl.clear observed)
+  in
+  attach_timer := set_timeout_id attach 0;
+  Signal.on_dispose ctx.ui_scope (fun () ->
+    active := false;
+    if !attach_timer >= 0 then clear_timeout !attach_timer;
+    if !sync_timer >= 0 then clear_timeout !sync_timer;
+    !cleanup ())
+
 let rows_of (v : V.t) =
   Array.to_list (V.get_virtual_items v)
   |> List.map (fun it ->
@@ -325,7 +499,7 @@ let rows_of (v : V.t) =
    setTimeout so the logseq-virt node is already in the document. *)
 let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
     data versions key_of overscan estimate_size pin_key pin_sig data_sig
-    same_item on_end =
+    ?on_projection_measure ?on_projection_width same_item on_end =
   match get_by_id list_id, get_by_id scroll_parent_id with
   | Some list_el, Some scroll_el ->
       margin :=
@@ -341,10 +515,36 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
         idx 0
       in
       let last_scroll = ref (scroll_top scroll_el) in
+      let last_width = ref None in
+      let width_measure_timer = ref (-1) in
       let phase=ref `Starting in
+      let sample_list_width () =
+        match on_projection_width with
+        | None -> `Unchanged
+        | Some on_width ->
+            let width = rect_width (bounding_rect list_el) in
+            (match !last_width with
+             | Some previous when Float.abs (width -. previous) <= 0.5 ->
+                 `Unchanged
+             | previous ->
+                 last_width := Some width;
+                 on_width width;
+                 if Option.is_some previous then `Changed else `Initial)
+      in
+      let notify_list_width v =
+        match sample_list_width () with
+        | `Changed when !width_measure_timer < 0 ->
+            width_measure_timer := set_timeout_id
+              (fun () ->
+                width_measure_timer := -1;
+                if !phase = `Active then measure_rows list_el v)
+              0
+        | _ -> ()
+      in
       let publish v = match !phase with
       | `Starting | `Disposed -> ()
       | `Active ->
+        notify_list_width v;
         let rows = rows_of v in
         let rows =
           match pin_key () with
@@ -423,7 +623,11 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
              truncated and the next row then overlaps the remainder; a
              border-box rect keeps sub-pixel heights *)
           ~measureElement:(fun el _entry _inst ->
-            rect_height (bounding_rect el))
+            let height = rect_height (bounding_rect el) in
+            Option.iter
+              (fun on_measure -> measure_projection_row on_measure el height)
+              on_projection_measure;
+            height)
           ()
       in
       (* seed the item array with the items signal's current value before
@@ -436,6 +640,20 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
        | Some s -> data := Signal.sample s
        | None -> ());
       let v = V.make (options ()) in
+      let list_resize =
+        match on_projection_width with
+        | None -> None
+        | Some _ ->
+            let resize =
+              new_resize_observer (fun entries ->
+                if Array.exists
+                     (fun entry -> entry_target entry == list_el)
+                     entries
+                then notify_list_width v)
+            in
+            resize_observe resize list_el;
+            Some resize
+      in
       Hashtbl.replace instances list_id v;
       Hashtbl.replace key_scrollers list_id (fun key ->
           match index_of_key key with
@@ -545,10 +763,12 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
       observe obs list_el (observe_opts ~childList:true ~subtree:true);
       Signal.on_dispose ctx.ui_scope (fun () ->
           phase:=`Disposed;
+          if !width_measure_timer >= 0 then clear_timeout !width_measure_timer;
           if !measure_timer >= 0 then clear_timeout !measure_timer;
           Hashtbl.remove instances list_id;
           Hashtbl.remove key_scrollers list_id;
           disconnect obs;
+          Option.iter resize_disconnect list_resize;
           Option.iter Signal.dispose_subscription pin_sub;
           Option.iter Signal.dispose_subscription data_sub;
           cleanup ());

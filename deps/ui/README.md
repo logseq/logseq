@@ -96,6 +96,13 @@ packaging does not replace its backend.
 See `docs/architecture.md` for module boundaries and `docs/parity-audit.md`
 for the distinction between historical Web evidence and desktop acceptance.
 
+The Web stylesheet vendored at `../../resources/css/lui.css` and icons under
+`../../resources/css/icons/` must stay synced to the same LUI revision pinned in
+`scripts/install-opam-deps.sh`, including
+`LICENSE-APACHE-2.0` and `NOTICE`. Vendor the upstream
+`platform/web/src/lui.css` source rather than its compiled `dist` stylesheet;
+the root `pnpm css:build` compiles it with app styles.
+
 ## macOS WebView desktop release
 
 The optional LUI desktop host loads the production Web frontend at
