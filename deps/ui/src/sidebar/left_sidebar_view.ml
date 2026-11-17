@@ -656,14 +656,16 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
   fun ctx parent ->
    let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
    let focused = Signal.state ctx.Lui_ui.ui_scheduler false in
+   let always_visible = Ui_services.env_native_block_controls () in
    let visible hovered focused open_menu =
-     hovered || focused || open_menu = "lp-" ^ lp_ref in
+     always_visible || hovered || focused || open_menu = "lp-" ^ lp_ref in
    Ui_components.with_props
     [ Ui_components.Prop.position `relative
     ; Ui_components.Prop.font_weight 500
     ; Ui_components.Prop.cursor `pointer
     ; Ui_components.Prop.user_select `none ]
     (column ~key ~style_class:li_class
+      ~data_attrs:[("tabindex", "0")]
       ~on_pointer_enter:(fun _ -> Signal.set hovered true)
       ~on_pointer_leave:(fun _ -> Signal.set hovered false)
       ~on_focus_within:(fun within -> Signal.set focused within)
