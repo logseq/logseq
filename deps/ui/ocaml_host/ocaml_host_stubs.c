@@ -123,6 +123,8 @@ typedef struct {
   SDL_ThreadID thread;
   int watching;
   int repainting;
+  bool control_press;
+  bool movable_before_press;
 } LogseqWindowState;
 
 static void *logseq_get_window_data(SDL_Window *window, const char *key) {
@@ -678,10 +680,20 @@ static bool logseq_titlebar_press(SDL_Window *window, id event) {
   return logseq_hit_test(window, &point, state) == SDL_HITTEST_DRAGGABLE;
 }
 
+static void logseq_finish_control_press(SDL_Window *window) {
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+  if (state && state->control_press) {
+    ((void (*)(id, SEL, int))objc_msgSend)((id)logseq_cocoa_window(window),
+        sel_registerName("setMovable:"), state->movable_before_press);
+    state->control_press = false;
+  }
+}
+
 static IMP logseq_window_send_event_parent;
 static void logseq_window_send_event(id self, SEL selector, id event) {
   long type = ((long (*)(id, SEL))objc_msgSend)(event, sel_registerName("type"));
-  if (type == 1 /* NSEventTypeLeftMouseDown */) {
+  SDL_WindowID window_id = 0;
+  if (type == 1 || type == 2 /* left mouse down/up */) {
     int count = 0;
     SDL_Window **windows = SDL_GetWindows(&count);
     SDL_Window *window = NULL;
@@ -692,13 +704,33 @@ static void logseq_window_send_event(id self, SEL selector, id event) {
       }
     }
     SDL_free(windows);
-    if (window && logseq_titlebar_press(window, event)) {
-      ((void (*)(id, SEL, id))objc_msgSend)(
-          self, sel_registerName("performWindowDragWithEvent:"), event);
-      return;
+    if (window) {
+      window_id = SDL_GetWindowID(window);
+      if (type == 1) {
+        logseq_finish_control_press(window);
+        if (logseq_titlebar_press(window, event)) {
+          ((void (*)(id, SEL, id))objc_msgSend)(
+              self, sel_registerName("performWindowDragWithEvent:"), event);
+          return;
+        }
+        LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+        if (state) {
+          /* AppKit's transparent native titlebar can still initiate a move
+             after SDL has accepted a button press. Keep the gesture on its
+             original control until the matching release has been delivered. */
+          state->movable_before_press = ((bool (*)(id, SEL))objc_msgSend)(
+              self, sel_registerName("isMovable"));
+          state->control_press = true;
+          ((void (*)(id, SEL, int))objc_msgSend)(self, sel_registerName("setMovable:"), 0);
+        }
+      }
     }
   }
   ((void (*)(id, SEL, id))logseq_window_send_event_parent)(self, selector, event);
+  if (type == 2 && window_id) {
+    SDL_Window *window = SDL_GetWindowFromID(window_id);
+    if (window) logseq_finish_control_press(window);
+  }
 }
 
 static void logseq_install_window_dragging(SDL_Window *window) {
@@ -719,21 +751,27 @@ static void logseq_install_window_dragging(SDL_Window *window) {
       cocoa, sel_registerName("setMovableByWindowBackground:"), 0);
 }
 
+static id logseq_test_mouse_event(SDL_Window *window, unsigned long type, double x, double y) {
+  id cocoa = (id)logseq_cocoa_window(window);
+  int height;
+  SDL_GetWindowSize(window, NULL, &height);
+  typedef struct { double x, y; } point_t;
+  point_t point = {x, height - y};
+  long number = ((long (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("windowNumber"));
+  id event = ((id (*)(Class, SEL, unsigned long, point_t, unsigned long,
+      double, long, id, long, long, float))objc_msgSend)(objc_getClass("NSEvent"),
+      sel_registerName("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
+      type, point, 0UL, 0., number, nil, 1L, 1L, 1.f);
+  return event;
+}
+
 CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_v) {
   CAMLparam3(id_v, x_v, y_v);
   CAMLlocal1(result);
   SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
   id cocoa = (id)logseq_cocoa_window(window);
   if (!cocoa) caml_invalid_argument("Titlebar test requires a Cocoa window");
-  int height;
-  SDL_GetWindowSize(window, NULL, &height);
-  typedef struct { double x, y; } point_t;
-  point_t point = {Double_val(x_v), height - Double_val(y_v)};
-  long number = ((long (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("windowNumber"));
-  id event = ((id (*)(Class, SEL, unsigned long, point_t, unsigned long,
-      double, long, id, long, long, float))objc_msgSend)(objc_getClass("NSEvent"),
-      sel_registerName("mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:"),
-      1UL, point, 0UL, 0., number, nil, 1L, 1L, 1.f);
+  id event = logseq_test_mouse_event(window, 1UL, Double_val(x_v), Double_val(y_v));
   ((void (*)(id, SEL, int))objc_msgSend)(
       cocoa, sel_registerName("setMovableByWindowBackground:"), 1);
   bool draggable = logseq_titlebar_press(window, event);
@@ -742,6 +780,25 @@ CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_
   result = caml_alloc_tuple(2);
   Store_field(result, 0, Val_bool(draggable));
   Store_field(result, 1, Val_bool(background));
+  CAMLreturn(result);
+}
+
+CAMLprim value logseq_native_test_control_gesture(value id_v, value x_v, value y_v) {
+  CAMLparam3(id_v, x_v, y_v);
+  CAMLlocal1(result);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_invalid_argument("Control gesture test requires a Cocoa window");
+  bool before = ((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  id down = logseq_test_mouse_event(window, 1UL, Double_val(x_v), Double_val(y_v));
+  id up = logseq_test_mouse_event(window, 2UL, Double_val(x_v), Double_val(y_v));
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, sel_registerName("sendEvent:"), down);
+  bool during = ((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, sel_registerName("sendEvent:"), up);
+  bool after = ((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  result = caml_alloc_tuple(2);
+  Store_field(result, 0, Val_bool(!during));
+  Store_field(result, 1, Val_bool(after == before));
   CAMLreturn(result);
 }
 
@@ -2819,6 +2876,11 @@ CAMLprim value logseq_native_software_dispose(value id) {
 CAMLprim value logseq_native_activate(value unit) {
   (void)unit;
   return Val_unit;
+}
+
+CAMLprim value logseq_native_test_control_gesture(value id_v, value x_v, value y_v) {
+  (void)id_v; (void)x_v; (void)y_v;
+  caml_failwith("Cocoa control gesture tests require macOS");
 }
 
 CAMLprim value logseq_native_test_titlebar_press(value id_v, value x_v, value y_v) {

@@ -10,6 +10,8 @@ external menu_key_action : int -> string -> int -> string -> int -> unit
   = "logseq_native_test_menu_key_action"
 external titlebar_press : int -> float -> float -> bool * bool
   = "logseq_native_test_titlebar_press"
+external control_gesture : int -> float -> float -> bool * bool
+  = "logseq_native_test_control_gesture"
 
 let menu_runtime_regression () =
   if Host_platform.is_macos then begin
@@ -661,7 +663,13 @@ let () =
         (draggable = expected && not background))
       [200.,20.,true;20.,20.,false;200.,20.,true;8.,8.,false;
        39.,39.,false;200.,100.,false];
-    print_endline "native titlebar press ownership: OK"
+    let id = Lui_sdl3.get_window_id window in
+    Native_window.set_drag_regions id [|0.;100.;8.;32.;32.;1.;0.;0.;400.;48.|];
+    let locked, restored = control_gesture id 120. 20. in
+    check "AppKit must not move the window during a control press" locked;
+    check "Mouse release must restore the window's original movability" restored;
+    Native_window.set_drag_regions id regions;
+    print_endline "native titlebar press ownership and gesture lock: OK"
   end;
   check "An invisible window is eligible for rendering"
     (not (Native_window.presentable (Lui_sdl3.get_window_id window)));
