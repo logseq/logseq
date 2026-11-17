@@ -55,6 +55,9 @@
       (cond-> {:page-id (:db/id page)
                :page-uuid (:block/uuid page)
                :page-title (:block/title page)
+               :route/eligible-for-recent? (boolean (and (ldb/page? page)
+                                                         (not (ldb/hidden? page))
+                                                         (not (string/blank? (:block/title page)))))
                :hidden? (boolean (ldb/hidden? page))
                :property? (boolean (ldb/property? page))
                :built-in? (boolean (ldb/built-in? page))
@@ -63,9 +66,9 @@
         (:logseq.property/heading page)
         (assoc :block-page-name (get-in page [:block/page :block/name])
                :block-route-name (some->> (:block/title page)
-                                           (re-find #"^#{0,}\s*(.*)(?:\n|$)")
-                                           second
-                                           string/lower-case))
+                                          (re-find #"^#{0,}\s*(.*)(?:\n|$)")
+                                          second
+                                          string/lower-case))
 
         (:block/uuid alias-source)
         (assoc :alias-source-id (:db/id alias-source)
