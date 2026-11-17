@@ -202,14 +202,21 @@
         (.setAttribute anchor "download" (file-name (str repo "_roam") :json))
         (.click anchor)))))
 
-(defn- truncate-old-versioned-files!
+(defn- delete-backup-file!
+  [^js backups-handle ^js file]
+  (if (and backups-handle (fn? (.-removeEntry backups-handle)))
+    (.removeEntry backups-handle (.-name file))
+    (when-let [handle (.-handle file)]
+      (when (fn? (.-remove handle))
+        (.remove handle)))))
+
+(defn truncate-old-versioned-files!
   "reserve the latest 12 version files"
   [^js backups-handle]
   (p/let [files (utils/getFiles backups-handle true)
           old-versioned-files (drop 12 (reverse (sort-by (fn [^js file] (.-name file)) files)))]
-    (p/map (fn [^js files]
-             (doseq [^js file files]
-               (.remove (.-handle file))))
+    (p/map (fn [^js file]
+             (delete-backup-file! backups-handle file))
            old-versioned-files)))
 
 (defn choose-backup-folder
