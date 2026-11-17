@@ -30,6 +30,41 @@ let generation = ref 0
 let delay_ms = 500
 let installed = ref false
 
+(* Inspect retained layer ownership on both hosts; tooltip surfaces and
+   permanent layer containers do not suppress themselves. *)
+let layer_blocks_tip : (unit -> bool) ref = ref (fun () -> false)
+
+let layer_guard (app : Lui_runtime.application) =
+  let previous = ref (-1) and blocked = ref false in
+  let prop node key =
+    Option.bind (Hashtbl.find_opt app.runtime_properties node)
+      (Lui_protocol.Property_map.find_opt key) in
+  let rec hidden node =
+    prop node Lui_protocol.Inert = Some (Lui_protocol.BoolValue true)
+    || prop node Lui_protocol.DisplayValue = Some (Lui_protocol.StringValue "none")
+    || (match Hashtbl.find_opt app.runtime_parents node with
+        | Some parent -> hidden parent | None -> false) in
+  fun () ->
+    let generation = Lui_runtime.generation app in
+    if generation <> !previous || !(app.pending_ops) <> [] then begin
+      previous := generation;
+      blocked := Hashtbl.fold (fun node kind found ->
+        found || (match kind with
+          | Lui_protocol.Popover | Dialog | Sheet | DropdownMenu | ContextMenu ->
+              let layer_host = match prop node Lui_protocol.DataAttrs with
+                | Some (Lui_protocol.StringValue attrs) ->
+                    List.mem_assoc "data-overlay-layer" (Lui_protocol.data_attrs_decode attrs)
+                | _ -> false in
+              let tooltip = prop node Lui_protocol.AccessibilityIdentifier
+                = Some (Lui_protocol.StringValue "lui-tooltip") in
+              let managed_menu = match Hashtbl.find_opt app.runtime_parents node with
+                | Some parent -> Hashtbl.find_opt app.mounted_nodes parent = Some Lui_protocol.MenuTrigger
+                | None -> false in
+              not layer_host && not tooltip && not managed_menu && not (hidden node)
+          | _ -> false)) app.mounted_nodes false
+    end;
+    !blocked
+
 let set_tip v =
   match !state with
   | Some s ->
@@ -89,6 +124,7 @@ let show_for (trig : Ui_services.el) =
      a11y); only when data-tooltip is absent does aria-label feed the
      tip text *)
   match label_for trig with
+  | _ when !layer_blocks_tip () -> hide ()
   | None | Some "" -> ()
   | Some label ->
       hide ();
@@ -97,7 +133,7 @@ let show_for (trig : Ui_services.el) =
         Option.value (trig.Ui_services.attr "data-tooltip-keys") ~default:""
       in
       let rec mount measure_attempts =
-        if not (trig.Ui_services.connected ()) then hide ()
+        if !layer_blocks_tip () || not (trig.Ui_services.connected ()) then hide ()
         else
           let tx, ty, tw, th = trig.Ui_services.rect () in
           if trig.Ui_services.rect_pending () then
@@ -119,7 +155,7 @@ let show_for (trig : Ui_services.el) =
                    tip_above = false;
                  });
             let rec place tries =
-              if not (trig.Ui_services.connected ()) || label_for trig <> Some label
+              if !layer_blocks_tip () || not (trig.Ui_services.connected ()) || label_for trig <> Some label
               then hide ()
               else
                 match Ui_services.dom_query "#lui-tooltip" with
@@ -195,6 +231,10 @@ let tip_view (tip : tip) : t =
    popover directly under popups_view's fragment *)
 let el : t =
  fun context parent ->
+  let guard = layer_guard context.Lui_ui.ui_application in
+  layer_blocks_tip := guard;
+  Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+    if !layer_blocks_tip == guard then layer_blocks_tip := (fun () -> false));
   match !state with
   | None -> Logseq_el.nothing context parent
   | Some s ->
@@ -209,6 +249,7 @@ let el : t =
    the extra per-move calls no-ops — moving off the trigger hits the
    `None -> hide` arm the same way mouseout would. *)
 let on_mousemove (ev : Ui_services.ev) =
+  if !layer_blocks_tip () then hide () else
   match ev.Ui_services.target with
   | None -> hide ()
   | Some el -> (

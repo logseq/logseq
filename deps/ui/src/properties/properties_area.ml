@@ -777,6 +777,7 @@ let page_area ~scope (p : Model.page) : t =
   if uuid = "" then
     (column ~gap:0 []) context parent
   else
+    let () = Editor_state.ensure context in
     let key = page_key uuid in
     let st =
       S.area_state context ~key
@@ -785,13 +786,14 @@ let page_area ~scope (p : Model.page) : t =
     in
     (* cljs db-properties-cp is a child of the title .ls-block only
        while the title isn't collapsed *)
-    let title_collapsed =
-      (not (Editor_state.is_expanded uuid))
-      && (Editor_state.is_collapsed uuid || p.Model.page_is_tag)
-    in
     let node =
       (reactive
-         (fun (d : S.area_data) ->
+         (fun (collapse : Editor_state.collapse_view) ->
+          reactive (fun (d : S.area_data) ->
+            let title_collapsed =
+              not (Editor_state.String_set.mem uuid collapse.cv_expanded)
+              && (Editor_state.String_set.mem uuid collapse.cv_collapsed || p.Model.page_is_tag)
+            in
             if title_collapsed then column ~gap:0 []
             else if
               (not p.Model.page_is_tag)
@@ -815,7 +817,8 @@ let page_area ~scope (p : Model.page) : t =
                      new_property_btn ctx ~for_class:false
                        ~owner_title:p.Model.page_title)
                 ])
-         (Signal.value st))
+            (Signal.value st))
+         (Editor_state.collapse_sig ()))
         context parent
     in
     S.note_area_node ~key node;
