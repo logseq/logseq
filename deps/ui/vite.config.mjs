@@ -117,7 +117,12 @@ export default defineConfig(() => {
       // in the shipped file.
       sourcemap: production ? "hidden" : true,
       rollupOptions: {
-        output: { chunkFileNames: "chunks/[name]-[hash].js" },
+        output: {
+          chunkFileNames: "chunks/[name]-[hash].js",
+          // These are application bundles. Vite's ES library default
+          // preserves whitespace for downstream library consumers.
+          ...(production ? { minify: true } : {}),
+        },
       },
     },
   };
