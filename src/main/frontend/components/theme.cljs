@@ -22,17 +22,6 @@
     (ui-handler/reset-custom-css!)
     (plugin-handler/hook-plugin-app :current-graph-changed {})))
 
-(defn ensure-route-title-and-label!
-  "Re-apply document title and body data-page after graph restore.
-  Initial routing can run before db-worker exists, so those first updates
-  fail and leave body[data-page] unset. PDF viewer geometry requires it."
-  [db-restoring? db-worker-ready? route]
-  (if db-restoring?
-    (util/set-title! (t :ui/loading))
-    (when (and (false? db-restoring?) db-worker-ready?)
-      (route-handler/update-page-title! route)
-      (route-handler/update-page-label! route))))
-
 (hsx/defc scrollbar-measure
   []
   (let [*el (hooks/use-ref nil)]
@@ -123,7 +112,11 @@
 
     (hooks/use-effect!
      (fn []
-       (ensure-route-title-and-label! db-restoring? db-worker-ready? route)
+       (if db-restoring?
+         (util/set-title! (t :ui/loading))
+         (when (and (false? db-restoring?) db-worker-ready?)
+           (route-handler/update-page-title! route)
+           (route-handler/update-page-label! route)))
        nil)
      [db-restoring? db-worker-ready? route])
 
