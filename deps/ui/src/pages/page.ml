@@ -492,20 +492,11 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             ; S.expanded = S.String_set.remove uuid st.S.expanded
             })
   in
-  (* cljs collapsable? on a page-title row = db-collapsable? on the page
-     entity (any non-internal property keys, e.g. a page property) — the
-     fold arrow shows on hover when this or an already-collapsed title
-     holds. Live-read the attr too: the mounted properties area keeps
-     data-db-collapsable in sync with the page's live property rows *)
-  let collapsable_title () =
-    page.Model.page_db_collapsable || page.Model.page_is_tag
-    || (not (S.is_expanded uuid) && S.is_collapsed uuid)
-    ||
-    (match Ui_services.dom_query (Printf.sprintf ".ls-page-title [data-blockid=\"%s\"]" uuid) with
-     | Some tb ->
-         tb.Ui_services.attr "data-db-collapsable" = Some "true"
-     | None -> false)
-  in
+  let properties = match page.page_uuid with
+    | Some _ -> Signal.value (Properties_area.page_state ctx page)
+    | None -> Signal.constant ctx.Lui_ui.ui_scheduler Properties_state.empty_area_data in
+  let collapsable_title (data : Properties_state.area_data) =
+    page.page_db_collapsable || page.page_is_tag || data.rows <> [] || data.hidden <> [] in
   (* cljs *control-show? atom: the fold caret appears only while the
      pointer is over the title row, and only for collapsable titles *)
   let caret_hover = Signal.state (Signal.signal_owner collapse) false in
@@ -584,7 +575,10 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                   if Runtime.signal_get caret_hover then (
                     Signal.set caret_hover false;
                     Runtime.flush ()))
-                [ Ui_parts.string_prop Lui_protocol.StyleClass
+                [ reactive ~equal:(fun before after -> collapsable_title before = collapsable_title after)
+                    (fun data ->
+                    let collapsable = collapsable_title data in
+                    Ui_parts.string_prop Lui_protocol.StyleClass
                     ~value:(reactive
                       (fun state -> "is-with-icon"
                         ^ (if title_collapsed state then " bullet-closed" else "")
@@ -598,12 +592,13 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                              / 2)" ) ]
                       [ Ui_parts.pressable
                           ~on_press:(fun _ ->
-                            if collapsable_title () then toggle_title_collapse ())
+                            if collapsable || (not (S.is_expanded uuid) && S.is_collapsed uuid)
+                            then toggle_title_collapse ())
                           (Ui_components.with_props
                             [Ui_components.Prop.pressed_opacity 0.3]
                             (Ui_parts.string_prop Lui_protocol.Cursor
                               ~value:(reactive
-                                (fun hover -> if hover then "pointer" else "default")
+                                (fun hover -> if hover && collapsable then "pointer" else "default")
                                 (Signal.value caret_hover))
                               (box ~key:"pt-ca" ~style_class:"block-control"
                                 ~accessibility_identifier:("control-" ^ uuid)
@@ -612,14 +607,14 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                 [ Ui_parts.string_prop Lui_protocol.StyleClass
                                     ~value:(reactive
                                       (fun hover state ->
-                                        (if hover && collapsable_title () then "" else "control-hide ")
+                                        (if hover && (collapsable || title_collapsed state) then "" else "control-hide ")
                                         ^ "rotating-arrow"
                                         ^ if title_collapsed state then " collapsed" else " not-collapsed")
                                       (Signal.value caret_hover) collapse)
                                     (box ~key:"pt-ra"
                                       ~opacity:(reactive
                                         (fun hover state ->
-                                          if hover && (collapsable_title () || title_collapsed state)
+                                          if hover && (collapsable || title_collapsed state)
                                           then 1. else 0.)
                                         (Signal.value caret_hover) collapse)
                                       [ reactive
@@ -631,7 +626,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                               icon ~key:"pt-arw" ~point_size:13
                                                 ~name:(`app "rotating-arrow-down") [])
                                           collapse ]) ])))
-                      ])
+                      ])) properties
 
         ; column ~key:"pt-col1" ~grow:1. ~cross:`stretch ~min_width:0
             ~data_attrs:[ ("style", "width:100%") ]

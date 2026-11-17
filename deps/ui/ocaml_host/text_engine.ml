@@ -607,7 +607,7 @@ let text_layout t id (r : Lui_scene.rect) s =
   let wrap_w =
     if r.w <= 0. || inherited_str store id "white-space" = Some "nowrap" then 0.
     else match Lui_store.kind store id with
-    | "text" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
+    | "text" | "label" | "paragraph" | "heading" | "dialog" | "sheet" | "drawer"
     | "popover" | "alert" ->
       (* LUI's pixel-snapping contract edge-rounds every exported rect,
          which can trim up to 1 device px off a box layout sized to its

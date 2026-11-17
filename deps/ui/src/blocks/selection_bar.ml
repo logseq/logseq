@@ -136,15 +136,36 @@ let restore_bar uuids =
     if uuids <> [] && selection_matches snapshot uuids && S.editing () = None
     then Editor_actions.show_action_bar ()
 
-let open_prop_dlg ~remove uuids =
+(* The toolbar disappears while its child picker is open. Keep the trigger's
+   rectangle so collision handling does not depend on a disposed button. *)
+let property_anchor_requests = Ui_effect.request ()
+
+let with_property_anchor ~scope ~trigger uuids open_picker =
+  let snapshot = selection_context (Runtime.model ()) uuids in
+  let ticket = Ui_effect.issue property_anchor_requests in
+  let anchor_scope = Signal.child_scope "selection-property-anchor" scope in
+  let measurement = Ui_services.dom_measure_rect trigger in
+  Ui_effect.task ~scope:anchor_scope measurement
+    ~ok:(fun ((_,_,width,height) as rect) ->
+      let current = Ui_effect.is_current property_anchor_requests ticket
+        && selection_matches snapshot uuids && width > 0. && height > 0. in
+      Signal.dispose_scope anchor_scope;
+      if current then open_picker (Properties_dialog.Anchor_rect rect))
+    ~error:(fun error ->
+      Signal.dispose_scope anchor_scope;
+      Ui_services.log_error ("selection property anchor failed", error))
+
+let open_prop_dlg ~scope ~trigger ~remove uuids =
   match uuids with
   | uuid :: _ ->
       let db_id = Option.bind (S.find uuid) (fun b -> b.Model.block_db_id) in
-      Properties_dialog.open_dialog ~on_close:(restore_bar uuids) ~remove
-        { Properties_dialog.uuid; uuids; db_id; is_tag = false; title = "" }
+      with_property_anchor ~scope ~trigger uuids (fun placement ->
+        Properties_dialog.open_at ~on_close:(restore_bar uuids) ~remove
+          ~phase:Properties_dialog.Prop_select placement
+          { Properties_dialog.uuid; uuids; db_id; is_tag = false; title = "" })
   | [] -> ()
 
-let open_tags ~scope = function
+let open_tags ~scope ~trigger = function
   | uuid :: _ as uuids ->
       let context_revision () =
         let model = Runtime.model () in
@@ -154,8 +175,9 @@ let open_tags ~scope = function
         | Ready _ -> Some model.context_revision
         | Pending | Invalid _ | Unsupported_scope _ -> None
       in
-      Properties_dialog.open_for_block_with_property ~scope ~context_revision
-        ~on_close:(restore_bar uuids) ~uuids uuid ~ident:"block/tags"
+      with_property_anchor ~scope ~trigger uuids (fun placement ->
+        Properties_dialog.open_for_block_with_property ~scope ~context_revision
+          ~placement ~on_close:(restore_bar uuids) ~uuids uuid ~ident:"block/tags")
   | [] -> ()
 
 let comment_targets uuids =
@@ -329,6 +351,7 @@ and node ~model () : t =
                                  let snapshot = selection_context model sel in
                                  let sbtn ~key ~label ?icon ?text ~on_press () =
                                    Ui_components.button ~key ~variant:`ghost
+                                     ~accessibility_identifier:key
                                      ~size:`sm ~label ?icon ?text
                                      ~on_press:(fun ev ->
                                        if selection_matches snapshot sel then
@@ -344,7 +367,7 @@ and node ~model () : t =
                                        ~label:(I18n.t "property/set-tags")
                                        ~icon:(`app "hash")
                                        ~on_press:(fun _ ->
-                                         open_tags ~scope:owner_scope sel)
+                                         open_tags ~scope:owner_scope ~trigger:"sb-tag" sel)
                                        ();
                                    ]
                                    @ (let targets = comment_targets sel in
@@ -371,7 +394,7 @@ and node ~model () : t =
                                          ~label:(I18n.t "property/set-property")
                                          ~text:(I18n.t "property/set-property")
                                          ~on_press:(fun _ ->
-                                           open_prop_dlg ~remove:false sel)
+                                           open_prop_dlg ~scope:owner_scope ~trigger:"sb-set" ~remove:false sel)
                                          ();
                                        sbtn ~key:"sb-uns"
                                          ~label:
@@ -379,7 +402,7 @@ and node ~model () : t =
                                          ~text:
                                            (I18n.t "property/unset-property")
                                          ~on_press:(fun _ ->
-                                           open_prop_dlg ~remove:true sel)
+                                           open_prop_dlg ~scope:owner_scope ~trigger:"sb-uns" ~remove:true sel)
                                          ();
                                      ]
                                    @ (if can_cut sel eligibility then

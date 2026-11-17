@@ -123,8 +123,8 @@ typedef struct {
   SDL_ThreadID thread;
   int watching;
   int repainting;
-  bool control_press;
-  bool movable_before_press;
+  void *titlebar_down;
+  double titlebar_down_x, titlebar_down_y;
 } LogseqWindowState;
 
 static void *logseq_get_window_data(SDL_Window *window, const char *key) {
@@ -174,6 +174,7 @@ static SDL_HitTestResult logseq_hit_test(SDL_Window *window,
 
 #if defined(__APPLE__)
 static void logseq_install_window_dragging(SDL_Window *window);
+static void logseq_cancel_titlebar_drag(LogseqWindowState *state);
 #endif
 
 CAMLprim value logseq_native_drag_regions(value id, value regions) {
@@ -201,6 +202,9 @@ CAMLprim value logseq_native_drag_regions(value id, value regions) {
     caml_failwith(SDL_GetError());
 #endif
   if (!count && !state->watching) {
+#if defined(__APPLE__)
+    logseq_cancel_titlebar_drag(state);
+#endif
     logseq_set_window_data(window, logseq_window_key, NULL);
     free(state);
   }
@@ -209,6 +213,12 @@ CAMLprim value logseq_native_drag_regions(value id, value regions) {
 
 static bool logseq_expose_watch(void *userdata, SDL_Event *event) {
   LogseqWindowState *state = userdata;
+#if defined(__APPLE__)
+  if (SDL_GetCurrentThreadID() == state->thread && event->type == SDL_EVENT_WINDOW_FOCUS_LOST
+      && event->window.windowID == state->window_id) {
+    logseq_cancel_titlebar_drag(state);
+  }
+#endif
   if (SDL_GetCurrentThreadID() == state->thread && !state->repainting &&
       event->type == SDL_EVENT_WINDOW_EXPOSED && event->window.windowID == state->window_id) {
     /* SDL can invoke this while its blocking event wait releases the runtime. */
@@ -680,20 +690,26 @@ static bool logseq_titlebar_press(SDL_Window *window, id event) {
   return logseq_hit_test(window, &point, state) == SDL_HITTEST_DRAGGABLE;
 }
 
-static void logseq_finish_control_press(SDL_Window *window) {
-  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
-  if (state && state->control_press) {
-    ((void (*)(id, SEL, int))objc_msgSend)((id)logseq_cocoa_window(window),
-        sel_registerName("setMovable:"), state->movable_before_press);
-    state->control_press = false;
+static void logseq_cancel_titlebar_drag(LogseqWindowState *state) {
+  if (state->titlebar_down) {
+    ((void (*)(id, SEL))objc_msgSend)((id)state->titlebar_down, sel_registerName("release"));
+    state->titlebar_down = NULL;
   }
+}
+
+static bool logseq_titlebar_drag_ready(LogseqWindowState *state, id event) {
+  typedef struct { double x, y; } point_t;
+  point_t location = ((point_t (*)(id, SEL))objc_msgSend)(event, sel_registerName("locationInWindow"));
+  const double threshold = 4.0;
+  double dx = location.x - state->titlebar_down_x;
+  double dy = location.y - state->titlebar_down_y;
+  return dx*dx + dy*dy >= threshold*threshold;
 }
 
 static IMP logseq_window_send_event_parent;
 static void logseq_window_send_event(id self, SEL selector, id event) {
   long type = ((long (*)(id, SEL))objc_msgSend)(event, sel_registerName("type"));
-  SDL_WindowID window_id = 0;
-  if (type == 1 || type == 2 /* left mouse down/up */) {
+  if (type == 1 || type == 2 || type == 6 /* left mouse down/up/drag */) {
     int count = 0;
     SDL_Window **windows = SDL_GetWindows(&count);
     SDL_Window *window = NULL;
@@ -705,32 +721,36 @@ static void logseq_window_send_event(id self, SEL selector, id event) {
     }
     SDL_free(windows);
     if (window) {
-      window_id = SDL_GetWindowID(window);
       if (type == 1) {
-        logseq_finish_control_press(window);
-        if (logseq_titlebar_press(window, event)) {
-          ((void (*)(id, SEL, id))objc_msgSend)(
-              self, sel_registerName("performWindowDragWithEvent:"), event);
+        LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+        if (state) logseq_cancel_titlebar_drag(state);
+        if (state && logseq_titlebar_press(window, event)) {
+          typedef struct { double x, y; } point_t;
+          point_t location = ((point_t (*)(id, SEL))objc_msgSend)(event, sel_registerName("locationInWindow"));
+          state->titlebar_down = ((id (*)(id, SEL))objc_msgSend)(event, sel_registerName("retain"));
+          state->titlebar_down_x = location.x;
+          state->titlebar_down_y = location.y;
           return;
         }
+      } else {
         LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
-        if (state) {
-          /* AppKit's transparent native titlebar can still initiate a move
-             after SDL has accepted a button press. Keep the gesture on its
-             original control until the matching release has been delivered. */
-          state->movable_before_press = ((bool (*)(id, SEL))objc_msgSend)(
-              self, sel_registerName("isMovable"));
-          state->control_press = true;
-          ((void (*)(id, SEL, int))objc_msgSend)(self, sel_registerName("setMovable:"), 0);
+        if (state && state->titlebar_down) {
+          if (type == 2) logseq_cancel_titlebar_drag(state);
+          else if (logseq_titlebar_drag_ready(state, event)) {
+            /* Hand the original press to the Window Server only after real
+               motion. A stationary press must not initiate a native drag. */
+            id down = (id)state->titlebar_down;
+            state->titlebar_down = NULL;
+            ((void (*)(id, SEL, id))objc_msgSend)(
+                self, sel_registerName("performWindowDragWithEvent:"), down);
+            ((void (*)(id, SEL))objc_msgSend)(down, sel_registerName("release"));
+          }
+          return;
         }
       }
     }
   }
   ((void (*)(id, SEL, id))logseq_window_send_event_parent)(self, selector, event);
-  if (type == 2 && window_id) {
-    SDL_Window *window = SDL_GetWindowFromID(window_id);
-    if (window) logseq_finish_control_press(window);
-  }
 }
 
 static void logseq_install_window_dragging(SDL_Window *window) {
@@ -749,6 +769,9 @@ static void logseq_install_window_dragging(SDL_Window *window) {
   }
   ((void (*)(id, SEL, int))objc_msgSend)(
       cocoa, sel_registerName("setMovableByWindowBackground:"), 0);
+  /* Window Server can begin native titlebar tracking before sendEvent:.
+     Opt out before the gesture; only our explicit drag handoff may move it. */
+  ((void (*)(id, SEL, int))objc_msgSend)(cocoa, sel_registerName("setMovable:"), 0);
 }
 
 static id logseq_test_mouse_event(SDL_Window *window, unsigned long type, double x, double y) {
@@ -802,6 +825,31 @@ CAMLprim value logseq_native_test_control_gesture(value id_v, value x_v, value y
   CAMLreturn(result);
 }
 
+CAMLprim value logseq_native_test_titlebar_click(value id_v) {
+  CAMLparam1(id_v); CAMLlocal1(result);
+  SDL_Window *window = SDL_GetWindowFromID(Int_val(id_v));
+  id cocoa = (id)logseq_cocoa_window(window);
+  if (!cocoa) caml_invalid_argument("Titlebar click test requires a Cocoa window");
+  typedef struct { double x, y, w, h; } rect_t;
+  rect_t before = ((rect_t (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("frame"));
+  bool automatic_drag_disabled = !((bool (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("isMovable"));
+  SEL send = sel_registerName("sendEvent:");
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, send, logseq_test_mouse_event(window, 1UL, 200., 20.));
+  LogseqWindowState *state = logseq_get_window_data(window, logseq_window_key);
+  rect_t pressed = ((rect_t (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("frame"));
+  bool waiting = automatic_drag_disabled && state->titlebar_down != NULL;
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, send, logseq_test_mouse_event(window, 6UL, 201., 21.));
+  rect_t moved = ((rect_t (*)(id, SEL))objc_msgSend)(cocoa, sel_registerName("frame"));
+  bool small_motion = state->titlebar_down != NULL;
+  bool ready = logseq_titlebar_drag_ready(state, logseq_test_mouse_event(window, 6UL, 204., 20.));
+  ((void (*)(id, SEL, id))objc_msgSend)(cocoa, send, logseq_test_mouse_event(window, 2UL, 201., 21.));
+  result = caml_alloc_tuple(3);
+  Store_field(result, 0, Val_bool(waiting && pressed.x == before.x && pressed.y == before.y));
+  Store_field(result, 1, Val_bool(small_motion && moved.x == before.x && moved.y == before.y));
+  Store_field(result, 2, Val_bool(ready && state->titlebar_down == NULL));
+  CAMLreturn(result);
+}
+
 /* Blend the app header into the title bar: content covers the full
    window and the title bar becomes transparent and untitled, like
    Electron's `titleBarStyle: hiddenInset`. The app's .cp__header row
@@ -842,6 +890,7 @@ CAMLprim void logseq_native_titlebar_blend(void) {
         1L /* NSWindowTitleHidden */);
     ((void (*)(id, SEL, int))objc_msgSend)(
         w, sel_registerName("setMovableByWindowBackground:"), 0);
+    ((void (*)(id, SEL, int))objc_msgSend)(w, sel_registerName("setMovable:"), 0);
   }
 }
 
@@ -2876,6 +2925,11 @@ CAMLprim value logseq_native_software_dispose(value id) {
 CAMLprim value logseq_native_activate(value unit) {
   (void)unit;
   return Val_unit;
+}
+
+CAMLprim value logseq_native_test_titlebar_click(value id_v) {
+  (void)id_v;
+  caml_failwith("Cocoa titlebar click tests require macOS");
 }
 
 CAMLprim value logseq_native_test_control_gesture(value id_v, value x_v, value y_v) {

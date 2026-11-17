@@ -39,7 +39,8 @@ type phase =
   | Node_tags of W.t (* property entity *)
   | Value_edit of W.t (* property entity *)
 
-type placement = Centered | Point of float * float | Trigger of string
+type placement = Centered | Point of float * float
+  | Anchor_rect of (float * float * float * float) | Trigger of string
 
 (* one open dialog at a time (cljs treats it as the single active
    modal); the signal is created lazily by the overlay view's context *)
@@ -173,7 +174,7 @@ let rec property_chosen d prop =
   else if d.d_target.is_tag then (
     finish_write d (D.class_add_property ~class_uuid:d.d_target.uuid
          ~ident:(ident_of prop)))
-  else if is_checkbox prop then (
+  else if is_checkbox prop && d.d_target.uuids = [] then (
     write_prop_value d prop (Some (W.Bool false)))
   else if d.d_target.uuids = []
           && not (is_many prop)
@@ -579,7 +580,13 @@ let value_edit_view d prop : t =
      && ident_of prop <> "logseq.property/icon" then ignore (read_selected ());
   if ty = "date" || ty = "datetime" then date_value_view d prop context parent
   else if ty = "checkbox" then
-    (async_select ~placeholder:(title_of prop)
+    (async_select ~placeholder:(I18n.t1 "property/set-placeholder" (title_of prop))
+      ~compact:(d.d_placement <> Centered)
+      (if d.d_target.uuids <> [] then
+         Js.Promise.resolve (List.map (fun (key, value) ->
+           Sel.item (I18n.t key) (fun () -> write_prop_value d prop (Some (W.Bool value))))
+           ["ui/true", true; "ui/false", false])
+       else
       (let* block = D.entity_by_uuid d.d_target.uuid in
        let value = match D.getf (D.untag block) (ident_of prop) with
          | Some value -> value
@@ -588,7 +595,7 @@ let value_edit_view d prop : t =
        let checked = value = W.Bool true in
        Js.Promise.resolve
          [Sel.item ~checked (title_of prop)
-            (fun () -> write_prop_value d prop (Some (W.Bool (not checked))))])) context parent
+            (fun () -> write_prop_value d prop (Some (W.Bool (not checked))))]))) context parent
   else if ident_of prop = "logseq.property/icon" then
     icon_value_view d context parent
   else
@@ -707,18 +714,29 @@ let view : t =
         | Some d -> with_phase d (fun phase ->
             match d.d_placement with
             | Trigger _ -> assert false
-            | Point (x, y) ->
-                popover ~key:"prop-pop" ~at:(x, y)
+            | (Point _ | Anchor_rect _) as placement ->
+                let at, anchor_rect = match placement with
+                  | Point (x, y) -> Some (x, y), None
+                  | Anchor_rect rect -> None, Some rect
+                  | Centered | Trigger _ -> assert false in
+                Ui_components.with_props
+                  [Ui_components.Prop.font_size "14px";
+                   Ui_components.Prop.line_height "20px";
+                   Ui_components.card_shadow]
+                (popover ~key:"prop-pop" ?at ?anchor_rect
+                  ~anchor:`below ~anchor_alignment:`start ~anchor_offset:4.
+                  ~padding:0 ~border_width:1 ~corner_radius:6
+                  ~background:"hsl(var(--popover))"
+                  ~foreground:"hsl(var(--popover-foreground))"
+                  ~border_color:"hsl(var(--border))"
                   ~style_class:"ui__popover-content"
-                  ~available_height:
-                    (Ui_services.dom_viewport_height () -. y -. 8.)
                   ~data_attrs:[ ("role", "dialog") ]
                   ~transition:Ui_components.popover_transition
                   ~on_dismiss:(fun _ -> close ())
                   [ box ~key:"prop-body"
                       ~style_class:"ls-property-dialog"
                       [ dialog_content ~compact_width:232 ~phase d ]
-                  ]
+                  ])
             | Centered ->
                 Ui_components.dialog ~text:(I18n.t "property/add-or-change")
                   ~style_class:"ls-property-dialog"
@@ -819,7 +837,7 @@ let open_for_anchor_el ?on_close ?(remove = false) ?(phase = Prop_select)
     else
       let x, y, w, h = anchor.Ui_services.rect () in
       if x <> 0. || y <> 0. || w <> 0. || h <> 0. then
-        open_dialog ?on_close ~remove ~phase ~anchor:(x, y +. h) target
+        open_at ?on_close ~remove ~phase (Anchor_rect (x,y,w,h)) target
       else open_dialog ?on_close ~remove ~phase target
   in
   open_measured 4
@@ -859,7 +877,8 @@ let open_for_block uuid =
    straight to the value-editing phase for the named property — a
    dedicated picker (date input, closed-value select, node select) —
    across the whole block selection *)
-let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close ~uuids uuid ~ident =
+let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close
+    ?(placement=Centered) ~uuids uuid ~ident =
   retire_open ();
   let revision = Option.map (fun read -> (read () : int option)) context_revision in
   if revision = Some None then () else
@@ -947,7 +966,7 @@ let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close
      | Ok prop when active ->
          (match D.untag prop with
           | W.Map _ as p ->
-              open_dialog ?on_close ~phase:(Value_edit p)
+              open_at ?on_close ~remove:false ~phase:(Value_edit p) placement
                 { uuid; uuids; db_id = None; is_tag = false; title = "" }
           | _ -> ())
      | Error error when active ->

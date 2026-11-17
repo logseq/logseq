@@ -45,9 +45,9 @@ let layer_guard (app : Lui_runtime.application) =
     || (match Hashtbl.find_opt app.runtime_parents node with
         | Some parent -> hidden parent | None -> false) in
   fun () ->
-    let generation = Lui_runtime.generation app in
-    if generation <> !previous || !(app.pending_ops) <> [] then begin
-      previous := generation;
+    let runtime_generation = Lui_runtime.generation app in
+    if runtime_generation <> !previous || !(app.pending_ops) <> [] then begin
+      previous := runtime_generation;
       blocked := Hashtbl.fold (fun node kind found ->
         found || (match kind with
           | Lui_protocol.Popover | Dialog | Sheet | DropdownMenu | ContextMenu ->
