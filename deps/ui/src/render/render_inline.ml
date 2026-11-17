@@ -1381,6 +1381,7 @@ let hiccup_tag_end s i =
 type run_spec =
   | Rs_plain
   | Rs_atomic of string * string
+  | Rs_page_alias of string * int * int
   | Rs_wrapped of int * int * bool * string * bool
 
 (* One positioned match for the edit layer: [tok_start, tok_stop) are
@@ -1472,19 +1473,23 @@ and try_bracket ~find ~refs ~self s i =
                  && Str_util.ends_with target_url "]]"
               then
                 let target = String.trim (String.sub target_url 2 (len - 4)) in
-                if target = "" then None else Some target
+                if target = "" then None
+                else
+                  let target_start = j + 2 + find_sub url 0 target_url - i in
+                  Some (target, target_start, target_start + len)
               else None
             in
             (match page_ref_target with
-             | Some target ->
+             | Some (target, target_start, target_end) ->
                  let alias_label =
                    if String.trim label = "" then None else Some label
                  in
                  Some
                    ( page_ref ?label:alias_label ~refs ~self target
                    , k + 1 - i
-                   , Rs_atomic
-                       (Option.value alias_label ~default:target, "ed-page-ref") )
+                   , Rs_page_alias
+                       (Option.value alias_label ~default:target,
+                        target_start, target_end) )
              | None ->
                  Some
                    ( external_link url (parse ~refs ~self label)

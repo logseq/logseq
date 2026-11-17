@@ -1486,14 +1486,19 @@ let on_model_input ~deleted uuid =
   | Some t -> on_buffer_change t ~deleted uuid
   | None -> ()
 
-let page_reference_at (m : Edit_model.t) pos =
+type page_ref_range = { start_off : int; end_off : int }
+
+let page_reference_at (m : Edit_model.t) pos : page_ref_range option =
   let rec find = function
     | [] -> None
     | (r : Edit_runs.run) :: rest ->
+        let start_off, end_off =
+          Option.value r.page_ref_range ~default:(r.start_off, r.end_off)
+        in
         if r.start_off > pos then None
-        else if r.kind = Edit_runs.Atomic && r.start_off + 2 <= pos
-                && pos <= r.end_off - 2 && Str_util.contains r.cls "ed-page-ref"
-        then Some r
+        else if r.kind = Edit_runs.Atomic && start_off + 2 <= pos
+                && pos <= end_off - 2 && Str_util.contains r.cls "ed-page-ref"
+        then Some { start_off; end_off }
         else find rest
   in
   find m.runs
@@ -1502,12 +1507,12 @@ let on_caret_move uuid =
   match !active, Editor_actions.edit_model uuid with
   | Some t, Some m when not (Edit_model.has_selection m) ->
       (match page_reference_at m m.caret with
-       | Some r ->
+       | Some range ->
            (match (get t).ac with
-            | Some ac when ac.auuid = uuid && ac.kind = Page_ref && ac.tpos = r.start_off -> ()
-            | _ -> open_ac ~tpos:r.start_off ~autopair:false t Page_ref);
+            | Some ac when ac.auuid = uuid && ac.kind = Page_ref && ac.tpos = range.start_off -> ()
+            | _ -> open_ac ~tpos:range.start_off ~autopair:false t Page_ref);
            (match (get t).ac with
-            | Some ac -> ac_update t ac (S.sub m.source (r.start_off + 2) (m.caret - r.start_off - 2))
+            | Some ac -> ac_update t ac (S.sub m.source (range.start_off + 2) (m.caret - range.start_off - 2))
             | None -> ())
        | None ->
            (match (get t).ac with
@@ -1535,7 +1540,7 @@ let insert_text (ac : ac) text back =
       let pos =
         if ac.kind = Page_ref then
           match page_reference_at m pos with
-          | Some r when r.start_off = tpos -> r.end_off
+          | Some range when range.start_off = tpos -> range.end_off
           | _ when pos + 1 < n && S.sub v pos 2 = "]]" -> pos + 2
           | _ -> pos
         else if ac.kind = Embed_ref

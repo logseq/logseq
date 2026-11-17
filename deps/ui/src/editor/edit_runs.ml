@@ -29,6 +29,7 @@ type run =
   ; reveal : int * int     (* caret in [lo, hi) reveals delim / expands atomic *)
   ; display : string       (* Atomic pill label; "" for Plain/Delim *)
   ; cls : string           (* style-class hint, "" when none *)
+  ; page_ref_range : (int * int) option
   }
 
 let join_cls a b = if a = "" then b else if b = "" then a else a ^ " " ^ b
@@ -40,11 +41,12 @@ let sub_of sb a n = Bytes.unsafe_to_string (Bytes.sub sb a n)
 
 let plain sb a b cls : run =
   { start_off = a; end_off = b; kind = Plain
-  ; text = sub_of sb a (b - a); reveal = (a, b); display = ""; cls }
+  ; text = sub_of sb a (b - a); reveal = (a, b); display = ""; cls
+  ; page_ref_range = None }
 
-let mk kind sb a b ~reveal ~display ~cls : run =
+let mk ?page_ref_range kind sb a b ~reveal ~display ~cls : run =
   { start_off = a; end_off = b; kind
-  ; text = sub_of sb a (b - a); reveal; display; cls }
+  ; text = sub_of sb a (b - a); reveal; display; cls; page_ref_range }
 
 (* Fold the tokens of [sb[lo, hi)] into runs appended to [acc].
    Gaps between tokens are plain text. [Rs_wrapped] emits a Delim pair
@@ -68,6 +70,11 @@ let rec seg (acc : run list) sb lo hi ~cls : run list =
            acc :=
              mk Atomic sb a b ~reveal:(a + 1, b) ~display
                ~cls:(join_cls cls "ed-block-ref") :: !acc
+       | Rs_page_alias (display, target_start, target_end) ->
+           acc :=
+             mk ~page_ref_range:(a + target_start, a + target_end)
+               Atomic sb a b ~reveal:(a + 1, b) ~display
+               ~cls:(join_cls cls "ed-page-ref") :: !acc
        | Rs_atomic (display, c) ->
            acc :=
              mk Atomic sb a b ~reveal:(a + 1, b) ~display
