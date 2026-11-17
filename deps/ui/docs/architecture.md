@@ -23,7 +23,7 @@ pnpm ui:build
 pnpm db-worker:build
 
 # native application library and worker:
-(cd deps/ui && opam exec -- dune build native/native_embed.exe.o)
+pnpm ui:native:experimental:build
 pnpm db-worker-node:native
 ```
 
@@ -143,10 +143,12 @@ lines untouched. Full inventory: `docs/e2e-contract.md`.
 | subs | `subs/` | all | subscription/model layer on `Ui_task`; Js.Promise↔Ui_task bridge (`task_of_promise`) stays at transport edge while worker/sdk emit Js.Promise |
 | web src | `src/` | Melange | web-only view/app code still migrating feature-by-feature; real browser boundary `src/core/web_dom.ml` |
 | web adapter | `web/` | Melange | `platform_web.ml` installs `Ui_services` ops via real browser APIs |
-| native application adapter | `native/` | native OCaml | host services (`services/platform_native.ml`), native view overrides, C bridge, `native_embed` entry |
+| native application adapter | `native/` | native OCaml | host services (`services/platform_native.ml`), native view overrides and the typed `native_embed` entry |
 
-`native/native_embed.exe.o` and `native/logseq_lui_bridge.c` provide the native
-embedding boundary. Hosts own rendering, OS controls and shared-library loading.
+`ocaml_host/` links the current native application library directly and receives
+typed patch batches from `native/native_embed.ml`. The previous SwiftUI desktop
+host and its C/dylib ABI have been removed. The self-drawn renderer remains
+experimental; WebView and Electron releases retain their own entry points.
 Electron releases retain their existing macOS, Windows and Linux build jobs.
 
 Boundary gate: `scripts/check-shared-boundaries.sh` (wired into `dune runtest test/contracts` on Unix) rejects `Js.*`/`Webapi`/`Web_dom`/`Unix`/`Thread`/`Yojson`/`Platform.*` in `src/shared`+`src/contracts`+`subs`. Tracked exceptions (must shrink to zero): `subs/promise_ext.ml` (Js.Promise `let*` still opened by src files), `subs_state` promise↔task adapters.

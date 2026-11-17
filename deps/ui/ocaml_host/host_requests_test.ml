@@ -768,15 +768,15 @@ let () =
   Native_embed.with_entry_lock (fun () ->
     Queue.clear Native_embed.pending_batches;
     List.iter (fun batch -> ignore (Native_embed.enqueue_batch batch)) expected);
-  let actual = Patch_decode.batches_of_string (Native_embed.Ffi.pump ()) in
-  check "Cross-language transport changed batch order, generations, or values" (actual=expected);
+  let actual = Native_embed.pump () in
+  check "In-process transport changed batch order, generations, or values" (actual=expected);
   let store = Lui_store.create () in
   List.iter (Lui_store.apply_batch store) actual;
   check "Transport lost a later text update"
     (Lui_store.string_prop store 900001 "text" = Some "updated");
   check "Transport lost mounted children" (Lui_store.node_count store=513);
-  check "Empty cross-language transport changed its no-work result" (Native_embed.Ffi.pump ()="");
-  print_endline "native patch wire boundary: OK"
+  check "Empty in-process transport changed its no-work result" (Native_embed.pump ()=[]);
+  print_endline "native typed patch queue: OK"
 
 let () =
   let batches = transport_batches () in

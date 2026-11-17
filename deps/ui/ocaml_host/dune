@@ -79,7 +79,7 @@
 (library
  (name logseq_native_host_services)
  (wrapped false)
- (modules patch_decode host_requests theme_vars host_builtin_icons host_icons host_image host_images text_engine)
+ (modules host_requests theme_vars host_builtin_icons host_icons host_image host_images text_engine)
  (libraries logseq_ui_native logseq_ocaml_host_platform logseq_native_entry
    logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
    lui.layout lui.text lui.svg lui.theme lui.ime lui.resource_loaders imagelib yojson str unix))
