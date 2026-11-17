@@ -157,7 +157,15 @@ let create () =
     ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())
     }
   else
-  if Daemon_client.is_electron () then (
+  if Lui_web_desktop.available () then (
+    let transport = Desktop_client.create_transport () in
+    let client = {
+      invoke_fn = (fun name args -> Desktop_client.invoke transport name args);
+      on_message = (fun _ _ -> ()); dead = transport.Desktop_client.dead } in
+    transport.sink <- (fun kind payload -> client.on_message kind payload);
+    Desktop_client.start_events transport ~on_failure:(fun () -> !notify_worker_failure ());
+    client)
+  else if Daemon_client.is_electron () then (
     let tr = Daemon_client.create_transport () in
     let t =
       { invoke_fn = (fun name args -> Daemon_client.invoke tr name args)

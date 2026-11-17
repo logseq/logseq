@@ -50,15 +50,29 @@ function cliMode() {
 }
 
 export default defineConfig(() => {
-  const production = cliMode() === "production";
+  const desktop = cliMode() === "desktop";
+  const production = desktop || cliMode() === "production";
   return {
-    plugins: [browserVectorBackend()],
+    plugins: [browserVectorBackend(), ...(desktop ? [{
+      name: "native-desktop-database-contract",
+      generateBundle(_options, bundle) {
+        for (const [name, output] of Object.entries(bundle)) {
+          if (/\.wasm$/i.test(name) || (output.type === "chunk" &&
+              /sqlite3InitModule|OpfsSAHPool|sqlite3\.wasm|sqlite-wasm/.test(output.code))) {
+            throw new Error(`Browser SQLite/WASM entered the native desktop bundle: ${name}`);
+          }
+        }
+        this.emitFile({type: "asset", fileName: "desktop-build.json",
+          source: JSON.stringify({database: "native-sqlite", browser_worker: false})});
+      },
+    }] : [])],
     resolve: {
       alias: [
         { find: new RegExp(`^(node:)?(${builtinModules.join("|")})$`),
           replacement: resolve(import.meta.dirname, "../db-worker/stubs/node-externals.mjs") },
         { find: "lui-shims/publishing-db",
-          replacement: resolve(import.meta.dirname, "shims/publishing_db.mjs") },
+          replacement: resolve(import.meta.dirname,
+            desktop ? "desktop/publishing_native.mjs" : "shims/publishing_db.mjs") },
         {
           // Stdlib.Printf -> mini interpreter (shims/printf.js), so the
           // full camlinternalFormat runtime stays out of the bundle.
@@ -94,8 +108,8 @@ export default defineConfig(() => {
         formats: ["es"],
         fileName: () => "main.js",
       },
-      outDir: resolve(import.meta.dirname, "../../static/js"),
-      emptyOutDir: false,
+      outDir: resolve(import.meta.dirname, desktop ? "../../_build/desktop-web/ui-js" : "../../static/js"),
+      emptyOutDir: desktop,
       minify: production,
       // cljs release emitted main.js.map next to the bundle and the
       // deploy pipeline stripped it before shipping; "hidden" keeps the

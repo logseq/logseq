@@ -1,0 +1,12 @@
+{
+  "name": "Logseq",
+  "slug": "logseq-web",
+  "identifier": "com.logseq.desktop.web",
+  "version": "0.0.1",
+  "build": 1,
+  "width": 1280,
+  "height": 860,
+  "description": "Logseq with an OCaml WebView desktop host",
+  "maintainer": "Logseq contributors",
+  "license": "AGPL-3.0-only"
+}
