@@ -91,6 +91,23 @@ let test_run_kinds () =
    | rs -> check "code inner literal" false;
            Js.log ("got: " ^ show_runs rs))
 
+let test_page_alias_autocomplete_range () =
+  let source = "[Atlas alias]([[Project Atlas]])" in
+  let model = M.create source in
+  check "page alias label does not trigger page autocomplete"
+    (Popups_state.page_reference_at model 4 = None);
+  let target_start = String.length "[Atlas alias](" in
+  let target_end = target_start + String.length "[[Project Atlas]]" in
+  let target_caret = target_start + 2 + String.length "Pro" in
+  (match Popups_state.page_reference_at model target_caret with
+   | None -> check "page alias target remains autocomplete range" false
+   | Some range ->
+       eqi "page alias autocomplete starts at target" target_start range.start_off;
+       eqi "page alias autocomplete ends at target" target_end range.end_off;
+       let updated = M.splice model range.start_off range.end_off "[[Next Project]]" in
+       eqs "page alias label survives autocomplete replacement"
+         "[Atlas alias]([[Next Project]])" updated.M.source)
+
 (* ---------- reveal ---------- *)
 
 let test_reveal () =
@@ -369,6 +386,7 @@ let run () =
   test_double_click ();
   test_byte_exact ();
   test_run_kinds ();
+  test_page_alias_autocomplete_range ();
   test_reveal ();
   test_utf8 ();
   test_units_multibyte ();
