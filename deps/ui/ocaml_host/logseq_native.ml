@@ -13,7 +13,7 @@
 
 open Lui_window
 
-module Sdl = Tsdl.Sdl
+module Sdl = Lui_sdl3
 module Lui_shell = Host_platform.Shell
 
 (* ocaml_host_stubs.c: NSApplication activation for a bare-binary
@@ -246,7 +246,7 @@ let () =
        Sdl.Gl.context_profile_core);
   sdl_ok (Sdl.gl_set_attribute Sdl.Gl.doublebuffer 1);
   let flags gl =
-    let base = Sdl.Window.(resizable + allow_highdpi + shown) in
+    let base = Sdl.Window.(resizable + high_pixel_density) in
     if gl then Sdl.Window.(base + opengl) else base
   in
   let win =
@@ -314,7 +314,7 @@ let () =
   if Host_platform.is_macos then native_install_menus ();
   let drawable () =
     if software_window then Sdl.get_window_size !win
-    else Sdl.gl_get_drawable_size !win
+    else Sdl.get_window_size_in_pixels !win
   in
   let dw, dh = drawable () in
   let scale = Float.max 0.01 (float dw /. float width) in
@@ -1078,7 +1078,7 @@ let () =
   in
   let set_ime_rect (r : Lui_scene.rect) =
     let s = !scale_cell in
-    Sdl.set_text_input_rect
+    Sdl.set_text_input_rect !win
       (Some
          (Sdl.Rect.create
             ~x:(int_of_float (r.Lui_scene.x /. s))
@@ -1106,7 +1106,7 @@ let () =
         r.Lui_scene.h
     end
   in
-  let text_input = Native_window.text_input () in
+  let text_input = Native_window.text_input !win in
   let focused_text_input id =
     let editable = id <> 0 && Lui_store.mem store id
                    && text_entry (Lui_store.kind store id) in
@@ -1332,14 +1332,14 @@ let () =
     ; ("altKey", jbool m.Input.alt) ]
   in
   let pointer_fields ~x ~y ~button ~buttons ~mods ~extra =
-    [ ("clientX", string_of_int x)
-    ; ("clientY", string_of_int y)
+    [ ("clientX", string_of_float x)
+    ; ("clientY", string_of_float y)
     ; ("button", string_of_int button)
     ; ("buttons", string_of_int buttons) ]
     @ mods_fields mods @ extra
   in
   let on_dom_button_down ~x ~y ~btn ~clicks ~mods =
-    let node = dom_hit ~x:(float x) ~y:(float y) in
+    let node = dom_hit ~x ~y in
     dom_down_node := node;
     dom_down_clicks := clicks;
     dom_buttons := !dom_buttons lor dom_button_bit btn;
@@ -1352,7 +1352,7 @@ let () =
          ~extra:[ ("detail", "0") ])
   in
   let on_dom_button_up ~x ~y ~btn ~mods =
-    let node = dom_hit ~x:(float x) ~y:(float y) in
+    let node = dom_hit ~x ~y in
     dom_buttons := !dom_buttons land lnot (dom_button_bit btn);
     let button = Input.button_to_int btn in
     let fields ~detail =
@@ -1404,9 +1404,9 @@ let () =
         | "text" -> Sdl.System_cursor.ibeam
         | "not-allowed" -> Sdl.System_cursor.no
         | "wait" | "progress" -> Sdl.System_cursor.waitarrow
-        | "col-resize" | "ew-resize" -> Sdl.System_cursor.size_we
-        | "row-resize" | "ns-resize" -> Sdl.System_cursor.size_ns
-        | "move" | "grab" | "grabbing" -> Sdl.System_cursor.size_all
+        | "col-resize" | "ew-resize" -> Sdl.System_cursor.sizewe
+        | "row-resize" | "ns-resize" -> Sdl.System_cursor.sizens
+        | "move" | "grab" | "grabbing" -> Sdl.System_cursor.sizeall
         | _ -> Sdl.System_cursor.arrow
       in
       (match Sdl.create_system_cursor kind with
@@ -1419,23 +1419,23 @@ let () =
     if name <> !current_cursor then begin
       current_cursor := name;
       match sys_cursor name with
-      | Some c -> Sdl.set_cursor (Some c)
+      | Some c -> Sdl.set_cursor c
       | None -> ()
     end
   in
-  ignore (sys_cursor "default" |> Option.map (fun c -> Sdl.set_cursor (Some c)));
+  ignore (sys_cursor "default" |> Option.map (fun c -> Sdl.set_cursor c));
   (* Cursor changes only on the next motion. A modal (search) that
      closes under a still pointer otherwise leaves the I-beam stuck
      until the mouse moves. Re-hit after each layout. *)
-  let last_ptr : (int * int) option ref = ref None in
+  let last_ptr : (float * float) option ref = ref None in
   let refresh_cursor () =
     match !last_ptr with
-    | Some (x, y) -> update_cursor (dom_hit ~x:(float x) ~y:(float y))
+    | Some (x, y) -> update_cursor (dom_hit ~x ~y)
     | None -> ()
   in
   let on_dom_motion ~x ~y ~rx ~ry ~mods =
     last_ptr := Some (x, y);
-    let node = dom_hit ~x:(float x) ~y:(float y) in
+    let node = dom_hit ~x ~y in
     update_cursor node;
     let now = Unix.gettimeofday () in
     let last_node, last_t = !last_move_emit in
@@ -1446,8 +1446,8 @@ let () =
       last_move_emit := (node, now);
       let fields =
         pointer_fields ~x ~y ~button:0 ~buttons:!dom_buttons ~mods
-          ~extra:[ ("movementX", string_of_int rx)
-                 ; ("movementY", string_of_int ry) ]
+          ~extra:[ ("movementX", string_of_float rx)
+                 ; ("movementY", string_of_float ry) ]
       in
       emit_dom "mousemove" node fields;
       emit_dom "pointermove" node fields
@@ -1650,39 +1650,22 @@ let () =
     end
   in
   let emit_dom_event e =
-    match Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) with
-    | `Mouse_button_down ->
-      on_dom_button_down
-        ~x:(Sdl.Event.get e Sdl.Event.mouse_button_x)
-        ~y:(Sdl.Event.get e Sdl.Event.mouse_button_y)
-        ~btn:(Input.button_of_sdl
-                (Sdl.Event.get e Sdl.Event.mouse_button_button))
-        ~clicks:(Sdl.Event.get e Sdl.Event.mouse_button_clicks)
+    match (Sdl.Event.value e).kind with
+    | Sdl.Event.Mouse_button_down button ->
+      on_dom_button_down ~x:button.x ~y:button.y
+        ~btn:(Input.button_of_sdl button.button) ~clicks:button.clicks
         ~mods:(Native_window.current_modifiers input_state)
-    | `Mouse_button_up ->
-      on_dom_button_up
-        ~x:(Sdl.Event.get e Sdl.Event.mouse_button_x)
-        ~y:(Sdl.Event.get e Sdl.Event.mouse_button_y)
-        ~btn:(Input.button_of_sdl
-                (Sdl.Event.get e Sdl.Event.mouse_button_button))
+    | Mouse_button_up button ->
+      on_dom_button_up ~x:button.x ~y:button.y
+        ~btn:(Input.button_of_sdl button.button)
         ~mods:(Native_window.current_modifiers input_state)
-    | `Mouse_motion ->
-      on_dom_motion
-        ~x:(Sdl.Event.get e Sdl.Event.mouse_motion_x)
-        ~y:(Sdl.Event.get e Sdl.Event.mouse_motion_y)
-        ~rx:(Sdl.Event.get e Sdl.Event.mouse_motion_xrel)
-        ~ry:(Sdl.Event.get e Sdl.Event.mouse_motion_yrel)
+    | Mouse_motion motion ->
+      on_dom_motion ~x:motion.x ~y:motion.y ~rx:motion.xrel ~ry:motion.yrel
         ~mods:(Native_window.current_modifiers input_state)
-    | `Key_down ->
-      on_dom_key ~down:true
-        ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
-        ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
-        ~repeat:(Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0) ()
-    | `Key_up ->
-      on_dom_key ~down:false
-        ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
-        ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod)
-        ~repeat:false ()
+    | Key_down key ->
+      on_dom_key ~down:true ~scancode:key.scancode ~keymod:key.keymod ~repeat:key.repeat ()
+    | Key_up key ->
+      on_dom_key ~down:false ~scancode:key.scancode ~keymod:key.keymod ~repeat:false ()
     | _ -> ()
   in
   (* ---- macOS main menu commands -----------------------------------
@@ -1696,17 +1679,7 @@ let () =
      AppKit stub (native_app_op). Tags match the kMenu* enum in
      ocaml_host_stubs.c. *)
   let push_menu_key ~down ~scancode ~keymod =
-    let ev = Sdl.Event.create () in
-    Sdl.Event.set ev Sdl.Event.typ
-      (if down then Sdl.Event.key_down else Sdl.Event.key_up);
-    Sdl.Event.set ev Sdl.Event.keyboard_window_id
-      (Sdl.get_window_id !win);
-    Sdl.Event.set ev Sdl.Event.keyboard_state
-      (if down then Sdl.pressed else Sdl.released);
-    Sdl.Event.set ev Sdl.Event.keyboard_repeat 0;
-    Sdl.Event.set ev Sdl.Event.keyboard_scancode scancode;
-    Sdl.Event.set ev Sdl.Event.keyboard_keymod keymod;
-    ignore (Sdl.push_event ev)
+    Sdl.push_key_event !win ~down ~scancode ~keymod ~repeat:false
   in
   let menu_key ~scancode ~keymod =
     push_menu_key ~down:true ~scancode ~keymod;
@@ -1720,9 +1693,7 @@ let () =
     | 3 -> native_app_op 2 (* Hide Others *)
     | 4 -> native_app_op 3 (* Show All *)
     | 5 -> (* Quit — through SDL so the app's normal exit path runs *)
-      let ev = Sdl.Event.create () in
-      Sdl.Event.set ev Sdl.Event.typ Sdl.Event.quit;
-      ignore (Sdl.push_event ev)
+      Sdl.push_quit_event ()
     | 6 -> menu_key ~scancode:Sdl.Scancode.z ~keymod:Sdl.Kmod.gui
     | 7 ->
       menu_key ~scancode:Sdl.Scancode.z
@@ -1819,18 +1790,18 @@ let () =
                     (Printf.sprintf {|{"text":%s}|} (jstr s))))
       | `move (x, y) ->
           apply_actions (handle_input (Input.Move (x, y)));
-          on_dom_motion ~x:(int_of_float x) ~y:(int_of_float y) ~rx:0
-            ~ry:0 ~mods:(Native_window.current_modifiers input_state)
+          on_dom_motion ~x ~y ~rx:0.
+            ~ry:0. ~mods:(Native_window.current_modifiers input_state)
       | `bdown (x, y, b, clicks) ->
           if b = Input.Left then Native_window.hold_pointer text_input true;
           apply_actions
             (handle_input (Input.Button_down (x, y, b, clicks, nomods)));
-          on_dom_button_down ~x:(int_of_float x) ~y:(int_of_float y) ~btn:b
+          on_dom_button_down ~x ~y ~btn:b
             ~clicks ~mods:(Native_window.current_modifiers input_state)
       | `bup (x, y, b) ->
           if b = Input.Left then Native_window.hold_pointer text_input false;
           apply_actions (handle_input (Input.Button_up (x, y, b, nomods)));
-          on_dom_button_up ~x:(int_of_float x) ~y:(int_of_float y) ~btn:b
+          on_dom_button_up ~x ~y ~btn:b
             ~mods:(Native_window.current_modifiers input_state)
       | `wheel (dx, dy) ->
           apply_actions (handle_input (Input.Wheel (dx, dy)))
@@ -1910,22 +1881,28 @@ let () =
       if Sdl.poll_event (Some e) then begin
         incr n;
         component_input := false;
-        dbg "sdl event type=%d" (Sdl.Event.get e Sdl.Event.typ);
+        let event = Sdl.Event.value e in
+        dbg "sdl event window=%d" event.window_id;
         metrics.event_count <- metrics.event_count + 1;
-        let input = Native_window.input_of_event input_state e in
-        (if Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ)=`Window_event
-            && Sdl.Event.get e Sdl.Event.window_event_id=Sdl.Event.window_event_focus_lost
+        let backing_changed = match event.kind with
+          | Sdl.Event.Window ((Pixel_size_changed | Display_scale_changed | Display_changed | Moved), _, _) -> true
+          | _ -> false in
+        let input =
+          if backing_changed then
+            let width, height = Sdl.get_window_size !win in
+            Some (Input.Resize (width, height))
+          else Native_window.input_of_event input_state e in
+        (if match event.kind with Sdl.Event.Window (Focus_lost, _, _) -> true | _ -> false
          then begin
            Host_requests.reset_editor_pointer editor_pointer;
            (* A button-up outside the window never reaches us — release
               the text-input hold or wanted stays ignored forever. *)
            Native_window.hold_pointer text_input false
          end);
-        (match input with
-         | Some (Input.Key_down _) ->
-           Renderer_metrics.note_key metrics
-             (dom_key (Sdl.Event.get e Sdl.Event.keyboard_scancode))
-         | Some (Input.Text_input s) -> Renderer_metrics.note_text metrics s
+        (match input, event.kind with
+         | Some (Input.Key_down _), Sdl.Event.Key_down key ->
+           Renderer_metrics.note_key metrics (dom_key key.scancode)
+         | Some (Input.Text_input text), _ -> Renderer_metrics.note_text metrics text
          | _ -> ());
         (match input with
          | Some (Input.Button_down (_,_,Input.Left,_,_)) -> Native_window.hold_pointer text_input true
@@ -1937,26 +1914,26 @@ let () =
         (* Outliner Tab shortcuts can prevent focus traversal. Let overlays
            keep their own focus order and dispatch other Tab keydowns once. *)
         let tab_dispatched =
-          match input with
-          | Some (Input.Key_down (Input.Tab, mods, repeat))
+          match input, event.kind with
+          | Some (Input.Key_down (Input.Tab, mods, repeat)), Sdl.Event.Key_down key
             when not (mods.Input.ctrl || mods.Input.meta || mods.Input.alt
                       || Keyboard_capture.active ())
                  && Ui.overlay_top ui = 0 ->
               on_dom_key ~before_default:true ~down:true
-                ~scancode:(Sdl.Event.get e Sdl.Event.keyboard_scancode)
-                ~keymod:(Sdl.Event.get e Sdl.Event.keyboard_keymod) ~repeat ();
+                ~scancode:key.scancode
+                ~keymod:key.keymod ~repeat ();
               true
           | _ -> false
         in
         (match input with
          | Some (Input.Button_down _ | Input.Button_up _ | Input.Key_down _
                 | Input.Text_input _ | Input.Wheel _ | Input.Wheel_mods _) ->
-           let age = Int32.sub (Sdl.get_ticks ()) (Sdl.Event.get e Sdl.Event.timestamp) in
-           let at = perf_s () -. Int32.to_float age /. 1000. in
+           let age_ns = Int64.sub (Sdl.get_ticks_ns ()) event.timestamp_ns in
+           let at = perf_s () -. max 0. (Int64.to_float age_ns /. 1e9) in
            metrics.input_at <- Some (match metrics.input_at with None -> at | Some old -> min old at)
          | _ -> ());
         (match input with
-         | Some (Input.Resize (w, h)) when w <> !win_w || h <> !win_h ->
+         | Some (Input.Resize (w, h)) when backing_changed || w <> !win_w || h <> !win_h ->
            win_w := w;
            win_h := h;
            apply_actions
@@ -2590,7 +2567,7 @@ let () =
         frame_deadline := Renderer_metrics.next_deadline ~previous:!frame_deadline ~now;
         let remaining = !frame_deadline -. now in
         if remaining > 0. then Thread.delay remaining
-    | None when not dirty -> Sdl.delay 1l
+    | None when not dirty -> Sdl.delay 1
     | None -> ()
 
   done);

@@ -12,13 +12,13 @@ external software_read : int -> bytes = "logseq_native_software_read"
 external software_hit : int -> bool = "logseq_native_software_hit"
 external software_dispose : int -> unit = "logseq_native_software_dispose"
 
-type text_input = { mutable held : bool; mutable wanted : bool; mutable active : bool }
-let text_input () =
-  let active = Tsdl.Sdl.is_text_input_active () in
-  {held=false; wanted=active; active}
+type text_input = { window : Lui_sdl3.window; mutable held : bool; mutable wanted : bool; mutable active : bool }
+let text_input window =
+  let active = Lui_sdl3.is_text_input_active window in
+  {window; held=false; wanted=active; active}
 let sync_text_input input =
   if not input.held && input.active <> input.wanted then begin
-    if input.wanted then Tsdl.Sdl.start_text_input () else Tsdl.Sdl.stop_text_input ();
+    if input.wanted then Lui_sdl3.start_text_input input.window else Lui_sdl3.stop_text_input input.window;
     input.active <- input.wanted
   end
 let request_text_input input enabled = input.wanted <- enabled; sync_text_input input
@@ -47,16 +47,16 @@ let drag_regions ~store ~rect_of ~scale ~blocked =
 
 let install window repaint =
   Callback.register "logseq_native_expose" repaint;
-  watch_expose (Tsdl.Sdl.get_window_id window) true
+  watch_expose (Lui_sdl3.get_window_id window) true
 
 let dispose window =
-  let id = Tsdl.Sdl.get_window_id window in
+  let id = Lui_sdl3.get_window_id window in
   watch_expose id false;
   software_dispose id;
   set_drag_regions id [||]
 
 
-module Sdl = Tsdl.Sdl
+module Sdl = Lui_sdl3
 module Input = Lui_window.Input
 
 let mods_of_keymod km =
@@ -74,89 +74,34 @@ let current_modifiers state = mods_of_keymod state.keymod
    consumed. Follow each dequeued key's own snapshot so rapid releases
    cannot change an earlier click, wheel event or text commit. *)
 let input_of_event state e =
-  let open Input in
-  let kind = Sdl.Event.enum (Sdl.Event.get e Sdl.Event.typ) in
+  let kind = (Sdl.Event.value e).kind in
   (match kind with
-   | `Key_down | `Key_up ->
-       state.keymod <- Sdl.Event.get e Sdl.Event.keyboard_keymod
-   | `Window_event ->
-       (match Sdl.Event.window_event_enum
-          (Sdl.Event.get e Sdl.Event.window_event_id) with
-        | `Focus_lost -> state.keymod <- 0
-        | `Focus_gained -> state.keymod <- Sdl.get_mod_state ()
-        | _ -> ())
+   | Sdl.Event.Key_down key | Key_up key -> state.keymod <- key.keymod
+   | Window (Focus_lost, _, _) -> state.keymod <- 0
+   | Window (Focus_gained, _, _) -> state.keymod <- Sdl.get_mod_state ()
    | _ -> ());
+  let open Input in
   match kind with
-  | `Window_event -> (
-      match
-        Sdl.Event.window_event_enum
-          (Sdl.Event.get e Sdl.Event.window_event_id)
-      with
-      | `Resized | `Size_changed ->
-        Some
-          (Resize
-             ( Int32.to_int (Sdl.Event.get e Sdl.Event.window_data1)
-             , Int32.to_int (Sdl.Event.get e Sdl.Event.window_data2) ))
-      | `Close -> Some Quit_input
-      | _ -> None)
-  | `Key_down ->
-    Some
-      (Key_down
-         ( Input.key_of_sdl_scancode
-             (Sdl.Event.get e Sdl.Event.keyboard_scancode)
-         , mods_of_keymod (Sdl.Event.get e Sdl.Event.keyboard_keymod)
-         , Sdl.Event.get e Sdl.Event.keyboard_repeat <> 0 ))
-  | `Text_input ->
-    (* SDL on X11 still commits TEXTINPUT for Ctrl/Super chords whose
-       keysym is not a letter (Ctrl+, Ctrl+. Ctrl+/ ...), so a shortcut
-       also typed its punctuation into the focused editor. Browsers never
-       insert text for a Ctrl/Meta chord; drop it here. Ctrl+Alt stays
-       (Windows AltGr layouts report it). *)
-    let m = current_modifiers state in
-    if (m.Input.ctrl && not m.Input.alt) || m.Input.meta then None
-    else Some (Text_input (Sdl.Event.get e Sdl.Event.text_input_text))
-  | `Text_editing ->
-    Some
-      (Text_editing
-         ( Sdl.Event.get e Sdl.Event.text_editing_text
-         , Sdl.Event.get e Sdl.Event.text_editing_start
-         , Sdl.Event.get e Sdl.Event.text_editing_length ))
-  | `Mouse_motion ->
-    Some
-      (Move
-         ( float (Sdl.Event.get e Sdl.Event.mouse_motion_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_motion_y) ))
-  | `Mouse_button_down ->
-    Some
-      (Button_down
-         ( float (Sdl.Event.get e Sdl.Event.mouse_button_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_button_y)
-         , Input.button_of_sdl
-             (Sdl.Event.get e Sdl.Event.mouse_button_button)
-         , Sdl.Event.get e Sdl.Event.mouse_button_clicks
-         , current_modifiers state ))
-  | `Mouse_button_up ->
-    Some
-      (Button_up
-         ( float (Sdl.Event.get e Sdl.Event.mouse_button_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_button_y)
-         , Input.button_of_sdl
-             (Sdl.Event.get e Sdl.Event.mouse_button_button)
-         , current_modifiers state ))
-  | `Mouse_wheel ->
-    Some
-      (Wheel_mods
-         ( float (Sdl.Event.get e Sdl.Event.mouse_wheel_x)
-         , float (Sdl.Event.get e Sdl.Event.mouse_wheel_y)
-         , current_modifiers state ))
-  | `Drop_file ->
-    let s = Sdl.Event.drop_file_file e in
-    Sdl.Event.drop_file_free e;
-    (match s with Some f -> Some (Drop_file f) | None -> None)
-  | `Drop_text ->
-    let s = Sdl.Event.drop_file_file e in
-    Sdl.Event.drop_file_free e;
-    (match s with Some t -> Some (Drop_text t) | None -> None)
-  | `Drop_begin | `Drop_complete -> None
-  | `Quit -> Some Quit_input
+  | Sdl.Event.Window (Resized, w, h) -> Some (Resize (w, h))
+  | Window (Close_requested, _, _) -> Some Quit_input
+  | Key_down key ->
+    Some (Key_down (Input.key_of_sdl_scancode key.scancode,
+                    mods_of_keymod key.keymod, key.repeat))
+  | Text_input text ->
+    (* Keep AltGr commits, but do not insert text generated by shortcuts. *)
+    let modifiers = current_modifiers state in
+    if (modifiers.ctrl && not modifiers.alt) || modifiers.meta then None
+    else Some (Text_input text)
+  | Text_editing (text, start, length) -> Some (Text_editing (text, start, length))
+  | Mouse_motion motion -> Some (Move (motion.x, motion.y))
+  | Mouse_button_down button ->
+    Some (Button_down (button.x, button.y, Input.button_of_sdl button.button,
+                       button.clicks, current_modifiers state))
+  | Mouse_button_up button ->
+    Some (Button_up (button.x, button.y, Input.button_of_sdl button.button,
+                     current_modifiers state))
+  | Mouse_wheel (x, y) -> Some (Wheel_mods (x, y, current_modifiers state))
+  | Drop_file file -> Some (Drop_file file)
+  | Drop_text text -> Some (Drop_text text)
+  | Quit -> Some Quit_input
   | _ -> None

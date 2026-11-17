@@ -954,7 +954,20 @@ let () =
   (match Host_requests.ed_ctx moved_env "block" with
    | Some ctx -> check "Cached editor context must follow scroll geometry" (ctx.ox=120. && ctx.oy=260.)
    | None -> failwith "Editor context disappeared");
-  print_endline "native editor wrapped geometry: OK"
+  let old_env = !Host_requests.env and old_pending = !Editor_state.pending_focus in
+  let request = Editor_actions.make_focus_request ~click:(0., 125., 205.) "block" 10 in
+  Fun.protect ~finally:(fun () ->
+      Host_requests.env := old_env; Editor_state.pending_focus := old_pending) (fun () ->
+    Host_requests.env := Some env;
+    Lui_store.apply_op store (SetExtensionProp (21,"caret",IntValue 10));
+    Editor_state.pending_focus := Some request;
+    check "An unresolved initial click must not paint the temporary end caret"
+      (Host_requests.editor_caret_key ()=None
+       && Host_requests.editor_caret_ops ~color:(Lui_scene.color 0 0 0 255)=[]);
+    request.Editor_state.focus_click <- None;
+    check "Resolving the initial click must restore the native caret"
+      (Host_requests.editor_caret_key ()=Some ("block",10)));
+  print_endline "native editor wrapped geometry and initial click caret: OK"
 
 let () =
   let store = Lui_store.create () and ui = Lui_window.Ui.create () in
@@ -2751,6 +2764,12 @@ let () =
 
 let () =
   let received = ref 0 and store = Lui_store.create () in
+  let current_model = ref (Edit_model.create "") in
+  let apply_input input =
+    incr received;
+    current_model := Edit_input.handle ~route:Edit_input.no_route
+      ~conduit:Edit_input.no_conduit !current_model input
+  in
   let branches = ref None in
   let old_app = !Native_embed.current_app
   and old_target = !Platform.event_target_of in
@@ -2771,7 +2790,7 @@ let () =
             (Edit_model.create "key regression") in
           Edit_view.view ~model
             ~frame:(Signal.constant context.Lui_ui.ui_scheduler Edit_input.empty_frame)
-            ~block_id ~cls:"" ~on_input:(fun _ -> incr received))) in
+            ~block_id ~cls:"" ~on_input:apply_input)) in
     Native_embed.current_app := Some app;
     Platform.event_target_of := (fun id -> Some (Native_embed.ext_snapshot (Lui_app.runtime app) id));
     Hashtbl.replace Platform.capture_listeners "keydown" [];
@@ -2803,7 +2822,24 @@ let () =
       Hashtbl.replace Platform.capture_listeners "keydown" [fun _ ->
         incr received; Signal.set (Option.get !branches) [2]; ignore (Lui_app.flush app)];
       ignore (key next);
-      check "A document-owned key was also delivered to a disposed editor" (!received=3));
+      check "A document-owned key was also delivered to a disposed editor" (!received=3);
+      let next = editor_id () in
+      List.iter (fun consumed -> List.iter (fun (name, expected_source, expected_caret) ->
+        current_model := Edit_model.select (Edit_model.create "abcdef") ~anchor:3 ~focus:3;
+        let before = !received in
+        Hashtbl.replace Platform.capture_listeners "keydown"
+          (if consumed then [fun _ ->
+            apply_input (Edit_input.Key (Edit_model.key_ev name, false));
+            Platform.request_prevent ()] else []);
+        ignore (Native_embed.keyboard_event next
+          (Printf.sprintf "{\"nodeId\":%d,\"key\":\"%s\"}" next name)
+          (Printf.sprintf "{\"key\":\"%s\"}" name));
+        check (name ^ " must be delivered exactly once") (!received=before+1);
+        check (name ^ " must edit exactly one character")
+          ((!current_model).Edit_model.source=expected_source
+           && (!current_model).Edit_model.caret=expected_caret))
+        ["ArrowLeft","abcdef",2; "ArrowRight","abcdef",4; "Backspace","abdef",2])
+        [false;true]);
   print_endline "native atomic editor key delivery: OK"
 
 let () =
