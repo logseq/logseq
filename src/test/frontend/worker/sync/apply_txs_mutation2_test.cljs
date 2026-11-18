@@ -26,6 +26,16 @@
             [logseq.outliner.recycle :as recycle]
             [promesa.core :as p]))
 
+(defn- marked-ids
+  "The tx ids a recorded mark-* fn was called with, per repo, each once; a call
+  with no ids marks nothing (master marks the failed and the no-op rebases in
+  one step, either of which can be empty, and no longer dedupes the ids)."
+  [calls]
+  (->> calls
+       (remove (fn [[_repo ids]] (empty? ids)))
+       (map (fn [[repo ids]] [repo (vec (distinct ids))]))
+       vec))
+
 (defn- three-blocks-conn
   []
   (db-test/create-conn-with-blocks
@@ -908,7 +918,7 @@
 
 ;; rejected transactions
 
-;; Fails if, in `rollback-and-mark-failed-txs!`, the `(filter uuid?)` step is dropped, the `(drop-while #(not (contains? rejected...` step is dropped, the `vec` step is dropped, the `:rtc-tx?` key is dropped, the `:tx-reject-rollback?` key is dropped, the `:listen-db` key is dropped, `:db-sync/rebased-local?` becomes `:db-sync/replayed-tx-data?`, the `(map :tx-id)` step is dropped, the `(filter (fn [{:keys [status]}]` step is dropped, the `(keep :tx-id)` step is dropped, the `distinct` step is dropped or `filter` becomes `remove`.
+;; Fails if, in `rollback-and-mark-failed-txs!`, the `(filter uuid?)` step is dropped, the `(drop-while #(not (contains? rejected...` step is dropped, the `vec` step is dropped, the `:rtc-tx?` key is dropped, the `:tx-reject-rollback?` key is dropped, the `:listen-db` key is dropped, `:db-sync/rebased-local?` becomes `:db-sync/replayed-tx-data?`, the `(map :tx-id)` step is dropped, the `(filter (fn [{:keys [status]}]` step is dropped, the `(keep :tx-id)` step is dropped or `filter` becomes `remove`.
 (deftest rollback-and-mark-failed-txs-rebases-the-pending-txs-after-the-rejected-one
   (let [conn (three-blocks-conn)
         [u0 u1 u2 u3 u4] (repeatedly 5 random-uuid)
@@ -955,10 +965,10 @@
     (is (= {:rtc-tx? true :tx-reject-rollback? true} (first @batches)))
     (is (= [["r" rebased-report]] @handled)
         "Only a rebased local transaction with data is handled again")
-    (is (= [["r" [u3]]] @stale)
+    (is (= [["r" [u3]]] (marked-ids @stale))
         "Only a rebase that failed or did nothing, of a tx with replay data, is no longer pending")
     (is (vector? (second (first @stale))))
-    (is (= [["r" [u1 "not-a-uuid"]]] @failed))
+    (is (= [["r" [u1 "not-a-uuid"]]] (marked-ids @failed)))
     ;; a tx id that is not a uuid is no rejection
     (reset! reversed [])
     (reset! batches [])
@@ -1223,7 +1233,7 @@
     (#'sync-apply/transact-remote-txs! conn [{:tx-data [[:db/add (str (:block/uuid b)) :block/title "remote b" 536870913]]}])
     (is (= "remote b" (:block/title (d/entity @conn (:db/id b)))))))
 
-;; Fails if, in `apply-remote-tx-with-local-changes!`, the `distinct` step is dropped or the `:remote-asset-tx-data` key is dropped.
+;; Fails if, in `apply-remote-tx-with-local-changes!`, the `:remote-asset-tx-data` key is dropped.
 (deftest apply-remote-tx-with-local-changes-returns-the-applied-data-and-marks-each-stale-tx-once
   (let [conn (three-blocks-conn)
         b (db-test/find-block-by-content @conn "b")
@@ -1247,7 +1257,7 @@
         (is (some #(and (= :block/title (:a %)) (= "remote b" (:v %)))
                   (:remote-asset-tx-data result))
             "The datoms of the applied remote tx are returned for the asset download")
-        (is (= [["r" [u]]] @stale) "A stale tx is no longer pending, and is marked once"))
+        (is (= [["r" [u]]] (marked-ids @stale)) "A stale tx is no longer pending"))
       (reset! *pending [])
       (let [error (try (apply! "lost") nil (catch :default e e))]
         (is (= :pending-tx-snapshot-changed (:code (ex-data error))))
