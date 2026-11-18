@@ -476,6 +476,185 @@ let test_pending_save_order (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_suggestion_selection_commits_pending_save (h : host) =
+  let* () = settle h 40 in
+  let source = "前缀 [图谱别名]([[Project Atlas]])" in
+  let target_start = String.length "前缀 [图谱别名](" in
+  let target_uuid = "00000001-2026-1116-0000-000000000000" in
+  let target_title = "Nov 16th, 2026" in
+  let selected_source =
+    "前缀 [图谱别名]([[" ^ target_uuid ^ "]])"
+  in
+  stage_page h [ Test_check.block "b1" source ];
+  set_editing ~uuid:"b1" ~buffer:source ~caret:(target_start + 2) ~base:source;
+  let target_entity =
+    W.Map
+      [ W.kw "block/uuid", W.Uuid target_uuid
+      ; W.kw "block/title", W.String target_title
+      ; W.kw "block/name", W.String "nov 16th, 2026" ]
+  in
+  let page_host =
+    { h with base_handler = (fun name args ->
+        match name, args with
+        | "thread-api/get-case-page", [ W.String _; W.String title ]
+          when title = target_title -> target_entity
+        | "thread-api/get-blocks",
+          [ W.String _; W.Array [ W.Map query ] ]
+          when W.get (W.Map query) "id" = Some (W.Uuid target_uuid) ->
+            W.List [ W.Map [ W.kw "block", target_entity ] ]
+        | _ -> h.base_handler name args) }
+  in
+  install_worker ~repo:h.repo page_host;
+  let previous_popup = !Popups_state.active in
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  Popups_state.open_ac ~tpos:target_start ~autopair:false popup Popups_state.Page_ref;
+  Editor_keys.apply_input "b1" (EI.Insert "Nov");
+  let* () = h.wait_ms 450 in
+  let query_before =
+    match !Ops.pending_save with
+    | Some save -> W.map_get save.Ops.opts "undo-redo/editor-info"
+    | None -> None
+  in
+  check "autocomplete debounce retains the typed save"
+    (match !Ops.pending_save with
+     | Some save -> save.Ops.uuid = "b1" && save.title = A.live_buffer "b1"
+     | None -> false);
+  check "autocomplete debounce waits for its owner to close"
+    (Option.is_some !Ops.pending_save_ready);
+  check "autocomplete deadline does not persist the intermediate query"
+    (save_ops () = []
+     && not (List.mem "thread-api/apply-outliner-ops" !calls));
+  check "typed query save keeps its original history before"
+    (Option.is_some query_before);
+  let row =
+    W.Map
+      [ W.kw "block/uuid", W.Uuid target_uuid
+      ; W.kw "block/title", W.String target_title
+      ; W.kw "page?", W.Bool true ]
+  in
+  let item = Popups_state.page_item_of_row 0 row in
+  (match (Popups_state.get popup).Popups_state.ac with
+   | Some ac ->
+       check "page suggestion query tracks typed input" (ac.query = "Nov");
+       Popups_state.set_ac popup (Some { ac with items = [ item ]; chosen = 0 });
+       let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+       Popups_state.apply_item popup ac ~meta:false item
+   | None -> check "page suggestion popup opens" false);
+  check "page selection preserves the alias wrapper"
+    (A.live_buffer "b1" = "前缀 [图谱别名]([[Nov 16th, 2026]])");
+  let selected_before =
+    match !Ops.pending_save with
+    | Some save -> W.map_get save.Ops.opts "undo-redo/editor-info"
+    | None -> None
+  in
+  check "page selection keeps the original history before"
+    (Option.is_some query_before && selected_before = query_before);
+  check "page selection replaces the deferred query payload"
+    (match !Ops.pending_save with
+     | Some save -> save.Ops.uuid = "b1" && save.title = A.live_buffer "b1"
+     | None -> false);
+  let* () = h.wait_ms 450 in
+  check "page selection writes one canonical save"
+    (match save_ops () with
+     | [ sop ] -> wire_has selected_source sop
+     | _ -> false);
+  check "page selection clears its pending debounce"
+    (Option.is_none !Ops.pending_save && Option.is_none !Ops.pending_save_ready);
+  let* () = Ops.undo () in
+  check "page selection is persisted before undo"
+    (let persisted = current_titles () = [ selected_source ] in
+     let saved = List.exists (wire_has selected_source) (save_ops ()) in
+     if not (persisted && saved) then
+       Js.log
+         ("autocomplete persisted titles: "
+          ^ String.concat " | " (current_titles ())
+          ^ "; save ops: " ^ string_of_int (List.length (save_ops ())));
+     persisted && saved);
+  Popups_state.close_ac popup;
+  Popups_state.active := previous_popup;
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_autocomplete_dismiss_resumes_pending_save (h : host) =
+  let* () = settle h 40 in
+  let source = "[[P]]" in
+  stage_page h [ Test_check.block "b1" source ];
+  set_editing ~uuid:"b1" ~buffer:source ~caret:3 ~base:source;
+  install_worker ~repo:h.repo h;
+  let previous_popup = !Popups_state.active in
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Page_ref;
+  Editor_keys.apply_input "b1" (EI.Insert "roject");
+  let* () = h.wait_ms 450 in
+  check "dismissal test save is retained at the debounce deadline"
+    (Option.is_some !Ops.pending_save && Option.is_some !Ops.pending_save_ready);
+  check "dismissal test does not save while autocomplete is open"
+    (save_ops () = []
+     && not (List.mem "thread-api/apply-outliner-ops" !calls));
+  Popups_state.close_ac popup;
+  let* () = h.wait_ms 25 in
+  check "dismissing autocomplete resumes the pending save"
+    (match save_ops () with [ _ ] -> true | _ -> false);
+  check "dismissal clears the resumed pending save"
+    (Option.is_none !Ops.pending_save && Option.is_none !Ops.pending_save_ready);
+  Popups_state.active := previous_popup;
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_autocomplete_explicit_flush (h : host) =
+  let* () = settle h 40 in
+  let source = "[[P]]" in
+  stage_page h [ Test_check.block "b1" source ];
+  set_editing ~uuid:"b1" ~buffer:source ~caret:3 ~base:source;
+  install_worker ~repo:h.repo h;
+  let previous_popup = !Popups_state.active in
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Page_ref;
+  Editor_keys.apply_input "b1" (EI.Insert "roject");
+  let* () = h.wait_ms 450 in
+  check "flush test save is retained at the debounce deadline"
+    (Option.is_some !Ops.pending_save && Option.is_some !Ops.pending_save_ready);
+  check "flush test autocomplete remains active"
+    (match (Popups_state.get popup).Popups_state.ac with
+     | Some ac -> ac.auuid = "b1"
+     | None -> false);
+  let* () = Ops.flush_pending_save () in
+  check "explicit flush persists while autocomplete is open"
+    (match save_ops () with [ _ ] -> true | _ -> false);
+  check "explicit flush clears pending debounce state"
+    (Option.is_none !Ops.pending_save && Option.is_none !Ops.pending_save_ready);
+  Popups_state.close_ac popup;
+  let* () = h.wait_ms 25 in
+  check "autocomplete close does not duplicate the explicit flush"
+    (List.length (save_ops ()) = 1);
+  Popups_state.active := previous_popup;
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_autocomplete_save_gate_is_block_scoped (h : host) =
+  let* () = settle h 40 in
+  stage_page h
+    [ Test_check.block "b1" "hello"
+    ; Test_check.block "b2" "[[P]]" ];
+  set_editing ~uuid:"b1" ~buffer:"hello" ~caret:5 ~base:"hello";
+  install_worker ~repo:h.repo h;
+  Editor_keys.apply_input "b1" (EI.Insert "x");
+  set_editing ~uuid:"b2" ~buffer:"[[P]]" ~caret:3 ~base:"[[P]]";
+  let previous_popup = !Popups_state.active in
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Page_ref;
+  let* () = h.wait_ms 450 in
+  check "another block's autocomplete does not hold the pending save"
+    (match save_ops () with
+     | [ sop ] -> wire_has "hellox" sop
+     | _ -> false);
+  check "different-block save clears its debounce state"
+    (Option.is_none !Ops.pending_save && Option.is_none !Ops.pending_save_ready);
+  Popups_state.close_ac popup;
+  Popups_state.active := previous_popup;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_queued_input (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "hello" ];
@@ -1700,6 +1879,10 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_save_debounce h in
   let* () = test_embed_persists_erased_buffer h in
   let* () = test_pending_save_order h in
+  let* () = test_suggestion_selection_commits_pending_save h in
+  let* () = test_autocomplete_dismiss_resumes_pending_save h in
+  let* () = test_autocomplete_explicit_flush h in
+  let* () = test_autocomplete_save_gate_is_block_scoped h in
   let* () = test_queued_input h in
   let* () = test_failed_apply_keeps_base h in
   let* () = test_resync_clean_dirty h in
