@@ -943,6 +943,100 @@
       (is (thrown? js/Error
                    (direct-children-membership @conn page-uuid))))))
 
+(deftest direct-children-membership-isolates-missing-child-uuid-test
+  (when-let [direct-children-membership
+             (direct-children-membership-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          sibling-a (random-uuid)
+          sibling-c (random-uuid)]
+      ;; A persisted outline child can lose :block/uuid (db-test#1537). That
+      ;; must isolate to the defective row rather than fail the whole page.
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 11
+                     :block/title "Parent"
+                     :block/name "parent"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid sibling-a
+                     :block/tx-id 11
+                     :block/title "Child A"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:db/id -2
+                     :block/tx-id 11
+                     :block/title "Child B"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a1"
+                     :block/created-at 1}
+                    {:block/uuid sibling-c
+                     :block/tx-id 11
+                     :block/title "Child C"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a2"}])
+      (let [child-b-id (ffirst (d/q '[:find ?e :where [?e :block/title "Child B"]] @conn))
+            response (direct-children-membership @conn page-uuid)
+            items (:items response)
+            error-item (ffirst (filter (comp map? first) items))]
+        (is (= 3 (count items))
+            "a UUID-less child does not drop its siblings")
+        (is (= [sibling-a "a0"] (first items)))
+        (is (= [sibling-c "a2"] (last items)))
+        (is (true? (:block.temp/integrity-error? error-item)))
+        (is (= child-b-id (:db/id error-item)))
+        (is (= page-uuid (:parent-uuid error-item)))
+        (is (= [:block/uuid] (:missing error-item)))
+        (is (not (contains? error-item :block/title))
+            "the integrity error must not include the block title")
+        (is (= response
+               (-> response ldb/write-transit-str ldb/read-transit-str))
+            "integrity-error membership items stay transit-safe")))))
+
+(deftest open-block-tree-isolates-missing-child-uuid-test
+  (when-let [open-block-tree (open-block-tree-api)]
+    (let [conn (db-test/create-conn)
+          page-uuid (random-uuid)
+          sibling-a (random-uuid)
+          sibling-c (random-uuid)]
+      (d/transact! conn
+                   [{:db/id -1
+                     :block/uuid page-uuid
+                     :block/tx-id 11
+                     :block/title "Parent"
+                     :block/name "parent"
+                     :block/tags :logseq.class/Page}
+                    {:block/uuid sibling-a
+                     :block/tx-id 11
+                     :block/title "Child A"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a0"}
+                    {:db/id -2
+                     :block/tx-id 11
+                     :block/title "Child B"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a1"
+                     :block/created-at 1}
+                    {:block/uuid sibling-c
+                     :block/tx-id 11
+                     :block/title "Child C"
+                     :block/page -1
+                     :block/parent -1
+                     :block/order "a2"}])
+      (let [tree (open-block-tree @conn page-uuid)
+            items (get-in tree [:children page-uuid :items])]
+        (is (= #{page-uuid sibling-a sibling-c}
+               (set (keys (:blocks tree))))
+            "canonical snapshots stay on UUID-bearing rows only")
+        (is (= 3 (count items)))
+        (is (some (fn [[id]] (and (map? id) (:block.temp/integrity-error? id)))
+                  items))))))
+
 (deftest canonical-block-snapshots-are-transit-safe-pure-results-test
   (let [canonical-blocks (canonical-blocks-api)
         direct-children-membership (direct-children-membership-api)

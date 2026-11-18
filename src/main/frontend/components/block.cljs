@@ -2229,15 +2229,22 @@
 
 (def ^:private lazy-children-row-height 32)
 
+(defn- child-list-item-key
+  [config item]
+  (str (:container-id config) "-"
+       (if (uuid? item)
+         item
+         (str "integrity-" (:db/id item)))))
+
 (defn- estimate-children-height
   "Rough rendered height of an unmounted subtree: a fixed row height per
    descendant, counting nested children through already-loaded children
    slots."
   [child-uuids depth]
-  (reduce (fn [height uuid]
+  (reduce (fn [height item]
             (+ height lazy-children-row-height
-               (if (< depth 8)
-                 (if-let [nested (db-hooks/peek-children uuid)]
+               (if (and (uuid? item) (< depth 8))
+                 (if-let [nested (db-hooks/peek-children item)]
                    (estimate-children-height nested (inc depth))
                    0)
                  0)))
@@ -2336,10 +2343,16 @@
 
 (hsx/defc library-child-uuids
   [child-uuids then]
-  (let [blocks (db-hooks/use-blocks (vec child-uuids))]
+  (let [child-uuids (vec child-uuids)
+        blocks (db-hooks/use-blocks (filterv uuid? child-uuids))]
     (then (if (nil? blocks)
             []
-            (entity/library-outline-child-uuids blocks)))))
+            (let [keep-uuids (set (entity/library-outline-child-uuids blocks))]
+              (into []
+                    (filter (fn [item]
+                              (or (not (uuid? item))
+                                  (contains? keep-uuids item))))
+                    child-uuids))))))
 
 (defn with-library-child-uuids
   "Library shows nested pages only; other pages keep every child."
@@ -4595,6 +4608,18 @@
   []
   (react-core/createElement "div" #js {:style #js {:minHeight 28}}))
 
+(hsx/defc integrity-error-row
+  "Inline placeholder for a persisted child that is missing required identity.
+   Keeps the outline from looking intact while isolating the failure to this row."
+  [item]
+  (ui/block-error
+   (t :block.integrity/missing-uuid
+      (str (:db/id item))
+      (str (:parent-uuid item))
+      (string/join ", " (map str (:missing item))))
+   {:section-attrs {:data-integrity-error true
+                    :data-db-id (str (:db/id item))}}))
+
 (declare subscribed-block-row)
 
 (hsx/defc block-container
@@ -5031,7 +5056,8 @@
                           (or (util/force-virtualization?)
                               (and (:virtualize? config)
                                    (>= blocks-count 64))))
-        selection-block-ids (or (:selection/block-ids config) block-uuids)
+        selection-block-ids (or (:selection/block-ids config)
+                                (filterv uuid? block-uuids))
         scroll-container (or (:scroll-container config)
                              (if-let [node (js/document.getElementById (:blocks-node-id config))]
                                (util/app-scroll-container-node node)
@@ -5044,8 +5070,8 @@
         *last-rendered-start (hooks/use-ref nil)
         virtual-opts {:ref *virtualized-ref
                       :custom-scroll-parent scroll-container
-                      :compute-item-key (fn [_idx block-uuid]
-                                          (str (:container-id config) "-" block-uuid))
+                      :compute-item-key (fn [_idx item]
+                                          (child-list-item-key config item))
                       :increase-viewport-by 254
                       :overscan 254
                       :skipAnimationFrameInResizeObserver true
@@ -5068,11 +5094,12 @@
                               (let [boundary-id
                                     (block-selection/virtual-range-boundary-id
                                      block-uuids direction current-start current-end)]
-                                (editor-handler/highlight-selection-area!
-                                 (str "ls-block-" boundary-id)
-                                 (str boundary-id)
-                                 {:append? true
-                                  :block-ids selection-block-ids}))))))
+                                (when (uuid? boundary-id)
+                                  (editor-handler/highlight-selection-area!
+                                   (str "ls-block-" boundary-id)
+                                   (str boundary-id)
+                                   {:append? true
+                                    :block-ids selection-block-ids})))))))
                       :item-content (fn [idx block-uuid]
                                       (subscribed-block-row
                                        (assoc config
@@ -5127,8 +5154,8 @@
                                     virtualizable-block-list
                                     opts)))))))
 
-(hsx/defc subscribed-block-row
-  [config block-uuid & {:as opts}]
+(hsx/defc subscribed-uuid-block-row
+  [config block-uuid opts]
   (let [block (db-hooks/use-block block-uuid)
         temp-collapsed? (rfx/use-sub [:ui/collapsed-blocks
                                       (state/get-current-repo)
@@ -5156,6 +5183,12 @@
        (fn [visible-uuids]
          (render-loaded-block-row config block visible-uuids virtualizable-block-list opts))))))
 
+(hsx/defc subscribed-block-row
+  [config item & {:as opts}]
+  (if (uuid? item)
+    [subscribed-uuid-block-row config item opts]
+    [integrity-error-row item]))
+
 (hsx/defc plain-block-list
   [config block-uuids]
   (let [block-uuids (vec block-uuids)
@@ -5164,11 +5197,11 @@
       [:div.blocks-list-wrap
        {:data-level (or (:level config) 0)}
        (map-indexed
-        (fn [idx block-uuid]
-          ^{:key (str (:container-id config) "-" block-uuid)}
+        (fn [idx item]
+          ^{:key (child-list-item-key config item)}
           [subscribed-block-row
            config
-           block-uuid
+           item
            {:top? (zero? idx)
             :bottom? (= (dec blocks-count) idx)}])
         block-uuids)])))

@@ -98,7 +98,18 @@
     (testing "renaming a child does not invalidate membership"
       (is (= #{}
              (children-keys
-              (affected-keys db [[:db/add 12 :block/title "Renamed"]])))))))
+              (affected-keys db [[:db/add 12 :block/title "Renamed"]])))))
+    (testing "repairing a missing child uuid invalidates the parent"
+      (let [db-without-uuid (db-with [{:db/id 10 :block/uuid parent-before-uuid}
+                                      {:db/id 12
+                                       :block/title "Child"
+                                       :block/parent 10
+                                       :block/order "a0"}])]
+        (is (= #{[:children parent-before-uuid]}
+               (children-keys
+                (affected-keys
+                 db-without-uuid
+                 [[:db/add 12 :block/uuid child-uuid]]))))))))
 
 (deftest route-page-invalidation-is-limited-to-heading-candidates-test
   (let [page-before-uuid (random-uuid)

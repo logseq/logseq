@@ -68,6 +68,39 @@
         (is (= page-id (:db/id (:block/parent repaired-block))))
         (is (empty? (:errors (worker-db-validate/validate-db conn))))))))
 
+(deftest validate-db-repairs-block-missing-uuid-without-updated-at
+  (let [conn (create-db-graph-conn)
+        page-uuid (random-uuid)
+        page-tx (:tempids
+                 (d/transact! conn [{:db/id "page"
+                                      :block/uuid page-uuid
+                                      :block/created-at 1
+                                      :block/updated-at 1
+                                      :block/name "test page"
+                                      :block/title "Test Page"
+                                      :block/tags :logseq.class/Page}]))
+        page-id (get page-tx "page")
+        block-id (get (:tempids
+                       (d/transact! conn [{:db/id "block"
+                                           :block/created-at 11
+                                           :block/page page-id
+                                           :block/parent page-id
+                                           :block/order "a0"
+                                           :block/title "Child B"}]))
+                      "block")]
+    (is (seq (:errors (db-validate/validate-db @conn))))
+    (with-redefs [shared-service/broadcast-to-clients! (fn [& _args] nil)]
+      (with-transact-pipeline #(worker-db-validate/validate-db conn))
+      (let [repaired-block (d/entity @conn block-id)]
+        (is (uuid? (:block/uuid repaired-block)))
+        (is (= 11 (:block/updated-at repaired-block))
+            "Opt-in repair copies :block/created-at when :block/updated-at is also missing.")
+        (is (= "Child B" (:block/title repaired-block)))
+        (is (= page-id (:db/id (:block/page repaired-block))))
+        (is (= page-id (:db/id (:block/parent repaired-block))))
+        (is (= "a0" (:block/order repaired-block)))
+        (is (empty? (:errors (worker-db-validate/validate-db conn))))))))
+
 (deftest validate-db-repairs-invalid-pages-properties-and-classes
   (let [conn (create-db-graph-conn)
         journal-id (get (:tempids

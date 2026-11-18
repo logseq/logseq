@@ -156,6 +156,8 @@
  :block.comments/save-error "保存评论失败。"
  :block.comments/yesterday-at "昨天 {1}"
 
+ :block.integrity/missing-uuid "此大纲行缺少必要的身份数据（实体 {1}，父块 {2}，缺失 {3}）。"
+
  :block.macro/embed-deprecated "{{embed}} 已弃用。请改用“/节点嵌入”命令。"
  :block.macro/namespace-deprecated "{{namespace}} 已弃用。请改用 {1} 功能。"
  :block.macro/query-deprecated "{{query}} 已弃用。请改用“/查询”命令。"
