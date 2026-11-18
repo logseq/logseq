@@ -19,3 +19,18 @@
        (rtc-error/e2ee-decrypt-failed?
         (ex-info "db-sync download failed"
                  {:error-message "snapshot download failed"})))))
+
+(deftest e2ee-decrypt-failed-detects-decrypt-private-key-test
+  (is (true?
+       (rtc-error/e2ee-decrypt-failed?
+        (ex-info "decrypt-private-key" {}))))
+  (is (true?
+       (rtc-error/e2ee-decrypt-failed?
+        (ex-info "db-sync upload failed"
+                 {:error (ex-info "decrypt-private-key"
+                                  {}
+                                  (js/DOMException. "OperationError" "OperationError"))}))))
+  (is (true?
+       (rtc-error/e2ee-decrypt-failed?
+        (ex-info "invalid-e2ee-password"
+                 {:code :db-sync/invalid-e2ee-password})))))
