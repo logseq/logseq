@@ -1,6 +1,7 @@
 (ns logseq.db.frontend.property-test
   (:require [cljs.test :refer [deftest is testing]]
-            [logseq.db.frontend.property :as db-property]))
+            [logseq.db.frontend.property :as db-property]
+            [logseq.db.frontend.property.build :as db-property-build]))
 
 (deftest sort-properties
   (let [p1 {:db/id 1, :block/order "a", :block/uuid "uuid-a"}
@@ -87,3 +88,13 @@
       (is (= true (:queryable? property)))
       (is (contains? db-property/public-built-in-properties :logseq.property/assignee))
       (is (db-property/logseq-property? :logseq.property/assignee)))))
+
+(deftest build-closed-value-block-validates-uuid-test
+  (testing "throws assertion error when block-uuid is not a uuid"
+    (is (thrown? js/Error (db-property-build/build-closed-value-block "not-a-uuid" :string "val" :prop {})))
+    (is (thrown? js/Error (db-property-build/build-closed-value-block nil :string "val" :prop {})))
+    (is (thrown? js/Error (db-property-build/build-closed-value-block 123 :string "val" :prop {}))))
+  (testing "succeeds when block-uuid is a valid uuid"
+    (let [u (random-uuid)
+          block (db-property-build/build-closed-value-block u :string "val" :prop {})]
+      (is (= u (:block/uuid block))))))
