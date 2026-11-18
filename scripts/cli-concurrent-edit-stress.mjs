@@ -417,7 +417,83 @@ export function staleIdsFromContext(context = {}) {
   return ids;
 }
 
-function runProcess(command, args, opts) {
+const createTreeOverlapLimit = 16;
+const createTreeUuidCount = 3;
+
+function diagnosticUuid(value) {
+  return typeof value === "string" && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value)
+    ? value
+    : undefined;
+}
+
+export function createStressInvocationTracker() {
+  const active = new Map();
+  return {
+    start(client, transport, context) {
+      if (!Number.isInteger(context.workerId)) return;
+      const { workerId, seq, op, phase, page } = context;
+      const entry = {
+        client, transport, workerId, seq, op, phase, page,
+        ids: staleIdsFromContext(context).slice(0, 8),
+        uuid: diagnosticUuid(context.uuid),
+        targetUuid: diagnosticUuid(context.targetUuid),
+        pageUuid: diagnosticUuid(context.pageUuid),
+        startedAtMs: Date.now(),
+      };
+      const overlapping = [];
+      let omitted = 0;
+      const watch = transport === "cli" && op === "create-tree"
+        ? (other) => {
+          if (overlapping.length < createTreeOverlapLimit) overlapping.push(other);
+          else omitted += 1;
+        }
+        : null;
+      for (const [other, observer] of active) {
+        observer?.(entry);
+        watch?.(other);
+      }
+      active.set(entry, watch);
+      return {
+        finish() {
+          entry.finishedAtMs = Date.now();
+          active.delete(entry);
+        },
+        overlaps() {
+          return {
+            overlapping: overlapping.map(({ page: otherPage, ...other }) => ({
+              ...other,
+              samePage: page && otherPage ? page === otherPage : undefined,
+            })),
+            overlappingOmitted: omitted,
+          };
+        },
+      };
+    },
+  };
+}
+
+function createTreeDiagnostics(trace, invocation) {
+  const uuids = trace?.["requested-uuids"];
+  const present = (key, index) => typeof trace?.[key]?.[index] === "boolean" ? trace[key][index] : null;
+  return {
+    targetUuid: diagnosticUuid(trace?.["target-uuid"]),
+    failedUuid: diagnosticUuid(trace?.["failed-uuid"]),
+    applyReturnedResult: typeof trace?.["apply-returned-result"] === "boolean" ? trace["apply-returned-result"] : null,
+    applyAtMs: Number.isSafeInteger(trace?.["apply-at-ms"]) ? trace["apply-at-ms"] : undefined,
+    lookupAtMs: Number.isSafeInteger(trace?.["lookup-at-ms"]) ? trace["lookup-at-ms"] : undefined,
+    requested: Array.isArray(uuids) ? uuids.slice(0, createTreeUuidCount).flatMap((value, index) => {
+      const uuid = diagnosticUuid(value);
+      return uuid ? [{
+        uuid,
+        presentAfterApply: present("present-after-apply", index),
+        presentAtLookup: present("present-at-lookup", index),
+      }] : [];
+    }) : [],
+    ...invocation?.overlaps(),
+  };
+}
+
+function runProcess(command, args, opts, extraEnv) {
   return new Promise((resolvePromise) => {
     const startedAt = Date.now();
     const child = spawn(command, args, {
@@ -425,6 +501,7 @@ function runProcess(command, args, opts) {
       env: {
         ...process.env,
         ...(opts.env || {}),
+        ...extraEnv,
         LOGSEQ_CLI_CONFIG: opts.config,
         LOGSEQ_CLI_GRAPH: opts.graph,
         LOGSEQ_CLI_TIMEOUT_MS: String(opts.timeoutMs),
@@ -461,13 +538,17 @@ function runProcess(command, args, opts) {
   });
 }
 
-async function runCli(opts, args, context = {}) {
+export async function runCli(opts, args, context = {}) {
   const cliBin =
     opts.clientIndex != null && opts.clientClis?.[opts.clientIndex]
       ? opts.clientClis[opts.clientIndex]
       : process.env.LOGSEQ_BIN;
   const command = cliCommand(cliBin);
-  const result = await runProcess(command.command, [...command.args, ...args], opts);
+  const traceCreateTree = context.op === "create-tree";
+  const invocation = opts.stressInvocations?.start(opts.clientName, "cli", context);
+  const result = await runProcess(command.command, [...command.args, ...args], opts, {
+    LOGSEQ_CLI_STRESS_CREATE_TREE_TRACE: traceCreateTree ? "1" : "",
+  }).finally(() => invocation?.finish());
   let parsed = null;
   if (result.stdout) {
     try {
@@ -478,24 +559,29 @@ async function runCli(opts, args, context = {}) {
   }
 
   const classification = classifyCliResult(result, parsed, context);
+  const traceFailure = traceCreateTree && !classification.ok && parsed?.error?.code === "add-id-resolution-failed";
   const event = {
     event: "cli",
     level: classification.level,
     outcome: classification.outcome,
-    context,
-    args,
+    context: traceFailure ? { op: context.op, workerId: context.workerId, seq: context.seq, client: opts.clientName } : context,
+    args: traceFailure ? undefined : args,
     code: result.code,
     signal: result.signal,
     elapsedMs: result.elapsedMs,
     status: parsed?.status,
-    error: parsed?.error,
-    stderr: result.stderr || undefined,
+    error: traceFailure ? { code: parsed.error.code, message: parsed.error.message } : parsed?.error,
+    stderr: traceFailure ? undefined : result.stderr || undefined,
     stdout: parsed ? undefined : result.stdout,
+    ...(traceFailure ? {
+      page: undefined,
+      createTreeDiagnostics: createTreeDiagnostics(parsed.error["create-tree-trace"], invocation),
+    } : {}),
   };
   logEvent(opts, event);
 
   if (!classification.ok && !classification.expectedRace && opts.failFast) {
-    throw new Error(`CLI command failed: logseq ${args.join(" ")}`);
+    throw new Error(traceFailure ? "CLI create-tree failed: add-id-resolution-failed" : `CLI command failed: logseq ${args.join(" ")}`);
   }
 
   return { ...classification, parsed, result };
@@ -541,6 +627,7 @@ async function invokeThreadApi(opts, state, method, args, context = {}) {
   const invokeOnce = async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs + 3000);
+    const invocation = opts.stressInvocations?.start(opts.clientName, "http", context);
     try {
       const nextResponse = await fetch(`${state.workerBaseUrl}/v1/invoke`, {
         method: "POST",
@@ -567,6 +654,7 @@ async function invokeThreadApi(opts, state, method, args, context = {}) {
       return { response: null, text: "", parsed: null, error: caught };
     } finally {
       clearTimeout(timer);
+      invocation?.finish();
     }
   };
 
@@ -2974,6 +3062,7 @@ async function buildStressClients(opts, runId) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   opts.runSummary = { unexpectedErrors: 0, workerErrors: 0, operations: {} };
+  opts.stressInvocations = createStressInvocationTracker();
   mkdirSync(dirname(opts.logFile), { recursive: true });
   const runId = `stress-${Date.now()}`;
 

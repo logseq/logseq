@@ -107,11 +107,13 @@
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
             editor-row-uuids (:editor-row-uuids opts)
+            stress-uuids (:stress/create-tree-uuids opts)
             operation-opts (dissoc opts
                                    :affected-block-uuids
                                    :editor-row-uuids
                                    :pending-editor-info
-                                   :return-updated-blocks?)
+                                   :return-updated-blocks?
+                                   :stress/create-tree-uuids)
             apply-started-at (perf-time-ms)
             operation-result (worker-util/profile
                               "apply outliner ops"
@@ -123,6 +125,10 @@
                                                                      (d/entity @conn :logseq.class/Journal))
                                                                     date-time-util/default-journal-title-formatter)})))
             applied-at (perf-time-ms)
+            stress-snapshot (when stress-uuids
+                              {:returned-result (some? operation-result)
+                               :present (worker-plain/stress-uuid-presence @conn stress-uuids)
+                               :at-ms (js/Date.now)})
             delta (db-listener/take-outliner-op-delta! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
             listener-at (perf-time-ms)
@@ -133,6 +139,7 @@
                            editor-row-uuids))
             response (cond-> {:result (worker-plain/worker-plain-value
                                        @conn operation-result)}
+                       stress-snapshot (assoc :stress/create-tree-apply stress-snapshot)
                        delta (assoc :delta delta)
                        (seq editor-row-uuids)
                        (assoc :editor-row-uuids editor-row-uuids

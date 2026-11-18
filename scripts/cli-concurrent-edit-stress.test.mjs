@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -13,6 +13,7 @@ import {
   clientRuntimeOptions,
   checksumDiagnosticsMatch,
   cliCommand,
+  createStressInvocationTracker,
   graphValidateArgs,
   isIdleSyncStatus,
   isSettledSyncStatus,
@@ -21,6 +22,7 @@ import {
   operationNames,
   operationWeights,
   parseArgs,
+  runCli,
   stressPageNames,
   stressConfigText,
   stressReferenceViewOrder,
@@ -34,6 +36,87 @@ import {
   todayJournalPageName,
   uniqueOperationPageTitle,
 } from "./cli-concurrent-edit-stress.mjs";
+
+test("logs bounded, content-free diagnostics only for unexpected create-tree ID failures", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "logseq-stress-trace-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "cli.js");
+  writeFileSync(bin, `
+    const result = JSON.parse(process.argv[2]);
+    if (process.env.LOGSEQ_CLI_STRESS_CREATE_TREE_TRACE !== process.argv[3]) process.exit(2);
+    console.log(JSON.stringify(result));
+    process.exitCode = result.status === "ok" ? 0 : 1;
+  `);
+
+  const tracker = createStressInvocationTracker();
+  const opts = {
+    clientName: "client-2",
+    clientIndex: 1,
+    clientClis: [null, bin],
+    config: join(dir, "cli.edn"),
+    graph: "stress-graph",
+    page: "private page title",
+    logFile: join(dir, "events.jsonl"),
+    timeoutMs: 5000,
+    runSummary: { unexpectedErrors: 0, workerErrors: 0, operations: {} },
+    stressInvocations: tracker,
+  };
+  const requested = [1, 2, 3].map((i) => `96cbeb1e-2582-4e77-9b9e-9b1e47912b1${i}`);
+  const trace = {
+    "requested-uuids": requested,
+    "target-uuid": "96cbeb1e-2582-4e77-9b9e-9b1e47912b14",
+    "failed-uuid": requested[1],
+    "apply-returned-result": true,
+    "present-after-apply": [true, true, true],
+    "present-at-lookup": [true, false, true],
+    title: "private block content",
+  };
+  const failure = { status: "error", error: {
+    code: "add-id-resolution-failed", message: "unable to resolve created ids", "create-tree-trace": trace,
+  } };
+  const context = { op: "create-tree", workerId: 2, seq: 49, page: opts.page };
+  const run = (result, ctx = context) =>
+    runCli(opts, [JSON.stringify(result), ctx.op === "create-tree" ? "1" : "", "private command content"], ctx);
+  const unrelated = tracker.start("client-1", "cli", { op: "finished-before", workerId: 1, seq: 30 });
+  unrelated.finish();
+  const overlapping = tracker.start("client-3", "http", {
+    op: "http-delete-restore-page", workerId: 3, seq: 55, phase: "delete", page: opts.page,
+  });
+  const pending = run(failure);
+  overlapping.finish();
+  for (let seq = 0; seq < 20; seq += 1) {
+    tracker.start("client-1", "cli", { op: "delete-single", workerId: 1, seq, id: 901 }).finish();
+  }
+  await pending;
+  await run({ status: "ok", data: trace });
+  await run({ status: "error", error: { code: "target-not-found" } });
+  await run({ ...failure, error: { ...failure.error, "create-tree-trace": undefined } },
+    { ...context, op: "preflight-create-tree" });
+
+  const events = readFileSync(opts.logFile, "utf8").trim().split("\n").map(JSON.parse);
+  const [failed, ...other] = events;
+  assert.equal(failed.outcome, "failed");
+  assert.equal(failed.error.code, "add-id-resolution-failed");
+  assert.equal(failed.context.client, "client-2");
+  const diagnostics = failed.createTreeDiagnostics;
+  assert.equal(diagnostics.targetUuid, trace["target-uuid"]);
+  assert.equal(diagnostics.failedUuid, requested[1]);
+  assert.equal(diagnostics.applyReturnedResult, true);
+  assert.deepEqual(diagnostics.requested, [
+    { uuid: requested[0], presentAfterApply: true, presentAtLookup: true },
+    { uuid: requested[1], presentAfterApply: true, presentAtLookup: false },
+    { uuid: requested[2], presentAfterApply: true, presentAtLookup: true },
+  ]);
+  assert.equal(diagnostics.overlapping.length, 16);
+  assert.equal(diagnostics.overlappingOmitted, 5);
+  assert.equal(diagnostics.overlapping[0].op, "http-delete-restore-page");
+  assert.equal(diagnostics.overlapping[0].client, "client-3");
+  assert.equal(diagnostics.overlapping[0].samePage, true);
+  assert.doesNotMatch(JSON.stringify(failed), /private|finished-before/);
+  assert.ok(other.every((event) => !("createTreeDiagnostics" in event)));
+  assert.deepEqual(opts.runSummary.operations["cli:create-tree"], { ok: 1, expectedRace: 1, unexpectedErrors: 1 });
+  assert.equal(opts.runSummary.unexpectedErrors, 2);
+});
 
 test("classifies stale block conflicts as race outcomes", () => {
   const parsed = {
