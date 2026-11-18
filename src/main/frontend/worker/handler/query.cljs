@@ -50,7 +50,7 @@
                           (d/pull db selector)
                           (common-initial-data/with-parent db))]
       (if stress-uuids
-        {:entity entity
+        {:stress/entity entity
          :stress/present (worker-plain/stress-uuid-presence db stress-uuids)
          :stress/at-ms (js/Date.now)}
         entity))))

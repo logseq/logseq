@@ -126,9 +126,9 @@
                                                                     date-time-util/default-journal-title-formatter)})))
             applied-at (perf-time-ms)
             stress-snapshot (when stress-uuids
-                              {:returned-result (some? operation-result)
-                               :present (worker-plain/stress-uuid-presence @conn stress-uuids)
-                               :at-ms (js/Date.now)})
+                              {:stress/returned-result (some? operation-result)
+                               :stress/present (worker-plain/stress-uuid-presence @conn stress-uuids)
+                               :stress/at-ms (js/Date.now)})
             delta (db-listener/take-outliner-op-delta! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
             listener-at (perf-time-ms)

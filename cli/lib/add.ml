@@ -848,10 +848,11 @@ let create_tree_error_context ~target_uuid ~apply_snapshot ~uuids ~failed_uuid
                 ( kw "target-uuid",
                   Option.fold ~none:Edn_util.nil ~some:Edn_util.uuid target_uuid );
                 (kw "failed-uuid", Edn_util.uuid failed_uuid);
-                (kw "apply-returned-result", from apply_snapshot "returned-result");
-                (kw "present-after-apply", from apply_snapshot "present");
+                ( kw "apply-returned-result",
+                  from apply_snapshot "stress/returned-result" );
+                (kw "present-after-apply", from apply_snapshot "stress/present");
                 (kw "present-at-lookup", from lookup_result "stress/present");
-                (kw "apply-at-ms", from apply_snapshot "at-ms");
+                (kw "apply-at-ms", from apply_snapshot "stress/at-ms");
                 (kw "lookup-at-ms", from lookup_result "stress/at-ms");
               |]) ))
 
@@ -877,7 +878,8 @@ let resolve_created_ids ?stress_trace config repo uuids =
               match stress_trace with
               | None -> result
               | Some _ ->
-                  Edn_util.get result "entity" |> Option.value ~default:Edn_util.nil
+                  Edn_util.get result "stress/entity"
+                  |> Option.value ~default:Edn_util.nil
             in
             match id_of_entity entity with
             | Some id -> loop (Vec.push_back acc id) rest
