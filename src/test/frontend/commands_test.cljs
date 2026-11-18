@@ -21,7 +21,7 @@
                      [(with-meta ["A faire" [[:editor/set-block-marker "TODO"]] "" :icon/circle "Statut de tache"]
                         {:en-text "Todo"
                          :en-group-name "Task status"})
-                      (with-meta ["Requete" [[:editor/insert-query]] "" :icon/search "Avance"]
+                      (with-meta ["Requete" [[:editor/insert-query]] "" :icon/search "Avancé"]
                         {:en-text "Query"
                          :en-group-name "Advanced"})])]
         (is (= ["A faire"]
