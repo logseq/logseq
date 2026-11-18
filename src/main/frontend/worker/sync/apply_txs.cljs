@@ -1363,6 +1363,30 @@
   [db ids]
   (mapv #(or (replay-entity-id-value db %) %) ids))
 
+(defn- property-value-creation?
+  [attrs]
+  (every? attrs [:block/uuid :block/parent :logseq.property/created-from-property]))
+
+(defn- drop-purged-property-value-page-refs
+  "Drop obsolete derived page lookups before replay; recompute them after the parent is applied."
+  [db rebase-db-before tx-data]
+  (let [purged-page-ref? (fn [item]
+                           (and (vector? item)
+                                (= :db/add (first item))
+                                (= :block/page (nth item 2 nil))
+                                (let [page-ref (nth item 3)]
+                                  (and (block-uuid-lookup-ref-value page-ref)
+                                       (nil? (d/entid db page-ref))
+                                       (ldb/page? (d/entity rebase-db-before page-ref))))))]
+    (if (some purged-page-ref? tx-data)
+      (let [adds-by-entity (group-by tx-item-entity (filter tx-item-add? tx-data))]
+        (remove (fn [item]
+                  (and (purged-page-ref? item)
+                       (property-value-creation? (into #{} (map tx-item-attr)
+                                                      (get adds-by-entity (second item))))))
+                tx-data))
+      tx-data)))
+
 (defn- rebase-property-value-page-tx
   "Align only new property-value children (added UUID) with their effective post-replay parent page."
   [db tx-report]
@@ -1370,8 +1394,7 @@
        (filter :added)
        (group-by :e)
        (keep (fn [[block-id datoms]]
-               (when (every? (set (map :a datoms))
-                             [:block/uuid :block/parent :logseq.property/created-from-property])
+               (when (property-value-creation? (into #{} (map :a) datoms))
                  (let [block (d/entity db block-id)
                        parent (:block/parent block)
                        page-id (or (some-> parent :block/page :db/id)
@@ -1661,7 +1684,11 @@
                        {:outliner-op :recycle-delete-permanently})))
 
     (let [[tx-data tx-meta] args
-          tx-data (expand-block-retracts-to-descendants @conn tx-data)]
+          db @conn
+          tx-data (cond->> tx-data
+                    (:db-sync/replayed-tx-data? tx-meta)
+                    (drop-purged-property-value-page-refs db rebase-db-before))
+          tx-data (expand-block-retracts-to-descendants db tx-data)]
       (when-let [tx-data (seq tx-data)]
         (let [tx-report (ldb/transact! conn tx-data tx-meta)]
           (when (:db-sync/replayed-tx-data? tx-meta)

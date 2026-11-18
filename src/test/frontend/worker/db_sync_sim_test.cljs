@@ -1972,6 +1972,9 @@
                         {})
             (is (= page-18-uuid
                    (:block/uuid (:block/page (d/entity @conn-b [:block/uuid parent-uuid])))))
+            (delete-page! conn-b page-19-uuid)
+            (apply-ops! conn-b [[:recycle-delete-permanently [page-19-uuid]]] {})
+            (is (nil? (d/entity @conn-b [:block/uuid page-19-uuid])))
             (is (true? (sync-client! server client-b-state)))
             (is (true? (sync-client! server client-a-state)))
             (is (empty? (sync-apply/pending-txs repo-a)))
