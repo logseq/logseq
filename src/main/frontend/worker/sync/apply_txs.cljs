@@ -1363,6 +1363,28 @@
   [db ids]
   (mapv #(or (replay-entity-id-value db %) %) ids))
 
+(defn- rebase-property-value-page-tx
+  "Align only new property-value children (added UUID) with their effective post-replay parent page."
+  [db tx-report]
+  (->> (:tx-data tx-report)
+       (filter :added)
+       (group-by :e)
+       (keep (fn [[block-id datoms]]
+               (when (every? (set (map :a datoms))
+                             [:block/uuid :block/parent :logseq.property/created-from-property])
+                 (let [block (d/entity db block-id)
+                       parent (:block/parent block)
+                       page-id (or (some-> parent :block/page :db/id)
+                                   (when (ldb/page? parent) (:db/id parent)))
+                       current-page-id (some-> block :block/page :db/id)]
+                   (when-not page-id
+                     (throw (ex-info "Rebased property value has no parent page"
+                                     {:block-uuid (:block/uuid block)
+                                      :parent-uuid (:block/uuid parent)})))
+                   (when-not (= page-id current-page-id)
+                     [:db/add block-id :block/page page-id])))))
+       vec))
+
 (defn- rebase-find-existing-left-sibling
   [current-db target]
   (loop [sibling (ldb/get-left-sibling target)]
@@ -1641,7 +1663,11 @@
     (let [[tx-data tx-meta] args
           tx-data (expand-block-retracts-to-descendants @conn tx-data)]
       (when-let [tx-data (seq tx-data)]
-        (ldb/transact! conn tx-data tx-meta)))))
+        (let [tx-report (ldb/transact! conn tx-data tx-meta)]
+          (when (:db-sync/replayed-tx-data? tx-meta)
+            (when-let [page-tx-data (seq (rebase-property-value-page-tx @conn tx-report))]
+              (ldb/transact! conn page-tx-data tx-meta)))
+          tx-report)))))
 
 (defn- rebase-local-op!
   [_repo conn local-tx rebase-db-before]
