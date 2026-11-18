@@ -8,6 +8,7 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
+            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
             [logseq.db.common.order :as db-order]
@@ -122,6 +123,24 @@
              [[:db/retract (:db/id class) :block/order (:block/order class)]]))))
       [:logseq.class/Comments :logseq.class/Comment]))))
 
+(defn- repair-journal-titles-and-names
+  [db]
+  (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))]
+    (mapcat
+     (fn [{:keys [e v]}]
+       (when (ldb/journal? (d/entity db e))
+         (let [title (date-time-util/int->journal-title v formatter)
+               canonical-name (-> (date-time-util/int->journal-title v date-time-util/default-journal-title-formatter)
+                                  common-util/page-name-sanity-lc)
+               stored (fn [attr] (:v (first (d/datoms db :eavt e attr))))]
+           (cond-> []
+             (not= title (stored :block/title))
+             (conj [:db/add e :block/title title])
+             (and (not= canonical-name (stored :block/name))
+                  (not-any? #(not= e (:e %)) (d/datoms db :avet :block/name canonical-name)))
+             (conj [:db/add e :block/name canonical-name])))))
+     (d/datoms db :avet :block/journal-day))))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -168,7 +187,8 @@
    ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]
    ["65.35" {:delete-properties [:block/scheduled :block/deadline :block/marker
                                  :block/priority :block/properties-text-values
-                                 :block/invalid-properties]}]])
+                                 :block/invalid-properties]}]
+   ["65.36" {:fix repair-journal-titles-and-names}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]

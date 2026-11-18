@@ -984,6 +984,52 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest journal-title-format-change-updates-stored-titles-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20241216}}
+               {:page {:build/journal 20241217}}])
+        journal (ldb/get-journal-page-by-day @conn 20241216)
+        other (ldb/get-journal-page-by-day @conn 20241217)
+        names (mapv :block/name [journal other])
+        format-tx [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]]
+        stored-title #(raw-block-title @conn %)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [before @conn
+            report (ldb/transact! conn format-tx)]
+        (is (= ["2024-12-16 Monday" "2024-12-17 Tuesday"] (mapv stored-title [journal other])))
+        (is (= names (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other])))
+        (doseq [tx [[[:db/add (:db/id journal) :block/title "wrong"]]
+                    [[:db/add (:db/id journal) :block/name "wrong"]]
+                    [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]
+                     [:db/add (:db/id journal) :block/title "wrong"]]]]
+          (is (thrown-with-msg? js/Error #"journal page protected attr updated" (ldb/transact! conn tx))))
+        (let [remote (d/conn-from-db before)]
+          (ldb/transact! remote (:tx-data report) {:rtc-tx? true :transact-remote? true})
+          (is (= (raw-block-title @conn journal) (raw-block-title @remote journal))))
+        (ldb/transact! conn (map (fn [datom]
+                                 [(if (:added datom) :db/retract :db/add) (:e datom) (:a datom) (:v datom)])
+                               (reverse (:tx-data report))) {:reverse? true})
+        (is (= "Dec 16th, 2024" (stored-title journal)))
+        (ldb/transact! conn (:tx-data report) {:reverse? true})
+        (is (= "2024-12-16 Monday" (stored-title journal)))
+        (outliner-op/apply-ops! conn
+                                [[:set-block-property [(:block/uuid (d/entity @conn :logseq.class/Journal))
+                                                       :logseq.property.journal/title-format "yyyy/MM/dd"]]]
+                                {})
+        (is (= ["2024/12/16" "2024/12/17"] (mapv stored-title [journal other]))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest get-page-resolves-current-journal-format-test
+  (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20241216}}])
+        journal (ldb/get-journal-page-by-day @conn 20241216)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "2024-12-16 Monday"))))
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
+    (is (nil? (ldb/get-page @conn "2024-12-18 Wednesday")))
+    (is (nil? (ldb/get-page @conn "not a page")))
+    (is (nil? (ldb/get-page @conn "")))))
+
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])

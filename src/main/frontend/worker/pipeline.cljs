@@ -578,8 +578,24 @@
   [db eid attr]
   (:v (first (d/datoms db :eavt eid attr))))
 
+(defn- journal-title-format-changed?
+  [{:keys [db-before db-after]}]
+  (not= (:logseq.property.journal/title-format (d/entity db-before :logseq.class/Journal))
+        (:logseq.property.journal/title-format (d/entity db-after :logseq.class/Journal))))
+
+(defn- journal-title-format-tx
+  [{:keys [db-after] :as tx-report}]
+  (when (journal-title-format-changed? tx-report)
+    (keep (fn [{:keys [e v]}]
+            (let [journal (d/entity db-after e)
+                  title (journal-title db-after v)]
+              (when (and (ldb/journal? journal)
+                         (not= title (stored-attr-value db-after e :block/title)))
+                [:db/add e :block/title title])))
+          (d/datoms db-after :avet :block/journal-day))))
+
 (defn- ensure-journal-page-protected-attrs-not-updated!
-  [{:keys [db-before tx-data]}]
+  [{:keys [db-before db-after tx-data] :as tx-report}]
   (when-let [violation
              (some (fn [{:keys [e a v added]}]
                      (when (and added
@@ -588,7 +604,10 @@
                              before-v (stored-attr-value db-before e a)]
                          (when (and before-ent
                                     (ldb/journal? before-ent)
-                                    (not= before-v v))
+                                    (not= before-v v)
+                                    (not (and (= a :block/title)
+                                              (journal-title-format-changed? tx-report)
+                                              (= v (journal-title db-after (:block/journal-day before-ent))))))
                            {:type :journal-page-protected-attr-updated
                             :entity-id e
                             :attr a
@@ -696,7 +715,10 @@
                      (not (rtc-tx-or-download-graph? tx-meta)))
             (ensure-journal-page-protected-attrs-not-updated! tx-report))
         extra-tx-data (when derive-extra-data?
-                        (compute-extra-tx-data tx-report))
+                        (concat
+                         (compute-extra-tx-data tx-report)
+                         (when-not (rtc-tx-or-download-graph? tx-meta)
+                           (journal-title-format-tx tx-report))))
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
                        (assoc tx-report

@@ -523,6 +523,16 @@ abc
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Empty imported files do not transact nil block refs")))
 
+(deftest-async import-scheduled-journal-keeps-canonical-name
+  (p/let [file (write-temp-graph-file "pages/scheduled.md" "- TODO task\n  SCHEDULED: <2024-12-16 Mon>\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {:user-config {:journal/page-title-format "yyyy-MM-dd EEEE"}})
+          journal (ldb/get-journal-page-by-day @conn 20241216)]
+    (is (some? journal))
+    (is (= "2024-12-16 Monday" (:v (first (d/datoms @conn :eavt (:db/id journal) :block/title)))))
+    (is (= "dec 16th, 2024" (:block/name journal)))))
+
 (deftest-async import-repeated-deadline-and-scheduled
   (p/let [file (write-temp-graph-file
                  "pages/repeated-tasks.md"
