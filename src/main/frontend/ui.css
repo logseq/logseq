@@ -67,8 +67,55 @@
   }
 }
 
+/* Groups, titles and rows for every auto-complete list. Rendered by
+   `auto-complete-group` and `auto-complete-item-label` in ui.cljs.
+
+   Spacing groups by proximity: a title sits close to its own rows
+   (pb-1) and, when rows come before it, gets a larger gap above (pt-3)
+   than below. Titles use the rows' px-2 so text lines up with the icons. */
 .ui__ac-group-name {
-  @apply px-2 pt-2.5 pb-1 text-xs font-medium text-gray-11 select-none;
+  @apply flex items-center gap-2 px-2 pt-1 pb-1 select-none;
+  @apply text-xs font-medium text-gray-11;
+  font-family: inherit;
+  font-style: normal;
+  letter-spacing: normal;
+  text-transform: none;
+
+  > .ui__ac-group-name-text {
+    @apply min-w-0 truncate;
+  }
+
+  /* Faint rule from the title to the right edge, in the same color as
+     shui's Separator and the popover border, so it holds up in every theme. */
+  &::after {
+    content: "";
+    @apply h-px flex-1 bg-border;
+  }
+}
+
+:is(.ui__ac-group, .menu-link-wrap) + .ui__ac-group > .ui__ac-group-name {
+  @apply pt-3;
+}
+
+.ui__ac-item-label {
+  @apply flex items-center gap-1.5 min-w-0;
+
+  > .ui__icon {
+    @apply shrink-0 opacity-70;
+    color: inherit !important;
+  }
+
+  > .ui__ac-item-text {
+    @apply min-w-0 truncate font-normal;
+  }
+
+  > .ui__ac-item-hint {
+    @apply shrink-0 text-xs text-gray-10;
+  }
+}
+
+#ui__ac-inner .menu-link.chosen .ui__ac-item-label > .ui__icon {
+  @apply opacity-100;
 }
 
 /* `select` pickers cap their results at `.item-results-wrap`. Pass that cap

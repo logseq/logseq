@@ -206,14 +206,13 @@
                                           ident (:db/ident x)
                                           ns' (some-> ident (namespace))
                                           plugin? (some-> ident (api-block/plugin-property-key?))
-                                          _plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
-                                      [:span.flex.gap-1.items-center
-                                       {:title (str ident)}
-                                       (if plugin?
-                                         [:span.pt-1 (shui/tabler-icon "puzzle" {:size 15 :class "opacity-40"})]
-                                         [:span.pt-1 (shui/tabler-icon "letter-t" {:size 15 :class "opacity-40"})])
-                                       [:strong.font-normal property-title
-                                        (when plugin? [:span.ml-1.text-xs.opacity-40 (str "" _plugin-name)])]]))
+                                          plugin-name (and plugin? (second (re-find #"^plugin\.property\.([^.]+)" ns')))]
+                                      (ui/auto-complete-item-label
+                                       {:icon (if plugin? "puzzle" "letter-t")
+                                        :title (str ident)}
+                                       property-title
+                                       (when plugin-name
+                                         [:span.ui__ac-item-hint plugin-name]))))
                            :value (or (:block/uuid x) (:db/ident x))
                            :property x
                            :db/ident (:db/ident x)
@@ -231,7 +230,7 @@
                                     (cond-> results
                                       (fn? transform-fn)
                                       (transform-fn input))))]
-      [:div.ls-property-add.flex.flex-row.items-center.property-key
+      [:div.ls-property-add.flex.flex-row.items-center
        {:data-keep-selection true}
        [:div.ls-property-key
         (select/select (merge

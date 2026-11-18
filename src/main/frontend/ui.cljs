@@ -499,6 +499,28 @@
             (some-> observer (.disconnect))))))
    [matched]))
 
+(defn auto-complete-item-label
+  "Icon + label for an auto-complete row. Slash commands and `select`
+  pickers both render rows with this, so their icons and text match.
+  `ui.css` styles it; `extra` renders after the label."
+  [{:keys [icon title]} label & extra]
+  (cond-> [:span.ui__ac-item-label]
+    title (conj {:title title})
+    icon (conj (shui/tabler-icon icon))
+    true (conj [:span.ui__ac-item-text label])
+    (seq extra) (into extra)))
+
+(defn- auto-complete-group
+  "One group of an auto-complete list: an optional title over its rows.
+  Every grouped list renders through this, so titles and the spacing
+  around them come from one place (`.ui__ac-group` in `ui.css`)."
+  [key title rows]
+  [:div.ui__ac-group {:key key}
+   (when title
+     [:div.ui__ac-group-name
+      [:span.ui__ac-group-name-text title]])
+   rows])
+
 (hsx/defc auto-complete
   [matched
    {:keys [on-chosen
@@ -553,11 +575,11 @@
           get-group-name
           (for [items (partition-by (comp get-group-name second) (medley/indexed matched))
                 :let [[idx item] (first items)]]
-            [:div {:key idx}
-             (if-let [group-name (get-group-name item)]
-               [:div.ui__ac-group-name group-name]
-               (when (pos? idx) [:hr]))
-             (render-f items)])
+            (if-let [group-name (get-group-name item)]
+              (auto-complete-group idx group-name (render-f items))
+              [:div.ui__ac-group {:key idx}
+               (when (pos? idx) [:hr])
+               (render-f items)]))
 
           grouped?
           (let [*idx (atom -1)
@@ -565,9 +587,7 @@
             (for [[group matched] (group-by :group matched)]
               (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
                 (if group
-                  [:div
-                   [:div.ui__ac-group-name group]
-                   (render-f matched')]
+                  (auto-complete-group (str group) group (render-f matched'))
                   (render-f matched')))))
           :else
           (render-f (medley/indexed matched)))]

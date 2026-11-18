@@ -122,9 +122,7 @@
                options (some-> item (get 3))
                icon-name (some-> (if (map? options) (:icon options) options) (name))
                command-name (if icon-name
-                              [:span.flex.items-center.gap-1
-                               (shui/tabler-icon icon-name)
-                               [:strong.font-normal command-name]]
+                              (ui/auto-complete-item-label {:icon icon-name} command-name)
                               command-name)]
            (cond
              (or plugin-id (vector? doc))

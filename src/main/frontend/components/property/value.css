@@ -18,9 +18,16 @@
 .ls-property-dialog {
   .ls-property-key {
     .cp__select-main {
+      @apply w-full;
+
       .item-results-wrap {
         max-height: min(calc(var(--available-height, 320px) - 64px), 256px);
       }
+    }
+
+    /* Line the query up with the row text (surface p-1.5 + row px-2). */
+    .cp__select .input-wrap input.cp__select-input {
+      @apply px-2;
     }
   }
 }
