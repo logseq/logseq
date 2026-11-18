@@ -111,12 +111,14 @@
      [current-repo db-worker-ready?])
 
     (hooks/use-effect!
-     #(let [db-restored? (false? db-restoring?)]
-        (if db-restoring?
-          (util/set-title! (t :ui/loading))
-          (when db-restored?
-            (route-handler/update-page-title! route))))
-     [db-restoring? route])
+     (fn []
+       (if db-restoring?
+         (util/set-title! (t :ui/loading))
+         (when (and (false? db-restoring?) db-worker-ready?)
+           (route-handler/update-page-title! route)
+           (route-handler/update-page-label! route)))
+       nil)
+     [db-restoring? db-worker-ready? route])
 
     (hooks/use-effect!
      (fn []

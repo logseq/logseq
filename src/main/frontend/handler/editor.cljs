@@ -318,7 +318,8 @@
 (defn- start-pending-new-block!
   []
   (state/set-state! :editor/pending-new-block
-                    {:typed-text ""
+                    {:id (random-uuid)
+                     :typed-text ""
                      :source-uuid (:block/uuid (state/get-edit-block))}))
 
 (defn- pending-new-block
@@ -4339,4 +4340,3 @@
          (when query-block
            (save-block-inner! query-block current-query {}))
          (save-block-inner! block "" {})))))))
-
