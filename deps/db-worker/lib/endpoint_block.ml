@@ -493,7 +493,7 @@ let result_blocks (result : Wire.t) : Wire.t list =
   | Wire.Map kvs ->
       let children =
         match Plain_value.map_get "children" kvs with
-        | Some (Wire.Array cs) -> cs
+        | Some (Wire.Array cs) | Some (Wire.List cs) -> cs
         | _ -> []
       in
       (match Plain_value.map_get "block" kvs with
@@ -549,6 +549,12 @@ let assoc_block_metadata db conflicts_by_block commented_block_uuids
 
 let assoc_result_block_metadata (result : Wire.t) db conflicts_by_block
     commented_block_uuids now_ms render_data root_render_data : Wire.t =
+  let assoc_children cs =
+    List.map
+      (assoc_block_metadata db conflicts_by_block commented_block_uuids now_ms
+         render_data)
+      cs
+  in
   match result with
   | Wire.Map kvs ->
       Wire.Map
@@ -562,12 +568,9 @@ let assoc_result_block_metadata (result : Wire.t) db conflicts_by_block
                      (render_data || root_render_data)
                      bm )
              | Wire.Keyword "children", Wire.Array cs ->
-                 ( k
-                 , Wire.Array
-                     (List.map
-                        (assoc_block_metadata db conflicts_by_block
-                           commented_block_uuids now_ms render_data)
-                        cs) )
+                 (k, Wire.Array (assoc_children cs))
+             | Wire.Keyword "children", Wire.List cs ->
+                 (k, Wire.List (assoc_children cs))
              | _ -> (k, v))
            kvs)
   | _ -> result
