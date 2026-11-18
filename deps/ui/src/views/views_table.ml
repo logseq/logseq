@@ -1393,7 +1393,8 @@ let grouped_table ?(paginate = false) inst ~rows : t =
         (scroll ~orientation:`horizontal
         ~style_class:"ls-table-rows content"
         [ Ui_components.with_props
-            [ Ui_components.Prop.position `relative ]
+            [ Ui_components.Prop.position `relative
+            ; Ui_components.Prop.padding_bottom 38 ]
             (box
             [ overlay
                 [ table_header ~rows inst cols
@@ -1505,16 +1506,32 @@ let foldable inst ~key ~title ~(body : t) : t =
                [ body ] ]) ])
     ctx parent
 
-let group_title s gv =
-  match gv with
-  | W.Map _ -> (
-      match Wr.ref_title gv with
-      | Some t when t <> "" -> t
-      | _ -> I.no_group_value (Option.value s.V.group_by ~default:""))
-  | W.Nil ->
-      if s.V.group_by = Some "block/page" then (I.t "view.table/pages")
-      else I.no_group_value (Option.value s.V.group_by ~default:"")
-  | v -> Wr.prop_text v
+let group_title inst s gv =
+  let missing_group () =
+    I.no_group_value (Option.value s.V.group_by ~default:"")
+  in
+  match Wr.group_value_uuid gv with
+  | Some uuid ->
+      if Hashtbl.mem s.V.blocks uuid || Hashtbl.mem s.V.ref_titles uuid then
+        let title = (V.ops ()).V.o_title_of_uuid inst uuid in
+        if title = "" then missing_group () else title
+      else missing_group ()
+  | None -> (
+      match gv with
+      | W.Map _ -> (
+          match W.get gv "kind" with
+          | Some (W.Keyword "scalar") -> (
+              match W.get gv "value" with
+              | Some value -> Wr.prop_text value
+              | None -> missing_group ())
+          | _ -> (
+              match Wr.ref_title gv with
+              | Some t when t <> "" -> t
+              | _ -> missing_group ()))
+      | W.Nil ->
+          if s.V.group_by = Some "block/page" then (I.t "view.table/pages")
+          else missing_group ()
+      | v -> Wr.prop_text v)
 
 (* ---------- body dispatch ---------- *)
 
@@ -1641,7 +1658,7 @@ let ref_grouped_lines inst (s : V.vstate) (gs : Wr.vrow_group list) : t list =
          let key = "g" ^ string_of_int i in
          let header =
            ref_header inst ~key
-             ~title:(text ~value:(group_title s g.Wr.gv) [])
+             ~title:(text ~value:(group_title inst s g.Wr.gv) [])
          in
          if V.Sset.mem key s.V.collapsed_groups then [ header ]
          else header :: List.map (block_line s) g.Wr.grows)
@@ -1703,9 +1720,9 @@ let render_list inst s : t =
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(text ~value:(group_title s g.Wr.gv) [])
+               ~title:(text ~value:(group_title inst s g.Wr.gv) [])
                ~body:
-                 (box ~margin_left:(-8) ~margin_top:4
+                 (box ~margin_left:(-8)
                     [ list_stream ~paginate:(more && i = last) inst g.Wr.grows ]))
            gs)
   | Wr.VGroupedList gs when ref_view inst ->
@@ -1919,28 +1936,32 @@ let render_table inst s : t =
   let s = windowed inst s in
   match s.V.data with
   | Wr.VGrouped gs ->
-      (* cljs grouped tables share the .flex.flex-col.border-t.pt-2.gap-2
-         partition wrapper (no .group-list-view — that's list display) *)
+      (* cljs places one virtualized list inside its border-t/pt-2 wrapper;
+         its gap-2 is not between the group items. *)
       let last = List.length gs - 1 in
-      column ~gap:8
+      column
         ~data_attrs:[ ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ]
         (List.mapi
            (fun i g ->
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(text ~value:(group_title s g.Wr.gv) [])
+               ~title:
+                 (box ~margin_top:8 ~margin_bottom:8
+                    [ text ~value:(group_title inst s g.Wr.gv) [] ])
                ~body:
                  (grouped_table ~paginate:(more && i = last) inst
                     ~rows:g.Wr.grows))
            gs)
   | Wr.VGroupedList gs ->
       let last_i = List.length gs - 1 in
-      column ~gap:8
+      column
         ~data_attrs:[ ("style", "border-top:1px solid hsl(var(--border));padding-top:8px") ]
         (List.mapi
            (fun i g ->
              let last_j = List.length g.Wr.glparts - 1 in
              foldable inst ~key:("g" ^ string_of_int i)
-               ~title:(text ~value:(group_title s g.Wr.glv) [])
+               ~title:
+                 (box ~margin_top:8 ~margin_bottom:8
+                    [ text ~value:(group_title inst s g.Wr.glv) [] ])
                ~body:
                  (Logseq_el.fragment
                     (List.mapi
