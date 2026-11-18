@@ -1402,7 +1402,9 @@ let test_display_properties_reads_current_block_properties () =
 let test_get_blocks_includes_render_critical_property_data () =
   let conn = create_conn () in
   let block_uuid = "00000000-0000-0000-0000-000000000001"
-  and reaction_uuid = "00000000-0000-0000-0000-000000000002" in
+  and reaction_uuid = "00000000-0000-0000-0000-000000000002"
+  and child_uuid = "00000000-0000-0000-0000-000000000003"
+  and referrer_uuid = "00000000-0000-0000-0000-000000000004" in
   ignore
     (transact_maps conn
        [ [ "db/ident", Kw "logseq.property/status"
@@ -1418,6 +1420,12 @@ let test_get_blocks_includes_render_critical_property_data () =
          ; "block/uuid", Uuid block_uuid
          ; "logseq.property/status", Kw "logseq.property/status.backlog"
          ; "logseq.property/scheduled", Inst 1783612800000L ]
+       ; [ "block/title", Str "Child"
+         ; "block/uuid", Uuid child_uuid
+         ; "block/parent", Vec [ Kw "block/uuid"; Uuid block_uuid ] ]
+       ; [ "block/title", Str "Child referrer"
+         ; "block/uuid", Uuid referrer_uuid
+         ; "block/refs", Vec [ Kw "block/uuid"; Uuid child_uuid ] ]
        ; op_db_add
            (Vec [ Kw "block/uuid"; Uuid block_uuid ])
            "block/properties"
@@ -1543,7 +1551,27 @@ let test_get_blocks_includes_render_critical_property_data () =
          | _ -> false);
       (match display_properties_api (uuid_lookup block_uuid) [] with
        | Wire.Map _ -> ()
-       | _ -> check "get-display-properties returns map" false))
+       | _ -> check "get-display-properties returns map" false);
+      let metadata_result =
+        api "get-blocks"
+          [ Wire.String test_repo
+          ; Wire.Array
+              [ Wire.Map
+                  [ kw "id", Wire.Uuid block_uuid
+                  ; ( kw "opts"
+                    , Wire.Map
+                        [ kw "children?", Wire.Bool true
+                        ; kw "block-metadata?", Wire.Bool true ] ) ] ] ]
+      in
+      (match wire_maps metadata_result with
+       | [ result ] -> (
+           match wire_get "children" result with
+           | Some (Wire.List [ Wire.Map child ]) ->
+               check "child refs-count metadata"
+                 (wire_get "block.temp/refs-count" child = Some (Wire.Int 1))
+           | Some _ -> check "get-blocks children retain list collection" false
+           | None -> check "get-blocks children present" false)
+       | _ -> Alcotest.fail "get-blocks metadata: unexpected result shape"))
   | _ -> Alcotest.fail "get-blocks critical: unexpected shape"
 
 (* (deftest get-blocks-default-payload-includes-created-at-and-proper-titles ...) *)
