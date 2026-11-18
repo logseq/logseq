@@ -210,9 +210,13 @@
   (let [refs (get block rebase-refs-key)
         created-ref-uuids (set (get block rebase-created-refs-key))
         missing-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
-        retracted-refs (remove (fn [ref-entity]
-                                 (contains? created-ref-uuids (:block/uuid ref-entity)))
-                               missing-refs)
+        block-refs (:block/refs block)
+        nil-refs? (some nil? block-refs)
+        ;; Replay recreates the references behind a nil, so their links stay.
+        retracted-refs (when-not nil-refs?
+                         (remove (fn [ref-entity]
+                                   (contains? created-ref-uuids (:block/uuid ref-entity)))
+                                 missing-refs))
         tag-lookups (->> (:block/tags block)
                          (filter (fn [v]
                                    (and (vector? v)
@@ -224,10 +228,10 @@
                                                      (or (get missing-ref-by-lookup block-ref)
                                                          block-ref))]
                                    (map rewrite-ref v)))
-        block-refs (:block/refs block)
-        recovered-block (if (some nil? block-refs)
+        recovered-block (if nil-refs?
                           (do
                             (when-not (and (seq refs)
+                                           (every? #(uuid? (:block/uuid %)) refs)
                                            (every? #(string? (:block/title %)) missing-refs))
                               (throw (ex-info "Cannot recover nil block refs without reference metadata"
                                               {:block/uuid (:block/uuid block)})))

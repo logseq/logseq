@@ -599,6 +599,9 @@
                   forward (update-in forward-outliner-ops [0 1 0]
                                      (fn [block]
                                        (cond-> (assoc block :block/refs #{nil})
+                                         (= :local-page scenario)
+                                         (dissoc :block.temp/sync-created-refs)
+
                                          (not recoverable?)
                                          (dissoc :block.temp/sync-rebase-refs
                                                  :block.temp/sync-created-refs))))]
@@ -616,6 +619,8 @@
                                             (:tx-data (ldb/transact! server-conn remote-tx))))
               (is (= "Remote edit" (:block/title (entity (:block/uuid child2)))))
               (when recoverable?
+                (is (= (str "See [[" (or remote-page-uuid ref-uuid) "]]")
+                       (:block/raw-title (entity block-uuid))))
                 (sync-apply/apply-remote-tx!
                  test-repo nil
                  (:tx-data (ldb/transact! server-conn
