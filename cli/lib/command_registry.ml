@@ -349,6 +349,8 @@ let options_for_command =
             [|
               value "id" "id" "Page id";
               value "page" "page" "Page name";
+              value "rename" "name"
+                "Rename an existing page (requires --id or --page)";
               flag "restore" "Restore recycled page before updating";
             |];
           property_update_options;

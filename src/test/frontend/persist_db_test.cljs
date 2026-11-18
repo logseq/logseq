@@ -1023,6 +1023,103 @@
                        (set! remote/stop! original-stop!)
                        (done)))))))
 
+(deftest electron-start-runtime-clears-current-repo-when-graph-is-absent
+  (async done
+    (let [current-repo-updates (atom [])
+          events (atom [])
+          notifications (atom [])
+          originals (install-electron-failover-test-env!
+                     {:current-repo "logseq_db_deleted"
+                      :repos (graph-repos "logseq_db_other")
+                      :runtime-results (atom [(fn [repo]
+                                                (p/rejected
+                                                 (ex-info "Graph is absent or stopped by deletion"
+                                                          {:code :graph-not-exists :repo repo})))])
+                      :events events
+                      :current-repo-updates current-repo-updates
+                      :notifications notifications})]
+      (-> (p/let [result (persist-db/<start-runtime!)]
+            (is (nil? result))
+            (is (nil? (state/get-current-repo)))
+            (is (= [nil] @current-repo-updates)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore-electron-failover-test-env! originals)
+                       (done)))))))
+
+(deftest electron-start-runtime-clears-current-repo-from-ipc-message-only-error
+  (async done
+    (let [current-repo-updates (atom [])
+          events (atom [])
+          notifications (atom [])
+          originals (install-electron-failover-test-env!
+                     {:current-repo "logseq_db_deleted"
+                      :repos (graph-repos "logseq_db_other")
+                      :runtime-results (atom [(fn [_]
+                                                (p/rejected
+                                                 (js/Error. "Graph is absent or stopped by deletion")))])
+                      :events events
+                      :current-repo-updates current-repo-updates
+                      :notifications notifications})]
+      (-> (p/let [result (persist-db/<start-runtime!)]
+            (is (nil? result))
+            (is (nil? (state/get-current-repo)))
+            (is (= [nil] @current-repo-updates)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore-electron-failover-test-env! originals)
+                       (done)))))))
+
+(deftest electron-start-runtime-still-rejects-other-errors
+  (async done
+    (let [current-repo-updates (atom [])
+          events (atom [])
+          notifications (atom [])
+          originals (install-electron-failover-test-env!
+                     {:current-repo "logseq_db_graph_a"
+                      :repos (graph-repos "logseq_db_graph_a")
+                      :runtime-results (atom [:runtime-error])
+                      :events events
+                      :current-repo-updates current-repo-updates
+                      :notifications notifications})]
+      (-> (p/let [result (<capture-result (persist-db/<start-runtime!))]
+            (is (= :rejected (:status result)))
+            (is (= :server-start-failed (:code (ex-data (:error result)))))
+            (is (= "logseq_db_graph_a" (state/get-current-repo)))
+            (is (= [] @current-repo-updates)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore-electron-failover-test-env! originals)
+                       (done)))))))
+
+(deftest electron-list-db-returns-empty-when-graph-is-absent
+  (async done
+    (let [current-repo-updates (atom [])
+          events (atom [])
+          notifications (atom [])
+          originals (install-electron-failover-test-env!
+                     {:current-repo "logseq_db_deleted"
+                      :repos (graph-repos "logseq_db_other")
+                      :runtime-results (atom [(fn [repo]
+                                                (p/rejected
+                                                 (ex-info "Graph is absent or stopped by deletion"
+                                                          {:code :graph-not-exists :repo repo})))])
+                      :events events
+                      :current-repo-updates current-repo-updates
+                      :notifications notifications})]
+      (-> (p/let [repos (persist-db/<list-db)]
+            (is (= [] repos))
+            (is (= "logseq_db_deleted" (state/get-current-repo)))
+            (is (= [] @current-repo-updates)))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (restore-electron-failover-test-env! originals)
+                       (done)))))))
+
 (deftest electron-list-db-server-unavailable-failures-do-not-switch-graph
   (async done
          (let [results (atom [:transport-error :transport-error :transport-error])

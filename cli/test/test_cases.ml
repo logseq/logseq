@@ -56,6 +56,203 @@ let () =
         "\"status\"";
       expect_named_not_contains "skill markdown data wrapper" output "\"data\"")
 
+let () =
+  let run_import_case name ~import_type ~reply ~output_mode ~error_message =
+    test_promise ("graph import worker result: " ^ name) (fun () ->
+        let root = temp_dir "logseq-cli-import-result-" in
+        let input = Node.Path.join [| root; "seed" |] in
+        write_file input "{:pages-and-blocks []}";
+        let imported = ref false in
+        let server =
+          invoke_server (fun body ->
+              if
+                Js.String.includes
+                  ~search:
+                    (if import_type = "edn" then "thread-api/import-edn"
+                     else "thread-api/import-db-binary")
+                  body
+              then (
+                imported := true;
+                reply)
+              else "null")
+        in
+        with_server server (fun base_url ->
+            let* output =
+              run_cli_p
+                ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                [|
+                  "--root-dir";
+                  root;
+                  "--graph";
+                  "demo";
+                  "--output";
+                  output_mode;
+                  "graph";
+                  "import";
+                  "--type";
+                  import_type;
+                  "--input";
+                  input;
+                |]
+            in
+            remove_tree root;
+            assert_true "worker received import" !imported
+              "worker did not receive import";
+            (match error_message with
+            | Some message ->
+                assert_true "rejected import exit" (output.code = 1)
+                  (Printf.sprintf "expected exit 1, got %d: %s %s" output.code
+                     output.stdout output.stderr);
+                expect_named_contains "worker rejection message"
+                  (output.stdout ^ output.stderr)
+                  message;
+                expect_named_not_contains "no false success" output.stdout
+                  ("Imported " ^ import_type ^ " from");
+                if output_mode = "json" then (
+                  ignore (expect_valid_json "import error JSON" output.stdout);
+                  expect_named_contains "error status" output.stdout
+                    "\"status\":\"error\"";
+                  expect_named_contains "validation error code" output.stdout
+                    "\"code\":\"graph-validation-failed\"";
+                  expect_named_contains "unwrapped original message"
+                    output.stdout
+                    ("\"message\":" ^ Js.Json.stringify (Js.Json.string message)))
+                else if output_mode = "edn" then (
+                  expect_named_contains "error status" output.stdout
+                    ":status :error";
+                  expect_named_contains "validation error code" output.stdout
+                    "graph-validation-failed")
+            | None ->
+                assert_true "successful import exit" (output.code = 0)
+                  (Printf.sprintf "expected exit 0, got %d: %s %s" output.code
+                     output.stdout output.stderr);
+                expect_named_contains "success message" output.stdout
+                  ("Imported " ^ import_type));
+            Js.Promise.resolve pass))
+  in
+  Array.iter
+    (fun mode ->
+      run_import_case
+        ("EDN validation rejection in " ^ mode)
+        ~import_type:"edn"
+        ~reply:
+          "[\"^ \",\"~:error\",\"The Imported EDN has 1 validation error(s)\"]"
+        ~output_mode:mode
+        ~error_message:(Some "The Imported EDN has 1 validation error(s)"))
+    [| "human"; "json"; "edn" |];
+  run_import_case "unexpected invalid EDN" ~import_type:"edn"
+    ~reply:
+      "[\"^ \",\"~:error\",\"The Imported EDN is unexpectedly invalid: \
+       Expected number or lookup ref\"]"
+    ~output_mode:"json"
+    ~error_message:
+      (Some
+         "The Imported EDN is unexpectedly invalid: Expected number or lookup \
+          ref");
+  run_import_case "structured worker rejection" ~import_type:"edn"
+    ~reply:"[\"^ \",\"~:error\",[\"^ \",\"~:invalid-entity\",42]]"
+    ~output_mode:"human" ~error_message:(Some "{:invalid-entity 42}");
+  Array.iter
+    (fun import_type ->
+      Array.iter
+        (fun tag ->
+          let message = "SQLITE_CORRUPT: malformed imported database" in
+          run_import_case
+            (import_type ^ " " ^ tag ^ " rejection")
+            ~import_type
+            ~reply:
+              ("[\"~#" ^ tag ^ "\",[\"^ \",\"~:message\",\"" ^ message ^ "\""
+              ^ (if tag = "error" then
+                   ",\"~:data\",[\"^ \",\"~:reason\",\"~:invalid-db\"]"
+                 else "")
+              ^ "]]")
+            ~output_mode:"json" ~error_message:(Some message))
+        [| "error"; "js/Error" |])
+    [| "edn"; "sqlite" |];
+  run_import_case "map containing js/Error preserves message" ~import_type:"edn"
+    ~reply:
+      "[\"^ \",\"~:error\",[\"~#js/Error\",[\"^ \",\"~:message\",\"Import \
+       transaction failed: invalid lookup ref\"]]]"
+    ~output_mode:"json"
+    ~error_message:(Some "Import transaction failed: invalid lookup ref");
+  run_import_case "successful EDN transaction count" ~import_type:"edn"
+    ~reply:"[\"^ \",\"~:tx-count\",11]" ~output_mode:"json" ~error_message:None;
+  run_import_case "nil error is not a rejection" ~import_type:"edn"
+    ~reply:"[\"^ \",\"~:error\",null,\"~:tx-count\",11]" ~output_mode:"edn"
+    ~error_message:None;
+  run_import_case "successful SQLite nil reply" ~import_type:"sqlite"
+    ~reply:"null" ~output_mode:"human" ~error_message:None
+
+let () =
+  match
+    Js.Dict.get Node.Process.process##env "LOGSEQ_DB_WORKER_NODE_SCRIPT"
+  with
+  | None -> ()
+  | Some worker_script ->
+      Array.iter
+        (fun import_type ->
+          test_promise ("graph import survives worker restart: " ^ import_type)
+            (fun () ->
+              let root = temp_dir "logseq-cli-import-restart-" in
+              let input = Node.Path.join [| root; "export" |] in
+              let env = [| ("LOGSEQ_DB_WORKER_NODE_SCRIPT", worker_script) |] in
+              let run graph args =
+                run_cli_p ~env
+                  (Array.append
+                     [|
+                       "--root-dir"; root; "--graph"; graph; "--output"; "json";
+                     |]
+                     args)
+              in
+              let cleanup () =
+                let* _ = run "source" [| "server"; "stop" |] in
+                let* _ = run "destination" [| "server"; "stop" |] in
+                remove_tree root;
+                Js.Promise.resolve ()
+              in
+              let scenario () =
+                let* created = run "source" [| "graph"; "create" |] in
+                ignore (expect_cli_exit_zero "create import source" created);
+                let* seeded =
+                  run "source"
+                    [| "upsert"; "page"; "--page"; "Imported lifecycle page" |]
+                in
+                ignore (expect_cli_exit_zero "seed import source" seeded);
+                let* exported =
+                  run "source"
+                    [|
+                      "graph"; "export"; "--type"; import_type; "--file"; input;
+                    |]
+                in
+                ignore (expect_cli_exit_zero "export import source" exported);
+                let* imported =
+                  run "destination"
+                    [|
+                      "graph"; "import"; "--type"; import_type; "--input"; input;
+                    |]
+                in
+                ignore (expect_cli_exit_zero "import destination" imported);
+                let* before = run "destination" [| "list"; "page" |] in
+                ignore (expect_cli_exit_zero "read imported graph" before);
+                expect_named_contains "imported page before restart"
+                  before.stdout "Imported lifecycle page";
+                let* restarted = run "destination" [| "server"; "restart" |] in
+                ignore (expect_cli_exit_zero "restart imported graph" restarted);
+                let* after = run "destination" [| "list"; "page" |] in
+                ignore (expect_cli_exit_zero "reopen imported graph" after);
+                expect_named_contains "imported page after restart" after.stdout
+                  "Imported lifecycle page";
+                Js.Promise.resolve ()
+              in
+              scenario () |> Js.Promise.then_ cleanup
+              |> Js.Promise.catch (fun error ->
+                  let* () = cleanup () in
+                  fail_promise
+                    (Option.value
+                       (promise_error_message error)
+                       ~default:"import restart scenario failed"))))
+        [| "edn"; "sqlite" |]
+
 let write_cli_wrapper path =
   write_file path
     ("require("
@@ -545,6 +742,61 @@ let () =
       with exn ->
         remove_tree root;
         fail_test (Printexc.to_string exn));
+
+  Array.iter
+    (fun (name, argv) ->
+      test ("repeated graph options preserve graphs: " ^ name) (fun () ->
+          let root = temp_dir "logseq-cli-repeated-graph-" in
+          let graph_file graph =
+            Node.Path.join [| root; "graphs"; graph; "db.sqlite" |]
+          in
+          try
+            Array.iter
+              (fun graph ->
+                mkdir_p (Node.Path.join [| root; "graphs"; graph |]);
+                write_file (graph_file graph) ("data-" ^ graph))
+              [| "a"; "b" |];
+            let result =
+              spawn_cli
+                (Array.append [| "--root-dir"; root; "--output"; "json" |] argv)
+            in
+            ignore (expect_exit_non_zero name result);
+            expect_named_contains "error code" result##stdout "invalid-options";
+            expect_named_contains "option name" result##stdout "--graph";
+            expect_named_contains "error message" result##stdout
+              "only be specified once";
+            Array.iter
+              (fun graph ->
+                if not (Node.Fs.existsSync (graph_file graph)) then
+                  fail_test (name ^ ": removed graph " ^ graph);
+                if read_file (graph_file graph) <> "data-" ^ graph then
+                  fail_test (name ^ ": modified graph " ^ graph))
+              [| "a"; "b" |];
+            remove_tree root
+          with exn ->
+            remove_tree root;
+            fail_test (Printexc.to_string exn)))
+    [|
+      ("short", [| "-g"; "a"; "graph"; "remove"; "-g"; "b" |]);
+      ("same value", [| "-g"; "a"; "graph"; "remove"; "-g"; "a" |]);
+      ("mixed aliases", [| "-g"; "a"; "graph"; "remove"; "--graph"; "b" |]);
+      ("equals", [| "--graph=a"; "graph"; "remove"; "--graph=b" |]);
+      ("missing value", [| "-g"; "--graph=a"; "graph"; "remove" |]);
+      ( "import",
+        [|
+          "-g=a";
+          "graph";
+          "import";
+          "--graph=b";
+          "--type";
+          "edn";
+          "--input";
+          "missing.edn";
+        |] );
+      ("read command", [| "-g=a"; "graph"; "list"; "--graph=b" |]);
+      ("version", [| "-g=a"; "--graph=a"; "--version" |]);
+      ("help", [| "-g=a"; "--graph=a"; "graph"; "remove"; "--help" |]);
+    |];
 
   test "graph commands require explicit unicode graph names" (fun () ->
       let root = temp_dir "logseq-cli-graph-unicode-" in
@@ -1350,6 +1602,7 @@ let () =
             | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
+                expect_named_contains "batch transaction label" body "~:apply-outliner-ops";
                 if
                   Js.String.includes ~search:"2026-02-10T08:00:00.000Z" body
                   || Js.String.includes ~search:"2026-02-12T18:00:00.000Z" body
@@ -1985,7 +2238,7 @@ let () =
             fail_promise
               (Printf.sprintf "expected four invoke requests, got %d" !step)));
 
-  test_promise "upsert block create sends page refs from block title" (fun () ->
+  test_promise "upsert block create delegates page ref parsing to worker" (fun () ->
       let step = ref 0 in
       let captured_apply_body = ref None in
       let server =
@@ -2034,13 +2287,76 @@ let () =
                 fail_test "missing captured apply body";
                 failwith "missing captured apply body"
           in
-          expect_named_contains "block refs attr" body "block/refs";
+          expect_named_contains "raw editor operation" body "logseq.outliner/insert-blocks-input";
           expect_named_contains "page ref title" body "bar_page";
-          expect_named_contains "page ref tag" body "logseq.class/Page";
           if !step = 3 then Js.Promise.resolve pass
           else
             fail_promise
               (Printf.sprintf "expected three invoke requests, got %d" !step)));
+
+  List.iter
+    (fun (selector, message, expected_code) ->
+      test_promise
+        ("upsert block " ^ selector ^ " reports worker failure: " ^ message)
+        (fun () ->
+          let requests = ref 0 in
+          let server =
+            create_server (fun[@u] req res ->
+                let body = ref "" in
+                req_set_encoding req "utf8";
+                req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+                req_on_end req "end" (fun[@u] () ->
+                    incr requests;
+                    if Js.String.includes ~search:"thread-api/pull" !body then
+                      write_json res 200
+                        (json_response
+                           "[\"^ \
+                            \",\"~:db/id\",233,\"~:block/uuid\",\"~u00000000-0000-4000-8000-000000000233\"]")
+                    else if
+                      Js.String.includes ~search:"thread-api/apply-outliner-ops"
+                        !body
+                    then write_json res 500 (error_response message)
+                    else write_json res 400 (error_response !body)))
+          in
+          with_server server (fun base_url ->
+              let* output =
+                run_cli_p
+                  ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                  [|
+                    "--graph";
+                    "alpha";
+                    "--output";
+                    "json";
+                    "upsert";
+                    "block";
+                    selector;
+                    "233";
+                    "--content";
+                    "updated after concurrent delete";
+                  |]
+              in
+              if output.code = 0 then
+                fail_test "worker failure must fail update";
+              if expected_code <> "" then (
+                expect_named_contains "concurrent deletion error code"
+                  output.stdout
+                  ("\"code\":\"" ^ expected_code ^ "\"");
+                expect_named_contains "concurrent deletion reason" output.stdout
+                  message)
+              else (
+                expect_named_contains "unrelated worker failure" output.stderr
+                  message;
+                expect_named_not_contains "not a deletion race" output.stdout
+                  "source-not-found");
+              if !requests <> 2 then
+                fail_test "update must not retry worker failure";
+              Js.Promise.resolve pass)))
+    [
+      ("--id", "Block source does not exist", "source-not-found");
+      ("--id", "unexpected storage failure", "");
+      ("--target-id", "Block target does not exist", "target-not-found");
+      ("--target-id", "unexpected storage failure", "");
+    ];
 
   test_promise "upsert block update resolves tag names from tag list" (fun () ->
       let step = ref 0 in
@@ -2080,6 +2396,8 @@ let () =
                 "block";
                 "--id";
                 "233";
+                "--content";
+                "Updated [[Alpha]]";
                 "--update-tags";
                 "[\"Tag A\"]";
               |]
@@ -2093,6 +2411,8 @@ let () =
                 failwith "missing captured apply body"
           in
           expect_named_contains "batch tag set op" body "batch-set-property";
+          expect_named_contains "raw title operation" body "logseq.outliner/save-block-input";
+          expect_named_contains "batch transaction label" body "~:apply-outliner-ops";
           expect_named_contains "resolved tag id" body "200";
           if !step = 3 then Js.Promise.resolve pass
           else
@@ -2190,39 +2510,20 @@ let () =
                    && Js.String.includes ~search:"home" body ->
                 "[[\"^ \
                  \",\"~:db/id\",42,\"~:block/uuid\",\"11111111-1111-1111-1111-111111111111\",\"~:block/name\",\"home\"]]"
-            | 4 when Js.String.includes ~search:"thread-api/cli-list-tags" body
-              ->
-                "[[\"^ \
-                 \",\"~:db/id\",200,\"~:block/title\",\"Comments\"]]"
-            | 5
-              when Js.String.includes ~search:"thread-api/q" body
-                   && Js.String.includes ~search:"comments" body ->
-                (* #tags join block/refs as [:block/name] lookups — materialize
-                   resolves the existing tag entity. *)
-                "[\"^ \
-                 \",\"~:db/id\",200,\"~:block/uuid\",\"55555555-5555-4555-8555-555555555555\",\"~:block/name\",\"comments\"]"
-            | 6
+            | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
-                if not (Js.String.includes ~search:"block/tags" body) then
-                  fail_test ("missing inline tag op: " ^ body);
-                if not (Js.String.includes ~search:"200" body) then
-                  fail_test ("missing resolved tag id: " ^ body);
+                expect_named_contains "raw editor operation" body "logseq.outliner/insert-blocks-input";
+                expect_named_contains "inline tag text" body "#Comments";
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing related property ident: " ^ body);
                 if not (Js.String.includes ~search:"88" body) then
                   fail_test ("missing resolved block ref id: " ^ body);
-                if
-                  not
-                    (Js.String.includes
-                       ~search:"55555555-5555-4555-8555-555555555555" body)
-                then
-                  fail_test ("missing tag entity in block/refs: " ^ body);
                 if Js.String.includes ~search:ref_uuid body then
                   fail_test
                     ("unresolved block uuid leaked into property op: " ^ body);
                 "[]"
-            | 7 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
@@ -2248,10 +2549,10 @@ let () =
               |]
           in
           ignore (expect_cli_exit_zero "upsert block inline ref tags" output);
-          if !step = 7 then Js.Promise.resolve pass
+          if !step = 5 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected seven invoke requests, got %d" !step)));
+              (Printf.sprintf "expected five invoke requests, got %d" !step)));
 
   test_promise "upsert block create resolves date property values by page name"
     (fun () ->
@@ -2263,6 +2564,8 @@ let () =
         invoke_server (fun body ->
             let mark key = Hashtbl.replace seen key () in
             match () with
+            | _ when Js.String.includes ~search:"logseq.outliner/preview-ops" body ->
+                mark "preview"; "[]"
             | _
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"duedate" body ->
@@ -2285,6 +2588,7 @@ let () =
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 mark "apply";
+                expect_named_contains "batch transaction label" body "~:apply-outliner-ops";
                 if not (Js.String.includes ~search:property_ident body) then
                   fail_test ("missing duedate property ident: " ^ body);
                 if not (Js.String.includes ~search:"99" body) then
@@ -2319,10 +2623,10 @@ let () =
           in
           ignore
             (expect_cli_exit_zero "upsert block date property" output);
-          if Hashtbl.length seen = 5 then Js.Promise.resolve pass
+          if Hashtbl.length seen = 6 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected five invoke requests, got %d"
+              (Printf.sprintf "expected six invoke requests, got %d"
                  (Hashtbl.length seen))));
 
   test_promise "upsert block create coerces datetime property values to epoch ms"
@@ -2425,6 +2729,27 @@ let () =
               ("expected non-zero exit for invalid datetime: " ^ output.stdout
              ^ output.stderr)));
 
+  test_promise "upsert block rejects old workers before creating missing targets" (fun () ->
+      let created = ref 0 in
+      let preview_seen = ref false in
+      let server = invoke_server (fun body ->
+          if Js.String.includes ~search:"logseq.outliner/preview-ops" body then (
+            preview_seen := true;
+            failwith "unsupported input operation")
+          else if Js.String.includes ~search:"create-page" body then (
+            incr created;
+            failwith "must not create before checking worker")
+          else if Js.String.includes ~search:"thread-api/q" body then "[]"
+          else failwith "unsupported input operation") in
+      with_server server (fun base_url ->
+          let* output = run_cli_p ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+              [| "--graph"; "alpha"; "--output"; "json"; "upsert"; "block";
+                 "--target-page"; "MissingNamespace/Child"; "--content"; "[[Fresh]]" |] in
+          ignore (assert_true "old worker rejected" (output.code <> 0) "expected failure");
+          ignore (assert_true "capability request" !preview_seen "missing input preview capability check");
+          ignore (assert_true "no preflight writes" (!created = 0) "created pages before worker rejection");
+          Js.Promise.resolve pass));
+
   test_promise "upsert block keeps target page title case when creating" (fun () ->
       let step = ref 0 in
       let page_uuid = "33333333-3333-4333-8333-333333333333" in
@@ -2432,11 +2757,12 @@ let () =
         invoke_server (fun body ->
             incr step;
             match !step with
-            | (1 | 2)
+            | 2 when Js.String.includes ~search:"logseq.outliner/preview-ops" body -> "[]"
+            | (1 | 3)
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"my page" body ->
                 "[]"
-            | 3
+            | 4
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if not (Js.String.includes ~search:"create-page" body) then
@@ -2445,11 +2771,11 @@ let () =
                   fail_test
                     ("create-page lost original title case: " ^ body);
                 "[null,\"~u" ^ page_uuid ^ "\"]"
-            | 4 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 5 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \
                  \",\"~:db/id\",50,\"~:block/uuid\",\"~u" ^ page_uuid
                 ^ "\",\"~:block/name\",\"my page\"]"
-            | 5
+            | 6
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 if not (Js.String.includes ~search:"insert-blocks" body) then
@@ -2459,7 +2785,7 @@ let () =
                     ("insert target was not rewritten to created page uuid: "
                    ^ body);
                 "[]"
-            | 6 when Js.String.includes ~search:"thread-api/pull" body ->
+            | 7 when Js.String.includes ~search:"thread-api/pull" body ->
                 "[\"^ \",\"~:db/id\",10]"
             | _ ->
                 fail_test
@@ -2485,10 +2811,10 @@ let () =
           in
           ignore
             (expect_cli_exit_zero "upsert block created page title case" output);
-          if !step = 6 then Js.Promise.resolve pass
+          if !step = 7 then Js.Promise.resolve pass
           else
             fail_promise
-              (Printf.sprintf "expected six invoke requests, got %d" !step)));
+              (Printf.sprintf "expected seven invoke requests, got %d" !step)));
 
   test_promise "upsert block rolls back created pages when apply fails"
     (fun () ->
@@ -2500,6 +2826,8 @@ let () =
         invoke_server (fun body ->
             let mark key = Hashtbl.replace seen key () in
             match () with
+            | _ when Js.String.includes ~search:"logseq.outliner/preview-ops" body ->
+                mark "preview"; "[]"
             | _
               when Js.String.includes ~search:"thread-api/q" body
                    && Js.String.includes ~search:"db/valueType" body ->
@@ -2572,7 +2900,7 @@ let () =
             not (Hashtbl.mem seen key)
           in
           if
-            missing "create" || missing "apply-failed" || missing "orphan-query"
+            missing "preview" || missing "create" || missing "apply-failed" || missing "orphan-query"
             || missing "delete"
           then
             fail_promise
@@ -2642,7 +2970,7 @@ let () =
               (Printf.sprintf "expected three invoke requests, got %d"
                  (Hashtbl.length seen))));
 
-  test_promise "upsert block --content keeps hashtags literal" (fun () ->
+  test_promise "upsert block --content delegates hashtag parsing to worker" (fun () ->
       let seen = Hashtbl.create 4 in
       let server =
         invoke_server (fun body ->
@@ -2661,6 +2989,7 @@ let () =
               when Js.String.includes ~search:"thread-api/apply-outliner-ops"
                      body ->
                 mark "apply";
+                expect_named_contains "raw editor operation" body "logseq.outliner/insert-blocks-input";
                 if not (Js.String.includes ~search:"#RealTag" body) then
                   fail_test ("literal hashtag dropped from title: " ^ body);
                 if Js.String.includes ~search:"block/tags" body then
@@ -3258,6 +3587,56 @@ let () =
       fail_test ("unexpected invoke body: " ^ body);
       None)
   in
+  Array.iter
+    (fun tag ->
+      test_promise ("sync download rejects async " ^ tag) (fun () ->
+          let root = temp_dir "logseq-cli-download-error-" in
+          let download_requests = ref 0 in
+          let message = "Download failed: snapshot checksum mismatch" in
+          let server =
+            invoke_server (fun body ->
+                let response = sync_invoke_response download_requests body in
+                if
+                  Js.String.includes
+                    ~search:"thread-api/db-sync-download-graph-by-id" body
+                then
+                  "[\"~#" ^ tag ^ "\",[\"^ \",\"~:message\",\"" ^ message ^ "\""
+                  ^ (if tag = "error" then
+                       ",\"~:data\",[\"^ \",\"~:graph-id\",\"~u" ^ sync_graph_id
+                       ^ "\"]"
+                     else "")
+                  ^ "]]"
+                else Option.get response)
+          in
+          with_server server (fun base_url ->
+              let* output =
+                run_cli_p
+                  ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                  [|
+                    "--root-dir";
+                    root;
+                    "--graph";
+                    "alpha";
+                    "--output";
+                    "json";
+                    "sync";
+                    "download";
+                  |]
+              in
+              remove_tree root;
+              assert_true "download exit" (output.code = 1)
+                (Printf.sprintf "expected exit 1, got %d: %s %s" output.code
+                   output.stdout output.stderr);
+              assert_true "download invoked" (!download_requests = 1)
+                "expected one download request";
+              expect_named_contains "original download message" output.stdout
+                message;
+              expect_named_contains "download error status" output.stdout
+                "\"status\":\"error\"";
+              expect_named_not_contains "no download success" output.stdout
+                "\"status\":\"ok\"";
+              Js.Promise.resolve pass)))
+    [| "error"; "js/Error" |];
   test_promise "invoke response decodes JSON escaped resultTransit" (fun () ->
       let server =
         create_server (fun[@u] req res ->
@@ -3646,8 +4025,8 @@ let () =
         Node.Path.join [| current_dirname; "fake_codex.js" |]
       in
       write_file codex_bin
-        ("#!/bin/sh\nexec " ^ Node.Process.argv.(0) ^ " " ^ fake_codex_js
-       ^ " \"$@\"\n");
+        ("#!/bin/sh\nexec " ^ Filename.quote Node.Process.argv.(0) ^ " "
+       ^ Filename.quote fake_codex_js ^ " \"$@\"\n");
       chmod_sync codex_bin 0o755;
       write_file config_path
         (edn_map

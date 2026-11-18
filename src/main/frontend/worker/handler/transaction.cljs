@@ -12,9 +12,10 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
+   [logseq.common.util.date-time :as date-time-util]
    [logseq.db :as ldb]
    [logseq.db.common.order :as db-order]
-   [logseq.outliner.op :as outliner-op]
+   [logseq.outliner.input :as outliner-input]
    [logseq.outliner.recycle :as outliner-recycle]))
 
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
@@ -114,7 +115,13 @@
             apply-started-at (perf-time-ms)
             operation-result (worker-util/profile
                               "apply outliner ops"
-                              (outliner-op/apply-ops! conn ops operation-opts))
+                              (outliner-input/apply-ops!
+                               conn ops (assoc operation-opts :logseq.outliner.input/parse-options
+                                               {:repo repo
+                                                :user-config (get-in @worker-state/*state [:config repo])
+                                                :date-formatter (or (:logseq.property.journal/title-format
+                                                                     (d/entity @conn :logseq.class/Journal))
+                                                                    date-time-util/default-journal-title-formatter)})))
             applied-at (perf-time-ms)
             delta (db-listener/take-outliner-op-delta! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)

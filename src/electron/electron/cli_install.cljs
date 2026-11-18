@@ -18,18 +18,28 @@
       user-bin)))
 
 (defn- render-unix-cli-launcher
-  [exe-path cli-path]
+  [exe-path bootstrap]
   (str "#!/usr/bin/env sh\n"
        "# " CLI_LAUNCHER_MARKER "\n"
        "set -eu\n"
-       "ELECTRON_RUN_AS_NODE=1 exec \"" exe-path "\" \"" cli-path "\" \"$@\"\n"))
+       "ELECTRON_RUN_AS_NODE=1 exec '" (string/replace exe-path "'" "'\\''")
+       "' -e '" (string/replace bootstrap "'" "'\\''") "' -- \"$@\"\n"))
 
 (defn- render-win-cli-launcher
-  [exe-path cli-path]
+  [exe-path bootstrap]
   (str "@echo off\r\n"
        "REM " CLI_LAUNCHER_MARKER "\r\n"
-       "set ELECTRON_RUN_AS_NODE=1\r\n"
-       "\"" exe-path "\" \"" cli-path "\" %*\r\n"))
+       "setlocal DisableDelayedExpansion\r\n"
+       "set \"ELECTRON_RUN_AS_NODE=1\"\r\n"
+       "\"" (string/replace exe-path "%" "%%") "\" -e \"" bootstrap "\" -- %*\r\n"))
+
+(defn- cli-bootstrap
+  [packaged? cli-path]
+  (let [cli-expression (if packaged?
+                         "require('node:path').join(process.resourcesPath,'app.asar','js','logseq-cli.js')"
+                         (str "Buffer.from('" (.toString (.from js/Buffer cli-path "utf8") "base64")
+                              "','base64').toString('utf8')"))]
+    (str "const cli=" cli-expression ";process.argv.splice(1,0,cli);require(cli);")))
 
 (defn- launcher-exe-path
   [{:keys [windows? exe-path appimage-path]}]
@@ -58,7 +68,7 @@
       (str error)))
 
 (defn install-cli-launcher!
-  [{:keys [windows? cli-path cli-dir cli-dir! path-join exists?
+  [{:keys [windows? packaged? cli-path cli-dir cli-dir! path-join exists?
            show-error-box! t log-info! log-warn!]
     :as deps}]
   (try
@@ -76,9 +86,10 @@
         :else
         (let [target-path (path-join cli-dir (if windows? "logseq.cmd" "logseq"))
               exe-path (launcher-exe-path deps)
+              bootstrap (cli-bootstrap packaged? cli-path)
               content (if windows?
-                        (render-win-cli-launcher exe-path cli-path)
-                        (render-unix-cli-launcher exe-path cli-path))]
+                        (render-win-cli-launcher exe-path bootstrap)
+                        (render-unix-cli-launcher exe-path bootstrap))]
           (when (write-cli-launcher! (assoc deps
                                             :target-path target-path
                                             :content content))

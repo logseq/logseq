@@ -3,6 +3,7 @@
   (:require [logseq.common.defkeywords :refer [defkeywords]]))
 
 (defkeywords
+  :route/eligible-for-recent? {:doc "Whether a route target is a visible page with a nonblank title."}
   :block/uuid      {:doc "block's uuid"}
   :block/name      {:doc "block name, lowercase, only page-blocks have this attr"}
   :block/raw-title {:doc "like `:block/title`,

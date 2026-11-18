@@ -837,6 +837,7 @@
   (let [repo-error #'db-worker-node/repo-error
         bound-repo "logseq_db_bound"]
     (is (nil? (repo-error :thread-api/list-db [] bound-repo)))
+    (is (nil? (repo-error :thread-api/scan-file-graph [nil [] {}] bound-repo)))
     (is (nil? (repo-error :thread-api/get-db-sync-config [] bound-repo)))
     (is (nil? (repo-error :thread-api/sync-app-state [{:auth/id-token "token"}] bound-repo)))
     (is (nil? (repo-error :thread-api/db-sync-list-remote-graphs [] bound-repo)))

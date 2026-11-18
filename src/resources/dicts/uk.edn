@@ -929,14 +929,8 @@
  :import/finishing "Завершення імпорту графа"
  :import/graph-name-conflict "Будь ласка, вкажіть іншу назву, оскільки граф із такою назвою вже існує!"
  :import/graph-name-placeholder "Назва графа"
- :import/ignored-assets (fn [count] (str "Під час імпорту пропущено " count " " (if (= 1 count) "об'єкт" "об'єктів") ". Докладнішу інформацію див. у консолі JavaScript."))
- :import/ignored-files (fn [count] (str "Під час імпорту проігноровано " count " " (if (= 1 count) "файл" "файлів") ". Докладнішу інформацію див. у консолі JavaScript."))
- :import/ignored-properties (fn [count] (str "Під час імпорту пропущено " count " " (if (= 1 count) "властивість" "властивості")))
- :import/ignored-properties-fix "Щоб виправити тип властивості, змініть значення властивості на значення правильного типу та повторно імпортуйте граф."
- :import/invalid-blocks-detected "Під час імпорту виявлено {1} некоректний блок (або блоки). Взаємодія з ними може призводити до помилок. Докладнішу інформацію можна знайти в консолі JavaScript."
  :import/invalid-edn-file "Наданий файл EDN не є коректним файлом EDN. Будь ласка, виправте його та спробуйте знову."
  :import/loading "Імпортується"
- :import/logseq-config-missing "Не вдалося виконати імпорт, оскільки для графа Logseq не було знайдено файл «logseq/config.edn»."
  :import/new-graph-name "Нова назва графа"
  :import/notes "Імпортувати наявні нотатки"
  :import/org-files-imported "Імпортовано {1} файл(и) org у форматі Markdown. Підтримку файлів org буде додано пізніше."

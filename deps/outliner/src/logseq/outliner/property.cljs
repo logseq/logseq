@@ -175,6 +175,15 @@
       (first ids)
       ids)))
 
+(defn- ignore-root-extends-add?
+  "Returns true when adding a normalized Root ref would create a redundant parent."
+  [db block property-id value]
+  (and (= property-id :logseq.property.class/extends)
+       (integer? value)
+       (= :logseq.class/Root (:db/ident (d/entity db value)))
+       (some #(not= :logseq.class/Root (:db/ident %))
+             (:logseq.property.class/extends block))))
+
 (defn- redundant-extends-retraction-tx-data
   [db class value]
   (let [parent-ids (set (->entity-ids db value))
@@ -185,9 +194,11 @@
      (mapcat #(direct-extends-retraction-tx-data (d/entity db %) inherited-parent-ids)
              (db-class/get-structured-children db (:db/id class))))))
 
-(defn- build-property-value-tx-data
+(defn- build-normalized-property-value-tx-data
+  "Builds property transactions. Extends refs in `value` must be normalized."
   [conn block property-id value]
-  (when (some? value)
+  (when (and (some? value)
+             (not (ignore-root-extends-add? @conn block property-id value)))
     (let [old-value (get block property-id)
           property (d/entity @conn property-id)
           multiple-values? (= :db.cardinality/many (:db/cardinality property))
@@ -195,9 +206,8 @@
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
-          tx-value (if extends?
-                     (let [value' (normalize-extends-value @conn value)]
-                       (if (coll? value') (set value') value'))
+          tx-value (if (and extends? (coll? value))
+                     (set value)
                      value)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
@@ -215,6 +225,14 @@
         (into (redundant-extends-retraction-tx-data @conn block value))
         true
         (conj update-block-tx)))))
+
+(defn- build-property-value-tx-data
+  [conn block property-id value]
+  (build-normalized-property-value-tx-data
+   conn block property-id
+   (if (and (= property-id :logseq.property.class/extends) (some? value))
+     (normalize-extends-value @conn value)
+     value)))
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
@@ -812,7 +830,7 @@
                          (doseq [alias-id (if (coll? v') v' [v'])]
                            (when (number? alias-id)
                              (throw-error-if-invalid-alias @conn block alias-id))))
-                       (build-property-value-tx-data conn block property-id v'))
+                       (build-normalized-property-value-tx-data conn block property-id v'))
                      (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
                  block-eids))]
        (when (seq txs)

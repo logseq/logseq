@@ -66,10 +66,10 @@ HELP
 
 uninstall() {
     log_info "Searching for Logseq installations..."
-    
+
     local user_removed=false
     local system_removed=false
-    
+
     # User installation paths
     local -a user_paths=(
         "$HOME/.local/share/logseq"
@@ -77,7 +77,7 @@ uninstall() {
         "$HOME/.local/share/applications/logseq.desktop"
         "$HOME/.local/share/icons/hicolor/512x512/apps/logseq.png"
     )
-    
+
     # System installation paths
     local -a system_paths=(
         "/opt/logseq"
@@ -85,7 +85,7 @@ uninstall() {
         "/usr/share/applications/logseq.desktop"
         "/usr/share/icons/hicolor/512x512/apps/logseq.png"
     )
-    
+
     # Remove user installation
     log_info "Checking user installation..."
     for path in "${user_paths[@]}"; do
@@ -95,7 +95,7 @@ uninstall() {
             user_removed=true
         fi
     done
-    
+
     # Remove system installation
     log_info "Checking system-wide installation..."
     for path in "${system_paths[@]}"; do
@@ -110,16 +110,16 @@ uninstall() {
             fi
         fi
     done
-    
+
     # Update desktop databases
     if [[ "$user_removed" == true ]] && [[ -d "$HOME/.local/share/applications" ]]; then
         update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
     fi
-    
+
     if [[ "$system_removed" == true ]]; then
         update-desktop-database /usr/share/applications 2>/dev/null || true
     fi
-    
+
     # Final status message
     if [[ "$user_removed" == true ]] || [[ "$system_removed" == true ]]; then
         log_info "Logseq has been uninstalled successfully!"
@@ -177,7 +177,7 @@ if [[ "$USER_INSTALL" == true ]]; then
     INSTALL_DIR="${INSTALL_DIR/#\/opt\/logseq/$HOME/.local/share/logseq}"
     BIN_DIR="$HOME/.local/bin"
     mkdir -p "$BIN_DIR"
-    
+
     # Add local bin to PATH if not already there
     if ! echo "$PATH" | grep -q "$HOME/.local/bin"; then
         log_info "Adding $HOME/.local/bin to PATH..."
@@ -207,14 +207,16 @@ cd "$TEMP_DIR"
 if [[ "$VERSION" == "latest" ]]; then
     log_info "Fetching latest release information..."
     LATEST_RELEASE=$(curl -s https://api.github.com/repos/logseq/logseq/releases/latest)
-    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x64-[^"]*\.zip"' | cut -d'"' -f4)
-    
+    DOWNLOAD_URL=$(echo "$LATEST_RELEASE" | grep -o '"browser_download_url": "[^"]*Logseq-linux-x86_64-[^"]*\.zip"' | cut -d'"' -f4)
+
     if [[ -z "$DOWNLOAD_URL" ]]; then
         log_error "Could not find download URL for latest version"
         exit 1
     fi
-else
+elif [[ "$VERSION" =~ ^0.* ]]; then
     DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x64-${VERSION}.zip"
+else
+    DOWNLOAD_URL="https://github.com/logseq/logseq/releases/download/${VERSION}/Logseq-linux-x86_64-${VERSION}.zip"
 fi
 
 log_info "Download URL: $DOWNLOAD_URL"
@@ -230,10 +232,17 @@ fi
 
 # Extract archive
 log_info "Extracting archive..."
-unzip -q logseq.zip
-
-# Find the extracted directory
-EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-x64*" | head -1)
+EXTRACTED_DIR="Logseq"
+LOGSEQ_BIN="logseq"
+if [[ "$VERSION" =~ ^0.* ]]; then
+  unzip -q logseq.zip
+  EXTRACTED_DIR=$(find . -maxdepth 2 -type d -name "Logseq-linux-x64*" | head -1)
+  LOGSEQ_BIN="Logseq"
+else
+  EXTRACTED_DIR="Logseq"
+  LOGSEQ_BIN="logseq"
+  unzip -q logseq.zip -d "$EXTRACTED_DIR"
+fi
 
 if [[ -z "$EXTRACTED_DIR" ]]; then
     log_error "Could not find extracted Logseq directory"
@@ -246,13 +255,13 @@ log_info "Installing files..."
 if [[ "$USER_INSTALL" == false ]]; then
     mkdir -p "$INSTALL_DIR"
     cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/Logseq"
-    ln -sf "$INSTALL_DIR/Logseq" "$BIN_DIR/logseq"
+    chmod +x "$INSTALL_DIR/$LOGSEQ_BIN"
+    ln -sf "$INSTALL_DIR/$LOGSEQ_BIN" "$BIN_DIR/logseq"
 else
     mkdir -p "$INSTALL_DIR"
     cp -r "$EXTRACTED_DIR"/* "$INSTALL_DIR/"
-    chmod +x "$INSTALL_DIR/Logseq"
-    ln -sf "$INSTALL_DIR/Logseq" "$BIN_DIR/logseq"
+    chmod +x "$INSTALL_DIR/$LOGSEQ_BIN"
+    ln -sf "$INSTALL_DIR/$LOGSEQ_BIN" "$BIN_DIR/logseq"
 fi
 
 # Fix sandbox permissions
@@ -278,17 +287,17 @@ if [[ "$SKIP_DESKTOP" == false ]]; then
     else
         ICON_DIR="/usr/share/icons/hicolor/512x512/apps"
     fi
-    
+
     # Ensure the directory exists regardless of install type
     mkdir -p "$ICON_DIR"
-    
+
     # Create desktop file
     cat > "$DESKTOP_FILE" << DESKTOP_EOF
 [Desktop Entry]
 Version=1.0
 Name=Logseq
 Comment=Logseq - A privacy-first, open-source platform for knowledge management and collaboration
-Exec=$INSTALL_DIR/Logseq $([ "$USER_INSTALL" = true ] && echo "--no-sandbox") %U
+Exec=$INSTALL_DIR/$LOGSEQ_BIN $([ "$USER_INSTALL" = true ] && echo "--no-sandbox") %U
 Icon=$ICON_DIR/logseq.png
 Terminal=false
 Type=Application
@@ -296,10 +305,10 @@ Categories=Office;Productivity;Utility;TextEditor;
 MimeType=application/x-logseq;
 StartupWMClass=Logseq
 DESKTOP_EOF
-    
+
     # Make desktop file executable
     chmod +x "$DESKTOP_FILE"
-    
+
     # 1. Find and copy the icon (try current paths first, then fallbacks)
     if [[ -f "$INSTALL_DIR/resources/app/icons/logseq.png" ]]; then
         cp "$INSTALL_DIR/resources/app/icons/logseq.png" "$ICON_DIR/logseq.png"
@@ -308,12 +317,12 @@ DESKTOP_EOF
     elif [[ -f "$INSTALL_DIR/resources/app/icon.png" ]]; then
         cp "$INSTALL_DIR/resources/app/icon.png" "$ICON_DIR/logseq.png"
     fi
-    
+
     # 2. Update desktop file to use purely the icon name for system-wide installs
     if [[ "$USER_INSTALL" == false ]]; then
         sed -i "s|Icon=$ICON_DIR/logseq.png|Icon=logseq|" "$DESKTOP_FILE"
     fi
-    
+
     # Update desktop database
     if [[ "$USER_INSTALL" == false ]]; then
         update-desktop-database /usr/share/applications/ 2>/dev/null || true
@@ -334,12 +343,12 @@ if command -v logseq >/dev/null 2>&1; then
         # Fallback Plan: Add a 2-second timeout to forcibly terminate the process, preventing the application from hanging.
         INSTALLED_VERSION=$(timeout 2 logseq --version 2>/dev/null | head -1 || echo "unknown")
     fi
-    
+
     log_info "Logseq installed successfully!"
     log_info "Version: $INSTALLED_VERSION"
     log_info "Location: $INSTALL_DIR"
     log_info "Command: logseq"
-    
+
     if [[ "$SKIP_DESKTOP" == false ]]; then
         log_info "Desktop integration: Enabled"
         log_info "You can find Logseq in your applications menu"

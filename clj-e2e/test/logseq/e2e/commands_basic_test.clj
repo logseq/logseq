@@ -101,10 +101,10 @@
     (assert/assert-is-visible ".ui__ac-group-name:has-text('FORMAT')")
     (assert/assert-is-visible ".ui__ac-group-name:has-text('Heading')")
     (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')"))
-  (testing "typed slash filter hides section headings"
+  (testing "typed slash filter keeps matching section headings"
     (util/press-seq "node" {:delay 20})
     (w/wait-for "a.menu-link:has-text('Node reference')")
-    (assert/assert-is-hidden ".ui__ac-group-name")))
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")))
 
 (defn- chosen-slash-command-visibility
   []
