@@ -55,14 +55,6 @@
        commands
        (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
 
-(defn slash-commands-search-filtered?
-  "True when the slash popup was narrowed by user search text.
-
-  Contextual filters such as hiding Clear heading on non-heading blocks
-  do not count as a search filter and must not hide group headings."
-  [search-matched initial-commands]
-  (not= search-matched initial-commands))
-
 (defn node-render
   [block q {:keys [db-tag?]}]
   (let [block' (cond-> block
@@ -153,9 +145,7 @@
         :class
         "cp__commands-slash"
 
-        :get-group-name
-        (fn [item]
-          (when (= (count item) 5) (last item)))})))
+        :get-group-name commands/command-group-name})))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]

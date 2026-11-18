@@ -217,7 +217,7 @@
   (p/let [title (db-async/<get-journal-page-title (state/get-current-repo) journal-title)]
     (get-page-ref-text title)))
 
-(defn- command-group-name
+(defn command-group-name
   [command]
   (when (= (count command) 5)
     (last command)))
@@ -238,28 +238,33 @@
         [(t-fn :editor.slash/node-embed)
          (embed-block)
          (t-fn :editor.slash/node-embed-desc)
-         :icon/blockEmbed]]
+         :icon/blockEmbed
+         (t-fn :editor.slash/group-basic)]]
 
        ;; format
        [[(t-fn :ui/link) (link-steps) (t-fn :editor.slash/link-desc) :icon/link (t-fn :editor.slash/group-format)]
-        [(t-fn :editor.slash/image-link) (image-link-steps) (t-fn :editor.slash/image-link-desc) :icon/photoLink]
+        [(t-fn :editor.slash/image-link) (image-link-steps) (t-fn :editor.slash/image-link-desc) :icon/photoLink (t-fn :editor.slash/group-format)]
         (when (state/markdown?)
           [(t-fn :editor.slash/underline)
            [[:editor/input "<ins></ins>" {:last-pattern command-trigger :backward-pos 6}]]
            (t-fn :editor.slash/underline-desc)
-           :icon/underline])
+           :icon/underline
+           (t-fn :editor.slash/group-format)])
         [(t-fn :editor.slash/code-block)
          (code-block-steps)
          (t-fn :editor.slash/code-block-desc)
-         :icon/code]
+         :icon/code
+         (t-fn :editor.slash/group-format)]
         [(t-fn :class.built-in/quote-block)
          (quote-block-steps)
          (t-fn :editor.slash/quote-desc)
-         :icon/quote]
+         :icon/quote
+         (t-fn :editor.slash/group-format)]
         [(t-fn :editor.slash/math-block)
          (math-block-steps)
          (t-fn :editor.slash/math-block-desc)
-         :icon/math]]
+         :icon/math
+         (t-fn :editor.slash/group-format)]]
 
        (headings t-fn)
 
@@ -292,20 +297,24 @@
         [(t-fn :date.nlp/yesterday)
          #(<journal-page-ref-text get-page-ref-text (date/yesterday))
          (t-fn :editor.slash/yesterday-desc)
-         :icon/yesterday]
+         :icon/yesterday
+         (t-fn :editor.slash/group-time-and-date)]
         [(t-fn :date.nlp/today)
          #(p/let [title (db-async/<get-today-journal-title (state/get-current-repo))]
             (get-page-ref-text title))
          (t-fn :editor.slash/today-desc)
-         :icon/calendar]
+         :icon/calendar
+         (t-fn :editor.slash/group-time-and-date)]
         [(t-fn :editor.slash/current-time)
          #(date/get-current-time)
          (t-fn :editor.slash/current-time-desc)
-         :icon/clock]
+         :icon/clock
+         (t-fn :editor.slash/group-time-and-date)]
         [(t-fn :editor.slash/date-picker)
          [[:editor/show-date-picker]]
          (t-fn :editor.slash/date-picker-desc)
-         :icon/calendar-dots]]
+         :icon/calendar-dots
+         (t-fn :editor.slash/group-time-and-date)]]
 
        ;; order list
        [[(t-fn :editor.slash/number-list)
@@ -318,7 +327,8 @@
          [[:editor/clear-current-slash]
           [:editor/toggle-children-number-list]]
          (t-fn :editor.slash/number-children)
-         :icon/numberedChildren]]
+         :icon/numberedChildren
+         (t-fn :editor.slash/group-list-type)]]
 
        ;; advanced
        [[(t-fn :block.comments/add-comment)
@@ -328,39 +338,46 @@
          :icon/messageCircle
          (t-fn :editor.slash/group-advanced)]
         [(t-fn :property.built-in/query) (query-steps) (query-doc) :icon/query (t-fn :editor.slash/group-advanced)]
-        [(t-fn :editor.slash/advanced-query) (advanced-query-steps) (t-fn :editor.slash/advanced-query-desc) :icon/query]
+        [(t-fn :editor.slash/advanced-query) (advanced-query-steps) (t-fn :editor.slash/advanced-query-desc) :icon/query (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/query-function)
          [[:editor/input "{{function }}" {:backward-pos 2}]]
          (t-fn :editor.slash/query-function-desc)
-         :icon/queryCode]
+         :icon/queryCode
+         (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/calculator)
          (calc-steps)
          (t-fn :editor.slash/calculator-desc)
-         :icon/calculator]
+         :icon/calculator
+         (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/upload-asset)
          [[:editor/click-hidden-file-input :id]]
          (t-fn :editor.slash/upload-asset-desc)
-         :icon/upload]
+         :icon/upload
+         (t-fn :editor.slash/group-advanced)]
         [(t-fn :class.built-in/template)
          [[:editor/input command-trigger nil]
           [:editor/search-template]]
          (t-fn :editor.slash/template-desc)
-         :icon/template]
-        [(t-fn :editor.slash/embed-html) (->inline "html") "" :icon/htmlEmbed]
+         :icon/template
+         (t-fn :editor.slash/group-advanced)]
+        [(t-fn :editor.slash/embed-html) (->inline "html") "" :icon/htmlEmbed (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/embed-video-url)
          [[:editor/input "{{video }}" {:last-pattern command-trigger :backward-pos 2}]]
          ""
-         :icon/videoEmbed]
-        [(t-fn :editor.slash/embed-youtube-timestamp) [[:youtube/insert-timestamp]] "" :icon/videoEmbed]
+         :icon/videoEmbed
+         (t-fn :editor.slash/group-advanced)]
+        [(t-fn :editor.slash/embed-youtube-timestamp) [[:youtube/insert-timestamp]] "" :icon/videoEmbed (t-fn :editor.slash/group-advanced)]
         [(t-fn :editor.slash/embed-twitter-tweet)
          [[:editor/input "{{tweet }}" {:last-pattern command-trigger :backward-pos 2}]]
          ""
-         :icon/xEmbed]
+         :icon/xEmbed
+         (t-fn :editor.slash/group-advanced)]
         [(t-fn :command.editor/add-property)
          [[:editor/clear-current-slash]
           [:editor/new-property]]
          ""
-         :icon/cube-plus]]
+         :icon/cube-plus
+         (t-fn :editor.slash/group-advanced)]]
 
        (let [commands (->> @*extend-slash-commands
                            (map resolve-slash-command)
@@ -372,11 +389,9 @@
 ;; Allow user to modify or extend, should specify how to extend.
 
        (state/get-commands)
-       (when-let [plugin-commands (seq (some->> (state/get-plugins-slash-commands)
-                                                (mapv #(vec (concat % [nil :icon/puzzle])))))]
-         (-> plugin-commands
-             (vec)
-             (update 0 (fn [v] (conj v (t-fn :editor.slash/group-plugins)))))))
+       (let [group-name (t-fn :editor.slash/group-plugins)]
+         (map #(into (vec %) [nil :icon/puzzle group-name])
+              (state/get-plugins-slash-commands))))
       (remove nil?)
       (util/distinct-by-last-wins first)))))
 
