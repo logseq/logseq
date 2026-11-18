@@ -20,6 +20,7 @@ let views_list : (string * string * string) list ref = ref []
 let view_flags : (string, string list) Hashtbl.t = Hashtbl.create 8
 let view_rows : (string, (string * string) list) Hashtbl.t =
   Hashtbl.create 8
+let view_data_overrides : (string, W.t) Hashtbl.t = Hashtbl.create 8
 let titles : (string, string) Hashtbl.t = Hashtbl.create 64
 let query_src : (string, string) Hashtbl.t = Hashtbl.create 8
 let query_rows : (string, string list) Hashtbl.t = Hashtbl.create 8
@@ -70,6 +71,11 @@ let view_ent uuid title ty : W.t =
                   [ W.Array [ kw "user.property/p1"; kw "is"; W.String "x" ]
                   ] ) ] ) ]
     else []
+    @
+    if flag_view uuid "group-tags" then
+      [ ( kw "logseq.property.view/group-by-property"
+        , W.Map [ kw "db/ident", kw "block/tags" ] ) ]
+    else []
   in
   W.Map
     ([ kw "block/uuid", W.Uuid uuid
@@ -109,15 +115,18 @@ let blocks_response = function
   | _ -> W.List []
 
 let view_data_value uuid : W.t =
-  let rows =
-    match Hashtbl.find_opt view_rows uuid with
-    | Some rs -> List.map fst rs
-    | None -> []
-  in
-  W.Map
-    [ kw "count", W.Int (List.length rows)
-    ; kw "rows", W.Array (List.map (fun u -> W.Uuid u) rows)
-    ; kw "properties", W.List [ kw "block/title" ] ]
+  match Hashtbl.find_opt view_data_overrides uuid with
+  | Some data -> data
+  | None ->
+      let rows =
+        match Hashtbl.find_opt view_rows uuid with
+        | Some rs -> List.map fst rs
+        | None -> []
+      in
+      W.Map
+        [ kw "count", W.Int (List.length rows)
+        ; kw "rows", W.Array (List.map (fun u -> W.Uuid u) rows)
+        ; kw "properties", W.List [ kw "block/title" ] ]
 
 let query_value spec : W.t =
   (* spec carries :current-block-uuid — find the owning scripted query *)
@@ -320,6 +329,83 @@ let query_result_replacement () =
         [], Some "invalid query"
     ]
 
+let grouped_entity_value uuid =
+  W.Map [ kw "kind", kw "entity"; kw "uuid", W.Uuid uuid ]
+
+let grouped_view_data groups =
+  let count = List.fold_left (fun n (_, rows) -> n + List.length rows) 0 groups in
+  let groups =
+    List.map
+      (fun (value, rows) ->
+        let rows = W.Array (List.map (fun uuid -> W.Uuid uuid) rows) in
+        W.Map [ kw "value", value; kw "rows", rows ])
+      groups
+  in
+  W.Map
+    [ kw "count", W.Int count
+    ; kw "partition", kw "grouped"
+    ; kw "groups", W.Array groups
+    ; kw "properties", W.List [ kw "block/title" ]
+    ]
+
+let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let uuid n = Printf.sprintf "cc000000-0000-4000-8000-%012d" n in
+  let table_view = uuid 1 in
+  let list_view = uuid 2 in
+  let page_uuid = uuid 11 in
+  let journal_uuid = uuid 12 in
+  let table_rows = List.init 4 (fun i -> uuid (21 + i)) in
+  let list_rows = List.init 4 (fun i -> uuid (31 + i)) in
+  let empty_value = W.Map [ kw "kind", kw "empty" ] in
+  let scalar_value =
+    W.Map [ kw "kind", kw "scalar"; kw "value", W.String "High" ]
+  in
+  let groups rows =
+    [ (grouped_entity_value page_uuid, [ List.nth rows 0 ])
+    ; (grouped_entity_value journal_uuid, [ List.nth rows 1 ])
+    ; (empty_value, [ List.nth rows 2 ])
+    ; (scalar_value, [ List.nth rows 3 ])
+    ]
+  in
+  h.set_views
+    [ (table_view, "Grouped table", "logseq.property.view/type.table")
+    ; (list_view, "Grouped list", "logseq.property.view/type.list")
+    ];
+  h.set_view_flags table_view [ "group-tags" ];
+  h.set_view_flags list_view [ "group-tags" ];
+  h.set_rows ~view:table_view
+    (List.mapi (fun i row -> row, "Table row " ^ string_of_int (i + 1)) table_rows);
+  h.set_rows ~view:list_view
+    (List.mapi (fun i row -> row, "List row " ^ string_of_int (i + 1)) list_rows);
+  Hashtbl.replace titles page_uuid "Page";
+  Hashtbl.replace titles journal_uuid "Journal";
+  Hashtbl.replace view_data_overrides table_view
+    (grouped_view_data (groups table_rows));
+  Hashtbl.replace view_data_overrides list_view
+    (grouped_view_data (groups list_rows));
+  let s = h.mount_table () in
+  let has_text value =
+    List.exists
+      (fun node -> M.string_prop node "text" = Some value)
+      (M.all_nodes s.S.tree)
+  in
+  let check_group_headers name ~missing_group =
+    List.iter
+      (fun label -> h.check (name ^ ": group title " ^ label) (has_text label))
+      [ "Page"; "Journal"; "High" ];
+    if missing_group then
+      h.check (name ^ ": missing group placeholder")
+        (has_text (I18n.no_group_value "block/tags"))
+  in
+  h.after 40 (fun () ->
+      check_group_headers "views: Table" ~missing_group:true;
+      Shared_scenarios_views.click_tab h s list_view;
+      h.after 40 (fun () ->
+          check_group_headers "views: List" ~missing_group:true;
+          finish ()))
+
 let run ~finish =
   query_result_replacement ();
-  Shared_scenarios_views.run (host ()) ~finish
+  let h = host () in
+  grouped_entity_headers h ~finish:(fun () ->
+      Shared_scenarios_views.run h ~finish)
