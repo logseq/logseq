@@ -103,10 +103,10 @@
 
      (or (set? v) (sequential? v))
      (into #{} (map (fn [ref-value]
-                      (let [uuid (:block/uuid ref-value)]
+                      (let [ref-uuid (:block/uuid ref-value)]
                         (if (and (map? ref-value)
-                                 (uuid? uuid)
-                                 (nil? (d/entity db [:block/uuid uuid])))
+                                 (uuid? ref-uuid)
+                                 (nil? (d/entity db [:block/uuid ref-uuid])))
                           (dissoc ref-value :db/id)
                           (stable-entity-ref-with-tx-data db tx-data ref-value)))))
            v)
@@ -136,12 +136,19 @@
       schema)))
 
 (defn- sanitize-block-refs
-  [refs]
-  (->> refs
-       (keep (fn [ref-entity]
-               (when (:block/uuid ref-entity)
-                 (select-keys ref-entity [:block/uuid :block/title :db/ident]))))
-       vec))
+  [refs recorded-refs]
+  (let [recorded-by-lookup (into {}
+                                 (map (fn [ref-entity]
+                                        [[:block/uuid (:block/uuid ref-entity)] ref-entity]))
+                                 recorded-refs)]
+    (into []
+          (keep (fn [ref-value]
+                  (let [ref-entity (if (vector? ref-value)
+                                     (get recorded-by-lookup ref-value)
+                                     ref-value)]
+                    (when (:block/uuid ref-entity)
+                      (select-keys ref-entity [:block/uuid :block/title :db/ident])))))
+          refs)))
 
 (defn- ref-attr?
   [db a]
@@ -154,7 +161,7 @@
    (sanitize-block-payload db block nil))
   ([db block {:keys [created-uuids tx-data]}]
    (if (map? block)
-     (let [refs (sanitize-block-refs (:block/refs block))
+     (let [refs (sanitize-block-refs (:block/refs block) (get block rebase-refs-key))
            created-ref-uuids (when (and (seq created-uuids) (seq refs))
                                (->> refs
                                     (keep :block/uuid)
@@ -207,8 +214,8 @@
   (let [refs (get block rebase-refs-key)
         created-ref-uuids (set (get block rebase-created-refs-key))
         missing-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
-        retracted-refs (remove (fn [block]
-                                 (contains? created-ref-uuids (:block/uuid block)))
+        retracted-refs (remove (fn [ref-entity]
+                                 (contains? created-ref-uuids (:block/uuid ref-entity)))
                                missing-refs)
         tag-lookups (->> (:block/tags block)
                          (filter (fn [v]
@@ -222,20 +229,20 @@
                                                          block-ref))]
                                    (map rewrite-ref v)))
         block-refs (:block/refs block)
-        block (if (some nil? block-refs)
-                (do
-                  (when-not (and (seq refs)
-                                 (every? #(uuid? (:block/uuid %)) refs)
-                                 (every? #(string? (:block/title %)) missing-refs))
-                    (throw (ex-info "Cannot recover nil block refs without reference metadata"
-                                    {:block/uuid (:block/uuid block)})))
-                  ;; Several missing references can collapse into one nil in a set.
-                  (assoc block :block/refs
-                         (into (into #{} (remove nil?) block-refs)
-                               (map (fn [ref-entity] [:block/uuid (:block/uuid ref-entity)]))
-                               refs)))
-                block)
-        block' (cond-> block
+        recovered-block (if (some nil? block-refs)
+                          (do
+                            (when-not (and (seq refs)
+                                           (every? #(uuid? (:block/uuid %)) refs)
+                                           (every? #(string? (:block/title %)) missing-refs))
+                              (throw (ex-info "Cannot recover nil block refs without reference metadata"
+                                              {:block/uuid (:block/uuid block)})))
+                            ;; Several missing references can collapse into one nil in a set.
+                            (assoc block :block/refs
+                                   (into (into #{} (remove nil?) block-refs)
+                                         (map (fn [ref-entity] [:block/uuid (:block/uuid ref-entity)]))
+                                         refs)))
+                          block)
+        block' (cond-> recovered-block
                  (seq retracted-refs)
                  (update :block/title
                          (fn [title]
