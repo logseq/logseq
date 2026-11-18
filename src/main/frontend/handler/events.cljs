@@ -467,22 +467,24 @@
              (:major (db-schema/parse-schema-version graph-schema-version)))
           {:app db-schema/version
            :remote-graph graph-schema-version})
-  (->
-   (p/do!
-    (when (util/mobile?)
-      (download-progress/show! graph-name))
-    (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
-    (rtc-handler/<get-remote-graphs)
-    (state/pub-event! [:graph/switch (str config/db-version-prefix graph-name) {:rtc-download? true}])
-    (when (util/mobile?)
-      (download-progress/hide!)))
-   (p/catch (fn [e]
-              (println "RTC download graph failed, error:")
-              (log/error :rtc-download-graph-failed e)
-              (when (util/mobile?)
-                (download-progress/hide!))
-              (when (rtc-error/e2ee-decrypt-failed? e)
-                (notification/show! (t :encryption/wrong-password) :error false))))))
+  (when (util/mobile?)
+    (download-progress/show! graph-name))
+  (-> (p/let [downloaded? (-> (rtc-handler/<rtc-download-graph! graph-name graph-uuid graph-e2ee?)
+                               (p/then (constantly true))
+                               (p/catch (fn [e]
+                                          (log/error :rtc-download-graph-failed e)
+                                          (rtc-error/notify-download-failure! graph-uuid e)
+                                          false)))]
+        (when downloaded?
+          (-> (p/do!
+               (rtc-handler/<get-remote-graphs)
+               (state/pub-event! [:graph/switch (str config/db-version-prefix graph-name)
+                                  {:rtc-download? true}]))
+              (p/catch (fn [e]
+                         (log/error :rtc-download-graph-failed e))))))
+      (p/finally (fn []
+                   (when (util/mobile?)
+                     (download-progress/hide!))))))
 
 ;; db-worker -> UI
 (defevent! :db/sync-changes [[_ data]]

@@ -55,14 +55,6 @@
        commands
        (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
 
-(defn slash-commands-search-filtered?
-  "True when the slash popup was narrowed by user search text.
-
-  Contextual filters such as hiding Clear heading on non-heading blocks
-  do not count as a search filter and must not hide group headings."
-  [search-matched initial-commands]
-  (not= search-matched initial-commands))
-
 (defn node-render
   [block q {:keys [db-tag?]}]
   (let [block' (cond-> block
@@ -105,12 +97,10 @@
         edit-block (state/get-edit-block)
         page? (entity/page? edit-block)
         has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
-        matched (or (filter-commands page? has-heading? matched') no-matched-commands)
-        filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
+        matched (or (filter-commands page? has-heading? matched') no-matched-commands)]
     (ui/auto-complete
      matched
-     (cond->
-      {:item-render
+     {:item-render
        (fn [item]
          (let [command-name (first item)
                command-doc (get item 2)
@@ -152,12 +142,10 @@
                                              format
                                              {:restore? restore-slash?
                                               :command command}))))
-       :class
-       "cp__commands-slash"}
-       (not filtered?)
-       (assoc :get-group-name
-              (fn [item]
-                (when (= (count item) 5) (last item))))))))
+        :class
+        "cp__commands-slash"
+
+        :get-group-name commands/command-group-name})))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]

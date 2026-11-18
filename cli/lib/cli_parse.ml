@@ -15,6 +15,16 @@ let option_value key options =
 
 let option_present key options = Vec.mem_assoc key options
 
+let validate_graph_option options =
+  let count =
+    Vec.fold_left
+      (fun count (key, _) -> if key = "graph" then count + 1 else count)
+      0 options
+  in
+  if count > 1 then
+    Error (Error.invalid_options "Option --graph may only be specified once")
+  else Ok ()
+
 let normalize_key = function
   | "-g" -> Some "graph"
   | "-o" -> Some "output"
@@ -250,6 +260,7 @@ let allowed_options_for_path path =
       [|
         "id";
         "page";
+        "rename";
         "restore";
         "update-tags";
         "update-properties";
@@ -540,10 +551,11 @@ let validate_option_values path options =
       else Ok ())
 
 let validate_options path options =
-  Error.bind (validate_known_options path options) (fun () ->
-      Error.bind (validate_boolean_option_values options) (fun () ->
-          Error.bind (validate_global_values options) (fun () ->
-              validate_option_values path options)))
+  Error.bind (validate_graph_option options) (fun () ->
+      Error.bind (validate_known_options path options) (fun () ->
+          Error.bind (validate_boolean_option_values options) (fun () ->
+              Error.bind (validate_global_values options) (fun () ->
+                  validate_option_values path options))))
 
 let sync_config_key_or_error = function
   | None -> Ok None
@@ -633,6 +645,7 @@ let parsed_upsert_command ?(args = Vec.empty) options = function
                 id = int64_option "id" options;
                 page = option_value "page" options;
                 restore = option_present "restore" options;
+                rename = option_value "rename" options;
                 update_tags_edn = option_value "update-tags" options;
                 update_properties_edn = option_value "update-properties" options;
                 remove_tags_edn = option_value "remove-tags" options;

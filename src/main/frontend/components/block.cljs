@@ -819,6 +819,13 @@
         (nil? page)
         (state/pub-event! [:page/create page-name])
 
+        ;; Normal click on a PDF annotation ref opens the PDF at the highlight.
+        ;; Shift-click (sidebar) and meta/ctrl/middle-click still reach the
+        ;; annotation block itself.
+        (and (entity/pdf-annotation? page)
+             (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
+        (pdf-assets/open-block-ref! page)
+
         (and (fn? (:on-pointer-down config))
              (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
         ((:on-pointer-down config) e)
@@ -5000,9 +5007,10 @@
                :child-uuids child-uuids
                :render-children render-children))))
    (fn [^js previous-props ^js next-props]
-     (let [[_previous-config previous-block previous-child-uuids] (.-args previous-props)
-           [_next-config next-block next-child-uuids] (.-args next-props)]
+     (let [[previous-config previous-block previous-child-uuids] (.-args previous-props)
+           [next-config next-block next-child-uuids] (.-args next-props)]
        (and (same-block-revision? previous-block next-block)
+            (= (:current-page-title previous-config) (:current-page-title next-config))
             (= previous-child-uuids next-child-uuids))))))
 
 (defn- render-loaded-block-row

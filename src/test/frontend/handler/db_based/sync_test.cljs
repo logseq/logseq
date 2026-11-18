@@ -19,6 +19,38 @@
          (#'db-sync/coerce-http-request :graph-members/create
                                         {:email "user@example.com"}))))
 
+(deftest remote-graph-list-is-isolated-across-account-switch-test
+  (async done
+    (let [previous-state (state/get-state)
+          response (p/deferred)
+          requested (p/deferred)
+          graph {:graph-id "graph-id" :graph-name "Sample" :role "manager"}
+          local-repo {:url "logseq_db_Local" :root "Local"}]
+      (state/set-auth-id-token "account-a")
+      (-> (p/with-redefs [db-sync/http-base (constantly "https://sync.example.com")
+                          user-handler/<ensure-id&access-token! #(p/resolved nil)
+                          repo-handler/get-repos #(p/resolved [local-repo])
+                          db-sync/fetch-json
+                          (fn [& _]
+                            (p/resolve! requested nil)
+                            response)]
+            (let [request (db-sync/<get-remote-graphs)]
+              (p/let [_ requested]
+                (state/set-state! :rtc/graphs [{:url "logseq_db_Sample"}])
+                (state/set-repos! [local-repo {:url "logseq_db_Sample" :remote? true}])
+                (state/set-auth-id-token nil)
+                (state/set-auth-id-token "account-b")
+                (is (empty? (state/get-rtc-graphs)))
+                (is (= [local-repo] (state/get-repos)))
+                (p/resolve! response {:graphs [graph]})
+                (p/let [_ request]
+                  (is (empty? (state/get-rtc-graphs)))
+                  (is (= [local-repo] (state/get-repos)))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (state/replace-state! previous-state)
+                       (finish-async-test! done)))))))
+
 (deftest remove-member-request-test
   (async done
          (let [called (atom nil)]
@@ -492,7 +524,9 @@
   (async done
          (let [graphs-state (atom nil)
                worker-prev @state/*db-worker
+               state-prev (state/get-state)
                ensure-calls (atom [])]
+           (state/set-auth-id-token "id-token-1")
            (reset! state/*db-worker :worker)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
@@ -525,12 +559,15 @@
                           (is false (str error))
                           (finish-async-test! done)))
                (p/finally (fn []
-                            (reset! state/*db-worker worker-prev)))))))
+                            (reset! state/*db-worker worker-prev)
+                            (state/replace-state! state-prev)))))))
 
 (deftest get-remote-graphs-ensures-user-rsa-keys-when-server-missing-test
   (async done
          (let [worker-prev @state/*db-worker
+               state-prev (state/get-state)
                ensure-calls (atom [])]
+           (state/set-auth-id-token "id-token-1")
            (reset! state/*db-worker :worker)
            (-> (p/with-redefs [db-sync/http-base (fn [] "http://base")
                                user-handler/<ensure-id&access-token! (fn [] (p/resolved true))
@@ -555,16 +592,17 @@
                           (is false (str error))
                           (finish-async-test! done)))
                (p/finally (fn []
-                            (reset! state/*db-worker worker-prev)))))))
+                            (reset! state/*db-worker worker-prev)
+                            (state/replace-state! state-prev)))))))
 
 (deftest get-remote-graphs-syncs-auth-before-ensuring-user-rsa-keys-test
   (async done
          (let [worker-prev @state/*db-worker
                state-prev (state/get-state)
                worker-calls (atom [])]
+           (state/set-auth-id-token "id-token-1")
            (reset! state/*db-worker :worker)
            (state/swap-state! assoc
-                  :auth/id-token "id-token-1"
                   :auth/access-token "access-token-1"
                   :auth/refresh-token "refresh-token-1"
                   :auth/oauth-token-url "http://oauth/token"

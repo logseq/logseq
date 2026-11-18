@@ -20,6 +20,7 @@ type block_opts = {
 type page_opts = {
   id : Cli_primitive.db_id option;
   page : string option;
+  rename : string option;
   restore : bool;
   update_tags_edn : string option;
   update_properties_edn : string option;
@@ -131,6 +132,7 @@ type action =
       mode : mode;
       id : Cli_primitive.db_id option;
       page : string option;
+      rename : string option;
       restore : bool;
       plan : Property.update_plan;
     }
@@ -275,6 +277,10 @@ let invalid_options = function
       Some "only one of --id or --page is allowed"
   | Parsed_page { page = Some page; _ } when String.trim page = "" ->
       Some "page must be non-empty"
+  | Parsed_page { rename = Some rename; _ } when String.trim rename = "" ->
+      Some "rename must be non-empty"
+  | Parsed_page { id = None; page = None; rename = Some _; _ } ->
+      Some "--rename requires --id or --page"
   | Parsed_tag { name = Some name; _ } when normalize_tag_name name = None ->
       Some "tag name must not be blank"
   | Parsed_property opts
@@ -715,6 +721,7 @@ let build_page repo graph (opts : page_opts) =
                  mode = Update;
                  id = Some id;
                  page;
+                 rename = opts.rename;
                  restore = opts.restore;
                  plan;
                })
@@ -724,9 +731,10 @@ let build_page repo graph (opts : page_opts) =
                {
                  repo;
                  graph;
-                 mode = Create;
+                 mode = (if Option.is_some opts.rename then Update else Create);
                  id = None;
                  page = Some page;
+                 rename = opts.rename;
                  restore = opts.restore;
                  plan;
                })
@@ -1390,7 +1398,10 @@ let lookup_of_tag = function
 let apply_outliner_ops config repo ops =
   Transport.thread_api_apply_outliner_ops config ~repo
     ~ops:(Edn_util.vector_t_vec ops)
-    ~options:(Edn_util.map_t_vec Vec.empty)
+    ~options:(Edn_util.map_t_vec
+      (if Vec.length ops > 1 then
+         Vec.singleton (kw "outliner-op", kw "apply-outliner-ops")
+       else Vec.empty))
 
 let create_tag_page config repo name =
   let op =
@@ -1422,17 +1433,17 @@ let create_page config repo name =
   in
   apply_outliner_ops config repo (Vec.singleton op)
 
+let rename_page_op uuid name =
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "rename-page";
+         vector_vec
+           (Vec.of_array [| Edn_util.uuid uuid; Edn_util.string name |]);
+       |])
+
 let rename_page config repo uuid name =
-  let op =
-    Edn_util.vector_vec
-      (Vec.of_array
-         [|
-           kw "rename-page";
-           Edn_util.vector_vec
-             (Vec.of_array [| Edn_util.uuid uuid; Edn_util.string name |]);
-         |])
-  in
-  apply_outliner_ops config repo (Vec.singleton op)
+  apply_outliner_ops config repo (Vec.singleton (rename_page_op uuid name))
 
 let value_of_kind kind = Edn_util.keyword (Property.string_of_kind kind)
 
@@ -2432,26 +2443,36 @@ let apply_resolved_update_plan invoke_config repo block_uuids resolved =
     bind (apply_outliner_ops invoke_config repo ops) (fun result ->
         pure (Ok result))
 
-let execute_plan_on_uuids invoke_config repo block_uuids plan =
+let resolve_page_update_plan invoke_config repo plan =
   let open Cli_effect in
-  bind (resolve_update_plan invoke_config repo plan)
+  map
     (function
-    | Error err -> pure (Error err)
-    | Ok resolved ->
-        apply_resolved_update_plan invoke_config repo block_uuids resolved)
+      | Error err -> Error err
+      | Ok ((_, _, update_properties, _) as resolved) ->
+          if
+            Vec.exists
+              (fun (ident, _) ->
+                Edn_util.keyword_to_string ident = "block/title")
+              update_properties
+          then
+            Error
+              (Error.invalid_options
+                 "page :block/title cannot be updated via --update-properties; \
+                  use --rename")
+          else Ok resolved)
+    (resolve_update_plan invoke_config repo plan)
 
-let execute_page_plan invoke_config repo page_uuid plan =
-  execute_plan_on_uuids invoke_config repo (Vec.singleton page_uuid) plan
+let restore_recycled_page_op page_uuid =
+  vector_vec
+    (Vec.of_array
+       [|
+         kw "restore-recycled";
+         vector_vec (Vec.of_array [| Edn_util.uuid page_uuid |]);
+       |])
 
 let restore_recycled_page invoke_config repo page_uuid =
   apply_outliner_ops invoke_config repo
-    (Vec.singleton
-       (vector_vec
-          (Vec.of_array
-             [|
-               kw "restore-recycled";
-               vector_vec (Vec.of_array [| Edn_util.uuid page_uuid |]);
-             |])))
+    (Vec.singleton (restore_recycled_page_op page_uuid))
 
 let pull_created_page invoke_config repo name create_result =
   match Add.created_page_uuid create_result with
@@ -2668,7 +2689,7 @@ let save_block_title invoke_config repo uuid content =
     Edn_util.vector_vec
       (Vec.of_array
          [|
-           kw "save-block";
+           kw "logseq.outliner/save-block-input";
            Edn_util.vector_vec
              (Vec.of_array [| block; Edn_util.map_vec Vec.empty |]);
          |])
@@ -3029,18 +3050,49 @@ let execute_task_update mode invoke_config repo id uuid status_input
                            (upsert_id_not_found "task"
                               (Option.value id ~default:0L))))))
 
-let page_result_with_plan ?(restore = false) mode invoke_config repo page_id
+let page_result_with_resolved_plan ?(restore = false) ?rename mode invoke_config
+    repo page_id page_uuid resolved =
+  let open Cli_effect in
+  let update_effect =
+    match rename with
+    | Some name ->
+        let ops =
+          Vec.push_front
+            (resolved_update_plan_ops (Vec.singleton page_uuid) resolved)
+            (rename_page_op page_uuid name)
+        in
+        let ops =
+          if restore then
+            Vec.push_front ops (restore_recycled_page_op page_uuid)
+          else ops
+        in
+        map
+          (fun result -> Ok result)
+          (apply_outliner_ops invoke_config repo ops)
+    | None ->
+        let restore_effect =
+          if restore then restore_recycled_page invoke_config repo page_uuid
+          else pure Edn_util.nil
+        in
+        bind restore_effect (fun _ ->
+            apply_resolved_update_plan invoke_config repo
+              (Vec.singleton page_uuid) resolved)
+  in
+  map
+    (function
+      | Error err -> Cli_result.error ~command:Command_id.Upsert_page mode err
+      | Ok _ -> ok_page_ids mode (Vec.singleton page_id))
+    update_effect
+
+let page_result_with_plan ?restore ?rename mode invoke_config repo page_id
     page_uuid plan =
   let open Cli_effect in
-  let restore_effect =
-    if restore then restore_recycled_page invoke_config repo page_uuid
-    else pure Edn_util.nil
-  in
-  bind restore_effect (fun _ ->
-      bind (execute_page_plan invoke_config repo page_uuid plan) (function
-        | Error err ->
-            pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
-        | Ok _ -> pure (ok_page_ids mode (Vec.singleton page_id))))
+  bind (resolve_page_update_plan invoke_config repo plan) (function
+    | Error err ->
+        pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
+    | Ok resolved ->
+        page_result_with_resolved_plan ?restore ?rename mode invoke_config repo
+          page_id page_uuid resolved)
 
 let execute_create_page mode invoke_config repo name restore plan =
   let open Cli_effect in
@@ -3068,45 +3120,102 @@ let execute_create_page mode invoke_config repo name restore plan =
                   (Cli_result.error ~command:Command_id.Upsert_page mode
                      (page_not_found ())))
       | None ->
-          bind (create_page invoke_config repo name) (fun create_result ->
-              bind (pull_created_page invoke_config repo name create_result)
-                (fun page ->
-                  match (id_of_entity page, uuid_of_entity page) with
-                  | Some id, Some uuid ->
-                      page_result_with_plan mode invoke_config repo id uuid plan
-                  | Some id, None -> pure (ok_page_ids mode (Vec.singleton id))
-                  | _ ->
-                      pure
-                        (Cli_result.error ~command:Command_id.Upsert_page mode
-                           (page_not_found ())))))
+          bind (resolve_page_update_plan invoke_config repo plan) (function
+            | Error err ->
+                pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
+            | Ok resolved ->
+                bind (create_page invoke_config repo name) (fun create_result ->
+                    bind
+                      (pull_created_page invoke_config repo name create_result)
+                      (fun page ->
+                        match (id_of_entity page, uuid_of_entity page) with
+                        | Some id, Some uuid ->
+                            page_result_with_resolved_plan mode invoke_config
+                              repo id uuid resolved
+                        | Some id, None ->
+                            pure (ok_page_ids mode (Vec.singleton id))
+                        | _ ->
+                            pure
+                              (Cli_result.error ~command:Command_id.Upsert_page
+                                 mode (page_not_found ()))))))
 
-let execute_update_page mode invoke_config repo id restore plan =
+let execute_update_page_entity ?rename mode invoke_config repo entity restore
+    plan =
   let open Cli_effect in
-  bind (pull_entity_by_id invoke_config repo page_selector id) (fun entity ->
-      match id_of_entity entity with
-      | None ->
-          pure
-            (Cli_result.error ~command:Command_id.Upsert_page mode
-               (upsert_id_not_found "page" id))
-      | Some id when not (page_entity entity) ->
-          pure
-            (Cli_result.error ~command:Command_id.Upsert_page mode
-               (upsert_id_type_mismatch "Page" id))
-      | Some _ when recycled_entity entity && not restore ->
+  match id_of_entity entity with
+  | None ->
+      pure
+        (Cli_result.error ~command:Command_id.Upsert_page mode
+           (page_not_found ()))
+  | Some id when not (page_entity entity) ->
+      pure
+        (Cli_result.error ~command:Command_id.Upsert_page mode
+           (if Option.is_some rename && Option.is_none (uuid_of_entity entity)
+            then page_not_found ()
+            else upsert_id_type_mismatch "Page" id))
+  | Some _ when recycled_entity entity && not restore ->
+      pure
+        (Cli_result.error ~command:Command_id.Upsert_page mode
+           (recycled_page_error ()))
+  | Some id -> (
+      let recycled = recycled_entity entity in
+      match uuid_of_entity entity with
+      | Some uuid ->
+          page_result_with_plan ?rename ~restore:recycled mode invoke_config
+            repo id uuid plan
+      | None when recycled ->
           pure
             (Cli_result.error ~command:Command_id.Upsert_page mode
                (recycled_page_error ()))
-      | Some id -> (
-          let recycled = recycled_entity entity in
-          match uuid_of_entity entity with
-          | Some uuid ->
-              page_result_with_plan ~restore:recycled mode invoke_config repo id
-                uuid plan
-          | None when recycled ->
-              pure
-                (Cli_result.error ~command:Command_id.Upsert_page mode
-                   (recycled_page_error ()))
-          | None -> pure (ok_page_ids mode (Vec.singleton id))))
+      | None when Option.is_some rename ->
+          pure
+            (Cli_result.error ~command:Command_id.Upsert_page mode
+               (Error.make Error.Upsert_id_not_found "page uuid not found"))
+      | None -> pure (ok_page_ids mode (Vec.singleton id)))
+
+let execute_update_page ?rename mode invoke_config repo id restore plan =
+  let open Cli_effect in
+  bind (pull_entity_by_id invoke_config repo page_selector id) (fun entity ->
+      if Option.is_none (id_of_entity entity) && Option.is_none rename then
+        pure
+          (Cli_result.error ~command:Command_id.Upsert_page mode
+             (upsert_id_not_found "page" id))
+      else
+        execute_update_page_entity ?rename mode invoke_config repo entity
+          restore plan)
+
+let execute_rename_page_by_name mode invoke_config repo name rename restore plan
+    =
+  let open Cli_effect in
+  bind (pull_pages_by_name invoke_config repo name page_selector)
+    (fun pages ->
+      let matches =
+        match Edn_util.as_seq pages with
+        | Some pages -> pages
+        | None -> invalid_arg "page query must return a sequence"
+      in
+      match Vec.length matches with
+      | 0 ->
+          pure
+            (Cli_result.error ~command:Command_id.Upsert_page mode
+               (page_not_found ()))
+      | 1 ->
+          execute_update_page_entity ~rename mode invoke_config repo
+            (Vec.nth matches 0) restore plan
+      | _ ->
+          let candidates =
+            Vec.map
+              (fun entity ->
+                {
+                  Error.id = id_of_entity entity;
+                  name = Edn_util.get_string entity "block/title";
+                })
+              matches
+          in
+          pure
+            (Cli_result.error ~command:Command_id.Upsert_page mode
+               (Error.make ~candidates Error.Ambiguous_page_name
+                  ("multiple pages match name: " ^ name ^ "; rerun with --id"))))
 
 let update_plan_empty (plan : Property.update_plan) =
   Vec.is_empty plan.update_tags
@@ -3310,24 +3419,23 @@ let execute_with_mode action config mode =
       pure
         (Cli_result.error ~command:Command_id.Upsert_tag mode
            (Error.make Error.Not_implemented "upsert tag is not implemented"))
-  | Upsert_page { repo; mode = Create; page = Some page; restore; plan; _ } ->
+  | Upsert_page { repo; mode = page_mode; id; page; rename; restore; plan; _ }
+    ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
         | Error err ->
             pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
-        | Ok invoke_config ->
-            execute_create_page mode invoke_config repo page restore plan)
-  | Upsert_page { repo; mode = Update; id = Some id; restore; plan; _ } ->
-      bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
-        (function
-        | Error err ->
-            pure (Cli_result.error ~command:Command_id.Upsert_page mode err)
-        | Ok invoke_config ->
-            execute_update_page mode invoke_config repo id restore plan)
-  | Upsert_page _ ->
-      pure
-        (Cli_result.error ~command:Command_id.Upsert_page mode
-           (Error.make Error.Not_implemented "upsert page is not implemented"))
+        | Ok invoke_config -> (
+            match (page_mode, id, page, rename) with
+            | Create, None, Some page, None ->
+                execute_create_page mode invoke_config repo page restore plan
+            | Update, Some id, _, rename ->
+                execute_update_page ?rename mode invoke_config repo id restore
+                  plan
+            | Update, None, Some page, Some rename ->
+                execute_rename_page_by_name mode invoke_config repo page rename
+                  restore plan
+            | _ -> invalid_arg "invalid upsert page action"))
   | Upsert_property { repo; mode = Create; name = Some name; schema; _ } ->
       bind (Server_runtime.ensure_server config repo ~create_empty_db:false)
         (function
@@ -3468,6 +3576,8 @@ let metadata () =
              [|
                "logseq upsert page --graph my-graph --page Home --update-tags \
                 '[\"project\"]'";
+               "logseq upsert page --graph my-graph --page Home --rename \"New \
+                Home\"";
                "logseq upsert page --graph my-graph --id 999 \
                 --update-properties '{:logseq.property/description \
                 \"Example\"}'";

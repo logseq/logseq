@@ -1,4 +1,5 @@
-import katexPkg from "https://esm.sh/katex@0.16.38?bundle";
+import katexPkg from "https://esm.sh/katex@0.16.38";
+import "https://esm.sh/katex@0.16.38/contrib/mhchem";
 
 // Core CodeMirror pieces
 import { EditorState } from "https://esm.sh/@codemirror/state@6";
@@ -663,6 +664,16 @@ const initPublish = () => {
     const tex = el.textContent;
     try {
       katex.render(tex, el, { displayMode: true, throwOnError: false });
+    } catch (_) {}
+  });
+
+  document.querySelectorAll(".math-inline").forEach((el) => {
+    const tex = el.textContent;
+    try {
+      katex.render(tex, el, {
+        displayMode: el.dataset.display === "true",
+        throwOnError: false,
+      });
     } catch (_) {}
   });
 

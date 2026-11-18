@@ -166,13 +166,68 @@
                           {:repo "logseq_db_tab"
                            :graph-id "tab-uuid"}
                           "logseq_db_current"))))
-      (testing "global current graph remains the last fallback"
-        (is (= "logseq_db_current"
+      (testing "global current graph is used only when it is still registered"
+        (is (= "logseq_db_first"
                (resolve-f []
                           [{:url "logseq_db_first"}]
                           {}
                           nil
                           "logseq_db_current")))))))
+
+(deftest resolve-startup-repo-skips-stale-current-repo-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "a current repo that is not in the registry falls back to the first repo"
+        (is (= "logseq_db_first"
+               (resolve-f []
+                          [{:url "logseq_db_first"}
+                           {:url "logseq_db_second"}]
+                          {}
+                          nil
+                          "logseq_db_deleted"))))
+      (testing "a current repo that still exists is kept"
+        (is (= "logseq_db_current"
+               (resolve-f []
+                          [{:url "logseq_db_first"}
+                           {:url "logseq_db_current"}]
+                          {}
+                          nil
+                          "logseq_db_current")))))))
+
+(deftest resolve-startup-repo-skips-missing-tab-repo-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "a tab repo that is not registered falls through to a valid current repo"
+        (is (= "logseq_db_current"
+               (resolve-f []
+                          [{:url "logseq_db_current"}
+                           {:url "logseq_db_first"}]
+                          {}
+                          {:repo "logseq_db_missing"}
+                          "logseq_db_current"))))
+      (testing "a missing tab repo and stale current repo fall through to the first repo"
+        (is (= "logseq_db_first"
+               (resolve-f []
+                          [{:url "logseq_db_first"}]
+                          {}
+                          {:repo "logseq_db_missing"
+                           :graph-id "missing-uuid"}
+                          "logseq_db_deleted")))))))
+
+(deftest resolve-startup-repo-with-no-repos-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "no registered graphs yields nil even when localStorage still has a current repo"
+        (is (nil? (resolve-f []
+                             []
+                             {}
+                             nil
+                             "logseq_db_deleted"))))
+      (testing "no registered graphs and no current repo yields nil"
+        (is (nil? (resolve-f [] [] {} nil nil)))))))
 
 (deftest normalize-registry-entry-prefers-remote-graph-id-test
   (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]
