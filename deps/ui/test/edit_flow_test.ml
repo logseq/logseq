@@ -1584,7 +1584,68 @@ let test_text_selection_arrows (h : host) =
            | None -> false);
         reset_editor ();
         run rest
-  in run cases
+  in
+  let* () = run cases in
+  let source = "Selected café — 東京 reference text." in
+  let uuid = "a0b9c507-0ce3-406f-9631-624eb81c3e56" in
+  let reference_body = "[[" ^ uuid in
+  let expected = reference_body ^ "]]" in
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" source ];
+  set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:source;
+  S.set (fun st ->
+      { st with S.editing = Option.map (fun e ->
+          { e with S.model = EM.select e.S.model ~anchor:0
+              ~focus:(String.length source) }) st.S.editing });
+  install_worker ~repo:h.repo h;
+  String.iter
+    (fun c -> Editor_keys.apply_input "b1" (EI.Insert (String.make 1 c)))
+    reference_body;
+  let active = (editing_now ()).S.model in
+  check "typing canonical block ref replaces selected text"
+    ((editing_now ()).S.buffer = expected);
+  check "caret remains inside the completed block ref"
+    (active.EM.caret = String.length reference_body);
+  check "active block ref renders as raw source"
+    (List.exists (EM.atomic_expanded active) active.EM.runs);
+  check "active block ref supports raw in-place insertion"
+    (let edited = EM.insert_text active "x" in
+     edited.EM.source = reference_body ^ "x]]"
+     && edited.EM.caret = String.length reference_body + 1);
+  check "external source replacement restores atomic caret snapping"
+    ((EM.set_source active expected).EM.caret = String.length expected);
+  check "active block ref caret can move within the raw source"
+    ((EM.move active EM.Left ~extend:false).EM.caret
+     = String.length reference_body - 1);
+  Editor_keys.apply_input "b1" (EI.Insert "]");
+  let after_one_close = (editing_now ()).S.model in
+  check "first typed closer overtakes the existing pair"
+    (after_one_close.EM.source = expected
+     && after_one_close.EM.caret = String.length expected - 1);
+  Editor_keys.apply_input "b1" (EI.Insert "]");
+  let after_close_pair = (editing_now ()).S.model in
+  check "second typed closer completes the existing pair"
+    (after_close_pair.EM.source = expected
+     && after_close_pair.EM.caret = String.length expected);
+  check "caret at block-ref edge restores collapsed display"
+    (not (List.exists (EM.atomic_expanded after_close_pair)
+            after_close_pair.EM.runs));
+  check "navigation from the block-ref edge remains atomic"
+    ((EM.move after_close_pair EM.Left ~extend:false).EM.caret = 0);
+  check "deletion from the block-ref edge remains atomic"
+    ((EM.delete_backward after_close_pair).EM.source = "");
+  let loaded = EM.create expected in
+  check "loaded block ref remains collapsed"
+    (not (List.exists (EM.atomic_expanded loaded) loaded.EM.runs));
+  check "loaded block ref navigation remains atomic"
+    ((EM.move loaded EM.Right ~extend:false).EM.caret = String.length expected);
+  check "loaded block ref deletion remains atomic"
+    ((EM.delete_forward loaded).EM.source = "");
+  Editor_keys.apply_input "b1" (EI.Insert "]");
+  check "later closing bracket remains literal"
+    ((editing_now ()).S.buffer = expected ^ "]");
+  reset_editor ();
+  Js.Promise.resolve ()
 
 let test_multi_selection_arrows (h : host) =
   let scope = "multi-selection-sidebar" in

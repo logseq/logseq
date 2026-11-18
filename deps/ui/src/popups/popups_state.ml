@@ -1347,14 +1347,20 @@ let open_ac ?tpos ?(autopair = true) t kind =
    | Page_ref when autopair ->
        (match Editor_actions.edit_model auuid with
         | Some m ->
-            let v = m.Edit_model.source in
-            let n = S.length v in
+            let source = m.Edit_model.source in
+            let source_len = S.length source in
             let pos = ac.tpos + tlen in
-            if not (pos + 1 < n && S.sub v pos 2 = "]]") then
+            let sel_start, sel_end = Editor_actions.sel_span_of m in
+            let close_pos = if sel_start = pos then sel_end else pos in
+            if not (close_pos + 1 < source_len
+                    && S.sub source close_pos 2 = "]]") then
               Editor_actions.update_model auuid (fun _ ->
-                  Edit_model.select
-                    (Edit_model.splice m pos pos "]]")
-                    ~anchor:pos ~focus:pos)
+                  let updated = Edit_model.splice m close_pos close_pos "]]" in
+                  match m.Edit_model.anchor with
+                  | Some anchor ->
+                      Edit_model.select updated ~anchor ~focus:m.Edit_model.caret
+                  | None ->
+                      Edit_model.select updated ~anchor:close_pos ~focus:close_pos)
         | None -> ())
    | _ -> ());
   (match kind with
