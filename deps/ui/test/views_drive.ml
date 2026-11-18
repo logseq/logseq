@@ -27,6 +27,13 @@ let query_rows : (string, string list) Hashtbl.t = Hashtbl.create 8
 let query_err : (string, string) Hashtbl.t = Hashtbl.create 8
 let held : string list ref = ref []
 let parked : (string * W.t * (W.t -> unit)) list ref = ref []
+let filter_ref_uuid = "dd000000-0000-4000-8000-000000000001"
+let flat_children : (string, W.t list) Hashtbl.t = Hashtbl.create 8
+let block_requests : (string * bool) list ref = ref []
+let collapsed_flags : (string, bool) Hashtbl.t = Hashtbl.create 8
+let collapse_writes : (string * bool) list ref = ref []
+let mounted_static_rows = ref []
+let mounted_static_scopes = ref []
 
 let kw s = W.Keyword s
 
@@ -61,8 +68,7 @@ let view_ent uuid title ty : W.t =
              [ W.Map [ kw "id", kw "block/title"; kw "asc?", W.Bool true ] ] )
        ]
      else [])
-    @
-    if flag_view uuid "filters" then
+    @ (if flag_view uuid "filters" then
       [ ( kw "logseq.property.table/filters"
         , W.Map
             [ kw "or?", W.Bool false
@@ -70,12 +76,21 @@ let view_ent uuid title ty : W.t =
               , W.Array
                   [ W.Array [ kw "user.property/p1"; kw "is"; W.String "x" ]
                   ] ) ] ) ]
-    else []
-    @
-    if flag_view uuid "group-tags" then
+    else [])
+    @ (if flag_view uuid "filter-ref" then
+      [ ( kw "logseq.property.table/filters"
+        , W.Map
+            [ kw "or?", W.Bool false
+            ; ( kw "filters"
+              , W.Array
+                  [ W.Array
+                      [ kw "user.property/p1"; kw "is"; W.Uuid filter_ref_uuid ] ] )
+            ] ) ]
+    else [])
+    @ (if flag_view uuid "group-tags" then
       [ ( kw "logseq.property.view/group-by-property"
         , W.Map [ kw "db/ident", kw "block/tags" ] ) ]
-    else []
+    else [])
   in
   W.Map
     ([ kw "block/uuid", W.Uuid uuid
@@ -92,12 +107,15 @@ let ent_for uuid : W.t =
         query_block_ent uuid
       else
         W.Map
-          [ kw "block/uuid", W.Uuid uuid
-          ; kw "db/id", W.Int 7
-          ; kw "block/title"
-          , W.String
-              (Option.value (Hashtbl.find_opt titles uuid)
-                 ~default:("Row " ^ uuid)) ]
+          ([ kw "block/uuid", W.Uuid uuid
+           ; kw "db/id", W.Int 7
+           ; kw "block/title"
+           , W.String
+               (Option.value (Hashtbl.find_opt titles uuid)
+                  ~default:("Row " ^ uuid)) ]
+          @ Option.fold ~none:[] ~some:(fun collapsed ->
+                [ kw "block/collapsed?", W.Bool collapsed ])
+              (Hashtbl.find_opt collapsed_flags uuid))
 
 let blocks_response = function
   | Some (W.Array reqs) ->
@@ -109,8 +127,33 @@ let blocks_response = function
                | Some (W.Uuid u) | Some (W.String u) -> u
                | _ -> "?"
              in
+             let children_requested =
+               match W.get req "opts" with
+               | Some opts -> W.get opts "children?" = Some (W.Bool true)
+               | None -> false
+             in
+             block_requests := (u, children_requested) :: !block_requests;
+             let children =
+               if not children_requested then []
+               else
+                 match Hashtbl.find_opt flat_children u with
+                 | Some children -> children
+                 | None when Hashtbl.mem query_src u || Hashtbl.mem query_err u ->
+                     [ W.Map
+                         [ kw "block/uuid", W.Uuid (u ^ "-v")
+                         ; kw "block/title"
+                         , W.String
+                             (Option.value (Hashtbl.find_opt query_src u)
+                                ~default:"")
+                         ; kw "block/parent-uuid", W.Uuid u
+                         ; kw "block/order", W.String "000001" ] ]
+                 | None -> []
+             in
              W.Map
-               [ kw "block", ent_for u; kw "children", W.Array [] ])
+               ([ kw "id", W.Uuid u; kw "block", ent_for u ]
+               @ (if children_requested then
+                    [ kw "children", W.Array children ]
+                  else [])))
            reqs)
   | _ -> W.List []
 
@@ -201,6 +244,29 @@ let scripted_response (name : string) (args : W.t list) : W.t =
 
 let invoke name args : W.t Js.Promise.t =
   requests := !requests @ [ name ];
+  if name = "thread-api/apply-outliner-ops" then
+    (match List.nth_opt args 1 with
+     | Some (W.Array ops) ->
+         List.iter
+           (function
+             | W.Array
+                 [ W.Keyword "collapse-expand-blocks"
+                 ; W.Array [ W.List blocks; W.Map _ ] ] ->
+                 List.iter
+                   (fun block ->
+                     match
+                       W.map_get_uuid block "block/uuid",
+                       Option.bind (W.get block "block/collapsed?") W.as_bool
+                     with
+                     | Some uuid, Some collapsed ->
+                         collapse_writes := (uuid, collapsed) :: !collapse_writes
+                     | _ -> invalid_arg "Malformed collapse-expand-blocks operation")
+                   blocks
+             | W.Array [ W.Keyword "collapse-expand-blocks"; _ ] ->
+                 invalid_arg "Malformed collapse-expand-blocks operation"
+             | _ -> ())
+           ops
+     | _ -> invalid_arg "Missing apply-outliner-ops payload");
   let resp = scripted_response name args in
   if List.mem name !held then
     Js.Promise.make (fun ~resolve ~reject:_ ->
@@ -235,9 +301,24 @@ let mount_view ~kind () =
   let vs =
     S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
       ~initial:Model.initial ~reducer:Update.update
-      ~view:(fun _ctx _ms _send ->
+      ~view:(fun ctx _ms _send ->
+      let extra_rows =
+          List.mapi
+            (fun index (row_kind, row_uuid, blk) ->
+              let inst =
+                Views_state.make ~sched:ctx.Lui_ui.ui_scheduler ~kind:row_kind
+                  ~feature:(Views_view.feature_of_kind row_kind)
+                  ~owner:(W.String "$$$views")
+              in
+              mounted_static_scopes :=
+                (row_kind, inst.Views_state.collapse_scope)
+                :: !mounted_static_scopes;
+              Lui_elements.column ~key:("mounted-static-" ^ string_of_int index)
+                [ Views_table.list_row_el inst ~row_uuid ~blk ])
+            !mounted_static_rows
+        in
         Logseq_el.el
-          [ Views_view.view ~kind ~owner:(W.String "$$$views") ])
+          ([ Views_view.view ~kind ~owner:(W.String "$$$views") ] @ extra_rows))
       ()
   in
   let flush0 = !Runtime.app_flush in
@@ -354,8 +435,48 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
   let list_view = uuid 2 in
   let page_uuid = uuid 11 in
   let journal_uuid = uuid 12 in
-  let table_rows = List.init 4 (fun i -> uuid (21 + i)) in
-  let list_rows = List.init 4 (fun i -> uuid (31 + i)) in
+  let rows = List.init 4 (fun i -> uuid (21 + i)) in
+  let root_uuid = List.hd rows in
+  let ref_uuid = uuid 51 in
+  let ref_child_uuid = uuid 52 in
+  let nested_wire uuid title ?(collapsed = false) children =
+    W.Map
+      ([ kw "block/uuid", W.Uuid uuid
+       ; kw "block/title", W.String title ]
+      @ (if collapsed then [ kw "block/collapsed?", W.Bool true ] else [])
+      @ (if children = [] then [] else [ kw "block/children", W.Array children ]))
+  in
+  let ref_wire =
+    nested_wire ref_uuid "Reference row" ~collapsed:true
+      [ nested_wire ref_child_uuid "Reference child" [] ]
+  in
+  mounted_static_rows :=
+    [ (Views_state.KLinkedRefs, ref_uuid, ref_wire)
+    ; (Views_state.KLinkedRefs, ref_uuid, ref_wire)
+    ; (Views_state.KUnlinkedRefs, ref_uuid, ref_wire) ];
+  mounted_static_scopes := [];
+  collapse_writes := [];
+  let flat_block uuid title parent order =
+    W.Map
+      [ kw "block/uuid", W.Uuid uuid
+      ; kw "block/title", W.String title
+      ; kw "block/parent-uuid", W.Uuid parent
+      ; kw "block/order", W.String order ]
+  in
+  Hashtbl.replace flat_children root_uuid
+    [ flat_block (uuid 41) "Grandchild" (uuid 42) "000002"
+    ; flat_block (uuid 43) "Second child" root_uuid "000002"
+    ; (match flat_block (uuid 42) "First child" root_uuid "000001" with
+      | W.Map fields -> W.Map (fields @ [ kw "block/collapsed?", W.Bool false ])
+      | block -> block) ];
+  Hashtbl.replace collapsed_flags root_uuid true;
+  let stale_collapsed =
+    List.fold_left
+      (fun set uuid -> Editor_state.String_set.add uuid set)
+      Editor_state.String_set.empty [ ref_uuid; uuid 42; uuid 43 ]
+  in
+  Outliner_ops.merge_collapsed stale_collapsed Editor_state.String_set.empty;
+  block_requests := [];
   let empty_value = W.Map [ kw "kind", kw "empty" ] in
   let scalar_value =
     W.Map [ kw "kind", kw "scalar"; kw "value", W.String "High" ]
@@ -371,18 +492,27 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
     [ (table_view, "Grouped table", "logseq.property.view/type.table")
     ; (list_view, "Grouped list", "logseq.property.view/type.list")
     ];
-  h.set_view_flags table_view [ "group-tags" ];
-  h.set_view_flags list_view [ "group-tags" ];
+  h.set_view_flags table_view [ "group-tags"; "filter-ref" ];
+  h.set_view_flags list_view [ "group-tags"; "filter-ref" ];
   h.set_rows ~view:table_view
-    (List.mapi (fun i row -> row, "Table row " ^ string_of_int (i + 1)) table_rows);
+    (List.mapi
+       (fun i row -> row, if i = 0 then "Root row" else "Grouped row " ^ string_of_int (i + 1))
+       rows);
   h.set_rows ~view:list_view
-    (List.mapi (fun i row -> row, "List row " ^ string_of_int (i + 1)) list_rows);
+    (List.mapi
+       (fun i row -> row, if i = 0 then "Root row" else "Grouped row " ^ string_of_int (i + 1))
+       rows);
   Hashtbl.replace titles page_uuid "Page";
   Hashtbl.replace titles journal_uuid "Journal";
   Hashtbl.replace view_data_overrides table_view
-    (grouped_view_data (groups table_rows));
+    (grouped_view_data (groups rows));
   Hashtbl.replace view_data_overrides list_view
-    (grouped_view_data (groups list_rows));
+    (grouped_view_data (groups rows));
+  let original_read_model = !Runtime.read_model in
+  Runtime.read_model :=
+    (fun () ->
+      { (original_read_model ()) with
+        Model.repo = Some "views-collapse-test" });
   let s = h.mount_table () in
   let has_text value =
     List.exists
@@ -397,12 +527,159 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
       h.check (name ^ ": missing group placeholder")
         (has_text (I18n.no_group_value "block/tags"))
   in
+  let request_flags uuid =
+    List.filter_map
+      (fun (requested_uuid, children) ->
+        if requested_uuid = uuid then Some children else None)
+      (List.rev !block_requests)
+  in
+  let group_filter_children_disabled () =
+    List.for_all
+      (fun uuid ->
+        let flags = request_flags uuid in
+        flags <> [] && List.for_all not flags)
+      [ page_uuid; journal_uuid; filter_ref_uuid ]
+  in
   h.after 40 (fun () ->
       check_group_headers "views: Table" ~missing_group:true;
+      h.check "views: Table rows do not request descendants"
+        (request_flags root_uuid = [ false ]);
+      h.check "views: Table group and filter references do not request descendants"
+        (group_filter_children_disabled ());
+      h.check "views: Table does not render List descendants"
+        (not (has_text "First child"));
       Shared_scenarios_views.click_tab h s list_view;
       h.after 40 (fun () ->
           check_group_headers "views: List" ~missing_group:true;
-          finish ()))
+          h.check "views: List mode reloads descendants for the same row"
+            (request_flags root_uuid = [ false; true ]);
+          h.check "views: List group and filter references remain child-free"
+            (group_filter_children_disabled ());
+          let root_tree_texts () =
+            match
+              List.find_opt
+                (fun node ->
+                  M.string_prop node "accessibility-identifier"
+                  = Some ("ls-block-" ^ root_uuid))
+                (M.all_nodes s.S.tree)
+            with
+            | Some root -> Shared_scenarios_views.subtree_texts s.S.tree root
+            | None -> []
+          in
+          h.check "views: List applies the persisted collapsed flag"
+            (not (List.mem "First child" (root_tree_texts ())));
+          h.check "views: List hydrates persisted collapse for loaded row trees"
+            (Editor_state.is_collapsed root_uuid
+             && not (Editor_state.is_collapsed (uuid 42))
+             && not (Editor_state.is_collapsed (uuid 43)));
+          let control =
+            List.find_opt
+              (fun node ->
+                M.string_prop node "accessibility-identifier"
+                = Some ("control-" ^ root_uuid))
+              (M.all_nodes s.S.tree)
+          in
+          let finish_workflow () =
+            List.iter
+              (fun (_, scope) -> Editor_state.clear_collapse_scope ~scope)
+              !mounted_static_scopes;
+            mounted_static_rows := [];
+            mounted_static_scopes := [];
+            Outliner_ops.merge_collapsed ~current:(fun () -> true)
+              Editor_state.String_set.empty
+              (List.fold_left
+                 (fun set uuid -> Editor_state.String_set.add uuid set)
+                 Editor_state.String_set.empty
+                 [ root_uuid; ref_uuid; uuid 42; uuid 43 ]);
+            Runtime.read_model := original_read_model;
+            finish ()
+          in
+          let writes () = List.rev !collapse_writes in
+          let has_ref_child root =
+            List.mem "Reference child"
+              (Shared_scenarios_views.subtree_texts s.S.tree root)
+          in
+          let test_reference_rows () =
+            let ref_controls =
+              List.filter
+                (fun node ->
+                  M.string_prop node "accessibility-identifier"
+                  = Some ("control-" ^ ref_uuid))
+                (M.all_nodes s.S.tree)
+            in
+            let ref_roots =
+              List.filter
+                (fun node ->
+                  M.string_prop node "accessibility-identifier"
+                  = Some ("ls-block-" ^ ref_uuid))
+                (M.all_nodes s.S.tree)
+            in
+            let mounted_kinds = List.map fst (List.rev !mounted_static_scopes) in
+            match ref_controls, ref_roots, mounted_kinds with
+            | [ linked_control; _second_control; unlinked_control ]
+              , [ linked_root; second_root; unlinked_root ]
+              , [ Views_state.KLinkedRefs; Views_state.KLinkedRefs
+                ; Views_state.KUnlinkedRefs ] ->
+                let before_refs = writes () in
+                Shared_scenarios_views.click s linked_control;
+                let linked_isolated =
+                  has_ref_child linked_root && not (has_ref_child second_root)
+                   && not (has_ref_child unlinked_root)
+                in
+                Shared_scenarios_views.click s unlinked_control;
+                h.check "views: linked and unlinked references toggle locally and independently"
+                  (linked_isolated
+                   && has_ref_child linked_root && not (has_ref_child second_root)
+                   && has_ref_child unlinked_root
+                   && writes () = before_refs);
+                finish_workflow ()
+            | _ ->
+                h.check "views: linked and unlinked reference rows are mounted" false;
+                finish_workflow ()
+          in
+          let after_expand before_expand_writes =
+            let tree_texts = root_tree_texts () in
+            let child_titles = [ "First child"; "Grandchild"; "Second child" ] in
+            let rendered_titles =
+              List.filter (fun title -> List.mem title child_titles) tree_texts
+            in
+            h.check "views: List renders nested descendants in parent/order sequence"
+              (rendered_titles = child_titles);
+            h.check "views: List renders each descendant exactly once"
+              (List.for_all
+                 (fun title -> List.length (List.filter (( = ) title) tree_texts) = 1)
+                 child_titles);
+            h.check "views: List expand persists the root's canonical false payload"
+              (writes () = before_expand_writes @ [ (root_uuid, false) ]);
+            let root_rail =
+              List.find_opt
+                (fun node ->
+                  Shared_scenarios_views.has_tok node "block-children-left-border")
+                (M.all_nodes s.S.tree)
+            in
+            match root_rail with
+            | None ->
+                h.check "views: child rail is mounted for expanded List rows" false;
+                test_reference_rows ()
+            | Some root_rail ->
+                let before_collapse_writes = writes () in
+                Shared_scenarios_views.click s root_rail;
+                h.after 20 (fun () ->
+                    h.check "views: child rail collapse hides nested descendants"
+                      (not (List.mem "First child" (root_tree_texts ())));
+                    h.check "views: List collapse persists the root's canonical true payload"
+                      (writes () = before_collapse_writes @ [ (root_uuid, true) ]);
+                    test_reference_rows ())
+          in
+          match control with
+          | None ->
+              h.check "views: List parent collapse control is mounted" false;
+              finish_workflow ()
+          | Some control ->
+              let before_expand_writes = writes () in
+              Shared_scenarios_views.click s control;
+              h.after 20 (fun () -> after_expand before_expand_writes)
+    ))
 
 let run ~finish =
   query_result_replacement ();

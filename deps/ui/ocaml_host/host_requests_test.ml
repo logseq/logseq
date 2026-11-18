@@ -2269,7 +2269,9 @@ let () = with_test_entry (fun () ->
       let app = Lui_app.create_with_extensions backend registry Model.initial (fun model _ -> model)
         (fun context _ _ ->
           Editor_state.ensure context;
-          if static then Tree.block_row_static block
+          if static then
+            Tree.block_row_static ~collapse_scope:"native-test"
+              ~persist_collapse:false block
           else
             let state = Signal.state context.Lui_ui.ui_scheduler
               {block with block_heading=None;block_order_list=None;block_order_index=None} in
@@ -6610,9 +6612,9 @@ let () = with_test_entry (fun () ->
               "count",Wire.Int 2]]]]
       | "thread-api/get-blocks",[Wire.String "property-fixture";Wire.Array requests]
         when requests=List.map metadata_request rows ->
-          Wire.Array (List.map (fun uuid -> map ["block",block uuid]) rows)
+          Wire.Array (List.map (fun uuid -> map ["id",Wire.Uuid uuid;"block",block uuid]) rows)
       | "thread-api/get-blocks",[Wire.String "property-fixture";Wire.Array [request]]
-        when request=render_request -> Wire.Array [map ["block",block "row-a"]]
+        when request=render_request -> Wire.Array [map ["id",Wire.Uuid "row-a";"block",block "row-a"]]
       | _ -> failwith ("Unexpected property fixture request: "^name)));
     on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   Runtime.read_model:=(fun () -> {Model.initial with repo=Some "property-fixture"});

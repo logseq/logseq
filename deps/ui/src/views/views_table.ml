@@ -1416,14 +1416,20 @@ let grouped_table ?(paginate = false) inst ~rows : t =
    refs, tag chips, positioned pills + properties panel, children).
    The row's preview W.t decodes through the standard block decoder;
    property/pill areas self-resolve live by uuid. *)
-let list_row_el ~row_uuid ~blk : t =
+let list_row_el inst ~row_uuid ~blk : t =
   let b = Decode.block_of_wire blk in
   let b =
     match b.Model.block_uuid with
     | Some _ -> b
     | None -> { b with Model.block_uuid = Some row_uuid }
   in
-  !Render_state.block_row_static b
+  let persist_collapse =
+    match inst.V.kind with
+    | V.KLinkedRefs | V.KUnlinkedRefs -> false
+    | _ -> true
+  in
+  !Render_state.block_row_static
+    ~collapse_scope:inst.V.collapse_scope ~persist_collapse b
 
 let row_title s u =
   match Hashtbl.find_opt s.V.blocks u with
@@ -1436,9 +1442,8 @@ let row_title s u =
 (* the keyed mount decodes the item snapshot — content edits
    republish under a new keyed_row_key and remount the row *)
 let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
-  let _inst = inst in
   let _, blk = Signal.get item_sig in
-  list_row_el ~row_uuid ~blk
+  list_row_el inst ~row_uuid ~blk
 
 (* ---------- foldable groups ---------- *)
 
@@ -1593,7 +1598,7 @@ let list_stream ?(paginate = false) inst uuids : t =
              (Signal.value (inst.V.st))
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
       ~on_end:(fun () -> (V.ops ()).V.o_load_more inst)
-      ~render:(fun (u, blk) -> list_row_el ~row_uuid:u ~blk)
+      ~render:(fun (u, blk) -> list_row_el inst ~row_uuid:u ~blk)
       (Array.of_list items)
       ctx parent
   else
@@ -1623,9 +1628,9 @@ let ref_vlist inst ~paginate ~item_extent (rows : t list) : t =
         (V.ops ()).V.o_load_more inst);
   node
 
-let block_line (s : V.vstate) u : t =
+let block_line inst (s : V.vstate) u : t =
   match Hashtbl.find_opt s.V.blocks u with
-  | Some blk -> list_row_el ~row_uuid:u ~blk
+  | Some blk -> list_row_el inst ~row_uuid:u ~blk
   | None -> box ~key:("miss-" ^ u) []
 
 let ref_header inst ~key ~title : t =
@@ -1661,7 +1666,7 @@ let ref_grouped_lines inst (s : V.vstate) (gs : Wr.vrow_group list) : t list =
              ~title:(text ~value:(group_title inst s g.Wr.gv) [])
          in
          if V.Sset.mem key s.V.collapsed_groups then [ header ]
-         else header :: List.map (block_line s) g.Wr.grows)
+         else header :: List.map (block_line inst s) g.Wr.grows)
        gs)
 
 let ref_grouped_list_lines inst (s : V.vstate)
@@ -1697,7 +1702,7 @@ let ref_grouped_list_lines inst (s : V.vstate)
                          [])
                 in
                 if V.Sset.mem key s.V.collapsed_groups then [ header ]
-                else header :: List.map (block_line s) rows)
+                else header :: List.map (block_line inst s) rows)
               g.Wr.glparts))
        gs)
 
@@ -1774,7 +1779,7 @@ let render_list inst s : t =
               gs))
   | _ when ref_view inst ->
       ref_vlist inst ~paginate:more ~item_extent:36.
-        (List.map (block_line s) (all_row_uuids s))
+        (List.map (block_line inst s) (all_row_uuids s))
   | _ -> list_stream ~paginate:more inst (all_row_uuids s)
 
 let gallery_configuration inst (s : V.vstate) =

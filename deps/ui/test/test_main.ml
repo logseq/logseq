@@ -1691,8 +1691,9 @@ let test_cmdk_block_reveal ~finish =
           nav_hash = (fun hash -> hash ^ "?graph-id=graph-g");
           invoke = (fun name args ->
             let answer = match name, args with
-              | "thread-api/get-blocks", _ ->
-                  Wire.Array [wmap ["block", original]]
+              | "thread-api/get-blocks", [_; Wire.Array [request]] ->
+                  let id = Option.get (Wire.get request "id") in
+                  Wire.Array [wmap ["id", id; "block", original]]
               | "thread-api/get-block-parents", [_; Wire.Int id; Wire.Int 1000] when id = original_id ->
                   (if origin_shape = `Scalar then Wire.List parents else Wire.Array parents)
               | "thread-api/pull", [_; _; Wire.Int 200] ->

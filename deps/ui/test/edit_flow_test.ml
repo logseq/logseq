@@ -501,7 +501,10 @@ let test_suggestion_selection_commits_pending_save (h : host) =
         | "thread-api/get-blocks",
           [ W.String _; W.Array [ W.Map query ] ]
           when W.get (W.Map query) "id" = Some (W.Uuid target_uuid) ->
-            W.List [ W.Map [ W.kw "block", target_entity ] ]
+            W.List
+              [ W.Map
+                  [ W.kw "id", W.Uuid target_uuid
+                  ; W.kw "block", target_entity ] ]
         | _ -> h.base_handler name args) }
   in
   install_worker ~repo:h.repo page_host;
