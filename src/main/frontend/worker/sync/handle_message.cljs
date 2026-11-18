@@ -206,6 +206,7 @@
                             (some? failed-tx-id) (assoc :failed-tx-id failed-tx-id)
                             (seq missing-block-uuids) (assoc :missing-block-uuids (vec missing-block-uuids))
                             (contains? message :error-detail) (assoc :error-detail (:error-detail message))
+                            (contains? message :retryable) (assoc :retryable (:retryable message))
                             (some? data) (assoc :data data))]
         (if (or (contains? message :success-tx-ids)
                 (contains? message :failed-tx-id))

@@ -146,6 +146,66 @@
                        "from client_ops where kind = 'tx' and tx_id = ? limit 1")
                   (str tx-id)))
 
+(defn- client-ops-tx-counts
+  [^js db & {:keys [outliner-op]}]
+  (let [sql (str "select "
+                 "coalesce(sum(case when pending = 1 then 1 else 0 end), 0) as pending, "
+                 "coalesce(sum(case when failed = 1 then 1 else 0 end), 0) as failed, "
+                 "count(*) as total "
+                 "from client_ops where kind = 'tx'"
+                 (when outliner-op " and outliner_op = ?"))
+        row (if outliner-op
+              (sqlite-get-row db sql (name outliner-op))
+              (sqlite-get-row db sql))]
+    {:pending (aget row "pending")
+     :failed (aget row "failed")
+     :total (aget row "total")}))
+
+(defn- pending-fix-txs
+  [repo]
+  (->> (sync-apply/pending-txs repo)
+       (filterv #(= :fix (:outliner-op %)))))
+
+(defn- seed-duplicate-sibling-orders!
+  [{:keys [conn child1 child2 child3]}]
+  (d/transact! conn [[:db/add (:db/id child1) :block/order "b5w"]
+                     [:db/add (:db/id child2) :block/order "b5w"]
+                     [:db/add (:db/id child3) :block/order "b5xV"]])
+  {:child1-id (:db/id child1)
+   :child2-id (:db/id child2)
+   :child3-id (:db/id child3)})
+
+(defn- enqueue-duplicate-order-fix!
+  [conn child1-id child2-id]
+  (#'sync-apply/repair-applied-txs!
+   conn
+   {:tx-data [(d/datom child1-id :block/order "b5w" 1 true)
+              (d/datom child2-id :block/order "b5w" 1 true)]}))
+
+(defn- sibling-orders
+  [db parent]
+  (->> (:block/_parent (d/entity db (:db/id parent)))
+       (map :block/order)
+       vec))
+
+(defn- reject-inflight-tx!
+  [client tx-id & {:keys [error-detail retryable]
+                   :or {error-detail "db transact failed"
+                        retryable false}}]
+  (let [raw-message (js/JSON.stringify
+                     (clj->js (cond-> {:type "tx/reject"
+                                       :reason "db transact failed"
+                                       :t 3
+                                       :failed-tx-id (str tx-id)
+                                       :retryable retryable}
+                                (some? error-detail) (assoc :error-detail error-detail))))]
+    (try
+      (with-silenced-console-error
+        #(sync-handle-message/handle-message! test-repo client raw-message))
+      nil
+      (catch :default e
+        e))))
+
 (defn- sync-conflict-rows
   [db block-uuid]
   (try
@@ -2177,6 +2237,119 @@
               (is (= 0 (aget failed-ent "pending")))
               (is (= 1 (aget failed-ent "failed")))
               (is (empty? tx-entries)))))))))
+
+(deftest tx-reject-retains-retryable-and-error-detail-test
+  (testing "tx/reject records server retryable and error-detail on the thrown rejection"
+    (let [failed-tx-id (random-uuid)
+          raw-message (js/JSON.stringify
+                       (clj->js {:type "tx/reject"
+                                 :reason "db transact failed"
+                                 :t 3
+                                 :failed-tx-id (str failed-tx-id)
+                                 :retryable false
+                                 :error-detail "server exception detail"}))
+          *captured (atom nil)
+          client {:repo test-repo
+                  :graph-id "graph-1"
+                  :inflight (atom [failed-tx-id])
+                  :online-users (atom [])
+                  :ws-state (atom :open)}]
+      (with-redefs [client-op/get-local-tx (constantly 0)
+                    sync-log-state/rtc-log (fn [type payload]
+                                             (reset! *captured {:type type
+                                                                :payload payload}))]
+        (let [error (try
+                      (with-silenced-console-error
+                        #(sync-handle-message/handle-message! test-repo client raw-message))
+                      nil
+                      (catch :default e
+                        e))
+              data (ex-data error)
+              captured @*captured]
+          (is (some? error))
+          (is (= :db-sync/tx-rejected (:type data)))
+          (is (false? (:retryable data)))
+          (is (= "server exception detail" (:error-detail data)))
+          (is (= :rtc.log/tx-rejected (:type captured)))
+          (is (false? (-> captured :payload :retryable)))
+          (is (= "server exception detail" (-> captured :payload :error-detail))))))))
+
+(deftest tx-reject-duplicate-order-fix-does-not-regenerate-loop-test
+  (testing "rejecting a pending duplicate-order :fix must not enqueue an equivalent replacement"
+    (let [{:keys [conn client-ops-conn parent] :as setup} (setup-parent-child)
+          {:keys [child1-id child2-id]} (seed-duplicate-sibling-orders! setup)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (enqueue-duplicate-order-fix! conn child1-id child2-id)
+          (let [fix-txs (pending-fix-txs test-repo)
+                fix-tx-id (:tx-id (first fix-txs))
+                client {:repo test-repo
+                        :graph-id "graph-1"
+                        :inflight (atom [fix-tx-id])
+                        :online-users (atom [])
+                        :ws-state (atom :open)}]
+            (is (= 1 (count fix-txs)))
+            (is (some? fix-tx-id))
+            (is (= 3 (count (distinct (sibling-orders @conn parent)))))
+            (with-redefs [client-op/get-local-tx (constantly 0)]
+              (let [error (reject-inflight-tx! client fix-tx-id)
+                    counts-after (client-ops-tx-counts client-ops-conn :outliner-op :fix)
+                    pending-after (pending-fix-txs test-repo)
+                    failed-row (client-op-tx-row client-ops-conn fix-tx-id)]
+                (is (some? error))
+                (is (= :db-sync/tx-rejected (:type (ex-data error))))
+                (is (= 0 (aget failed-row "pending")))
+                (is (= 1 (aget failed-row "failed")))
+                (is (empty? pending-after)
+                    "rejected :fix must not be replaced by a new pending :fix")
+                (is (= 1 (:failed counts-after)))
+                (is (= 0 (:pending counts-after)))
+                (is (= 3 (count (distinct (sibling-orders @conn parent))))
+                    "local duplicate-order repair should remain applied")
+                (dotimes [_ 2]
+                  (when-let [next-fix-id (:tx-id (first (pending-fix-txs test-repo)))]
+                    (reset! (:inflight client) [next-fix-id])
+                    (reject-inflight-tx! client next-fix-id)))
+                (let [counts-final (client-ops-tx-counts client-ops-conn :outliner-op :fix)]
+                  (is (= 1 (:failed counts-final))
+                      "failed :fix rows must not grow on repeated reject")
+                  (is (= 0 (:pending counts-final))))))))))))
+
+(deftest tx-reject-duplicate-order-fix-preserves-later-user-edit-test
+  (testing "a later pending user edit survives rejection of an automatic :fix"
+    (let [{:keys [conn client-ops-conn parent child3] :as setup} (setup-parent-child)
+          {:keys [child1-id child2-id child3-id]} (seed-duplicate-sibling-orders! setup)]
+      (with-datascript-conns conn client-ops-conn
+        (fn []
+          (enqueue-duplicate-order-fix! conn child1-id child2-id)
+          (d/transact! conn [[:db/add child3-id :block/title "local user edit"]])
+          (let [pending (sync-apply/pending-txs test-repo)
+                fix-tx (first (filter #(= :fix (:outliner-op %)) pending))
+                user-tx (first (remove #(= :fix (:outliner-op %)) pending))
+                fix-tx-id (:tx-id fix-tx)
+                user-tx-id (:tx-id user-tx)
+                client {:repo test-repo
+                        :graph-id "graph-1"
+                        :inflight (atom [fix-tx-id])
+                        :online-users (atom [])
+                        :ws-state (atom :open)}]
+            (is (some? fix-tx-id))
+            (is (some? user-tx-id))
+            (is (not= fix-tx-id user-tx-id))
+            (with-redefs [client-op/get-local-tx (constantly 0)]
+              (let [error (reject-inflight-tx! client fix-tx-id)
+                    user-row (client-op-tx-row client-ops-conn user-tx-id)
+                    user-pending (#'sync-apply/pending-tx-by-id test-repo user-tx-id)
+                    child3' (d/entity @conn [:block/uuid (:block/uuid child3)])]
+                (is (some? error))
+                (is (= :db-sync/tx-rejected (:type (ex-data error))))
+                (is (= "local user edit" (:block/title child3')))
+                (is (= 1 (aget user-row "pending")))
+                (is (not= 1 (aget user-row "failed")))
+                (is (= user-tx-id (:tx-id user-pending)))
+                (is (not= :fix (:outliner-op user-pending)))
+                (is (empty? (pending-fix-txs test-repo)))
+                (is (= 3 (count (distinct (sibling-orders @conn parent)))))))))))))
 
 (deftest tx-reject-stale-keeps-inflight-op-pending-test
   (testing "stale tx/reject should keep inflight ops pending for retry"

@@ -803,6 +803,10 @@
       (seq (:forward-outliner-ops local-tx))
       (seq (:inverse-outliner-ops local-tx))))
 
+(defn- sync-fix-tx?
+  [local-tx]
+  (= :fix (:outliner-op local-tx)))
+
 (defn rollback-and-mark-failed-txs!
   [repo tx-ids]
   (let [rejected-tx-ids (->> tx-ids (filter uuid?) set)]
@@ -814,18 +818,29 @@
                                       vec)]
           (when (seq rejected-and-after)
             (let [rebase-db-before @conn
+                  ;; Keep automatic :fix repairs applied. Reversing them restores
+                  ;; the collisions that repair-applied-txs! would immediately
+                  ;; re-queue under a new tx-id, accumulating failed client_ops.
+                  txs-to-reverse (vec (remove sync-fix-tx? rejected-and-after))
+                  rejected-fixes (filterv #(and (sync-fix-tx? %)
+                                                (contains? rejected-tx-ids (:tx-id %)))
+                                          rejected-and-after)
                   rebase-txs (->> rejected-and-after
                                   (remove #(contains? rejected-tx-ids (:tx-id %)))
                                   vec)
                   *rebase-tx-reports (atom [])
                   *rebase-results (atom [])]
+              (when (seq rejected-fixes)
+                (log/warn :db-sync/keep-rejected-sync-fix
+                          {:repo repo
+                           :tx-ids (mapv :tx-id rejected-fixes)}))
               (try
                 (let [tx-report (ldb/batch-transact-with-temp-conn!
                                  conn
                                  {:rtc-tx? true
                                   :tx-reject-rollback? true}
                                  (fn [conn]
-                                   (reverse-local-txs! conn rejected-and-after)
+                                   (reverse-local-txs! conn txs-to-reverse)
                                    (reset! *rebase-results
                                            (rebase-local-txs! repo conn rebase-txs rebase-db-before)))
                                  {:listen-db
