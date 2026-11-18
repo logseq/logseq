@@ -1146,7 +1146,7 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
     :else [entity]))
 
 (defn- get-blocks-from-datoms-impl
-  [{:keys [db-after db-before]} datoms]
+  [{:keys [db-after db-before]} datoms journal-eids]
   (letfn [(referrer-eids [db eids]
             (->> eids
                  (mapcat (fn [id]
@@ -1184,7 +1184,7 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                            (not= (boolean (some-> (d/entity db-before id) hidden-entity?))
                                  (boolean (some-> (d/entity db-after id) hidden-entity?)))))
                  set))]
-    (when (seq datoms)
+    (when (or (seq datoms) (seq journal-eids))
       (let [ref-affecting-attrs #{:block/uuid :block/name :block/title :block/properties :block/alias}
             direct-visibility-affecting-attrs #{:block/parent :block/page :block/order}
             page-hierarchy-affecting-attrs #{:block/parent :block/page}
@@ -1194,7 +1194,7 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                                     (cond-> [e]
                                       (= :block/alias a)
                                       (conj v))))
-                          set)
+                          (into (set journal-eids)))
             direct-visibility-eids (->> datoms
                                         (filter #(contains? direct-visibility-affecting-attrs (:a %)))
                                         (map :e)
@@ -1238,17 +1238,19 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                              (remove hidden-entity?))}))))
 
 (defn- get-affected-blocks
-  [tx-report]
-  (let [data (:tx-data tx-report)
+  [{:keys [db-before db-after tx-data] :as tx-report}]
+  (let [journal-eids (when (not= (:logseq.property.journal/title-format (d/entity db-before :logseq.class/Journal))
+                                 (:logseq.property.journal/title-format (d/entity db-after :logseq.class/Journal)))
+                       (map :e (d/datoms db-after :avet :block/journal-day)))
         datoms (filter
                 (fn [datom]
                   ;; Capture direct changes on searchable content and outline structure
                   (contains? #{:block/uuid :block/name :block/title :block/properties :block/alias
                                :block/parent :block/page :block/order :logseq.property/deleted-at}
                              (:a datom)))
-                data)]
-    (when (seq datoms)
-      (get-blocks-from-datoms-impl tx-report datoms))))
+                tx-data)]
+    (when (or (seq datoms) (seq journal-eids))
+      (get-blocks-from-datoms-impl tx-report datoms journal-eids))))
 
 (defn sync-search-indice
   ([tx-report]

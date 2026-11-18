@@ -5,11 +5,13 @@
             [datascript.core :as d]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
             [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
+            [logseq.outliner.op :as outliner-op]
             [logseq.outliner.page :as outliner-page]
             [promesa.core :as p]))
 
@@ -1758,6 +1760,45 @@
   []
   (let [dir (node-helper/create-tmp-dir "search-db")]
     (#'platform-node/open-sqlite-db nil {:path (node-path/join dir "search.sqlite")})))
+
+(deftest journal-format-change-reindexes-journal-and-referrers-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:build/journal 20241216}}
+                 {:page {:block/title "References"}
+                  :blocks [{:block/title "reference"}]}])
+          journal (ldb/get-journal-page-by-day @conn 20241216)
+          block (db-test/find-block-by-content @conn "reference")
+          expected #{(:block/uuid journal) (:block/uuid block)}
+          stored-title (:v (first (d/datoms @conn :eavt (:db/id journal) :block/title)))
+          stored-name (:block/name journal)
+          *report (atom nil)]
+      (d/transact! conn [{:db/id (:db/id block)
+                         :block/title (str "[[" (:block/uuid journal) "]]")
+                         :block/refs [(:db/id journal)]}])
+      (d/listen! conn "journal-format-search" #(reset! *report %))
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (-> (<open-search-db)
+          (p/then
+           (fn [db]
+             (search/create-tables-and-triggers! db)
+             (search/upsert-blocks! db (clj->js (search/build-blocks-indice @conn)))
+             (outliner-op/apply-ops!
+              conn
+              [[:set-block-property [(:block/uuid (d/entity @conn :logseq.class/Journal))
+                                     :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]]]
+              {})
+             (let [{:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice @*report)
+                   query #(set (map :block/uuid (search/search-blocks conn db % {:limit 20 :enable-snippet? false})))]
+               (when (seq blocks-to-remove-set) (search/delete-blocks! db blocks-to-remove-set))
+               (when (seq blocks-to-add) (search/upsert-blocks! db (clj->js blocks-to-add)))
+               (is (= expected (query "2024-12-16 Monday")))
+               (is (empty? (query "Dec 16th, 2024")))
+               (is (= stored-title (:v (first (d/datoms @conn :eavt (:db/id journal) :block/title)))))
+               (is (= stored-name (:block/name (d/entity @conn (:db/id journal))))))
+             (.close db)))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally (fn [] (ldb/register-transact-pipeline-fn! identity) (done)))))))
 
 (defn- query-rows
   [db sql & bind]
