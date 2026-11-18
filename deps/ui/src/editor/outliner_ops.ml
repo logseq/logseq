@@ -1002,6 +1002,10 @@ type queued_save =
   }
 let pending_save : queued_save option ref = ref None
 let pending_save_ready : (unit -> unit) option ref = ref None
+let autocomplete_owns_save_block : (string -> bool) ref = ref (fun _ -> false)
+
+let set_autocomplete_save_block_owner query =
+  autocomplete_owns_save_block := query
 
 let history_opts ?(opts = Wire.Map []) ~before ~after () =
   match opts with
@@ -1745,8 +1749,10 @@ let schedule_save uuid title =
   let rec save_when_ready () =
     match !pending_save with
     | Some current when current == save ->
-        if context_current context && !S.structure_pending then
-          pending_save_ready := Some save_when_ready
+        if context_current context
+           && (!S.structure_pending
+               || !autocomplete_owns_save_block save.uuid)
+        then pending_save_ready := Some save_when_ready
         else begin
           clear_pending_save ();
           ignore (save_pending save)

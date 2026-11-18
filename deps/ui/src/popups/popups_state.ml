@@ -232,6 +232,15 @@ let make scheduler : t =
 
 let get t = Runtime.signal_get t.vs
 
+let () =
+  Outliner_ops.set_autocomplete_save_block_owner (fun uuid ->
+      match !active with
+      | Some t -> (
+          match (get t).ac with
+          | Some ac -> ac.auuid = uuid && ac_current ac
+          | None -> false)
+      | None -> false)
+
 (* signal of whether any popover layer (autocomplete / context menu /
    picker popup) is open — drives chrome that must hide while one is up *)
 let popup_signal () =
@@ -304,7 +313,9 @@ let update t f =
   Signal.update t.vs f;
   Runtime.flush ()
 
-let set_ac t ac = update t (fun v -> { v with ac })
+let set_ac t ac =
+  update t (fun v -> { v with ac });
+  if Option.is_none ac then Outliner_ops.resume_pending_save ()
 let set_cm t cm = update t (fun v -> { v with cm })
 let set_pv t pv = update t (fun v -> { v with pv })
 let invalidate_ac t =
@@ -335,7 +346,9 @@ let close_pv t = set_pv t None
 
 let () = Editor_state.on_edit_exit (fun _uuid ->
     match !active with
-    | Some t -> update t (fun v -> { v with ac = None; pv = None })
+    | Some t ->
+        update t (fun v -> { v with ac = None; pv = None });
+        Outliner_ops.resume_pending_save ()
     | None -> ())
 
 (* title + blocks of the page a .preview-ref-link points at — same bare
@@ -1549,10 +1562,14 @@ let insert_text (ac : ac) text back =
         else pos
       in
       let caret = tpos + S.length text - back in
-      Editor_actions.update_model ac.auuid (fun _ ->
-          Edit_model.select
-            (Edit_model.splice m tpos pos text)
-            ~anchor:caret ~focus:caret);
+      let updated_model =
+        Edit_model.select
+          (Edit_model.splice m tpos pos text)
+          ~anchor:caret ~focus:caret
+      in
+      Editor_actions.update_model ac.auuid (fun _ -> updated_model);
+      if updated_model.Edit_model.source <> m.Edit_model.source then
+        Outliner_ops.schedule_save ac.auuid updated_model.Edit_model.source;
       Editor_sink.focus_input ac.auuid
   | None -> ()
 
