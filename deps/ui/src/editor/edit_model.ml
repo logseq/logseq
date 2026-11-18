@@ -261,7 +261,10 @@ let lines_of_source s =
 let immutable_ref (r : E.run) =
   r.kind = E.Atomic && List.mem "ed-block-ref" (String.split_on_char ' ' r.cls)
 
-let snap_ref m off ~forward =
+let interior_ref (r : E.run) off =
+  immutable_ref r && r.start_off < off && off < r.end_off
+
+let snap_ref_strict m off ~forward =
   let rec find = function
     | [] -> off
     | (r : E.run) :: rest ->
@@ -272,15 +275,27 @@ let snap_ref m off ~forward =
   in
   find m.runs
 
+let snap_ref m off ~forward =
+  match List.find_opt (fun r -> interior_ref r m.caret) m.runs with
+  | Some r when interior_ref r off -> off
+  | _ -> snap_ref_strict m off ~forward
+
 let rebuild m source ~caret ~anchor ~dirty =
   let next =
     { m with source; version = m.version + 1; runs = E.runs source
     ; caret; anchor; composition = None; composition_text = ""
     ; lines = lines_of_source source; dirty }
   in
+  let next_caret =
+    match dirty with
+    | Some _ when List.exists (fun r -> interior_ref r caret) next.runs -> caret
+    | _ -> snap_ref_strict next caret ~forward:true
+  in
   { next with
-    caret = snap_ref next caret ~forward:true
-  ; anchor = Option.map (fun off -> snap_ref next off ~forward:(off > caret)) anchor }
+    caret = next_caret
+  ; anchor =
+      Option.map (fun off -> snap_ref_strict next off ~forward:(off > caret)) anchor
+  }
 
 let create ?(units = Bytes) source =
   { source
@@ -372,7 +387,8 @@ let in_reveal m (lo, hi) =
 let delim_shown m (r : E.run) = r.kind = E.Delim && in_reveal m r.reveal
 
 let atomic_expanded m (r : E.run) =
-  r.kind = E.Atomic && not (immutable_ref r) && in_reveal m r.reveal
+  r.kind = E.Atomic
+  && (if immutable_ref r then interior_ref r m.caret else in_reveal m r.reveal)
 
 let revealed_delims m =
   List.filter (delim_shown m) m.runs
