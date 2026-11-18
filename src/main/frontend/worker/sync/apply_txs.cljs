@@ -803,6 +803,12 @@
       (seq (:forward-outliner-ops local-tx))
       (seq (:inverse-outliner-ops local-tx))))
 
+(defn- finish-rebased-txs!
+  [repo results]
+  (let [{failed :failed no-op :no-op} (group-by :status results)]
+    (mark-failed-txs! repo (mapv :tx-id failed))
+    (mark-pending-txs-false! repo (mapv :tx-id no-op))))
+
 (defn rollback-and-mark-failed-txs!
   [repo tx-ids]
   (let [rejected-tx-ids (->> tx-ids (filter uuid?) set)]
@@ -837,18 +843,11 @@
                   (doseq [tx-report @*rebase-tx-reports]
                     (handle-local-tx! repo tx-report))
                   (repair-applied-txs! conn tx-report)
-                  (let [replay-tx-ids (->> rebase-txs
-                                           (filter local-tx-has-replay-data?)
-                                           (map :tx-id)
-                                           set)
-                        stale-tx-ids (->> @*rebase-results
-                                          (filter (fn [{:keys [status]}]
-                                                    (contains? #{:failed :no-op} status)))
-                                          (keep :tx-id)
-                                          (filter replay-tx-ids)
-                                          distinct
-                                          vec)]
-                    (mark-pending-txs-false! repo stale-tx-ids)))
+                  (let [replay-tx-ids (into #{} (comp (filter local-tx-has-replay-data?)
+                                                     (map :tx-id))
+                                            rebase-txs)]
+                    (finish-rebased-txs! repo (filter (comp replay-tx-ids :tx-id)
+                                                      @*rebase-results))))
                 (finally
                   (reset! *rebase-tx-reports nil)
                   (reset! *rebase-results nil)
@@ -1772,16 +1771,7 @@
           (handle-local-tx! repo tx-report))
 
         (repair-applied-txs! conn tx-report)
-        ;; Mark only explicitly stale rebases as non-pending.
-        ;; Do not infer stale via tx-id set-diff, which can hide still-valid
-        ;; pending txs that should wait for server ack/reject.
-        (let [stale-tx-ids (->> @*rebase-results
-                                (filter (fn [{:keys [status]}]
-                                          (contains? #{:failed :no-op} status)))
-                                (keep :tx-id)
-                                distinct
-                                vec)]
-          (mark-pending-txs-false! repo stale-tx-ids))
+        (finish-rebased-txs! repo @*rebase-results)
         {:remote-asset-tx-data (mapcat (comp :tx-data :report) @*remote-tx-results)})
 
       (catch :default e

@@ -368,6 +368,34 @@
       (is (= #{[:block/uuid tag-uuid]}
              (get-in forward-outliner-ops [0 1 0 :block/tags]))))))
 
+(deftest derive-history-outliner-ops-preserves-unresolved-reference-creation-maps
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page"}
+                :blocks [{:block/title "child"}]}])
+        db @conn
+        child (db-test/find-block-by-content db "child")
+        ref-page {:block/uuid (random-uuid)
+                  :block/title "Referenced Page"
+                  :block/name "referenced page"
+                  :block/tags :logseq.class/Page}]
+    (doseq [refs [#{ref-page} (list ref-page)]]
+      (let [block {:block/uuid (:block/uuid child) :block/refs refs}
+            tx-meta {:outliner-op :save-block :outliner-ops [[:save-block [block nil]]]}
+            {:keys [forward-outliner-ops]} (op-construct/derive-history-outliner-ops db db [] tx-meta)]
+        (is (= #{ref-page} (get-in forward-outliner-ops [0 1 0 :block/refs])))))))
+
+(deftest rewrite-block-title-unlinks-only-known-missing-refs-test
+  (let [recovered-uuid (random-uuid)
+        deleted-uuid (random-uuid)
+        block {:block/uuid (random-uuid)
+               :block/title (str "See [[" recovered-uuid "]] and [[" deleted-uuid "]]")
+               :block/refs #{nil [:block/uuid deleted-uuid]}
+               op-construct/rebase-refs-key [{:block/uuid recovered-uuid :block/title "Keep"}
+                                             {:block/uuid deleted-uuid :block/title "Former"}]}]
+    (is (= (str "See [[" recovered-uuid "]] and Former")
+           (:block/title (op-construct/rewrite-block-title-with-retracted-refs
+                          @(db-test/create-conn) block))))))
+
 (deftest derive-history-outliner-ops-insert-blocks-resolves-retracted-ref-id-from-tx-data-test
   (testing "insert-blocks should canonicalize block ref attrs when ref entity is retracted in current tx"
     (let [conn (db-test/create-conn-with-blocks
