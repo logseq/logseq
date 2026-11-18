@@ -59,7 +59,7 @@
 (def ^:private pending-index-sql
   "create index if not exists idx_client_ops_pending_created on client_ops(kind, pending, created_at, id)")
 (def ^:private failed-index-sql
-  "create index if not exists idx_client_ops_failed on client_ops(id) where kind = 'tx' and failed = 1")
+  "create index if not exists idx_client_ops_failed on client_ops(kind) where failed = 1")
 (def ^:private asset-index-sql
   "create index if not exists idx_client_ops_asset_uuid on client_ops(kind, asset_uuid)")
 (def ^:private sync-conflicts-table-sql
