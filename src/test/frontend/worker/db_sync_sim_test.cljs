@@ -1910,7 +1910,8 @@
                 (d/unlisten! conn-a listener-a)
                 (d/unlisten! conn-b listener-b)))))))))
 
-(deftest two-clients-rebase-property-value-stays-on-parent-page-test
+(defn- assert-property-value-page-after-rebase!
+  [purge-source-page?]
   (let [page-18-uuid (uuid "00000001-2026-1118-0000-000000000000")
         page-19-uuid (uuid "00000001-2026-1119-0000-000000000000")
         parent-uuid (uuid "00000002-2026-1119-0000-000000000000")
@@ -1972,10 +1973,12 @@
                         {})
             (is (= page-18-uuid
                    (:block/uuid (:block/page (d/entity @conn-b [:block/uuid parent-uuid])))))
-            (delete-page! conn-b page-19-uuid)
-            (apply-ops! conn-b [[:recycle-delete-permanently [page-19-uuid]]] {})
-            (is (nil? (d/entity @conn-b [:block/uuid page-19-uuid])))
+            (when purge-source-page?
+              (delete-page! conn-b page-19-uuid)
+              (apply-ops! conn-b [[:recycle-delete-permanently [page-19-uuid]]] {}))
             (is (true? (sync-client! server client-b-state)))
+            (is (= (not purge-source-page?)
+                   (some? (d/entity @(:conn @server) [:block/uuid page-19-uuid]))))
             (is (true? (sync-client! server client-a-state)))
             (is (empty? (sync-apply/pending-txs repo-a)))
             (is (= (:t @server) (client-op/get-local-tx repo-a)))
@@ -1998,6 +2001,12 @@
               (is (= expected-created-from (map :child-created-from states)) (pr-str states))
               (is (every? empty? (map db-issues dbs))
                   (pr-str (mapv db-issues dbs))))))))))
+
+(deftest two-clients-rebase-property-value-stays-on-parent-page-test
+  (testing "with the source page retained"
+    (assert-property-value-page-after-rebase! false))
+  (testing "with the source page purged"
+    (assert-property-value-page-after-rebase! true)))
 
 (deftest ^:long undo-redo-indent-sequence-does-not-produce-invalid-entity-test
   (testing "undo/redo of add-1 add-2 indent-2 should remain valid after another undo"
