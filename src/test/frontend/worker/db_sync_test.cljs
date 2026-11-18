@@ -566,17 +566,19 @@
               (upload-pending-and-assert-converged! conn remote-conn))))))))
 
 (deftest rebase-persisted-nil-reference-test
-  (doseq [recoverable? [true false]]
-    (testing (str "Persisted grouped save and insert, metadata available=" recoverable?)
-      (let [{:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+  (doseq [scenario [:local-page :same-name-remote-page :missing-metadata]]
+    (testing (name scenario)
+      (let [recoverable? (not= :missing-metadata scenario)
+            remote-page-uuid (when (= :same-name-remote-page scenario) (random-uuid))
+            {:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
             server-conn (d/conn-from-db @conn)
-            parsed-ref (gp-block/page-name->map "Linear Equations" @conn true
+            parsed-ref (gp-block/page-name->map "Reference Page" @conn true
                                                date-time-util/default-journal-title-formatter)
             ref-uuid (:block/uuid parsed-ref)
             block-uuid (:block/uuid child1)
             sibling-uuid (random-uuid)
             descendant-uuid (random-uuid)
-            title (str "Problem / source: [[" ref-uuid "]]")
+            title (str "See [[" ref-uuid "]]")
             entity (fn [id] (d/entity @conn [:block/uuid id]))]
         (with-datascript-conns conn client-ops-conn
           (fn []
@@ -585,7 +587,7 @@
                                         :block/title title
                                         :block/refs [parsed-ref]} {}]]
                          [:insert-blocks [[{:block/title "" :block/uuid sibling-uuid}
-                                           {:block/title "saved notation"
+                                           {:block/title "Child note"
                                             :block/uuid descendant-uuid
                                             :block/parent [:block/uuid sibling-uuid]}]
                                           (:db/id child1)
@@ -601,25 +603,34 @@
                                          (dissoc :block.temp/sync-rebase-refs
                                                  :block.temp/sync-created-refs))))]
               (is (= :save-block (ffirst forward)))
-              (is (string/starts-with? saved-title "Problem / source: "))
+              (is (string/starts-with? saved-title "See "))
               (is (= sibling-uuid (-> (entity descendant-uuid) :block/parent :block/uuid)))
               (client-op/upsert-local-tx-entry!
                test-repo (assoc pending :normalized-tx-data tx
                                 :reversed-tx-data reversed-tx :forward-outliner-ops forward))
-              (sync-apply/apply-remote-tx!
-               test-repo nil
-               (:tx-data (ldb/transact! server-conn
-                                        [[:db/add (:db/id child2) :block/title "Remote edit"]])))
+              (let [page-tx (when remote-page-uuid
+                              (:tx-data (outliner-page/create @server-conn "Reference Page"
+                                                              {:uuid remote-page-uuid})))
+                    remote-tx (into [[:db/add (:db/id child2) :block/title "Remote edit"]] page-tx)]
+                (sync-apply/apply-remote-tx! test-repo nil
+                                            (:tx-data (ldb/transact! server-conn remote-tx))))
               (is (= "Remote edit" (:block/title (entity (:block/uuid child2)))))
+              (when recoverable?
+                (sync-apply/apply-remote-tx!
+                 test-repo nil
+                 (:tx-data (ldb/transact! server-conn
+                                          [[:db/add (:db/id child2) :block/title "Second remote edit"]])))
+                (is (= "Second remote edit" (:block/title (entity (:block/uuid child2))))))
               (let [row (client-op-tx-row client-ops-conn tx-id)]
                 (if recoverable?
                   (do
                     (is (= 1 (aget row "pending")))
                     (is (= 0 (aget row "failed")))
                     (is (= saved-title (:block/title (entity block-uuid))))
-                    (is (= #{ref-uuid} (set (map :block/uuid (:block/refs (entity block-uuid))))))
+                    (is (= #{(or remote-page-uuid ref-uuid)}
+                           (set (map :block/uuid (:block/refs (entity block-uuid))))))
                     (is (= sibling-uuid (-> (entity descendant-uuid) :block/parent :block/uuid)))
-                    (is (= "saved notation" (:block/title (entity descendant-uuid))))
+                    (is (= "Child note" (:block/title (entity descendant-uuid))))
                     (upload-pending-and-assert-converged! conn server-conn))
                   (do
                     (is (= 0 (aget row "pending")))

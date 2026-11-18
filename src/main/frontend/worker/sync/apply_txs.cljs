@@ -1643,6 +1643,22 @@
       (when-let [tx-data (seq tx-data)]
         (ldb/transact! conn tx-data tx-meta)))))
 
+(defn- replay-local-outliner-op!
+  [conn [op args :as entry] rebase-db-before]
+  (replay-canonical-outliner-op! conn entry rebase-db-before)
+  (let [[block opts] args]
+    (if (and (= :save-block op) (some nil? (:block/refs block)))
+      ;; Read the saved refs before later ops in the same group can change them.
+      (let [saved (d/entity @conn [:block/uuid (:block/uuid block)])
+            repaired (cond-> (assoc block :block/refs (set (:block/refs saved)))
+                       (contains? block :block/title)
+                       (assoc :block/title (:block/title saved))
+
+                       (contains? block :block/tags)
+                       (assoc :block/tags (set (:block/tags saved))))]
+        [op [repaired opts]])
+      entry)))
+
 (defn- rebase-local-op!
   [_repo conn local-tx rebase-db-before]
   (if (= :fix (:outliner-op local-tx))
@@ -1668,13 +1684,20 @@
                                                        :db-sync/suppress-stale-rebase-transact-failed-log?
                                                        true)]]]))]
       (try
-        (let [rebase-tx-report
+        (let [*replayed-ops (volatile! nil)
+              rebase-tx-report
               (ldb/batch-transact-with-temp-conn!
                conn
                tx-meta
-               (fn [conn]
-                 (doseq [op forward-ops']
-                   (replay-canonical-outliner-op! conn op rebase-db-before))))
+               (fn [temp-conn]
+                 (if (seq forward-ops)
+                   (vreset! *replayed-ops
+                            (mapv #(replay-local-outliner-op! temp-conn % rebase-db-before) forward-ops))
+                   (doseq [op forward-ops']
+                     (replay-canonical-outliner-op! temp-conn op rebase-db-before))))
+               :transform-tx-meta (fn [batch-tx-meta]
+                                    (cond-> batch-tx-meta
+                                      @*replayed-ops (assoc :db-sync/forward-outliner-ops @*replayed-ops))))
               status (if rebase-tx-report :rebased :no-op)]
           {:tx-id (:tx-id local-tx)
            :status status})
