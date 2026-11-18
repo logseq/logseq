@@ -442,6 +442,19 @@ let set_collapsed ?(scope = "main") uuid v =
   if ready () then set (collapsed_ui_transform ~scope uuid v)
   else defer_init (collapsed_ui_transform ~scope uuid v)
 
+let clear_collapse_scope ~scope =
+  let prefix = collapse_key scope "" in
+  let has_prefix s =
+    String.length s >= String.length prefix
+    && String.sub s 0 (String.length prefix) = prefix
+  in
+  if ready () then
+    set_silent (fun st ->
+        { st with
+          collapsed_ui = String_set.filter (fun key -> not (has_prefix key)) st.collapsed_ui
+        ; expanded_ui = String_set.filter (fun key -> not (has_prefix key)) st.expanded_ui
+        })
+
 (* cljs block.cljs mounts a container's root block with
    set-collapsed-block! false — a zoomed/sidebar root always shows its
    children there even when the db datom is collapsed *)

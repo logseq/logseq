@@ -358,6 +358,37 @@ let fail_view inst gen () =
   if V.fetch_fresh inst gen then
     V.update inst (fun s -> { s with V.loading = false; view_error = Some "" })
 
+let collapsed_updates_for_list_rows row_uuids blocks =
+  let row_set = Hashtbl.create (max 1 (List.length row_uuids)) in
+  List.iter (fun uuid -> Hashtbl.replace row_set uuid ()) row_uuids;
+  let add = ref Editor_state.String_set.empty in
+  let rem = ref Editor_state.String_set.empty in
+  let rec walk = function
+    | W.Map _ as block ->
+        let uuid =
+          Option.get (W.map_get_uuid block "block/uuid")
+        in
+        (match W.get block "block/collapsed?" with
+        | Some (W.Bool true) -> add := Editor_state.String_set.add uuid !add
+        | Some (W.Bool false) | None ->
+            rem := Editor_state.String_set.add uuid !rem
+        | Some _ -> invalid_arg "List block collapsed flag must be a boolean");
+        (match W.get block "block/children" with
+        | None -> ()
+        | Some (W.Array children | W.List children | W.Set children) ->
+            List.iter walk children
+        | Some _ -> invalid_arg "List block children must be a collection")
+    | W.Array blocks | W.List blocks | W.Set blocks -> List.iter walk blocks
+    | _ -> invalid_arg "List block tree node must be a map"
+  in
+  List.iter
+    (fun block ->
+      match W.map_get_uuid block "block/uuid" with
+      | Some uuid when Hashtbl.mem row_set uuid -> walk block
+      | Some _ | None -> ())
+    blocks;
+  !add, !rem
+
 (* [~merge] copies the previous table into a fresh one so [blocks ==]
    changes and a refetch does not wipe rows already on screen.
    [~set_limit] is published in that same update: the body must not
@@ -374,9 +405,26 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
   let filter_refs=List.fold_left (fun acc (clause:V.filter_clause) ->
     match clause.c_val with Some value -> references acc value | None -> acc) [] (V.get inst).V.filters in
   let uuids=dedupe_uuids (uuids @ List.rev filter_refs) in
-  let apply blocks =
+  let state = V.get inst in
+  let list_row_uuids =
+    if state.V.display_type = "list" then row_uuids_of state.V.data else []
+  in
+  let child_uuids = Hashtbl.create (max 1 (List.length list_row_uuids)) in
+  List.iter
+    (fun uuid -> Hashtbl.replace child_uuids uuid ())
+    list_row_uuids;
+  let apply ?loaded_wire blocks =
     Fun.protect ~finally (fun () ->
         if fresh () then begin
+          Option.iter
+            (fun loaded_wire ->
+              if list_row_uuids <> [] then begin
+                let add, rem =
+                  collapsed_updates_for_list_rows list_row_uuids loaded_wire
+                in
+                Outliner_ops.merge_collapsed ~current:fresh add rem
+              end)
+            loaded_wire;
           V.update inst (fun s ->
               let s = { s with V.blocks } in
               match set_limit with
@@ -395,6 +443,7 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
       else Hashtbl.create (max 16 (List.length uuids))
     in
     Db.get_blocks uuids ~metadata:true
+      ~children_for:(fun uuid -> Hashtbl.mem child_uuids uuid)
       ~on_error:(fun () -> finally (); on_error ()) (fun bs ->
         List.iter
           (fun b ->
@@ -402,7 +451,7 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
             | Some u -> Hashtbl.replace blocks u b
             | None -> ())
           bs;
-        apply blocks)
+        apply ~loaded_wire:bs blocks)
 
 let load_props inst f =
   let gen = !(inst.V.data_gen) in
@@ -1039,7 +1088,13 @@ let view_with_virtualization ~virtualize ~kind ~owner : t =
     | _ ->
         (V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner, true)
   in
-  let inst = {inst with V.virtualize} in
+  let inst =
+    { inst with
+      V.virtualize
+    ; V.collapse_scope =
+        (if fresh then inst.V.collapse_scope else V.fresh_collapse_scope ())
+    }
+  in
   Hashtbl.replace live inst.V.id inst;
   (* defer to post-mount: refresh flushes signals, which must not run
      while the mount is still emitting ops (a microtask, so the current
@@ -1058,6 +1113,7 @@ let view_with_virtualization ~virtualize ~kind ~owner : t =
           resolve ()));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
       Hashtbl.remove live inst.V.id;
+      Editor_state.clear_collapse_scope ~scope:inst.V.collapse_scope;
       match inst.V.kind with
       | V.KQuery _ -> ()
       | _ -> incr inst.V.data_gen; Views_builder.drop_tree inst);

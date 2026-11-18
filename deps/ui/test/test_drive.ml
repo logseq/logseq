@@ -1211,13 +1211,15 @@ let blocks_response = function
       W.List
         (List.map
            (fun req ->
+             let id = Option.get (W.get req "id") in
              let u =
-               match W.get req "id" with
-               | Some (W.Uuid u) | Some (W.String u) -> u
-               | _ -> "?"
+               match id with
+               | W.Uuid u | W.String u -> u
+               | _ -> invalid_arg "get-blocks fixture request id must be a UUID"
              in
              W.Map
-               [ W.Keyword "block", ent_for u
+               [ W.Keyword "id", id
+               ; W.Keyword "block", ent_for u
                ; W.Keyword "children", W.Array []
                ])
            reqs)

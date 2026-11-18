@@ -162,11 +162,11 @@ let get_all_page_titles f =
   |> catch_quiet
   |> ignore
 
-(* get-blocks returns one {block, children?} wrapper per request —
-   callers want the entity map; fold a present children list onto
-   block/children so the wire shape matches entity-forward-map trees *)
-let block_of_result (w : W.t) : W.t =
+(* get-blocks descendants are flat, unlike entity-forward-map trees. *)
+let block_of_result ~children_requested (w : W.t) : W.t =
   match W.get w "block" with
+  | Some (W.Map _) when children_requested ->
+      Option.get (Decode.nest_get_blocks w)
   | Some (W.Map ps) -> (
       match W.get w "children" with
       | Some cs -> W.Map (ps @ [ (W.Keyword "block/children", cs) ])
@@ -174,27 +174,47 @@ let block_of_result (w : W.t) : W.t =
   | Some b -> b
   | None -> w
 
-let get_blocks uuids ?(metadata = false) ?(children = false)
+let get_blocks uuids ?(metadata = false) ?(children_for = fun _ -> false)
     ?(include_property_block = false) ?(on_error = fun () -> ()) f =
+  let requested_children = Hashtbl.create (max 1 (List.length uuids)) in
+  let requests =
+    List.map
+      (fun u ->
+        let children_requested = children_for u in
+        Hashtbl.replace requested_children u children_requested;
+        W.Map
+          [ (W.kw "id", W.Uuid u)
+          ; ( W.kw "opts"
+            , W.Map
+                ([ (W.kw "block-metadata?", W.Bool metadata)
+                 ; (W.kw "children?", W.Bool children_requested)
+                 ; ( W.kw "include-property-block?"
+                   , W.Bool include_property_block )
+                 ]) )
+          ])
+      uuids
+  in
   (let* w =
     Runtime.invoke2 "thread-api/get-blocks" (W.String (repo ()))
-      (W.Array
-         (List.map
-            (fun u ->
-              W.Map
-                [ (W.kw "id", W.Uuid u)
-                ; ( W.kw "opts"
-                  , W.Map
-                      ([ (W.kw "block-metadata?", W.Bool metadata)
-                       ; (W.kw "children?", W.Bool children)
-                       ; ( W.kw "include-property-block?"
-                         , W.Bool include_property_block )
-                       ]) )
-                ])
-            uuids))
+      (W.Array requests)
   in
   Outliner_ops.check_loader_result w;
-  f (List.map block_of_result (W.args_list w));
+  f
+    (List.map
+       (fun result ->
+         let uuid =
+           match W.get result "id" with
+           | Some (W.Uuid uuid) -> uuid
+           | Some _ -> invalid_arg "get-blocks response id must be a UUID"
+           | None -> invalid_arg "get-blocks response is missing id"
+         in
+         let children_requested =
+           match Hashtbl.find_opt requested_children uuid with
+           | Some requested -> requested
+           | None -> invalid_arg "get-blocks response id was not requested"
+         in
+         block_of_result ~children_requested result)
+       (W.args_list w));
   Js.Promise.resolve ())
   |> Js.Promise.catch (fun e ->
          Ui_services.log_error ("views worker call failed", e);
@@ -368,7 +388,8 @@ let insert_view_block ~current ?(on_error = fun () -> ())
     ?(after = fun () -> ()) ~title ~uuid ~page_uuid
     ~owner_uuid ~feature_type () =
   let repo = repo () in
-  get_blocks [ page_uuid ] ~metadata:true ~children:true ~on_error (fun ents ->
+  get_blocks [ page_uuid ] ~metadata:true ~children_for:(fun _ -> true)
+    ~on_error (fun ents ->
       if current () then begin
       let last_child_uuid =
         match ents with

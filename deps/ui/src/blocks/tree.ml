@@ -175,11 +175,26 @@ let children_indent ~library b =
   22 + bullet_size ~library b / 2 - 1
   - (if b.Model.block_order_list = Some "number" then 3 else 0)
 
-let children_container ~library uuid (bs : Model.block Signal.signal) content =
+let children_container ?on_toggle ~library uuid
+    (bs : Model.block Signal.signal) content =
   (* Center the one-pixel guide on the bullet, including odd icon sizes. *)
   let guide_left b =
     let size = bullet_size ~library b in
     float_of_int size /. 2. -. float_of_int (size / 2) +. 0.5 in
+  let rail =
+    box ~key:("border-" ^ uuid) ~style_class:"block-children-left-border"
+      ~width:4 ~corner_radius:2 ~opacity:0.6
+      ~data_attrs:
+        ([ "data-blockid", uuid ]
+        @ if Option.is_some on_toggle then [ "data-collapse-owned", "true" ] else [])
+      []
+  in
+  let rail =
+    Option.fold ~none:rail
+      ~some:(fun on_toggle ->
+        Ui_parts.pressable ~on_press:(fun _ -> on_toggle ()) rail)
+      on_toggle
+  in
   Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive (children_indent ~library) bs)
   (Ui_components.with_props
     [ Ui_components.Prop.position `relative; Ui_components.Prop.padding_top 2 ]
@@ -192,9 +207,7 @@ let children_container ~library uuid (bs : Model.block Signal.signal) content =
           ; Ui_components.Prop.inset_bottom 0.
           ; Ui_components.Prop.z_index 1
           ; Ui_components.Prop.cursor `pointer ]
-          (box ~key:("border-" ^ uuid) ~style_class:"block-children-left-border"
-            ~width:4 ~corner_radius:2 ~opacity:0.6
-            ~data_attrs:["data-blockid", uuid] [])
+          rail
       ; Ui_components.with_props
           [ Ui_components.Prop.position `absolute
           ; Ui_components.Prop.inset_top 0.
@@ -222,19 +235,19 @@ let private_tag_ident (ident : string) : bool =
       "logseq.class/Asset"; "logseq.class/Journal";
       "logseq.class/Whiteboard"; "logseq.class/Pdf-annotation" ]
 
-(* cljs tags-cp hidden idents: ldb/internal-tags (Page/Property/Tag/
-   Root/Asset) plus classes carrying :logseq.property.class/hide-from-node;
-   private built-ins (Journal, Whiteboard) never render as chips either *)
+(* cljs tags-cp hides internal classes plus built-ins marked
+   :logseq.property.class/hide-from-node. *)
 let hidden_tag_ident (ident : string) : bool =
-  private_tag_ident ident
+  Outliner_ops.internal_tag_ident ident
   || List.mem ident
-       [ "logseq.class/Root"; "logseq.class/Comments"
-       ; "logseq.class/Comment"; "logseq.class/Code-block"
-       ; "logseq.class/Quote-block"; "logseq.class/Math-block" ]
+       [ "logseq.class/Comments"; "logseq.class/Comment"
+       ; "logseq.class/Code-block"; "logseq.class/Quote-block"
+       ; "logseq.class/Math-block"; "logseq.class/Pdf-annotation" ]
 
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
-let control_wrap ~scope ~library uuid (b : Model.block) : t =
+let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
+    (b : Model.block) : t =
  fun ctx parent ->
   Settings_state.ensure ctx;
   let order_list = b.Model.block_order_list = Some "number" in
@@ -254,7 +267,7 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
      a fresh map per class_signal triples the subscriptions on every
      S.set publish. Owned into the row's scope so the collapse_sig
      subscription dies on unmount *)
-  let cs = Logseq_el.own ctx (collapsed_sig ~scope b) in
+  let cs = Logseq_el.own ctx (collapsed_sig ~scope:collapse_scope b) in
   let has_children = b.Model.block_children <> [] in
   (* the web reveals the fold caret only on row hover (the lui-core.css
      [data-has-children] rule); hover-less backends keep it visible at
@@ -292,10 +305,10 @@ let control_wrap ~scope ~library uuid (b : Model.block) : t =
            ~url:"#" ~target:`self_ ~min_width:22 ~min_height:22
            ~padding:2 ~margin_top:1
            ~accessibility_identifier:("control-" ^ uuid)
+           ?on_press:(Option.map (fun on_toggle -> fun _ -> on_toggle ()) on_toggle)
            ~data_attrs:
-             [ ( "style"
-               , "text-decoration:none" )
-             ]
+             ([ "style", "text-decoration:none" ]
+             @ if Option.is_some on_toggle then [ "data-collapse-owned", "true" ] else [])
         [ Ui_parts.class_signal cs
             (fun c ->
               if caret_shown c then "" else "control-hide")
@@ -746,7 +759,7 @@ let comments_row ?depth_signal ?(flat = false) ~scope ~depth ~editable ~library
               if flat then ("data-cid", scope) :: attrs else attrs)
             bs (S.collapse_sig ()) depth_signal)
           [ row ~style_class:"block-main-container" ~gap:4 ~min_height:24
-              [ reactive (control_wrap ~scope ~library uuid) bs
+              [ reactive (control_wrap ~scope ~collapse_scope:scope ~library uuid) bs
               ; column ~grow:1. ~min_width:0 [Comments_view.area_el ~scope bs] ] ]))))
     ctx parent
 
@@ -794,7 +807,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
           ((match block_heading_lvl b with
             | Some lvl -> [ ("data-has-heading", string_of_int lvl) ]
             | None -> []))
-        [ control_wrap ~scope ~library uuid b
+        [ control_wrap ~scope ~collapse_scope:scope ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1. ~min_width:0
             [ column ~key:("col2-" ^ key) ~min_width:0
                 [ row ~key:("bmc-" ^ key)
@@ -1108,13 +1121,19 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
    keeps the row from claiming the live row's DOM node on reconciliation —
    both are keyed ls-…/rfs-… on the same uuid but are distinct logical
    nodes. *)
-and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
+and block_row_static ?(depth = 0) ?(library = false) ~collapse_scope
+    ~persist_collapse (b : Model.block) : t =
  fun ctx parent ->
   (* references rows can be the first block render on a page (journals
      refresh mounts ref rows before any editable row) — the state must
      exist before the per-row signals below *)
   S.ensure ctx;
   (let uuid = Option.value b.block_uuid ~default:"" in
+  let on_toggle () =
+    Editor_actions.exit_edit ~select:false;
+    Editor_actions.toggle_collapse_block ~scope:collapse_scope
+      ~persist:persist_collapse b
+  in
   let key = block_key b in
   let has_children = b.block_children <> [] in
   track_mounted_row ~scope:"ref" b
@@ -1124,11 +1143,11 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
-       ~data_attrs_signal:(row_attrs_sig ~scope:"ref" ~depth ~editable:false uuid b)
+       ~data_attrs_signal:(row_attrs_sig ~scope:collapse_scope ~depth ~editable:false uuid b)
     [ row ~key:("main-" ^ key)
         ~style_class:"block-main-container" ~gap:4
         ~data_attrs:(heading_attrs b)
-        [ control_wrap ~scope:"ref" ~library uuid b
+        [ control_wrap ~on_toggle ~scope:"ref" ~collapse_scope ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)
                 [ row ~key:("bmc-" ^ key)
@@ -1173,17 +1192,25 @@ and block_row_static ?(depth = 0) ?(library = false) (b : Model.block) : t =
             ]
         ]
     ; Properties_area.block_area ~scope:"reference" ~uuid
-    ; (if has_children then children_static_el ~depth ~library uuid b
+    ; (if has_children then
+         children_static_el ~depth ~library ~collapse_scope ~persist_collapse
+           ~on_toggle uuid b
        else Logseq_el.nothing)
     ]))))
   ctx parent
 
-and children_static_el ~depth ~library uuid (b : Model.block) : t =
+and children_static_el ~depth ~library ~collapse_scope ~persist_collapse
+    ~on_toggle uuid (b : Model.block) : t =
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
-  children_container ~library uuid bs
-    (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
-      (List.map (block_row_static ~depth:(depth + 1) ~library) b.block_children))
+  let collapsed = Logseq_el.own ctx (collapsed_sig ~scope:collapse_scope b) in
+  if_ ~test:(reactive not collapsed)
+    (children_container ~on_toggle ~library uuid bs
+       (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
+          (List.map
+             (block_row_static ~depth:(depth + 1) ~library ~collapse_scope
+                ~persist_collapse)
+             b.block_children)))
     ctx parent
 
 
@@ -1329,7 +1356,8 @@ let () = Render_state.page_embed := page_embed
    the blocks layer directly (cycle via comments -> render -> views) *)
 let () =
   Render_state.block_row_static :=
-    (fun b -> block_row_static b)
+    (fun ~collapse_scope ~persist_collapse b ->
+      block_row_static ~collapse_scope ~persist_collapse b)
 
 (* Named signal arguments let a projected row borrow its live block and
    depth through the reactive prop form without remounting its editor. *)

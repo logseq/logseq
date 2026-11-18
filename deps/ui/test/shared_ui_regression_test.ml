@@ -1264,7 +1264,7 @@ let run_views ~registry ~profile ~finish =
             List.map (fun request ->
               let uuid=Option.get (Option.bind (Wire.get request "id") Wire.as_uuid) in
               requested:= !requested @ [uuid];
-              Wire.Map [Wire.kw "block",Wire.Map
+              Wire.Map [Wire.kw "id",Wire.Uuid uuid;Wire.kw "block",Wire.Map
                 [Wire.kw "block/uuid",Wire.Uuid uuid;Wire.kw "block/title",Wire.String
                   (match uuid with "tag-a" -> "Journal" | "tag-b" -> "Page" | _ -> "Row")]]) requests
         | _ -> []

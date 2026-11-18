@@ -1900,20 +1900,23 @@ let on_click ev =
       if S.ready () then
         (
         match closest ".block-control" target with
-        | Some el -> (
-            ev.Ui_services.prevent_default ();
-            match uuid_of_prefixed "control-" (el.Ui_services.id ()) with
-            | Some u ->
-                A.exit_edit ~select:false;
-                A.toggle_collapse ~scope:(A.scope_of_el el) u
-            | None -> ())
+        | Some el ->
+            if el.Ui_services.attr "data-collapse-owned" = Some "true" then ()
+            else (
+              ev.Ui_services.prevent_default ();
+              match uuid_of_prefixed "control-" (el.Ui_services.id ()) with
+              | Some u ->
+                  A.exit_edit ~select:false;
+                  A.toggle_collapse ~scope:(A.scope_of_el el) u
+              | None -> ())
         | None -> (
             match closest ".block-children-left-border" target with
             | Some el -> (
-                match el.Ui_services.attr "data-blockid" with
-                | Some u ->
-                    A.toggle_collapse ~scope:(A.scope_of_el el) u
-                | None -> ())
+                if el.Ui_services.attr "data-collapse-owned" <> Some "true" then
+                  match el.Ui_services.attr "data-blockid" with
+                  | Some u ->
+                      A.toggle_collapse ~scope:(A.scope_of_el el) u
+                  | None -> ())
             | None -> (
                 match closest ".bullet-container" target with
                 | Some el -> (

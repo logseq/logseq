@@ -2667,9 +2667,9 @@ let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
 let find_outliner_block ~scope uuid =
   Option.bind (S.outliner_blocks_in_scope scope) (fun blocks -> S.find_in blocks uuid)
 
-let toggle_collapse ?(scope = "main") uuid =
-  match find_outliner_block ~scope uuid with
-  | Some b when S.children_of b <> [] ->
+let toggle_collapse_block ~scope ~persist (b : Model.block) =
+  match b.Model.block_uuid with
+  | Some uuid when S.children_of b <> [] ->
       if b.Model.block_default_collapsed
          && not (S.is_collapsed_in ~scope uuid)
       then
@@ -2685,9 +2685,14 @@ let toggle_collapse ?(scope = "main") uuid =
       else
         let now = not (S.effective_collapsed ~scope b) in
         S.set_collapsed ~scope uuid now;
-        if not (Ui_services.env_publishing ()) then
+        if persist && not (Ui_services.env_publishing ()) then
           ignore (Ops.apply [ Ops.collapse_expand [ (uuid, now) ] ])
   | _ -> ()
+
+let toggle_collapse ?(scope = "main") uuid =
+  match find_outliner_block ~scope uuid with
+  | Some b -> toggle_collapse_block ~scope ~persist:true b
+  | None -> ()
 
 let set_collapsed ?(scope = "main") uuid collapsed =
   match find_outliner_block ~scope uuid with

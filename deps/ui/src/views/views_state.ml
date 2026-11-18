@@ -118,6 +118,7 @@ type vstate =
 
 type inst =
   { id : int
+  ; collapse_scope : string
   ; virtualize : bool
   ; kind : inst_kind
   ; feature : feature
@@ -186,10 +187,16 @@ let empty_vstate () : vstate =
   }
 
 let next_id = ref 0
+let next_collapse_scope_id = ref 0
+
+let fresh_collapse_scope () =
+  incr next_collapse_scope_id;
+  "views-list-" ^ string_of_int !next_collapse_scope_id
 
 let make ~sched ~kind ~feature ~owner : inst =
   incr next_id;
   { id = !next_id
+  ; collapse_scope = fresh_collapse_scope ()
   ; virtualize = true
   ; kind
   ; feature
