@@ -88,7 +88,7 @@
 
   .property-pair.property-panel-row {
     @apply grid items-start pr-3 gap-3 w-full;
-    grid-template-columns: 160px minmax(0, 1fr);
+    grid-template-columns: fit-content(260px) minmax(0, 1fr);
     margin-left: 0;
   }
 
@@ -105,6 +105,11 @@
 
   .property-key-panel .property-k {
     @apply block min-w-0 max-w-full overflow-hidden text-ellipsis whitespace-nowrap;
+  }
+
+  .property-pair .hidden-properties-toggle-key .property-k {
+    @apply overflow-visible whitespace-normal;
+    text-overflow: clip;
   }
 
   .property-value-panel.ls-block.property-value-container {
@@ -126,6 +131,10 @@
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value-panel.ls-block.property-value-container,
   .property-pair.property-panel-row[data-property-type=checkbox] .property-value.property-value-panel-inner {
     @apply items-center;
+  }
+
+  .property-pair.property-panel-row[data-property-type=datetime] .ls-datetime {
+    @apply flex-wrap;
   }
 
   .property-pair.property-panel-row[data-property-type=url] .property-value-panel a:not(.block-control):not(.bullet-link-wrap),
@@ -616,6 +625,10 @@ a.control-link {
 
   /* Visible and expanded hidden properties share the same bounded key column. */
   grid-template-columns: fit-content(min(360px, 45%)) minmax(0, 1fr);
+
+  > .hidden-properties-toggle-row {
+    grid-template-columns: subgrid;
+  }
 
   > * {
     grid-column: 1 / -1;
