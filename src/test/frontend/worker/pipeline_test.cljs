@@ -1028,7 +1028,14 @@
     (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
     (is (nil? (ldb/get-page @conn "2024-12-18 Wednesday")))
     (is (nil? (ldb/get-page @conn "not a page")))
-    (is (nil? (ldb/get-page @conn "")))))
+    (is (nil? (ldb/get-page @conn ""))))
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "2021Q4"}}
+                                              {:page {:build/journal 20040120}}])
+        page (ldb/get-page @conn "2021Q4")
+        journal (ldb/get-journal-page-by-day @conn 20040120)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "dd.MM.yyyy"]])
+    (is (= (:db/id page) (:db/id (ldb/get-page @conn "2021Q4"))))
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "20.01.2004"))))))
 
 (deftest create-journal-page-name-uses-default-formatter-test
   (let [conn (db-test/create-conn)]

@@ -20,7 +20,10 @@
   (when (and db (string? page-name))
     (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
           journal-day (when formatter (date-time-util/journal-title->int page-name [formatter]))]
-      (or (when journal-day
+      (or (when (and journal-day
+                     (= (common-util/page-name-sanity-lc page-name)
+                        (common-util/page-name-sanity-lc
+                         (date-time-util/int->journal-title journal-day formatter))))
             (:e (first (d/datoms db :avet :block/journal-day journal-day))))
           (first (sort (map :e (entity-util/get-pages-by-name db page-name))))))))
 
