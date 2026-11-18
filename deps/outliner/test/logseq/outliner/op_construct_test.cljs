@@ -384,6 +384,18 @@
             {:keys [forward-outliner-ops]} (op-construct/derive-history-outliner-ops db db [] tx-meta)]
         (is (= #{ref-page} (get-in forward-outliner-ops [0 1 0 :block/refs])))))))
 
+(deftest rewrite-block-title-unlinks-only-known-missing-refs-test
+  (let [recovered-uuid (random-uuid)
+        deleted-uuid (random-uuid)
+        block {:block/uuid (random-uuid)
+               :block/title (str "See [[" recovered-uuid "]] and [[" deleted-uuid "]]")
+               :block/refs #{nil [:block/uuid deleted-uuid]}
+               op-construct/rebase-refs-key [{:block/uuid recovered-uuid :block/title "Keep"}
+                                             {:block/uuid deleted-uuid :block/title "Former"}]}]
+    (is (= (str "See [[" recovered-uuid "]] and Former")
+           (:block/title (op-construct/rewrite-block-title-with-retracted-refs
+                          @(db-test/create-conn) block))))))
+
 (deftest derive-history-outliner-ops-insert-blocks-resolves-retracted-ref-id-from-tx-data-test
   (testing "insert-blocks should canonicalize block ref attrs when ref entity is retracted in current tx"
     (let [conn (db-test/create-conn-with-blocks
