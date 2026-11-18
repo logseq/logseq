@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -12,6 +13,10 @@ const require = createRequire(import.meta.url);
 const transit = require(require.resolve("transit-js", { paths: [resolve(repoRoot, "cli")] }));
 const transitWriter = transit.writer("json");
 const transitReader = transit.reader("json");
+const volatilePropertyName = "cli-stress-volatile-prop";
+const volatilePropertyDeleteHistoryLimit = 64;
+const propertyReadbackCandidateLimit = 8;
+const readbackOrderingReason = "Harness sees command boundaries, not write/readback/remote-sync application times.";
 
 export function parseArgs(argv) {
   const opts = {
@@ -298,12 +303,9 @@ function logEvent(opts, event) {
   if (opts.runSummary) {
     recordStressOutcome(opts.runSummary, event);
   }
-  const payload = {
-    ts: new Date().toISOString(),
-    graph: opts.graph,
-    page: opts.page,
-    ...event,
-  };
+  const payload = event.event === "property-upsert-readback-diagnostic"
+    ? { ts: new Date().toISOString(), ...event }
+    : { ts: new Date().toISOString(), graph: opts.graph, page: opts.page, ...event };
   appendFileSync(opts.logFile, `${JSON.stringify(payload)}\n`, "utf8");
   if (event.level === "error" || event.level === "warn" || event.event === "summary" || event.event === "operation-summary") {
     console.log(JSON.stringify(payload));
@@ -364,6 +366,108 @@ export function classifyCliResult(result, parsed, context = {}) {
     level: ok || expectedRace ? "info" : "error",
     outcome: ok ? "ok" : expectedRace ? "race-conflict" : "failed",
     expectedRace,
+  };
+}
+
+export function createVolatilePropertyDeleteHistory() {
+  return { records: [], totalCount: 0, evictedCount: 0 };
+}
+
+export function startVolatilePropertyDelete(history, { clientIndex, workerId, seq, startMs }) {
+  const record = {
+    clientIndex,
+    workerId,
+    seq,
+    startMs,
+    endMs: null,
+    elapsedMs: null,
+    success: null,
+    outcome: null,
+  };
+  history.records.push(record);
+  history.totalCount += 1;
+  if (history.records.length > volatilePropertyDeleteHistoryLimit) {
+    history.records.shift();
+    history.evictedCount += 1;
+  }
+  return record;
+}
+
+export function completeVolatilePropertyDelete(record, { endMs, success, outcome }) {
+  record.endMs = endMs;
+  record.elapsedMs = endMs - record.startMs;
+  record.success = success;
+  record.outcome = outcome;
+}
+
+export function buildPropertyReadbackDiagnostic({ history, context, parsed, clientIndex, startMs, endMs }) {
+  const targetOperation =
+    context.op === "property-upsert" ||
+    (context.op === "property-delete-recreate" && context.phase === "recreate");
+  if (
+    !targetOperation ||
+    context.property !== volatilePropertyName ||
+    parsed?.status !== "error" ||
+    parsed?.error?.code !== "property-not-found" ||
+    parsed?.error?.message !== "property not found after upsert"
+  ) {
+    return null;
+  }
+
+  const records = history.records;
+  const candidateEntries = records
+    .map((record, index) => {
+      const effectiveEndMs = record.endMs ?? endMs;
+      return {
+        record,
+        index,
+        commandOverlap: record.startMs <= endMs && startMs <= effectiveEndMs,
+      };
+    })
+    .sort(
+      (left, right) =>
+        Number(right.commandOverlap) - Number(left.commandOverlap) || right.index - left.index,
+    );
+  const retainedDeleteOverlapCount = candidateEntries.filter((entry) => entry.commandOverlap).length;
+  const candidates = candidateEntries.slice(0, propertyReadbackCandidateLimit).map(({ record, commandOverlap }) => ({
+    clientIndex: record.clientIndex,
+    workerId: record.workerId,
+    seq: record.seq,
+    startMs: record.startMs,
+    endMs: record.endMs,
+    elapsedMs: record.elapsedMs,
+    success: record.success,
+    outcome: record.outcome,
+    inFlight: record.endMs == null,
+    commandOverlap,
+  }));
+  const totalCount = history.totalCount;
+
+  return {
+    clock: "performance.now",
+    timeUnit: "ms",
+    failedCommand: {
+      clientIndex,
+      workerId: context.workerId,
+      seq: context.seq,
+      startMs,
+      endMs,
+      elapsedMs: endMs - startMs,
+    },
+    deleteHistory: {
+      limit: volatilePropertyDeleteHistoryLimit,
+      retainedCount: records.length,
+      totalCount,
+      evictedCount: history.evictedCount,
+      truncated: history.evictedCount > 0,
+    },
+    deleteCandidateLimit: propertyReadbackCandidateLimit,
+    deleteCandidates: candidates,
+    retainedDeleteOverlapCount,
+    deleteCandidateOmittedCount: totalCount - candidates.length,
+    deleteCandidateListTruncated: totalCount > candidates.length,
+    readbackOrdering: "unknown",
+    readbackOrderingReason,
   };
 }
 
@@ -467,7 +571,21 @@ async function runCli(opts, args, context = {}) {
       ? opts.clientClis[opts.clientIndex]
       : process.env.LOGSEQ_BIN;
   const command = cliCommand(cliBin);
+  const startMs = performance.now();
+  const deleteRecord =
+    opts.volatilePropertyDeleteHistory &&
+    context.op === "property-delete-recreate" &&
+    context.phase === "delete" &&
+    context.property === volatilePropertyName
+      ? startVolatilePropertyDelete(opts.volatilePropertyDeleteHistory, {
+          clientIndex: opts.clientIndex,
+          workerId: context.workerId,
+          seq: context.seq,
+          startMs,
+        })
+      : null;
   const result = await runProcess(command.command, [...command.args, ...args], opts);
+  const endMs = performance.now();
   let parsed = null;
   if (result.stdout) {
     try {
@@ -478,6 +596,13 @@ async function runCli(opts, args, context = {}) {
   }
 
   const classification = classifyCliResult(result, parsed, context);
+  if (deleteRecord) {
+    completeVolatilePropertyDelete(deleteRecord, {
+      endMs,
+      success: classification.ok,
+      outcome: classification.outcome,
+    });
+  }
   const event = {
     event: "cli",
     level: classification.level,
@@ -493,6 +618,22 @@ async function runCli(opts, args, context = {}) {
     stdout: parsed ? undefined : result.stdout,
   };
   logEvent(opts, event);
+
+  const diagnostic = buildPropertyReadbackDiagnostic({
+    history: opts.volatilePropertyDeleteHistory,
+    context,
+    parsed,
+    clientIndex: opts.clientIndex,
+    startMs,
+    endMs,
+  });
+  if (diagnostic) {
+    logEvent(opts, {
+      event: "property-upsert-readback-diagnostic",
+      level: "error",
+      ...diagnostic,
+    });
+  }
 
   if (!classification.ok && !classification.expectedRace && opts.failFast) {
     throw new Error(`CLI command failed: logseq ${args.join(" ")}`);
@@ -2907,7 +3048,7 @@ function createStressState(opts, runId) {
     stableTagIds: new Map(),
     stableProperties: ["cli-stress-prop-a", "cli-stress-prop-b"],
     volatileTag: "cli-stress-volatile-tag",
-    volatileProperty: "cli-stress-volatile-prop",
+    volatileProperty: volatilePropertyName,
     rawPropertyIdent: "user.property/cli-http-prop",
     rawPropertyName: "cli-http-prop",
     activeIds: new Set(),
@@ -2974,6 +3115,7 @@ async function buildStressClients(opts, runId) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   opts.runSummary = { unexpectedErrors: 0, workerErrors: 0, operations: {} };
+  opts.volatilePropertyDeleteHistory = createVolatilePropertyDeleteHistory();
   mkdirSync(dirname(opts.logFile), { recursive: true });
   const runId = `stress-${Date.now()}`;
 
