@@ -240,6 +240,24 @@
         tx-data)
        (apply concat)))))
 
+(defn- descendants-page-tx
+  "When a block becomes a page, or a page becomes a block, its descendant blocks still point
+  :block/page at the old page; re-point them at `page-id`. The walk stops at a nested page:
+  its blocks belong to it, not to the converted node."
+  [db-after root-id page-id]
+  (loop [parent-ids [root-id]
+         tx []]
+    (if-let [parent-id (first parent-ids)]
+      (let [child-ids (->> (d/datoms db-after :avet :block/parent parent-id)
+                           (map :e)
+                           (remove #(ldb/page? (d/entity db-after %))))]
+        (recur (into (rest parent-ids) child-ids)
+               (into tx (map (fn [child-id]
+                               {:db/id child-id
+                                :block/page page-id})
+                             child-ids))))
+      tx)))
+
 (defn- toggle-page-and-block
   [db {:keys [db-before db-after tx-data tx-meta]}]
   (when-not (rtc-tx-or-download-graph? tx-meta)
@@ -278,15 +296,7 @@
            (when (or page-tag-update? move-to-library? move-under-page?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)
-                   ;; When a block becomes a page its descendant blocks still point
-                   ;; :block/page at the old page; re-point them at the new page.
-                   children-page-tx (fn []
-                                      (keep (fn [child-id]
-                                              (let [child (d/entity db-after child-id)]
-                                                (when (and child (not (ldb/page? child)))
-                                                  {:db/id child-id
-                                                   :block/page id})))
-                                            (ldb/get-block-full-children-ids db-after id)))]
+                   children-page-tx #(descendants-page-tx db-after id %)]
                (when block-after
                  (cond
                    ;; move non-page block to Library
@@ -296,7 +306,7 @@
                       :block/name (common-util/page-name-sanity-lc (:block/title block-after))
                       :block/tags :logseq.class/Page}
                      [:db/retract id :block/page]]
-                    (children-page-tx))
+                    (children-page-tx id))
 
                    ;; page moved under another page
                    (and move-under-page? (ldb/internal-page? block-after))
@@ -318,7 +328,7 @@
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
                                        [:db/retract id :block/order]]))]
-                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx)))
+                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx id)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
@@ -329,8 +339,10 @@
                                            parent
                                            (recur (:block/parent parent)))))]
                      (when parent-page
-                       [[:db/retract id :block/name]
-                        [:db/add id :block/page (:db/id parent-page)]]))))))))
+                       (concat
+                        [[:db/retract id :block/name]
+                         [:db/add id :block/page (:db/id parent-page)]]
+                        (children-page-tx (:db/id parent-page)))))))))))
        tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks
