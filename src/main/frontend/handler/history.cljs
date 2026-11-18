@@ -1,10 +1,10 @@
 (ns ^:no-doc frontend.handler.history
   (:require [frontend.handler.editor :as editor]
+            [frontend.handler.common.editor :as editor-common]
             [frontend.handler.route :as route-handler]
             [frontend.persist-db.browser :as db-browser]
             [frontend.state :as state]
             [frontend.util :as util]
-            [goog.functions :refer [debounce]]
             [logseq.db :as ldb]
             [promesa.core :as p]))
 
@@ -63,37 +63,27 @@
         (state/set-state! :history/paused? false)
         restore-result))))
 
-(let [*last-request (atom nil)]
-  (defn- undo-aux!
-    [e]
-    (when-not (:editor/code-block-context (state/get-state))
-      (state/set-state! :editor/op :undo)
-      (p/do!
-       @*last-request
-       (when-let [repo (state/get-current-repo)]
-         (util/stop e)
+(defn- <run-history-command!
+  [e undo?]
+  (when-not (:editor/code-block-context (state/get-state))
+    (util/stop e)
+    (when-let [repo (state/get-current-repo)]
+      (editor-common/<enqueue-command!
+       repo
+       (fn []
+         (state/set-state! :editor/op (if undo? :undo :redo))
+         (when undo?
+           (state/set-state! [:editor/last-replace-ref-content-tx repo] nil))
          (p/do!
-          (state/set-state! [:editor/last-replace-ref-content-tx repo] nil)
           (editor/save-current-block!)
           (state/clear-editor-action!)
-          (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-undo repo))
-          (p/let [result @*last-request]
+          (p/let [result (state/<invoke-db-worker
+                         (if undo? :thread-api/undo-redo-undo :thread-api/undo-redo-redo)
+                         repo)]
             (restore-cursor-and-state! result))))))))
-(defonce undo! (debounce undo-aux! 20))
 
-(let [*last-request (atom nil)]
-  (defn- redo-aux!
-    [e]
-    (when-not (:editor/code-block-context (state/get-state))
-      (state/set-state! :editor/op :redo)
-      (p/do!
-       @*last-request
-       (when-let [repo (state/get-current-repo)]
-         (util/stop e)
-         (p/do!
-          (editor/save-current-block!)
-          (state/clear-editor-action!)
-          (reset! *last-request (state/<invoke-db-worker :thread-api/undo-redo-redo repo))
-          (p/let [result @*last-request]
-            (restore-cursor-and-state! result))))))))
-(defonce redo! (debounce redo-aux! 20))
+(defn- undo-aux! [e] (<run-history-command! e true))
+(defn- redo-aux! [e] (<run-history-command! e false))
+
+(def undo! undo-aux!)
+(def redo! redo-aux!)

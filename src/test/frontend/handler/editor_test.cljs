@@ -159,6 +159,26 @@
               :block-container :container}
              (editor/get-state))))))
 
+(deftest pending-insertion-buffers-text-without-shortcut-letters-test
+  (let [previous (state/get-state :editor/pending-new-block)
+        input #js {:value ""}]
+    (try
+      (state/set-state! :editor/pending-new-block {:typed-text ""})
+      (with-redefs [state/get-input (constantly input)
+                    state/get-edit-input-id (constantly "edit-block")
+                    state/get-editor-action (constantly nil)
+                    cursor/pos (constantly 0)
+                    editor-autopair/surround-by? (constantly false)
+                    util/stop (fn [_])]
+        (let [handle (editor/keydown-not-matched-handler :markdown)]
+          (doseq [[event expected] [[#js {:key "z" :ctrlKey true} ""]
+                                    [#js {:key "z" :metaKey true} ""]
+                                    [#js {:key "x"} "x"]]]
+            (handle event nil)
+            (is (= expected (:typed-text (state/get-state :editor/pending-new-block)))))))
+      (finally
+        (state/set-state! :editor/pending-new-block previous)))))
+
 (deftest enter-handler-uses-the-keydown-target-snapshot-test
   (let [stale-node #js {:value ""}
         target #js {:value "a"
