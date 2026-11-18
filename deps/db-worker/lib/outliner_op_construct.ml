@@ -1263,6 +1263,16 @@ let inverse_entry_of_entity db_before (ent : entity) (k : string)
   ( Wire.keyword k
   , if ref_attr db_before k then sanitize_ref_value db_before v else v )
 
+let save_block_removes_referenced_entity db_before db_after block =
+  match block_entity db_before block with
+  | None -> false
+  | Some before_ent ->
+      Ldb.ref_ids before_ent "block/refs"
+      |> List.exists (fun id ->
+             not
+               (Option.is_some
+                  (Seq.uncons (datoms db_after Eavt ~e:id ()))))
+
 (* op-construct/build-inverse-save-block *)
 let build_inverse_save_block db_before (block : Wire.t) (opts : Wire.t)
     : Wire.t option =
@@ -1891,10 +1901,15 @@ let build_strict_inverse_outliner_ops db_before db_after tx_data
            | Some (op, args) ->
                (match op with
                 | "save-block" ->
-                    Option.map
-                      (fun o -> [ o ])
-                      (build_inverse_save_block db_before (arg args 0)
-                         (arg args 1))
+                    if
+                      save_block_removes_referenced_entity db_before db_after
+                        (arg args 0)
+                    then None
+                    else
+                      Option.map
+                        (fun o -> [ o ])
+                        (build_inverse_save_block db_before (arg args 0)
+                           (arg args 1))
                 | "insert-blocks" | "apply-template" ->
                     build_inverse_insert_like db_before db_after tx_data args
                 | "move-blocks" ->
