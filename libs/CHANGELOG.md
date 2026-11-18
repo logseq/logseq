@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.6]
+
+### Fixed
+- Rebuild the SDK from the current master sources so the published bundle includes the latest SDK fixes and APIs alongside the dependency updates in 0.3.5.
+
 ## [0.3.5]
 
 ### Fixed
