@@ -1,7 +1,7 @@
 {
   "name": "@logseq/libs",
   "packageManager": "pnpm@10.33.0",
-  "version": "0.3.4",
+  "version": "0.3.6",
   "description": "Logseq SDK libraries",
   "main": "dist/lsplugin.user.js",
   "typings": "index.d.ts",
@@ -23,10 +23,10 @@
     "csstype": "3.2.3",
     "debug": "4.4.3",
     "deepmerge": "4.3.1",
-    "dompurify": "3.3.3",
+    "dompurify": "3.4.18",
     "eventemitter3": "5.0.4",
     "fast-deep-equal": "3.1.3",
-    "lodash-es": "4.17.23",
+    "lodash-es": "4.18.1",
     "path": "0.12.7"
   },
   "devDependencies": {
