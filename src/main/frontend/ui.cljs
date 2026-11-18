@@ -500,15 +500,32 @@
    [matched]))
 
 (defn auto-complete-item-label
-  "Icon + label for an auto-complete row. Slash commands and `select`
-  pickers both render rows with this, so their icons and text match.
-  `ui.css` styles it; `extra` renders after the label."
-  [{:keys [icon title]} label & extra]
+  "Icon + label for an auto-complete row. Slash commands, node and template
+  search, and `select` pickers all render rows with this, so icons and text
+  line up across popups. `ui.css` styles it.
+
+  `icon` is a Tabler icon name, or rendered icon hiccup (node icons, emoji);
+  either way it sits in the same fixed slot. `wrap?` lets long text wrap
+  instead of truncating. `extra` renders after the label."
+  [{icon' :icon :keys [title wrap?]} label & extra]
   (cond-> [:span.ui__ac-item-label]
-    title (conj {:title title})
-    icon (conj (shui/tabler-icon icon))
+    (or title wrap?) (conj (cond-> {}
+                             title (assoc :title title)
+                             wrap? (assoc :class "is-wrap")))
+    icon' (conj [:span.ui__ac-item-icon
+                 (if (string? icon') (shui/tabler-icon icon') icon')])
     true (conj [:span.ui__ac-item-text label])
     (seq extra) (into extra)))
+
+(defn auto-complete-empty
+  "Empty-state message for auto-complete lists, aligned with row text."
+  [& children]
+  (into [:div.ui__ac-empty] children))
+
+(defn auto-complete-hint
+  "Secondary hint line under an auto-complete list, aligned with row text."
+  [& children]
+  (into [:div.ui__ac-hint] children))
 
 (defn- auto-complete-group
   "One group of an auto-complete list: an optional title over its rows.

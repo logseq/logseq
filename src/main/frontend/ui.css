@@ -97,25 +97,54 @@
   @apply pt-3;
 }
 
+/* Rows: a fixed 18px icon slot one text line tall, then the label. The slot
+   centers on the first line, so wrapped labels keep the icon in place. */
 .ui__ac-item-label {
-  @apply flex items-center gap-1.5 min-w-0;
+  @apply flex items-start gap-1.5 min-w-0;
 
-  > .ui__icon {
-    @apply shrink-0 opacity-70;
-    color: inherit !important;
+  > .ui__ac-item-icon {
+    @apply flex h-5 w-[18px] shrink-0 items-center justify-center opacity-70;
+
+    .ui__icon {
+      color: inherit !important;
+    }
   }
 
   > .ui__ac-item-text {
-    @apply min-w-0 truncate font-normal;
+    @apply min-w-0 flex-1 truncate font-normal leading-5;
+  }
+
+  &.is-wrap > .ui__ac-item-text {
+    @apply whitespace-normal;
+    overflow-wrap: anywhere;
   }
 
   > .ui__ac-item-hint {
-    @apply shrink-0 text-xs text-gray-10;
+    @apply shrink-0 text-xs leading-5 text-gray-10;
   }
 }
 
-#ui__ac-inner .menu-link.chosen .ui__ac-item-label > .ui__icon {
+#ui__ac-inner .menu-link.chosen .ui__ac-item-label > .ui__ac-item-icon {
   @apply opacity-100;
+}
+
+/* Context line above a row's label (node breadcrumbs), indented to the text. */
+.ui__ac-item-context {
+  @apply mb-0.5 text-xs text-gray-11;
+  padding-left: calc(18px + var(--spacing) * 1.5);
+
+  &.no-icon {
+    @apply pl-0;
+  }
+}
+
+/* Empty state and hint lines use the rows' px-2 so text lines up. */
+.ui__ac-empty {
+  @apply px-2 py-1.5 text-sm text-gray-11;
+}
+
+.ui__ac-hint {
+  @apply flex items-center gap-2 px-2 pt-1.5 pb-0.5 text-xs text-gray-11;
 }
 
 /* `select` pickers cap their results at `.item-results-wrap`. Pass that cap

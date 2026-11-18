@@ -66,35 +66,33 @@
                  (:friendly-title block)
                  (assoc :block/title (:friendly-title block)))]
     (when-not (string/blank? (:block/title block'))
-      [:div.flex.flex-col
-       (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
-         (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-           [:div.text-xs.opacity-70.mb-1 {:style {:margin-left 3}}
-            (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block')
-                        {:disabled? true
-                         :block block'})]))
-       [:div.flex.flex-row.items-start
-        (when-not db-tag?
-          [:div.flex.items-center.h-5.mr-1.opacity-50
-           (cond
-             (:nlp-date? block')
-             (ui/icon "calendar" {:size 14})
-
-             (or (string/starts-with? (str (:block/title block')) (t :editor/new-tag))
-                 (string/starts-with? (str (:block/title block')) (t :editor/new-page)))
-             (ui/icon "plus" {:size 14})
-
-             :else
-             (icon-component/get-node-icon-cp block' {:ignore-current-icon? true}))])
-
-        (let [title (let [alias (get-in block' [:alias :block/title])]
-                      (block-handler/block-unique-title block' {:alias alias}))]
-          (if (or (string/starts-with? title (t :editor/new-tag))
-                  (string/starts-with? title (t :editor/new-page)))
+      (let [new-node-title? #(or (string/starts-with? (str %) (t :editor/new-tag))
+                                 (string/starts-with? (str %) (t :editor/new-page)))
+            ;; Tag search shows no icons; every other row keeps the slot,
+            ;; even when a node has no icon, so titles stay aligned.
+            icon (when-not db-tag?
+                   (cond
+                     (:nlp-date? block') "calendar"
+                     (new-node-title? (:block/title block')) "plus"
+                     :else (or (icon-component/get-node-icon-cp
+                                block' {:ignore-current-icon? true :size 18})
+                               [:span])))
+            title (let [alias (get-in block' [:alias :block/title])]
+                    (block-handler/block-unique-title block' {:alias alias}))]
+        [:div.flex.flex-col
+         (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
+           (when-let [breadcrumb (state/get-component :block/breadcrumb)]
+             [:div.ui__ac-item-context {:class (when db-tag? "no-icon")}
+              (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block')
+                          {:disabled? true
+                           :block block'})]))
+         (ui/auto-complete-item-label
+          {:icon icon :wrap? true}
+          (if (new-node-title? title)
             title
             (block-handler/block-title-with-icon block'
                                                  (search-handler/highlight-exact-query title q)
-                                                 icon-component/icon)))]])))
+                                                 icon-component/icon)))]))))
 
 (hsx/defc commands
   [id format]
@@ -256,17 +254,17 @@
                         (page-handler/page-not-exists-handler input))
          :item-render (fn [block _chosen?]
                         (node-render block q {:db-tag? db-tag?}))
-         :empty-placeholder [:div.text-gray-500.text-sm.px-4.py-2 (if db-tag?
-                                                                    (t :editor/search-for-tag)
-                                                                    (t :editor/search-for-node))]
+         :empty-placeholder (ui/auto-complete-empty (if db-tag?
+                                                      (t :editor/search-for-tag)
+                                                      (t :editor/search-for-node)))
          :class "black"})
 
        (when (and db-tag?
                   (not (string/blank? q))
                   (not= "page" (string/lower-case q)))
-         [:p.px-1.opacity-50.text-sm.flex.flex-row.items-center.gap-2
+         (ui/auto-complete-hint
           (shui/shortcut "mod+enter")
-          [:span (t :editor/display-tag-inline-hint)]])])))
+          [:span (t :editor/display-tag-inline-hint)]))])))
 
 (hsx/defc page-search
   "Page or tag searching popup"
@@ -343,7 +341,7 @@
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   [:div.text-gray-500.text-sm.px-4.py-2 (t :editor/block-search)]
+      :empty-placeholder   (ui/auto-complete-empty (t :editor/block-search))
       :item-render (fn [block]
                      (node-render block q {:db-tag? false}))
       :class       "ac-block-search"}))))
@@ -392,9 +390,9 @@
      matched-templates
      {:on-chosen   (editor-handler/template-on-chosen-handler id)
       :on-enter    (fn [_state] (state/clear-editor-action!))
-      :empty-placeholder [:div.text-gray-500.px-4.py-2.text-sm (t :editor/search-template-placeholder)]
+      :empty-placeholder (ui/auto-complete-empty (t :editor/search-template-placeholder))
       :item-render (fn [template]
-                     (:block/title template))
+                     (ui/auto-complete-item-label {:icon "template"} (:block/title template)))
       :class       "black"})))
 
 (hsx/defc template-search
@@ -483,7 +481,8 @@
           input-value input-value]
       (when (seq options)
         (let [command (:command (first options))]
-          [:div.p-2.rounded-md.flex.flex-col.gap-2
+          ;; The editor popup surface already pads this (p-1.5).
+          [:div.flex.flex-col.gap-2
            (for [{:keys [id placeholder type auto-focus]} options]
              (shui/input
               (cond->
