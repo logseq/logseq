@@ -29,7 +29,7 @@ let held : string list ref = ref []
 let parked : (string * W.t * (W.t -> unit)) list ref = ref []
 let filter_ref_uuid = "dd000000-0000-4000-8000-000000000001"
 let flat_children : (string, W.t list) Hashtbl.t = Hashtbl.create 8
-let block_requests : (string * bool) list ref = ref []
+let block_requests : (string * bool * bool * bool) list ref = ref []
 let collapsed_flags : (string, bool) Hashtbl.t = Hashtbl.create 8
 let collapse_writes : (string * bool) list ref = ref []
 let mounted_static_rows = ref []
@@ -132,7 +132,15 @@ let blocks_response = function
                | Some opts -> W.get opts "children?" = Some (W.Bool true)
                | None -> false
              in
-             block_requests := (u, children_requested) :: !block_requests;
+             let option_true name =
+               match W.get req "opts" with
+               | Some opts -> W.get opts name = Some (W.Bool true)
+               | None -> false
+             in
+             block_requests :=
+               (u, children_requested, option_true "all?",
+                option_true "include-collapsed-children?")
+               :: !block_requests;
              let children =
                if not children_requested then []
                else
@@ -529,21 +537,26 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
   in
   let request_flags uuid =
     List.filter_map
-      (fun (requested_uuid, children) ->
-        if requested_uuid = uuid then Some children else None)
+      (fun (requested_uuid, children, all, include_collapsed) ->
+        if requested_uuid = uuid then Some (children, all, include_collapsed)
+        else None)
       (List.rev !block_requests)
   in
   let group_filter_children_disabled () =
     List.for_all
       (fun uuid ->
         let flags = request_flags uuid in
-        flags <> [] && List.for_all not flags)
+        flags <> []
+        && List.for_all
+             (fun (children, all, include_collapsed) ->
+               not children && not all && not include_collapsed)
+             flags)
       [ page_uuid; journal_uuid; filter_ref_uuid ]
   in
   h.after 40 (fun () ->
       check_group_headers "views: Table" ~missing_group:true;
-      h.check "views: Table rows do not request descendants"
-        (request_flags root_uuid = [ false ]);
+      h.check "views: Table rows do not request child trees"
+        (request_flags root_uuid = [ (false, false, false) ]);
       h.check "views: Table group and filter references do not request descendants"
         (group_filter_children_disabled ());
       h.check "views: Table does not render List descendants"
@@ -551,8 +564,9 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
       Shared_scenarios_views.click_tab h s list_view;
       h.after 40 (fun () ->
           check_group_headers "views: List" ~missing_group:true;
-          h.check "views: List mode reloads descendants for the same row"
-            (request_flags root_uuid = [ false; true ]);
+          h.check "views: List mode requests a complete child tree for the same row"
+            (request_flags root_uuid
+             = [ (false, false, false); (true, true, true) ]);
           h.check "views: List group and filter references remain child-free"
             (group_filter_children_disabled ());
           let root_tree_texts () =

@@ -443,7 +443,9 @@ let load_blocks ?(merge = false) ?set_limit ?(fresh = fun () -> true)
       else Hashtbl.create (max 16 (List.length uuids))
     in
     Db.get_blocks uuids ~metadata:true
-      ~children_for:(fun uuid -> Hashtbl.mem child_uuids uuid)
+      ~children_for:(fun uuid ->
+        if Hashtbl.mem child_uuids uuid then Db.Complete_tree
+        else Db.No_children)
       ~on_error:(fun () -> finally (); on_error ()) (fun bs ->
         List.iter
           (fun b ->

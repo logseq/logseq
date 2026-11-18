@@ -277,7 +277,7 @@ let refresh_block inst f =
   | V.KQuery { block_uuid } ->
       let gen = V.new_fetch inst in
       Db.get_blocks [ block_uuid ] ~metadata:true
-        ~children_for:(fun _ -> true)
+        ~children_for:(fun _ -> Db.Visible_children)
         ~on_error:(fun () ->
           if V.fetch_fresh inst gen then begin
             set_query_error inst "";
@@ -374,7 +374,7 @@ let save_src ?(after = fun () -> ()) inst src =
         Db.save_block_title s.V.query_block_uuid src after
       else
         Db.get_blocks [ block_uuid ] ~metadata:true
-          ~children_for:(fun _ -> true)
+          ~children_for:(fun _ -> Db.Visible_children)
           ~include_property_block:true
           (fun ents ->
             if current () then
