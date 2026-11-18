@@ -26,3 +26,22 @@
                          :en-group-name "Advanced"})])]
         (is (= ["A faire"]
                (map first matched)))))))
+
+(deftest registered-slash-commands-use-the-pass-t-fn
+  (testing "registered commands are translated by each commands-map pass, so the English pass feeds cross-language search"
+    (let [registered @commands/*extend-slash-commands
+          t-fn (fn [k & _] (str "T:" (name k)))]
+      (reset! commands/*extend-slash-commands
+              [(fn [t-fn]
+                 [(t-fn :editor.slash/cloze)
+                  [[:editor/input "{{cloze }}"]]
+                  (t-fn :editor.slash/cloze-desc)
+                  :icon/brackets-contain
+                  (t-fn :editor.slash/group-format)])])
+      (try
+        (let [cloze (some #(when (= "T:cloze" (first %)) %)
+                          (commands/commands-map (constantly "") t-fn))]
+          (is (= "T:cloze-desc" (nth cloze 2)))
+          (is (= "T:group-format" (commands/command-group-name cloze))))
+        (finally
+          (reset! commands/*extend-slash-commands registered))))))
