@@ -154,9 +154,14 @@
 (defn open-dir-dialog
   ([] (open-dir-dialog nil))
   ([default-path]
-   (p/let [opts (cond-> {:properties ["openDirectory" "createDirectory" "promptToCreate"]}
-                  (and (string? default-path) (not (string/blank? default-path)))
-                  (assoc :defaultPath (node-path/dirname default-path)))
+   (p/let [default-dir (when (and (string? default-path) (not (string/blank? default-path)))
+                          (-> default-path node-path/normalize node-path/dirname))
+           directory-exists? (when default-dir
+                               (-> (fs-extra/stat default-dir)
+                                   (p/then (fn [^js stat] (.isDirectory stat)))
+                                   (p/catch (constantly false))))
+           opts (cond-> {:properties ["openDirectory" "createDirectory" "promptToCreate"]}
+                  directory-exists? (assoc :defaultPath default-dir))
            result (.showOpenDialog dialog (bean/->js opts))
            result (get (js->clj result) "filePaths")]
      (p/resolved (first result)))))
