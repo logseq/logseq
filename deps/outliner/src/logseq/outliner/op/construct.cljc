@@ -136,19 +136,12 @@
       schema)))
 
 (defn- sanitize-block-refs
-  [refs recorded-refs]
-  (let [recorded-by-lookup (into {}
-                                 (map (fn [ref-entity]
-                                        [[:block/uuid (:block/uuid ref-entity)] ref-entity]))
-                                 recorded-refs)]
-    (into []
-          (keep (fn [ref-value]
-                  (let [ref-entity (if (vector? ref-value)
-                                     (get recorded-by-lookup ref-value)
-                                     ref-value)]
-                    (when (:block/uuid ref-entity)
-                      (select-keys ref-entity [:block/uuid :block/title :db/ident])))))
-          refs)))
+  [refs]
+  (->> refs
+       (keep (fn [ref-entity]
+               (when (:block/uuid ref-entity)
+                 (select-keys ref-entity [:block/uuid :block/title :db/ident]))))
+       vec))
 
 (defn- ref-attr?
   [db a]
@@ -161,13 +154,16 @@
    (sanitize-block-payload db block nil))
   ([db block {:keys [created-uuids tx-data]}]
    (if (map? block)
-     (let [refs (sanitize-block-refs (:block/refs block) (get block rebase-refs-key))
-           created-ref-uuids (when (and (seq created-uuids) (seq refs))
-                               (->> refs
-                                    (keep :block/uuid)
-                                    (filter (set created-uuids))
-                                    distinct
-                                    vec))
+     (let [;; A replayed payload keeps the reference metadata recorded with it.
+           refs (or (get block rebase-refs-key)
+                    (sanitize-block-refs (:block/refs block)))
+           created-ref-uuids (or (get block rebase-created-refs-key)
+                                 (when (and (seq created-uuids) (seq refs))
+                                   (->> refs
+                                        (keep :block/uuid)
+                                        (filter (set created-uuids))
+                                        distinct
+                                        vec)))
           m (reduce-kv
              (fn [m k v]
                (cond
@@ -232,7 +228,6 @@
         recovered-block (if (some nil? block-refs)
                           (do
                             (when-not (and (seq refs)
-                                           (every? #(uuid? (:block/uuid %)) refs)
                                            (every? #(string? (:block/title %)) missing-refs))
                               (throw (ex-info "Cannot recover nil block refs without reference metadata"
                                               {:block/uuid (:block/uuid block)})))
