@@ -43,7 +43,7 @@
 }
 
 .ui__ac-group-name {
-  @apply p-2 text-xs text-popover-foreground/20 font-medium;
+  @apply px-2 pt-2.5 pb-1 text-xs font-medium text-gray-11 select-none;
 }
 
 .search-all #ui__ac-inner {
