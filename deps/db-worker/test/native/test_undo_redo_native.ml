@@ -1634,6 +1634,133 @@ let test_repeated_save_block_content_undo_redo () =
       ignore (Undo_redo.redo test_repo);
       check "title v3 again" (title_is "v3"))
 
+let test_save_block_undo_restores_orphaned_page_ref () =
+  with_worker_conns (fun () ->
+      Undo_redo.clear_history test_repo;
+      let conn = conn () in
+      let _page_uuid, _parent_uuid, block_uuid = seed_page_parent_child () in
+      let project_uuid = Uuid_gen.uuid () in
+      let date_uuid = "00000001-2026-1116-0000-000000000000" in
+      let create_page title uuid =
+        ignore
+          (Outliner_page.create_bang conn title
+             ~opts:(fun () ->
+               Outliner_page.create (db_of conn) title ~uuid ())
+             ())
+      in
+      create_page "Project Atlas" project_uuid;
+      create_page "Nov 16th, 2026" date_uuid;
+      let cursor caret =
+        Wire.Map
+          [ Wire.Keyword "block-uuid", Wire.Uuid block_uuid
+          ; Wire.Keyword "container-id", Wire.Int 0
+          ; Wire.Keyword "start-pos", Wire.Int caret
+          ; Wire.Keyword "end-pos", Wire.Int caret ]
+      in
+      let save_reference title before after =
+        Undo_redo.set_pending_editor_info test_repo (Some before);
+        let ops =
+          edn_wire
+            (Printf.sprintf
+               "[[:save-block [{:block/uuid %s :block/title %s} {}]]]"
+               (uuid_lit block_uuid) (qstr title))
+        in
+        let opts =
+          Wire.Map
+            [ Wire.Keyword "client-id", Wire.String "test-client"
+            ; Wire.Keyword "local-tx?", Wire.Bool true
+            ; Wire.Keyword "db-sync/tx-id", Wire.Uuid (Uuid_gen.uuid ())
+            ; Wire.Keyword "undo-redo/editor-info-after", after ]
+        in
+        ignore
+          (Outliner_op.apply_ops conn (normalize_ops (db_of conn) ops) opts)
+      in
+      let title () =
+        match ent_at_uuid (db_of conn) block_uuid with
+        | Some block -> Option.value (ent_title_of block) ~default:"<missing>"
+        | None -> "<missing-block>"
+      in
+      let refs () =
+        match ent_at_uuid (db_of conn) block_uuid with
+        | Some block -> List.map ent_uuid_of (Ldb.ref_ents block "block/refs")
+        | None -> []
+      in
+      let refs_resolve expected =
+        refs () = [ expected ]
+        && ent_at_uuid (db_of conn) expected <> None
+      in
+      save_reference "[[Project Atlas]]" (cursor 0) (cursor 1);
+      check "initial Project Atlas source is canonical"
+        (title () = "[[" ^ project_uuid ^ "]]");
+      check "initial Project Atlas reference resolves"
+        (refs_resolve project_uuid);
+      Undo_redo.clear_history test_repo;
+      save_reference "[[NovProject Atlas]]" (cursor 1) (cursor 2);
+      let intermediate_uuid =
+        match refs () with
+        | [ uuid ] -> uuid
+        | _ -> failwith "expected one intermediate page reference"
+      in
+      check "intermediate source is canonical"
+        (title () = "[[" ^ intermediate_uuid ^ "]]");
+      check "intermediate page was auto-created"
+        (ent_at_uuid (db_of conn) intermediate_uuid <> None);
+      check "intermediate page reference resolves"
+        (refs_resolve intermediate_uuid);
+      save_reference ("[[" ^ date_uuid ^ "]]") (cursor 2) (cursor 3);
+      check "date source is canonical" (title () = "[[" ^ date_uuid ^ "]]");
+      check "date page reference resolves" (refs_resolve date_uuid);
+      check "saving date removed intermediate block reference"
+        (not (List.mem intermediate_uuid (refs ())));
+      check "saving date collected the now-orphaned intermediate page"
+        (ent_at_uuid (db_of conn) intermediate_uuid = None);
+      let undo_result = Undo_redo.undo test_repo in
+      let undo_title = title () in
+      let undo_refs = refs () in
+      let undo_intermediate_exists =
+        ent_at_uuid (db_of conn) intermediate_uuid <> None
+      in
+      let undo_refs_resolve =
+        undo_title = "[[" ^ intermediate_uuid ^ "]]"
+        && undo_refs = [ intermediate_uuid ]
+        && undo_intermediate_exists
+        && List.for_all
+             (fun uuid -> ent_at_uuid (db_of conn) uuid <> None)
+             undo_refs
+      in
+      let redo_result = Undo_redo.redo test_repo in
+      let redo_title = title () in
+      let redo_refs = refs () in
+      let redo_refs_resolve =
+        List.for_all
+          (fun uuid -> ent_at_uuid (db_of conn) uuid <> None)
+          redo_refs
+      in
+      let redo_date_exists = ent_at_uuid (db_of conn) date_uuid <> None in
+      let assertions =
+        [ "undo applied", (match undo_result with Wire.Map _ -> true | _ -> false)
+        ; "undo restores intermediate source",
+          undo_title = "[[" ^ intermediate_uuid ^ "]]"
+        ; "undo restores intermediate block reference",
+          undo_refs = [ intermediate_uuid ]
+        ; "undo restores intermediate page entity",
+          undo_intermediate_exists
+        ; "all references resolve after undo", undo_refs_resolve
+        ; "redo applied", (match redo_result with Wire.Map _ -> true | _ -> false)
+        ; "redo restores Nov 16th, 2026 source", redo_title = "[[" ^ date_uuid ^ "]]"
+        ; "redo restores Nov 16th, 2026 block reference", redo_refs = [ date_uuid ]
+        ; "redo resolves Nov 16th, 2026 reference",
+          redo_date_exists && redo_refs_resolve ]
+      in
+      let failures =
+        List.filter_map (fun (name, passed) -> if passed then None else Some name)
+          assertions
+      in
+      check
+        ("worker save-block Undo/Redo invariants: "
+         ^ String.concat "; " failures)
+        (failures = []))
+
 let test_repeated_save_block_op_content_undo_redo () =
   with_worker_conns (fun () ->
       Undo_redo.clear_history test_repo;
@@ -2727,6 +2854,9 @@ let cases =
       test_undo_insert_retracts_added_entity_cleanly
   ; Alcotest.test_case "repeated-save-block-content-undo-redo-test" `Quick
       test_repeated_save_block_content_undo_redo
+  ; Alcotest.test_case
+      "save-block-undo-restores-orphaned-page-ref-test" `Quick
+      test_save_block_undo_restores_orphaned_page_ref
   ; Alcotest.test_case "repeated-save-block-op-content-undo-redo-test" `Quick
       test_repeated_save_block_op_content_undo_redo
   ; Alcotest.test_case

@@ -541,6 +541,9 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
         Sync_deps.require "rewrite_block_title_with_retracted_refs"
           Sync_deps.rewrite_block_title_with_retracted_refs db block_base
       in
+      let block' =
+        Outliner_op.attach_title_page_refs conn (block_map_wire block')
+      in
       (match block_ent with
        | None ->
            invalid_rebase_op (Wire.keyword op)
@@ -548,7 +551,7 @@ let rec replay_canonical_outliner_op (conn : conn) (op_entry : Wire.t)
                        ; Wire.keyword "reason", Wire.keyword "missing-block" ])
        | Some _ -> ());
       ignore
-        (Outliner_core.save_block_conn conn (block_map_wire block')
+        (Outliner_core.save_block_conn conn block'
            (Outliner_op.save_opts_of (opts_wire_map opts))
            (block_map_wire opts));
       None
