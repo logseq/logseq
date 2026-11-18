@@ -1,3 +1,4 @@
+import type { PluginLocal } from '../LSPlugin.core'
 import { safeSnakeCase } from '../common'
 
 /**
@@ -44,10 +45,6 @@ type LSPluginExperimentsContext = {
   resolveResourceFullUrl(filePath: string): string
 }
 
-type LSPluginExperimentsPluginLocal = {
-  [key: string]: any
-}
-
 /**
  * WARN: These are some experience features and might be adjusted at any time.
  * These unofficial plugins that use these APIs are temporarily
@@ -84,7 +81,7 @@ export class LSPluginExperiments {
     }
   }
 
-  get pluginLocal(): LSPluginExperimentsPluginLocal {
+  get pluginLocal(): PluginLocal {
     return this.ensureHostScope().LSPluginCore.ensurePlugin(
       this.ctx.baseInfo.id
     )
