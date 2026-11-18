@@ -3690,9 +3690,8 @@
       (is (false? @restored?))
       (is (= "{{youtube-timestamp 45}}" @inserted-val)))))
 
-(deftest insert-safely-ignores-nil-value-test
-  (let [content-set? (atom false)]
-    (with-redefs [gdom/getElement (constantly (js-obj "value" "some text"))
-                  state/set-block-content-and-last-pos! (fn [& _] (reset! content-set? true))]
-      (commands/insert! "mock-input-id" nil {})
-      (is (false? @content-set?) "insert! should not modify block content when value is nil"))))
+(deftest insert-requires-string-value-test
+  (is (thrown-with-msg? js/Error #"commands/insert! expects value to be a string"
+        (commands/insert! "mock-input-id" nil {})))
+  (is (thrown-with-msg? js/Error #"commands/insert! expects value to be a string"
+        (commands/insert! "mock-input-id" {:text "invalid"} {}))))

@@ -435,7 +435,8 @@
    {:keys [last-pattern postfix-fn backward-pos end-pattern backward-truncate-number
            command only-breakline?]
     :as _option}]
-  (when-let [input (and id (string? value) (gdom/getElement id))]
+  (assert (string? value) "commands/insert! expects value to be a string")
+  (when-let [input (gdom/getElement id)]
     (let [last-pattern (when-not (= last-pattern :skip-check)
                          (when-not backward-truncate-number
                            (or last-pattern command-trigger)))
