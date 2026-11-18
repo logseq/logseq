@@ -20,9 +20,9 @@
   (when (and db (string? page-name))
     (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
           journal-day (when formatter (date-time-util/journal-title->int page-name [formatter]))]
-      (if journal-day
-        (:e (first (d/datoms db :avet :block/journal-day journal-day)))
-        (first (sort (map :e (entity-util/get-pages-by-name db page-name))))))))
+      (or (when journal-day
+            (:e (first (d/datoms db :avet :block/journal-day journal-day))))
+          (first (sort (map :e (entity-util/get-pages-by-name db page-name))))))))
 
 (defn get-first-page-by-title
   "Return the oldest page's db id for :block/title"
