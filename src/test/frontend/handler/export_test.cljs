@@ -231,6 +231,56 @@
              (set! (.-showSaveFilePicker js/window) original-picker)
              (done)))))))
 
+(deftest file-name-sanitizes-slashes-and-colons-test
+  (testing "replaces forward and backward slashes and colons with underscores"
+    (let [ts 1700000000000
+          expected-suffix (str "_" (quot ts 1000) ".sqlite")]
+      (with-redefs [util/time-ms (constantly ts)]
+        (is (= (str "my-graph" expected-suffix)
+               (export/file-name "my-graph" :sqlite)))
+        (is (= (str "user_my-graph" expected-suffix)
+               (export/file-name "user/my-graph" "sqlite")))
+        (is (= (str "user_sub_my-graph" expected-suffix)
+               (export/file-name "/user/sub/my-graph" :sqlite)))
+        (is (= (str "C__Users_graph" expected-suffix)
+               (export/file-name "C:\\Users\\graph" "sqlite")))))))
+
+(deftest export-sqlite-db-on-web-sanitizes-suggested-name-when-repo-has-slashes-test
+  (async done
+    (let [picker-calls (atom [])
+          original-electron? util/electron?
+          original-export-db persist-db/<export-db
+          original-picker (.-showSaveFilePicker js/window)
+          payload (js/Uint8Array. #js [1 2 3])]
+      (set! util/electron? (constantly false))
+      (set! persist-db/<export-db (fn [_repo _opts]
+                                    (p/resolved payload)))
+      (set! (.-showSaveFilePicker js/window)
+            (fn [opts]
+              (swap! picker-calls conj opts)
+              (p/resolved #js {:createWritable
+                               (fn []
+                                 (p/resolved #js {:write (fn [_] (p/resolved nil))
+                                                  :close (fn [] (p/resolved nil))}))})))
+      (letfn [(cleanup! []
+                (set! util/electron? original-electron?)
+                (set! persist-db/<export-db original-export-db)
+                (set! (.-showSaveFilePicker js/window) original-picker)
+                (done))]
+        (-> (export/export-repo-as-sqlite-db! "user/my-graph")
+            (p/then (fn [_]
+                      (is (= 1 (count @picker-calls)))
+                      (let [suggested-name (.-suggestedName (first @picker-calls))]
+                        (is (not (string/includes? suggested-name "/"))
+                            "suggestedName must not contain forward slashes")
+                        (is (not (string/includes? suggested-name "\\"))
+                            "suggestedName must not contain backslashes")
+                        (is (string/starts-with? suggested-name "user_my-graph_"))
+                        (is (string/ends-with? suggested-name ".sqlite")))))
+            (p/catch (fn [e]
+                       (is false (str "unexpected error: " e))))
+            (p/finally cleanup!))))))
+
 (deftest export-zip-on-electron-writes-export-file-and-notifies-path
   (async done
     (let [mkdir-calls (atom [])
