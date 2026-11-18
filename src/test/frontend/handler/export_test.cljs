@@ -442,6 +442,37 @@
                (is false (str error))))
             (p/finally cleanup!))))))
 
+(deftest web-backup-migrates-legacy-latin1-handle-key-test
+  (async done
+    (let [repo "logseq_db_café"
+          backup-folder "Backups"
+          mock-handle #js {:name backup-folder}
+          legacy-key (str "handle/" (js/btoa repo) "/" backup-folder)
+          primary-key (export/repo-handle-key repo backup-folder)
+          idb-store (atom {legacy-key mock-handle})
+          original-idb-get-item idb/get-item
+          original-idb-set-item! idb/set-item!]
+      (set! idb/get-item
+            (fn [key]
+              (p/resolved (get @idb-store key))))
+      (set! idb/set-item!
+            (fn [key val]
+              (swap! idb-store assoc key val)
+              (p/resolved nil)))
+      (letfn [(cleanup! []
+                (set! idb/get-item original-idb-get-item)
+                (set! idb/set-item! original-idb-set-item!)
+                (done))]
+        (-> (#'export/<get-backup-handle repo backup-folder)
+            (p/then
+             (fn [handle]
+               (is (= mock-handle handle) "Finds handle via legacy Latin-1 key")
+               (is (= mock-handle (get @idb-store primary-key)) "Migrates handle to primary UTF-8 key")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
 (deftest auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test
   (async done
     (let [repo "logseq_db_backup_worker"
