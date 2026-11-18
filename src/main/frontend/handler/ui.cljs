@@ -221,6 +221,17 @@
     (when (some-> heading .-classList (.contains "ui__ac-group-name"))
       heading)))
 
+(defn- auto-complete-edge-padding
+  "Returns the container's `scroll-padding-top` in px.
+
+  `#ui__ac-inner` sets it to the height of its edge fade, so keyboard
+  navigation stops each row clear of the faded edge."
+  [container]
+  (if (and (some? (.-nodeType container)) (exists? js/getComputedStyle))
+    (let [padding (js/parseFloat (.-scrollPaddingTop (js/getComputedStyle container)))]
+      (if (js/isNaN padding) 0 padding))
+    0))
+
 (defn- auto-complete-scroll-geometry
   "Builds focused-item geometry from `container` and `element` DOM nodes.
 
@@ -243,20 +254,24 @@
                         element-top)]
       {:scroll-top scroll-top
        :viewport-height (.-clientHeight container)
+       :edge-padding (auto-complete-edge-padding container)
        :item-top cluster-top
        :item-height (- (+ element-top (.-height element-rect)) cluster-top)})))
 
 (defn- auto-complete-keep-visible-scroll-top
-  "Returns a `scrollTop` that keeps the focused item inside the viewport."
-  [{:keys [scroll-top viewport-height item-top item-height]}]
+  "Returns a `scrollTop` that keeps the focused item inside the viewport,
+  at least `edge-padding` px away from either edge."
+  [{:keys [scroll-top viewport-height item-top item-height edge-padding]
+    :or {edge-padding 0}}]
   (let [item-bottom (+ item-top item-height)
-        viewport-bottom (+ scroll-top viewport-height)]
+        viewport-top (+ scroll-top edge-padding)
+        viewport-bottom (- (+ scroll-top viewport-height) edge-padding)]
     (cond
-      (< item-top scroll-top)
-      (max 0 item-top)
+      (< item-top viewport-top)
+      (max 0 (- item-top edge-padding))
 
       (> item-bottom viewport-bottom)
-      (max 0 (- item-bottom viewport-height))
+      (max 0 (- (+ item-bottom edge-padding) viewport-height))
 
       :else
       scroll-top)))
@@ -264,12 +279,12 @@
 (defn- auto-complete-scroll-into-view!
   "Keeps the highlighted auto-complete item visible in `#ui__ac-inner`.
 
-  Slash-command and search popups scroll that inner list, not the popover
-  wrapper. Arrow up/down used to set `scrollTop` on `#ui__ac`'s parent, so
-  the chosen row could move out of view."
+  Every auto-complete (slash commands, search popups, `select` pickers)
+  scrolls that inner list, not the popover wrapper, so the container is
+  looked up from the item itself."
   [idx]
-  (when-let [element (gdom/getElement (str "ac-" idx))]
-    (when-let [container (gdom/getElement "ui__ac-inner")]
+  (when-let [^js element (gdom/getElement (str "ac-" idx))]
+    (when-let [container (.closest element "#ui__ac-inner")]
       (when-let [geometry (auto-complete-scroll-geometry container element)]
         (set! (.-scrollTop container)
               (auto-complete-keep-visible-scroll-top geometry))))))

@@ -1,8 +1,33 @@
+/* Every auto-complete list scrolls here, whether it sits in an editor popup or
+   in a `select` picker. Edges that hide more content fade out; the fade is
+   toggled by `sync-auto-complete-scroll-fade!` in ui.cljs, and keyboard
+   navigation reads `scroll-padding` so the chosen row stays clear of it. */
 #ui__ac-inner {
+  --ui-ac-fade-size: 16px;
+  --ui-ac-fade-top: 0px;
+  --ui-ac-fade-bottom: 0px;
+
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   position: relative;
   -webkit-overflow-scrolling: touch;
+  scroll-padding-block: var(--ui-ac-fade-size);
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--ui-ac-fade-top),
+    #000 calc(100% - var(--ui-ac-fade-bottom)),
+    transparent 100%
+  );
+
+  &[data-fade-top] {
+    --ui-ac-fade-top: var(--ui-ac-fade-size);
+  }
+
+  &[data-fade-bottom] {
+    --ui-ac-fade-bottom: var(--ui-ac-fade-size);
+  }
 
   .menu-link {
     @apply break-all rounded;
@@ -44,6 +69,20 @@
 
 .ui__ac-group-name {
   @apply px-2 pt-2.5 pb-1 text-xs font-medium text-gray-11 select-none;
+}
+
+/* `select` pickers cap their results at `.item-results-wrap`. Pass that cap
+   down so `#ui__ac-inner` stays the scroll container, as in editor popups. */
+.item-results-wrap {
+  @apply flex flex-col;
+
+  > #ui__ac {
+    @apply flex flex-col min-h-0;
+  }
+
+  #ui__ac-inner {
+    @apply min-h-0;
+  }
 }
 
 .search-all #ui__ac-inner {

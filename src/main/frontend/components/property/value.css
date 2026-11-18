@@ -13,13 +13,13 @@
   @apply min-w-[224px];
 }
 
+/* Size the list from the popover's available height, like the slash menu,
+   instead of a fixed box that clipped the last row. `#ui__ac-inner` scrolls. */
 .ls-property-dialog {
   .ls-property-key {
-    @apply overflow-y-hidden h-[286px];
-
     .cp__select-main {
       .item-results-wrap {
-        @apply max-h-[250px];
+        max-height: min(calc(var(--available-height, 320px) - 64px), 256px);
       }
     }
   }

@@ -16,6 +16,7 @@
           element #js {:getBoundingClientRect (fn [] #js {:top 90 :height 30})}]
       (is (= {:scroll-top 100
               :viewport-height 240
+              :edge-padding 0
               :item-top 150
               :item-height 30}
              (#'ui-handler/auto-complete-scroll-geometry container element)))))
@@ -31,6 +32,7 @@
                        :getBoundingClientRect (fn [] #js {:top 72 :height 30})}]
       (is (= {:scroll-top 100
               :viewport-height 240
+              :edge-padding 0
               :item-top 100
               :item-height 62}
              (#'ui-handler/auto-complete-scroll-geometry container element)))))
@@ -71,6 +73,30 @@
                  :viewport-height 200
                  :item-top 0
                  :item-height 52}))))
+  (testing "stops a row below the viewport clear of the bottom edge fade"
+    (is (= 186
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 0
+             :viewport-height 200
+             :edge-padding 16
+             :item-top 350
+             :item-height 20}))))
+  (testing "stops a row above the viewport clear of the top edge fade"
+    (is (= 24
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 200
+             :viewport-height 200
+             :edge-padding 16
+             :item-top 40
+             :item-height 20}))))
+  (testing "scrolls a row sitting under the bottom edge fade back into the clear"
+    (is (= 106
+           (#'ui-handler/auto-complete-keep-visible-scroll-top
+            {:scroll-top 100
+             :viewport-height 200
+             :edge-padding 16
+             :item-top 270
+             :item-height 20}))))
   (testing "keeps scroll-top when the focused item is already visible"
     (is (= 100
            (#'ui-handler/auto-complete-keep-visible-scroll-top

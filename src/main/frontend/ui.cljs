@@ -473,6 +473,32 @@
       (handler)
       #(.removeEventListener js/window.visualViewport "resize" handler))))
 
+(defn- sync-auto-complete-scroll-fade!
+  "Marks which edges of the auto-complete scroll container hide more content.
+  `ui.css` fades only those edges, so rows at rest are never masked."
+  [^js el]
+  (when el
+    (let [scroll-top (.-scrollTop el)
+          max-scroll-top (- (.-scrollHeight el) (.-clientHeight el))]
+      (.toggleAttribute el "data-fade-top" (> scroll-top 1))
+      (.toggleAttribute el "data-fade-bottom" (< scroll-top (dec max-scroll-top))))))
+
+(defn- use-auto-complete-scroll-fade!
+  [*inner matched]
+  (hooks/use-layout-effect!
+   (fn []
+     (when-let [^js el (hooks/deref *inner)]
+       (let [sync! #(sync-auto-complete-scroll-fade! el)
+             observer (when (exists? js/ResizeObserver)
+                        (js/ResizeObserver. sync!))]
+         (sync!)
+         (.addEventListener el "scroll" sync! #js {:passive true})
+         (some-> observer (.observe el))
+         #(do
+            (.removeEventListener el "scroll" sync!)
+            (some-> observer (.disconnect))))))
+   [matched]))
+
 (hsx/defc auto-complete
   [matched
    {:keys [on-chosen
@@ -490,6 +516,8 @@
                   matched)
         *current-idx (hooks/use-memo #(atom 0) [])
         [current-idx] (hooks/use-atom *current-idx)
+        *inner (hooks/use-ref nil)
+        _ (use-auto-complete-scroll-fade! *inner matched)
         shortcut-state {:matched matched
                         :opts opts
                         ::current-idx *current-idx}
@@ -519,6 +547,7 @@
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
+        {:ref *inner}
         (when header header)
         (cond
           get-group-name
