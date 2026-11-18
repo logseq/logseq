@@ -174,23 +174,37 @@ let block_of_result ~children_requested (w : W.t) : W.t =
   | Some b -> b
   | None -> w
 
-let get_blocks uuids ?(metadata = false) ?(children_for = fun _ -> false)
+type children_policy = No_children | Visible_children | Complete_tree
+
+let children_options = function
+  | No_children -> false, false, false
+  | Visible_children -> true, false, false
+  | Complete_tree -> true, true, true
+
+let get_blocks uuids ?(metadata = false) ?(children_for = fun _ -> No_children)
     ?(include_property_block = false) ?(on_error = fun () -> ()) f =
   let requested_children = Hashtbl.create (max 1 (List.length uuids)) in
   let requests =
     List.map
       (fun u ->
-        let children_requested = children_for u in
+        let policy = children_for u in
+        let children_requested, all, include_collapsed_children =
+          children_options policy
+        in
         Hashtbl.replace requested_children u children_requested;
+        let opts =
+          [ (W.kw "block-metadata?", W.Bool metadata)
+          ; (W.kw "children?", W.Bool children_requested)
+          ]
+          @ (if all then [ (W.kw "all?", W.Bool true) ] else [])
+          @ (if include_collapsed_children then
+               [ (W.kw "include-collapsed-children?", W.Bool true) ]
+             else [])
+          @ [ (W.kw "include-property-block?", W.Bool include_property_block) ]
+        in
         W.Map
           [ (W.kw "id", W.Uuid u)
-          ; ( W.kw "opts"
-            , W.Map
-                ([ (W.kw "block-metadata?", W.Bool metadata)
-                 ; (W.kw "children?", W.Bool children_requested)
-                 ; ( W.kw "include-property-block?"
-                   , W.Bool include_property_block )
-                 ]) )
+          ; (W.kw "opts", W.Map opts)
           ])
       uuids
   in
@@ -388,7 +402,8 @@ let insert_view_block ~current ?(on_error = fun () -> ())
     ?(after = fun () -> ()) ~title ~uuid ~page_uuid
     ~owner_uuid ~feature_type () =
   let repo = repo () in
-  get_blocks [ page_uuid ] ~metadata:true ~children_for:(fun _ -> true)
+  get_blocks [ page_uuid ] ~metadata:true
+    ~children_for:(fun _ -> Visible_children)
     ~on_error (fun ents ->
       if current () then begin
       let last_child_uuid =
