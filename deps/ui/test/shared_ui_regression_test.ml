@@ -872,6 +872,9 @@ let preview_reference_disclosure ~registry ~profile =
         (Option.is_some (counter child_id) && Option.is_none (counter root_id)
          && not (references_visible ()));
       let child_counter = Option.get (counter child_id) in
+      check "Preview reference counts expose the action's accessible label"
+        (M.string_prop child_counter "accessibility-label" =
+           Some (I18n.t "block/open-block-references"));
       List.iter (fun expected ->
         S.press session child_counter.M.id; S.flush session;
         check "Preview count presses expand and re-collapse the referenced block's inline references"

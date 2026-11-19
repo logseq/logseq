@@ -1066,6 +1066,7 @@ let preview_row_extras ~open_in_sidebar ~render_references context counts : Tree
       Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
         (button ~key:("preview-count-" ^ uuid) ~variant:`ghost ~size:`sm
           ~accessibility_identifier:("preview-reference-count-" ^ uuid)
+          ~label:(U.t "block/open-block-references")
           ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
           ~tooltip:(U.t "block/open-block-references")
           ~on_press:activate ~on_press_detail:activate
