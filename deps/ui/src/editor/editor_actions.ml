@@ -2878,7 +2878,76 @@ let toggle_open_blocks () =
       });
   if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
 
+module History_ui = struct
+  let map fields = Wire.Map (List.map (fun (key, value) -> Wire.kw key, value) fields)
+
+  let snapshot route =
+    let destination, parameters = match route with
+      | Model.Home -> "home", []
+      | Model.Journals -> "all-journals", []
+      | Model.Page name | Model.Block_zoom name -> "page", ["name", Wire.String name]
+      | Model.Library -> "page", ["name", Wire.String "Library"]
+      | Model.All_pages -> "all-pages", []
+      | Model.All_graphs -> "graphs", []
+      | Model.Import -> "import", []
+      | Model.Bug_report -> "bug-report", []
+      | Model.Bug_report_clipboard -> "bug-report-tool", []
+      | Model.Settings -> "settings", []
+      | Model.File path -> "file", ["path", Wire.String path]
+      | Model.Not_found path -> "not-found", ["path", Wire.String path] in
+    map ["route-data", map ["to", Wire.Keyword destination;
+      "path-params", map parameters; "query-params", Wire.Nil]]
+
+  let href state =
+    match Wire.get state "route-data" with
+    | None | Some Wire.Nil -> None
+    | Some route ->
+        match Wire.get route "to" with
+        | Some (Wire.Keyword "home") -> Some "#/"
+        | Some (Wire.Keyword "all-journals") -> Some "#/all-journals"
+        | Some (Wire.Keyword ("page" | "page-block")) ->
+            let parameters = Option.get (Wire.get route "path-params") in
+            let name = Option.get (Wire.map_get_string parameters "name") in
+            Some ("#/page/" ^ Ui_services.uri_encode_component name)
+        | _ -> None
+
+  let restoring : string option ref = ref None
+
+  let record_navigation ~before ~after =
+    let old_state = snapshot before and new_state = snapshot after in
+    let paused = match !restoring with Some path -> href new_state = Some path | None -> false in
+    restoring := None;
+    if not paused && old_state <> new_state then
+      match (Runtime.model ()).Model.repo with
+      | None -> ()
+      | Some repo ->
+          let payload = Wire.String (Transit.to_string
+            (map ["old-state", old_state; "new-state", new_state])) in
+          Ops.after_saves repo (fun () ->
+            ignore (Runtime.invoke2 "thread-api/undo-redo-record-ui-state" (Wire.String repo) payload
+              |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+              |> Js.Promise.catch (fun error ->
+                Ui_services.log_error ("navigation history failed", error);
+                Js.Promise.resolve ())))
+
+  let restore result =
+    match Wire.get result "ui-state-str" with
+    | None | Some Wire.Nil -> false
+    | Some (Wire.String payload) ->
+        let states = Transit.of_string payload in
+        let key = if Wire.get result "undo?" = Some (Wire.Bool true) then "old-state" else "new-state" in
+        let state = Option.get (Wire.get states key) in
+        (match href state with
+         | Some target when href (snapshot (Runtime.route ())) <> Some target ->
+             restoring := Some target;
+             Ui_services.nav_set_hash (Runtime.nav_hash target)
+         | _ -> ());
+        true
+    | Some _ -> invalid_arg "Navigation history must contain a Transit string"
+end
+
 let restore_history result =
+  if History_ui.restore result then Js.Promise.resolve () else
   let context = action_context () in
   let editing = S.editing () in
   let current () = context = action_context ()

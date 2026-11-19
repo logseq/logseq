@@ -824,6 +824,7 @@ let rec resolve () =
       (* commit and close any in-progress edit before the route swaps
          (cljs exits editing on navigation) *)
       Editor_actions.flush_edit ();
+      Editor_actions.History_ui.record_navigation ~before:(Runtime.route ()) ~after:route;
       (* cljs unmounts its modal stack on route change *)
       if Dialogs_state.ready () then Dialogs_state.close_all ();
       (* Page fetches start before the commit — the

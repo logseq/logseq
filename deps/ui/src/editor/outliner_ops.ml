@@ -190,8 +190,49 @@ let trim_title uuid title = if source_block uuid then title else String.trim tit
    same origin repo. Navigation retires UI actions, not committed text. *)
 let autosave_revisions : (string option * string, int) Hashtbl.t = Hashtbl.create 4
 let autosave_revision = ref 0
+let save_waiters : (string, (unit -> unit) list) Hashtbl.t = Hashtbl.create 4
+let active_saves : (string, int) Hashtbl.t = Hashtbl.create 4
+
+let saves_in_flight repo =
+  Option.value (Hashtbl.find_opt active_saves repo) ~default:0 > 0
+  || Hashtbl.fold (fun (source, _) _ pending -> pending || source = Some repo)
+       autosave_revisions false
+
+let notify_saves = function
+  | Some repo when not (saves_in_flight repo) ->
+      let callbacks = Option.value (Hashtbl.find_opt save_waiters repo) ~default:[] in
+      Hashtbl.remove save_waiters repo;
+      List.iter (fun finish -> finish ()) (List.rev callbacks)
+  | _ -> ()
+
+let after_saves repo finish =
+  if not (saves_in_flight repo) then finish ()
+  else Hashtbl.replace save_waiters repo
+      (finish :: Option.value (Hashtbl.find_opt save_waiters repo) ~default:[])
+
+let await_saves repo =
+  Js.Promise.make (fun ~resolve ~reject:_ ->
+    after_saves repo (fun () -> resolve Wire.Nil [@u]))
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+
+let begin_save = function
+  | None -> ()
+  | Some repo -> Hashtbl.replace active_saves repo
+      (1 + Option.value (Hashtbl.find_opt active_saves repo) ~default:0)
+
+let finish_save repo =
+  (match repo with
+   | None -> ()
+   | Some repo ->
+       let count = Hashtbl.find active_saves repo - 1 in
+       if count = 0 then Hashtbl.remove active_saves repo
+       else Hashtbl.replace active_saves repo count);
+  notify_saves repo
+
 let invalidate_autosave uuid =
-  Hashtbl.remove autosave_revisions ((Runtime.model ()).Model.repo, uuid)
+  let repo = (Runtime.model ()).Model.repo in
+  Hashtbl.remove autosave_revisions (repo, uuid);
+  notify_saves repo
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -1129,10 +1170,17 @@ let save_current save =
 
 let release_save save =
   if save_current save then
-    Hashtbl.remove autosave_revisions (save.context.repo, save.uuid)
+    Hashtbl.remove autosave_revisions (save.context.repo, save.uuid);
+  notify_saves save.context.repo
 
 let save_pending_result ?current save =
   if not (save_current save) then Js.Promise.resolve None else
+  let () = begin_save save.context.repo in
+  let finished = ref false in
+  let finish () = if not !finished then begin
+    finished := true;
+    finish_save save.context.repo
+  end in
   let write =
     let* bm =
       block_map_parsed_source ~origin_repo:(Option.get save.context.repo)
@@ -1153,7 +1201,13 @@ let save_pending_result ?current save =
     end;
     Js.Promise.resolve (if accepted then result else None)
   in
-  write |> Js.Promise.catch (fun _ -> release_save save; write)
+  let guarded = write |> Js.Promise.catch (fun _ ->
+       release_save save;
+       finish ();
+       write) in
+  let* result = guarded in
+  finish ();
+  Js.Promise.resolve result
 
 let save_pending ?current save =
   let* _ = save_pending_result ?current save in
@@ -1964,6 +2018,15 @@ let restore_history ?owner result =
   if refresh_current ?owner context then !(S.restore_history) result
   else Js.Promise.resolve ()
 
+let apply_history_result ?owner result =
+  match Wire.get result "ui-state-str" with
+  | Some (Wire.String _) -> !(S.restore_history) result
+  | _ ->
+      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
+      match owner with
+      | Some owner -> require_refresh_success owner
+      | None -> Js.Promise.resolve ()
+
 let undo ?owner () =
   let context = Runtime.model () in
   let owner = refresh_owner_for owner in
@@ -1971,14 +2034,12 @@ let undo ?owner () =
   match context.Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
+      let* () = await_saves repo in
       if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
-      match owner with
-      | Some owner -> require_refresh_success owner
-      | None -> Js.Promise.resolve ()))
+      apply_history_result ?owner result))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
@@ -1992,14 +2053,12 @@ let redo ?owner () =
   match context.Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
+      let* () = await_saves repo in
       if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
-      match owner with
-      | Some owner -> require_refresh_success owner
-      | None -> Js.Promise.resolve ()))
+      apply_history_result ?owner result))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");

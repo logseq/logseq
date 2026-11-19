@@ -1209,6 +1209,89 @@ let test_navigation_retires_dirty_editor (h : host) =
   in
   switch [ false; true ]
 
+let test_navigation_history (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "history source"];
+  let source = h.snapshot () in
+  let original_hash = Ui_services.nav_hash () in
+  let target = Model.Page "History Target" in
+  set_editing ~uuid:"b1" ~buffer:"history saved" ~caret:13 ~base:"history source";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let events = ref [] and payloads = ref [] and fail_record = ref false in
+  let release = ref (fun () -> ()) in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+    if name = "thread-api/apply-outliner-ops" then begin
+      events := !events @ ["save"];
+      let* _ = Js.Promise.make (fun ~resolve ~reject:_ ->
+        release := (fun () -> resolve W.Nil [@u])) in
+      worker.Worker_client.invoke_fn name args
+    end else if name = "thread-api/undo-redo-record-ui-state" then begin
+      events := !events @ ["record"];
+      match args with
+      | [W.String repo; W.String payload] ->
+          check "Route history remains bound to its initiating graph" (repo = h.repo);
+          if !fail_record then h.reject_promise "history record fixture rejected"
+          else (payloads := !payloads @ [payload]; Js.Promise.resolve W.Nil)
+      | _ -> invalid_arg "history record fixture protocol"
+    end else if name = "thread-api/undo-redo-undo" then begin
+      events := !events @ ["undo"];
+      Js.Promise.resolve (W.Map [W.kw "undo?", W.Bool true;
+        W.kw "ui-state-str", W.String (List.hd !payloads)])
+    end else if name = "thread-api/get-page-route-info" then Js.Promise.resolve W.Nil
+    else worker.Worker_client.invoke_fn name args) };
+  Ui_services.nav_set_hash (Runtime.nav_hash "#/page/History%20Target");
+  Router.resolve ();
+  let* () = h.wait_ms 25 in
+  check "Navigation cannot precede its accepted text save in undo history"
+    (!events = ["save"] && !payloads = []);
+  h.restore {source with Model.route = target; route_page = None};
+  let history = Ops.undo () in
+  let* () = h.wait_ms 25 in
+  check "Undo waits for a save already detached by route navigation" (!events = ["save"]);
+  !release ();
+  let* () = history in
+  check "Accepted text, navigation state and undo dispatch retain their order"
+    (!events = ["save";"record";"undo"]);
+  let payload = List.hd !payloads in
+  let states = Transit.of_string payload in
+  check "Undo of navigation restores its prior page hash"
+    (Ui_services.nav_hash () = Runtime.nav_hash
+       (Option.get (A.History_ui.href (Option.get (W.get states "old-state")))));
+  Router.resolve ();
+  h.restore source;
+  let* () = h.wait_ms 25 in
+  check "Restoring navigation does not create another undo entry" (List.length !payloads = 1);
+  let* () = A.restore_history (W.Map [W.kw "undo?", W.Bool false;
+    W.kw "ui-state-str", W.String payload]) in
+  check "Redo restores the destination rather than the editing source page"
+    (Ui_services.nav_hash () = Runtime.nav_hash "#/page/History%20Target");
+  Router.resolve ();
+  h.restore {source with Model.route = target; route_page = None};
+  let* () = h.wait_ms 25 in
+  check "Redo also suppresses recording its own navigation" (List.length !payloads = 1);
+  A.History_ui.record_navigation ~before:target ~after:target;
+  h.restore {source with Model.repo = None};
+  A.History_ui.record_navigation ~before:source.Model.route ~after:target;
+  check "Unchanged routes and sessions without a graph add no history" (List.length !payloads = 1);
+  check "A result without UI history is left to editor-cursor restoration"
+    (not (A.History_ui.restore W.Nil));
+  check "Invalid internal UI history payloads are rejected"
+    (try ignore (A.History_ui.restore (W.Map [W.kw "ui-state-str", W.Int 1])); false
+     with Invalid_argument _ -> true);
+  h.restore source;
+  fail_record := true;
+  A.History_ui.record_navigation ~before:source.Model.route ~after:target;
+  let* () = h.wait_ms 25 in
+  check "A failed history write neither invents an entry nor changes the active route"
+    (List.length !payloads = 1 && Runtime.route () = source.Model.route);
+  Runtime.worker := Some worker;
+  A.History_ui.restoring := None;
+  Ui_services.nav_replace_hash original_hash;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_history_after_navigation (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
@@ -2243,6 +2326,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_exit_after_navigation h in
   let* () = test_navigation_retires_dirty_editor h in
   let* () = test_history_after_navigation h in
+  let* () = test_navigation_history h in
   let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in

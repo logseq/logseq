@@ -48,7 +48,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E16 | Drag selection, selection toolbar and drop/selection indicator parity. |
 | Editor E22 | Indent, type and undo twice: caret 0 in Master versus end-of-block in the reported LUI case. |
 | Editor E23 | Generic context-menu dismissal selection lifecycle beyond the four repaired actions; preserve asynchronous clipboard/delete ownership. |
-| Editor E31 | Cross-page undo/redo navigation: route-state recording/restoration is in progress locally; not yet accepted. |
+| History UI state | Master also records sidebar open/collapse/items. The current local repair records routes only, not sidebar layout history. |
 | Editor E38 | Video timestamp shortcut insertion, including actual current playback time. |
 | Editor E40 | Cross-page five-step undo: stored `A` versus `AB` after the reported sequence. Do not assume route restoration alone fixes transaction progress. |
 | Calculator extra root | Extra empty root after calculator flows is unexplained; Enter versus Escape has not been isolated. No speculative fix. |
@@ -75,6 +75,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E12 / E23 / E30 / E32 | Select-all save/exit, four reported menu-action cleanups, real autocomplete Tab focus traversal, and image clipping after the crash repair. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
+| Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |
 | Shell N1 / N20 | Decorative `#` Tab stop, empty-cmdk footer focus and Escape-to-body. The Escape path was reviewed, not newly browser-verified. |
 | Shell N3 / N6 / N17 | Navigation-menu origin and tooltip geometry/typography. |
 | Shell N9 / N12 | Cmdk Create-footer foreground and title-action offset/gap/foreground. |
