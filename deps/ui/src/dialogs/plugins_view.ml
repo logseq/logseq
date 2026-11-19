@@ -681,7 +681,7 @@ let body (_ms : Model.t Signal.signal) : t =
   in
   let node =
     reactive
-      (fun (tab_now, _dirty) ->
+      (fun _dirty ->
         column ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
           [ Ui_components.with_props [Ui_components.Prop.padding_bottom 8]
@@ -700,9 +700,9 @@ let body (_ms : Model.t Signal.signal) : t =
                       (link ~url:"https://github.com/logseq/marketplace" ~target:`blank
                         ~text:(t "plugin/contribute") []) ]
               ]
-          ; box ~key:"pl-panels" 
-              [ (if tab_now = "marketplace" then
-                   column
+          ; box ~key:"pl-panels"
+              [ if_ ~test:(reactive ((=) "marketplace") (Signal.value tab))
+                  (column ~key:"marketplace-panel"
                      [ reactive (fun pkgs ->
                          let themes = List.length
                            (List.filter (fun p -> Plugin_host.jbool p "theme") pkgs) in
@@ -715,18 +715,16 @@ let body (_ms : Model.t Signal.signal) : t =
                              ~search_st:mkt_search ~pkgs:pkg_now ~stats:stat_now
                              ~filter ~sort ~loading:load_now)
                          mkt_sig (Signal.value filter) (Signal.value sort)
-                     ]
-                 else
-                   reactive
+                     ])
+              ; if_ ~test:(reactive ((=) "installed") (Signal.value tab))
+                  (reactive
                      (fun (search, cat) ->
                        installed_panel ~key:"inst" ~search ~cat
                          ~search_st:inst_search ~cat_st:inst_cat)
                      inst_sig)
               ]
           ])
-      (own2 pair
-         (Signal.value tab)
-         (Plugin_host.dirty_value owner))
+      (Plugin_host.dirty_value owner)
   in
   node ctx parent
 

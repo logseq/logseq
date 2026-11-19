@@ -1444,6 +1444,40 @@ module Account_settings = struct
           let now = Ui_services.time_now () in
           if end_ > now && day <= now +. 365. *. 86_400_000. then Some end_ else None
 
+  let local_date value =
+    let date = Dates.fields value in
+    Printf.sprintf "%04d-%02d-%02d" date.year date.month date.day
+
+  let expiration_picker value : t =
+   fun ctx parent ->
+    let opened = Signal.state ctx.Lui_ui.ui_scheduler false in
+    let set = Runtime.signal_set in
+    let close () = set opened false in
+    let label = pat "expiration" in
+    let picker =
+      reactive (fun date ->
+        popover ~key:"pat-expiration-calendar" ~anchor:`below ~anchor_alignment:`start
+          ~background:"hsl(var(--popover))" ~corner_radius:8 ~border_width:1
+          ~border_color:"hsl(var(--border))" ~on_dismiss:(fun _ -> close ())
+          [Ui_components.calendar ?initial:(Dates.parse_local_datetime date)
+             ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
+             ~month_label:T.calendar_month_label ~day_label:T.calendar_day_label
+             ~translate:T.t ~initial_focus_day:true
+             ~on_pick:(fun ts ->
+               let date = local_date ts in
+               if Option.is_some (expiry date) then (close (); set value date)) ()])
+        (Signal.value value)
+    in
+    column ~key:"pat-expiration" ~grow:1. ~min_width:0 ~gap:4
+      [caption label;
+       box
+         [Ui_components.button ~variant:`outline ~height:36 ~label
+            ~icon:(`app "calendar") ~icon_placement:`trailing
+            ~text_signal:(Signal.value value)
+            ~on_press:(fun _ -> set opened (not (Signal.get (Signal.value opened)))) [];
+          if_ ~test:(Signal.value opened) picker]]
+      ctx parent
+
   let tokens : t =
    fun ctx parent ->
     let owner = ctx.Lui_ui.ui_scheduler in
@@ -1451,8 +1485,7 @@ module Account_settings = struct
     let graphs = Signal.state owner [] and graph = Signal.state owner ""
     and access = Signal.state owner "both" and pending = Signal.state owner false
     and created = Signal.state owner None in
-    let date = Dates.fields (Dates.shift_day (Ui_services.time_now ()) 30) in
-    let end_date = Signal.state owner (Printf.sprintf "%04d-%02d-%02d" date.year date.month date.day) in
+    let end_date = Signal.state owner (local_date (Dates.shift_day (Ui_services.time_now ()) 30)) in
     let get s = Signal.get (Signal.value s) and set = Runtime.signal_set in
     let url = Rtc_ops.http_base () ^ "/api/v1/personal-access-tokens" in
     let failed () = set pending false; Toast.error (pat "request-error") in
@@ -1524,10 +1557,7 @@ module Account_settings = struct
               [menu ~key:"pat-graph" (pat "graph") (Signal.value graph) options (set graph);
                menu ~key:"pat-permission" (pat "permission") (Signal.value access)
                  (List.map (fun p -> (p, permission p)) ["read"; "write"; "both"]) (set access);
-               column ~grow:1. ~min_width:0 ~gap:4 [caption (pat "expiration");
-                 Ui_components.form_input ~height:36 ~label:(pat "expiration")
-                   ~text_signal:(Signal.value end_date)
-                   ~on_input:(function Lui_protocol.TextChanged (_, v) -> set end_date v | _ -> ()) []]])
+               expiration_picker end_date])
             (Signal.value graphs);
           row [Ui_components.button ~variant:`primary ~icon:(`app "key") ~text:(pat "create")
             ~disabled:(reactive (fun id date busy -> id = "" || expiry date = None || busy)
@@ -1569,12 +1599,12 @@ module Account_settings = struct
     let keys = Signal.state owner `Loading and mode = Signal.state owner `Default
     and status = Signal.state owner None and private_key = Signal.state owner None
     and current = Signal.state owner "" and password = Signal.state owner ""
-    and unlock = Signal.state owner "" and pending = Signal.state owner false in
+    and reveal_open = Signal.state owner false and pending = Signal.state owner false in
     let set = Runtime.signal_set and get s = Signal.get (Signal.value s) in
     let key = encryption_key in
-    let secret ?(autofocus = false) label state =
+    let secret label state =
       column ~gap:6 [caption label;
-        Ui_components.secure_field ~height:36 ~label ~autofocus ~text_signal:(Signal.value state)
+        Ui_components.secure_field ~height:36 ~label ~text_signal:(Signal.value state)
           ~on_input:(function Lui_protocol.TextChanged (_, value) -> set state value | _ -> ()) []]
     in
     let view =
@@ -1626,18 +1656,48 @@ module Account_settings = struct
               [text ~as_:`Code ~grow:1. ~min_width:0 ~value:key_value [];
                button (key "copy-key") (fun () -> Ui_services.clipboard_copy key_value)]
           in
-          let reveal () =
-            if not (get pending) && String.trim (get unlock) <> "" then begin
-              set pending true;
-              run ctx (Runtime.invoke1 "thread-api/reveal-user-rsa-private-key" (s (get unlock)))
-                ~ok:(fun w ->
-                  set pending false;
-                  match w with
-                  | Wire.Binary bytes ->
-                      set unlock ""; set private_key (Some (key_base64 bytes)); change `Default
-                  | _ -> set status (Some (key "key-unavailable")))
-                ~error:(fun () -> set pending false; set status (Some (key "wrong-password")))
-            end
+          let reveal_dialog : t =
+           fun dialog_ctx parent ->
+            let unlock = Signal.state owner "" and busy = Signal.state owner false
+            and feedback = Signal.state owner None in
+            let close () = set reveal_open false in
+            let submit () =
+              if not (get busy) && String.trim (get unlock) <> "" then begin
+                set busy true;
+                run dialog_ctx
+                  (Runtime.invoke1 "thread-api/reveal-user-rsa-private-key" (s (get unlock)))
+                  ~ok:(fun w ->
+                    set busy false;
+                    match w with
+                    | Wire.Binary bytes ->
+                        set private_key (Some (key_base64 bytes)); close ()
+                    | _ -> set feedback (Some (key "key-unavailable")))
+                  ~error:(fun () -> set busy false; set feedback (Some (key "wrong-password")))
+              end
+            in
+            let title = key "enter-password-title" in
+            Ui_components.dialog ~key:"reveal-private-key" ~content_sized:true
+              ~text:title ~padding:16 ~gap:32 ~on_dismiss:(fun _ -> close ())
+              [column ~gap:32
+                 [text ~font_size:"1.5rem" ~font_weight:500 ~value:title [];
+                  column ~gap:16
+                    [column ~gap:4
+                       [Ui_requests.pw_input dialog_ctx ~key:"reveal-password"
+                          ~placeholder:(key "enter-password") ~autofocus:true ~value:unlock
+                          ~on_enter:submit;
+                        reactive (function
+                          | None -> spacer []
+                          | Some value ->
+                              text ~font_size:"0.875rem"
+                                ~foreground:"var(--lx-yellow-10)" ~value [])
+                          (Signal.value feedback)];
+                     Ui_components.button ~variant:`primary ~text:(T.t "ui/submit")
+                       ~disabled:(reactive (fun value busy -> String.trim value = "" || busy)
+                         (Signal.value unlock) (Signal.value busy))
+                       ~on_press:(fun _ -> submit ()) []]];
+               Ui_components.dialog_close ~key:"reveal-close" ~label:(T.t "ui/close")
+                 ~on_press:(fun _ -> close ())]
+              dialog_ctx parent
           in
           let status_line = reactive (function None -> spacer [] | Some msg -> caption msg) (Signal.value status) in
           reactive (function
@@ -1664,20 +1724,16 @@ module Account_settings = struct
                      Option.fold ~none:(caption (key "key-unavailable")) ~some:key_line public];
                    column ~gap:4 [caption (key "private-key");
                      reactive (function Some value -> key_line value | None ->
-                         row [button (key "show-private-key") (fun () -> change `Reveal)])
+                         row [button (key "show-private-key") (fun () -> set reveal_open true)])
                        (Signal.value private_key)];
+                   if_ ~test:(Signal.value reveal_open) reveal_dialog;
                    reactive (fun mode ->
                      let explanatory =
                        if mode = `Forgot then [caption (key "forgot-password-warning")]
-                       else if mode = `Reveal then []
                        else [caption (key "remember-password-rich"); caption (key "cloud-password-rich")] in
                      column ~gap:12 (explanatory @
                        (match mode with
                         | `Default -> [row [button (key "reset-password") (fun () -> change `Reset)]; status_line]
-                        | `Reveal ->
-                            [secret ~autofocus:true (key "enter-password") unlock; status_line;
-                             row ~gap:8 [button (key "show-private-key") reveal;
-                               button (T.t "ui/cancel") (fun () -> set unlock ""; change `Default)]]
                         | `Reset | `Forgot ->
                             (if mode = `Reset then [secret (key "current-password") current] else [])
                             @ [secret (key "set-new-password") password; status_line;
