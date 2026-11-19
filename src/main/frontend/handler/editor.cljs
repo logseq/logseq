@@ -1757,10 +1757,12 @@
   (show-action-bar! {:delay 200})
   nil)
 
+(declare after-pending-move)
+
 (defn on-select-block
   [direction]
   (fn [_event]
-    (select-block-up-down direction)))
+    (after-pending-move #(select-block-up-down direction))))
 
 (defn save-block-aux!
   [block value opts]
@@ -2091,6 +2093,16 @@
                    (when (identical? @*move-up-down-tail tail)
                      (reset! *move-up-down-tail nil))))
       result)))
+
+(defn- after-pending-move
+  "Runs `f` once a running Alt+Shift+Up/Down has reselected the moved rows,
+  right away when none runs. Until then the selection holds the rows drawn
+  before the move, which are no longer in the page, so a Shift+Up/Down or
+  Up/Down read from them found no neighbour and did nothing."
+  [f]
+  (if-let [pending @*move-up-down-tail]
+    (p/then pending (fn [_] (f)))
+    (f)))
 
 (defn get-selected-ordered-blocks
   []
@@ -3796,7 +3808,7 @@
         (keydown-up-down-handler direction {})
 
         (state/selection?)
-        (select-up-down direction)
+        (after-pending-move #(select-up-down direction))
 
         ;; if there is an edit-input-id set, we are probably still on editing mode,
         ;; that is not fully initialized
@@ -3821,7 +3833,7 @@
           (select-block-up-down direction)
           ;; simulate text selection
           (cursor/select-up-down input direction anchor cursor-rect)))
-      (select-block-up-down direction))))
+      (after-pending-move #(select-block-up-down direction)))))
 
 (defn editor-commands-popup-exists?
   []
