@@ -1001,6 +1001,54 @@ let test_exit_waits_for_save (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_select_all_exit (h : host) =
+  let* () = settle h 40 in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | rejected :: rest ->
+        reset_editor ();
+        stage_page h [ Test_check.block "b1" "old"; Test_check.block "b2" "second" ];
+        A.clear_selection ();
+        set_editing ~uuid:"b1" ~buffer:"saved before selection" ~caret:22 ~base:"old";
+        install_worker ~repo:h.repo h;
+        let worker = Option.get !Runtime.worker in
+        let attempted = ref false in
+        Runtime.worker := Some { worker with Worker_client.invoke_fn =
+          (fun name args ->
+            if name = "thread-api/apply-outliner-ops" then begin
+              attempted := true;
+              if rejected then h.reject_promise "select-all save rejected"
+              else worker.Worker_client.invoke_fn name args
+            end else worker.Worker_client.invoke_fn name args) };
+        Editor_keys.apply_input "b1"
+          (EI.Key (EM.key_ev ~meta:true ~shift:true "A", false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Select-all commits its edited block before retiring the input" !attempted;
+        if rejected then
+          check "A rejected select-all save retains the dirty editor"
+            (S.editing_uuid () = Some "b1"
+             && A.live_buffer "b1" = "saved before selection")
+        else begin
+          check "Select-all exits editing and preserves the outline selection"
+            (S.editing () = None
+             && S.String_set.equal (S.selected ()) (S.String_set.of_list ["b1"; "b2"])
+             && S.selection_scope () = "main" && S.anchor () = Some "b1");
+          check "Select-all saves the complete buffer"
+            (current_titles () = ["saved before selection"; "second"])
+        end;
+        Runtime.worker := Some worker;
+        run rest
+  in
+  let* () = run [false; true] in
+  reset_editor ();
+  stage_page h [];
+  A.clear_selection ();
+  A.select_all ();
+  check "Select-all on an empty outline leaves no editor or selection"
+    (S.editing () = None && S.String_set.is_empty (S.selected ()));
+  Js.Promise.resolve ()
+
 let test_enter_edit_origin (h : host) =
   let saved = h.snapshot () in
   let generation = !Runtime.load_gen in
@@ -2124,6 +2172,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
   let* () = test_exit_waits_for_save h in
+  let* () = test_select_all_exit h in
   let* () = test_enter_edit_origin h in
   let* () = test_exit_after_navigation h in
   let* () = test_navigation_retires_dirty_editor h in

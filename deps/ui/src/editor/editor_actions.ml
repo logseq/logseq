@@ -1745,15 +1745,18 @@ let select_single_in ~scope uuid =
 let select_single uuid = select_single_in ~scope:(scope_of_uuid uuid) uuid
 
 let select_all () =
+  let scope = S.interaction_scope () in
   match flat_uuids () with
   | [] -> ()
-  | first :: _ ->
+  | first :: _ as uuids ->
       S.set (fun st ->
           { st with
-            S.selected = S.String_set.of_list (flat_uuids ())
+            S.selected = S.String_set.of_list uuids
+          ; selection_scope = scope
           ; anchor = Some first
           ; action_bar = false
-          })
+          });
+      Option.iter (fun _ -> exit_edit ~select:false) (S.editing ())
 
 let clear_selection ?scope () =
   S.set (fun st ->
