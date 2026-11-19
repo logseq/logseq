@@ -97,7 +97,18 @@ let set_journals_calendar_enabled env enabled =
   in
   Assert.is_visible_l card
 
-  let () =
+let () =
+  Fest.Promise.test "marketplace-search-autofocus-test" (fun () ->
+      let* env = env in
+      let* () = Fixtures.new_logseq_page env in
+      let* () = open_plugins_dialog env in
+      let* () = switch_to_marketplace env in
+      let* () = Pw.press env "j" in
+      let* value = Pw.input_value env ".cp__plugins-page input[placeholder*='Search']" in
+      Fest.equal value "j" Fest.expect;
+      Js.Promise.resolve ())
+
+let () =
   Fest.Promise.test "marketplace-tabs-search-and-state-test" (fun () ->
     let* env = env in
     let* () = Fixtures.new_logseq_page env in

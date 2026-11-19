@@ -22,6 +22,7 @@ let show ?key ?code ?duration ~kind msg =
 let success msg = show ~kind:"success" msg
 let error msg = show ~kind:"error" msg
 let warning msg = show ~kind:"warning" msg
+let reserved_graph_name_key = "reserved-graph-name"
 let code ?(prefix = "") ?(copy_first = false) msg =
   show ~kind:"success"
     ~code:{Model.code_text = msg; code_copy_first = copy_first} (prefix ^ msg)

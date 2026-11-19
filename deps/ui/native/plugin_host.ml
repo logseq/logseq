@@ -117,7 +117,8 @@ let marketplace : Js.Json.t Js.Promise.t option ref = ref None
 (* cljs plugin-handler/load-marketplace-plugins: packages list, kept on
    the web platform filter; the fetch lands async while the view already
    renders its loading state *)
-let marketplace_pkgs (owner : Signal.scheduler) : Js.Json.t Js.Promise.t =
+let marketplace_pkgs ?(refresh = false) (owner : Signal.scheduler) : Js.Json.t Js.Promise.t =
+  if refresh then marketplace := None;
   match !marketplace with
   | Some p -> p
   | None -> (
@@ -145,7 +146,8 @@ let stats_url =
 
 let marketplace_stats : Js.Json.t Js.Promise.t option ref = ref None
 
-let fetch_stats () : Js.Json.t Js.Promise.t =
+let fetch_stats ?(refresh = false) () : Js.Json.t Js.Promise.t =
+  if refresh then marketplace_stats := None;
   match !marketplace_stats with
   | Some p -> p
   | None ->
@@ -157,6 +159,12 @@ let fetch_stats () : Js.Json.t Js.Promise.t =
       p
 let call_button_action _pid _action _key = report_unavailable "callButtonAction"
 let check_or_update _id _repo _only_check = report_unavailable "checkOrUpdate"
+let supports_auto_updates = false
+let auto_updates () = false
+let set_auto_updates _ = report_unavailable "autoCheckUpdates"
+let plugin_logs _ = []
+let clear_plugin_logs _ = report_unavailable "clearPluginLogs"
+let watch_plugin_logs ~scope:_ _ _ = ()
 let update_version _id = None
 let plugin_settings_schema _pid : Js.Json.t list = []
 let plugin_settings_json _pid : Js.Json.t = jobj []
