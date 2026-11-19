@@ -102,7 +102,7 @@ let contribution : t = fun ctx parent ->
   (Ui_parts.string_prop Lui_protocol.DisplayValue
     ~value:(reactive (fun width -> if width >= 640. then "inline-flex" else "none") width)
     (Ui_components.with_props [Ui_components.Prop.position `absolute;
-      Ui_components.Prop.inset_top (-42.); Ui_components.Prop.inset_right 20.;
+      Ui_components.Prop.inset_top (-42.); Ui_components.Prop.inset_right 8.;
       Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.font_weight 500;
       Ui_components.Prop.line_height "20px"; Ui_components.Prop.opacity 0.6]
       (row ~key:"contribution"
@@ -343,29 +343,29 @@ let market_card ~stats ~search_st pkg =
         [ Ui_components.Prop.position `absolute
         ; Ui_components.Prop.inset_bottom (-8.)
         ; Ui_components.Prop.inset_left (-7.)
-        ; Ui_components.Prop.padding_left 8
+        ; Ui_components.Prop.padding_left 18
         ; Ui_components.Prop.inset_right 7. ]
       (row ~key:"ctl" ~main:`space_between
              ~cross:`center
              [ Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
-               (row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
+               (row ~key:"ctl-l" ~style_class:"l" ~cross:`center
                  ((* cljs card-ctls-of-market .l: stars + total downloads
-                     from stats.json *)
+                     from stats.json; each li is pr-3 with a 16px icon *)
                   match package_stat stats id with
                   | None -> []
                   | Some st ->
-                      row ~key:"stars" ~cross:`center
-                        ~gap:2
-                        [ icon ~name:(`app "star") ~size:`sm []
-                        ; text ~key:"n" ~value:(string_of_int st.stars)
-                            [] ]
+                      Ui_components.with_props [ Ui_components.Prop.padding_right 12 ]
+                        (row ~key:"stars" ~cross:`center ~gap:4
+                           [ icon ~name:(`app "star") ~point_size:16 []
+                           ; text ~key:"n" ~value:(string_of_int st.stars)
+                               [] ])
                       ::
                       (if st.downloads > 0 then
-                         [ row ~key:"dls"
-                             ~cross:`center ~gap:2
-                             [ icon ~name:(`app "cloud-down") ~size:`sm []
-                             ; text ~key:"n"
-                                 ~value:(format_number st.downloads) [] ]
+                         [ Ui_components.with_props [ Ui_components.Prop.padding_right 12 ]
+                             (row ~key:"dls" ~cross:`center ~gap:4
+                                [ icon ~name:(`app "cloud-down") ~point_size:16 []
+                                ; text ~key:"n"
+                                    ~value:(format_number st.downloads) [] ])
                          ]
                        else [])))
              ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
@@ -373,7 +373,7 @@ let market_card ~stats ~search_st pkg =
                      [Ui_components.Prop.font_size "0.8125rem";
                       Ui_components.Prop.hover_opacity 0.8]
                     (Ui_components.button ~variant:`ghost ~key:"btn"
-                     ~height:21 ~min_height:0 ~padding_horizontal:0 ~padding_vertical:0
+                     ~height:21 ~min_height:0 ~padding_horizontal:4 ~padding_vertical:0
                      ~foreground:"var(--ls-link-text-color, var(--lx-accent-11))"
                      ~style_class:
                        ("btn" ^ if installed_ then " disabled" else "")
