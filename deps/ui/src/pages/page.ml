@@ -1458,7 +1458,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
             key a = key b)
           page_tabs_el ms ])
   in
-  let footer ~source : t =
+  let footer ~source ~spacing : t =
    fun context parent ->
     let section = Signal.get source in
     let flags = Signal.own_signal context.Lui_ui.ui_scope
@@ -1481,7 +1481,13 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
               ~previous_blank:(reactive (fun section collapse ->
                 Add_button.previous_blank ~scope section.Outliner_projection.page.page_blocks collapse)
                 source (S.collapse_sig ()))
-              ~flags:(fun _ -> flags) () ]) ])
+              ~flags:(fun _ -> flags) () ])
+          ; (match spacing with
+             | None -> Logseq_el.nothing
+             | Some spacing ->
+                 Ui_parts.int_prop Lui_protocol.HeightValue
+                   ~value:(reactive (fun value -> int_of_float (Float.ceil value)) spacing)
+                   (box ~key:"page-blocks-minimum-spacer" ~min_height:0 [])) ])
       ; reactive ~equal:linked_refs_eq linked_refs_el ms
       ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms ]) context parent
   in
@@ -1489,7 +1495,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
     (column ~key:"page" ~min_width:0 ~padding_horizontal:8
       ~data_attrs:(reactive wrap_attrs_of ms)
       [ Flat_outliner.view ~state:outline ~library ~header
-          ~footer:(fun ~source ~spacing:_ -> footer ~source) ()
+          ~section_minimum_height:(60. -. 28.) ~section_blocks_only:true ~footer ()
       ; Selection_bar.view ~model:ms () ])) ctx parent
 
 (* the route-root dynamic segment — page routes keep the region mounted

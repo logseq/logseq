@@ -136,7 +136,7 @@ let block_row ~state ~library ~source : t =
                   source (Signal.value count)) ])))
     ctx parent
 
-let view ~state ~library ~header ~footer ?section_minimum_height
+let view ~state ~library ~header ~footer ?section_minimum_height ?(section_blocks_only = false)
     ?(padding_horizontal = 0)
     ?(on_end = fun () -> ()) () : t =
  fun ctx parent ->
@@ -146,7 +146,7 @@ let view ~state ~library ~header ~footer ?section_minimum_height
           "main-outline-journal-measure-"
           ^ string_of_int (Outline_viewport_state.fresh_presentation_id ())
         in
-        Some (root_id, Virt_list.section_spacings ctx ~minimum ~rows:state.rows)
+        Some (root_id, Virt_list.section_spacings ~blocks_only:section_blocks_only ctx ~minimum ~rows:state.rows)
     | _ -> None in
   let root = column ~key:"main-outline"
       ?accessibility_identifier:(Option.map fst measurements)

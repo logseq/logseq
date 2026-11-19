@@ -2407,8 +2407,14 @@ let test_views_builder () =
   (match tree_of_src "\"text\"" with
    | COp ("and", [ CText "text" ]) -> check "tree_of_src text wrap" true
    | _ -> check "tree_of_src text wrap" false);
-  check "tree_of_src preserves unsupported source" (tree_of_src "sym" = CInvalid "sym");
-  check "tree_of_src preserves malformed source" (tree_of_src "(broken" = CInvalid "(broken");
+  check "tree_of_src treats bare symbols as full-text searches"
+    (tree_of_src "sym" = COp ("and", [CText "sym"]));
+  check "tree_of_src treats unwrapped clauses as full-text searches"
+    (tree_of_src "(broken" = COp ("and", [CText "(broken"]));
+  check "tree_of_src preserves malformed wrapped DSL"
+    (tree_of_src "(and (property :x)" = CInvalid "(and (property :x)");
+  check "tree_of_src retains the complete plain-text query"
+    (tree_of_src "Search seed parity" = COp ("and", [CText "Search seed parity"]));
   (* loc-based tree surgery: loc [i] at a group indexes clause i-1;
      [0] targets the group node itself *)
   let ta, tb, tc = (ci "a" [], ci "b" [], ci "c" []) in
@@ -2759,6 +2765,15 @@ let test_views_state () =
      = Some (Wire.Keyword "p/g"))
 
 let test_views_query () =
+  check "plain-text query source becomes a full-text DSL string"
+    (Views_query.parse_src "Search seed parity" = Views_query.QDsl "\"Search seed parity\"");
+  check "plain-text query quoting preserves literal quotes and backslashes"
+    (Views_query.parse_src "find \"quoted\" \\ text"
+     = Views_query.QDsl (Edn.to_string (Wire.String "find \"quoted\" \\ text")));
+  List.iter (fun source ->
+    check "structured DSL source is not quoted as full text"
+      (Views_query.parse_src source = Views_query.QDsl source))
+    ["[[Target Page]]"; "[?b :block/title ?title]"; "\"quoted text\"" ];
   check "parse blank" (Views_query.parse_src "" = Views_query.QBlank);
   check "parse (and)" (Views_query.parse_src "(and)" = Views_query.QBlank);
   (match Views_query.parse_src "(and (task \"TODO\"))" with

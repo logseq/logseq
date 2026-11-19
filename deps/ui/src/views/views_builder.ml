@@ -190,10 +190,11 @@ let rec clause_of_wire (w : W.t) : clause option =
   | _ -> None
 
 let tree_of_src (src : string) : clause =
-  let t = String.trim src in
-  if t = "" then COp ("and", [])
-  else try
-    match clause_of_wire (read_source t) with
+  match Views_query.parse_src_result src with
+  | Ok Views_query.QBlank -> COp ("and", [])
+  | Error _ | Ok (Views_query.QDatalog _) -> CInvalid src
+  | Ok (Views_query.QDsl source) -> try
+    match clause_of_wire (read_source source) with
     | Some (COp _ as op) -> op
     | Some c -> COp ("and", [ c ])
     | None -> CInvalid src

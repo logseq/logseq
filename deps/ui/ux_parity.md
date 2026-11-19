@@ -17,11 +17,10 @@ Table77 on `7760653a` accepts E1 structure/range and the stored Tab/Shift+Tab
 round-trip, structured-paste focus with no reaction warnings, Marketplace
 control dimensions, E40, nested geometry, N19 and dialogs. These results
 supersede the earlier browser-pending notes for those scenarios below.
-The separate Tab stack overflow is source-repaired in `d8dfa4ed`; its rebuilt
-browser check remains pending. The final Marketplace offsets (grid 3px high,
+The separate Tab stack overflow is source-repaired in `d8dfa4ed`. The final Marketplace offsets (grid 3px high,
 contribution link 2.5px high) are now source-repaired without changing the
 fixed list viewport or accepted control dimensions; rebuilt-browser position
-verification remains pending.
+verification is accepted in Table78 below, together with the overflow repair.
 
 Table78 on `7b05cc7a` accepts the E1 console repair and the final Marketplace
 offsets. Its new ordinary-block reference-count and selected-text Query
@@ -30,7 +29,8 @@ request the existing reference-count resource and refresh on reference changes;
 Query conversion uses the slash popup's captured editor base instead of the
 replacement slash buffer. Mounted/editor regressions cover positive/empty
 counts, rejected refresh, existing/blank query text, advanced conversion and
-rejected conversion. These repairs remain browser-unverified. A clean detached
+rejected conversion. Table79 accepts the badge and stored query text; execution
+is addressed separately below. A clean detached
 `7b05cc7a58` worktree passes the UI aggregate (6373 assertions). New asynchronous
 reads exposed the views fixture's invalid default map response to config-file
 requests; it now returns EDN text. The repaired UI aggregate passes with 6392
@@ -43,9 +43,25 @@ nonexistent editor sink. Mounted coverage includes indent, outdent, empty
 selection and rejection. The reported delayed focus-budget console line still
 needs rebuilt-browser verification; its original payload has no target/session
 state to establish whether this reachable defect caused that particular event.
-Local graph deletion (no removal toast and storage rediscovered after reload)
-remains open. The earlier prepare-pool-before-close repair is still present;
-the available deletion evidence does not identify the worker failure or stall.
+
+Table79 on `f7c8599a` accepts ordinary reference badges, Marketplace header
+glyphs, E1 console cleanliness through 10.5-second observation windows, and
+local graph deletion for opened and unopened graphs (removal toast and durable
+absence after reload). Graph deletion is accepted; no further deletion repair
+was needed. Selected-text Query now stores the correct text, but its plain-text
+interpretation was still missing. Query execution and the builder now share
+Master's sanitization: non-DSL text becomes a quoted full-text search rather
+than a bare EDN symbol. Mounted coverage checks the search clause, Filter
+control, empty results, blank queries, outgoing resource and genuine errors.
+The block property value's vertical inset is reduced to match the 28px property
+pair. The linked-reference offset is independent: its evidence page has no
+property row. Its single 28px block plus 28px add row lost Master's 60px body
+minimum in the flat stream. Measured body-only spacing restores that minimum
+without shifting taller or property-bearing pages. These query and geometry
+repairs remain rebuilt-browser-unverified. The UI aggregate passes with 6417
+assertions and exit zero; native tests and the native build pass. Native
+measurement behavior is unchanged; the short-page correction uses the web
+projection observer, not new native measurement plumbing.
 
 ## 1. Intentional / out of scope
 

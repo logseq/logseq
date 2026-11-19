@@ -1939,7 +1939,7 @@ and icon_view ?(jump_target = true) ctx row : t =
 and block_value_wrap (inner : t) : t =
   Ui_components.with_props
     [ Ui_components.Prop.font_size "0.875rem"; Ui_components.Prop.line_height "20px" ]
-  (Lui_elements.column ~min_width:0 ~grow:1. ~padding_vertical:4
+  (Lui_elements.column ~min_width:0 ~grow:1. ~padding_vertical:2
     ~style_class:"property-block-container content"
     [ Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"ls-block"
         ~transition:Ui_components.block_transition

@@ -696,8 +696,103 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
               h.after 20 (fun () -> after_expand before_expand_writes)
     ))
 
+let plain_text_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  Runtime.read_model := (fun () -> {Model.initial with repo=Some "plain-text-query"});
+  let rec run = function
+    | [] -> Runtime.worker := previous_worker; Runtime.read_model := previous_model;
+        Runtime.app_flush := previous_flush; finish ()
+    | (uuid, source, error) :: rest ->
+        Hashtbl.replace query_src uuid source;
+        Hashtbl.replace query_rows uuid [];
+        Option.iter (fun message -> Hashtbl.replace query_err uuid message) error;
+        install_worker ();
+        let worker = Option.get !Runtime.worker in
+        let specs = ref [] in
+        Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+          (match name,args with
+           | "thread-api/get-render-snapshots",[_;request] ->
+               List.iter (function W.Array [W.Keyword "query";spec] -> specs := spec :: !specs
+                 | _ -> ()) (W.elems (Option.value (W.get request "resources") ~default:W.Nil))
+           | _ -> ());
+          worker.invoke_fn name args)};
+        let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+          ~initial:Model.initial ~reducer:Update.update
+          ~view:(fun _ _ _ -> Lui_elements.column
+            [Views_view.query_title_el ~block_uuid:uuid ~title:None;
+             Views_view.view ~kind:(Views_state.KQuery {block_uuid=uuid}) ~owner:(W.Uuid uuid)]) () in
+        Runtime.app_flush := (fun () -> S.flush mounted);
+        h.after 40 (fun () ->
+          S.flush mounted;
+          let nodes = M.all_nodes mounted.S.tree in
+          let has_text text = List.exists (fun node -> M.string_prop node "text"=Some text) nodes in
+          let has_class name = List.exists (fun node -> Shared_scenarios_views.has_tok node name) nodes in
+          check "Plain-text query builder keeps the Filter control"
+            (List.exists (fun node -> node.M.kind="button"
+              && M.string_prop node "accessibility-label"=Some (I18n.t "view.filter/filter")) nodes);
+          check "Plain-text query builder displays the full search clause"
+            (source="" || has_text (I18n.builder_search source));
+          check "Query resource receives quoted full-text source, not a bare symbol"
+            (if source="" then !specs=[] else List.exists (fun spec ->
+              W.get spec "query"=Some (W.String (Edn.to_string (W.String source)))) !specs);
+          check "Plain-text queries render an empty result table and preserve real errors"
+            (match error with
+             | Some message -> has_text message && not (has_class "query-result")
+             | None -> if source="" then not (has_class "query-result")
+                 else has_class "query-result");
+          ignore (Lui_app.dispose mounted.S.app);
+          run rest)
+  in run ["plain-query", "Search seed parity", None; "blank-query", "", None;
+          "failed-plain-query", "Rejected search", Some "search unavailable"]
+
+let short_page_spacing ~finish =
+  let previous_flush = !Runtime.app_flush in
+  let section : Outliner_projection.section =
+    {section_key="short-page";repository=Some "short-page";scope="main";
+     page=Test_check.page [];is_last=true} in
+  let block = Outliner_projection.Block
+    {block=Test_check.block "short-block" "Short";scope="main";section;depth=0;ancestors=[]} in
+  let header = Outliner_projection.Header section and footer = Outliner_projection.Footer section in
+  let measurements = ref None and rows_state = ref None and spacing = ref None in
+  let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+    ~initial:Model.initial ~reducer:Update.update ~view:(fun ctx _ _ ->
+      let rows = Signal.state ctx.Lui_ui.ui_scheduler [header;block;footer] in
+      let measured = Virt_list.section_spacings ~blocks_only:true ctx ~minimum:32.
+          ~rows:(Signal.value rows) in
+      measurements := Some measured; rows_state := Some rows;
+      spacing := Some (measured.spacing_for (Outliner_projection.key header));
+      Properties_value.block_value_wrap (Lui_elements.text ~value:"SQLite roundtrip" [])) () in
+  Runtime.app_flush := (fun () -> S.flush mounted);
+  let measured = Option.get !measurements in
+  let value () = Signal.get (Option.get !spacing) in
+  let measure row kind height = measured.on_row_measure (Outliner_projection.key row)
+    (Outliner_projection.key header) kind height in
+  let change rows = Runtime.signal_set (Option.get !rows_state) rows; S.flush mounted in
+  let later f = ignore (Js.Global.setTimeout ~f 10) in
+  check "Property block values use the reference two-pixel vertical inset"
+    (List.exists (fun node -> Shared_scenarios_views.has_tok node "property-block-container"
+      && Hashtbl.find_opt node.M.props "padding-vertical"=Some (Lui_protocol.IntValue 2))
+      (M.all_nodes mounted.S.tree));
+  measure header "header" 100.; measure footer "footer" 200.; measure block "block" 28.;
+  later (fun () ->
+    check "A short page preserves sixty pixels for its block and add row" (value () +. 28. +. 28. = 60.);
+    measure block "block" nan;
+    later (fun () ->
+      check "Invalid body measurements do not change page spacing" (value ()=4.);
+      change [header;footer];
+      check "Empty pages clear residual body spacing" (value ()=0.);
+      change [header;block;footer]; measure block "block" 28.;
+      later (fun () ->
+        check "The first block restores short-page spacing after an empty page" (value ()=4.);
+        measure block "block" 56.;
+        later (fun () ->
+          check "Wrapped or property-bearing blocks need no extra body spacing" (value ()=0.);
+          ignore (Lui_app.dispose mounted.S.app); Runtime.app_flush := previous_flush; finish ()))))
+
 let run ~finish =
   query_result_replacement ();
   let h = host () in
-  grouped_entity_headers h ~finish:(fun () ->
-      Shared_scenarios_views.run h ~finish)
+  plain_text_queries h ~finish:(fun () -> short_page_spacing ~finish:(fun () ->
+    grouped_entity_headers h ~finish:(fun () ->
+      Shared_scenarios_views.run h ~finish)))

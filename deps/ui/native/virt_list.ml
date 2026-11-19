@@ -17,7 +17,8 @@ type section_measurements =
   ; observe_eager : Lui_ui.ui_context -> root_id:string -> unit
   }
 
-let section_spacings ctx ~minimum:_ ~(rows : Outliner_projection.row list Signal.signal) =
+let section_spacings ?(blocks_only = false) ctx ~minimum:_ ~(rows : Outliner_projection.row list Signal.signal) =
+  ignore blocks_only;
   ignore rows;
   let spacing_for _ = Signal.constant ctx.Lui_ui.ui_scheduler 0. in
   { spacing_for

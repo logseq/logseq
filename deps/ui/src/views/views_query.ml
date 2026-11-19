@@ -23,6 +23,15 @@ let today_day () =
   + ((int_of_float (Js.Date.getMonth d) + 1) * 100)
   + int_of_float (Js.Date.getDate d)
 
+let sanitize_dsl source =
+  let n = String.length source in
+  let wrapped left right = n >= 2 && source.[0] = left && source.[n - 1] = right in
+  if n = 0 || wrapped '(' ')' || wrapped '"' '"'
+     || (n >= 4 && String.sub source 0 2 = "[[" && String.sub source (n - 2) 2 = "]]")
+     || (n >= 2 && String.sub source 0 2 = "[?")
+  then source
+  else Edn.to_string (W.String source)
+
 let parse_src (s : string) : qsrc =
   let t = String.trim s in
   if t = "" || t = "(and)" || t = "(and )" then QBlank
@@ -30,7 +39,7 @@ let parse_src (s : string) : qsrc =
     match Edn.parse t with
     | W.Map _ as m -> QDatalog m
     | _ -> QDsl t)
-  else QDsl t
+  else QDsl (sanitize_dsl t)
 
 (* Incomplete source is a query-local error while the user is editing. *)
 let parse_src_result src =
