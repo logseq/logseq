@@ -12,6 +12,7 @@
         env (doto (js-obj)
               (aset "DB" index-db)
               (aset "LOGSEQ_SYNC_ASSETS" assets-bucket)
+              (aset "ASSET_LINK_SECRET" (:asset-link-secret cfg))
               ;; Keep node-adapter snapshot stream uncompressed.
               (aset "DB_SYNC_SNAPSHOT_STREAM_GZIP" "false")
               (aset "COGNITO_ISSUER" (:cognito-issuer cfg))

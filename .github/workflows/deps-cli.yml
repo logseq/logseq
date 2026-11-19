@@ -101,6 +101,12 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-deps-cli-maven-v1-${{ github.job }}-java-${{ env.JAVA_VERSION }}-clojure-${{ env.CLOJURE_VERSION }}-babashka-${{ env.BABASHKA_VERSION }}-${{ hashFiles('**/deps.edn', '**/nbb.edn', '**/bb.edn') }}
+
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
@@ -118,6 +124,12 @@ jobs:
 
       - name: Run logseq CLI tests
         run: opam exec -- pnpm --dir cli test
+
+      - name: Compile query integration worker
+        run: pnpm db-worker-node:compile
+
+      - name: Run shared query integration tests
+        run: pnpm --dir cli test:query-integration
 
       - name: Build logseq CLI
         run: |

@@ -748,6 +748,39 @@
                                   :children []
                                   :resources [[:journals]]}))))))
 
+(deftest missing-renderer-resource-errors-include-the-uuid-test
+  (let [{:keys [conn]} (render-resource-fixture)
+        missing-uuid (random-uuid)]
+    (doseq [[kind label] [[:page-preview-source :page-uuid]
+                          [:property-choices :property-uuid]
+                          [:block-ref-count :block-uuid]
+                          [:block-unlinked-ref-exists :block-uuid]
+                          [:block-comment-threads :block-uuid]
+                          [:block-task-time :block-uuid]]]
+      (testing (str kind)
+        (try
+          (call-resource-raw (render-resource-api) conn [kind missing-uuid])
+          (is false "A required missing entity must fail fast.")
+          (catch :default error
+            (is (re-find #"Missing renderer resource entity" (ex-message error)))
+            (is (re-find (re-pattern (str missing-uuid)) (ex-message error))
+                "The UUID must be visible in the console error's message.")
+            (is (re-find (re-pattern (name label)) (ex-message error)))
+            (is (= {label missing-uuid} (ex-data error)))))))))
+
+(deftest nil-renderer-resource-identities-fail-before-entity-lookup-test
+  (let [{:keys [conn]} (render-resource-fixture)]
+    (doseq [[resource-key label] [[[:page-preview-source nil] :page-uuid]
+                                  [[:property-choices nil] :property-uuid]
+                                  [[:block-ref-count nil] :block-uuid]
+                                  [[:block-reactions nil nil] :target-uuid]]]
+      (try
+        (call-resource-raw (render-resource-api) conn resource-key)
+        (is false "Nil cannot identify a renderer resource entity.")
+        (catch :default error
+          (is (= "Invalid renderer resource UUID" (ex-message error)))
+          (is (= {label nil} (ex-data error))))))))
+
 (deftest page-identity-resource-resolves-only-the-page-uuid-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn page]} (render-resource-fixture)
@@ -1358,6 +1391,57 @@
        expected
        response))))
 
+(deftest block-reactions-resource-handles-missing-targets-in-a-batch-test
+  (let [{:keys [conn reaction-target creator-a journal-a]}
+        (render-resource-fixture)
+        missing-uuid (random-uuid)
+        missing-key [:block-reactions missing-uuid nil]
+        live-key [:block-reactions reaction-target creator-a]
+        api (get @thread-api/*thread-apis :thread-api/get-render-snapshots)]
+    (with-redefs [worker-state/get-datascript-conn (constantly conn)]
+      (let [response (api test-repo {:blocks [journal-a]
+                                    :children []
+                                    :resources [missing-key live-key]})]
+        (is (= [] (get-in response [:slots [:resource missing-key] :value]))
+            "A missing target must not read reactions belonging to other blocks.")
+        (is (= #{[:entity missing-uuid] [:reactions missing-uuid]}
+               (get-in response [:slots [:resource missing-key] :watch :keys])))
+        (is (= 2 (get-in response [:slots [:resource live-key] :value 0 :count])))
+        (is (= journal-a
+               (get-in response [:slots [:block journal-a] :value :block/uuid])))))))
+
+(deftest block-reactions-resource-handles-delete-and-recreate-test
+  (let [{:keys [conn reaction-target creator-a reaction-a]}
+        (render-resource-fixture)
+        resource-key [:block-reactions reaction-target creator-a]
+        api (render-resource-api)]
+    (is (seq (:value (call-resource-raw api conn resource-key))))
+    (d/transact! conn [[:db/retractEntity [:block/uuid reaction-target]]])
+    (let [response (call-resource-raw api conn resource-key)]
+      (assert-resource-envelope @conn resource-key
+                                #{[:entity reaction-target] [:reactions reaction-target]}
+                                [] response)
+      (let [report (d/transact! conn [{:block/uuid reaction-target
+                                      :block/title "Restored target"}
+                                     [:db/add [:block/uuid reaction-a]
+                                      :logseq.property.reaction/target
+                                      [:block/uuid reaction-target]]])
+            affected-keys (render-affected-keys/affected-keys report)]
+        (is (some (:watch-keys response) affected-keys)
+            "Recreating the target must invalidate the missing target's summary.")
+        (is (= [{:emoji-id "thumbsup" :count 1
+                 :reacted-by-me? true :usernames ["Alpha"]}]
+               (:value (call-resource-raw api conn resource-key))))))))
+
+(deftest block-reactions-resource-rejects-invalid-identities-test
+  (let [{:keys [conn reaction-target]} (render-resource-fixture)]
+    (doseq [resource-key [[:block-reactions nil nil]
+                          [:block-reactions "not-a-uuid" nil]
+                          [:block-reactions reaction-target "not-a-uuid"]
+                          [:block-reactions (random-uuid) "not-a-uuid"]]]
+      (is (thrown? js/Error
+                   (call-resource-raw (render-resource-api) conn resource-key))))))
+
 (deftest block-display-properties-resource-returns-only-normalized-entity-identities-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block display-property hidden-property
@@ -1572,6 +1656,23 @@
                                     true
                                     response)))
       (with-redefs [search-handler/search-blocks (fn [& _] [])]
+        (let [response (call-resource-with-runtime api conn resource-key {:repo test-repo})]
+          (assert-resource-envelope @conn resource-key
+                                    #{}
+                                    false
+                                    response))))))
+
+(deftest block-unlinked-ref-exists-resource-ignores-own-page-mentions-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn page view-row]} (render-resource-fixture)
+          page-id (entity-id @conn page)
+          row-id (entity-id @conn view-row)
+          resource-key [:block-unlinked-ref-exists page]
+          _ (d/transact! conn [[:db/add page-id :block/title "Reference target"]
+                               [:db/add row-id :block/title "Mentions reference target"]
+                               [:db/add row-id :block/page page-id]])]
+      (with-redefs [search-handler/search-blocks
+                    (fn [_repo _query _opts] [{:db/id row-id}])]
         (let [response (call-resource-with-runtime api conn resource-key {:repo test-repo})]
           (assert-resource-envelope @conn resource-key
                                     #{}
@@ -2067,6 +2168,51 @@
       (is (= {:partition :flat :count 0 :rows []}
              (get-in batch [:slots [:resource resource-key] :value]))))))
 
+(deftest query-view-data-skips-stale-query-row-uuids-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn view-row resource-block other-view]}
+          (render-resource-fixture)
+          query-view (add-view! conn :query-result)
+          resource-key [:view-data query-view
+                        {:feature-type :query-result
+                         :sorting [{:id :block/title :asc? true}]
+                         :query-row-uuids [view-row resource-block]}]
+          linked-key [:view-data other-view
+                      {:feature-type :linked-references
+                       :sorting [{:id :block/title :asc? true}]}]
+          live (call-resource api conn resource-key)
+          _ (is (= #{view-row resource-block}
+                   (set (get-in live [:value :rows])))
+                "The live query view must return both rows before delete.")
+          _ (d/transact! conn [[:db/retractEntity [:block/uuid view-row]]])
+          stale (try
+                  (call-resource-raw api conn resource-key)
+                  (catch :default error
+                    error))
+          batch (try
+                  (render-engine/render-snapshots
+                   @conn
+                   {:blocks []
+                    :children []
+                    :resources [resource-key linked-key]}
+                   {})
+                  (catch :default error
+                    error))]
+      (is (map? stale)
+          (str "A stale query-row UUID must not throw, got: "
+               (ex-message stale)))
+      (is (= [resource-block] (get-in stale [:value :rows]))
+          "A deleted query-row UUID must drop out of a live view.")
+      (is (= 1 (get-in stale [:value :count])))
+      (is (= :flat (get-in stale [:value :partition])))
+      (is (map? batch)
+          (str "A stale query-row UUID must not reject the snapshot batch, got: "
+               (ex-message batch)))
+      (is (map? (get-in batch [:slots [:resource linked-key] :value]))
+          "A stale query-row UUID must not fail sibling view-data in the same batch.")
+      (is (= [resource-block]
+             (get-in batch [:slots [:resource resource-key] :value :rows]))))))
+
 (deftest all-pages-view-data-returns-the-first-window-ids-without-row-snapshots-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn]} (render-resource-fixture)
@@ -2149,6 +2295,31 @@
       (is (string? (:block/title preview)))
       (is (not-any? #(contains? (:slots (call-resource api conn offset-key)) [:block %])
                     offset-rows)))))
+
+(deftest all-pages-snapshot-skips-named-entities-without-uuid-test
+  (let [api (get @thread-api/*thread-apis :thread-api/get-render-snapshots)]
+    (if-not api
+      (is false "Missing thread API: get-render-snapshots")
+      (let [{:keys [conn page]} (render-resource-fixture)
+            view-uuid (add-view! conn :all-pages)
+            resource-key [:view-data view-uuid
+                          {:feature-type :all-pages
+                           :sorting [{:id :block/updated-at :asc? false}]}]
+            request {:blocks []
+                     :children []
+                     :resources [resource-key]}
+            snapshot (fn []
+                       (with-redefs [worker-state/get-datascript-conn (constantly conn)]
+                         (api test-repo request)))
+            before (get-in (snapshot) [:slots [:resource resource-key] :value :rows])
+            _ (d/transact! conn [{:block/name "external url"
+                                  :block/title "External URL"}])
+            after (get-in (snapshot) [:slots [:resource resource-key] :value :rows])]
+        (is (seq before))
+        (is (contains? (set before) page))
+        (is (every? uuid? before))
+        (is (= before after)
+            "A leftover :block/name entity without :block/uuid must not fail All Pages.")))))
 
 (deftest opaque-query-resource-declares-watch-all-test
   (when-let [api (render-resource-api)]
@@ -2490,6 +2661,107 @@
            (-> response ldb/write-transit-str ldb/read-transit-str))
         "Query error payloads must stay transit-encodable.")))
 
+(defn- assert-isolated-query-failure
+  [conn failing-query]
+  (let [journals-key [:journals]
+        response (render-engine/render-snapshots
+                  @conn
+                  {:blocks []
+                   :children []
+                   :resources [failing-query journals-key]}
+                  {})]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "A query failure must not fail sibling resources.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (string? (get-in response [:slots [:resource failing-query] :value :error :message]))
+        (str "Expected a per-resource query error for " (pr-str failing-query)))
+    (is (= [] (get-in response [:slots [:resource failing-query] :value :rows])))
+    (is (true? (get-in response [:slots [:resource failing-query] :watch :all?])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Isolated query errors must stay transit-encodable.")
+    response))
+
+(deftest render-snapshots-isolates-query-resource-failures-test
+  (let [{:keys [conn view-row]} (render-resource-fixture)]
+    (doseq [[label failing-query]
+            [["legacy simple-query list"
+              [:query {:kind :datalog
+                       :query '(task WAIT WAITING)
+                       :current-block-uuid view-row}]]
+             ["non-vector datalog"
+              [:query {:kind :datalog
+                       :query "not datalog"
+                       :current-block-uuid view-row}]]
+             ["empty datalog"
+              [:query {:kind :datalog :query []}]]
+             ["datalog without :find"
+              [:query {:kind :datalog
+                       :query [:where '[?e :block/title]]}]]
+             ["missing query"
+              [:query {:kind :dsl}]]
+             ["unknown kind"
+              [:query {:kind :unknown :query "(task TODO)"}]]
+             ["wrong cards? type"
+              [:query {:kind :dsl :query "(task TODO)" :cards? "false"}]]
+             ["non-string result-transform"
+              [:query {:kind :datalog
+                       :query '[:find ?e :where [?e :block/title]]
+                       :result-transform-edn '(fn [rows] rows)}]]
+             ["invalid today-day"
+              [:query {:kind :datalog
+                       :query '[:find ?e :where [?e :block/title]]
+                       :today-day 1}]]
+             ["non-uuid current-block"
+              [:query {:kind :datalog
+                       :query '[:find ?e :where [?e :block/title]]
+                       :current-block-uuid "not-a-uuid"}]]
+             ["incomplete dsl"
+              [:query {:kind :dsl :query "((and)"}]]
+             ["invalid regex evaluation"
+              [:query {:kind :datalog
+                       :query '[:find ?regex
+                                :in $ ?matcher
+                                :where [(re-pattern ?matcher) ?regex]]
+                       :inputs ["("]}]]
+             ["result-transform not a function"
+              [:query {:kind :dsl
+                       :query "(task TODO)"
+                       :result-transform-edn "not-a-fn"}]]
+             ["full-text without repo"
+              [:query {:kind :dsl :query "\"needle\""}]]
+             ["wrong query key shape"
+              [:query]]]]
+      (testing label
+        (assert-isolated-query-failure conn failing-query)))))
+
+(deftest render-snapshots-isolates-view-data-resource-failures-test
+  (let [{:keys [conn view-a]} (render-resource-fixture)
+        journals-key [:journals]
+        failing-view [:view-data view-a
+                      {:feature-type :class-objects
+                       :sorting [{:id :block/title :asc? true}]}]
+        response (with-redefs [db-view/get-view-data
+                               (fn [& _args]
+                                 (throw (ex-info "Cannot compare 1 to :logseq.property/empty-placeholder"
+                                                 {:sort :logseq.property/scheduled})))]
+                   (render-engine/render-snapshots
+                    @conn
+                    {:blocks []
+                     :children []
+                     :resources [failing-view journals-key]}
+                    {}))]
+    (is (nil? (get-in response [:slots [:resource journals-key] :error]))
+        "A view-data failure must not fail sibling resources.")
+    (is (vector? (get-in response [:slots [:resource journals-key] :value])))
+    (is (string? (get-in response [:slots [:resource failing-view] :value :error :message])))
+    (is (= [] (get-in response [:slots [:resource failing-view] :value :rows])))
+    (is (= :flat (get-in response [:slots [:resource failing-view] :value :partition])))
+    (is (true? (get-in response [:slots [:resource failing-view] :watch :all?])))
+    (is (= response
+           (-> response ldb/write-transit-str ldb/read-transit-str))
+        "Isolated view errors must stay transit-encodable.")))
+
 (deftest query-resource-injects-built-in-rules-and-merges-user-rules-test
   (when-let [api (render-resource-api)]
     (let [{:keys [conn resource-block reference-block]}
@@ -2587,6 +2859,7 @@
                           :block/page [:block/uuid journal-a]
                           :block/parent [:block/uuid journal-a]
                           :block/order "z0"
+                          :block/tags :logseq.class/Task
                           :logseq.property/status :logseq.property/status.doing}])
       (let [resource-key
             [:query {:kind :datalog
@@ -2687,7 +2960,7 @@
     (let [{:keys [conn view-a view-row]} (render-resource-fixture)
           row-entity (d/entity @conn [:block/uuid view-row])
           ownerless-class-view (add-view! conn :class-objects)]
-      (testing "view contexts are one typed serializable path"
+      (testing "invalid serializable view contexts stay isolated to that resource"
         (doseq [resource-key
                 [[:view-data view-a
                   {:feature-type :class-objects
@@ -2697,6 +2970,16 @@
                  [:view-data ownerless-class-view
                   {:feature-type :class-objects}]
                  [:view-data view-a
+                  {:feature-type :query-result
+                   :query-row-uuids ["not-a-uuid"]}]]]
+          (let [response (call-resource-raw api conn resource-key)]
+            (is (string? (get-in response [:value :error :message]))
+                (str "Expected an isolated view error for " (pr-str resource-key)))
+            (is (= [] (get-in response [:value :rows])))
+            (is (true? (:watch-all? response))))))
+      (testing "view and query keys with functions or entities stay fail-fast"
+        (doseq [resource-key
+                [[:view-data view-a
                   {:feature-type :class-objects
                    :sorting [{:id :block/title
                               :value-fn identity}]}]
@@ -2704,33 +2987,16 @@
                   {:feature-type :class-objects
                    :filters {:or? false
                              :filters [[:block/tags :is #{row-entity}]]}}]
-                 [:view-data view-a
-                  {:feature-type :query-result
-                   :query-row-uuids ["not-a-uuid"]}]]]
-          (is (thrown? js/Error
-                       (call-resource-raw api conn resource-key))
-              (str "Expected invalid view resource: " (pr-str resource-key)))))
-      (testing "query specs contain no closures, entities, or untyped options"
-        (doseq [resource-key
-                [[:query {:kind :dsl :query "(task TODO)" :cards? "false"}]
                  [:query {:kind :dsl
                           :query "(task TODO)"
                           :query-fn identity}]
                  [:query {:kind :datalog
                           :query '[:find ?e :where [?e :block/title]]
-                          :inputs [row-entity]}]
-                 [:query {:kind :datalog :query "not datalog"}]
-                 [:query {:kind :datalog
-                          :query '[:find ?e :where [?e :block/title]]
-                          :result-transform-edn '(fn [rows] rows)}]]]
+                          :inputs [row-entity]}]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
-              (str "Expected invalid query resource: " (pr-str resource-key)))))
-      (testing "full-text has one worker-search path and requires repo context"
-        (is (thrown? js/Error
-                     (call-resource-raw api conn
-                                        [:query {:kind :dsl
-                                                 :query "\"needle\""}])))))))
+              (str "Expected non-serializable resource key to fail-fast: "
+                   (pr-str resource-key))))))))
 
 (deftest block-sync-conflicts-resource-is-owned-by-the-sync-state-provider-test
   (when-let [api (render-resource-api)]
@@ -2769,9 +3035,52 @@
                               [:route-block "page identity" ""]
                               [:page-membership page :property]
                               [:page-membership quick-add-page :quick-add nil]
-                              [:page-membership quick-add-page :unknown]
-                              [:view-data (random-uuid)]
-                              [:query {:kind :dsl}]]]
+                              [:page-membership quick-add-page :unknown]]]
           (is (thrown? js/Error
                        (call-resource-raw api conn resource-key))
-              (str "Expected fail-fast for " (pr-str resource-key))))))))
+              (str "Expected fail-fast for " (pr-str resource-key)))))
+      (testing "malformed view-data keys stay isolated"
+        (let [resource-key [:view-data (random-uuid)]
+              response (call-resource-raw api conn resource-key)]
+          (is (string? (get-in response [:value :error :message])))
+          (is (= [] (get-in response [:value :rows]))))))))
+
+(deftest favorites-resource-dedupes-pages-linked-twice-test
+  (when-let [api (render-resource-api)]
+    (let [conn (db-test/create-conn)
+          favorite-page (or (ldb/get-page @conn common-config/favorites-page-name)
+                            (let [favorite-page-uuid (random-uuid)]
+                              (d/transact! conn
+                                           [{:block/uuid favorite-page-uuid
+                                             :block/tx-id 1
+                                             :block/title common-config/favorites-page-name
+                                             :block/name common-config/favorites-page-name}])
+                              (ldb/get-page @conn common-config/favorites-page-name)))
+          favorite-page-id (:db/id favorite-page)
+          page-uuid (random-uuid)
+          ;; Two favorite blocks link the same page, e.g. an OG config.edn
+          ;; that listed it as both "foo" and "Foo" after a rename (#8596)
+          _ (d/transact! conn
+                         [{:db/id -1
+                           :block/uuid page-uuid
+                           :block/tx-id 2
+                           :block/title "Foo"
+                           :block/name "foo"
+                           :block/tags :logseq.class/Page}
+                          {:block/uuid (random-uuid)
+                           :block/tx-id 2
+                           :block/title ""
+                           :block/link -1
+                           :block/page favorite-page-id
+                           :block/parent favorite-page-id
+                           :block/order "a0"}
+                          {:block/uuid (random-uuid)
+                           :block/tx-id 2
+                           :block/title ""
+                           :block/link -1
+                           :block/page favorite-page-id
+                           :block/parent favorite-page-id
+                           :block/order "a1"}])
+          favorites-response (call-resource api conn [:favorites])]
+      (is (= [page-uuid]
+             (mapv :block/uuid (:value favorites-response)))))))

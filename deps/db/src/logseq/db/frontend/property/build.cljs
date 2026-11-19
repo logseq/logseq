@@ -84,7 +84,7 @@
                                                 block-id
                                                 (or (:db/id property) {:db/ident (:db/ident property)}))
        :block/order (db-order/gen-key)}
-      (if (db-property-type/property-value-content? (:logseq.property/type property) property)
+      (if (db-property-type/property-value-content? (:logseq.property/type block) property)
         {:logseq.property/value value}
         {:block/title value}))
       true

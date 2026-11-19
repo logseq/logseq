@@ -202,6 +202,9 @@
 (defn- breadcrumb-entity
   [db entity]
   (cond-> (shallow-ref-identity db entity)
+    (ldb/built-in? entity)
+    (assoc :logseq.property/built-in? true)
+
     (string? (:block/raw-title entity))
     (assoc :block/raw-title (:block/raw-title entity))
 

@@ -100,3 +100,23 @@
            :current-block-uuid (random-uuid)}
           {:query "(task TODO)"}))
         "Query syntax errors stay in the query error boundary instead of emptying the page.")))
+
+(deftest advanced-query-spec-sends-legacy-simple-query-list-as-datalog-test
+  (let [current-block-uuid (random-uuid)
+        resource-keys (atom [])]
+    (with-redefs [db-hooks/use-resource
+                  (fn [resource-key]
+                    (swap! resource-keys conj resource-key)
+                    {:rows []})
+                  hooks/use-effect! (fn [& _args])]
+      (is (= []
+             (query-result/use-query-result
+              {:dsl-query? false
+               :current-block-uuid current-block-uuid}
+              {:query '(task WAIT WAITING)
+               :title "Tasks on wait/waiting"})))
+      (is (= [[:query {:kind :datalog
+                       :query '(task WAIT WAITING)
+                       :current-block-uuid current-block-uuid}]]
+             @resource-keys)
+          "Advanced queries keep a simple-query list as :datalog; the worker isolates that shape."))))

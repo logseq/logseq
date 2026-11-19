@@ -10,6 +10,7 @@
             [frontend.worker.sync.util :as sync-util]
             [frontend.worker.ui-request :as ui-request]
             [logseq.db :as ldb]
+            [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [promesa.core :as p]))
 
 (def ^:private decrypt-snapshot-datoms-batch-orig sync-crypt/<decrypt-snapshot-datoms-batch)
@@ -1353,3 +1354,42 @@
              (p/catch (fn [e]
                         (is false (str e))
                         (done))))))
+
+(deftest semantic-ciphertext-decrypts-after-download-for-each-graph-member-test
+  (async done
+         (-> (p/let [aes-key (crypt/<generate-aes-key)
+                     exported-key (crypt/<export-aes-key aes-key)
+                     key-base64 (js/btoa (.join (js/Array.from exported-key #(js/String.fromCharCode %)) ""))
+                     request (js/Request. "https://sync.example.test/api/v1/graphs/graph-1/e2ee/encrypt"
+                                          #js {:method "POST"
+                                               :headers #js {"content-type" "application/json"}
+                                               :body (js/JSON.stringify #js {:key key-base64
+                                                                             :texts #js ["Shared 名称" "shared 名称"]})})
+                     response (e2ee-handler/handle {:request request :env #js {}
+                                                    :graph-id "graph-1" :handler :semantic/e2ee-encrypt})
+                     body (.json response)
+                     texts (aget body "texts")]
+               (is (= 200 (.-status response)))
+               (p/loop [members ["original-member" "later-member"]]
+                 (when-let [member (first members)]
+                   (p/let [pair (crypt/<generate-rsa-key-pair)
+                           wrapped (crypt/<encrypt-aes-key (:publicKey pair) aes-key)
+                           downloaded-key
+                           (p/with-redefs [sync-crypt/e2ee-base (constantly "https://sync.example.test")
+                                           sync-crypt/<clear-item! (fn [_] (p/resolved nil))
+                                           sync-crypt/<set-item! (fn [_ _] (p/resolved nil))
+                                           sync-crypt/<get-user-rsa-key-pair-raw
+                                           (fn [_] (p/resolved {:public-key "synthetic-public-key"
+                                                                :encrypted-private-key "synthetic-encrypted-private-key"}))
+                                           sync-crypt/<decrypt-private-key (fn [_] (p/resolved (:privateKey pair)))
+                                           sync-crypt/<fetch-graph-encrypted-aes-key-raw
+                                           (fn [_ _] (p/resolved {:encrypted-aes-key (ldb/write-transit-str wrapped)}))]
+                             (sync-crypt/<fetch-graph-aes-key-for-download (str (random-uuid))))
+                           decrypted (decrypt-snapshot-datoms-batch-orig
+                                      downloaded-key
+                                      [{:a :block/title :v (aget texts 0)}
+                                       {:a :block/name :v (aget texts 1)}])]
+                     (is (= ["Shared 名称" "shared 名称"] (mapv :v decrypted)) member)
+                     (p/recur (next members))))))
+             (p/catch #(is false (str %)))
+             (p/finally done))))

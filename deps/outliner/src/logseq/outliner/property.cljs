@@ -175,6 +175,15 @@
       (first ids)
       ids)))
 
+(defn- ignore-root-extends-add?
+  "Returns true when adding a normalized Root ref would create a redundant parent."
+  [db block property-id value]
+  (and (= property-id :logseq.property.class/extends)
+       (integer? value)
+       (= :logseq.class/Root (:db/ident (d/entity db value)))
+       (some #(not= :logseq.class/Root (:db/ident %))
+             (:logseq.property.class/extends block))))
+
 (defn- redundant-extends-retraction-tx-data
   [db class value]
   (let [parent-ids (set (->entity-ids db value))
@@ -185,9 +194,11 @@
      (mapcat #(direct-extends-retraction-tx-data (d/entity db %) inherited-parent-ids)
              (db-class/get-structured-children db (:db/id class))))))
 
-(defn- build-property-value-tx-data
+(defn- build-normalized-property-value-tx-data
+  "Builds property transactions. Extends refs in `value` must be normalized."
   [conn block property-id value]
-  (when (some? value)
+  (when (and (some? value)
+             (not (ignore-root-extends-add? @conn block property-id value)))
     (let [old-value (get block property-id)
           property (d/entity @conn property-id)
           multiple-values? (= :db.cardinality/many (:db/cardinality property))
@@ -195,9 +206,8 @@
           multiple-values-empty? (and (sequential? old-value)
                                       (contains? (set (map :db/ident old-value)) :logseq.property/empty-placeholder))
           extends? (= property-id :logseq.property.class/extends)
-          tx-value (if extends?
-                     (let [value' (normalize-extends-value @conn value)]
-                       (if (coll? value') (set value') value'))
+          tx-value (if (and extends? (coll? value))
+                     (set value)
                      value)
           update-block-tx (cond-> (outliner-core/block-with-updated-at {:db/id (:db/id block)})
                             true
@@ -215,6 +225,14 @@
         (into (redundant-extends-retraction-tx-data @conn block value))
         true
         (conj update-block-tx)))))
+
+(defn- build-property-value-tx-data
+  [conn block property-id value]
+  (build-normalized-property-value-tx-data
+   conn block property-id
+   (if (and (= property-id :logseq.property.class/extends) (some? value))
+     (normalize-extends-value @conn value)
+     value)))
 
 (defn- get-property-value-schema
   "Gets a malli schema to validate the property value for the given property type and builds
@@ -286,8 +304,10 @@
       (conj [:db/retract (:db/id property) :db/valueType]))))
 
 (defn- validate-property-name-update
-  [conn property property-name]
-  (when (and (some? property-name) (not= property-name (:block/title property)))
+  [conn property property-name {:keys [e2ee?]}]
+  ;; e2ee titles are ciphertext packages, not validatable page titles
+  (when (and (some? property-name) (not= property-name (:block/title property))
+             (not e2ee?))
     (outliner-validate/validate-page-title property-name {:node property})
     (outliner-validate/validate-page-title-characters property-name {:node property})
     (outliner-validate/validate-block-title @conn property-name property)
@@ -315,8 +335,8 @@
       schema)))
 
 (defn- update-property
-  [conn db-ident property schema {:keys [property-name properties]}]
-  (validate-property-name-update conn property property-name)
+  [conn db-ident property schema {:keys [property-name properties e2ee? encrypted-name] :as opts}]
+  (validate-property-name-update conn property property-name opts)
   (outliner-validate/validate-editing-built-in-property property schema)
   (let [schema (schema-for-update @conn db-ident property schema)
         changed-property-attrs
@@ -328,7 +348,7 @@
                      (into {}))
           (and (some? property-name) (not= property-name (:block/title property)))
           (assoc :block/title property-name
-                 :block/name (common-util/page-name-sanity-lc property-name)))
+                 :block/name (if e2ee? encrypted-name (common-util/page-name-sanity-lc property-name))))
         property-tx-data
         (cond-> []
           (seq changed-property-attrs)
@@ -439,7 +459,7 @@
         value' (convert-property-input-string (:logseq.property/type block)
                                               property value)
         _ (when (and (not= (:logseq.property/type property) :number)
-                     (not (string? value')))
+                     (not (string? value)))
             (throw (ex-info "value should be a string" {:block-id block-id
                                                         :property-id property-id
                                                         :value value'})))
@@ -810,7 +830,7 @@
                          (doseq [alias-id (if (coll? v') v' [v'])]
                            (when (number? alias-id)
                              (throw-error-if-invalid-alias @conn block alias-id))))
-                       (build-property-value-tx-data conn block property-id v'))
+                       (build-normalized-property-value-tx-data conn block property-id v'))
                      (js/console.error "Skipping setting a block's property because the block id could not be found:" eid)))
                  block-eids))]
        (when (seq txs)
@@ -927,7 +947,7 @@
                                         (->> (cond
                                                (nil? value) []
                                                (de/entity? value) [value]
-                                               (sequential? value) value
+                                               (coll? value) value
                                                :else [value])
                                              (map (fn [item]
                                                     (if (de/entity? item)
@@ -971,9 +991,11 @@
             db-ident' (db-ident/ensure-unique-db-ident @conn db-ident)]
         (assert (some? k-name)
                 (prn "property-id: " property-id ", property-name: " property-name))
-        (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
-        (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
-        (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}})
+        ;; e2ee titles are ciphertext packages, not validatable page titles
+        (when-not (:e2ee? opts)
+          (outliner-validate/validate-page-title k-name {:node {:db/ident db-ident'}})
+          (outliner-validate/validate-page-title-characters k-name {:node {:db/ident db-ident'}})
+          (outliner-validate/validate-property-title k-name {:node {:db/ident db-ident'}}))
         (let [db-id (:db/id properties)
               page (when (integer? db-id)
                      (d/entity db db-id))
@@ -983,7 +1005,8 @@
                       (integer? db-id)
                       (assoc :block-uuid (:block/uuid page)))
               tx-data (concat
-                       [(sqlite-util/build-new-property db-ident' schema opts')]
+                       [(cond-> (sqlite-util/build-new-property db-ident' schema opts')
+                          (:e2ee? opts) (assoc :block/name (:encrypted-name opts)))]
                        ;; Convert page to property
                        (when db-id
                          [[:db/retract db-id :block/tags :logseq.class/Page]]))]

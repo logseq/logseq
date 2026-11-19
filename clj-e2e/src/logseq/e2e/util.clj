@@ -215,17 +215,12 @@
 (def mac? (= "Mac OS X" (System/getProperty "os.name")))
 
 (defn login-test-account
-  [& {:keys [username password]
-      :or {username "e2etest"
-           password "Logseq-e2e"}}]
-  (w/eval-js "localStorage.setItem(\"login-enabled\",true);")
-  (w/click ".toolbar-dots-btn")
-  (w/click "div:text(\"Login\")")
-  (input username)
-  (k/tab)
-  (input password)
-  (w/click ".cp__user-login button[type=\"submit\"]")
-  (w/wait-for-not-visible ".cp__user-login"))
+  "RTC tests are already logged in: `open-2-pages` injects the local db-sync
+  server URL and the test account's tokens through the init script before
+  first navigation, so no Cognito UI login is needed. This verifies the
+  injected login is present so a missing init script fails fast."
+  []
+  (is (some? (w/eval-js "localStorage.getItem('id-token')"))))
 
 (defn goto-journals
   []

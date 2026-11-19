@@ -15,10 +15,22 @@
 ;; FIXME: For DB graph built-in pages, look up by name -> uuid like
 ;; get-built-in-page instead of this approach which is more error prone
 (defn get-first-page-by-name
-  "Return the oldest page's db id for :block/name"
+  "Resolve a stored page name or an exact current/default-format journal title."
   [db page-name]
   (when (and db (string? page-name))
-    (first (sort (map :e (entity-util/get-pages-by-name db page-name))))))
+    (let [stored-id (first (sort (map :e (entity-util/get-pages-by-name db page-name))))]
+      (or (when (and stored-id (not (entity-util/journal? (d/entity db stored-id))))
+            stored-id)
+        (when-let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))]
+          (some (fn [format]
+                  (let [journal-day (date-time-util/journal-title->int page-name [format])]
+                    (when (and journal-day
+                               (= (common-util/page-name-sanity-lc page-name)
+                                  (common-util/page-name-sanity-lc
+                                   (date-time-util/int->journal-title journal-day format))))
+                      (:e (first (d/datoms db :avet :block/journal-day journal-day))))))
+                (distinct [formatter date-time-util/default-journal-title-formatter])))
+          stored-id))))
 
 (defn get-first-page-by-title
   "Return the oldest page's db id for :block/title"
@@ -90,13 +102,14 @@
   ([db id hidden-eid?]
    (let [entity (d/entity db id)
          entity-ident (:db/ident entity)
+         page-ids (set (cons id (get-block-alias-ids db id)))
          class-ids (when (entity-util/class? entity)
                      (let [children (db-class/get-structured-children db id)]
                        (set (conj children id))))]
      (fn [ref-eid]
        (or
-        (= ref-eid id)
-        (= id (datom-v db ref-eid :block/page))
+        (contains? page-ids ref-eid)
+        (contains? page-ids (datom-v db ref-eid :block/page))
         (= id (datom-v db ref-eid :logseq.property/view-for))
         (hidden-eid? (datom-v db ref-eid :block/page))
         (hidden-eid? ref-eid)
@@ -226,13 +239,14 @@
   [db id]
   (let [entity (d/entity db id)
         entity-ident (:db/ident entity)
+        page-ids (set (cons id (get-block-alias db id)))
         class-ids (when (entity-util/class? entity)
                     (let [children (db-class/get-structured-children db id)]
                       (set (conj children id))))]
     (fn [ref-block]
       (or
-       (= (:db/id ref-block) id)
-       (= id (:db/id (:block/page ref-block)))
+       (contains? page-ids (:db/id ref-block))
+       (contains? page-ids (:db/id (:block/page ref-block)))
        (= id (:db/id (:logseq.property/view-for ref-block)))
        (entity-util/hidden? (:block/page ref-block))
        (entity-util/hidden? ref-block)

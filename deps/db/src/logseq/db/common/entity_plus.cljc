@@ -12,7 +12,6 @@
             [clojure.data :as data]
             [datascript.core :as d]
             [datascript.impl.entity :as entity :refer [Entity]]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]
             [logseq.db.frontend.property :as db-property]))
@@ -83,17 +82,12 @@
   (when db
     (identical? "db" (:kv/value (entity-memoized db :logseq.kv/db-type)))))
 
-(defn- get-journal-title
-  [db e]
-  (date-time-util/int->journal-title (:block/journal-day e)
-                                     (:logseq.property.journal/title-format (entity-memoized db :logseq.class/Journal))))
-
 (defn- get-block-title
   [^Entity e k default-value]
   (let [db (.-db e)
         db-based? (db-based-graph? db)]
     (if (and db-based? (entity-util/journal? e))
-      (get-journal-title db e)
+      (lookup-entity e k default-value)
       (or
        (get (.-kv e) k)
        (if db-based?
@@ -182,9 +176,7 @@
        (let [db (.-db e)]
          (case k
            :block/raw-title
-           (if (and (db-based-graph? db) (entity-util/journal? e))
-             (get-journal-title db e)
-             (lookup-entity e :block/title default-value))
+           (lookup-entity e :block/title default-value)
 
            :block/properties
            (get-properties e)

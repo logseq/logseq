@@ -101,10 +101,10 @@
     (assert/assert-is-visible ".ui__ac-group-name:has-text('FORMAT')")
     (assert/assert-is-visible ".ui__ac-group-name:has-text('Heading')")
     (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')"))
-  (testing "typed slash filter hides section headings"
+  (testing "typed slash filter keeps matching section headings"
     (util/press-seq "node" {:delay 20})
     (w/wait-for "a.menu-link:has-text('Node reference')")
-    (assert/assert-is-hidden ".ui__ac-group-name")))
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")))
 
 (defn- chosen-slash-command-visibility
   []
@@ -221,6 +221,20 @@
     (k/shift+enter)
     (assert/assert-is-hidden ".ls-page-blocks .block-tags")))
 
+(deftest typed-block-command-preserves-source-test
+  (doseq [command ["code block" "calculator"]]
+    (testing command
+      (fixtures/create-page)
+      (b/new-block "alpha beta")
+      (let [source-uuid (get (ls-api-call! :editor.getCurrentBlock) "uuid")]
+        (util/input-command command)
+        (w/wait-for "div[data-node-type='code']")
+        (let [source (ls-api-call! :editor.getBlock source-uuid)
+              inserted (ls-api-call! :editor.getNextSiblingBlock source-uuid)]
+          (is (= "alpha beta" (get source "content")))
+          (is (= "" (get inserted "content")))
+          (is (= (get source "parentId") (get inserted "parentId"))))))))
+
 (deftest math-block-test
   (testing "/math block"
     (b/new-block "")
@@ -275,10 +289,13 @@
   (testing "/clear heading"
     (b/new-block "clear heading test")
     (util/input-command "h1")
-    (util/exit-edit)
-    (w/wait-for "h1.block-title-wrap.as-heading:has-text('clear heading test')")
-    (b/jump-to-block "clear heading test")
-    (util/input-command "Clear heading")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link:has-text('Clear heading')")
+    (w/click "a.menu-link:has-text('Clear heading')")
+    (util/press-seq " /")
+    (w/wait-for ".ui__popover-content")
+    (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')")
+    (k/backspace)
     (util/exit-edit)
     (assert/assert-is-hidden "h1.block-title-wrap.as-heading:has-text('clear heading test')")
     (assert/assert-is-visible "span.block-title-wrap:has-text('clear heading test')")
@@ -390,7 +407,9 @@
     ;; double `enter` convert the next block to bullet block
     (k/enter)
     (assert/assert-have-count "span.typed-list" 4)
-    (util/wait-timeout 60)
+    (-> (w/-query (str util/editor-q ":focus"))
+        assert/assert-that
+        (.hasValue ""))
     (k/enter)
     (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))

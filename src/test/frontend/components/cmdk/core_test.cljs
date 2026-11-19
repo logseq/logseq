@@ -15,6 +15,88 @@
    [logseq.shui.ui :as shui]
    [promesa.core :as p]))
 
+(deftest existing-matches-precede-page-creation-test
+  (let [page {:result-type :page
+              :source-block {:page? true :block.temp/original-title "car"}}
+        alias-target {:page? true :block.temp/original-title "vehicle"}
+        alias {:result-type :page :alias alias-target :source-block alias-target}
+        another-page {:result-type :page
+                      :source-block {:page? true :block.temp/original-title "cart"}}
+        block {:result-type :block :source-block {:block/title "hello"}}
+        another-block {:result-type :block :source-block {:block/title "hello again"}}
+        command {:source-command {:id :test-command}}
+        file {:file-path "car.pdf"}
+        filter-item {:filter {:group :nodes}}
+        namespaced-page {:result-type :page
+                         :source-block {:page? true :block.temp/original-title "transport/car"}}
+        namespace-child {:result-type :page
+                         :source-block {:page? true
+                                        :block.temp/original-title "car"
+                                        :block/parent 10
+                                        :block.temp/breadcrumb [{:db/id 10 :block/title "transport"}]}}
+        library-page {:result-type :page
+                      :source-block {:page? true
+                                     :block.temp/original-title "car"
+                                     :block/parent 11
+                                     :block.temp/breadcrumb [{:db/id 11
+                                                              :block/title "Library"
+                                                              :logseq.property/built-in? true}]}}
+        tag {:result-type :page
+             :source-block {:page? true
+                            :block.temp/original-title "car"
+                            :block/tags [{:db/ident :logseq.class/Tag}]}}
+        property {:result-type :page
+                  :source-block {:page? true
+                                 :block.temp/original-title "car"
+                                 :block/tags [{:db/ident :logseq.class/Property}]}}]
+    (doseq [[input filter-group results expected-groups expected-action]
+            [["c" nil {:nodes {:items [page]}} [:nodes :create] :open]
+             ["ca" nil {:nodes {:items [page]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [page]}} [:nodes] :open]
+             ["car" nil {:nodes {:items [namespace-child]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [library-page]}} [:nodes] :open]
+             ["car" nil {:nodes {:items [tag]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [property]}} [:nodes :create] :open]
+             ["car" nil {:nodes {:items [alias]}} [:nodes :create] :open]
+             ["transport/ca" nil {:nodes {:items [namespaced-page]}} [:nodes :create] :open]
+             ["ca" :nodes {:nodes {:items [page]}} [:nodes :create] :open]
+             ["ca" nil {:current-page {:items [page]}} [:current-page :create] :open]
+             ["ca" nil {:nodes {:items [page another-page]}
+                        :commands {:items [command]}
+                        :files {:items [file]}}
+              [:nodes :create :nodes :commands :files] :open]
+             ["car" nil {:nodes {:items [alias another-page]}}
+              [:nodes :create :nodes] :open]
+             ["transport/ca" nil {:nodes {:items [namespaced-page another-page]}
+                                  :files {:items [file]}}
+              [:nodes :create :nodes :files] :open]
+             ["ca" :nodes {:nodes {:items [page another-page]}}
+              [:nodes :create :nodes] :open]
+             ["hello" nil {:nodes {:items [block another-block]}
+                           :commands {:items [command]}
+                           :filters {:items [filter-item]}}
+              [:nodes :create :nodes :commands :filters] :open]
+             ["ca" nil {:current-page {:items [block another-block]}
+                        :nodes {:items [page another-page]}}
+              [:current-page :current-page :nodes :create :nodes] :open]
+             ["carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]
+             ["transport/carr" nil {:filters {:items [filter-item]}} [:create :filters] :create]]]
+      (testing (str "Default action for " input " with filter " filter-group)
+        (let [state {::cmdk/input (atom input)
+                     ::cmdk/filter (atom (when filter-group {:group filter-group}))
+                     ::cmdk/results (atom results)
+                     ::cmdk/highlighted-item (atom nil)
+                     ::cmdk/all-items-cache (atom [])
+                     ::cmdk/focus-source (atom :keyboard)
+                     ::cmdk/scroll-container-ref (atom nil)}
+              items (vec (mapcat last (cmdk/state->results-ordered state)))]
+          (reset! (::cmdk/all-items-cache state) items)
+          (is (= expected-groups (mapv :group items)))
+          (is (= expected-action (cmdk/state->action state)))
+          (when-let [creation-index (some #(when (:source-create %) (:item-index %)) items)]
+            (cmdk/move-highlight state creation-index)
+            (is (= :create (cmdk/state->action state)))))))))
+
 (deftest shift-open-page-uses-page-action-test
   (async done
     (let [page-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -221,4 +303,36 @@
           (p/catch
            (fn [error]
              (is false (str error))))
+          (p/finally done)))))
+
+(deftest load-results-current-page-scopes-search-to-owning-page-test
+  (async done
+    (let [page-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+          block-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+          search-pages (atom [])
+          results (atom {})
+          search-state {::cmdk/input (atom "needle")
+                        ::cmdk/results results
+                        ::cmdk/filter (atom {:group :current-page})}]
+      (-> (p/with-redefs [state/get-current-repo (constantly "repo")
+                          state/get-current-page (constantly "Page A")
+                          state/<invoke-db-worker
+                          (fn [_ _ _ lookup-ref]
+                            (p/resolved
+                             (get {[:block/name "page a"] {:block/uuid page-uuid}
+                                   [:block/uuid block-uuid] {:block/uuid block-uuid
+                                                            :block/page {:block/uuid page-uuid}}}
+                                  lookup-ref)))
+                          search/block-search
+                          (fn [_ _ opts]
+                            (swap! search-pages conj (:page opts))
+                            (p/resolved {:items [] :matched-count 0}))]
+            (p/do!
+             (cmdk/load-results :current-page search-state)
+             (p/with-redefs [state/get-current-page (constantly (str block-uuid))]
+               (cmdk/load-results :current-page search-state))))
+          (p/then
+           (fn []
+             (is (= [(str page-uuid) (str page-uuid)] @search-pages))))
+          (p/catch (fn [error] (is false (str error))))
           (p/finally done)))))

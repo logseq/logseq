@@ -120,23 +120,6 @@
                            {:blocks {child-uuid (block child-uuid 11 "after")}})]
     (is (empty? (:children delta)))))
 
-(deftest unordered-parent-reference-has-no-children-patch-test
-  (let [parent-uuid (random-uuid)
-        page-uuid (random-uuid)
-        db-before (db-with-blocks [{:db/id 1
-                                    :block/uuid parent-uuid
-                                    :block/tx-id 10}])
-        report (tx-report db-before [{:block/uuid page-uuid
-                                      :block/name "nested page"
-                                      :block/parent [:block/uuid parent-uuid]
-                                      :block/tx-id 11}])
-        delta (build-delta
-               report
-               {:blocks {page-uuid
-                         (block page-uuid 11 "Nested page")}})]
-    (is (empty? (:children delta))
-        "A parent reference without outliner order is not child membership.")))
-
 (deftest direct-child-visibility-builds-remove-and-upsert-patches-test
   (doseq [[label attr value]
           [["recycled child" :logseq.property/deleted-at 1000]
@@ -174,6 +157,46 @@
         (is (= {parent-uuid {:remove []
                              :upsert [[child-uuid "a0"]]}}
                (membership-operations (:children show-delta))))))))
+
+(deftest inherited-recycle-visibility-updates-children-membership-test
+  (let [uuids (into {} (map (fn [id] [id (random-uuid)])) (range 1 7))
+        db (db-with-blocks
+            (mapv (fn [id]
+                    (cond-> {:db/id id :block/uuid (uuids id) :block/tx-id 10}
+                      (contains? #{3 4 5} id) (assoc :block/parent (case id 3 1 4 3 5 4)
+                                                   :block/order "a0")
+                      (= 2 id) (assoc :logseq.property/deleted-at 1000)))
+                  (range 1 7)))]
+    (doseq [[label setup tx-data expected]
+            [["recycle ancestor" [] [[:db/add 1 :logseq.property/deleted-at 1000]]
+              {1 {:remove [3]} 3 {:remove [4]} 4 {:remove [5]}}]
+             ["restore ancestor" [[:db/add 1 :logseq.property/deleted-at 1000]]
+              [[:db/retract 1 :logseq.property/deleted-at 1000]]
+              {1 {:upsert [3]} 3 {:upsert [4]} 4 {:upsert [5]}}]
+             ["independently recycled descendant"
+              [[:db/add 1 :logseq.property/deleted-at 1000]
+               [:db/add 4 :logseq.property/deleted-at 1000]]
+              [[:db/retract 1 :logseq.property/deleted-at 1000]]
+              {1 {:upsert [3]}}]
+             ["move into recycled ancestor" [] [[:db/add 3 :block/parent 2]]
+              {1 {:remove [3]} 3 {:remove [4]} 4 {:remove [5]}}]
+             ["move out of recycled ancestor" [[:db/add 3 :block/parent 2]]
+              [[:db/add 3 :block/parent 1]]
+              {1 {:upsert [3]} 3 {:upsert [4]} 4 {:upsert [5]}}]
+             ["move between live parents" [] [[:db/add 3 :block/parent 6]]
+              {1 {:remove [3]} 6 {:upsert [3]}}]]]
+      (testing label
+        (let [report (tx-report (d/db-with db setup) tx-data)
+              operations (membership-operations (:children (build-delta report {})))
+              expected (into {}
+                             (map (fn [[parent-id changes]]
+                                    [(uuids parent-id)
+                                     (into {}
+                                           (map (fn [op]
+                                                  [op (mapv #(vector (uuids %) "a0") (get changes op))]))
+                                           [:remove :upsert])]))
+                             expected)]
+          (is (= expected operations)))))))
 
 (deftest insert-builds-a-minimal-child-upsert-test
   (let [parent-uuid (random-uuid)

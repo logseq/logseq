@@ -5,13 +5,14 @@
             [wally.main :as w])
   (:import [com.microsoft.playwright Locator$ClickOptions]))
 
+(def ^:private enabled-refresh-button "button:not([disabled]):has-text(\"Refresh\")")
+
 (defn refresh-all-remote-graphs
   []
-  (let [enabled-refresh "button:not([disabled]):has-text(\"Refresh\")"]
-    (w/wait-for enabled-refresh {:timeout 30000})
-    (w/click enabled-refresh
-             (-> (Locator$ClickOptions.)
-                 (.setTimeout 30000)))))
+  (w/wait-for enabled-refresh-button {:timeout 30000})
+  (w/click enabled-refresh-button
+           (-> (Locator$ClickOptions.)
+               (.setTimeout 30000))))
 
 (defn goto-all-graphs
   []
@@ -69,6 +70,29 @@
                (if cloud-ready?
                  (+ cloud-ready-ms e2ee-password-poll-ms)
                  0))))))
+
+(defn ensure-remote-graphs-loaded
+  "Open the all-graphs page and finish the one-time \"Set password for remote
+  graphs\" prompt when the account has no RSA keys on the sync server yet.
+  `<get-remote-graphs` runs the key check before it stores the fetched list, so
+  the prompt must be answered or the remote section (and its Refresh button)
+  never renders. Returns once remote graphs are loaded."
+  []
+  (goto-all-graphs)
+  (loop [remaining-ms 60000]
+    (cond
+      (w/visible? e2ee-password-modal)
+      (input-e2ee-password)
+
+      (w/visible? enabled-refresh-button)
+      nil
+
+      (<= remaining-ms 0)
+      (throw (ex-info "Remote graphs did not load" {}))
+
+      :else
+      (do (util/wait-timeout e2ee-password-poll-ms)
+          (recur (- remaining-ms e2ee-password-poll-ms))))))
 
 (defn- new-graph-helper
   [graph-name enable-sync? graph-e2ee?]

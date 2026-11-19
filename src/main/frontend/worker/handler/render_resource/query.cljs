@@ -75,6 +75,8 @@
        (<= 10000101 value 99991231)))
 
 (defn- require-query-spec!
+  "Throw on an unusable query spec. Callers must catch: a bad query must
+  never fail the get-render-snapshots batch."
   [query-spec]
   (let [kind (:kind query-spec)
         allowed-keys (case kind
@@ -83,6 +85,7 @@
                        nil)]
     (when-not (and (map? query-spec)
                    allowed-keys
+                   (contains? query-spec :query)
                    (every? allowed-keys (keys query-spec))
                    (or (not (contains? query-spec :current-page-title))
                        (and (string? (:current-page-title query-spec))
@@ -287,24 +290,27 @@
            :error {:message (or (ex-message error) (str error))}}
     (ex-data error) (assoc-in [:error :data] (transit-safe-value (ex-data error)))))
 
+(defn isolated-query-failure
+  "Per-resource query error. Watch-all re-evaluates once the query is fixed."
+  [error]
+  (log/error :renderer-query-failed {:error error})
+  [common/watch-all (query-error-value error)])
+
 (defn- query
   [db resource-key runtime]
-  (let [query-spec (require-query-spec! (second resource-key))]
-    (when (and (= :dsl (:kind query-spec))
-               (quoted-query-text (:query query-spec))
-               (not (:repo runtime)))
-      (common/fail! "Full-text query resource requires repository" {}))
-    (try
+  (try
+    (let [query-spec (require-query-spec! (second resource-key))]
+      (when (and (= :dsl (:kind query-spec))
+                 (quoted-query-text (:query query-spec))
+                 (not (:repo runtime)))
+        (common/fail! "Full-text query resource requires repository" {}))
       [(query-watch-keys db query-spec)
        {:rows (query-result-rows db (execute-query-spec db query-spec runtime)
-                                 query-spec)}]
-      ;; A user-supplied query can fail in many ways: cljs.reader errors on
-      ;; incomplete syntax while editing, invalid regex, malformed datalog,
-      ;; a bad result-transform. Isolating the failure keeps sibling snapshot
-      ;; resources alive; watch-all re-evaluates once the query is fixed.
-      (catch :default error
-        (log/error :renderer-query-failed {:kind (:kind query-spec) :error error})
-        [common/watch-all (query-error-value error)]))))
+                                 query-spec)}])
+    ;; Spec contracts, user query content, DSL parse, evaluation, and
+    ;; result-transform failures all stay on this resource.
+    (catch :default error
+      (isolated-query-failure error))))
 
 (def resource-renderers
   {:query (common/renderer 2 query)})

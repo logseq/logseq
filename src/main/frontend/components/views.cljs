@@ -471,8 +471,13 @@
      (editor-handler/save-current-block!)
      (when hide-popup?
        (shui/popup-hide!))
-     (state/exit-editing-and-set-selected-blocks! [cell])
-     (set-focus-timeout! (js/setTimeout #(.focus cell) 100)))))
+     ;; The popup can hide after the cell unmounted (the table re-rendered
+     ;; or the page changed): then there is no cell to select or focus
+     (if cell
+       (do
+         (state/exit-editing-and-set-selected-blocks! [cell])
+         (set-focus-timeout! (js/setTimeout #(when (.-isConnected cell) (.focus cell)) 100)))
+       (state/clear-edit!)))))
 
 (defn- mobile-btn-class
   "The sole purpose of this function is to avoid false positives in hardcoded UI detection."
@@ -1659,18 +1664,24 @@
        (into [:div.flex.flex-row]
              (map cell unpinned-columns)))]))
 
+(defn- search-input-visible?
+  "Keep the search field open after a remount whenever a query is already present."
+  [show-input? input]
+  (or (boolean show-input?) (not (string/blank? input))))
+
 (hsx/defc search
   [input {:keys [on-change set-input!]}]
-  (let [[show-input? set-show-input!] (hooks/use-state false)]
+  (let [[show-input? set-show-input!] (hooks/use-state false)
+        input-visible? (search-input-visible? show-input? input)]
     [:div.flex.flex-row.items-center
      (shui/button
       {:variant "ghost"
        :class "text-muted-foreground !px-1"
        :size :sm
-       :on-click #(when-not show-input?
+       :on-click #(when-not input-visible?
                     (set-show-input! true))}
       (ui/icon "search" {:size 15}))
-     (when show-input?
+     (when input-visible?
        [:<>
         (shui/input
          {:placeholder (t :view.filter/type-to-search)
@@ -3975,6 +3986,18 @@
   [view-data previous-view-data]
   (or view-data previous-view-data))
 
+(defn- view-paint-identity
+  "Exclude search input from a windowed resource context's paint identity."
+  [window-context]
+  (dissoc window-context :input))
+
+(defn- retained-view-paint
+  "Keep the previous payload while its paint identity is unchanged."
+  [view-data previous-view-data previous-identity next-identity]
+  (view-paint-source view-data
+                     (when (= previous-identity next-identity)
+                       previous-view-data)))
+
 (hsx/defc ^:large-vars/cleanup-todo loaded-view-aux
   [view-entity {:keys [config view-feature-type query-row-uuids
                        deactivate-deferred-view!] :as option}]
@@ -4001,8 +4024,11 @@
                                         viewport-height)
         window-context (:window-context plan)
         window-context-key (pr-str window-context)
+        paint-identity-key (pr-str (view-paint-identity window-context))
         window-or-full-data (db-hooks/use-resource (:resource-key plan))
         [previous-view-data set-previous-view-data!] (hooks/use-state nil)
+        [retained-paint-identity-key set-retained-paint-identity-key!]
+        (hooks/use-state paint-identity-key)
         [full-data-active? set-full-data-active!] (hooks/use-state false)
         full-snapshot (db-hooks/use-resource-snapshot (when full-data-active?
                                                         (:full-key plan)))
@@ -4030,7 +4056,10 @@
                            :ready (:value full-snapshot)
                            :error (throw (:error full-snapshot))
                            nil))
-        view-data (view-paint-source window-or-full-data previous-view-data)
+        view-data (retained-view-paint window-or-full-data
+                                       previous-view-data
+                                       retained-paint-identity-key
+                                       paint-identity-key)
         paint (loaded-view-paint view-data)
         all-row-ids (when (:ready? paint)
                       (view-data->rows view-data))
@@ -4078,11 +4107,18 @@
      (fn []
        (set-row-offset-state! nil)
        (set-stale-offset-window! nil)
-       ;; Keep previous paint only for same-context refetches (delete).
-       ;; A new filter/sort/input key must not keep the old 431-row table.
-       (set-previous-view-data! nil)
        js/undefined)
      [window-context-key])
+    (hooks/use-effect!
+     (fn []
+       ;; Search-only changes preserve the toolbar during a refetch.
+       ;; Windowed filter/sort changes invalidate retained paint;
+       ;; layout changes are handled by the separate effect below.
+       (when (not= retained-paint-identity-key paint-identity-key)
+         (set-retained-paint-identity-key! paint-identity-key)
+         (set-previous-view-data! nil))
+       js/undefined)
+     [paint-identity-key])
     (hooks/use-effect!
      (fn []
        (let [next-layout [display-type group-by-property-ident]]
@@ -4093,10 +4129,16 @@
            (set-stale-offset-window! nil)))
        js/undefined)
      [display-type group-by-property-ident])
-    (if-not (:ready? paint)
+    (cond
+      (:error view-data)
+      (ui/block-error (t :view/error) {:content (:message (:error view-data))})
+
+      (not (:ready? paint))
       [:div.flex.flex-col.space-2.gap-2.my-2
        (for [idx (range 3)]
          (shui/skeleton {:key idx :class "h-6 w-full"}))]
+
+      :else
       (let [data (:rows paint)
             notify-windowed-paint! (fn []
                                      (when (:full-key plan)
@@ -4243,7 +4285,7 @@
      [view-parent view-parent-uuid view-feature-type])
     nil))
 
-(hsx/defc view
+(hsx/defc view-root
   [{:keys [view-parent-uuid view-feature-type view-uuid] :as option}]
   (let [query-result? (= :query-result view-feature-type)
         view-uuids (when-not query-result?
@@ -4256,3 +4298,9 @@
 
       (and (not query-result?) (some? view-uuids))
       (missing-view view-parent-uuid view-feature-type))))
+
+(hsx/defc view
+  [option]
+  (ui/catch-error
+   (ui/block-error (t :view/error) {})
+   (view-root option)))

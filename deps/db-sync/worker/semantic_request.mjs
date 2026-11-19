@@ -34,8 +34,19 @@ export function semanticRequestUrl(options, baseUrl) {
   }
   if (url.searchParams.get("encoding") === "base64") {
     const size = decodedBase64Size(options.body);
-    if (size > MAX_ASSET_SIZE) throw new Error("decoded asset exceeds the 100MB limit");
-    url.searchParams.set("size", String(size));
+    // Canonical encrypted asset bytes include the IV, GCM tag, and Transit framing.
+    // Their declared size describes the plaintext and is checked by the stream validator.
+    const encryptedTitle = /^\["~b[A-Za-z0-9+/]{16}","~b/.test(url.searchParams.get("title") ?? "");
+    const header = atob(options.body.replace(/\s/g, "").slice(0, 36));
+    const encryptedBody = /^\["~b[A-Za-z0-9+/]{16}","~b/.test(header);
+    if (encryptedTitle && encryptedBody) {
+      if (size > 27 + 4 * Math.ceil((MAX_ASSET_SIZE + 16) / 3)) {
+        throw new Error("encrypted asset exceeds the 100MB plaintext limit");
+      }
+    } else {
+      if (size > MAX_ASSET_SIZE) throw new Error("decoded asset exceeds the 100MB limit");
+      url.searchParams.set("size", String(size));
+    }
   }
   return url;
 }

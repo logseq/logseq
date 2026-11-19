@@ -9,6 +9,7 @@
             [logseq.e2e.playwright-page :as pw-page]
             [logseq.e2e.rtc :as rtc]
             [logseq.e2e.settings :as settings]
+            [logseq.e2e.sync-server :as sync-server]
             [logseq.e2e.util :as util]
             [wally.main :as w])
   (:import (com.microsoft.playwright Page$NavigateOptions)
@@ -52,15 +53,21 @@
       (f))))
 
 (defn open-2-pages
-  "Use `*page1` and `*page2` in `f`"
+  "Use `*page1` and `*page2` in `f`.
+
+  Both pages are pointed at the shared local db-sync server and logged in as
+  the injected test account before first navigation, so RTC tests never talk
+  to api.logseq.io or Cognito."
   [f & {:keys [headless port]}]
   (let [headless (or headless @config/*headless)
         page-opts {:headless headless
                    :persistent false
                    :slow-mo @config/*slow-mo}
+        sync (sync-server/test-login)
+        _ (sync-server/seed-remote-graph! sync)
         p1 (w/make-page page-opts)
         p2 (w/make-page page-opts)]
-    (run! #(settings/install-init-script! (.context @%)) [p1 p2])
+    (run! #(settings/install-init-script! (.context @%) sync) [p1 p2])
     (reset! *page1 p1)
     (reset! *page2 p2)
     (binding [custom-report/*pw-contexts* (set [(.context @p1) (.context @p2)])
@@ -72,6 +79,10 @@
           (open-app! (or port @config/*port))
           (settings/developer-mode)
           (settings/refresh-test-env!)
+          ;; The first page sets the account's remote-graphs password; the
+          ;; second then finds RSA keys already on the server and goes straight
+          ;; to the loaded remote list.
+          (graph/ensure-remote-graphs-loaded)
           (let [p (w/get-page)]
             (.onConsoleMessage
              p

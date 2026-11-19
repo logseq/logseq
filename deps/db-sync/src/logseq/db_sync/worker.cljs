@@ -28,7 +28,12 @@
                (super state env)
                (set! (.-state this) state)
                (set! (.-env this) env)
-               (set! (.-sql this) (.-sql ^js (.-storage state)))
+               (let [storage (.-storage state)
+                     sql (.-sql storage)]
+                 (set! (.-sql this)
+                       #js {:exec (fn [query & args]
+                                    (.apply (.-exec sql) sql (to-array (cons query args))))
+                            :transaction (fn [f] (.transactionSync storage f))}))
                (set! (.-conn this) nil)
                (set! (.-schema-ready this) false)
                (let [presence (presence/presence* this)

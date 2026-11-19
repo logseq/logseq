@@ -103,6 +103,7 @@
   (when-let [repo (state/get-current-repo)]
     (state/<invoke-db-worker :thread-api/get-page-route-info repo page-name)))
 
+;; Recent records main-view page visits; block and sidebar visits do not count.
 (defn redirect-to-page!
   "`page-name` can be a block uuid or name, prefer to use uuid than name when possible"
   ([page-name]
@@ -119,8 +120,8 @@
          (notification/show! (t :nav/cannot-go-to-internal-page) :warning)
          (if-let [source-uuid (and (not ignore-alias?) (:alias-source-uuid route-info))]
            (p/let [source-route-info (<page-route-info source-uuid)]
-             (when-let [source-id (:alias-source-id route-info)]
-               (recent-handler/add-page-to-recent! source-id click-from-recent?))
+             (when (:route/eligible-for-recent? source-route-info)
+               (recent-handler/add-page-to-recent! (:page-id source-route-info) click-from-recent?))
              (let [m (cond->
                       (merge-query-params
                        (default-page-route (str source-uuid) source-route-info)
@@ -136,8 +137,8 @@
                        (assoc :push push))]
                (redirect! m)))
            (do
-             (when-let [db-id (:page-id route-info)]
-               (recent-handler/add-page-to-recent! db-id click-from-recent?))
+             (when (:route/eligible-for-recent? route-info)
+               (recent-handler/add-page-to-recent! (:page-id route-info) click-from-recent?))
              (let [m (cond->
                       (merge-query-params
                        (default-page-route (str page-name) route-info)
@@ -264,6 +265,12 @@
 
 (defn set-route-match!
   [route]
+  ;; The selection holds rendered block DOM nodes; a path change remounts the
+  ;; view and detaches them, so stale nodes must be dropped here — otherwise
+  ;; selection-driven ops (e.g. move up/down) silently apply on the old page.
+  (when (not= (:path route)
+              (:path (state/get-route-match)))
+    (state/clear-selection!))
   (state/swap-state! assoc :route-match route)
   (update-page-title! route)
   (update-page-label! route)

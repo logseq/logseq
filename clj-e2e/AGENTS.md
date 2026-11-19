@@ -12,6 +12,7 @@
   - `playwright_page.clj`: Playwright page initialization
   - `rtc.clj`: RTC testing helpers
   - `settings.clj`: Logseq settings manipulation
+  - `sync_server.clj`: Local db-sync server lifecycle + injected test account for RTC tests
   - `util.clj`: General utilities
 - Tests (`test/logseq/e2e/`)
   - `fixtures.clj`: Test fixtures

@@ -7,6 +7,7 @@
             ["path" :as node-path]
             [clojure.string :as string]
             [electron.utils :refer [fetch extract-zip] :as utils]
+            [electron.github-api :as github-api]
             [electron.logger :as logger]
             [electron.configs :as cfgs]
             [electron.window :refer [get-all-windows]]))
@@ -30,7 +31,11 @@
             (> (- (js/Date.now) @*last-valid-github-api) (* 1000 60)))
     (let [target github-api-1]
       (-> (fetch (str target "/rate_limit") {:timeout 2000})
-          (p/then #(when (not= (.-status %) 200) (throw (js/Error. (.-statusText %)))))
+          (p/then (fn [^js res]
+                    (p/let [body (when (= 200 (.-status res))
+                                   (-> (.json res) (p/catch (constantly nil))))]
+                      (when-not (github-api/proxy-usable? (.-status res) body)
+                        (throw (js/Error. (str "GitHub API proxy unusable: " (.-status res) " " (.-statusText res))))))))
           (p/then #(do (reset! *github-api target) (debug "INFO: use github api - " target)))
           (p/catch #(do (reset! *github-api github-api-0) (debug "ERR: valid github api - " %)))
           (p/finally #(reset! *last-valid-github-api (js/Date.now)))))))

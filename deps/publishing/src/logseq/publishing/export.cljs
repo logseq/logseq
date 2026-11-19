@@ -27,14 +27,32 @@
     (js/console.log (:payload msg))
     (js/console.error (:payload msg))))
 
+(defn- throw-copy-failed!
+  [from to e]
+  (throw (js/Error. (str "Failed to copy " from " -> " to ": " (.-message e)))))
+
 (defn- copy-file!
+  "Copy a file by reading and writing bytes.
+
+  Do not use fs.copyFile / copyFileSync (or fs-extra copy) for sources that may
+  live inside Electron's app.asar. The asar fs wrapper implements copyFile by
+  extracting the source once to $TMPDIR and caching that path for the process
+  lifetime. macOS deletes unused $TMPDIR files after ~3 days, so later copies
+  fail with ENOENT on the stale temp path. Read+write uses the asar-aware read
+  path and does not depend on that cache."
   [from to]
-  (fs/mkdirSync (node-path/dirname to) #js {:recursive true})
-  (fs/copyFileSync from to))
+  (try
+    (fs/mkdirSync (node-path/dirname to) #js {:recursive true})
+    (fs/writeFileSync to (fs/readFileSync from))
+    (catch :default e
+      (throw-copy-failed! from to e))))
 
 (defn- copy-path!
   [from to]
-  (let [stat (fs/statSync from)]
+  (let [stat (try
+               (fs/statSync from)
+               (catch :default e
+                 (throw-copy-failed! from to e)))]
     (cond
       (.isDirectory stat)
       (do

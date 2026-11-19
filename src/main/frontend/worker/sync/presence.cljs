@@ -1,7 +1,8 @@
 (ns frontend.worker.sync.presence
   "Presence and rtc state helpers for db sync."
-  (:require [logseq.common.util :as common-util]
-            [frontend.worker.state :as worker-state]))
+  (:require [frontend.worker.state :as worker-state]
+            [frontend.worker.sync.client-op :as client-op]
+            [logseq.common.util :as common-util]))
 
 (defn current-client
   [db-sync-client repo]
@@ -48,6 +49,7 @@
       {:repo repo
        :graph-id graph-uuid
        :pending-local pending-local
+       :failed-local (client-op/get-failed-local-tx-count repo)
        :pending-asset pending-asset
        :missing-asset-upload-files missing-asset-upload-files
        :pending-server pending-server
@@ -75,13 +77,14 @@
   (let [repo (:repo client)
         ws-state @(:ws-state client)
         online-users @(:online-users client)
-        {:keys [pending-local pending-asset missing-asset-upload-files pending-server
+        {:keys [pending-local failed-local pending-asset missing-asset-upload-files pending-server
                 local-tx remote-tx local-checksum remote-checksum graph-id]}
         (sync-counts-f repo)]
     {:rtc-state {:ws-state ws-state}
      :rtc-lock (= :open ws-state)
      :online-users (or online-users [])
      :unpushed-block-update-count (or pending-local 0)
+     :failed-local-ops-count failed-local
      :pending-asset-ops-count (or pending-asset 0)
      :missing-asset-upload-files (or missing-asset-upload-files [])
      :missing-asset-upload-files-count (count missing-asset-upload-files)
@@ -108,13 +111,17 @@
 
 (defn update-user-presence!
   [broadcast-f client user-id* editing-block-uuid]
-  (when (and user-id* editing-block-uuid)
+  ;; a null editing-block-uuid means the user stopped editing (the server
+  ;; clears it the same way): drop their editing block
+  (when user-id*
     (when-let [*online-users (:online-users client)]
       (swap! *online-users
              (fn [users]
                (mapv (fn [user]
                        (if (= user-id* (:user/uuid user))
-                         (assoc user :user/editing-block-uuid editing-block-uuid)
+                         (if editing-block-uuid
+                           (assoc user :user/editing-block-uuid editing-block-uuid)
+                           (dissoc user :user/editing-block-uuid))
                          user))
                      users)))
       (broadcast-f client))))

@@ -26,6 +26,7 @@
   [f]
   (let [db (new sqlite ":memory:" nil)
         sql #js {:_db db
+                 :transaction (fn [f] ((.transaction db f)))
                  :exec (fn [sql-str & args]
                          (let [stmt (.prepare db sql-str)]
                            (if (select-sql? sql-str)

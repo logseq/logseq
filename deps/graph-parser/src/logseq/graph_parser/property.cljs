@@ -138,44 +138,63 @@
         (re-find (re-pattern (str "^\\s?[^ ]+" colons)) line))))
 
 (defn remove-properties
-  [format content]
-  (cond
-    (contains-properties? content)
-    (let [lines (string/split-lines content)
-          [title-lines properties&body] (split-with #(-> (string/triml %)
-                                                         string/upper-case
-                                                         (string/starts-with? properties-start)
-                                                         not)
-                                                    lines)
-          body (drop-while #(-> (string/trim %)
-                                string/upper-case
-                                (string/starts-with? properties-end)
-                                not
-                                (or (string/blank? %)))
-                           properties&body)
-          body (if (and (seq body)
-                        (-> (first body)
-                            string/triml
-                            string/upper-case
-                            (string/starts-with? properties-end)))
-                 (let [line (string/replace (first body) #"(?i):END:\s?" "")]
-                   (if (string/blank? line)
-                     (rest body)
-                     (cons line (rest body))))
-                 body)]
-      (->> (concat title-lines body)
-           (string/join "\n")))
+  "Removes block properties from `content`, using the parsed `marker` to locate fenced titles."
+  ([format content]
+   (remove-properties format content nil))
+  ([format content marker]
+   (cond
+     (contains-properties? content)
+     (let [lines (string/split-lines content)
+           [title-lines properties&body] (split-with #(-> (string/triml %)
+                                                          string/upper-case
+                                                          (string/starts-with? properties-start)
+                                                          not)
+                                                     lines)
+           body (drop-while #(-> (string/trim %)
+                                 string/upper-case
+                                 (string/starts-with? properties-end)
+                                 not
+                                 (or (string/blank? %)))
+                            properties&body)
+           body (if (and (seq body)
+                         (-> (first body)
+                             string/triml
+                             string/upper-case
+                             (string/starts-with? properties-end)))
+                  (let [line (string/replace (first body) #"(?i):END:\s?" "")]
+                    (if (string/blank? line)
+                      (rest body)
+                      (cons line (rest body))))
+                  body)]
+       (->> (concat title-lines body)
+            (string/join "\n")))
 
-    (not= format :org)
-    (let [lines (string/split-lines content)
-          lines (if (simplified-property? (first lines))
-                  (drop-while simplified-property? lines)
-                  (cons (first lines)
-                        (drop-while simplified-property? (rest lines))))]
-      (string/join "\n" lines))
+     (not= format :org)
+     (let [lines (string/split-lines content)
+           fence-line (cond-> (some-> (first lines) string/trim)
+                        (and marker (seq lines))
+                        (string/replace-first (re-pattern (str "^" (common-util/escape-regex-chars marker) "\\s+")) ""))
+           fence (some->> fence-line (re-find #"^(?:```|\$\$)"))
+           ;; a block that starts with a code or math fence has its properties
+           ;; after the closing fence (inside the fence they would be code)
+           closing (when fence
+                     (some (fn [[i line]] (when (= (string/trim line) fence) i))
+                           (map-indexed vector (rest lines))))
+           lines (cond
+                   closing
+                   (let [[fenced after] (split-at (+ 2 closing) lines)]
+                     (concat fenced (drop-while simplified-property? after)))
 
-    :else
-    content))
+                   (simplified-property? (first lines))
+                   (drop-while simplified-property? lines)
+
+                   :else
+                   (cons (first lines)
+                         (drop-while simplified-property? (rest lines))))]
+       (string/join "\n" lines))
+
+     :else
+     content)))
 
 (defn remove-logbook
   [content]

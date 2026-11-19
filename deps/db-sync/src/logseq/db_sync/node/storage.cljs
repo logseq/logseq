@@ -36,6 +36,7 @@
                    (.exec db sql))))
        :prepare (fn [sql] (.prepare db sql))
        :close (fn [] (.close db))
+       :transaction (fn [f] ((.transaction db f)))
        :_db db})
 
 (defn open-index-db [data-dir]

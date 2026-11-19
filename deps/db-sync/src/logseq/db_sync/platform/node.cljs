@@ -8,6 +8,26 @@
     (.forEach headers (fn [value key] (aset out key value)))
     out))
 
+(defn- header-value [node-headers key]
+  (let [value (aget node-headers key)]
+    (cond
+      (string? value) value
+      (array? value) (aget value 0)
+      :else nil)))
+
+(defn- forwarded-proto
+  "Original client scheme from a reverse proxy. The left-most value is the one
+  the client used; later values are appended by downstream proxies."
+  [node-headers]
+  (when-let [value (header-value node-headers "x-forwarded-proto")]
+    (let [proto (-> value
+                    (string/split #",")
+                    first
+                    string/trim
+                    string/lower-case)]
+      (when (contains? #{"http" "https"} proto)
+        proto))))
+
 (defn request-from-node
   [^js req {:keys [scheme host]}]
   (let [headers (js/Headers.)
@@ -18,8 +38,8 @@
               (when (some? value)
                 (.set headers (string/lower-case k) value))))
         method (or (.-method req) "GET")
-        host (or host (aget node-headers "host") "localhost")
-        scheme (or scheme "http")
+        host (or host (header-value node-headers "host") "localhost")
+        scheme (or scheme (forwarded-proto node-headers) "http")
         url (str scheme "://" host (.-url req))
         init #js {:method method
                   :headers headers}]

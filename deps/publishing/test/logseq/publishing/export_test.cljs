@@ -1,5 +1,5 @@
 (ns logseq.publishing.export-test
-  (:require [cljs.test :as t :refer [is use-fixtures async]]
+  (:require [cljs.test :as t :refer [deftest is use-fixtures async]]
             [logseq.publishing.test.helper :as test-helper :include-macros true :refer [deftest-async]]
             [logseq.publishing.export :as publish-export]
             [promesa.core :as p]
@@ -53,18 +53,23 @@
                          (throw (ex-info (:payload msg) {}))
                          (js/console.log (:payload msg))))}))
 
+(def binary-static-bytes
+  "PNG-like bytes including NUL and 0xFF so string-based copies would corrupt them."
+  (js/Uint8Array. #js [0x89 0x50 0x4e 0x47 0x0d 0x0a 0x1a 0x0a 0x00 0xff 0x00 0x01]))
+
 (defn- create-static-dir [dir]
   (fs/mkdirSync (path/join dir) #js {:recursive true})
   (mapv #(fs/mkdirSync (path/join dir %)) publish-export/static-dirs)
   (fs/mkdirSync (path/join dir "css" "fonts") #js {:recursive true})
   (fs/writeFileSync (path/join dir "css" "style.css") "style")
   (fs/writeFileSync (path/join dir "css" "fonts" "font.woff2") "font")
+  (fs/writeFileSync (path/join dir "img" "pixel.bin") binary-static-bytes)
   (fs/mkdirSync (path/join dir "js" "publishing"))
   (mapv #(fs/writeFileSync (path/join dir "js" "publishing" %) %)
         (conj publish-export/js-files "manifest.edn"))
   (doseq [file (conj (vec (js-map-files)) "db-worker.js.map")]
     (fs/writeFileSync (path/join dir "js" file) file))
-  (fs/writeFileSync (path/join dir "404.html") ""))
+  (fs/writeFileSync (path/join dir "404.html") "404"))
 
 (defn- create-logseq-graph
   "Creates a minimal graph to test publishing"
@@ -96,6 +101,15 @@
            (is (= "font"
                   (str (fs/readFileSync "tmp/published-graph/static/css/fonts/font.woff2")))
                "nested static files are copied recursively")
+           (is (= "404"
+                  (str (fs/readFileSync "tmp/published-graph/404.html")))
+               "404.html is copied from the static dir")
+           (is (every? #(fs/existsSync (path/join "tmp/published-graph/static" %))
+                       publish-export/static-dirs)
+               "static css/icons/img/js dirs are copied")
+           (is (.equals (fs/readFileSync "tmp/static/img/pixel.bin")
+                        (fs/readFileSync "tmp/published-graph/static/img/pixel.bin"))
+               "binary static files are copied byte-for-byte")
            (is (empty? (filter #(.endsWith (path/basename %) ".map")
                                (get-files "tmp/published-graph/static/js")))
                "source maps are not copied"))))
@@ -140,3 +154,38 @@
          (is (= "bar"
                 (str (fs/readFileSync "tmp/published-graph/assets/bar.png")))
              "second asset is copied correctly")))
+
+(deftest copy-file-uses-read-write-not-copyfile
+  ;; nbb's ESM `fs` namespace is not stubbable (copyFileSync is non-configurable),
+  ;; so assert the asar-safe copy implementation directly.
+  (let [src (str (fs/readFileSync "src/logseq/publishing/export.cljs"))]
+    (is (re-find #"fs/writeFileSync to \(fs/readFileSync from\)" src)
+        "copy-file! copies by reading bytes and writing them")
+    (is (nil? (re-find #"fs/copyFileSync" src))
+        "export does not call fs/copyFileSync for asar-safe static copies")
+    (is (nil? (re-find #"fs/copyFile\b" src))
+        "export does not call fs/copyFile for asar-safe static copies")))
+
+(deftest-async create-export-reports-static-copy-failure
+  (create-static-dir "tmp/static")
+  (create-logseq-graph "tmp/test-graph")
+  (fs/rmSync "tmp/static/404.html")
+  (let [notifications (atom [])]
+    (p/let [_ (publish-export/create-export
+               "<div>WOOT</div>"
+               "tmp/static"
+               "tmp/test-graph"
+               "tmp/published-graph"
+               {:notification-fn #(swap! notifications conj %)})]
+           (let [msg (first @notifications)]
+             (is (= 1 (count @notifications))
+                 "a static copy failure is reported once")
+             (is (= "error" (:type msg))
+                 "a static copy failure is reported as an error")
+             (is (re-find #"Export public pages unexpectedly failed" (:payload msg)))
+             (is (re-find #"Failed to copy" (:payload msg))
+                 "the failed copy names the source and destination")
+             (is (re-find #"404\.html" (:payload msg))
+                 "the failed copy includes the missing static file")
+             (is (not (fs/existsSync "tmp/published-graph/static/css/style.css"))
+                 "a static copy failure does not silently continue with the remaining files")))))

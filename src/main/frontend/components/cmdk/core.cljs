@@ -26,11 +26,13 @@
             [frontend.state :as state]
             [frontend.ui :as ui]
             [frontend.util :as util]
+            [frontend.util.entity :as entity]
             [frontend.util.page :as page-util]
             [frontend.util.ref :as ref]
             [frontend.util.text :as text-util]
             [goog.object :as gobj]
             [logseq.common.util :as common-util]
+            [logseq.db :as ldb]
             [logseq.shui.hooks :as hooks]
             [logseq.shui.ui :as shui]
             [promesa.core :as p]
@@ -117,6 +119,25 @@
              :class nil}]
            (remove nil?)))))
 
+(defn- insert-create-after-first-match
+  [groups]
+  (let [creation-items (some (fn [[_ group items]]
+                              (when (= group :create) items)) groups)
+        first-match (fn [result-type]
+                      (some (fn [[_ group items]]
+                              (when-let [item (some #(when (= result-type (:result-type %)) %) items)]
+                                [group item])) groups))
+        [matched-group matched-item] (or (first-match :page) (first-match :block))]
+    (if (and (seq creation-items) matched-group)
+      (for [[title group items] groups
+            :when (not= group :create)]
+        [title group
+         (if (= group matched-group)
+           (let [[before after] (split-with #(not= matched-item %) items)]
+             (concat before [(first after)] creation-items (rest after)))
+           items)])
+      groups)))
+
 ;; Take the results, decide how many items to show, and order the results appropriately
 (defn state->results-ordered
   [state]
@@ -142,6 +163,11 @@
                          (some (fn [block]
                                  (and
                                   (:page? block)
+                                  (not (entity/class? block))
+                                  (not (entity/property? block))
+                                  (or (nil? (:block/parent block))
+                                      (entity/journal? block)
+                                      (ldb/library? (peek (:block.temp/breadcrumb block))))
                                   (= (util/page-name-sanity-lc input) (util/page-name-sanity-lc (:block.temp/original-title block))))) blocks-result)))
         include-slash? (string/includes? input "/")
         start-with-slash? (string/starts-with? input "/")
@@ -152,12 +178,11 @@
                   [(group-label :nodes)          :nodes         (visible-items :nodes)]]
 
                  include-slash?
-                 [(when-not node-exists?
-                    [(group-label :create)       :create        (create-items input)])
-
-                  [(group-label :current-page)   :current-page  (visible-items :current-page)]
+                 [[(group-label :current-page)   :current-page  (visible-items :current-page)]
                   [(group-label :nodes)          :nodes         (visible-items :nodes)]
                   [(group-label :files)          :files         (visible-items :files)]
+                  (when-not node-exists?
+                    [(group-label :create)       :create        (create-items input)])
                   [(group-label :filters)        :filters       (visible-items :filters)]]
 
                  filter-group
@@ -171,16 +196,16 @@
 
                  :else
                  (->>
-                  [(when-not node-exists?
-                     [(group-label :create)         :create         (create-items input)])
-                   [(group-label :current-page)     :current-page   (visible-items :current-page)]
+                  [[(group-label :current-page)     :current-page   (visible-items :current-page)]
                    [(group-label :nodes)            :nodes          (visible-items :nodes)]
                    [(group-label :recently-updated-pages) :recently-updated-pages (visible-items :recently-updated-pages)]
                    [(group-label :commands)         :commands       (visible-items :commands)]
                    [(group-label :files)            :files          (visible-items :files)]
+                   (when-not node-exists?
+                     [(group-label :create)         :create         (create-items input)])
                    [(group-label :filters)          :filters        (visible-items :filters)]]
                   (remove nil?)))
-        order (remove nil? order*)]
+        order (insert-create-after-first-match (remove nil? order*))]
     (for [[group-name group-key group-items] order]
       [group-name
        group-key
@@ -188,7 +213,8 @@
          (count group-items)
          (or (get-in results [group-key :matched-count])
              (count (get-in results [group-key :items]))))
-       (mapv #(assoc % :group group-key :item-index (vswap! index inc)) group-items)])))
+       (mapv #(assoc % :group (if (:source-create %) :create group-key)
+                       :item-index (vswap! index inc)) group-items)])))
 
 (defn state->highlighted-item
   ([state]
@@ -217,7 +243,7 @@
 ;; Each result group has it's own load-results function
 (defmulti load-results (fn [group _state] group))
 
-(declare <page-uuid)
+(declare <page-uuid <search-page-uuid)
 
 (defn- recent-page-items
   [pages]
@@ -501,16 +527,16 @@
     (let [!results (::results state)
           !input (::input state)
           repo (state/get-current-repo)
-          expanded? (::expanded? state)
-          opts (cmdk-state/cmdk-block-search-options
-                {:filter-group :current-page
-                 :dev? config/dev?
-                 :expanded? expanded?})]
+          expanded? (::expanded? state)]
       (swap! !results assoc-in [group :status] :loading)
-      (swap! !results assoc-in [:current-page :status] :loading)
-      (p/let [current-page-uuid (<page-uuid repo current-page)
-              opts (assoc opts :page-uuid current-page-uuid)
-              search-result (search/block-search repo @!input opts)
+      (p/let [current-page-uuid (<search-page-uuid repo current-page)
+              opts (cmdk-state/cmdk-block-search-options
+                    {:filter-group :current-page
+                     :dev? config/dev?
+                     :expanded? expanded?
+                     :page-uuid current-page-uuid})
+              search-result (when current-page-uuid
+                              (search/block-search repo @!input opts))
               {:keys [blocks matched-count]} (block-search-result->items search-result)
               blocks (remove nil? blocks)
               items (map (fn [block]
@@ -572,25 +598,31 @@
                   (:source-block highlighted-item))]
     (:block/uuid block)))
 
+(defn- route-node-ref
+  [node]
+  (cond
+    (uuid? node) [:block/uuid node]
+    (common-util/uuid-string? node) [:block/uuid (uuid node)]
+    :else [:block/name (common-util/page-name-sanity-lc node)]))
+
 (defn- <page-uuid
   [repo page-id-name-or-uuid]
-  (cond
-    (uuid? page-id-name-or-uuid)
+  (if (or (uuid? page-id-name-or-uuid) (nil? page-id-name-or-uuid))
     (p/resolved page-id-name-or-uuid)
+    (p/let [page (state/<invoke-db-worker :thread-api/pull
+                                          repo
+                                          [:block/uuid]
+                                          (route-node-ref page-id-name-or-uuid))]
+      (:block/uuid page))))
 
-    (nil? page-id-name-or-uuid)
-    (p/resolved nil)
-
-    :else
-    (let [lookup-ref (if (and (string? page-id-name-or-uuid)
-                              (common-util/uuid-string? page-id-name-or-uuid))
-                       [:block/uuid (uuid page-id-name-or-uuid)]
-                       [:block/name (common-util/page-name-sanity-lc page-id-name-or-uuid)])]
-      (p/let [page (state/<invoke-db-worker :thread-api/pull
-                                            repo
-                                            [:block/uuid]
-                                            lookup-ref)]
-        (:block/uuid page)))))
+(defn- <search-page-uuid
+  [repo route-node]
+  (p/let [node (state/<invoke-db-worker :thread-api/pull
+                                        repo
+                                        [:block/uuid {:block/page [:block/uuid]}]
+                                        (route-node-ref route-node))]
+    (or (get-in node [:block/page :block/uuid])
+        (:block/uuid node))))
 
 (defn- block-page-uuid
   [block]
@@ -939,9 +971,10 @@
         highlighted-item (or highlighted-item*
                              (when (= :keyboard focus-source) first-item))
         mouse-mode? (= :mouse focus-source)
-        can-show-less? (< (get-group-limit group) (count visible-items))
+        visible-result-count (count (remove :source-create visible-items))
+        can-show-less? (< (get-group-limit group) visible-result-count)
         can-show-more? (or has-more?
-                           (< (count visible-items) (count items)))
+                           (< visible-result-count (count items)))
         show-less #(swap! (::results state) assoc-in [group :show] :less)
         show-more #(show-more-results! state group)]
     [:div {:class         (if (= group :create)
@@ -991,7 +1024,7 @@
                   source-block (some-> item :source-block)
                   hls-page? (and page? (pdf-utils/hls-file? (:block/title source-block)))]]
         ^{:key (:item-index item)}
-        [render-result-list-item state group highlighted? mouse-mode? item hls-page? text input])]]))
+        [render-result-list-item state (:group item) highlighted? mouse-mode? item hls-page? text input])]]))
 
 (defn move-highlight
   [state n]

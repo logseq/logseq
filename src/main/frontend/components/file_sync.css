@@ -9,7 +9,8 @@
       .ui__button.cloud {
           @apply relative;
 
-          &.on {
+          &.on,
+          &.failed {
               @apply after:content-['*'];
 
               &:after {
@@ -35,6 +36,11 @@
                       background-color: var(--ls-color-file-sync-idle);
                   }
               }
+          }
+
+          &.on.failed:after,
+          &.failed:after {
+              background-color: var(--ls-color-file-sync-error);
           }
       }
 

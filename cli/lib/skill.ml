@@ -38,10 +38,14 @@ external process_argv : string array = "argv" [@@mel.module "process"]
 let executable_dir_candidates () =
   let candidates_for_script script =
     let script_dir = Filename.dirname script in
+    let parent_dir = Filename.dirname script_dir in
     Vec.of_array
       [|
         skill_file_under script_dir;
-        skill_file_under (Filename.dirname script_dir);
+        skill_file_under parent_dir;
+        (* the desktop app: the CLI is Resources/app.asar/js/logseq-cli.js and
+           electron-builder's extraResources puts the skill in Resources/ *)
+        skill_file_under (Filename.dirname parent_dir);
       |]
   in
   if Array.length process_argv >= 2 then candidates_for_script process_argv.(1)

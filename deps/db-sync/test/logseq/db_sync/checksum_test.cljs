@@ -527,6 +527,18 @@
           incremental (checksum/update-checksum checksum-before tx-report)]
       (is (= full incremental)))))
 
+(deftest incremental-checksum-matches-recompute-for-entity-with-two-block-uuids-test
+  (testing "an edit of an entity whose stored datoms hold 2 :block/uuid values (init-db does not check cardinality) keeps the incremental checksum equal to the recompute, which counts the entity once per uuid datom"
+    (let [db (d/init-db (map (fn [[e a v]] (d/datom e a v))
+                             [[1 :block/uuid (random-uuid)] [1 :block/name "page-a"]
+                              [2 :block/uuid (random-uuid)] [2 :block/uuid (random-uuid)]
+                              [2 :block/title "Block"] [2 :block/page 1]])
+                        db-schema/schema)
+          tx-report (d/with db [[:db/add 2 :block/title "Block edited"]])
+          checksum-before (checksum/recompute-checksum (:db-before tx-report))]
+      (is (= (checksum/recompute-checksum (:db-after tx-report))
+             (checksum/update-checksum checksum-before tx-report))))))
+
 (deftest checksum-ignores-non-page-non-block-entities-test
   (testing "entities with uuid but without page semantics do not affect checksum"
     (let [db0 (sample-db)

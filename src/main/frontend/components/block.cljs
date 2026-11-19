@@ -819,6 +819,13 @@
         (nil? page)
         (state/pub-event! [:page/create page-name])
 
+        ;; Normal click on a PDF annotation ref opens the PDF at the highlight.
+        ;; Shift-click (sidebar) and meta/ctrl/middle-click still reach the
+        ;; annotation block itself.
+        (and (entity/pdf-annotation? page)
+             (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
+        (pdf-assets/open-block-ref! page)
+
         (and (fn? (:on-pointer-down config))
              (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
         ((:on-pointer-down config) e)
@@ -1285,13 +1292,6 @@
        progress-view]
       content)))
 
-(defn- img-audio-video?
-  [block]
-  (let [asset-type (some-> (:logseq.property.asset/type block) keyword)]
-    (or (contains? (common-config/img-formats) asset-type)
-        (contains? config/audio-formats asset-type)
-        (contains? config/video-formats asset-type))))
-
 (defn- block-tagged-with?
   [block tag-ident]
   (some (fn [tag]
@@ -1336,7 +1336,7 @@
                        (not contents-page?))]
     (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
       (cond
-        (and asset? (img-audio-video? block))
+        asset?
         (asset-cp config block)
 
         (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
@@ -2807,7 +2807,7 @@
       [:div.opacity-75 (t :ui/untitled)]
 
       (and (ldb/asset? block)
-           (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
+           (not (block-asset/media-asset? block)))
       (asset-cp config block)
 
       (:raw-title? config)
@@ -3727,7 +3727,7 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (ldb/asset? block) (img-audio-video? block))
+           (and (ldb/asset? block) (block-asset/media-asset? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
@@ -3885,7 +3885,8 @@
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
   (when-not (entity/journal? block)
-    {:on-drag-enter (fn [event]
+    {:data-block-drop-target true
+     :on-drag-enter (fn [event]
                       (.preventDefault event))
      :on-drag-over (fn [event]
                      (block-drag-over event uuid top? block-id *move-to'))
@@ -5000,9 +5001,10 @@
                :child-uuids child-uuids
                :render-children render-children))))
    (fn [^js previous-props ^js next-props]
-     (let [[_previous-config previous-block previous-child-uuids] (.-args previous-props)
-           [_next-config next-block next-child-uuids] (.-args next-props)]
+     (let [[previous-config previous-block previous-child-uuids] (.-args previous-props)
+           [next-config next-block next-child-uuids] (.-args next-props)]
        (and (same-block-revision? previous-block next-block)
+            (= (:current-page-title previous-config) (:current-page-title next-config))
             (= previous-child-uuids next-child-uuids))))))
 
 (defn- render-loaded-block-row

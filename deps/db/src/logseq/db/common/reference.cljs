@@ -6,6 +6,7 @@
             [logseq.db :as ldb]
             [logseq.db.common.initial-data :as common-initial-data]
             [logseq.db.frontend.class :as db-class]
+            [logseq.db.frontend.content :as db-content]
             [logseq.db.frontend.entity-util :as entity-util]))
 
 ;; -----------------------------------------------------------------------------
@@ -251,6 +252,8 @@
        (mapcat (fn [pid] (:block/_refs (d/entity db pid))))
        (remove (fn [ref]
                  (or
+                  ;; Exclude blocks that live on this page or one of its aliases.
+                  (contains? ids (:db/id (:block/page ref)))
                   (when class-ids
                     (some class-ids (map :db/id (:block/tags ref))))
                   (entity-util/hidden? ref)
@@ -306,20 +309,38 @@
                  set)))]
     (linked-reference-result db id include-ref-pages-count? has-filters? ref-blocks children-ids))))
 
+(defn- mentions-title?
+  "Returns whether `block-title` mentions one of the lower-cased `titles`
+  within a text segment outside node references."
+  [block-title titles]
+  (let [lc (string/lower-case block-title)]
+    (and (some #(string/includes? lc %) titles)
+         ;; Split includes captured UUIDs at odd indexes; only search text segments.
+         (some (fn [text]
+                 (some #(string/includes? text %) titles))
+               (take-nth 2 (string/split lc db-content/id-ref-pattern))))))
+
 (defn get-unlinked-references
+  "Blocks that mention the page, or one of its aliases, by title without
+  referencing it."
   [db id]
-  (let [entity (d/entity db id)
-        title (string/lower-case (:block/title entity))]
-    (when-not (string/blank? title)
+  (let [page-ids (ldb/page-alias-set db id)
+        titles (->> page-ids
+                    (keep #(:block/title (d/entity db %)))
+                    (map string/lower-case)
+                    (remove string/blank?)
+                    distinct)]
+    (when (seq titles)
       (let [ids (->> (d/datoms db :avet :block/title)
                      (keep (fn [d]
-                             (when (and (not= id (:e d))
-                                        (string/includes? (string/lower-case (:v d)) title))
+                             (when (and (not (contains? page-ids (:e d)))
+                                        (mentions-title? (:v d) titles))
                                (:e d)))))]
         (keep
          (fn [eid]
            (let [e (d/entity db eid)]
-             (when-not (or (some #(= id %) (map :db/id (:block/refs e)))
+             (when-not (or (contains? page-ids (:db/id (:block/page e)))
+                           (some #(contains? page-ids %) (map :db/id (:block/refs e)))
                            (:block/link e)
                            (ldb/built-in? e))
                e)))
