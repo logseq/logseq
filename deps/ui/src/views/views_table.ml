@@ -1591,10 +1591,18 @@ let foldable inst ~key ~title ~(body : t) : t =
                [ body ] ]) ])
     ctx parent
 
+(* the worker encodes a nil group value as {:kind :empty} *)
+let empty_group_value gv =
+  match gv with
+  | W.Nil -> true
+  | W.Map _ -> W.get gv "kind" = Some (W.Keyword "empty")
+  | _ -> false
+
 let group_title inst s gv =
   let missing_group () =
     I.no_group_value (Option.value s.V.group_by ~default:"")
   in
+  let gv = if empty_group_value gv then W.Nil else gv in
   match Wr.group_value_uuid gv with
   | Some uuid ->
       if Hashtbl.mem s.V.blocks uuid || Hashtbl.mem s.V.ref_titles uuid then
@@ -1787,7 +1795,7 @@ let ref_grouped_list_lines inst (s : V.vstate)
     let key = "g" ^ string_of_int i in
     let title = group_title inst s g.Wr.glv in
     let header = ref_header inst ~key
-        ~title:(if g.Wr.glv = W.Nil then
+        ~title:(if empty_group_value g.Wr.glv then
           text ~font_size:"14px" ~foreground:"hsl(var(--muted-foreground))" ~value:title []
         else link ~url:("#/page/" ^ Ui_services.uri_encode_component title)
           ~target:`self_ ~style_class:"page-ref" ~text:title []) in
