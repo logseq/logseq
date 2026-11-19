@@ -1456,6 +1456,16 @@ abc
       (is (not= (.getTime modified-at) (:block/created-at page)))
       (is (empty? (:errors (db-validate/validate-local-db! @conn)))))))
 
+(deftest-async import-custom-format-journal-block-keeps-journal-day-created-at
+  (p/let [file (write-temp-graph-file "journals/2024_03_08.md" "- journal block\n")
+          conn (db-test/create-conn)
+          _ (db-pipeline/add-listener conn)
+          _ (import-files-to-db [file] conn {:user-config {:journal/page-title-format "yyyy/MM/dd"}})
+          journal (ldb/get-journal-page-by-day @conn 20240308)
+          block (db-test/find-block-by-content @conn "journal block")]
+    (is (= "2024/03/08" (:block/name journal)))
+    (is (= (date-time-util/journal-day->ms 20240308) (:block/created-at journal) (:block/created-at block)))))
+
 (deftest-async import-date-property-before-journal-file
   ;; https://github.com/logseq/logseq/issues/13976
   ;; A node/date property lookup of a journal page is transacted before that
