@@ -1753,8 +1753,10 @@
                                       (keep #(class-alias-search-choice class %)
                                             (:block/alias class))))
                             all-classes)]
-        (->> (search/fuzzy-search choices q {:extract-fn class-search-text})
-             (common-util/distinct-by :db/id))))))
+        (->> (search/fuzzy-search choices q {:extract-fn class-search-text
+                                           :limit (count choices)})
+             (common-util/distinct-by :db/id)
+             (take 20))))))
 
 (defn <get-matched-blocks
   "Return matched blocks, optionally including public built-ins"
