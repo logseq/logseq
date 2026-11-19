@@ -315,7 +315,7 @@ let renderable env uuid (n : Model.block) : bool =
 
 (* rebuild the children list under [parent_key] — [parent_key] is the
    parent block's uuid, or the page uuid for the top-level list *)
-let rec splice_children env parent_key (cur : Model.block list)
+let rec splice_children ?(links = ISet.empty) env parent_key (cur : Model.block list)
     (child_level : int) : Model.block list =
   let cur =
     match
@@ -392,10 +392,15 @@ let rec splice_children env parent_key (cur : Model.block list)
             | _ -> c)
         | None -> c
       in
+      let loop_linked, links =
+        match c.Model.block_link with
+        | Some id -> ISet.mem id links, ISet.add id links
+        | None -> false, links
+      in
       let children' =
         match c.Model.block_uuid with
         | Some u ->
-            splice_children env (Some u) c.Model.block_children
+            splice_children ~links env (Some u) c.Model.block_children
               (c.Model.block_level + 1)
         | None -> c.Model.block_children
       in
@@ -404,7 +409,8 @@ let rec splice_children env parent_key (cur : Model.block list)
          splice descends with no parent_key rather than consuming this
          row's own patch a second time *)
       let embed_children' =
-        splice_children env None c.Model.block_embed_children
+        if loop_linked then [] else
+        splice_children ~links env None c.Model.block_embed_children
           (c.Model.block_level + 1)
       in
       let c =
@@ -584,8 +590,9 @@ let apply_to_page ?(strict = true) (h : helpers) (page : Model.page)
           | _ -> None
         in
         let top =
+          let links = Option.fold ~none:ISet.empty ~some:ISet.singleton page.Model.page_db_id in
           renumber_tree
-            (splice_children env root_key page.Model.page_blocks 1)
+            (splice_children ~links env root_key page.Model.page_blocks 1)
         in
         (* a patch whose parent is not in this tree is foreign (a
            cross-page move's other end, another route's children) — not

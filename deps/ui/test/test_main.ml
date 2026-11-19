@@ -5028,8 +5028,51 @@ let test_delta_preserves_embed_children () =
                 (Editor_state.children_of b)=[child.Model.block_uuid, child.Model.block_title]
        | _ -> false)) [false;true]
 
+let test_delta_recursive_embed () =
+  let module D = Page_delta in
+  let own_child = block "own-child" "Original child" in
+  let source = { (block "source-parent" "Source") with Model.block_db_id = Some 213 } in
+  let link = { (block "page-link" "Page link") with Model.block_link = Some 207;
+    block_children = [own_child] } in
+  let page_root = { (block "source-page" "Source page") with Model.block_db_id = Some 207;
+    block_children = [{source with Model.block_children = [link]}] } in
+  let canonical = {link with Model.block_embed_children = [page_root]} in
+  let occurrence uuid = { (block uuid "") with Model.block_link = Some 213;
+    block_embed_children = [source] } in
+  List.iter (fun (name, upsert, failed) ->
+    let p : D.parsed = {rev=1;canon=D.SMap.empty;deleted=D.SSet.empty;affected=[];
+      patches=D.SMap.singleton "source-parent" {D.base_rev=0;remove=D.SSet.empty;upsert}} in
+    let canon_nodes = Hashtbl.create 1 and idx_nodes = Hashtbl.create 1 in
+    Hashtbl.add canon_nodes "page-link" canonical;
+    Hashtbl.add idx_nodes "source-parent" source;
+    let env : D.env = {p;canon_nodes;idx_nodes;consumed=Hashtbl.create 1;failed=false} in
+    let updated = D.splice_children env (Some "host")
+      [occurrence "first"; occurrence "second"] 1 in
+    let valid (outer : Model.block) = match outer.block_embed_children with
+      | [root] -> (match root.block_children with
+        | [] -> upsert = [] || failed
+        | [moved] when not failed -> (match moved.block_embed_children with
+          | [page] -> (match page.block_children with
+            | [parent] -> (match parent.block_children with
+              | [loop] -> loop.block_uuid = link.block_uuid
+                  && loop.block_embed_children = []
+                  && List.map (fun (b : Model.block) -> b.block_uuid, b.block_title)
+                       loop.block_children = [own_child.block_uuid, own_child.block_title]
+              | _ -> false)
+            | _ -> false)
+          | _ -> false)
+        | _ -> false)
+      | _ -> false in
+    check ("Page deltas bound recursive embeds without dropping sibling occurrences: " ^ name)
+      (env.failed = failed
+       && List.map (fun (b : Model.block) -> b.block_uuid) updated = [Some "first";Some "second"]
+       && List.for_all valid updated))
+    ["moved", ["page-link","a1"], false; "empty", [], false;
+     "missing", ["missing","a1"], true]
+
 let () =
   test_delta_preserves_embed_children ();
+  test_delta_recursive_embed ();
   test_pure_helpers ();
   Edit_model_test.run ();
   Edit_view_web_test.run ();
