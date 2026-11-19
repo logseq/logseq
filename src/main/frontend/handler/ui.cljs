@@ -221,17 +221,6 @@
     (when (some-> heading .-classList (.contains "ui__ac-group-name"))
       heading)))
 
-(defn- auto-complete-edge-padding
-  "Returns the container's `scroll-padding-top` in px.
-
-  `#ui__ac-inner` sets it to the height of its edge fade, so keyboard
-  navigation stops each row clear of the faded edge."
-  [container]
-  (if (and (some? (.-nodeType container)) (exists? js/getComputedStyle))
-    (let [padding (js/parseFloat (.-scrollPaddingTop (js/getComputedStyle container)))]
-      (if (js/isNaN padding) 0 padding))
-    0))
-
 (defn- auto-complete-scroll-geometry
   "Builds focused-item geometry from `container` and `element` DOM nodes.
 
@@ -254,15 +243,13 @@
                         element-top)]
       {:scroll-top scroll-top
        :viewport-height (.-clientHeight container)
-       :edge-padding (auto-complete-edge-padding container)
        :item-top cluster-top
        :item-height (- (+ element-top (.-height element-rect)) cluster-top)})))
 
 (defn- auto-complete-keep-visible-scroll-top
   "Returns a `scrollTop` that keeps the focused item inside the viewport,
   at least `edge-padding` px away from either edge."
-  [{:keys [scroll-top viewport-height item-top item-height edge-padding]
-    :or {edge-padding 0}}]
+  [{:keys [scroll-top viewport-height item-top item-height edge-padding]}]
   (let [item-bottom (+ item-top item-height)
         viewport-top (+ scroll-top edge-padding)
         viewport-bottom (- (+ scroll-top viewport-height) edge-padding)]
@@ -286,8 +273,12 @@
   (when-let [^js element (gdom/getElement (str "ac-" idx))]
     (when-let [container (.closest element "#ui__ac-inner")]
       (when-let [geometry (auto-complete-scroll-geometry container element)]
+        ;; `#ui__ac-inner` sets `scroll-padding` to its edge fade height, so
+        ;; rows stop clear of the faded edges.
         (set! (.-scrollTop container)
-              (auto-complete-keep-visible-scroll-top geometry))))))
+              (auto-complete-keep-visible-scroll-top
+               (assoc geometry :edge-padding
+                      (js/parseFloat (.-scrollPaddingTop (js/getComputedStyle container))))))))))
 
 (defn auto-complete-prev
   [state e]

@@ -82,7 +82,7 @@
         [:div.flex.flex-col
          (when (and (:block/uuid block') (or (:block/parent block') (not (:page? block))))
            (when-let [breadcrumb (state/get-component :block/breadcrumb)]
-             [:div.ui__ac-item-context {:class (when db-tag? "no-icon")}
+             [:div.ui__ac-item-context
               (breadcrumb {:search? true} (state/get-current-repo) (:block/uuid block')
                           {:disabled? true
                            :block block'})]))
@@ -254,17 +254,17 @@
                         (page-handler/page-not-exists-handler input))
          :item-render (fn [block _chosen?]
                         (node-render block q {:db-tag? db-tag?}))
-         :empty-placeholder (ui/auto-complete-empty (if db-tag?
-                                                      (t :editor/search-for-tag)
-                                                      (t :editor/search-for-node)))
+         :empty-placeholder [:div.ui__ac-empty (if db-tag?
+                                                 (t :editor/search-for-tag)
+                                                 (t :editor/search-for-node))]
          :class "black"})
 
        (when (and db-tag?
                   (not (string/blank? q))
                   (not= "page" (string/lower-case q)))
-         (ui/auto-complete-hint
+         [:div.ui__ac-hint
           (shui/shortcut "mod+enter")
-          [:span (t :editor/display-tag-inline-hint)]))])))
+          [:span (t :editor/display-tag-inline-hint)]])])))
 
 (hsx/defc page-search
   "Page or tag searching popup"
@@ -341,7 +341,7 @@
      result
      {:on-chosen   chosen-handler
       :on-enter    non-exist-block-handler
-      :empty-placeholder   (ui/auto-complete-empty (t :editor/block-search))
+      :empty-placeholder   [:div.ui__ac-empty (t :editor/block-search)]
       :item-render (fn [block]
                      (node-render block q {:db-tag? false}))
       :class       "ac-block-search"}))))
@@ -390,7 +390,7 @@
      matched-templates
      {:on-chosen   (editor-handler/template-on-chosen-handler id)
       :on-enter    (fn [_state] (state/clear-editor-action!))
-      :empty-placeholder (ui/auto-complete-empty (t :editor/search-template-placeholder))
+      :empty-placeholder [:div.ui__ac-empty (t :editor/search-template-placeholder)]
       :item-render (fn [template]
                      (ui/auto-complete-item-label {:icon "template"} (:block/title template)))
       :class       "black"})))

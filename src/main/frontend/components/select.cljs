@@ -85,7 +85,7 @@
      [:input.cp__select-input.w-full
       (merge {:type "text"
               :ref *input-el
-              :class "!p-1.5"
+              :class "!px-2 !py-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
               :auto-focus auto-focus?
               :value input

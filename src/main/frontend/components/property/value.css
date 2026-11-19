@@ -13,21 +13,18 @@
   @apply min-w-[224px];
 }
 
-/* Size the list from the popover's available height, like the slash menu,
-   instead of a fixed box that clipped the last row. `#ui__ac-inner` scrolls. */
-.ls-property-dialog {
-  .ls-property-key {
-    .cp__select-main {
-      @apply w-full;
+/* The add-property key picker uses the editor popup surface (editor.css).
+   It sits inside the popover rather than on it, because the popover goes on
+   to show the value step. The list is sized from the popover's available
+   height, like the slash menu, and `#ui__ac-inner` scrolls. */
+.ls-property-dialog .ls-property-key {
+  @apply p-1.5 w-72;
 
-      .item-results-wrap {
-        max-height: min(calc(var(--available-height, 320px) - 64px), 256px);
-      }
-    }
+  .cp__select-main {
+    @apply w-full;
 
-    /* Line the query up with the row text (surface p-1.5 + row px-2). */
-    .cp__select .input-wrap input.cp__select-input {
-      @apply px-2;
+    .item-results-wrap {
+      max-height: min(calc(var(--available-height, 320px) - 64px), 256px);
     }
   }
 }

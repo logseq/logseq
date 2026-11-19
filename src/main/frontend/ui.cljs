@@ -477,11 +477,10 @@
   "Marks which edges of the auto-complete scroll container hide more content.
   `ui.css` fades only those edges, so rows at rest are never masked."
   [^js el]
-  (when el
-    (let [scroll-top (.-scrollTop el)
-          max-scroll-top (- (.-scrollHeight el) (.-clientHeight el))]
-      (.toggleAttribute el "data-fade-top" (> scroll-top 1))
-      (.toggleAttribute el "data-fade-bottom" (< scroll-top (dec max-scroll-top))))))
+  (let [scroll-top (.-scrollTop el)
+        max-scroll-top (- (.-scrollHeight el) (.-clientHeight el))]
+    (.toggleAttribute el "data-fade-top" (> scroll-top 1))
+    (.toggleAttribute el "data-fade-bottom" (< scroll-top (dec max-scroll-top)))))
 
 (defn- use-auto-complete-scroll-fade!
   [*inner matched]
@@ -489,14 +488,13 @@
    (fn []
      (when-let [^js el (hooks/deref *inner)]
        (let [sync! #(sync-auto-complete-scroll-fade! el)
-             observer (when (exists? js/ResizeObserver)
-                        (js/ResizeObserver. sync!))]
+             observer (js/ResizeObserver. sync!)]
          (sync!)
          (.addEventListener el "scroll" sync! #js {:passive true})
-         (some-> observer (.observe el))
+         (.observe observer el)
          #(do
             (.removeEventListener el "scroll" sync!)
-            (some-> observer (.disconnect))))))
+            (.disconnect observer)))))
    [matched]))
 
 (defn auto-complete-item-label
@@ -508,34 +506,22 @@
   either way it sits in the same fixed slot. `wrap?` lets long text wrap
   instead of truncating. `extra` renders after the label."
   [{icon' :icon :keys [title wrap?]} label & extra]
-  (cond-> [:span.ui__ac-item-label]
-    (or title wrap?) (conj (cond-> {}
-                             title (assoc :title title)
-                             wrap? (assoc :class "is-wrap")))
-    icon' (conj [:span.ui__ac-item-icon
-                 (if (string? icon') (shui/tabler-icon icon') icon')])
-    true (conj [:span.ui__ac-item-text label])
-    (seq extra) (into extra)))
-
-(defn auto-complete-empty
-  "Empty-state message for auto-complete lists, aligned with row text."
-  [& children]
-  (into [:div.ui__ac-empty] children))
-
-(defn auto-complete-hint
-  "Secondary hint line under an auto-complete list, aligned with row text."
-  [& children]
-  (into [:div.ui__ac-hint] children))
+  (into [:span.ui__ac-item-label {:title title :class (when wrap? "is-wrap")}
+         (when icon'
+           [:span.ui__ac-item-icon (if (string? icon') (shui/tabler-icon icon') icon')])
+         [:span.ui__ac-item-text label]]
+        extra))
 
 (defn- auto-complete-group
-  "One group of an auto-complete list: an optional title over its rows.
-  Every grouped list renders through this, so titles and the spacing
-  around them come from one place (`.ui__ac-group` in `ui.css`)."
-  [key title rows]
+  "One group of an auto-complete list: its title, or a divider when an
+  untitled group follows another, over its rows. Every list with groups
+  renders them through this, so titles and the spacing around them come
+  from one place (`.ui__ac-group` in `ui.css`)."
+  [key title divider? rows]
   [:div.ui__ac-group {:key key}
-   (when title
-     [:div.ui__ac-group-name
-      [:span.ui__ac-group-name-text title]])
+   (cond
+     title [:div.ui__ac-group-name [:span.ui__ac-group-name-text title]]
+     divider? [:hr])
    rows])
 
 (hsx/defc auto-complete
@@ -592,20 +578,14 @@
           get-group-name
           (for [items (partition-by (comp get-group-name second) (medley/indexed matched))
                 :let [[idx item] (first items)]]
-            (if-let [group-name (get-group-name item)]
-              (auto-complete-group idx group-name (render-f items))
-              [:div.ui__ac-group {:key idx}
-               (when (pos? idx) [:hr])
-               (render-f items)]))
+            (auto-complete-group idx (get-group-name item) (pos? idx) (render-f items)))
 
           grouped?
           (let [*idx (atom -1)
                 inc-idx #(swap! *idx inc)]
             (for [[group matched] (group-by :group matched)]
               (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
-                (if group
-                  (auto-complete-group (str group) group (render-f matched'))
-                  (render-f matched')))))
+                (auto-complete-group (str group) group false (render-f matched')))))
           :else
           (render-f (medley/indexed matched)))]
        (when empty-placeholder

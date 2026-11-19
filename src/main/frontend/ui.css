@@ -1,11 +1,22 @@
 /* Every auto-complete list scrolls here, whether it sits in an editor popup or
    in a `select` picker. Edges that hide more content fade out; the fade is
    toggled by `sync-auto-complete-scroll-fade!` in ui.cljs, and keyboard
-   navigation reads `scroll-padding` so the chosen row stays clear of it. */
+   navigation reads `scroll-padding` so the chosen row stays clear of it.
+   The fade stops don't inherit, so toggling them restyles only this box. */
+@property --ui-ac-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ui-ac-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 #ui__ac-inner {
   --ui-ac-fade-size: 16px;
-  --ui-ac-fade-top: 0px;
-  --ui-ac-fade-bottom: 0px;
 
   overflow-x: hidden;
   overflow-y: auto;
@@ -13,13 +24,17 @@
   position: relative;
   -webkit-overflow-scrolling: touch;
   scroll-padding-block: var(--ui-ac-fade-size);
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 var(--ui-ac-fade-top),
-    #000 calc(100% - var(--ui-ac-fade-bottom)),
-    transparent 100%
-  );
+
+  /* Lists that fit have no mask at all. */
+  &:is([data-fade-top], [data-fade-bottom]) {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--ui-ac-fade-top),
+      #000 calc(100% - var(--ui-ac-fade-bottom)),
+      transparent 100%
+    );
+  }
 
   &[data-fade-top] {
     --ui-ac-fade-top: var(--ui-ac-fade-size);
@@ -74,12 +89,8 @@
    (pb-1) and, when rows come before it, gets a larger gap above (pt-3)
    than below. Titles use the rows' px-2 so text lines up with the icons. */
 .ui__ac-group-name {
-  @apply flex items-center gap-2 px-2 pt-1 pb-1 select-none;
+  @apply flex items-center gap-2 px-2 py-1 select-none;
   @apply text-xs font-medium text-gray-11;
-  font-family: inherit;
-  font-style: normal;
-  letter-spacing: normal;
-  text-transform: none;
 
   > .ui__ac-group-name-text {
     @apply min-w-0 truncate;
@@ -93,7 +104,7 @@
   }
 }
 
-:is(.ui__ac-group, .menu-link-wrap) + .ui__ac-group > .ui__ac-group-name {
+.ui__ac-group + .ui__ac-group > .ui__ac-group-name {
   @apply pt-3;
 }
 
@@ -128,13 +139,13 @@
   @apply opacity-100;
 }
 
-/* Context line above a row's label (node breadcrumbs), indented to the text. */
+/* Context line above a row's label (node breadcrumbs). When the label has an
+   icon, indent past the icon slot and gap so the context lines up with the text. */
 .ui__ac-item-context {
   @apply mb-0.5 text-xs text-gray-11;
-  padding-left: calc(18px + var(--spacing) * 1.5);
 
-  &.no-icon {
-    @apply pl-0;
+  &:has(+ .ui__ac-item-label > .ui__ac-item-icon) {
+    padding-left: calc(18px + var(--spacing) * 1.5);
   }
 }
 

@@ -16,7 +16,6 @@
           element #js {:getBoundingClientRect (fn [] #js {:top 90 :height 30})}]
       (is (= {:scroll-top 100
               :viewport-height 240
-              :edge-padding 0
               :item-top 150
               :item-height 30}
              (#'ui-handler/auto-complete-scroll-geometry container element)))))
@@ -32,7 +31,6 @@
                        :getBoundingClientRect (fn [] #js {:top 72 :height 30})}]
       (is (= {:scroll-top 100
               :viewport-height 240
-              :edge-padding 0
               :item-top 100
               :item-height 62}
              (#'ui-handler/auto-complete-scroll-geometry container element)))))
@@ -58,6 +56,7 @@
            (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 0
              :viewport-height 200
+             :edge-padding 0
              :item-top 350
              :item-height 20}))))
   (testing "scrolls up when the focused item is above the viewport"
@@ -65,12 +64,14 @@
            (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 200
              :viewport-height 200
+             :edge-padding 0
              :item-top 40
              :item-height 20}))))
   (testing "scrolls back to 0 when the first grouped command is above the viewport"
     (is (zero? (#'ui-handler/auto-complete-keep-visible-scroll-top
                 {:scroll-top 400
                  :viewport-height 200
+                 :edge-padding 0
                  :item-top 0
                  :item-height 52}))))
   (testing "stops a row below the viewport clear of the bottom edge fade"
@@ -102,6 +103,7 @@
            (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 100
              :viewport-height 200
+             :edge-padding 0
              :item-top 140
              :item-height 20}))))
   (testing "keeps a partially clipped item fully visible at the bottom edge"
@@ -109,6 +111,7 @@
            (#'ui-handler/auto-complete-keep-visible-scroll-top
             {:scroll-top 0
              :viewport-height 200
+             :edge-padding 0
              :item-top 190
              :item-height 30})))))
 
