@@ -1611,6 +1611,66 @@ let restore snap =
   Editor_commands.active := snap.editor_cmds;
   Editor_commands.popup_vs := snap.editor_popup_vs
 
+let test_preview_lifetime st ~finish =
+  let previous_worker = !Runtime.worker in
+  let child = "00000000-0000-0000-0000-000000000321" in
+  let rejected = ref false and reads = ref 0 in
+  Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
+    (fun name _ ->
+      incr reads;
+      Js.Promise.resolve
+        (if !rejected then W.Tagged ("error", W.String "preview fixture failure")
+         else match name with
+         | "thread-api/get-page-route-info" ->
+             W.Map [W.kw "block/title", W.String "Preview heading"]
+         | "thread-api/get-page-blocks-tree" ->
+             W.Array [W.Map [W.kw "block/uuid", W.Uuid child;
+                            W.kw "block/title", W.String "Preview content"]]
+         | "thread-api/get-render-snapshots" ->
+             W.Map [W.kw "slots", W.Map
+               [W.Array [W.kw "resource"; W.Array [W.kw "block-ref-count"; W.Uuid child]],
+                W.Map [W.kw "value", W.Int 2]]]
+         | _ -> W.Nil)) };
+  let trigger name =
+    let wrap = Stub_dom.make_element "span" and link = Stub_dom.make_element "a" in
+    let set : string -> string -> unit = Stub_dom.get_field link "setAttribute" in
+    set "data-ref" name;
+    Stub_dom.append_child wrap link;
+    Ui_dom_web.el_of wrap in
+  let open_preview name =
+    Popups_view.close_pv st;
+    Popups_view.pv_open st (trigger name);
+    for _ = 0 to Ui_dom_web.token_ring_size do
+      ignore (Ui_dom_web.el_of (Stub_dom.make_element "span"))
+    done in
+  let rec run = function
+    | [] ->
+        Popups_view.close_pv st;
+        let before = !reads in
+        Popups_view.pv_open st (Ui_dom_web.el_of (Stub_dom.make_element "span"));
+        check "An empty reference trigger does not fetch preview data" (!reads = before);
+        rejected := true;
+        open_preview "rejected preview";
+        after 40 (fun () ->
+          check "A failed reference preview does not leave stale content" ((P.get st).P.pv = None);
+          Popups_view.close_pv st;
+          Runtime.worker := previous_worker;
+          finish ())
+    | name :: rest ->
+        open_preview name;
+        after 40 (fun () ->
+          check "Reference previews survive host element-token churn while loading"
+            (match (P.get st).P.pv with
+             | Some preview ->
+                 preview.P.pv_content.P.pc_title = "Preview heading"
+                 && List.map (fun block -> block.Model.block_title)
+                      preview.P.pv_content.P.pc_blocks = ["Preview content"]
+                 && preview.P.pv_content.P.pc_ref_counts = Some [child,2]
+             | None -> false);
+          run rest)
+  in
+  run ["Preview page"; "00000000-0000-0000-0000-000000000123"]
+
 let run ~finish =
   ignore (Fake_worker.install worker_handler);
   let snap = snapshot () in
@@ -1671,6 +1731,7 @@ let run ~finish =
   test_sidebar_nav ();
   after 30 (fun () ->
       async_checks ();
+      test_preview_lifetime st ~finish:(fun () ->
       (* cleanup after the deferred stage so async ops still resolve
          against the live session *)
       Runtime.read_model := prev_reader;
@@ -1683,4 +1744,4 @@ let run ~finish =
       P.close_cm st;
       ignore (Lui_app.dispose s.S.app);
       restore snap;
-      finish ())
+      finish ()))

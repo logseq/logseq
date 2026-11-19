@@ -1107,7 +1107,7 @@ let pv_open st (wrap : Ui_services.el) =
         (match !pv_pending with
          | Some el
            when generation = !pv_generation && graph = Router.repo ()
-                && Properties_state.same_el el wrap
+                && el == wrap
                 && wrap.Ui_services.connected () ->
              S.set_pv st
                (Some
