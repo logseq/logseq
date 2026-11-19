@@ -15,6 +15,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
@@ -553,6 +554,36 @@
       (finally
         ;; return global fn back to previous behavior
         (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest built-journals-use-current-title-format-test
+  (let [conn (db-test/create-conn-with-blocks [])
+        previous-pipeline @ldb/*transact-pipeline-fn]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+    (sqlite-build/create-blocks conn [{:page {:block/title "2024/01/03"}}
+                                     {:page {:build/journal 20240201}}])
+    (let [existing (ldb/get-journal-page-by-day @conn 20240201)]
+      (d/transact! conn [[:db/add (:db/id existing) :block/title "2024/01/04"]
+                         [:db/add (:db/id existing) :block/name "2024/01/04"]]))
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [txs (sqlite-export/build-import
+                 {:pages-and-blocks [{:page {:build/journal 20240102}}
+                                     {:page {:build/journal 20240103}}
+                                     {:page {:build/journal 20240104}}]}
+                 @conn {})]
+        (ldb/transact! conn (sqlite-export/import-tx-data txs) {::sqlite-export/imported-data? true}))
+      (let [journal (ldb/get-journal-page-by-day @conn 20240102)
+            collision (ldb/get-journal-page-by-day @conn 20240103)]
+        (is (= "2024/01/02" (:block/title journal)))
+        (is (= "2024/01/02" (:block/name journal)))
+        (is (= #uuid "00000001-2024-0102-0000-000000000000" (:block/uuid journal)))
+        (is (= "Jan 3rd, 2024" (:block/title collision)))
+        (is (= "jan 3rd, 2024" (:block/name collision)))
+        (is (= "Jan 4th, 2024" (:block/title (ldb/get-journal-page-by-day @conn 20240104))))
+        (is (= "2024/01/04" (:block/name (ldb/get-journal-page-by-day @conn 20240201))))
+        (is (not= (:db/id collision) (:db/id (ldb/get-page @conn "2024/01/03")))))
+      (finally
+        (reset! ldb/*transact-pipeline-fn previous-pipeline)))))
 
 (deftest batch-import-edn-datom-format-with-shifted-builtin-eids-test
   (let [source-conn (d/create-conn db-schema/schema)

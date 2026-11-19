@@ -14,6 +14,7 @@
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
+            [logseq.db.common.journal :as db-journal]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.content :as db-content]
@@ -1053,10 +1054,18 @@
    supported: :default, :url, :checkbox, :number, :node and :date. :checkbox and
    :number values are written as booleans and integers/floats. :node references
    are written as vectors e.g. `[:build/page {:block/title \"PAGE NAME\"}]`"
-  [options*]
-  (let [options (merge {:extract-content-refs? true :translate-property-values? true} options*)]
-    (validate-options options)
-    (build-blocks-tx* options)))
+  ([options*]
+   (let [options (merge {:extract-content-refs? true :translate-property-values? true} options*)]
+     (validate-options options)
+     (build-blocks-tx* options)))
+  ([options db]
+   (let [{:keys [init-tx block-props-tx] :as txs} (build-blocks-tx options)]
+     (if (some :block/journal-day init-tx)
+       (let [{:keys [db-after tx-data]} (d/with db (concat init-tx block-props-tx))
+             journal-ids (into #{} (comp (filter #(= :block/journal-day (:a %))) (map :e)) tx-data)
+             repair-tx (db-journal/title-format-tx db-after journal-ids)]
+         (update txs :block-props-tx into repair-tx))
+       txs))))
 
 (defn create-blocks
   "Builds txs with build-blocks-tx and transacts them. Also provides a shorthand
@@ -1064,7 +1073,7 @@
   [conn options]
   (let [options' (merge {:auto-create-ontology? true}
                         (if (vector? options) {:pages-and-blocks options} options))
-        {:keys [init-tx block-props-tx] :as _txs} (build-blocks-tx options')]
+        {:keys [init-tx block-props-tx] :as _txs} (build-blocks-tx options' @conn)]
     ;; (cljs.pprint/pprint _txs)
     (d/transact! conn init-tx)
     (when (seq block-props-tx)

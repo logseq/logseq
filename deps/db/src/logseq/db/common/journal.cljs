@@ -6,12 +6,13 @@
             [logseq.db.frontend.entity-util :as entity-util]))
 
 (defn title-format-values
-  "Return formatted journal attributes, excluding journals blocked by names that stay occupied."
-  [db]
+  "Return formatted journal attributes, optionally scoped to ids, excluding names that stay occupied."
+  [db & [journal-ids]]
   (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))
         proposed (into {}
                        (keep (fn [{:keys [e v]}]
-                               (when (entity-util/journal? (d/entity db e))
+                               (when (and (or (nil? journal-ids) (contains? journal-ids e))
+                                          (entity-util/journal? (d/entity db e)))
                                  (let [title (date-time-util/int->journal-title v formatter)]
                                    [e {:block/title title
                                        :block/name (common-util/page-name-sanity-lc title)}]))))
@@ -30,11 +31,11 @@
           (recur available))))))
 
 (defn title-format-tx
-  "Generate changed title/name datoms for journals whose proposed names are available."
-  [db]
+  "Generate changed title/name datoms, optionally scoped to ids, whose proposed names are available."
+  [db & [journal-ids]]
   (mapcat (fn [[e attrs]]
             (keep (fn [[attr value]]
                     (when (not= value (:v (first (d/datoms db :eavt e attr))))
                       [:db/add e attr value]))
                   attrs))
-          (title-format-values db)))
+          (title-format-values db journal-ids)))
