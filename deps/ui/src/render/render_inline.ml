@@ -1398,13 +1398,16 @@ type span_tok = { tok_start : int; tok_stop : int; tok_spec : run_spec }
 let footnote_anchor ~back name =
   let encoded = Ui_services.uri_encode_component name in
   let own, target = if back then "fn.", "fnr." else "fnr.", "fn." in
-  link ~url:"#" ~target:`self_
+  let marker = if back then {js|\u21a9\ufe0e|js} else "" in
+  let anchor = link ~url:"#" ~target:`self_
     ~accessibility_identifier:(own ^ encoded)
     ~data_attrs:[(if back then "data-footnote-back" else "data-footnote-ref"), name]
     ~on_press:(fun _ ->
       Option.iter (fun el -> el.Ui_services.scroll_into_view ())
         (Ui_services.dom_query ("[id=\"" ^ target ^ encoded ^ "\"]")))
-    [text ~as_:`Sup ~value:(name ^ if back then "↩︎" else "") []]
+    [text ~as_:`Sup ~value:(name ^ marker) []] in
+  if back then Ui_components.with_props [Ui_components.Prop.font_size "14px"] anchor
+  else anchor
 
 (* refs: uuids/names of the enclosing reference chain (cljs :ref-set) —
    a ref whose target is in it renders nothing, breaking self- and

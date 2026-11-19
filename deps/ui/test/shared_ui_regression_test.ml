@@ -1133,6 +1133,8 @@ let run_views ~registry ~profile ~finish =
         M.string_prop node "accessibility-identifier" = Some id) (nodes notes) in
       check "Footnote definitions render their body instead of raw Markdown syntax"
         (List.exists (fun node -> M.string_prop node "text" = Some "footnote text") (nodes notes));
+      check "Footnote backlinks preserve the Unicode return marker"
+        (List.exists (fun node -> M.string_prop node "text" = Some {js|1↩︎|js}) (nodes notes));
       S.press notes (anchor "fnr.1").M.id;
       S.press notes (anchor "fn.1").M.id;
       check "Footnote links navigate to the definition and back to their reference"

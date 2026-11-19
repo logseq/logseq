@@ -752,9 +752,10 @@ let rec title ?heading ?(is_cards = false)
         (if body = "" then [] else
            title ?heading ~card_eid ~self ~wrap_attrs ~prefix body)
         @ List.mapi (fun index (name, definition) ->
-            row ~key:("footnote-" ^ string_of_int index) ~cross:`center ~gap:4
+            row ~key:("footnote-" ^ string_of_int index) ~display:`block
               ~data_attrs:["data-footnote-definition", name]
-              [content ~self definition; Render_inline.footnote_anchor ~back:true name]) notes
+              (Render_inline.parse ~self definition
+               @ [Render_inline.footnote_anchor ~back:true name])) notes
         @ (if is_cards then [practice_el ~eid:card_eid] else [])
       else if deprecated_quote s then
         [ (* data-node-type attr is an e2e selector *)
