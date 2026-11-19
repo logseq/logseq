@@ -398,6 +398,49 @@ let test_save_debounce (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_acknowledged_save_before_broadcast (h : host) =
+  let* () = settle h 40 in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (title, reject_refresh) :: rest ->
+        reset_editor ();
+        stage_page h [Test_check.block "b1" "old"];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:"old";
+        let writes = ref 0 in
+        Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              if name = "thread-api/apply-outliner-ops" then begin
+                incr writes;
+                Js.Promise.resolve (W.Map [W.kw "result", W.Nil])
+              end else if name = "thread-api/get-page-blocks-tree" then
+                if reject_refresh then h.reject_promise "deferred save refresh failed"
+                else Js.Promise.resolve (page_w (Test_check.page [Test_check.block "b1" title]))
+              else Js.Promise.resolve (h.base_handler name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        Ops.schedule_save "b1" title;
+        let* () = Ops.flush_pending_save () in
+        check "Acknowledged autosave can precede the throttled page broadcast"
+          ((editing_now ()).S.base = title && A.model_title "b1" = "old" && !writes = 1);
+        A.blur_commit ();
+        let* () = settle h 40 in
+        check "Blur does not add a history transaction for an acknowledged buffer"
+          (!writes = 1);
+        check "A clean blur refreshes deferred truth or retains editing on refresh failure"
+          (if reject_refresh then Option.is_some (S.editing ())
+           else S.editing () = None && A.model_title "b1" = title);
+        stage_page h [Test_check.block "b1" "old"];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:0 ~base:title;
+        A.flush_edit ();
+        let* () = h.wait_ms 25 in
+        check "Navigation does not resave an acknowledged buffer before its broadcast"
+          (!writes = 1 && S.editing () = None);
+        run rest
+  in
+  let* () = run ["saved", false; "", false; "saved", true] in
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_embed_persists_erased_buffer (h : host) =
   let* () = settle h 40 in
   let rec run = function
@@ -2685,6 +2728,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_authoritative_route_miss h in
   let* () = test_composition h in
   let* () = test_save_debounce h in
+  let* () = test_acknowledged_save_before_broadcast h in
   let* () = test_embed_persists_erased_buffer h in
   let* () = test_pending_save_order h in
   let* () = test_suggestion_selection_commits_pending_save h in

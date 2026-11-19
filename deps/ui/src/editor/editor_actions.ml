@@ -592,12 +592,14 @@ let model_title uuid =
 
 let display_title uuid = S.title_for uuid (model_title uuid)
 
+let buffer_needs_save uuid buf =
+  buf <> model_title uuid
+  && match S.editing () with
+     | Some e when e.S.uuid = uuid -> buf <> Ops.trim_title uuid e.S.base
+     | _ -> true
+
 let commit_result ?(after = fun () -> ()) uuid buf =
-  (* compare against the persisted title, not display_title — the
-     override may already hold buf (exit_edit sets it first) and
-     normalization (heading strip, ref rewrite) can make the saved
-     title differ from the buffer *)
-  if buf <> model_title uuid then (
+  if buffer_needs_save uuid buf then (
     let save = Ops.accept_save uuid buf in
     let title = Ops.normalized_title uuid buf in
     S.override_title uuid title;
@@ -607,10 +609,13 @@ let commit_result ?(after = fun () -> ()) uuid buf =
   else (
     let origin = Runtime.capture_reload_origin () in
     Option.iter Ops.release_save (Ops.take_pending_save_for uuid);
-    (match origin with
-     | Some origin when Runtime.reload_origin_current origin -> after ()
-     | _ -> ());
-    Js.Promise.resolve ())
+    if buf <> model_title uuid then
+      Ops.refresh_page_then (fun () -> after (); Js.Promise.resolve ())
+    else (
+      (match origin with
+       | Some origin when Runtime.reload_origin_current origin -> after ()
+       | _ -> ());
+      Js.Promise.resolve ()))
 
 let commit uuid buf = ignore (commit_result uuid buf)
 
@@ -790,7 +795,7 @@ let flush_edit () =
       cancel_pending_focus ();
       let buf = Ops.trim_title e.uuid (live_buffer e.uuid) in
       let save =
-        if buf <> model_title e.uuid then Some (Ops.accept_save e.uuid buf)
+        if buffer_needs_save e.uuid buf then Some (Ops.accept_save e.uuid buf)
         else (
           Option.iter Ops.release_save (Ops.take_pending_save_for e.uuid);
           None)
