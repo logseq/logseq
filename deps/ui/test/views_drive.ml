@@ -247,6 +247,7 @@ let scripted_response (name : string) (args : W.t list) : W.t =
         (match List.nth_opt args 1 with Some r -> r | None -> W.Map [])
   | "thread-api/get-blocks" -> blocks_response (List.nth_opt args 1)
   | "thread-api/get-all-properties" -> W.List []
+  | "thread-api/get-file-content" -> W.String "{}"
   | "thread-api/pull" | "thread-api/pull-many" -> W.List []
   | _ -> W.Map []
 
