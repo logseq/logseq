@@ -1222,6 +1222,27 @@ let test_page_menu () =
         Editor_keys.on_global_key (key_event "ArrowDown");
         check "Rapid toolbar entry then wraps to its first action"
           (Stub_dom.get_field document "activeElement" == (!entries).(0));
+        let active_entries = !entries and active_initial = !initial_entries in
+        let retiring = Stub_dom.make_element "div" in
+        let set : string -> string -> unit = Stub_dom.get_field retiring "setAttribute" in
+        set "inert" "";
+        ignore (Stub_dom.append_child root retiring);
+        let old_rows = Array.map (fun _ ->
+          let row = Stub_dom.make_element "button" in
+          ignore (Stub_dom.append_child retiring row);
+          row) active_entries in
+        entries := Array.append old_rows active_entries;
+        initial_entries := Array.append
+          (Array.sub old_rows 0 (Array.length active_initial)) active_initial;
+        open_menu := Some (102., 10., 100., true, None);
+        S.appear toolbar popup.M.id;
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Reopened toolbar first Down focuses its live Login"
+          (Stub_dom.get_field document "activeElement" == login);
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Reopened toolbar wraps past the inert exit-transition menu"
+          (Stub_dom.get_field document "activeElement" == active_entries.(0));
+        Stub_dom.detach retiring;
         entries := [||]; initial_entries := [||];
         Stub_dom.set_field document "activeElement" root;
         S.appear toolbar popup.M.id;

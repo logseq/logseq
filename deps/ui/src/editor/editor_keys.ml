@@ -782,13 +782,17 @@ let page_menu_navigated () =
   | Some previous, Some current -> previous == current
   | _ -> false
 
+let page_menu_items selector =
+  Ui_services.dom_query_all selector
+  |> List.filter (fun item -> item.Ui_services.closest "[inert]" = None)
+
 let page_menu_key ev =
   match (Runtime.model ()).Model.page_menu, ev_key ev with
   | Some (_, _, _, app, _), ("ArrowDown" | "ArrowUp" | "Home" | "End" as key)
     when not (ev.Ui_services.default_prevented || ev.Ui_services.composing
               || ev.Ui_services.meta || ev.Ui_services.ctrl || ev.Ui_services.alt) ->
       let selector = if app then ".ls-dots-menu" else ".ls-context-menu-content" in
-      let items = Ui_services.dom_query_all
+      let items = page_menu_items
         (selector ^ " [role='menuitem']:not([aria-disabled='true'])") in
       let count = List.length items in
       if count = 0 then false else begin
@@ -800,7 +804,7 @@ let page_menu_key ev =
         let current = match index_of active with
           | Some index -> index
           | None when app ->
-              (match List.rev (Ui_services.dom_query_all
+              (match List.rev (page_menu_items
                 (selector ^ " [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])")) with
                | last :: _ -> Option.value (index_of (Some last)) ~default:(-1)
                | [] -> -1)

@@ -296,7 +296,7 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
     ~on_appear:(fun _ ->
       if with_app_items then
         (if not (Editor_keys.page_menu_navigated ()) then
-         match List.rev (Ui_services.dom_query_all
+         match List.rev (Editor_keys.page_menu_items
           ".ls-dots-menu [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])") with
          | target :: _ -> target.Ui_services.focus ()
          | [] -> ())
