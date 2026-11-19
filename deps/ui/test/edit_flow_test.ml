@@ -1331,6 +1331,71 @@ let test_delete_selection_history (h : host) =
 
 (* Explicit property commands must publish worker truth while the editor
    remains open, without waiting for a later autosave or broadcast. *)
+let test_task_cycle (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "task fixture"];
+  set_editing ~uuid:"b1" ~buffer:"task fixture" ~caret:4 ~base:"task fixture";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let status = ref None and available = ref true and reads = ref 0 and writes = ref [] in
+  let rows = List.mapi (fun index name ->
+    W.Map [W.kw "db/id", W.Int (index + 31);
+           W.kw "db/ident", W.Keyword ("logseq.property/status." ^ name)])
+    ["todo"; "doing"; "done"] in
+  Runtime.worker := Some { worker with Worker_client.invoke_fn = (fun name args ->
+    if name = "thread-api/get-blocks" then begin
+      incr reads;
+      Js.Promise.resolve (W.List [W.Map [W.kw "block",
+        W.Map (match !status with None -> [] | Some id ->
+          [W.kw "logseq.property/status", W.Map [W.kw "db/id", W.Int id]])]])
+    end else if name = "thread-api/get-property-closed-values" then
+      Js.Promise.resolve (if !available then W.List rows
+        else W.Map [W.kw "error", W.String "status fixture unavailable"])
+    else begin
+      if name = "thread-api/apply-outliner-ops" then
+        (match args with
+         | [_; W.Array mutations; _] -> List.iter (function
+             | W.Array [W.Keyword "batch-set-property";
+                        W.Array [_; W.Keyword "logseq.property/status"; W.Int id; _]] ->
+                 status := Some id; writes := !writes @ [!status]
+             | W.Array [W.Keyword "remove-block-property";
+                        W.Array [_; W.Keyword "logseq.property/status"]] ->
+                 status := None; writes := !writes @ [None]
+             | _ -> ()) mutations
+         | _ -> ());
+      worker.Worker_client.invoke_fn name args
+    end) };
+  let rec cycle = function
+    | [] -> Js.Promise.resolve ()
+    | (meta, expected) :: rest ->
+        Editor_keys.apply_input "b1"
+          (EI.Key (EM.key_ev ~meta ~ctrl:(not meta) "Enter", false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Modified Enter cycles the latest task status without splitting or exiting"
+          (!status = expected && S.editing_uuid () = Some "b1"
+           && current_titles () = ["task fixture"]
+           && (editing_now ()).S.model.EM.caret = 4);
+        cycle rest in
+  let* () = cycle [true,Some 31; false,Some 32; true,Some 33; false,None] in
+  check "Task cycling reads authoritative properties for every step"
+    (!reads = 4 && !writes = [Some 31;Some 32;Some 33;None]);
+  available := false;
+  Editor_keys.apply_input "b1" (EI.Key (EM.key_ev ~meta:true "Enter", false));
+  let* () = h.wait_ms 25 in
+  check "Unavailable task values never dispatch a guessed property mutation"
+    (!writes = [Some 31;Some 32;Some 33;None] && S.editing_uuid () = Some "b1");
+  reset_editor ();
+  stage_page h [];
+  let before = !reads in
+  Editor_keys.apply_input "b1" (EI.Key (EM.key_ev ~meta:true "Enter", false));
+  let* () = h.wait_ms 25 in
+  check "An empty editor does not create a task or a content block"
+    (!reads = before && current_titles () = []);
+  Runtime.worker := Some worker;
+  Js.Promise.resolve ()
+
 let test_code_conversion_focus (h : host) =
   let previous_focus = !S.code_focus in
   let mounted = ref false and focused = ref [] in
@@ -2173,6 +2238,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_indent_outdent h in
   let* () = test_exit_waits_for_save h in
   let* () = test_select_all_exit h in
+  let* () = test_task_cycle h in
   let* () = test_enter_edit_origin h in
   let* () = test_exit_after_navigation h in
   let* () = test_navigation_retires_dirty_editor h in

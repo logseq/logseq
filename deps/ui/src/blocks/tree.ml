@@ -335,7 +335,7 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
                          else
                            icon ~key:("arw-" ^ uuid)
                              ~name:(`app "rotating-arrow-down")
-                             ~point_size:13 [])
+                             ~point_size:16 ~margin_left:2 [])
                        cs ])
             ])
         ])
