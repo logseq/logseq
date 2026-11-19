@@ -1160,6 +1160,7 @@ let test_page_menu () =
   ignore (Stub_dom.append_child root second);
   ignore (Stub_dom.append_child (Stub_dom.get_field document "body") root);
   let entries = ref [| first; second |] in
+  let initial_entries = ref [||] in
   let open_menu = ref (Some (100., 10., 100., true, None)) in
   Fun.protect ~finally:(fun () ->
     Runtime.read_model := previous_model;
@@ -1171,6 +1172,8 @@ let test_page_menu () =
       Stub_dom.set_field document "querySelectorAll" (fun selector ->
         if selector = ".ls-dots-menu [role='menuitem']:not([aria-disabled='true'])"
         then Stub_dom.with_item_fn (Stub_dom.arr_of !entries)
+        else if selector = ".ls-dots-menu [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])"
+        then Stub_dom.with_item_fn (Stub_dom.arr_of !initial_entries)
         else previous_query selector);
       Stub_dom.set_field document "activeElement" root;
       Editor_keys.on_global_key (key_event "ArrowDown");
@@ -1179,6 +1182,39 @@ let test_page_menu () =
       Editor_keys.on_global_key (key_event "ArrowDown");
       check "The next page-menu Down advances past the focused action"
         (Stub_dom.get_field document "activeElement" == second);
+      let token = Ui_services.storage_get "id-token" in
+      Ui_services.storage_remove "id-token";
+      let toolbar = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+        ~initial:Model.initial ~reducer:(fun m _ -> m)
+        ~view:(fun _ _ _ -> Page_menu.view (100., 10., 100., true) None) () in
+      Fun.protect ~finally:(fun () ->
+        ignore (Lui_app.dispose toolbar.S.app);
+        Option.iter (Ui_services.storage_set "id-token") token) (fun () ->
+        S.flush toolbar;
+        let rows = nodes toolbar |> List.filter (fun node -> node.M.kind="menu-item")
+          |> List.map (fun node ->
+            let element = Stub_dom.make_element "button" in
+            ignore (Stub_dom.append_child root element);
+            node, element) in
+        entries := Array.of_list (List.map snd rows);
+        initial_entries := Array.of_list (List.filter_map (fun (node, element) ->
+          if data_attr node "data-menu-tail" = None then Some element else None) rows);
+        let login = List.find (fun (node, _) ->
+          M.string_prop node "text" = Some (I18n.t "ui/login")) rows |> snd in
+        let popup = List.find (fun node -> has_tok node "ls-dots-menu") (nodes toolbar) in
+        Stub_dom.set_field document "activeElement" root;
+        S.appear toolbar popup.M.id;
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "The mounted toolbar's first Down focuses Login"
+          (Stub_dom.get_field document "activeElement" == login);
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "The toolbar's next Down wraps to its first action"
+          (Stub_dom.get_field document "activeElement" == (!entries).(0));
+        entries := [||]; initial_entries := [||];
+        Stub_dom.set_field document "activeElement" root;
+        S.appear toolbar popup.M.id;
+        check "An empty toolbar DOM does not steal focus on appearance"
+          (Stub_dom.get_field document "activeElement" == root));
       entries := [||];
       check "An empty page menu does not claim arrow navigation"
         (not (Editor_keys.page_menu_key (key_event "ArrowDown")));
