@@ -174,16 +174,18 @@ let bullet_size ~library (b : Model.block) =
     | Some 4 -> 16 | Some 5 -> 13 | Some 6 -> 12
     | _ -> 16
 
-let children_indent ~library b =
-  22 + bullet_size ~library b / 2 - 1
+let children_indent = 30
+
+let guide_offset ~library b =
+  22 + bullet_size ~library b / 2 - children_indent
   - (if b.Model.block_order_list = Some "number" then 3 else 0)
 
 let children_container ?on_toggle ~library uuid
     (bs : Model.block Signal.signal) content =
-  (* Center the one-pixel guide on the bullet, including odd icon sizes. *)
   let guide_left b =
     let size = bullet_size ~library b in
-    float_of_int size /. 2. -. float_of_int (size / 2) +. 0.5 in
+    float_of_int (guide_offset ~library b)
+    +. float_of_int size /. 2. -. float_of_int (size / 2) +. 0.5 in
   let rail =
     box ~key:("border-" ^ uuid) ~style_class:"block-children-left-border"
       ~width:4 ~corner_radius:2 ~opacity:0.6
@@ -198,19 +200,21 @@ let children_container ?on_toggle ~library uuid
         Ui_parts.pressable ~on_press:(fun _ -> on_toggle ()) rail)
       on_toggle
   in
-  Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive (children_indent ~library) bs)
   (Ui_components.with_props
-    [ Ui_components.Prop.position `relative; Ui_components.Prop.padding_top 2 ]
+    [ Ui_components.Prop.position `relative; Ui_components.Prop.padding_top 2
+    ; Ui_components.Prop.padding_left 1 ]
     (row ~key:("children-" ^ uuid) ~style_class:"block-children-container"
+      ~margin_left:(children_indent - 1)
       ~margin_bottom:(-2)
       [ Ui_components.with_props
           [ Ui_components.Prop.position `absolute
-          ; Ui_components.Prop.inset_left (-1.)
           ; Ui_components.Prop.inset_top 0.
           ; Ui_components.Prop.inset_bottom 0.
           ; Ui_components.Prop.z_index 1
           ; Ui_components.Prop.cursor `pointer ]
-          rail
+          (Ui_parts.float_prop Lui_protocol.InsetLeft
+            ~value:(reactive (fun b -> float_of_int (guide_offset ~library b - 1)) bs)
+            rail)
       ; Ui_components.with_props
           [ Ui_components.Prop.position `absolute
           ; Ui_components.Prop.inset_top 0.
@@ -1125,7 +1129,7 @@ and children_dom ?extras ~depth ~editable ~library ~virtualize uuid scope
              ~render:(fun () ->
                child_list ?extras ~depth ~editable ~library ~virtualize uuid scope bs) ]
      else
-       column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
+       column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1. ~min_width:0
          [ child_list ?extras ~depth ~editable ~library ~virtualize uuid scope bs ])
 
 and children_el ?extras ~depth ~editable ~library ~virtualize uuid scope
@@ -1235,7 +1239,7 @@ and children_static_el ~depth ~library ?highlight ~collapse_scope
   let collapsed = Logseq_el.own ctx (collapsed_sig ~scope:collapse_scope b) in
   if_ ~test:(reactive not collapsed)
     (children_container ~on_toggle ~library uuid bs
-       (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
+       (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1. ~min_width:0
           (List.map
              (block_row_static ~depth:(depth + 1) ~library ?highlight
                 ~collapse_scope ~persist_collapse)

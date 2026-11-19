@@ -6,8 +6,8 @@ type guide = { ancestor : P.ancestor; inset : int }
 
 let guides ~library (row : P.block_row) =
   let _, reversed = List.fold_left (fun (inset, guides) ancestor ->
-    let next = inset + Tree.children_indent ~library ancestor.P.ancestor_block in
-    next, {ancestor; inset = next} :: guides)
+    let next = inset + Tree.children_indent in
+    next, {ancestor; inset = next + Tree.guide_offset ~library ancestor.P.ancestor_block} :: guides)
     (0, []) (List.rev row.ancestors) in
   List.rev reversed
 
@@ -65,9 +65,8 @@ let block_row ~state ~library ~source : t =
           (column ~margin_left:42 ~margin_vertical:8 ~padding_horizontal:16 ~padding_vertical:8
             ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
             [Views_view.view ~kind:Views_state.KLinkedRefs ~owner:(Wire.Uuid uuid)]))) } in
-  let indent row = List.fold_left (fun total ancestor ->
-    total + Tree.children_indent ~library ancestor.P.ancestor_block)
-    0 (block_of_row row).ancestors in
+  let indent row = Tree.children_indent * List.length (block_of_row row).ancestors in
+  (Ui_parts.int_prop Lui_protocol.PaddingLeft ~value:(reactive indent source)
   (Ui_components.with_props [Ui_components.Prop.position `relative]
     (column ~key:(P.key (P.Block initial)) ~min_width:0 ~margin_left:(-20)
       ~style_class:"page-blocks-inner"
@@ -82,7 +81,7 @@ let block_row ~state ~library ~source : t =
               ; Ui_components.Prop.inset_top 0.
               ; Ui_components.Prop.inset_bottom 0. ]
               (Ui_parts.float_prop Lui_protocol.InsetLeft
-                ~value:(reactive (fun guide -> float_of_int (guide.inset - 1)) guide)
+                ~value:(reactive (fun guide -> float_of_int (guide.inset - 2)) guide)
                 (box ~key:(let ancestor = (Signal.get guide).ancestor in
                    P.scoped_key ancestor.ancestor_scope (P.block_identity ancestor.ancestor_block)) ~width:4
                   ~style_class:"block-children-left-border"
@@ -102,10 +101,9 @@ let block_row ~state ~library ~source : t =
                         (box ~key:"guide-line" ~width:1
                           ~style_class:"block-children-indent-guide"
                           ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" [])) ]))))
-      ; Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive indent source)
-          (Tree.projected_block_row ~extras ~scope:initial.scope ~library
+      ; Tree.projected_block_row ~extras ~scope:initial.scope ~library
                 ~depth:(reactive (fun row -> (block_of_row row).depth) source)
-                ~source:(reactive (fun row -> (block_of_row row).block) source)) ]))
+                ~source:(reactive (fun row -> (block_of_row row).block) source) ])))
     ctx parent
 
 let view ~state ~library ~header ~footer ?section_minimum_height
