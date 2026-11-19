@@ -15,6 +15,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
@@ -108,12 +109,6 @@
   [db block]
   (when block
     (:v (first (d/datoms db :eavt (:db/id block) :block/title)))))
-
-(defn- default-journal-page-name
-  [journal-day]
-  (-> journal-day
-      (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-      common-util/page-name-sanity-lc))
 
 (defn- silence-stderr
   [f]
@@ -560,6 +555,36 @@
         ;; return global fn back to previous behavior
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest built-journals-use-current-title-format-test
+  (let [conn (db-test/create-conn-with-blocks [])
+        previous-pipeline @ldb/*transact-pipeline-fn]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+    (sqlite-build/create-blocks conn [{:page {:block/title "2024/01/03"}}
+                                     {:page {:build/journal 20240201}}])
+    (let [existing (ldb/get-journal-page-by-day @conn 20240201)]
+      (d/transact! conn [[:db/add (:db/id existing) :block/title "2024/01/04"]
+                         [:db/add (:db/id existing) :block/name "2024/01/04"]]))
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [txs (sqlite-export/build-import
+                 {:pages-and-blocks [{:page {:build/journal 20240102}}
+                                     {:page {:build/journal 20240103}}
+                                     {:page {:build/journal 20240104}}]}
+                 @conn {})]
+        (ldb/transact! conn (sqlite-export/import-tx-data txs) {::sqlite-export/imported-data? true}))
+      (let [journal (ldb/get-journal-page-by-day @conn 20240102)
+            collision (ldb/get-journal-page-by-day @conn 20240103)]
+        (is (= "2024/01/02" (:block/title journal)))
+        (is (= "2024/01/02" (:block/name journal)))
+        (is (= #uuid "00000001-2024-0102-0000-000000000000" (:block/uuid journal)))
+        (is (= "Jan 3rd, 2024" (:block/title collision)))
+        (is (= "jan 3rd, 2024" (:block/name collision)))
+        (is (= "Jan 4th, 2024" (:block/title (ldb/get-journal-page-by-day @conn 20240104))))
+        (is (= "2024/01/04" (:block/name (ldb/get-journal-page-by-day @conn 20240201))))
+        (is (not= (:db/id collision) (:db/id (ldb/get-page @conn "2024/01/03")))))
+      (finally
+        (reset! ldb/*transact-pipeline-fn previous-pipeline)))))
+
 (deftest batch-import-edn-datom-format-with-shifted-builtin-eids-test
   (let [source-conn (d/create-conn db-schema/schema)
         ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
@@ -780,10 +805,10 @@
                         (d/with @conn tx-data)))]
     (d/transact! conn [[:db/add :logseq.class/Journal
                         :logseq.property.journal/title-format "yyyy-MM-dd"]])
-    (testing "writing the computed journal title must still reject a stored-title change"
+    (testing "writing the formatted journal title without a format change must still reject a stored-title change"
       (let [error (try
                     (run-pipeline [{:db/id (:db/id journal)
-                                    :block/title (:block/title (d/entity @conn (:db/id journal)))}])
+                                    :block/title "2025-02-03"}])
                     nil
                     (catch :default e
                       e))]
@@ -984,20 +1009,109 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
-(deftest create-journal-page-name-uses-default-formatter-test
+(deftest journal-title-format-change-updates-stored-titles-and-names-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20241216}}
+               {:page {:build/journal 20241217}}
+               {:page {:build/journal 20241218}}
+               {:page {:block/title "2024-12-18 Wednesday"}}])
+        journal (ldb/get-journal-page-by-day @conn 20241216)
+        other (ldb/get-journal-page-by-day @conn 20241217)
+        collision (ldb/get-journal-page-by-day @conn 20241218)
+        owner (ldb/get-page @conn "2024-12-18 Wednesday")
+        format-tx [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]]
+        stored-title #(raw-block-title @conn %)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [before @conn
+            report (ldb/transact! conn format-tx)]
+        (is (= ["2024-12-16 Monday" "2024-12-17 Tuesday"] (mapv stored-title [journal other])))
+        (is (= ["2024-12-16 monday" "2024-12-17 tuesday"]
+               (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other])))
+        (is (= "Dec 18th, 2024" (stored-title collision)))
+        (is (= "Dec 18th, 2024" (:block/title (d/entity @conn (:db/id collision)))))
+        (is (= "Dec 18th, 2024" (:block/raw-title (d/entity @conn (:db/id collision)))))
+        (is (= "2024-12-16 Monday" (:block/title (d/entity @conn (:db/id journal)))))
+        (is (= "2024-12-16 Monday" (:block/raw-title (d/entity @conn (:db/id journal)))))
+        (is (= "dec 18th, 2024" (:block/name (d/entity @conn (:db/id collision)))))
+        (is (= (:db/id owner) (:db/id (ldb/get-page @conn "2024-12-18 Wednesday"))))
+        (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
+        (doseq [tx [[[:db/add (:db/id journal) :block/title "wrong"]]
+                    [[:db/add (:db/id journal) :block/name "wrong"]]
+                    [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]
+                     [:db/add (:db/id journal) :block/title "wrong"]]
+                    [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]
+                     [:db/add (:db/id journal) :block/name "wrong"]]]]
+          (is (thrown-with-msg? js/Error #"journal page protected attr updated" (ldb/transact! conn tx))))
+        (let [remote (d/conn-from-db before)]
+          (ldb/transact! remote (:tx-data report) {:rtc-tx? true :transact-remote? true})
+          (is (= (raw-block-title @conn journal) (raw-block-title @remote journal)))
+          (is (= (:block/name (d/entity @conn (:db/id journal)))
+                 (:block/name (d/entity @remote (:db/id journal))))))
+        (ldb/transact! conn (map (fn [datom]
+                                 [(if (:added datom) :db/retract :db/add) (:e datom) (:a datom) (:v datom)])
+                               (reverse (:tx-data report))) {:reverse? true})
+        (is (= "Dec 16th, 2024" (stored-title journal)))
+        (is (= "dec 16th, 2024" (:block/name (d/entity @conn (:db/id journal)))))
+        (ldb/transact! conn (:tx-data report) {:reverse? true})
+        (is (= "2024-12-16 Monday" (stored-title journal)))
+        (outliner-op/apply-ops! conn
+                                [[:set-block-property [(:block/uuid (d/entity @conn :logseq.class/Journal))
+                                                       :logseq.property.journal/title-format "yyyy/MM/dd"]]]
+                                {})
+        (is (= ["2024/12/16" "2024/12/17"] (mapv stored-title [journal other])))
+        (is (= ["2024/12/16" "2024/12/17"]
+               (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other]))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest journal-title-format-name-swap-test
+  (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20240102}}
+                                               {:page {:build/journal 20240201}}])
+        journals (mapv #(ldb/get-journal-page-by-day @conn %) [20240102 20240201])
+        names #(mapv (fn [journal] (:block/name (d/entity @conn (:db/id journal)))) journals)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+      (is (= ["2024/01/02" "2024/02/01"] (names)))
+      (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/dd/MM"]])
+      (is (= ["2024/02/01" "2024/01/02"] (names)))
+      (is (= ["2024/02/01" "2024/01/02"] (mapv #(raw-block-title @conn %) journals)))
+      (is (= 20240102 (:block/journal-day (ldb/get-page @conn "2024/02/01"))))
+      (is (= 20240201 (:block/journal-day (ldb/get-page @conn "2024/01/02"))))
+      (d/transact! conn [[:db/add (:db/id (first journals)) :block/name "2024/01/02"]
+                         [:db/add (:db/id (second journals)) :block/name "2024/02/01"]])
+      (is (= 20240102 (:block/journal-day (ldb/get-page @conn "2024/02/01"))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest get-page-resolves-current-journal-format-test
+  (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20241216}}])
+        journal (ldb/get-journal-page-by-day @conn 20241216)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "2024-12-16 Monday"))))
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
+    (is (nil? (ldb/get-page @conn "2024-12-18 Wednesday")))
+    (is (nil? (ldb/get-page @conn "not a page")))
+    (is (nil? (ldb/get-page @conn ""))))
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "2021Q4"}}
+                                              {:page {:build/journal 20040120}}])
+        page (ldb/get-page @conn "2021Q4")
+        journal (ldb/get-journal-page-by-day @conn 20040120)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "dd.MM.yyyy"]])
+    (is (= (:db/id page) (:db/id (ldb/get-page @conn "2021Q4"))))
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "20.01.2004"))))))
+
+(deftest create-journal-page-name-uses-current-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
     (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {:journal? true})
           page (d/entity @conn [:block/uuid page-uuid])
           journal-day (:block/journal-day page)
           expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")
-          expected-name (-> journal-day
-                            (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-                            common-util/page-name-sanity-lc)]
+          expected-name (common-util/page-name-sanity-lc expected-title)]
       (is (= expected-title (:block/title page))
           "Journal title follows configured title format")
       (is (= expected-name (:block/name page))
-          "Journal block/name keeps the default formatter for stable identity"))))
+          "Journal block/name follows the configured title"))))
 
 (deftest apply-template-today-dynamic-variable-persists-journal-ref-test
   (testing "apply-template stores <% today %> as a DB graph id ref to the journal page"
@@ -1048,7 +1162,7 @@
           tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
           journal-title-format "yyyy-MM-dd"
           expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
-          expected-tomorrow-name (default-journal-page-name tomorrow)
+          expected-tomorrow-name (common-util/page-name-sanity-lc expected-tomorrow-title)
           conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:build/journal today}
@@ -1175,7 +1289,7 @@
         tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
         journal-title-format "yyyy-MM-dd"
         expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
-        expected-tomorrow-name (default-journal-page-name tomorrow)
+        expected-tomorrow-name (common-util/page-name-sanity-lc expected-tomorrow-title)
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:build/journal today}

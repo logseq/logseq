@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -565,10 +564,7 @@
                         (outliner-validate/validate-page-title (:block/title m*) {:node m*}))
                     page-name (if encrypted-title?
                                 encrypted-name
-                                (if-let [journal-day (:block/journal-day block-entity)]
-                                  (common-util/page-name-sanity-lc
-                                   (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter))
-                                  (common-util/page-name-sanity-lc (:block/title m*))))]
+                                (common-util/page-name-sanity-lc (:block/title m*)))]
                 (assoc m* :block/name page-name))
               m*)
           _ (when (and ;; page or object changed?

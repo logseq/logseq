@@ -2353,7 +2353,8 @@
    {:keys [import-state journal-created-ats] :as options}
    {:keys [properties-tx]} asset-blocks-tx]
   (let [{:keys [page-names-to-uuids]} per-file-state
-        journal-page-created-at (some-> (:block/page block*) second journal-created-ats)
+        journal-page-created-at (get journal-created-ats
+                                     (get @page-names-to-uuids (second (:block/page block*))))
         prepared-block (cond-> block-after-assets
                          journal-page-created-at
                          (assoc :block/created-at journal-page-created-at))
@@ -2434,8 +2435,8 @@
         (assoc :block/title (:block/name m))
         (seq (:block/alias m))
         (update-page-alias (:page-names-to-uuids per-file-state))
-        (journal-created-ats (:block/name m))
-        (assoc :block/created-at (journal-created-ats (:block/name m))))
+        (journal-created-ats (:block/uuid m))
+        (assoc :block/created-at (journal-created-ats (:block/uuid m))))
       (add-missing-timestamps options)
       (update-page-tags db user-options per-file-state all-idents)
       (dissoc ::file-page?)))
@@ -3097,7 +3098,7 @@
   [pages]
   (->> pages
        (map #(when-let [journal-day (:block/journal-day %)]
-               [(:block/name %) (date-time-util/journal-day->ms journal-day)]))
+               [(:block/uuid %) (date-time-util/journal-day->ms journal-day)]))
        (into {})))
 
 (defn- clean-extra-invalid-tags

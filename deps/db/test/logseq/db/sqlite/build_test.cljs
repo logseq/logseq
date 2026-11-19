@@ -9,6 +9,23 @@
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]))
 
+(deftest build-journals-with-current-title-format
+  (doseq [formatter [nil "yyyy/MM/dd"]]
+    (let [conn (db-test/create-conn)]
+      (when formatter
+        (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format formatter]]))
+      (sqlite-build/create-blocks
+       conn
+       [{:page {:block/title "References"
+                :build/properties {:date [:build/page {:build/journal 20240102}]}}}])
+      (let [journal (ldb/get-journal-page-by-day @conn 20240102)
+            expected (if formatter "2024/01/02" "Jan 2nd, 2024")]
+        (is (= expected (:block/title journal)))
+        (is (= (if formatter "2024/01/02" "jan 2nd, 2024") (:block/name journal)))
+        (is (= #uuid "00000001-2024-0102-0000-000000000000" (:block/uuid journal)))
+        (is (= (:db/id journal)
+               (:db/id (:user.property/date (ldb/get-page @conn "References")))))))))
+
 (deftest build-tags
   (let [conn (db-test/create-conn)
         _ (sqlite-build/create-blocks

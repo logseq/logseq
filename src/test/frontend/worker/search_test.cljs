@@ -5,6 +5,7 @@
             [datascript.core :as d]
             [frontend.test.node-helper :as node-helper]
             [frontend.worker.handler.block-breadcrumb :as block-breadcrumb]
+            [frontend.worker.pipeline :as worker-pipeline]
             [frontend.worker.platform.node :as platform-node]
             [frontend.worker.search :as search]
             [frontend.worker.search-benchmark :as search-benchmark]
@@ -1758,6 +1759,36 @@
   []
   (let [dir (node-helper/create-tmp-dir "search-db")]
     (#'platform-node/open-sqlite-db nil {:path (node-path/join dir "search.sqlite")})))
+
+(deftest journal-format-change-reindexes-journal-and-referrers-test
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:build/journal 20241216}}
+                 {:page {:block/title "References"}
+                  :blocks [{:block/title "reference"}]}])
+          journal (ldb/get-journal-page-by-day @conn 20241216)
+          block (db-test/find-block-by-content @conn "reference")
+          expected #{(:block/uuid journal) (:block/uuid block)}]
+      (d/transact! conn [{:db/id (:db/id block)
+                         :block/title (str "[[" (:block/uuid journal) "]]")
+                         :block/refs [(:db/id journal)]}])
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (-> (<open-search-db)
+          (p/then
+           (fn [db]
+             (search/create-tables-and-triggers! db)
+             (search/upsert-blocks! db (clj->js (search/build-blocks-indice @conn)))
+             (let [report (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+                   {:keys [blocks-to-remove-set blocks-to-add]} (search/sync-search-indice report)
+                   query #(set (map :block/uuid (search/search-blocks conn db % {:limit 20 :enable-snippet? false})))]
+               (when (seq blocks-to-remove-set) (search/delete-blocks! db blocks-to-remove-set))
+               (when (seq blocks-to-add) (search/upsert-blocks! db (clj->js blocks-to-add)))
+               (is (= expected (query "2024-12-16 Monday")))
+               (is (= "2024-12-16 monday" (:block/name (d/entity @conn (:db/id journal)))))
+               (is (empty? (query "Dec 16th, 2024"))))
+             (.close db)))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally (fn [] (ldb/register-transact-pipeline-fn! identity) (done)))))))
 
 (defn- query-rows
   [db sql & bind]

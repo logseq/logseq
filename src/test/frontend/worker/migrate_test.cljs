@@ -9,6 +9,40 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
+(deftest migrate-journal-titles-and-current-format-names-test
+  (let [conn (d/create-conn db-schema/schema)
+        stored #(-> (d/datoms @conn :eavt %1 %2) first :v)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 65 :minor 35}}
+                      [:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]
+                      {:db/id -1 :block/title "stale" :block/name "2024-12-16" :block/journal-day 20241216 :block/tags :logseq.class/Journal}
+                      {:db/id -2 :block/title "stale" :block/name "2024-12-17" :block/journal-day 20241217 :block/tags :logseq.class/Journal}
+                      {:block/title "2024-12-17 Tuesday" :block/name "2024-12-17 tuesday"}])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (db-migrate/migrate conn)
+      (let [journal-id (:e (first (d/datoms @conn :avet :block/journal-day 20241216)))
+            collision-id (:e (first (d/datoms @conn :avet :block/journal-day 20241217)))]
+        (is (= "2024-12-16 Monday" (stored journal-id :block/title)))
+        (is (= "2024-12-16 monday" (stored journal-id :block/name)))
+        (is (= "stale" (stored collision-id :block/title)))
+        (is (= "2024-12-17" (stored collision-id :block/name)))
+        (is (nil? (db-migrate/migrate conn))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest migrate-journal-title-format-name-swap-test
+  (let [conn (d/create-conn db-schema/schema)]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
+    (d/transact! conn [{:db/ident :logseq.kv/schema-version :kv/value {:major 65 :minor 35}}
+                      [:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/dd/MM"]
+                      {:block/title "2024/01/02" :block/name "2024/01/02" :block/journal-day 20240102 :block/tags :logseq.class/Journal}
+                      {:block/title "2024/02/01" :block/name "2024/02/01" :block/journal-day 20240201 :block/tags :logseq.class/Journal}])
+    (db-migrate/migrate conn)
+    (doseq [[day title] [[20240102 "2024/02/01"] [20240201 "2024/01/02"]]]
+      (let [journal (ldb/get-journal-page-by-day @conn day)]
+        (is (= title (:block/name journal)))
+        (is (= title (:v (first (d/datoms @conn :eavt (:db/id journal) :block/title)))))))))
+
 (defn- entities-with
   [db attr]
   (seq

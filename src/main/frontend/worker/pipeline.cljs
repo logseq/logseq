@@ -13,6 +13,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.journal :as db-journal]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -578,9 +579,21 @@
   [db eid attr]
   (:v (first (d/datoms db :eavt eid attr))))
 
+(defn- journal-title-format-changed?
+  [{:keys [db-before db-after]}]
+  (not= (:logseq.property.journal/title-format (d/entity db-before :logseq.class/Journal))
+        (:logseq.property.journal/title-format (d/entity db-after :logseq.class/Journal))))
+
+(defn- journal-title-format-tx
+  [{:keys [db-after] :as tx-report}]
+  (when (journal-title-format-changed? tx-report)
+    (db-journal/title-format-tx db-after)))
+
 (defn- ensure-journal-page-protected-attrs-not-updated!
-  [{:keys [db-before tx-data]}]
-  (when-let [violation
+  [{:keys [db-before db-after tx-data] :as tx-report}]
+  (let [formatted-values (when (journal-title-format-changed? tx-report)
+                           (db-journal/title-format-values db-after))]
+    (when-let [violation
              (some (fn [{:keys [e a v added]}]
                      (when (and added
                                 (contains? journal-protected-update-attrs a))
@@ -588,7 +601,8 @@
                              before-v (stored-attr-value db-before e a)]
                          (when (and before-ent
                                     (ldb/journal? before-ent)
-                                    (not= before-v v))
+                                    (not= before-v v)
+                                    (not= v (get-in formatted-values [e a])))
                            {:type :journal-page-protected-attr-updated
                             :entity-id e
                             :attr a
@@ -596,7 +610,7 @@
                             :after v
                             :journal-day (:block/journal-day before-ent)}))))
                    tx-data)]
-    (throw (ex-info "journal page protected attr updated" violation))))
+      (throw (ex-info "journal page protected attr updated" violation)))))
 
 (defn- projected-reference-content-datom?
   [datom]
@@ -696,7 +710,10 @@
                      (not (rtc-tx-or-download-graph? tx-meta)))
             (ensure-journal-page-protected-attrs-not-updated! tx-report))
         extra-tx-data (when derive-extra-data?
-                        (compute-extra-tx-data tx-report))
+                        (concat
+                         (compute-extra-tx-data tx-report)
+                         (when-not (rtc-tx-or-download-graph? tx-meta)
+                           (journal-title-format-tx tx-report))))
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
                        (assoc tx-report
@@ -734,7 +751,9 @@
                              (:tx-data replace-tx-report))]
     (assoc tx-report'
            :tx-data full-tx-data
-           :tx-meta tx-meta
+           :tx-meta (cond-> tx-meta
+                      (journal-title-format-changed? tx-report)
+                      (assoc :gen-undo-ops? false))
            :db-before (:db-before tx-report)
            :db-after (or (:db-after tx-report')
                          (:db-after tx-report)))))
