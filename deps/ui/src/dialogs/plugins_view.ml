@@ -104,10 +104,10 @@ let contribution : t = fun ctx parent ->
     (Ui_components.with_props [Ui_components.Prop.position `absolute;
       Ui_components.Prop.inset_top (-42.); Ui_components.Prop.inset_right 8.;
       Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.font_weight 500;
-      Ui_components.Prop.line_height "20px"; Ui_components.Prop.opacity 0.6]
-      (row ~key:"contribution"
+      Ui_components.Prop.line_height "16px"; Ui_components.Prop.opacity 0.6]
+      (row ~key:"contribution" ~height:28 ~padding_horizontal:12 ~padding_vertical:4 ~cross:`center
        [link ~key:"contribute" ~url:"https://github.com/logseq/marketplace" ~target:`blank
-        ~height:28 ~padding_horizontal:12 ~padding_vertical:4
+        ~height:15 ~padding:0
         ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
         ~text:(t "plugin/contribute") []]))) ctx parent
 
@@ -341,7 +341,7 @@ let market_card ~stats ~search_st pkg =
                     ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ]) ]) ]
     ; Ui_components.with_props
         [ Ui_components.Prop.position `absolute
-        ; Ui_components.Prop.inset_bottom (-8.)
+        ; Ui_components.Prop.inset_bottom (-5.)
         ; Ui_components.Prop.inset_left (-7.)
         ; Ui_components.Prop.padding_left 18
         ; Ui_components.Prop.inset_right 7. ]
@@ -371,9 +371,11 @@ let market_card ~stats ~search_st pkg =
              ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
                  [ Ui_components.with_props
                      [Ui_components.Prop.font_size "0.8125rem";
+                      Ui_components.Prop.font_weight 400;
+                      Ui_components.Prop.line_height "1";
                       Ui_components.Prop.hover_opacity 0.8]
                     (Ui_components.button ~variant:`ghost ~key:"btn"
-                     ~height:21 ~min_height:0 ~padding_horizontal:4 ~padding_vertical:0
+                     ~height:21 ~min_height:0 ~padding_horizontal:4 ~padding_vertical:4
                      ~foreground:"var(--ls-link-text-color, var(--lx-accent-11))"
                      ~style_class:
                        ("btn" ^ if installed_ then " disabled" else "")
