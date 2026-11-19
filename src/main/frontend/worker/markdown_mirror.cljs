@@ -493,6 +493,8 @@
    :export-properties-as-list-items? true
    :export-node-property-values-as-page-refs? true
    :export-default-property-values-as-blocks? true
+   ;; `myprop:: value` for a single-value Text property, not a one-item list
+   :single-text-property-value-inline? true
    :preserve-block-refs? true
    :date-formatter (:date-formatter options)})
 
