@@ -174,11 +174,11 @@
   "open 2 app instances, add a rtc graph, check this graph available on other instance"
   [graph-name-prefix f]
   (let [graph-name (str graph-name-prefix "-" (inst-string (java.time.Instant/now)))]
+    ;; `open-2-pages` already prepared the test env and leaves both pages on
+    ;; the all-graphs route, where a refresh would find no page title.
     (cp/prun!
      2
      #(w/with-page %
-        (settings/developer-mode)
-        (settings/refresh-test-env!)
         (util/login-test-account))
      [@*page1 @*page2])
     (w/with-page @*page1
