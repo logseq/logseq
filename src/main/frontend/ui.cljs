@@ -483,19 +483,23 @@
     (.toggleAttribute el "data-fade-bottom" (< scroll-top (dec max-scroll-top)))))
 
 (defn- use-auto-complete-scroll-fade!
-  [*inner matched]
+  "Keeps the edge fades in sync while `#ui__ac-inner` is mounted. Watching
+  both the list box and its content catches every overflow change: new
+  results, rows that load late, and popover resizes."
+  [*inner *content mounted?]
   (hooks/use-layout-effect!
    (fn []
-     (when-let [^js el (hooks/deref *inner)]
-       (let [sync! #(sync-auto-complete-scroll-fade! el)
+     (when mounted?
+       (let [^js el (hooks/deref *inner)
+             sync! #(sync-auto-complete-scroll-fade! el)
              observer (js/ResizeObserver. sync!)]
-         (sync!)
          (.addEventListener el "scroll" sync! #js {:passive true})
          (.observe observer el)
+         (.observe observer (hooks/deref *content))
          #(do
             (.removeEventListener el "scroll" sync!)
             (.disconnect observer)))))
-   [matched]))
+   [mounted?]))
 
 (defn auto-complete-item-label
   "Icon + label for an auto-complete row. Slash commands, node and template
@@ -503,10 +507,9 @@
   line up across popups. `ui.css` styles it.
 
   `icon` is a Tabler icon name, or rendered icon hiccup (node icons, emoji);
-  either way it sits in the same fixed slot. `wrap?` lets long text wrap
-  instead of truncating. `extra` renders after the label."
-  [{icon' :icon :keys [title wrap?]} label & extra]
-  (into [:span.ui__ac-item-label {:title title :class (when wrap? "is-wrap")}
+  either way it sits in the same fixed slot. `extra` renders after the label."
+  [{icon' :icon :keys [title]} label & extra]
+  (into [:span.ui__ac-item-label {:title title}
          (when icon'
            [:span.ui__ac-item-icon (if (string? icon') (shui/tabler-icon icon') icon')])
          [:span.ui__ac-item-text label]]
@@ -542,7 +545,8 @@
         *current-idx (hooks/use-memo #(atom 0) [])
         [current-idx] (hooks/use-atom *current-idx)
         *inner (hooks/use-ref nil)
-        _ (use-auto-complete-scroll-fade! *inner matched)
+        *content (hooks/use-ref nil)
+        _ (use-auto-complete-scroll-fade! *inner *content (boolean (seq matched)))
         shortcut-state {:matched matched
                         :opts opts
                         ::current-idx *current-idx}
@@ -573,21 +577,23 @@
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         {:ref *inner}
-        (when header header)
-        (cond
-          get-group-name
-          (for [items (partition-by (comp get-group-name second) (medley/indexed matched))
-                :let [[idx item] (first items)]]
-            (auto-complete-group idx (get-group-name item) (pos? idx) (render-f items)))
+        [:div.ui__ac-content
+         {:ref *content}
+         (when header header)
+         (cond
+           get-group-name
+           (for [items (partition-by (comp get-group-name second) (medley/indexed matched))
+                 :let [[idx item] (first items)]]
+             (auto-complete-group idx (get-group-name item) (pos? idx) (render-f items)))
 
-          grouped?
-          (let [*idx (atom -1)
-                inc-idx #(swap! *idx inc)]
-            (for [[group matched] (group-by :group matched)]
-              (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
-                (auto-complete-group (str group) group false (render-f matched')))))
-          :else
-          (render-f (medley/indexed matched)))]
+           grouped?
+           (let [*idx (atom -1)
+                 inc-idx #(swap! *idx inc)]
+             (for [[group matched] (group-by :group matched)]
+               (let [matched' (doall (map (fn [item] [(inc-idx) item]) matched))]
+                 (auto-complete-group (str group) group false (render-f matched')))))
+           :else
+           (render-f (medley/indexed matched)))]]
        (when empty-placeholder
          empty-placeholder))]))
 

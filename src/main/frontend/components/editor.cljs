@@ -68,15 +68,13 @@
     (when-not (string/blank? (:block/title block'))
       (let [new-node-title? #(or (string/starts-with? (str %) (t :editor/new-tag))
                                  (string/starts-with? (str %) (t :editor/new-page)))
-            ;; Tag search shows no icons; every other row keeps the slot,
-            ;; even when a node has no icon, so titles stay aligned.
+            ;; Tag search shows no icons.
             icon (when-not db-tag?
                    (cond
                      (:nlp-date? block') "calendar"
                      (new-node-title? (:block/title block')) "plus"
-                     :else (or (icon-component/get-node-icon-cp
-                                block' {:ignore-current-icon? true :size 18})
-                               [:span])))
+                     :else (icon-component/get-node-icon-cp
+                            block' {:ignore-current-icon? true :size 18})))
             title (let [alias (get-in block' [:alias :block/title])]
                     (block-handler/block-unique-title block' {:alias alias}))]
         [:div.flex.flex-col
@@ -87,7 +85,7 @@
                           {:disabled? true
                            :block block'})]))
          (ui/auto-complete-item-label
-          {:icon icon :wrap? true}
+          {:icon icon}
           (if (new-node-title? title)
             title
             (block-handler/block-title-with-icon block'

@@ -28,7 +28,7 @@
         row [:div.flex.flex-row.justify-between.w-full
 	             {:class (when chosen? "chosen")
 	              :on-pointer-down util/stop-propagation}
-	             [:div.flex.flex-row.items-center.gap-1
+	             [:div.flex.flex-row.items-center.gap-1.min-w-0
 	              (when multiple-choices?
 	                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
 	                              :on-click (fn [e]

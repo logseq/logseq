@@ -200,7 +200,9 @@
                  (map (fn [x]
                         (let [convert? (:convert-page-to-property? x)]
                           {:label (if convert?
-                                    (t :property/convert-page-to-property (:block/title x))
+                                    (ui/auto-complete-item-label
+                                     {:icon "transform"}
+                                     (t :property/convert-page-to-property (:block/title x)))
                                     (let [property-title (or (db-property/built-in-display-title x t)
                                                              (:block/title x))
                                           ident (:db/ident x)
