@@ -187,6 +187,9 @@ let run () =
     ; clipboard =
         { copy = (fun s -> copied := s)
         ; write_text = (fun s -> copied := s; Ui_task.resolve ())
+        ; write_blocks = (fun data ->
+            Ui_task.bind data (fun data -> copied := data.Ui_services.text; Ui_task.resolve ()))
+        ; read_blocks = None
         ; read_text = (fun () -> incr read_count; Ui_task.resolve !clip)
         }
     ; session =

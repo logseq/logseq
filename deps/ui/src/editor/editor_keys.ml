@@ -1923,21 +1923,23 @@ let on_paste ev =
       ev.Ui_services.stop_immediate ();
       A.upload_file_snapshots ev.Ui_services.files
     end else if editor_target then
-      let clipboard = !(S.clipboard), !(S.clipboard_text) in
+      let cached = !(S.clipboard) in
+      let text = ev.Ui_services.clipboard_get "text/plain"
+      and html = ev.Ui_services.clipboard_get "text/html"
+      and logseq = ev.Ui_services.clipboard_get "application/logseq" in
+      let saved = { ev with Ui_services.clipboard_get =
+          (function "text/plain" -> text | "text/html" -> html
+            | "application/logseq" -> logseq | _ -> "") } in
       if !S.structure_pending then (
-        let text = ev.Ui_services.clipboard_get "text/plain"
-        and html = ev.Ui_services.clipboard_get "text/html" in
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ();
-        let saved = { ev with Ui_services.clipboard_get =
-            (function "text/plain" -> text | "text/html" -> html | _ -> "") } in
         let context = Runtime.repo (), Runtime.route () in
         let before = S.editing () in
         S.enqueue_edit_action ~real:true (fun () ->
             if context = (Runtime.repo (), Runtime.route ())
                && S.replay_current before (S.editing ()) then
-              A.paste_blocks ~clipboard saved))
-      else A.paste_blocks ~clipboard ev
+              A.paste_from_clipboard ~cached saved))
+      else A.paste_from_clipboard ~cached saved
 
 (* a clipboard event aimed at the open editor's conduit input *)
   end

@@ -2219,22 +2219,6 @@ let rec has_selected_ancestor sel uuid =
       | None -> false)
   | _ -> false
 
-(* export-blocks-as-markdown shape: every title of every selected root
-   tree, children flattened with two-space indentation *)
-let export_titles blocks =
-  let buf = Buffer.create 256 in
-  let rec go depth (b : Model.block) =
-    for _ = 1 to depth do
-      Buffer.add_string buf "  "
-    done;
-    Buffer.add_string buf "- ";
-    Buffer.add_string buf b.Model.block_title;
-    Buffer.add_string buf "\n";
-    List.iter (go (depth + 1)) b.Model.block_children
-  in
-  List.iter (go 0) blocks;
-  Buffer.contents buf
-
 let selected_copy_blocks ~plain snapshot =
   if S.String_set.is_empty snapshot.unresolved then
     Some (if plain then snapshot.blocks else snapshot.roots)
@@ -2242,25 +2226,107 @@ let selected_copy_blocks ~plain snapshot =
     Ui_services.log_error "selection entities unavailable";
     None)
 
-let selection_text ~plain blocks =
-  if plain then String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks)
-  else export_titles blocks
+let clipboard_attr = function
+  | Wire.Keyword attr ->
+      not (String.starts_with ~prefix:"block.temp/" attr)
+      && not (List.mem attr
+        [ "block/alias-source-page-class?"; "block/alias-source-page-id"
+        ; "block/alias-source-page-uuid"; "block/comment-threads"; "block/link-id"
+        ; "block/page-id"; "block/page-name"; "block/page-uuid"; "block/parent-id"
+        ; "block/parent-uuid"; "block/raw-title"; "block/properties"
+        ; "logseq.property/description-title"; "logseq.property/query-block?"
+        ; "logseq.property/query-id"; "logseq.property.recycle/original-page-title"
+        ; "logseq.property/view-for-id"; "logseq.property/views"
+        ; "logseq.property.view/gallery-asset-property-ident"
+        ; "logseq.property.view/type-id"; "logseq.property.view/type-ident" ])
+  | _ -> false
 
-let remember_selection_copy ~plain blocks text =
-  S.clipboard := (if plain then [] else blocks);
-  S.clipboard_text := text
+let clipboard_ref value =
+  match Wire.get value "db/id", Wire.get value "block/uuid" with
+  | Some _, Some (Wire.Uuid _ as uuid) -> Some (Wire.Array [Wire.kw "block/uuid"; uuid])
+  | _ -> None
 
-let copy_selection ev =
-  match selected_copy_blocks ~plain:false (selected_snapshot ()) with
-  | None | Some [] -> ()
-  | Some blocks ->
-      let text = selection_text ~plain:false blocks in
-      ev.Ui_services.clipboard_set "text/plain" text;
-      remember_selection_copy ~plain:false blocks text;
-      ev.Ui_services.prevent_default ()
+let clipboard_value value =
+  match clipboard_ref value, value with
+  | Some ref_, _ -> ref_
+  | None, (Wire.Array (_ :: _) | Wire.List (_ :: _) | Wire.Set (_ :: _)) ->
+      let values = Wire.elems value in
+      let refs = List.filter_map clipboard_ref values in
+      if List.length refs = List.length values then Wire.Set refs else value
+  | _ -> value
 
-let write_clipboard_text ~current text on_written =
-  let write = Ui_services.clipboard_write_text text in
+let clipboard_attrs = function Wire.Map attrs -> attrs | _ -> []
+
+let encode_block_clipboard ~repo ~cut blocks =
+  Edn.to_string (Wire.Map
+    [ Wire.kw "graph", Wire.String repo
+    ; Wire.kw "embed-block?", Wire.Nil
+    ; Wire.kw "op", Wire.Keyword (if cut then "cut" else "copy")
+    ; Wire.kw "blocks", Wire.Array (List.map (fun block ->
+          Wire.Map (List.filter_map (fun (k, v) ->
+              if clipboard_attr k && v <> Wire.Nil then Some (k, clipboard_value v)
+              else None) (clipboard_attrs block))) blocks) ])
+
+let decode_block_clipboard ~repo data =
+  match Edn.parse data with
+  | packet when Wire.map_get_string packet "graph" = Some repo
+                && Wire.get packet "embed-block?" <> Some (Wire.Bool true) ->
+      let blocks = Wire.elems (Option.value ~default:Wire.Nil (Wire.get packet "blocks")) in
+      if blocks = [] || not (List.for_all (fun block ->
+          match Wire.get block "block/uuid", Wire.get block "block/title" with
+          | Some (Wire.Uuid _), Some (Wire.String _) -> true
+          | _ -> false) blocks) then None
+      else
+        let cut = Wire.get packet "op" = Some (Wire.Keyword "cut") in
+        Some (cut, List.map (fun block ->
+            Wire.Map (List.filter (fun (k, _) -> clipboard_attr k) (clipboard_attrs block))) blocks)
+  | _ | exception Edn.Parse_error _ -> None
+
+let block_clipboard ~repo ~cut roots =
+  let ids = List.filter_map (fun b -> b.Model.block_uuid) roots in
+  let uuids = Wire.List (List.map (fun u -> Wire.Uuid u) ids) in
+  let children_opts = Wire.Map (List.map (fun key -> Wire.kw key, Wire.Bool true)
+      ["all?"; "children?"; "include-collapsed-children?"; "include-property-block?"]) in
+  let entities = Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+      (Wire.Array (List.map (fun id -> Wire.Map
+        [Wire.kw "id", Wire.Uuid id; Wire.kw "opts", children_opts]) ids)) in
+  let config = Wire.Map
+      [Wire.kw "export-bullet-indentation", Wire.String "\t";
+       Wire.kw "date-formatter", Wire.String "MMM do, yyyy";
+       Wire.kw "encode-highlight-as-mark?", Wire.Bool true] in
+  let export = Export_state.defaults () in
+  let text = Runtime.invoke "thread-api/export-blocks-as-format"
+      [ Wire.String repo; uuids; Wire.Keyword "markdown";
+        Wire.Map [Wire.kw "indent-style", Wire.String export.indent_style;
+                  Wire.kw "remove-options",
+                    Wire.Set (List.map Wire.kw export.remove_options)]; config ] in
+  let html = Runtime.invoke "thread-api/export-get-blocks-data"
+      [ Wire.String repo; uuids;
+        Wire.Map [Wire.kw "include-properties?", Wire.Bool true]; config ] in
+  Subs_state.task_of_promise
+    (let* entities = entities in
+     let* text = text in
+     let* html = html in
+     let seen = Hashtbl.create (List.length ids) in
+     let blocks = Wire.elems entities
+       |> List.concat_map (fun result ->
+           match Wire.get result "block" with
+           | Some (Wire.Map _ as root) ->
+               let children = Wire.elems
+                   (Option.value ~default:Wire.Nil (Wire.get result "children")) in
+               if Wire.get root "block/name" = None then root :: children else children
+           | _ -> failwith "Selected block missing from clipboard export")
+       |> List.filter (fun block ->
+           let uuid = Option.get (Wire.map_get_uuid block "block/uuid") in
+           if Hashtbl.mem seen uuid then false
+           else (Hashtbl.add seen uuid (); true)) in
+     let text = Option.get (Wire.as_string text) in
+     let html = Export_formats.html ~indent_unit:"\t"
+         (Option.get (Wire.map_get_string html "content")) in
+     Js.Promise.resolve
+       {Ui_services.text; html; logseq = encode_block_clipboard ~repo ~cut blocks})
+
+let after_clipboard_write ~current write on_written =
   let task = Ui_task.bind write (fun () ->
       if not (current ()) then Ui_task.reject Ui_task.Cancelled
       else (on_written (); Ui_task.resolve ())) in
@@ -2269,6 +2335,9 @@ let write_clipboard_text ~current text on_written =
        | _ -> Ui_services.log_error ("clipboard write failed", error));
       Ui_task.reject error));
   task
+
+let write_clipboard_text ~current text on_written =
+  after_clipboard_write ~current (Ui_services.clipboard_write_text text) on_written
 
 let clipboard_action_epoch = ref 0
 let cancel_clipboard_actions () = incr clipboard_action_epoch
@@ -2305,23 +2374,34 @@ let cut_editing_text uuid =
             Outliner_ops.schedule_save uuid (live_buffer uuid))
   | _ -> Ui_task.reject Ui_task.Cancelled
 
-let write_selection_copy ~plain ~cut =
+let write_selection_copy ?(capture = fun () -> ()) ~plain ~cut () =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
   let current = clipboard_action_current () in
   match selected_copy_blocks ~plain snapshot with
   | None | Some [] -> ()
   | Some blocks ->
-      let text = selection_text ~plain blocks in
-      ignore (write_clipboard_text ~current:(fun () -> current () &&
+      capture ();
+      let current () = current () &&
           List.for_all (fun block ->
             match block.Model.block_uuid with
             | Some uuid -> (match S.find uuid with Some live -> live == block | None -> false)
-            | None -> false) snapshot.blocks) text (fun () ->
-          remember_selection_copy ~plain blocks text;
-          if cut then
-            delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-              ~before snapshot.uuids))
+            | None -> false) snapshot.blocks in
+      if plain then
+        ignore (write_clipboard_text ~current
+          (String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks))
+          (fun () -> S.clipboard := None))
+      else
+        let data = block_clipboard ~repo:(Runtime.repo ()) ~cut blocks in
+        let written = Ui_services.clipboard_write_blocks data in
+        ignore (Ui_task.bind (after_clipboard_write ~current written ignore) (fun () ->
+          Ui_task.bind data (fun content ->
+              if current () then (
+                S.clipboard := Some content;
+                if cut then
+                  delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+                    ~before snapshot.uuids);
+              Ui_task.resolve ())))
 
 let cut_block_text uuid =
   match S.find uuid with
@@ -2333,11 +2413,12 @@ let cut_block_text uuid =
         block.Model.block_title (fun () ->
           ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ])))
 
-let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
-let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false ()
+let cut_selection_text () = write_selection_copy ~plain:false ~cut:true ()
+let copy_selection ev =
+  write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:false ()
 let cut_selection ev =
-  ev.Ui_services.prevent_default ();
-  cut_selection_text ()
+  write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:true ()
 
 (* ---- external paste (handler.paste.cljs/paste-copied-text) ----
 
@@ -2543,9 +2624,9 @@ let paste_history_opts target_uuid =
       ; Wire.Keyword "caret", Wire.Keyword "end" ] in
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
-let paste_trees trees target_uuid ~replace_empty =
+let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
   Ops.apply_and_refresh_result ~opts:(paste_history_opts target_uuid)
-    [ Ops.paste_trees trees target_uuid ~replace_empty ]
+    [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ]
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks
@@ -2637,31 +2718,34 @@ let splice_clipboard_text uuid text =
    branch — html→markdown wins over plain text, block-shaped text
    extracts into blocks, blank-line text into one block per paragraph,
    and anything else splices at the cursor *)
-let paste_into_editor ~clipboard:(trees, copied_text) ev =
+let paste_into_editor ~clipboard ev =
   let clip_text = ev.Ui_services.clipboard_get "text/plain" in
   let clip_html = ev.Ui_services.clipboard_get "text/html" in
-  match (S.editing (), trees) with
+  match (S.editing (), clipboard) with
   | Some e, _ when S.is_draft e ->
       ev.Ui_services.prevent_default ();
       ev.Ui_services.stop_immediate ();
       let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
-      if not (trees <> [] && clip_text = copied_text)
+      if clipboard = None
          && not (markdown_blocks text || has_paragraph_break text) then
         splice_clipboard_text e.uuid text
-  | Some e, (_ :: _ as trees) when clip_text = copied_text -> (
+  | Some e, Some ((_, blocks) as copied) -> (
       match S.find e.uuid with
       | Some b ->
           ev.Ui_services.prevent_default ();
           (* keep the conduit's own paste listener from splicing the
              text a second time *)
           ev.Ui_services.stop_immediate ();
+          let has_children = S.children_of b <> [] in
           let replace_empty =
             String.trim b.Model.block_title = ""
             && String.trim e.S.buffer = ""
+            && (not has_children || List.length blocks = 1)
           in
           let focus = paste_focus () in
           ignore
-            (let* resp = paste_trees trees e.uuid ~replace_empty in
+            (let* resp = paste_copied_blocks copied e.uuid
+                ~sibling:(not has_children) ~replace_empty in
             (* replace-empty swaps the editing block's entity
                       in place (same uuid, new title) — resync the live
                       model buffer first, else edit_last_inserted's
@@ -2747,29 +2831,51 @@ let paste_external ev ~text ~html =
         ev.Ui_services.prevent_default ();
         paste_lines lines
 
-let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
+let paste_blocks ~clipboard ev =
   match S.editing () with
   | Some _ -> paste_into_editor ~clipboard ev
   | None -> (
-      match trees with
-      | _ :: _ when ev.Ui_services.clipboard_get "text/plain" = copied_text -> (
+      match clipboard with
+      | Some copied -> (
           ev.Ui_services.prevent_default ();
           match selected_uuids () with
           | _ :: _ as sel ->
               let focus = paste_focus () in
               ignore
                 (let* resp =
-                  paste_trees trees
+                  paste_copied_blocks copied
                     (List.nth sel (List.length sel - 1))
-                    ~replace_empty:false
+                    ~sibling:true ~replace_empty:false
                 in
                 focus resp;
                 Js.Promise.resolve ())
           | [] -> ())
-      | _ ->
+      | None ->
           paste_external ev
             ~text:(ev.Ui_services.clipboard_get "text/plain")
             ~html:(ev.Ui_services.clipboard_get "text/html"))
+
+let paste_from_clipboard ~cached ev =
+  let repo = Runtime.repo () in
+  let decode = decode_block_clipboard ~repo in
+  let data = ev.Ui_services.clipboard_get "application/logseq" in
+  let cached =
+    Option.bind cached (fun content ->
+        if content.Ui_services.text = ev.Ui_services.clipboard_get "text/plain"
+        then decode content.logseq else None) in
+  match decode data, cached, Ui_services.clipboard_read_blocks () with
+  | Some _ as clipboard, _, _ | None, (Some _ as clipboard), _ ->
+      paste_blocks ~clipboard ev
+  | None, None, None -> paste_blocks ~clipboard:None ev
+  | None, None, Some read ->
+      ev.Ui_services.prevent_default ();
+      ev.Ui_services.stop_immediate ();
+      let current = paste_context_current () in
+      let saved = {ev with Ui_services.prevent_default = ignore; stop_immediate = ignore} in
+      let read = Ui_task.catch (read ()) (fun _ -> Ui_task.resolve None) in
+      ignore (Ui_task.bind read (fun data ->
+          if current () then paste_blocks ~clipboard:(Option.bind data decode) saved;
+          Ui_task.resolve ()))
 
 (* ---- misc ---- *)
 

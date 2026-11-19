@@ -237,6 +237,63 @@ external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
 external clipboard_read_text : unit -> string Js.Promise.t = "readText"
   [@@mel.scope ("navigator", "clipboard")]
 
+type clipboard_item
+
+external clipboard_item_constructor : clipboard_item Js.Undefined.t = "ClipboardItem"
+  [@@mel.scope "globalThis"]
+external clipboard_item : Webapi.Blob.t Js.Promise.t Js.Dict.t -> clipboard_item
+  = "ClipboardItem" [@@mel.new]
+external supports_custom_format : string -> bool = "supports"
+  [@@mel.scope "ClipboardItem"]
+external has_supports : (string -> bool) Js.Undefined.t = "supports"
+  [@@mel.scope "ClipboardItem"]
+external clipboard_write : clipboard_item array -> unit Js.Promise.t = "write"
+  [@@mel.scope ("navigator", "clipboard")]
+external clipboard_read : unit -> clipboard_item array Js.Promise.t = "read"
+  [@@mel.scope ("navigator", "clipboard")]
+external clipboard_types : clipboard_item -> string array = "types" [@@mel.get]
+external clipboard_get_type : clipboard_item -> string -> Webapi.Blob.t Js.Promise.t
+  = "getType" [@@mel.send]
+external clipboard_blob : string array -> string Js.Dict.t -> Webapi.Blob.t
+  = "Blob" [@@mel.new]
+external clipboard_blob_text : Webapi.Blob.t -> string Js.Promise.t = "text" [@@mel.send]
+
+let logseq_mime = "application/logseq"
+let web_logseq_mime = "web " ^ logseq_mime
+let has_clipboard_item () = Option.is_some (Js.Undefined.toOption clipboard_item_constructor)
+let supports_logseq_clipboard () =
+  has_clipboard_item () && Option.is_some (Js.Undefined.toOption has_supports)
+  && supports_custom_format web_logseq_mime
+
+let clipboard_write_blocks (data : Ui_services.block_clipboard Js.Promise.t) =
+  if not (has_clipboard_item ()) then
+    let* content = data in
+    clipboard_write_text content.text
+  else
+    let item = Js.Dict.empty () in
+    let put key mime get =
+      let options = Js.Dict.fromList ["type", mime] in
+      Js.Dict.set item key
+        (let* content = data in
+         Js.Promise.resolve (clipboard_blob [|get content|] options))
+    in
+    put "text/plain" "text/plain" (fun content -> content.text);
+    put "text/html" "text/html" (fun content -> content.html);
+    if supports_logseq_clipboard () then
+      put web_logseq_mime logseq_mime (fun content -> content.logseq);
+    clipboard_write [|clipboard_item item|]
+
+let clipboard_read_blocks () =
+  let* items = clipboard_read () in
+  match Array.find_opt
+          (fun item -> Array.exists ((=) web_logseq_mime) (clipboard_types item))
+          items with
+  | None -> Js.Promise.resolve None
+  | Some item ->
+      let* blob = clipboard_get_type item web_logseq_mime in
+      let* content = clipboard_blob_text blob in
+      Js.Promise.resolve (Some content)
+
 let copy_to_clipboard s = ignore (clipboard_write_text s)
 
 external decode_uri : string -> string = "decodeURIComponent"

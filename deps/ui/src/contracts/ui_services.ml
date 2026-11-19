@@ -134,9 +134,13 @@ type uri = { encode_component : string -> string }
 
 (* Clipboard ops are best-effort host requests; the task resolves when
    the host confirms. copy is the fire-and-forget plain-text write. *)
+type block_clipboard = { text : string; html : string; logseq : string }
+
 type clipboard = {
   copy : string -> unit;
   write_text : string -> unit Ui_task.t;
+  write_blocks : block_clipboard Ui_task.t -> unit Ui_task.t;
+  read_blocks : (unit -> string option Ui_task.t) option;
   read_text : unit -> string Ui_task.t;
 }
 
@@ -497,6 +501,8 @@ let perf_mark name = (get ()).perf.mark name
 let uri_encode_component s = (get ()).uri.encode_component s
 let clipboard_copy s = (get ()).clipboard.copy s
 let clipboard_write_text s = (get ()).clipboard.write_text s
+let clipboard_write_blocks data = (get ()).clipboard.write_blocks data
+let clipboard_read_blocks () = (get ()).clipboard.read_blocks
 let clipboard_read_text () = (get ()).clipboard.read_text ()
 let session_get k = (get ()).session.get k
 let session_set k v = (get ()).session.set k v
