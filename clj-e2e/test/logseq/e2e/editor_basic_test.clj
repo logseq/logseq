@@ -2059,6 +2059,7 @@
       (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
           assert/assert-that
           (.hasText target-page))
+      (is (= target-page (p/get-page-name)))
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
@@ -2107,6 +2108,7 @@
       (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
           assert/assert-that
           (.hasText target-page))
+      (is (= target-page (p/get-page-name)))
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
