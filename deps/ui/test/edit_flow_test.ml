@@ -578,6 +578,95 @@ let test_suggestion_selection_commits_pending_save (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_node_reference_suggestions (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "" ];
+  install_worker ~repo:h.repo h;
+  let previous_popup = !Popups_state.active in
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  let failed = ref false and searches = ref 0 in
+  let target = "00000000-0000-0000-0000-000000000006" in
+  let row uuid title page extra = W.Map
+    ([W.kw "block/uuid",W.Uuid uuid;W.kw "block/title",W.String title;
+      W.kw "page?",W.Bool page] @ extra) in
+  let results = [
+    row "target-page" "Target Page" true [];
+    row "class-page" "Whiteboard" true [W.kw "tag?",W.Bool true];
+    row target "Target linked title" false
+      [W.kw "block.temp/original-title",W.String "[[raw-reference-uuid]]"];
+    row "b1" "Target editing block" false []] in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
+    match name with
+    | "thread-api/get-all-page-titles" ->
+        Js.Promise.resolve (W.List [W.String "Tar private property"])
+    | "thread-api/q" -> Js.Promise.resolve (W.List [])
+    | "thread-api/search-blocks" ->
+        incr searches;
+        check "node search trims its query without changing the insertion range"
+          (match args with [_;W.String query;_] -> query = "Tar" | _ -> false);
+        if !failed then h.reject_promise "node search transport"
+        else Js.Promise.resolve (W.List results)
+    | _ -> Js.Promise.resolve (h.base_handler name args));
+    on_message = (fun _ _ -> ());
+    dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let open_query buffer caret query =
+    set_editing ~uuid:"b1" ~buffer ~caret ~base:"";
+    Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Page_ref;
+    match (Popups_state.get popup).Popups_state.ac with
+    | Some ac -> Popups_state.ac_update popup ac query
+    | None -> check "node-reference autocomplete opens" false in
+  open_query "[[ Tar ]]" 7 " Tar ";
+  let* () = h.wait_ms 25 in
+  (match (Popups_state.get popup).Popups_state.ac with
+   | Some ac ->
+       check "node search retains backend nodes and complete NLP suggestions"
+         (!searches > 0
+          && List.exists (fun item -> item.Popups_state.ai_label = "Whiteboard") ac.items
+          && List.for_all (fun term -> List.exists
+              (fun item -> item.Popups_state.ai_key = "nlp:" ^ term) ac.items)
+            ["Next year";"This year";"Last year";"Last Saturday";"This Saturday";"Next Saturday"]);
+       check "node search does not invent private pages or suggest its editing block"
+         (not (List.exists (fun item ->
+            item.Popups_state.ai_label = "Tar private property"
+            || item.ai_label = "Target editing block") ac.items));
+       (match List.find_opt (fun item ->
+          item.Popups_state.ai_act = Popups_state.Emit ("[[" ^ target ^ "]]",0)) ac.items with
+        | Some item ->
+            check "node search displays resolved titles rather than raw UUID markup"
+              (item.ai_label = "Target linked title");
+            Popups_state.apply_item popup ac ~meta:false item;
+            check "choosing a resolved block title still inserts its UUID reference"
+              (A.live_buffer "b1" = "[[" ^ target ^ "]]")
+        | None -> check "node search retains block results below pages and dates" false)
+   | None -> check "node search keeps its owning autocomplete" false);
+  Ops.cancel_pending_save ();
+  Popups_state.close_ac popup;
+  failed := true;
+  open_query "[[Tar]]" 5 "Tar";
+  let* () = h.wait_ms 25 in
+  check "failed node search retains the query and local suggestions without cached private pages"
+    (match (Popups_state.get popup).Popups_state.ac with
+     | Some ac -> ac.query = "Tar"
+         && List.exists (fun item -> item.Popups_state.ai_key = "new:Tar") ac.items
+         && not (List.exists (fun item -> item.Popups_state.ai_label = "Tar private property") ac.items)
+     | None -> false);
+  Popups_state.close_ac popup;
+  failed := false;
+  let before = !searches in
+  open_query "[[ ]]" 3 " ";
+  let* () = h.wait_ms 25 in
+  check "empty node-reference query offers all 33 NLP dates without a graph search"
+    (match (Popups_state.get popup).Popups_state.ac with
+     | Some ac -> !searches = before && List.length ac.items = 33
+         && List.for_all (fun item -> Str_util.starts_with_ci item.Popups_state.ai_key "nlp:") ac.items
+     | None -> false);
+  Popups_state.close_ac popup;
+  Popups_state.active := previous_popup;
+  Ops.cancel_pending_save ();
+  install_worker ~repo:h.repo h;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_autocomplete_dismiss_resumes_pending_save (h : host) =
   let* () = settle h 40 in
   let source = "[[P]]" in
@@ -2344,6 +2433,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_embed_persists_erased_buffer h in
   let* () = test_pending_save_order h in
   let* () = test_suggestion_selection_commits_pending_save h in
+  let* () = test_node_reference_suggestions h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in
   let* () = test_autocomplete_save_gate_is_block_scoped h in

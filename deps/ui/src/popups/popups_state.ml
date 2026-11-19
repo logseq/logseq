@@ -55,8 +55,8 @@ type ac_item =
   ; ai_title : string option (* cljs item-render div[title] *)
   ; ai_help : bool (* cljs item-render div.has-help > small help icon *)
   ; ai_node : bool (* cljs node-render shape (page/tag/block search) *)
-  ; ai_node_icon : (string * bool) option
-  (* icon name for the h-5 slot; bool = wrap in .icon-cp-container *)
+  ; ai_node_icon : (Node_icon.t * bool) option
+  (* resolved icon for the h-5 slot; bool = wrap in .icon-cp-container *)
   ; ai_title_icon : string option
   (* entity icon → gap-1 wrap around the title (block-title-with-icon) *)
   ; ai_breadcrumb : string option (* mb-1 breadcrumb row; Some "" = empty *)
@@ -66,7 +66,13 @@ type ac_item =
   }
 
 let mk_item ~key ~label ?english ?icon ?group ?info ?(desc = Desc_none)
-    ?(node = false) ?node_icon ?title_icon ?breadcrumb act =
+    ?(node = false) ?node_icon ?node_entity ?title_icon ?breadcrumb act =
+  let node_icon = Option.bind node_icon (fun (name, wrapped) ->
+    let fallback = Node_icon.tabler name in
+    let resolved = match node_entity with
+      | Some entity -> Node_icon.of_entity ~fallback:(Some fallback) entity
+      | None -> Some fallback in
+    Option.map (fun value -> value, wrapped) resolved) in
   let title, help =
     match desc with
     | Desc_none -> (None, false)
@@ -671,34 +677,68 @@ let filter_slash q items =
 (* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
    date pages (calendar icon); choosing one emits [[<journal title>]]
    parsed from the english name *)
-let nlp_date_of (en : string) : Dates.t =
-  let now = Dates.date_now () in
+let nlp_weekdays =
+  ["Monday",1;"Tuesday",2;"Wednesday",3;"Thursday",4;"Friday",5;"Saturday",6;"Sunday",0]
+
+let nlp_date_of ?(now = Dates.date_now ()) (en : string) : Dates.t =
   let add n = Dates.add_days now (int_of_float n) in
   let shift_month n = Dates.shift_month now (int_of_float n) in
   let shift_year n = Dates.shift_year now (int_of_float n) in
+  let f = Dates.fields now in
+  let noon ?(month = f.month) day = Dates.make ~year:f.year ~month ~day ~hours:12 () in
   match en with
   | "Today" -> now
   | "Tomorrow" -> add 1.
   | "Yesterday" -> add (-1.)
   | "Next week" -> add 7.
-  | "This week" -> now
+  | "This week" -> noon (f.day - f.wday)
   | "Last week" -> add (-7.)
   | "Next month" -> shift_month 1.
-  | "This month" -> now
+  | "This month" -> noon 1
   | "Last month" -> shift_month (-1.)
   | "Next year" -> shift_year 1.
-  | _ -> now
+  | "This year" -> noon ~month:1 1
+  | "Last year" -> shift_year (-1.)
+  | _ ->
+      match String.split_on_char ' ' en with
+      | [prefix; weekday] ->
+          (match List.assoc_opt weekday nlp_weekdays with
+           | Some day ->
+               let delta = match prefix with
+                 | "This" -> (day - f.wday + 7) mod 7
+                 | "Last" -> -1 - ((f.wday - day + 6) mod 7)
+                 | "Next" -> 7 - ((f.wday + 6) mod 7) + ((day + 6) mod 7)
+                 | _ -> invalid_arg "Unknown weekday reference" in
+               noon (f.day + delta)
+           | None -> now)
+      | _ -> now
 
 let nlp_en_names =
   [ "Today"; "Tomorrow"; "Yesterday"; "Next week"; "This week"
-  ; "Last week"; "Next month"; "This month"; "Last month"; "Next year" ]
+  ; "Last week"; "Next month"; "This month"; "Last month"; "Next year"; "This year"; "Last year" ]
+  @ List.concat_map (fun prefix -> List.map (fun (day, _) -> prefix ^ " " ^ day) nlp_weekdays)
+      ["Last";"This";"Next"]
 
 let nlp_i18n_key en =
   "date.nlp/"
   ^ String.concat "-"
       (List.map String.lowercase_ascii (String.split_on_char ' ' en))
 
+let nlp_items kind =
+  List.map (fun en ->
+    let title = Dates.journal_title_of (nlp_date_of en) in
+    mk_item ~key:("nlp:" ^ en) ~label:(U.t (nlp_i18n_key en)) ~english:en
+      ~node:true ~node_icon:("calendar", false) ~icon:"calendar"
+      (match kind with
+       | Page_embed -> Emit ("{{embed [[" ^ title ^ "]]}}", 0)
+       | _ -> Emit ("[[" ^ title ^ "]]", 0))) nlp_en_names
+
+let node_search_text item =
+  item.ai_label ^ " " ^
+    (if Str_util.starts_with_ci item.ai_key "nlp:" then item.ai_english else "")
+
 let page_items_for t kind q =
+  let q = if kind = Page_ref then String.trim q else q in
   let act_of ~created title =
     match kind with
     | Tag_search -> if created then Tag_create title else Tag_apply title
@@ -723,18 +763,10 @@ let page_items_for t kind q =
         (* cljs get-matched-classes → fuzzy-search (limit 20) *)
         Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
         |> List.map wrap_tag
-    | Page_ref | Page_embed ->
+    | Page_ref -> Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nlp_items kind) q
+    | Page_embed ->
         if q = "" then
-          List.map
-            (fun en ->
-              let jt = Dates.journal_title_of (nlp_date_of en) in
-              mk_item ~key:("nlp:" ^ en) ~node:true
-                ~node_icon:("calendar", false)
-                ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
-                (match kind with
-                 | Page_embed -> Emit ("{{embed [[" ^ jt ^ "]]}}", 0)
-                 | _ -> Emit ("[[" ^ jt ^ "]]", 0)))
-            nlp_en_names
+          nlp_items kind
         else
           Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
           |> List.map wrap
@@ -798,8 +830,8 @@ let repo = Runtime.repo
 let page_item_of_row ?(kind = Page_ref) i w =
   let title =
     match
-      [ Cmdk_state.str_field w "block.temp/original-title"
-      ; Cmdk_state.str_field w "block/title" ]
+      [ Cmdk_state.str_field w "block/title"
+      ; Cmdk_state.str_field w "block.temp/original-title" ]
       |> List.filter_map Fun.id
     with
     | t :: _ -> t
@@ -831,9 +863,27 @@ let page_item_of_row ?(kind = Page_ref) i w =
     ~key:("node-" ^ uuid ^ "-" ^ string_of_int i)
     ~label:title ~node:true
     ~node_icon:((if is_page then "file" else "point-filled"), true)
+    ~node_entity:w
     ?breadcrumb:(if is_page then None else Cmdk_state.breadcrumb_of w)
     act
 ;;
+
+let node_search_items ~kind rows query =
+  let page_keys = Hashtbl.create 20 in
+  let nodes = List.mapi (fun index row ->
+    let item = page_item_of_row ~kind index row in
+    if Wire.get row "page?" = Some (Wire.Bool true) then
+      Hashtbl.replace page_keys item.ai_key ();
+    item) rows in
+  let dates = if kind = Page_ref then nlp_items kind else [] in
+  let ranked = Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nodes @ dates) query in
+  let seen = Hashtbl.create 50 in
+  List.iter (fun item -> Hashtbl.replace seen item.ai_key ()) ranked;
+  let unmatched = List.filter (fun item -> not (Hashtbl.mem seen item.ai_key)) nodes in
+  let pages, blocks = List.partition (fun item ->
+    Hashtbl.mem page_keys item.ai_key || Str_util.starts_with_ci item.ai_key "nlp:")
+      (ranked @ unmatched) in
+  pages @ blocks
 
 let refresh_items t ac =
   match ac.kind with
@@ -924,11 +974,13 @@ let run_block_search t ac =
 let run_node_search t ac =
   incr t.gen;
   let gen = !(t.gen) and graph = repo () and session = !(t.session) in
+  let query = String.trim ac.query in
+  if ac.kind = Page_ref && query = "" then () else
   ignore
     ((let* w =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String graph)
-         (Wire.String ac.query)
+         (Wire.String query)
          (* cljs <get-matched-blocks passes :enable-snippet? false — the
             page-ref menu renders no snippets and snippet() is the
             expensive part of the FTS query *)
@@ -959,71 +1011,14 @@ let run_node_search t ac =
                  | Some origin, Some editor ->
                      editor.uuid = ac.auuid && origin.epoch == editor.epoch
                  | _ -> false) ->
-          let rows =
-            if a.kind = Embed_ref then
-              List.filter (fun row ->
+          let rows = List.filter (fun row ->
                 Wire.map_get_uuid row "block/uuid" <> Some a.auuid
                 && Cmdk_state.str_field row "block/uuid" <> Some a.auuid) rows
-            else rows
           in
-          let pages, blocks =
-            List.partition
-              (fun w ->
-                match Wire.get w "page?" with
-                | Some (Wire.Bool b) -> b
-                | _ -> false)
-              rows
-          in
-          (* cljs <get-matched-blocks: block-search rows go through a
-             client-side fuzzy re-rank (limit 50) and the unmatched
-             leftovers are appended rather than dropped. The loaded page
-             titles stand in for cljs's leftover source so a search index
-             that is still (re)building can't starve the menu, and nlp
-             date pages join the pool as they do in cljs nlp-pages?. *)
-          let matched_pages = List.mapi (page_item_of_row ~kind:a.kind) pages
-          and matched_blocks = List.mapi (page_item_of_row ~kind:a.kind) blocks in
+          let matched = node_search_items ~kind:a.kind rows query in
           let items =
-            if a.kind = Embed_ref then matched_pages @ matched_blocks
+            if a.kind = Embed_ref then matched
             else begin
-          let seen = Hashtbl.create 32 in
-          List.iter
-            (fun it -> Hashtbl.replace seen it.ai_label ())
-            matched_pages;
-          let leftover =
-            List.filter_map
-              (fun title ->
-                 if Hashtbl.mem seen title then None
-                 else Some (mk_item ~key:("page:" ^ title) ~label:title
-                              ~node:true ~node_icon:("file", true)
-                              (Emit ("[[" ^ title ^ "]]", 0))))
-              (Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50
-                 !(t.titles) a.query)
-          in
-          List.iter
-            (fun it -> Hashtbl.replace seen it.ai_label ()) leftover;
-          let nlp =
-            List.filter_map
-              (fun en ->
-                 let jt = Dates.journal_title_of (nlp_date_of en) in
-                 let label = U.t (nlp_i18n_key en) in
-                 if Hashtbl.mem seen jt || Hashtbl.mem seen label
-                 then None
-                 else
-                   Some
-                     (mk_item ~key:("nlp:" ^ en) ~node:true
-                        ~node_icon:("calendar", false) ~label
-                        ~icon:"calendar"
-                        (Emit ("[[" ^ jt ^ "]]", 0))))
-              (Fuzzy.fuzzy_search
-                 ~extract:(fun en ->
-                    en ^ " "
-                    ^ Dates.journal_title_of (nlp_date_of en))
-                 ~limit:10 nlp_en_names a.query)
-          in
-          let matched =
-            take 50
-              (matched_pages @ nlp @ leftover @ matched_blocks)
-          in
           match
               List.filter
                 (fun it -> S.sub it.ai_key 0 4 = "new:")
@@ -1033,7 +1028,7 @@ let run_node_search t ac =
             | new_items ->
                 let first_starts =
                   match matched with
-                  | m :: _ -> Str_util.starts_with_ci m.ai_label a.query
+                  | m :: _ -> Str_util.starts_with_ci m.ai_label query
                   | [] -> false
                 in
                 if first_starts then

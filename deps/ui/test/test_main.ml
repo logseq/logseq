@@ -3064,7 +3064,7 @@ let test_popups_state () =
   eqs "nlp key" "date.nlp/next-week"
     (Popups_state.nlp_i18n_key "Next week");
   check "nlp names"
-    (List.length Popups_state.nlp_en_names = 10
+    (List.length Popups_state.nlp_en_names = 33
     && List.mem "Tomorrow" Popups_state.nlp_en_names);
   let now = Dates.date_now () in
   let ms_diff en = Popups_state.nlp_date_of en -. now in
@@ -3073,6 +3073,21 @@ let test_popups_state () =
   check "nlp next week" (ms_diff "Next week" > 604700000.);
   check "nlp today" (abs_float (ms_diff "Today") < 5000.);
   check "nlp unknown" (abs_float (ms_diff "Bogus") < 5000.);
+  let monday = Dates.make ~year:2026 ~month:11 ~day:16 ~hours:15 () in
+  List.iter (fun (prefix, days) ->
+    List.iter2 (fun (weekday, _) expected ->
+      let actual = Dates.fields (Popups_state.nlp_date_of ~now:monday (prefix ^ " " ^ weekday)) in
+      check ("nlp " ^ prefix ^ " " ^ weekday)
+        (actual.year = 2026 && actual.month = 11 && actual.day = expected))
+      Popups_state.nlp_weekdays days)
+    ["Last",[9;10;11;12;13;14;15];"This",[16;17;18;19;20;21;22];"Next",[23;24;25;26;27;28;29]];
+  List.iter (fun (term, year, month, day) ->
+    let actual = Dates.fields (Popups_state.nlp_date_of ~now:monday term) in
+    check ("nlp period " ^ term) (actual.year = year && actual.month = month && actual.day = day))
+    ["This week",2026,11,15;"This month",2026,11,1;"This year",2026,1,1;"Last year",2025,11,16];
+  let sunday = Dates.make ~year:2026 ~month:11 ~day:15 () in
+  check "nlp next Monday on Sunday uses the upcoming Monday"
+    ((Dates.fields (Popups_state.nlp_date_of ~now:sunday "Next Monday")).day = 16);
   let with_month_end_clock : (unit -> Dates.fields) -> Dates.fields =
     [%mel.raw {js|function (read) {
       const { mock } = require("node:test");
@@ -3129,7 +3144,7 @@ let test_popups_state () =
   check "block_item"
     (bi.Popups_state.ai_label = "BT"
     && bi.ai_act = Popups_state.Emit ("[[bu]]", 0)
-    && bi.ai_node && bi.ai_node_icon = Some ("point-filled", true)
+    && bi.ai_node && bi.ai_node_icon = Some (Node_icon.tabler "point-filled", true)
     && bi.ai_breadcrumb = Some "");
   check "class_titles"
     (Popups_state.class_titles_of

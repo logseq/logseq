@@ -112,11 +112,9 @@ let node_icon_slot ~key (it : S.ac_item) : t =
      | Some (icn, true) ->
          [ row ~key:"cp" ~style_class:"icon-cp-container"
              ~cross:`center ~foreground:"inherit"
-             [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
-                 ~style_class:"ui__icon" [] ] ]
+             [ Icon_picker.icon_el ~key:"ni" ~size:14. ~cls:"ui__icon" icn ] ]
      | Some (icn, false) ->
-         [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
-             ~style_class:"ui__icon" [] ]
+         [ Icon_picker.icon_el ~key:"ni" ~size:14. ~cls:"ui__icon" icn ]
      | None -> [])
 ;;
 

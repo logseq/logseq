@@ -296,7 +296,7 @@ let test_ac_slash_switch st (s : ('m, 'a) S.t) =
                 (* an empty [[ query lists the i18n nlp date pages —
                    cljs page-search renders calendar rows *)
                 check "empty page query lists nlp dates"
-                  (List.length ac'.P.items = 10
+                  (List.length ac'.P.items = 33
                    && List.exists
                         (fun it -> it.P.ai_key = "nlp:Today")
                         ac'.P.items)
