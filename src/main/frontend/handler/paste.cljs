@@ -238,8 +238,11 @@
                                                                      :other-attrs {:block/link (:db/id linked-block)}})]
                        (state/clear-edit!))))))
              (editor-handler/paste-blocks blocks {:revert-cut-txs revert-cut-txs
+                                                  :cut? keep-uuid?
                                                   :keep-uuid? keep-uuid?})))
-         (paste-copied-text input text html)))
+         ;; Reopening the same block can reuse the input ID after the clipboard read starts.
+         (when (and input (identical? input (state/get-input)))
+           (paste-copied-text input text html))))
      (p/catch (fn [error]
                 (log/error :msg "Paste failed" :exception error)
                 (state/pub-event! [:capture-error {:error error

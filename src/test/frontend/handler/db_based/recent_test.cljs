@@ -2,17 +2,22 @@
   (:require [clojure.string :as string]
             [clojure.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.common.thread-api :as thread-api]
             [frontend.config :as config]
             [frontend.handler.db-based.recent :as db-recent-handler]
+            [frontend.handler.graph :as graph-handler]
+            [frontend.handler.route :as route-handler]
             [frontend.state :as state]
             [frontend.test.helper :include-macros true :refer [deftest-async]]
             [frontend.worker.handler.page :as worker-page]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.state :as worker-state]
             [logseq.common.config :as common-config]
             [logseq.db :as ldb]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
-            [promesa.core :as p]))
+            [promesa.core :as p]
+            [reitit.frontend.easy :as rfe]))
 
 (defn- make-test-env!
   []
@@ -193,3 +198,38 @@
           (is (= [active-page]
                  (map :block/title favorites)))
           (is (true? favorited?)))))))
+
+(deftest-async recent-records-only-eligible-page-navigation-test
+  (let [env (make-test-env!)
+        original-state (state/get-state)
+        block-uuid (random-uuid)]
+    (doseq [title ["Alpha" "Beta" "Hidden" "Blank"]]
+      (create-page! env title))
+    (let [alpha-id (:db/id (get-page env "Alpha"))
+          beta-id (:db/id (get-page env "Beta"))
+          hidden-uuid (:block/uuid (get-page env "Hidden"))
+          blank-uuid (:block/uuid (get-page env "Blank"))
+          route-info (get @thread-api/*thread-apis :thread-api/get-page-route-info)]
+      (d/transact! (test-conn env)
+                   [{:block/uuid block-uuid
+                     :block/title "A block"
+                     :block/page alpha-id
+                     :block/parent alpha-id}
+                    [:db/add (:db/id (get-page env "Hidden")) :logseq.property/hide? true]
+                    [:db/add (:db/id (get-page env "Blank")) :block/title " "]])
+      (p/with-redefs [state/get-current-repo (constantly (:repo env))
+                      worker-state/get-datascript-conn (constantly (test-conn env))
+                      state/<invoke-db-worker (fn [_api repo lookup]
+                                                (p/resolved (route-info repo lookup)))
+                      graph-handler/current-graph-id (constantly nil)
+                      rfe/push-state (constantly nil)]
+        (state/set-recent-pages! [])
+        (-> (p/do!
+             (route-handler/redirect-to-page! "Alpha")
+             (route-handler/redirect-to-page! "Beta")
+             (route-handler/redirect-to-page! "Alpha")
+             (route-handler/redirect-to-page! hidden-uuid)
+             (route-handler/redirect-to-page! blank-uuid)
+             (route-handler/redirect-to-page! block-uuid)
+             (is (= [beta-id alpha-id] (state/get-recent-pages))))
+            (p/finally #(state/replace-state! original-state)))))))

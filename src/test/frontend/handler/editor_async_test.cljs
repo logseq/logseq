@@ -14,6 +14,7 @@
             [frontend.handler.db-based.property :as db-property-handler]
             [frontend.handler.editor :as editor]
             [frontend.handler.editor.assets :as editor-assets]
+            [frontend.handler.notification :as notification]
             [frontend.handler.editor.quick-add :as editor-quick-add]
             [frontend.handler.export.html :as export-html]
             [frontend.handler.user :as user-handler]
@@ -21,6 +22,7 @@
             [frontend.state :as state]
             [frontend.test.helper :as test-helper :include-macros true :refer [deftest-async load-test-files]]
             [frontend.util :as util]
+            [frontend.util.ref :as ref]
             [frontend.worker.handler.block :as worker-block-handler]
             [frontend.worker.handler.comments :as worker-comments]
             [goog.dom :as gdom]
@@ -787,6 +789,103 @@
                    :replace-empty-target? false}
                   (:opts @inserted))
                "Explicit target asset insertion should append as children, not replace the temp edit block"))))))
+
+(defn- <save-assets-in-test-db
+  [files opts edit-block edit-content editor-events]
+  (p/with-redefs [assets-handler/ensure-assets-dir! (fn [_] (p/resolved ["/repo" "assets"]))
+                  assets-handler/get-file-checksum identity
+                  state/<invoke-db-worker
+                  (fn [api & args]
+                    (let [[repo pattern id] args
+                          db (conn/get-db repo)]
+                      (case api
+                        :thread-api/pull (p/resolved (d/pull db pattern id))
+                        :thread-api/q (p/resolved (apply d/q (first pattern) db (rest pattern)))
+                        (apply <test-db-worker api args))))
+                  db-transact/apply-outliner-ops apply-test-outliner-ops!
+                  state/get-edit-block (constantly edit-block)
+                  state/get-edit-content (constantly edit-content)
+                  notification/show! (fn [& _])
+                  editor/save-block-aux! (fn [& args] (swap! editor-events conj [:save args]))
+                  editor/edit-block! (fn [block _] (swap! editor-events conj [:edit block]))]
+    (editor-assets/db-based-save-assets! test-helper/test-db files opts)))
+
+(deftest-async db-based-save-assets-preserves-batch-identity-and-order
+  (let [asset-a (random-uuid)
+        asset-b (random-uuid)
+        cases [["" false [:new :a :b]]
+               ["" false [:a :new :b]]
+               ["" false [:a :b :a]]
+               ["target" false [:a :b]]
+               ["target" true [:a :b]]]]
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 [{:block/uuid asset-a :block/title "File A"
+                   :block/tags :logseq.class/Asset
+                   :logseq.property.asset/type "txt"
+                   :logseq.property.asset/checksum "a.txt"}
+                  {:block/uuid asset-b :block/title "File B"
+                   :block/tags :logseq.class/Asset
+                   :logseq.property.asset/type "txt"
+                   :logseq.property.asset/checksum "b.txt"}])
+    (p/loop [remaining cases index 0]
+      (when-let [[title explicit-target? input] (first remaining)]
+        (let [target-uuid (random-uuid)
+              page-title (str "Batch " index)
+              _ (load-test-files [{:page {:block/title page-title}
+                                  :blocks [{:block/uuid target-uuid :block/title title}]}])
+              target (block-by-worker-id (conn/get-db test-helper/test-db) target-uuid)
+              events (atom [])
+              files (mapv #(case %
+                             :new {:src (str "new-" index ".txt") :title "New file"}
+                             :a {:src "a.txt"}
+                             :b {:src "b.txt"}) input)
+              expected-titles (mapv #(case %
+                                      :new "New file"
+                                      :a (ref/->page-ref asset-a)
+                                      :b (ref/->page-ref asset-b)) input)]
+          (p/let [result (<save-assets-in-test-db files
+                                                (when explicit-target? {:target-block target})
+                                                target title events)
+                  db (conn/get-db test-helper/test-db)
+                  parent-id (if explicit-target? (:db/id target) (:db/id (:block/page target)))
+                  children (ldb/get-children db parent-id)
+                  inserted (if (and (not explicit-target?) (seq title)) (rest children) children)
+                  new-asset-uuid (:block/uuid (first (filter ldb/asset? inserted)))]
+            (is (= expected-titles (mapv :block/title inserted)))
+            (is (= (count input) (count (set (map :block/uuid inserted))))
+                "Each uploaded item has its own inserted block identity")
+            (is (= (mapv #(case % :a asset-a :b asset-b :new new-asset-uuid) input)
+                   (mapv :block/uuid result))
+                "Returned assets retain the input order and reuse existing entities")
+            (when (and (not explicit-target?) (empty? title))
+              (is (= target-uuid (:block/uuid (first inserted))))
+              (is (= (:block/title (first inserted)) (:block/title (second (last @events))))))
+            (p/recur (rest remaining) (inc index))))))))
+
+(deftest-async db-based-save-assets-save-only-preserves-active-editor
+  (load-test-files [{:page {:block/title "Notes"}
+                    :blocks [{:block/title "Saved content"}]}])
+  (let [target (test-helper/find-block-by-content "Saved content")
+        asset-uuid (random-uuid)
+        events (atom [])]
+    (d/transact! (conn/get-db test-helper/test-db false)
+                 [{:block/uuid asset-uuid :block/title "Existing file"
+                   :block/tags :logseq.class/Asset
+                   :logseq.property.asset/type "txt"
+                   :logseq.property.asset/checksum "existing.txt"}])
+    (p/let [result (<save-assets-in-test-db [{:src "new.txt" :title "New file"}
+                                           {:src "existing.txt"}]
+                                          {:save-only? true}
+                                          target "Unsaved content" events)
+            db (conn/get-db test-helper/test-db)
+            assets (ldb/get-children (d/entity db :logseq.class/Asset))]
+      (is (= ["New file" "Existing file"] (mapv :block/title result)))
+      (is (= asset-uuid (:block/uuid (second result))))
+      (is (= ["New file"] (mapv :block/title assets))
+          "Saving attaches only new assets to the Asset page")
+      (is (= ["Saved content"]
+             (mapv :block/title (ldb/get-children db (:db/id (:block/page target))))))
+      (is (empty? @events) "Saving assets must not save or replace the active editor"))))
 
 (deftest-async ensure-comments-area-for-selected-blocks
   (let [first-uuid (random-uuid)

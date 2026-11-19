@@ -2,6 +2,11 @@
   (:require [cljs.test :refer [deftest is testing]]
             [logseq.publish.render :as render]))
 
+(defn- block-content->html
+  [content]
+  (render/render-hiccup
+   (render/block-content-nodes {:block/title content} {:uuid->title {} :graph-uuid "g"} 1)))
+
 (deftest entity-properties-filters-explicitly-hidden-properties
   (testing "property is filtered when ctx marks it hidden"
     (let [entity {:user.property/secret "value"}
@@ -56,3 +61,29 @@
               1)
         html (render/render-hiccup node)]
     (is (re-find #"https://www\.youtube\.com/embed/xu9p5ynlhZk" html))))
+
+(deftest block-content-nodes-renders-inline-latex
+  (is (= "<span class=\"block-text\" dir=\"auto\">before <span class=\"math-inline\">x^2</span> after</span>"
+         (block-content->html "before $x^2$ after"))))
+
+(deftest block-content-nodes-renders-displayed-latex-inside-paragraph
+  (is (= "<span class=\"block-text\" dir=\"auto\">a <span class=\"math-inline\" data-display=\"true\">y</span> b</span>"
+         (block-content->html "a $$y$$ b"))))
+
+(deftest block-content-nodes-renders-display-latex-block
+  (is (= "<div class=\"block-text\" dir=\"auto\"><div class=\"math-block\">\\int_0^1 x\\,dx</div></div>"
+         (block-content->html "$$\\int_0^1 x\\,dx$$"))))
+
+(deftest block-content-nodes-renders-latex-environments
+  (testing "equation environments render their bare content"
+    (is (= "<div class=\"block-text\" dir=\"auto\"><div class=\"math-block\">a=b\n</div></div>"
+           (block-content->html "\\begin{equation}\na=b\n\\end{equation}"))))
+  (testing "other environments keep their begin and end"
+    (is (= "<div class=\"block-text\" dir=\"auto\"><div class=\"math-block\">\\begin{align}\nc&amp;=d\n\\end{align}</div></div>"
+           (block-content->html "\\begin{align}\nc&=d\n\\end{align}")))))
+
+(deftest block-content-nodes-escapes-latex
+  (is (= "<span class=\"block-text\" dir=\"auto\"><span class=\"math-inline\">a&lt;b &amp; c</span></span>"
+         (block-content->html "$a<b & c$")))
+  (is (= "<div class=\"block-text\" dir=\"auto\"><div class=\"math-block\">&lt;img src=x onerror=alert(1)&gt;</div></div>"
+         (block-content->html "$$<img src=x onerror=alert(1)>$$"))))

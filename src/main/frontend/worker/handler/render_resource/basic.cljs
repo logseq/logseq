@@ -42,6 +42,9 @@
        (ldb/get-page-blocks db)
        ldb/sort-by-order
        (keep :block/link)
+       ;; A page can be linked by more than one favorite block, e.g. after
+       ;; importing an OG config.edn that listed it as both `foo` and `Foo`
+       (common-util/distinct-by :db/id)
        (map #(d/entity db (:db/id %)))
        (remove ldb/recycled?)
        vec))

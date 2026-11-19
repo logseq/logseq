@@ -1458,3 +1458,29 @@
     (is (= [10 2 1] desc-groups))
     ;; Explicit ascending order must reverse the default descending order.
     (is (= [1 2 10] asc-groups))))
+
+(defn- raw-number-filter
+  [property-ident operator match]
+  {:or? false
+   :filters [[property-ident operator match]]})
+
+(deftest get-view-data-class-objects-raw-number-is-filter-includes-zero-test
+  (let [conn (topic-conn
+              [{:page {:block/title "zero" :build/tags [:Topic]
+                       :build/properties {:user.property/size 0}}}
+               {:page {:block/title "five" :build/tags [:Topic]
+                       :build/properties {:user.property/size 5}}}]
+              :properties {:user.property/size {:logseq.property/type :raw-number}})
+        class-id (:db/id (d/entity @conn :user.class/Topic))
+        view-id (create-view-id conn :class-objects :view-for-id class-id)
+        option {:view-feature-type :class-objects
+                :view-for-id class-id
+                :sorting [{:id :block/title :asc? true}]}
+        is-zero (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is #{0})))
+        is-five (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is #{5})))
+        is-not-zero (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is-not #{0})))
+        is-not-five (db-view/get-view-data @conn view-id (assoc option :filters (raw-number-filter :user.property/size :is-not #{5})))]
+    (is (= ["zero"] (result-titles conn is-zero)))
+    (is (= ["five"] (result-titles conn is-five)))
+    (is (= ["five"] (result-titles conn is-not-zero)))
+    (is (= ["zero"] (result-titles conn is-not-five)))))

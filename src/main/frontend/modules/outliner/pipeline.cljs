@@ -57,6 +57,7 @@
                                (vals blocks))]
         (when deleted-ids
           (state/sidebar-remove-deleted-block! deleted-ids))
+        ;; Remove deleted pages even during undo/redo; restoration does not record a visit.
         (when-let [removed-page-ids (not-empty (concat deleted-ids recycled-ids))]
           (state/remove-pages-from-recent! removed-page-ids)))
       (when (or (current-page-deleted? current-page deleted)

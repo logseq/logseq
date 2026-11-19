@@ -1,4 +1,4 @@
-import { LSPluginUser } from '../LSPlugin.user'
+import type { LSPluginUser } from '../LSPlugin.user'
 
 export type NetMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD'
 
@@ -666,5 +666,3 @@ export class LSPluginNet {
     return this._ctx
   }
 }
-
-

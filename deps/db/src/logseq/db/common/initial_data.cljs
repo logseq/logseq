@@ -15,10 +15,22 @@
 ;; FIXME: For DB graph built-in pages, look up by name -> uuid like
 ;; get-built-in-page instead of this approach which is more error prone
 (defn get-first-page-by-name
-  "Return the oldest page's db id for :block/name"
+  "Resolve a stored page name or an exact current/default-format journal title."
   [db page-name]
   (when (and db (string? page-name))
-    (first (sort (map :e (entity-util/get-pages-by-name db page-name))))))
+    (let [stored-id (first (sort (map :e (entity-util/get-pages-by-name db page-name))))]
+      (or (when (and stored-id (not (entity-util/journal? (d/entity db stored-id))))
+            stored-id)
+        (when-let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))]
+          (some (fn [format]
+                  (let [journal-day (date-time-util/journal-title->int page-name [format])]
+                    (when (and journal-day
+                               (= (common-util/page-name-sanity-lc page-name)
+                                  (common-util/page-name-sanity-lc
+                                   (date-time-util/int->journal-title journal-day format))))
+                      (:e (first (d/datoms db :avet :block/journal-day journal-day))))))
+                (distinct [formatter date-time-util/default-journal-title-formatter])))
+          stored-id))))
 
 (defn get-first-page-by-title
   "Return the oldest page's db id for :block/title"

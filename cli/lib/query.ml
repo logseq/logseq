@@ -44,11 +44,6 @@ let normalize_query_name value =
     Some (String.sub value 1 (String.length value - 1))
   else Some value
 
-let parsed_edn text =
-  match edn_value_of_string ~label:"built-in query" text with
-  | Ok value -> value
-  | Error err -> failwith err.message
-
 let kw value = Edn_util.keyword value
 let sym value = Edn_util.symbol value
 let in_sym value = Melange_edn_melange.symbol value
@@ -502,53 +497,6 @@ let built_in_queries =
   |> Vec.sort (fun (a : query_entry) (b : query_entry) ->
       String.compare a.name b.name)
 
-let db_query_dsl_rules =
-  parsed_edn
-    {|[
-      [(parent ?p ?c) [?c :block/parent ?p]]
-      [(parent ?p ?c) [?t :block/parent ?p] (parent ?t ?c)]
-      [(class-extends ?p ?c) [?c :logseq.property.class/extends ?p]]
-      [(class-extends ?p ?c) [?t :logseq.property.class/extends ?p] (class-extends ?t ?c)]
-      [(alias ?e2 ?e1) [?e2 :block/alias ?e1]]
-      [(alias ?e2 ?e1) [?e1 :block/alias ?e2]]
-      [(self-ref ?b ?ref) [?b :block/refs ?ref]]
-      [(has-ref ?b ?r) [?b :block/refs ?r]]
-      [(has-ref ?b ?r) (parent ?p ?b) [?p :block/refs ?r]]
-      [(page-ref ?b ?ref) (has-ref ?b ?ref)]
-      [(block-content ?b ?query) [?b :block/title ?content] [(clojure.string/includes? ?content ?query)]]
-      [(page ?b ?page-name) [?b :block/page ?bp] [?bp :block/name ?page-name]]
-      [(between ?b ?start ?end) [?b :block/page ?p] [?p :block/tags :logseq.class/Journal] [?p :block/journal-day ?d] [(>= ?d ?start)] [(<= ?d ?end)]]
-      [(ref->val ?pv ?val) [?pv :block/title ?val]]
-      [(ref->val ?pv ?val) [?pv :logseq.property/value ?val]]
-      [(property-missing-value ?b ?prop-e ?default-p ?default-v) [?t :logseq.property.class/properties ?prop-e] [?prop-e :db/ident ?prop] (object-has-class-property? ?b ?prop) [(get-else $ ?b ?prop "N/A") ?prop-v] [(= ?prop-v "N/A")] [?prop-e ?default-p ?default-v]]
-      [(scalar-property-value ?b ?prop-e ?val) [?prop-e :db/ident ?prop] [?b ?prop ?val]]
-      [(scalar-property-value-with-default ?b ?prop-e ?val) (scalar-property-value ?b ?prop-e ?val)]
-      [(scalar-property-value-with-default ?b ?prop-e ?val) (property-missing-value ?b ?prop-e :logseq.property/scalar-default-value ?val)]
-      [(ref-property-value ?b ?prop-e ?val) [?prop-e :db/ident ?prop] [?b ?prop ?pv] (ref->val ?pv ?val)]
-      [(ref-property-value-with-default ?b ?prop-e ?val) (ref-property-value ?b ?prop-e ?val)]
-      [(ref-property-value-with-default ?b ?prop-e ?val) (property-missing-value ?b ?prop-e :logseq.property/default-value ?pv) (ref->val ?pv ?val)]
-      [(object-has-class-property? ?b ?prop) [?prop-e :db/ident ?prop] [?t :logseq.property.class/properties ?prop-e] [?b :block/tags ?tc] (or [(= ?t ?tc)] (class-extends ?t ?tc))]
-      [(has-property-or-object-property? ?b ?prop) [?prop-e :db/ident ?prop] (or [?b ?prop _] (object-has-class-property? ?b ?prop))]
-      [(has-simple-query-property ?b ?prop) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (has-property-or-object-property? ?b ?prop) (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true])]
-      [(has-private-simple-query-property ?b ?prop) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (has-property-or-object-property? ?b ?prop)]
-      [(has-property ?b ?prop) [?b ?prop _] [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true])]
-      [(scalar-property ?b ?prop ?val) [?prop-e :db/ident ?prop] (scalar-property-value ?b ?prop-e ?val) (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true])]
-      [(scalar-property-with-default ?b ?prop ?val) [?prop-e :db/ident ?prop] (scalar-property-value-with-default ?b ?prop-e ?val) (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true])]
-      [(ref-property ?b ?prop ?val) [?prop-e :db/ident ?prop] (ref-property-value ?b ?prop-e ?val) (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true])]
-      [(ref-property-with-default ?b ?prop ?val) [?prop-e :db/ident ?prop] (ref-property-value-with-default ?b ?prop-e ?val) (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true])]
-      [(private-scalar-property ?b ?prop ?val) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (scalar-property-value ?b ?prop-e ?val)]
-      [(private-scalar-property-with-default ?b ?prop ?val) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (scalar-property-value-with-default ?b ?prop-e ?val)]
-      [(private-ref-property ?b ?prop ?val) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (ref-property-value ?b ?prop-e ?val)]
-      [(private-ref-property-with-default ?b ?prop ?val) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (ref-property-value-with-default ?b ?prop-e ?val)]
-      [(property ?b ?prop ?val) [?prop-e :db/ident ?prop] [?prop-e :block/tags :logseq.class/Property] (or [(missing? $ ?prop-e :logseq.property/public?)] [?prop-e :logseq.property/public? true]) [?b ?prop ?pv] (or (and [(missing? $ ?prop-e :db/valueType)] [?b ?prop ?val]) (and [?prop-e :db/valueType :db.type/ref] (or [?pv :block/title ?val] [?pv :logseq.property/value ?val])))]
-      [(tag-spec->tag ?tag ?spec) [(number? ?spec)] [(identity ?spec) ?tag]]
-      [(tag-spec->tag ?tag ?spec) [?tag :block/title ?spec]]
-      [(tag-spec->tag ?tag ?spec) [?tag :db/ident ?spec]]
-      [(tags ?b ?tags) [(identity ?tags) [?spec ...]] (tag-spec->tag ?tag ?spec) [?b :block/tags ?tc] (or [(= ?tag ?tc)] (class-extends ?tag ?tc)) [(missing? $ ?b :block/link)]]
-      [(task ?b ?statuses) (ref-property-with-default ?b :logseq.property/status ?val) [(contains? ?statuses ?val)]]
-      [(priority ?b ?priorities) (ref-property-with-default ?b :logseq.property/priority ?priority) [(contains? ?priorities ?priority)]]
-    ]|}
-
 let trim_non_empty value =
   let value = String.trim value in
   if value = "" then None else Some value
@@ -741,37 +689,6 @@ let command_id = function
 
 let validate_parsed _ = Ok ()
 
-let symbol_is name = function
-  | Melange_edn_melange.Any (Melange_edn_melange.Symbol value) -> value = name
-  | _ -> false
-
-let query_in_ends_with_percent query =
-  match Edn_util.as_vector query with
-  | Some values -> (
-      let rec find_in values =
-        match Vec.pop_front values with
-        | None -> Vec.empty
-        | Some (keyword, rest) when Edn_util.as_keyword keyword = Some "in" ->
-            collect_in Vec.empty rest
-        | Some (_, rest) -> find_in rest
-      and collect_in acc values =
-        match Vec.pop_front values with
-        | None -> acc
-        | Some (keyword, _) when Option.is_some (Edn_util.as_keyword keyword) ->
-            acc
-        | Some (value, rest) -> collect_in (Vec.push_back acc value) rest
-      in
-      match find_in values with
-      | values when not (Vec.is_empty values) ->
-          symbol_is "%" (Vec.nth values (Vec.length values - 1))
-      | _ -> false)
-  | _ -> false
-
-let query_args query inputs =
-  let args = Vec.push_front inputs query in
-  if query_in_ends_with_percent query then Vec.push_back args db_query_dsl_rules
-  else args
-
 let build ?registry:_ config _globals parsed =
   match parsed with
   | Parsed_list -> Ok List
@@ -876,6 +793,67 @@ let query_entry_value (entry : query_entry) =
          (Edn_util.keyword "query", entry.query);
        |])
 
+let query_input_bindings query =
+  let rec find_in values =
+    match Vec.pop_front values with
+    | None -> Vec.empty
+    | Some (value, rest) when Edn_util.as_keyword value = Some "in" ->
+        collect Vec.empty rest
+    | Some (_, rest) -> find_in rest
+  and collect bindings values =
+    match Vec.pop_front values with
+    | None -> bindings
+    | Some (value, _) when Option.is_some (Edn_util.as_keyword value) ->
+        bindings
+    | Some (value, rest) -> collect (Vec.push_back bindings value) rest
+  in
+  match Edn_util.as_vector query with
+  | Some values ->
+      find_in values
+      |> Vec.filter (fun value -> Edn_util.as_symbol value <> Some "$")
+  | None -> Vec.empty
+
+let custom_query_value query inputs =
+  let bindings = query_input_bindings query in
+  (* CLI inputs bind % positionally; Desktop carries rules separately. A full
+     input vector includes that slot. Otherwise the worker supplies rules. *)
+  let query_inputs, rules =
+    if
+      Vec.length bindings = Vec.length inputs
+      && Vec.exists (fun value -> Edn_util.as_symbol value = Some "%") bindings
+    then
+      Vec.fold_left
+        (fun (values, current_rules) (binding, value) ->
+          if Edn_util.as_symbol binding = Some "%" then
+            let rules_value =
+              match Edn_util.as_seq value with
+              | Some rule_values -> Edn_util.vector_vec rule_values
+              | None -> value
+            in
+            (values, Some rules_value)
+          else (Vec.push_back values value, current_rules))
+        (Vec.empty, None)
+        (Vec.combine bindings inputs)
+    else (inputs, None)
+  in
+  let fields =
+    Vec.of_array
+      [|
+        (Edn_util.keyword "query", query);
+        (Edn_util.keyword "inputs", Edn_util.vector_vec query_inputs);
+      |]
+  in
+  Edn_util.map_t_vec
+    (match rules with
+    | Some value -> Vec.push_back fields (Edn_util.keyword "rules", value)
+    | None -> fields)
+
+let query_result mode value =
+  Cli_result.ok ~command:Command_id.Query mode
+    (Query_result
+       (Edn_util.map_vec
+          (Vec.of_array [| (Edn_util.keyword "result", value) |])))
+
 let execute_with_mode action config mode =
   let open Cli_effect in
   match action with
@@ -896,16 +874,10 @@ let execute_with_mode action config mode =
         | Error err ->
             pure (Output_mode.error ~command:Command_id.Query mode err)
         | Ok invoke_config ->
-            bind
-              (Transport.thread_api_q invoke_config ~repo
-                 ~query:(Edn_util.vector_t_vec (query_args query inputs)))
-              (fun value ->
-                pure
-                  (Cli_result.ok ~command:Command_id.Query mode
-                     (Query_result
-                        (Edn_util.map_vec
-                           (Vec.of_array
-                              [| (Edn_util.keyword "result", value) |]))))))
+            map (query_result mode)
+              (Transport.thread_api_query_custom invoke_config ~repo
+                 ~query:(custom_query_value query inputs)
+                 ~context:(Edn_util.map_t_vec Vec.empty)))
 
 let meta ?(examples = Vec.empty) id doc =
   {
@@ -935,6 +907,24 @@ let metadata () =
                 '[:logseq.property/status.done \"daily\"]'";
                "logseq query --graph my-graph --query '[:find [?e ...] :where \
                 [?e :block/name]]'";
+               "logseq query --graph my-graph --query '[:find ?day :in $ \
+                ?start ?end :where [?p :block/journal-day ?day] [(<= ?start \
+                ?day)] [(<= ?day ?end)]]' --inputs '[:-7d :today]' # Journal \
+                days from seven days ago through today.";
+               "logseq query --graph my-graph --query '[:find [?title ...] :in \
+                $ ?start ?end :where [?b :block/page ?page] [?b :block/title \
+                ?title] [?b :block/updated-at ?updated] [(<= ?start ?updated)] \
+                [(<= ?updated ?end)]]' --inputs '[:today-start :today-end]' # \
+                Blocks updated today; boundaries resolve to epoch \
+                milliseconds.";
+               "logseq query --graph my-graph --query '[:find ?title . :in $ \
+                ?name :where [?p :block/name ?name] [?p :block/title ?title]]' \
+                --inputs '[\"[[Home]]\"]' # [[Home]] resolves to \"home\"; CLI \
+                has no current-page or query-block context.";
+               "logseq query --graph my-graph --query '[:find ?value . :in $ \
+                ?value :where [(identity ?value) ?bound]]' --inputs \
+                '[\"\\\"42\\\"\"]' # Keep \"42\" as a string; [\"42\"] \
+                resolves to the number 42.";
              |])
         Command_id.Query "Run a Datascript query";
       meta

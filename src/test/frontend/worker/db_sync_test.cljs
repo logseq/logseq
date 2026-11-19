@@ -565,6 +565,88 @@
                 (is (ldb/recycled? (d/entity @conn [:block/uuid recycled-uuid]))))
               (upload-pending-and-assert-converged! conn remote-conn))))))))
 
+(deftest rebase-persisted-nil-reference-test
+  (doseq [scenario [:local-page :same-name-remote-page :missing-metadata]]
+    (testing (name scenario)
+      (let [recoverable? (not= :missing-metadata scenario)
+            remote-page-uuid (when (= :same-name-remote-page scenario) (random-uuid))
+            {:keys [conn client-ops-conn child1 child2]} (setup-parent-child)
+            server-conn (d/conn-from-db @conn)
+            parsed-ref (gp-block/page-name->map "Reference Page" @conn true
+                                               date-time-util/default-journal-title-formatter)
+            ref-uuid (:block/uuid parsed-ref)
+            block-uuid (:block/uuid child1)
+            sibling-uuid (random-uuid)
+            descendant-uuid (random-uuid)
+            title (str "See [[" ref-uuid "]]")
+            entity (fn [id] (d/entity @conn [:block/uuid id]))]
+        (with-datascript-conns conn client-ops-conn
+          (fn []
+            (apply-ops! conn
+                        [[:save-block [{:block/uuid block-uuid
+                                        :block/title title
+                                        :block/refs [parsed-ref]} {}]]
+                         [:insert-blocks [[{:block/title "" :block/uuid sibling-uuid}
+                                           {:block/title "Child note"
+                                            :block/uuid descendant-uuid
+                                            :block/parent [:block/uuid sibling-uuid]}]
+                                          (:db/id child1)
+                                          {:sibling? true :keep-uuid? true}]]]
+                        (assoc local-tx-meta :outliner-op :insert-blocks))
+            (let [{:keys [tx-id tx reversed-tx forward-outliner-ops] :as pending}
+                  (first (sync-apply/pending-txs test-repo))
+                  saved-title (:block/title (entity block-uuid))
+                  forward (update-in forward-outliner-ops [0 1 0]
+                                     (fn [block]
+                                       (cond-> (assoc block :block/refs #{nil})
+                                         (= :local-page scenario)
+                                         (dissoc :block.temp/sync-created-refs)
+
+                                         (not recoverable?)
+                                         (dissoc :block.temp/sync-rebase-refs
+                                                 :block.temp/sync-created-refs))))]
+              (is (= :save-block (ffirst forward)))
+              (is (string/starts-with? saved-title "See "))
+              (is (= sibling-uuid (-> (entity descendant-uuid) :block/parent :block/uuid)))
+              (client-op/upsert-local-tx-entry!
+               test-repo (assoc pending :normalized-tx-data tx
+                                :reversed-tx-data reversed-tx :forward-outliner-ops forward))
+              (let [page-tx (when remote-page-uuid
+                              (:tx-data (outliner-page/create @server-conn "Reference Page"
+                                                              {:uuid remote-page-uuid})))
+                    remote-tx (into [[:db/add (:db/id child2) :block/title "Remote edit"]] page-tx)]
+                (sync-apply/apply-remote-tx! test-repo nil
+                                            (:tx-data (ldb/transact! server-conn remote-tx))))
+              (is (= "Remote edit" (:block/title (entity (:block/uuid child2)))))
+              (when recoverable?
+                (is (= (str "See [[" (or remote-page-uuid ref-uuid) "]]")
+                       (:block/raw-title (entity block-uuid))))
+                (sync-apply/apply-remote-tx!
+                 test-repo nil
+                 (:tx-data (ldb/transact! server-conn
+                                          [[:db/add (:db/id child2) :block/title "Second remote edit"]])))
+                (is (= "Second remote edit" (:block/title (entity (:block/uuid child2))))))
+              (let [row (client-op-tx-row client-ops-conn tx-id)]
+                (if recoverable?
+                  (do
+                    (is (= 1 (aget row "pending")))
+                    (is (= 0 (aget row "failed")))
+                    (is (= saved-title (:block/title (entity block-uuid))))
+                    (is (= #{(or remote-page-uuid ref-uuid)}
+                           (set (map :block/uuid (:block/refs (entity block-uuid))))))
+                    (is (= sibling-uuid (-> (entity descendant-uuid) :block/parent :block/uuid)))
+                    (is (= "Child note" (:block/title (entity descendant-uuid))))
+                    (upload-pending-and-assert-converged! conn server-conn))
+                  (do
+                    (is (= 0 (aget row "pending")))
+                    (is (= 1 (aget row "failed")))
+                    (is (= "child 1" (:block/title (entity block-uuid))))
+                    (is (nil? (entity descendant-uuid)))
+                    (is (= 1 (:failed-local (db-sync/status test-repo))))
+                    (client-op/cleanup-finished-history-ops! test-repo #{})
+                    (is (= forward (:forward-outliner-ops
+                                    (client-op/get-local-tx-entry test-repo tx-id))))))))))))))
+
 (deftest rebase-insert-page-in-library-with-reference-test
   (doseq [with-reference? [false true]]
     (testing (str "Library page insertion, with reference=" with-reference?)

@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [datascript.core :as d]
             [frontend.common.thread-api :refer [def-thread-api]]
+            [frontend.worker.plain-value :as worker-plain]
             [frontend.worker.query-dsl :as query-dsl]
             [frontend.worker.state :as worker-state]
             [logseq.common.util :as common-util]
@@ -39,12 +40,20 @@
 (def-thread-api :thread-api/pull
   [repo selector id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (let [eid (if (and (vector? id) (= :block/name (first id)))
-                (:db/id (ldb/get-page @conn (second id)))
-                id)]
-      (some->> eid
-               (d/pull @conn selector)
-               (common-initial-data/with-parent @conn)))))
+    (let [db @conn
+          stress-uuids (:stress/create-tree-uuids id)
+          lookup (if stress-uuids (:stress/lookup id) id)
+          eid (if (and (vector? lookup) (= :block/name (first lookup)))
+                (:db/id (ldb/get-page db (second lookup)))
+                lookup)
+          entity (some->> eid
+                          (d/pull db selector)
+                          (common-initial-data/with-parent db))]
+      (if stress-uuids
+        {:stress/entity entity
+         :stress/present (worker-plain/stress-uuid-presence db stress-uuids)
+         :stress/at-ms (js/Date.now)}
+        entity))))
 
 (defn- block-status-history
   [db block-id]
@@ -256,9 +265,16 @@
          rules-required? :rules-required?} (add-query-rules query-m)
         resolved-query (resolve-page-ref-equality query-form)
         resolved-inputs (mapv #(resolve-custom-query-input db % context) inputs)
-        query-args (cond-> resolved-inputs
-                     rules-required? (conj rules-input))]
-    (apply d/q resolved-query db query-args)))
+        input-args (into [db] resolved-inputs)
+        query-args (if rules-required?
+                     (let [bindings (:in (datalog-util/query-vec->map resolved-query))
+                           rules-index (first (keep-indexed (fn [index binding]
+                                                              (when (= '% binding) index))
+                                                            bindings))
+                           [before after] (split-at rules-index input-args)]
+                       (into (conj (vec before) rules-input) after))
+                     input-args)]
+    (apply d/q resolved-query query-args)))
 
 (defn- require-query-context!
   [context]

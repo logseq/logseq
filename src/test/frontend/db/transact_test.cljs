@@ -379,6 +379,43 @@
           (p/finally
            done)))))
 
+(deftest stale-insert-response-releases-only-its-own-input-test
+  (async done
+    (let [prev-pending (state/get-state :editor/pending-new-block)]
+      (-> (p/loop [cases [false true]]
+            (when (seq cases)
+              (let [newer-insert? (first cases)
+                    repo (atom "old-repo")
+                    route (atom {:data {:name :page}})
+                    worker-result (p/deferred)
+                    insert-id (random-uuid)
+                    newer-pending {:id (random-uuid) :typed-text "draft"}]
+                (state/set-state! :editor/pending-new-block {:id insert-id :typed-text ""})
+                (p/let [_ (p/with-redefs [util/node-test? false
+                                          state/get-current-repo #(deref repo)
+                                          state/get-route-match #(deref route)
+                                          state/get-editor-info (constantly nil)
+                                          state/<invoke-db-worker (fn [_api & _args] worker-result)]
+                            (let [result (db-transact/apply-outliner-ops
+                                          nil
+                                          [[:insert-blocks [[{:block/uuid (random-uuid)}] nil {}]]]
+                                          {:editor/edit-block-fn (fn [_rows]
+                                                                  (is false "Stale insert must not open an editor"))})]
+                              (reset! repo "new-repo")
+                              (reset! route {:data {:name :home}})
+                              (when newer-insert?
+                                (state/set-state! :editor/pending-new-block newer-pending))
+                              (p/resolve! worker-result {:result ::persisted})
+                              (p/let [value result]
+                                (is (= ::persisted value))
+                                (is (= (when newer-insert? newer-pending)
+                                       (state/get-state :editor/pending-new-block))))))]
+                  (p/recur (next cases))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn []
+                       (state/set-state! :editor/pending-new-block prev-pending)
+                       (done)))))))
+
 (deftest apply-outliner-ops-does-not-run-editor-callback-on-worker-failure-test
   (async done
     (let [callback-called? (atom false)]

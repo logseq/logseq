@@ -103,6 +103,23 @@ async function fetchSnapshotDescriptor(options) {
   return fetchJson(url, options.adminToken);
 }
 
+function snapshotRequestUrl(baseUrl, graphId, serverUrl) {
+  const base = normalizeBaseUrl(baseUrl);
+  const streamPath = `/sync/${graphId}/snapshot/stream`;
+  let parsed;
+  try {
+    parsed = new URL(serverUrl);
+  } catch {
+    return `${base}${streamPath}`;
+  }
+  // The node adapter may return an internal or http origin. The bytes live on
+  // the same API the caller already used for the descriptor.
+  if (parsed.pathname === streamPath) {
+    return `${base}${streamPath}${parsed.search}`;
+  }
+  return serverUrl;
+}
+
 async function fetchSnapshotBytes(url, adminToken) {
   const response = await fetch(url, {
     method: "GET",
@@ -211,7 +228,10 @@ async function main() {
     fail("Snapshot download response missing URL.");
   }
 
-  const buffer = await fetchSnapshotBytes(descriptor.url, options.adminToken);
+  const buffer = await fetchSnapshotBytes(
+    snapshotRequestUrl(options.baseUrl, options.graphId, descriptor.url),
+    options.adminToken,
+  );
   const decompressed = maybeDecompressBuffer(buffer);
   const rows = parseFramedRows(decompressed);
 
@@ -238,5 +258,6 @@ module.exports = {
   parseCliArgs,
   parseFramedRows,
   sanitizeGraphIdForFilename,
+  snapshotRequestUrl,
   writeSnapshotSqlite,
 };

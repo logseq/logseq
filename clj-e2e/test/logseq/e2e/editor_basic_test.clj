@@ -1054,6 +1054,79 @@
     (is (nil? (ls-api-call! :editor.getBlock block-uuid)))
     (assert/assert-have-count (str "#ls-block-" block-uuid) 0)))
 
+(defn- press-keys-in-one-turn!
+  "Dispatch the keys in a single JS turn so they arrive while Enter's insert
+  is still pending in the db worker. Playwright's default slow-mo would
+  otherwise wait long enough for the insert to land between keys."
+  [keys]
+  (w/eval-js
+   "s => {
+      const keys = JSON.parse(s);
+      const keyCodeOf = (key) => {
+        if (key === 'Enter') return 13;
+        if (key === 'Backspace') return 8;
+        if (key === 'Tab') return 9;
+        if (key === 'Escape') return 27;
+        return key.toUpperCase().charCodeAt(0);
+      };
+      const codeOf = (key) => key.length === 1 ? ('Key' + key.toUpperCase()) : key;
+      const target = document.activeElement;
+      for (const key of keys) {
+        const keyCode = keyCodeOf(key);
+        const fire = (type) => {
+          const event = document.createEvent('Events');
+          event.initEvent(type, true, true);
+          event.key = key;
+          event.code = codeOf(key);
+          event.keyCode = keyCode;
+          event.which = keyCode;
+          target.dispatchEvent(event);
+        };
+        fire('keydown');
+        fire('keyup');
+      }
+    }"
+   (json/write-value-as-string keys)))
+
+(defn- page-block-titles
+  [page-name]
+  (mapv (fn [block]
+          (or (get block "content") (get block "title") ""))
+        (ls-api-call! :editor.getPageBlocksTree page-name)))
+
+(defn- fast-pending-insert-keys-leave-titles
+  [keys]
+  (assert/assert-editor-mode)
+  (let [page-name (p/get-page-name)]
+    (press-keys-in-one-turn! keys)
+    (util/wait-timeout 2500)
+    (util/exit-edit)
+    (page-block-titles page-name)))
+
+(deftest fast-enter-enter-backspace-keeps-the-new-empty-block-test
+  (testing "Enter, Enter, Backspace on an empty block while the insert is pending keeps two empty blocks"
+    (is (= ["" ""]
+           (fast-pending-insert-keys-leave-titles ["Enter" "Enter" "Backspace"])))))
+
+(deftest fast-enter-xy-backspace-keeps-typed-text-on-the-new-block-test
+  (testing "Enter, x, y, Backspace on an empty block while the insert is pending keeps the trimmed text on the new block"
+    (is (= ["" "x"]
+           (fast-pending-insert-keys-leave-titles ["Enter" "x" "y" "Backspace"])))))
+
+(deftest fast-enter-tab-backspace-keeps-the-indented-block-test
+  (testing "Enter, Tab, Backspace while insert and indent are pending keeps the new block nested"
+    (assert/assert-editor-mode)
+    (let [page-name (p/get-page-name)]
+      (press-keys-in-one-turn! ["Enter" "Tab" "Backspace"])
+      (util/wait-timeout 2500)
+      (util/exit-edit)
+      (let [tree (ls-api-call! :editor.getPageBlocksTree page-name)
+            child-titles (mapv (fn [block]
+                                 (or (get block "content") (get block "title") ""))
+                               (get (first tree) "children"))]
+        (is (= [""] (page-block-titles page-name)))
+        (is (= [""] child-titles))))))
+
 (deftest today-queries-render-without-resource-errors
   (let [page (ls-api-call! :editor.createJournalPage
                            (str (java.time.Instant/now)))]
@@ -1612,6 +1685,73 @@
     (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 4)
     (assert/assert-have-count ".cp__right-sidebar .ls-block.selected" 0)))
 
+(defn- wait-selected-blockid!
+  [blockid]
+  (w/wait-for (format ".ls-page-blocks .ls-block.selected[blockid='%s']" blockid)))
+
+(deftest select-parent-expands-nested-block-to-page-test
+  (testing "Mod+A expands grandchild -> child -> parent -> whole page"
+    (let [page-name (p/get-page-name)
+          parent (ls-api-call! :editor.appendBlockInPage page-name "parent")
+          parent-uuid (get parent "uuid")
+          child (ls-api-call! :editor.insertBlock parent-uuid "child" {:sibling false})
+          child-uuid (get child "uuid")
+          grandchild (ls-api-call! :editor.insertBlock child-uuid "grandchild text" {:sibling false})
+          grandchild-uuid (get grandchild "uuid")]
+      (is (string? parent-uuid))
+      (ls-api-call! :editor.appendBlockInPage page-name "sibling top")
+      (w/click (loc/filter ".ls-page-blocks .block-title-wrap" :has-text "grandchild text"))
+      (assert/assert-editor-mode)
+      (k/press "ControlOrMeta+a")
+      (assert/assert-editor-mode)
+      (is (= "grandchild text" (util/get-edit-content)))
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! grandchild-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! child-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! parent-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (w/wait-for ".ls-page-blocks .ls-block.selected :text('sibling top')")
+      (assert/assert-is-visible
+       (loc/filter ".ls-page-blocks .ls-block.selected" :has-text "sibling top"))
+      (is (>= (.count (w/-query ".ls-page-blocks .ls-block.selected")) 4)
+          "Select-all should include the nested tree and the top-level sibling"))))
+
+(deftest select-parent-stops-at-zoomed-in-block-test
+  (testing "Mod+A inside a zoomed-in block expands to that block and then stops"
+    (let [page-name (p/get-page-name)
+          parent (ls-api-call! :editor.appendBlockInPage page-name "zoom parent")
+          parent-uuid (get parent "uuid")
+          child (ls-api-call! :editor.insertBlock parent-uuid "zoom child" {:sibling false})
+          child-uuid (get child "uuid")
+          grandchild (ls-api-call! :editor.insertBlock child-uuid "zoom grandchild" {:sibling false})
+          grandchild-uuid (get grandchild "uuid")]
+      (is (string? parent-uuid))
+      (ls-api-call! :editor.appendBlockInPage page-name "zoom sibling")
+      (w/click (format ".ls-page-blocks #dot-%s" parent-uuid))
+      (is (string/includes? (or (w/eval-js "window.location.hash") "") parent-uuid))
+      (w/click (loc/filter "#main-content-container .block-title-wrap" :has-text "zoom grandchild"))
+      (assert/assert-editor-mode)
+      (k/press "ControlOrMeta+a")
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! grandchild-uuid)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! child-uuid)
+      (k/press "ControlOrMeta+a")
+      (wait-selected-blockid! parent-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (k/press "ControlOrMeta+a")
+      (util/wait-timeout 300)
+      (wait-selected-blockid! parent-uuid)
+      (assert/assert-have-count ".ls-page-blocks .ls-block.selected" 1)
+      (assert/assert-have-count
+       (loc/filter ".ls-page-blocks .ls-block.selected" :has-text "zoom sibling")
+       0))))
+
 (deftest structured-and-plain-text-copy-test
   (testing "structured copy preserves trees while plain copy exposes readable indentation"
     (let [target-page "copy target"]
@@ -1916,6 +2056,9 @@
       (is (= marker (util/get-edit-content)))
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
+          assert/assert-that
+          (.hasText target-page))
       (is (= target-page (p/get-page-name)))
       (p/goto-page host-page)
       (assert/assert-is-visible
@@ -1962,8 +2105,43 @@
       (assert/assert-is-visible ".ui__popover-content a.menu-link")
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
+      (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
+          assert/assert-that
+          (.hasText target-page))
       (is (= target-page (p/get-page-name)))
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
       (is (some #(string/starts-with? % marker) (util/get-page-blocks-contents))))))
+
+(deftest page-title-slash-validation-keeps-title-editable-test
+  (testing "after a slash page-name error, letters can still be typed without reload"
+    (let [page-name (str "sample-title-" (random-uuid))
+          other-page (str "another-title-" (random-uuid))
+          toast (loc/filter ".ui__toast.warning" :has-text "Page name can't include")]
+      (p/new-page page-name)
+      (w/click "div[data-testid='page title'] .block-title-wrap")
+      (assert/assert-editor-mode)
+      (util/move-cursor-to-end)
+      (util/press-seq "/bad")
+      (k/enter)
+      (assert/assert-is-visible toast)
+      (assert/assert-editor-mode)
+      ;; Dismissing the toast moves focus to its close button, so type first.
+      (util/press-seq "z")
+      (is (= (str page-name "/badz") (util/get-edit-content))
+          "letters must still be accepted in this page title after the slash error")
+      (util/get-editor)
+      (util/move-cursor-to-end)
+      (util/press-seq "y")
+      (is (= (str page-name "/badzy") (util/get-edit-content))
+          "letters still work after the toast remains visible")
+      (w/fill util/editor-q (str page-name "-fixed"))
+      (util/exit-edit)
+      (p/new-page other-page)
+      (w/click "div[data-testid='page title'] .block-title-wrap")
+      (assert/assert-editor-mode)
+      (util/move-cursor-to-end)
+      (util/press-seq "abc")
+      (is (= (str other-page "abc") (util/get-edit-content))
+          "other page titles must stay editable after the slash error"))))

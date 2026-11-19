@@ -11,6 +11,7 @@
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
+            [electron.deeplink :as deeplink]
             [electron.embedding-server :as embedding-server]
             [electron.exceptions :as exceptions]
             [electron.handler :as handler]
@@ -20,11 +21,12 @@
             [electron.release-warning :as release-warning]
             [electron.server :as server]
             [electron.updater :refer [init-updater] :as updater]
-            [electron.url :refer [logseq-url-handler]]
+            [electron.url :as url]
             [electron.utils :refer [*win mac? dev? get-win-from-sender
                                     decode-protected-assets-schema-path send-to-renderer]
              :as utils]
             [electron.window :as win]
+            [lambdaisland.glogi :as log]
             [logseq.publishing.export :as publish-export]
             [promesa.core :as p]))
 
@@ -44,6 +46,7 @@
 (defonce *teardown-fn (volatile! nil))
 (defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
+(defonce *pending-open-urls (atom []))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -51,18 +54,10 @@
                  :win    win}))
 
 (defn open-url-handler
-  "win - the main window instance (first renderer process)
-   url - the input URL"
-  [win url]
-  (logger/info "open-url" {:url url})
-  ;; https://github.com/electron-userland/electron-builder/issues/1552
-  ;; At macOS platform this is captured at 'open-url' event, we set it with deeplinkingUrl = url! (See // Protocol handler for osx)
-  ;; At win32 platform this is saved at process.argv together with other arguments. To get only the provided url, deeplinkingUrl = argv.slice(1). (See // Protocol handler for win32)
-  (when-let [parsed-url (try (js/URL. url)
-                             (catch :default e
-                               (logger/info "upon opening non-url" {:error e})))]
-    (when (= (str LSP_SCHEME ":") (.-protocol parsed-url))
-      (logseq-url-handler win parsed-url))))
+  "Resolve and open a protocol URL in the appropriate window."
+  [window protocol-url]
+  (log/info :deeplink/open-url protocol-url)
+  (url/logseq-url-handler window (url/resolve-url protocol-url)))
 
 (defn- register-default-protocol-client!
   "Register Logseq as the default handler for the custom protocol.
@@ -277,26 +272,39 @@
         menu (.buildFromTemplate Menu (clj->js template))]
     (.setApplicationMenu Menu menu)))
 
-(defn- find-deeplink-url
-  "Extract a deeplink URL from a sequence of command-line argument strings."
-  [args]
-  (some #(when (string/starts-with? % (str LSP_SCHEME ":")) %) args))
+(defn note-open-url!
+  "Handle a protocol URL immediately when a window exists; otherwise stash it
+   for cold-start handling. Returns `:handled`, `:pending`, or nil."
+  [url]
+  (cond
+    (not (string? url))
+    nil
+
+    @*win
+    (do (open-url-handler @*win url)
+        :handled)
+
+    :else
+    (do (swap! *pending-open-urls conj url)
+        (log/info :deeplink/pending-url url)
+        :pending)))
 
 (defn- setup-deeplink! []
-  ;; macOS: app fires open-url for custom-protocol links when the app is already running
+  ;; macOS emits open-url for custom-protocol links. On cold start this often
+  ;; fires before ready / before the main window exists — stash then.
   (.on app "open-url"
        (fn [^js event url]
          (.preventDefault event)
-         (when-let [win @*win]
-           (open-url-handler win url)))))
+         (note-open-url! url))))
 
-(defn- handle-initial-deeplink!
-  "On Windows/Linux, the protocol URL is passed as a command-line argument
-   on the first launch. Call this after the main window is ready."
-  [win]
-  (when-not mac?
-    (when-let [url (find-deeplink-url (rest (js->clj (.-argv js/process))))]
-      (open-url-handler win url))))
+(defn- handle-deferred-deeplink!
+  [window startup-target remaining-urls]
+  (when startup-target
+    (if (:graph-name startup-target)
+      (url/open-graph! window startup-target)
+      (url/logseq-url-handler window startup-target)))
+  (doseq [pending-url remaining-urls]
+    (open-url-handler window pending-url)))
 
 (defn- maybe-warn-wrong-release!
   []
@@ -370,6 +378,7 @@
                     (preferred-unix-cli-dir))]
     (cli-install/install-cli-launcher!
      {:windows? utils/win32?
+      :packaged? (.-isPackaged ^js app)
       :cli-path cli-path
       :cli-dir! cli-dir!
       :exe-path (.getPath app "exe")
@@ -399,8 +408,15 @@
              (p/then
               (fn [_]
                 (let [t0 (setup-interceptor! app')
-                      ^js win (win/create-main-window!)
+                      [startup-url & remaining-urls] (deeplink/startup-deeplink-urls
+                                                      @*pending-open-urls (js->clj (.-argv js/process)) mac?)
+                      startup-target (when startup-url (url/resolve-url startup-url))
+                      startup-graph (:graph-name startup-target)
+                      ^js win (win/create-main-window!
+                               win/MAIN_WINDOW_ENTRY
+                               (when startup-graph {:graph startup-graph}))
                       _ (reset! *win win)]
+                  (reset! *pending-open-urls [])
 
                   (utils/<restore-proxy-settings)
 
@@ -409,8 +425,7 @@
                   (db/ensure-graphs-dir!)
                   (install-cli-launcher!)
 
-                  ;; Windows/Linux: handle deeplink URL passed on first launch via argv
-                  (handle-initial-deeplink! win)
+                  (handle-deferred-deeplink! win startup-target remaining-urls)
                   (maybe-warn-wrong-release!)
 
                   (vreset! *setup-fn
@@ -497,10 +512,9 @@
       (.on app "second-instance"
            (fn [_event ^js command-line _working-directory]
              (when-let [window @*win]
-               (win/switch-to-window! window)
-               ;; Windows/Linux: deeplink URL may appear in subsequent-instance commandLine
-               (when-let [url (find-deeplink-url (rest (js->clj command-line)))]
-                 (open-url-handler window url)))))
+               (win/switch-to-window! window))
+             (when-let [url (deeplink/find-deeplink-url (rest (js->clj command-line)))]
+               (note-open-url! url))))
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
