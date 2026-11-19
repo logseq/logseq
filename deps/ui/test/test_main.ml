@@ -1095,6 +1095,36 @@ let test_decode6 () =
 (* ---- Editor_state pure helpers ---- *)
 
 let test_editor_state () =
+  let module P = Outliner_projection in
+  let linked = {(block ~children:[block "embed-child" "child"] "linked" "Linked") with
+    Model.block_ref_count = 1} in
+  let linking = {(block "linking" "") with Model.block_link = Some 9;
+    block_embed_children = [linked]} in
+  let project blocks = P.create ~expanded:(fun ~scope:_ _ -> true)
+      ~children_of:Editor_state.children_of
+      [{P.section_key = "host"; repository = None; scope = "main";
+        page = page blocks; is_last = true}] in
+  let rows projection = List.filter_map (function P.Block row -> Some row | _ -> None)
+      projection.P.rows in
+  let projected = rows (project [linking]) in
+  check "Embed projection retains linked reference count"
+    ((List.hd projected).P.block.Model.block_ref_count = 1);
+  check "Embed projection replaces the linking row at the same depth"
+    (List.map (fun (row : P.block_row) -> row.block.block_uuid, row.depth) projected
+     = [Some "linked", 0; Some "embed-child", 1]);
+  check "Embed projection preserves the host owner on the linked root only"
+    (List.map (fun (row : P.block_row) -> row.block.block_original) projected
+     = [Some ("linking", "main"); None]);
+  let empty_page = {linked with Model.block_is_page = true; block_children = []} in
+  check "Empty page embed retains its linked title row"
+    (List.map (fun (row : P.block_row) -> row.block.block_title)
+       (rows (project [{linking with block_embed_children = [empty_page]}])) = ["Linked"]);
+  check "Loop-protected embed renders the original block"
+    (List.map (fun (row : P.block_row) -> row.block.block_uuid)
+       (rows (project [{linking with block_embed_children = []}])) = [Some "linking"]);
+  check "Malformed embed projection fails fast"
+    (try ignore (project [{linking with block_embed_children = [linked; linked]}]); false
+     with Invalid_argument _ -> true);
   let grandchild = block "g" "gc" in
   let child = block ~children:[ grandchild ] "c" "child" in
   let embed =
@@ -3928,7 +3958,54 @@ let test_scoped_keyboard_selection () =
         expect "Upward range retains explicit children when its direction reverses" expected)
         [true, ["c2"; "sibling"]; true, ["c1"; "c2"; "sibling"];
          true, ["parent"; "c1"; "c2"; "sibling"];
-         false, ["c1"; "c2"; "sibling"]])
+         false, ["c1"; "c2"; "sibling"]];
+      let linked = block ~children:[block "child" "Child"] "linked" "Linked" in
+      let linking = {(block "linking" "") with Model.block_link = Some 9;
+        block_embed_children = [linked]} in
+      let linked_page = {(block ~children:[linked; block "t2" "Tail"] "target" "Target") with
+        Model.block_is_page = true} in
+      let page_link = {(block "page-link" "") with Model.block_link = Some 10;
+        block_embed_children = [linked_page]} in
+      model_stub := {Model.initial with route_page = Some
+        (page [block "h1" "Head"; linking; page_link; block "h2" "Host tail"])};
+      S.extra_sources := [];
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "h1"; anchor = Some "h1"});
+      check "Selection visual order projects linked identities at host depth"
+        (A.flat_uuids () = ["h1"; "linked"; "child"; "target"; "linked"; "child"; "t2"; "h2"]);
+      check "Cross-embed range includes duplicate linked occurrences in visual order"
+        (A.range_between "child" "h2" = ["child"; "target"; "linked"; "child"; "t2"; "h2"]);
+      check "An unavailable visual range endpoint yields no selection"
+        (A.range_between "missing" "h2" = []);
+      List.iter (fun expected -> A.extend_selection false;
+        check "Shift-Down crosses projected embed subtrees using linked identities"
+          (A.selected_uuids () = expected))
+        [["h1"; "linked"]; ["h1"; "linked"; "target"]; ["h1"; "linked"; "target"; "h2"]];
+      A.extend_selection false;
+      check "Shift-Down selects the visual add-block footer without inventing a UUID"
+        ((S.read ()).S.selected_footer = (Option.get (!model_stub).Model.route_page).Model.page_uuid
+         && List.length (A.selected_uuids ()) = 4);
+      A.extend_selection true;
+      check "Shift-Up reverses footer selection before changing UUID membership"
+        ((S.read ()).S.selected_footer = None && List.length (A.selected_uuids ()) = 4);
+      check "Selection membership highlights a UUID in every scope"
+        (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.selected ()));
+      check "Empty selection does not highlight an embedded occurrence"
+        (not (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.String_set.empty)));
+      let embedded scope owner = {S.source_scope = scope; source_kind = S.Outliner;
+        source_blocks = (fun () -> [{linked with Model.block_original = Some ("link", owner)}])} in
+      S.extra_sources := [embedded "first-embed" "main"; embedded "second-embed" "main";
+        embedded "nested-embed" "second-embed"];
+      let collapsed = S.collapsed_ui_transform ~scope:"first-embed" "linked" true S.initial in
+      check "Embedded occurrences share immediate containing-outliner collapse state"
+        (List.for_all (fun scope -> S.collapsed_in ~scope collapsed "linked")
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]);
+      check "Independent sidebar containers retain independent root presentation"
+        (not (S.collapsed_in ~scope:"sidebar" collapsed "linked"));
+      let expanded = S.collapsed_ui_transform ~scope:"second-embed" "linked" false collapsed in
+      check "Expanding another occurrence synchronizes without a worker refresh"
+        (List.for_all (fun scope -> not (S.collapsed_in ~scope expanded "linked"))
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]))
 
 (* ---- Update.update: remaining arm ---- *)
 

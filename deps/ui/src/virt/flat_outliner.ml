@@ -36,6 +36,35 @@ let block_attrs row =
 let block_row ~state ~library ~source : t =
  fun ctx parent ->
   let initial = block_of_row (Signal.get source) in
+  let expanded = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let extras : Tree.row_extras =
+    { right_of_block = (fun block ->
+        if block.Model.block_ref_count <= 0 then None else
+        let uuid = Option.get block.block_uuid in
+        let activate event =
+          let shift = match event with
+            | Lui_protocol.PressDetail (_, detail) -> detail.Lui_protocol.modifiers land 2 <> 0
+            | Lui_protocol.PressModifiers (_, modifiers) -> modifiers land 2 <> 0
+            | _ -> false in
+          if shift then Sidebar_state.open_block_references
+              (Sidebar_state.ensure (Option.get !Runtime.model_source)) uuid
+          else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ()) in
+        Some (Ui_components.with_props
+          [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
+          (button ~key:("reference-count-" ^ uuid) ~variant:`ghost ~size:`sm
+            ~style_class:"block-refs-count"
+            ~label:(I18n.t "block/open-block-references")
+            ~tooltip:(I18n.t "block/open-block-references")
+            ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
+            ~on_press:activate ~on_press_detail:activate
+            [text ~font_size:"14px" ~value:(string_of_int block.block_ref_count) []])))
+    ; below_block = (fun block ->
+        if block.Model.block_ref_count <= 0 then None else
+        let uuid = Option.get block.block_uuid in
+        Some (if_ ~test:(Signal.value expanded)
+          (column ~margin_left:42 ~margin_vertical:8 ~padding_horizontal:16 ~padding_vertical:8
+            ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
+            [Views_view.view ~kind:Views_state.KLinkedRefs ~owner:(Wire.Uuid uuid)]))) } in
   let indent row = List.fold_left (fun total ancestor ->
     total + Tree.children_indent ~library ancestor.P.ancestor_block)
     0 (block_of_row row).ancestors in
@@ -74,7 +103,7 @@ let block_row ~state ~library ~source : t =
                           ~style_class:"block-children-indent-guide"
                           ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" [])) ]))))
       ; Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive indent source)
-          (Tree.projected_block_row ~scope:initial.scope ~library
+          (Tree.projected_block_row ~extras ~scope:initial.scope ~library
                 ~depth:(reactive (fun row -> (block_of_row row).depth) source)
                 ~source:(reactive (fun row -> (block_of_row row).block) source)) ]))
     ctx parent

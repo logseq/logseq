@@ -5,6 +5,8 @@
 module S = Editor_state
 module Ops = Outliner_ops
 
+let structural_uuid ~scope uuid = S.original_uuid_in_scope ~scope uuid
+
 let closest sel t =
   match t with Some el -> el.Ui_services.closest sel | None -> None
 
@@ -704,6 +706,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
                   S.editing = Some editing
                 ; selection_scope = scope
                 ; selected = S.String_set.empty
+                ; selected_footer = None
                 ; anchor = None
                 ; action_bar = false
                 });
@@ -766,6 +769,7 @@ let rec exit_edit ~select =
                   { st with
                     S.editing = None
                   ; selection_scope = e.scope
+                  ; selected_footer = None
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
                   ; anchor = (if select then Some e.uuid else st.anchor)
@@ -1197,11 +1201,15 @@ let split_at_cursor uuid =
           && (above || library || S.is_collapsed_in ~scope:e.S.scope uuid
               || b.Model.block_children = [])
         in
+        let insert_target, insert_scope =
+          if S.is_collapsed_in ~scope:e.S.scope uuid || b.Model.block_children = []
+          then S.original_owner_in_scope ~scope:e.S.scope uuid
+          else uuid, e.S.scope in
         mark "prelude";
         let opts = Ops.history_opts ~opts:(Ops.op_opts "insert-blocks")
             ~before:(S.history_editing e)
             ~after:(S.history_editing
-              (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
+              (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:insert_scope ~base:after ())) () in
         (* Capture this block's debounce now, before the next editor can
            schedule a save for a UUID the worker has not inserted yet. *)
         let context = Runtime.model () in
@@ -1217,15 +1225,17 @@ let split_at_cursor uuid =
                    ~source:false new_uuid after |] in
           Ops.submit_result ~current context opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
-            ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
-            @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else [])
+            ; Ops.insert_blocks [ a.(1) ] insert_target ~sibling ]
+            @ if above then [ Ops.move_blocks [ insert_target ] new_uuid ~sibling:true ] else [])
         in
         mark "ops";
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
         optimistic_edit ~owner:batch.owner (fun p ->
-            Model.split_insert ~above p ~uuid ~before
+            Model.split_insert ~above p ~uuid:insert_target
+              ~before:(if insert_target = uuid then before else
+                (Option.get (S.find insert_target)).Model.block_title)
               ~new_block:
                 (Model.empty_block ~uuid:new_uuid ~title:after
                    ~is_page:library)
@@ -1244,7 +1254,7 @@ let split_at_cursor uuid =
             { st with
               S.editing =
                 Some
-                  (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope
+                  (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:insert_scope
                      ~base:after ()) });
         mark "editing";
         S.click_point := None;
@@ -1532,14 +1542,29 @@ let merge_next uuid =
 
 (* ---- selection ---- *)
 
+let selection_projection ~scope =
+  let scope = S.selection_owner_scope scope in
+  let main_scope = match Runtime.route () with Model.Block_zoom uuid -> "zoom-" ^ uuid | _ -> "main" in
+  if scope <> main_scope then None else
+  let model = Runtime.model () in
+  let pages = match model.Model.route_page with Some page -> [page] | None -> model.journals in
+  let sections = List.mapi (fun index page ->
+    {Outliner_projection.section_key = string_of_int index; repository = model.repo;
+      scope; page; is_last = false}) pages in
+  let projection = Outliner_projection.create ~children_of:S.children_of
+      ~expanded:(fun ~scope block -> not (S.effective_collapsed ~scope block)) sections in
+  Some (List.filter_map (function Outliner_projection.Block row -> Some row | _ -> None)
+      projection.rows)
+
 let flat_uuids () =
-  List.filter_map
-    (fun b -> b.Model.block_uuid)
-    (S.flat_visible ~scope:(S.interaction_scope ()) ())
+  let scope = S.interaction_scope () in
+  match selection_projection ~scope with
+  | Some rows -> List.filter_map (fun row -> row.Outliner_projection.block.Model.block_uuid) rows
+  | None -> List.filter_map (fun b -> b.Model.block_uuid) (S.flat_visible ~scope ())
 
 let selection_forest () =
   let model = Runtime.model () in
-  let scope = S.selection_scope () in
+  let scope = S.selection_owner_scope (S.selection_scope ()) in
   let main_scope =
     scope = "main"
     || match Runtime.route () with Model.Block_zoom u -> scope = "zoom-" ^ u | _ -> false
@@ -1654,9 +1679,31 @@ let next_after_subtree ~scope uuid =
   | Some (b :: _) -> Some b
   | Some [] | None -> None
 
+let selection_neighbor ~scope uuid up =
+  match selection_projection ~scope with
+  | None -> (if up then S.prev_visible ~scope uuid else next_after_subtree ~scope uuid)
+  | Some rows ->
+      let matches row = row.Outliner_projection.block.Model.block_uuid = Some uuid in
+      let target = match List.find_opt (fun row -> matches row && row.Outliner_projection.scope = scope) rows with
+        | Some row -> Some row | None -> List.find_opt matches rows in
+      match target with
+      | None -> None
+      | Some target ->
+          let rec scan previous = function
+            | [] -> None
+            | row :: rest when row == target ->
+                if up then Option.map (fun row -> row.Outliner_projection.block) previous
+                else List.find_map (fun row ->
+                  if row.Outliner_projection.depth <= target.depth then Some row.block else None) rest
+            | row :: rest -> scan (Some row) rest in
+          scan None rows
+
 (* Grow by explicit endpoints; reversing direction removes the active one. *)
 let extend_selection up =
   let sel = S.selected () in
+  if (S.read ()).S.selected_footer <> None then
+    (if up then S.set (fun st -> {st with S.selected_footer = None}))
+  else
   match S.anchor () with
   | None -> ()
   | Some anchor -> (
@@ -1701,14 +1748,16 @@ let extend_selection up =
           S.set (fun st ->
               { st with S.selected = S.String_set.remove h sel; action_bar = true })
       | Some h -> (
-          let nbr =
-            (if up
-             then S.prev_visible ~scope:(S.selection_scope ())
-             else next_after_subtree ~scope:(S.selection_scope ()))
-              h
-          in
+          let nbr = selection_neighbor ~scope:(S.selection_scope ()) h up in
           match nbr with
           | None ->
+              if not up then
+                (match selection_projection ~scope:(S.selection_scope ()) with
+                 | Some rows ->
+                     Option.iter (fun row -> S.set (fun st ->
+                       {st with S.selected_footer = row.Outliner_projection.section.page.Model.page_uuid}))
+                       (List.find_opt (fun row -> row.Outliner_projection.block.Model.block_uuid = Some h) rows)
+                 | None -> ());
               (* head is the topmost flat block: cljs
                  navigable-sibling-block treats .ls-page-title as a
                  block, so shift+up past it conj's the title row into
@@ -1742,6 +1791,7 @@ let select_single_in ~scope uuid =
   S.set (fun st ->
       { st with
         S.selected = S.String_set.singleton uuid
+      ; selected_footer = None
       ; selection_scope = scope
       ; anchor = Some uuid
       ; action_bar = false
@@ -1757,6 +1807,7 @@ let select_all () =
       S.set (fun st ->
           { st with
             S.selected = S.String_set.of_list uuids
+          ; selected_footer = None
           ; selection_scope = scope
           ; anchor = Some first
           ; action_bar = false
@@ -1767,6 +1818,7 @@ let clear_selection ?scope () =
   S.set (fun st ->
       { st with
         S.selected = S.String_set.empty
+      ; selected_footer = None
       ; selection_scope = (match scope with Some scope -> scope | None -> st.selection_scope)
       ; anchor = None
       ; action_bar = false
@@ -1872,6 +1924,7 @@ let indent_or_outdent ~indent =
          .ls-block; the model parent is the embed block *)
       let parent_original =
         match S.find_parent focus with
+        | Some (Some {Model.block_original = Some (original, _); _}, _) -> Some original
         | Some (Some p, _) when p.Model.block_link <> None ->
             p.Model.block_uuid
         | _ -> None
@@ -1881,7 +1934,8 @@ let indent_or_outdent ~indent =
         | _ -> 0
       in
       with_focus_after ~restore:(S.editing ()) focus caret
-        (apply_indent_outdent ?parent_original uuids indent)
+        (apply_indent_outdent ?parent_original
+          (List.map (structural_uuid ~scope:(S.interaction_scope ())) uuids) indent)
 
 let move_up_down_tail = ref (Js.Promise.resolve ())
 
@@ -1899,6 +1953,7 @@ let move_blocks_up_down ?uuid up =
         | None, _ -> selected_uuids ()
       in
       let uuids = List.filter (within_focused_root ~outdent:false) uuids in
+      let uuids = List.map (structural_uuid ~scope) uuids in
       match uuids with
       | [] -> Js.Promise.resolve ()
       | uuids ->
@@ -2025,7 +2080,8 @@ let delete_selection () =
   let snapshot = selected_snapshot () in
   if S.String_set.is_empty snapshot.unresolved then
     delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-      ~before:(S.history_cursor ()) snapshot.uuids
+      ~before:(S.history_cursor ())
+      (List.map (structural_uuid ~scope:snapshot.scope) snapshot.uuids)
   else Ui_services.log_error "selection entities unavailable"
 
 (* ---- drag & drop ---- *)
@@ -2067,6 +2123,7 @@ let begin_block_drag ~scope src =
       S.String_set.singleton src,
       (if find_outliner_block ~scope src <> None then [src] else [])
   in
+  let roots = List.map (structural_uuid ~scope) roots in
   block_drag := Some { source = src; scope; context = Runtime.model (); selected; roots };
   flush_edit ();
   clear_selection ()
@@ -2180,6 +2237,7 @@ let drop_dragged_block ~alt ~scope src tgt move_to =
     if alt && count = 1 then insert_dragged_reference ~scope src tgt move_to
     else
     let sources = dragged_block_uuids src in
+    let tgt = if move_to = "nested" then tgt else structural_uuid ~scope tgt in
     if sources = [] then () else
     match move_to with
     | "top" -> (

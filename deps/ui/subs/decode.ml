@@ -424,7 +424,9 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
       ref_ids w "logseq.property.comments/blocks"
   ; block_children = children
   ; block_link = link
+  ; block_ref_count = Option.value (Wire.map_get_int w "block.temp/refs-count") ~default:0
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page =
       Option.is_some (Wire.map_get_string w "block/name")
   ; block_heading =

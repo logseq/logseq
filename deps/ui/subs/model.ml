@@ -31,6 +31,7 @@ type block =
   { block_uuid : string option
   ; block_db_id : int option
   ; block_title : string
+  ; block_ref_count : int
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
@@ -65,6 +66,7 @@ type block =
   ; (* fetched blocks of the linked entity; never written back by
        structure ops (they belong to the source page) *)
     block_embed_children : block list
+  ; block_original : (string * string) option (* projected embed's host UUID and scope *)
   ; block_is_page : bool
   ; block_heading : int option (* resolved h1..h6 level *)
     (* page-typed outline child (carries block/name; cljs entity/page?) *)
@@ -342,6 +344,7 @@ let empty_block ~uuid ~title ~is_page : block =
   { block_uuid = Some uuid
   ; block_db_id = None
   ; block_title = title
+  ; block_ref_count = 0
   ; block_level = 0
   ; block_tag_ids = []
   ; block_tags = []
@@ -368,6 +371,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_children = []
   ; block_link = None
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page = is_page
   ; block_heading = None
   ; block_default_collapsed = false

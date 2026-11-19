@@ -49,9 +49,14 @@ let el ?puuid ?(scope = "main") ?(library = false)
     (Ui_parts.pressable
        ~on_press:(fun _ ->
          Editor_actions.append_block ?for_page:puuid ~scope ~library ())
-       (Ui_parts.class_signal fs
-       (fun (_has, indented) ->
+       (Ui_parts.class_signal
+         (Logseq_el.own context (Signal.map2 (fun flags selected -> flags, selected)
+            fs (Signal.cutoff Bool.equal (Signal.map (fun (state : Editor_state.t) ->
+              puuid <> None && state.selected_footer = puuid
+              && not (Editor_state.String_set.is_empty state.selected)) (Editor_state.signal ())))))
+       (fun ((_has, indented), selected) ->
          "ls-block block-add-button flex-1 flex-col rounded-sm cursor-text !py-0 "
+         ^ (if selected then "selected " else "")
          ^ (if indented then " ls-block-content-indent" else ""))
        (Ui_parts.float_prop Lui_protocol.HoverOpacity
           ~value:(reactive
