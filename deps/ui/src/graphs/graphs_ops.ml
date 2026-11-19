@@ -248,13 +248,6 @@ let delete_graph repo ~remote =
   in
   let finish () =
     Editor_actions.after_pending_input (fun () ->
-    (* drop the repo from the local list before the worker round-trip:
-       the graphs view can re-render the remote row while the unlink is
-       in flight, and its click handler decides local-vs-remote from
-       `repos`. cljs removes via state/delete-repo! right after the
-       delete-graph! invoke resolves; removing on entry keeps the remote
-       row non-local for the whole window *)
-    drop_from_repos ();
     let* ok =
       (let* w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
        if Rtc_error.is_error w then begin
@@ -265,11 +258,9 @@ let delete_graph repo ~remote =
              Ui_services.log_error ("unlink-db failed " ^ repo, e);
              Js.Promise.resolve false)
     in
-    if not ok then begin
-      Runtime.send (Action.Repos_loaded (repo :: repos ()));
-      !on_repos_changed ();
-      Js.Promise.resolve ()
-    end else begin
+    if not ok then Js.Promise.resolve ()
+    else begin
+      drop_from_repos ();
       Graphs_meta.drop repo;
       match (Runtime.model ()).Model.repo = Some repo, (repos ()) with
       | true, next :: _ ->

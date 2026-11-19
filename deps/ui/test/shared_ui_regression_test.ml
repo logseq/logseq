@@ -399,6 +399,11 @@ let flashcards_config ~registry ~profile =
     check "Feature visibility does not mount Settings" (not (Settings_state.ready ()));
     check "Feature visibility retains unrelated navigation"
       (List.exists (fun node -> class_has node "all-pages-nav") (nodes session));
+    check "The Pages navigation link stays in the current application tab"
+      (List.exists (fun node -> node.M.kind="link"
+        && Option.fold ~none:false ~some:(fun url -> String.starts_with ~prefix:"#/all-pages" url)
+             (M.string_prop node "url")
+        && M.string_prop node "target"=Some "_self") (nodes session));
     ignore (Lui_app.dispose session.S.app))
 
 let grouped_table_selection ~registry ~profile =
@@ -2512,7 +2517,7 @@ let run_views ~registry ~profile ~finish =
     and metadata = Graphs_meta.read () in
     let first = "logseq_db_Delete fixture" and last = "logseq_db_Last fixture" in
     let state = ref { Model.initial with repos = [first;last] } in
-    let mode = ref `Success and requests = ref [] in
+    let mode = ref `Pending and requests = ref [] and unlink_done = ref None in
     Runtime.read_model := (fun () -> !state);
     Runtime.app_send := (fun action -> state := Update.update !state action; true);
     Graphs_ops.on_repos_changed := (fun () -> ());
@@ -2520,6 +2525,7 @@ let run_views ~registry ~profile ~finish =
     Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
       requests := (name,args) :: !requests;
       match !mode with
+      | `Pending -> Js.Promise.make (fun ~resolve ~reject:_ -> unlink_done := Some resolve)
       | `Success -> Js.Promise.resolve Wire.Nil
       | `Error -> Js.Promise.resolve (Wire.Tagged ("error", Wire.String "locked"))
       | `Reject -> Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "locked") [@u]));
@@ -2528,7 +2534,14 @@ let run_views ~registry ~profile ~finish =
       List.exists (fun (toast : Model.toast) -> toast.toast_text = I18n.removed name) (!state).toasts in
     let open Promise_ext in
     ignore (
-      let* () = Graphs_ops.delete_graph first ~remote:false in
+      let deletion = Graphs_ops.delete_graph first ~remote:false in
+      let* () = Js.Promise.resolve () in
+      check "Pending graph deletion retains its row and metadata until storage completes"
+        (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
+         && (!state).repos = [first;last] && Graphs_meta.uuid_of first = Some first
+         && (!state).toasts = []);
+      (Option.get !unlink_done) Wire.Nil [@u];
+      let* () = deletion in
       check "Graph deletion sends the internal repo to storage but displays its name"
         (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
          && (!state).repos = [last] && success_text "Delete fixture"

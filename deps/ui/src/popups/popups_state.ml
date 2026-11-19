@@ -2530,7 +2530,8 @@ let apply_item t ac ~meta it =
            with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
       invalidate_ac t;
-      erase_trigger_text ac;
+      (if kind = Template_search then insert_text ac "/" 0
+       else erase_trigger_text ac);
       (match kind with
        | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
@@ -2538,7 +2539,8 @@ let apply_item t ac ~meta it =
       set_ac t
         (Some
            (refresh_items t
-              { ac with kind; flip = None; flipx = None; query = ""; tlen = 0
+              { ac with kind; flip = None; flipx = None; query = "";
+                tlen = (if kind = Template_search then 1 else 0)
               ; items = []; chosen = 0 }));
       measure_ac t kind
   | Embed_target target_id ->
@@ -2567,7 +2569,7 @@ let apply_item t ac ~meta it =
        | "link" | "image-link" ->
            (* cljs [:editor/input "/link"] — the buffer holds the literal
               command text while the form is open *)
-           emit ac.auuid ac.tpos ("/" ^ c)
+           insert_text ac "/link" 0
        | _ ->
            (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
            emit ac.auuid ac.tpos "");

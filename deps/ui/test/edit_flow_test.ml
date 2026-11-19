@@ -2822,6 +2822,45 @@ let test_template_does_not_save_search_title (h : host) =
          (S.find_in page.Model.page_blocks "b1")) = Some "");
   Js.Promise.resolve ()
 
+let test_slash_cancellation_titles (h : host) =
+  let rec next = function
+    | [] -> Js.Promise.resolve ()
+    | (image, prefix) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [Test_check.block "b1" prefix];
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        let typed = prefix ^ (if image then "/Image link" else "/Template") in
+        set_editing ~uuid:"b1" ~buffer:typed ~caret:(String.length typed) ~base:prefix;
+        let popup = Option.get !Popups_state.active in
+        let ac : Popups_state.ac =
+          { kind = Slash; x = 0.; y = 0.; cy = 0.; pos_pending = false;
+            flip = None; flipx = None; query = ""; tpos = String.length prefix;
+            tlen = 1; items = []; chosen = 0; auuid = "b1"; editor = None } in
+        Popups_state.set_ac popup (Some ac);
+        Popups_state.apply_item popup ac ~meta:false
+          (Popups_state.mk_item ~key:"cancel-command" ~label:""
+            (if image then Editor_cmd "image-link" else Switch Template_search));
+        let expected = prefix ^ (if image then "/link" else "/") in
+        check "Slash secondary commands retain Master's cancellation text"
+          (A.live_buffer "b1" = expected);
+        if image then begin
+          Editor_commands.open_link_form true "b1" (String.length prefix);
+          ignore (Editor_commands.popup_key ~key:"Escape"
+            ~inside:(fun () -> true) ~prevent_default:(fun () -> ()))
+        end else begin
+          Popups_state.close_ac popup;
+          A.exit_edit ~select:false
+        end;
+        let* () = h.wait_ms 450 in
+        check "Cancelled slash command text survives its save"
+          (Option.bind !Runtime.current_page (fun page ->
+             Option.map (fun (b : Model.block) -> b.block_title)
+               (S.find_in page.page_blocks "b1")) = Some expected);
+        next rest
+  in
+  next [true,""; false,""; true,"prefix "; false,"prefix "]
+
 let run (_h : host) =
   test_measure_deferred ();
   test_stale_line_ranges ()
@@ -2834,6 +2873,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_code_conversion_focus h in
   let* () = test_calculator_exit_structure h in
   let* () = test_template_does_not_save_search_title h in
+  let* () = test_slash_cancellation_titles h in
   let* () = test_authoritative_route_miss h in
   let* () = test_composition h in
   let* () = test_save_debounce h in

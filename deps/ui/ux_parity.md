@@ -110,6 +110,39 @@ host`; it is not an all-green worker gate. These three repairs remain
 rebuilt-browser and visually unverified. No `static/` files or shared `:3010`
 server were touched.
 
+The additional Table80 navigation sweep found that the Pages anchor inherited
+the SDK's default `_blank` target. It now explicitly targets `_self`, keeping
+the existing All pages URL and graph ID in the current application tab. A mounted
+regression checks both the All pages destination and target. Browser confirmation
+of the reported Journals landing, including whether an extra tab was opened,
+remains pending.
+
+The sandbox-deletion evidence exposes a completion-boundary mismatch rather
+than proving an OPFS failure cause. `restore.cjs` selects Table33 NEW CP9 before
+deleting T80 CP9 Sandbox, waits for the graph row to detach, then reloads after
+1500ms. LUI detached that row before awaiting `unsafe-unlink-db`; Master removes
+registration only after deletion resolves. LUI now retains the row and metadata
+until successful worker completion, then removes them and shows the existing
+toast. Pending, successful, final-graph, error-result and rejected-RPC cases are
+covered. No worker pool ordering was changed. Whether the actual sandbox unlink
+stalled, rejected or was interrupted by reload still requires its RPC completion
+and pool prepare/close/remove evidence; durable sandbox deletion is not accepted.
+
+Image link cancellation now retains `/link`, as Master's `image-link-steps`
+specifies, rather than `/image-link`. Template search retains `/` and tracks its
+one-character trigger instead of silently erasing the buffer while leaving the
+typed `/Template` save pending. Both use the existing guarded model insertion
+and save path. Shared editing regressions exercise cancellation and persisted
+titles for blank blocks and commands following existing text. The Image link
+fixture opens the real form directly because the drive does not install the
+application's editor-command document listener. Other command execution and
+existing failed-save coverage are preserved.
+
+The follow-up UI aggregate passes with 6447 assertions and exit zero; native
+tests and the native build pass. These navigation, completion-boundary and
+cancellation repairs remain rebuilt-browser and visually unverified. No browser,
+web build, `static/` write or shared `:3010` access was used.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

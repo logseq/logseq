@@ -380,7 +380,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
   box ~key ~style_class:(class_ ^ act)
     [ (match href, on_shift_click with
        | Some url, _ -> (fun content ->
-           link ~url ~container_relative_frame:`horizontal
+           link ~url ~target:`self_ ~container_relative_frame:`horizontal
              ?on_press:(if Ui_services.env_native_block_controls () then
                Some (fun _ -> on_click ()) else None) [content])
        | None, None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
