@@ -2056,7 +2056,9 @@
       (is (= marker (util/get-edit-content)))
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
-      (is (= target-page (p/get-page-name)))
+      (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
+          assert/assert-that
+          (.hasText target-page))
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
@@ -2102,7 +2104,9 @@
       (assert/assert-is-visible ".ui__popover-content a.menu-link")
       (w/click
        (.first (loc/filter ".page-reference .page-ref" :has-text target-page)))
-      (is (= target-page (p/get-page-name)))
+      (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
+          assert/assert-that
+          (.hasText target-page))
       (p/goto-page host-page)
       (assert/assert-is-visible
        (loc/filter ".ls-page-blocks .block-title-wrap" :has-text marker))
