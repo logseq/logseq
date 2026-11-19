@@ -1400,14 +1400,45 @@ type span_tok = { tok_start : int; tok_stop : int; tok_spec : run_spec }
    cycle-references. self: uuid of the block/page whose title is being
    parsed; added to refs of any resolved ref's children. *)
 
-let rec parse ?(refs = []) ?(self = "") s =
+(* cljs highlight-query-text (search-handler/highlight-exact-query): the
+   first case-insensitive match of [query] in a plain text run renders as
+   an unpadded <mark> *)
+let highlight_segments ~query text : t list =
+  let low = String.lowercase_ascii text
+  and q = String.lowercase_ascii query in
+  let n = String.length text and m = String.length q in
+  let rec find i =
+    if i + m > n then None
+    else if String.sub low i m = q then Some i
+    else find (i + 1)
+  in
+  let mark s =
+    D.el ~tag:"mark"
+      ~attrs:
+        [ ( "style"
+          , "background-color:var(--ls-page-mark-bg-color,#fef3ac);\
+             color:var(--ls-page-mark-color,#262626);padding:0;\
+             border-radius:0" ) ]
+      [ D.txt s ]
+  in
+  match if m = 0 then None else find 0 with
+  | None -> [ D.txt text ]
+  | Some j ->
+      (if j > 0 then [ D.txt (String.sub text 0 j) ] else [])
+      @ [ mark (String.sub text j m) ]
+      @ if j + m < n then [ D.txt (String.sub text (j + m) (n - j - m)) ] else []
+
+let rec parse ?(refs = []) ?(self = "") ?highlight s =
   let find = substring_finder s in
   let els = ref [] in
   let buf = Buffer.create 64 in
   let push e = els := e :: !els in
   let flush () =
     if Buffer.length buf > 0 then (
-      push (D.txt (Buffer.contents buf));
+      (match highlight with
+       | Some query ->
+           List.iter push (highlight_segments ~query (Buffer.contents buf))
+       | None -> push (D.txt (Buffer.contents buf)));
       Buffer.clear buf)
   in
   let n = String.length s in

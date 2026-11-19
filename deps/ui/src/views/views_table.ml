@@ -1523,7 +1523,13 @@ let list_row_el inst ~row_uuid ~blk : t =
           b.block_default_collapsed || (level >= limit && b.block_children <> [])
       ; block_children = List.map (with_depth (level + 1)) b.block_children } in
     with_depth 1 b in
-  !Render_state.block_row_static
+  let highlight =
+    match inst.V.kind, (Runtime.model ()).Model.route_page with
+    | V.KUnlinkedRefs, Some page when String.trim page.Model.page_title <> "" ->
+        Some page.Model.page_title
+    | _ -> None
+  in
+  !Render_state.block_row_static ?highlight
     ~collapse_scope:inst.V.collapse_scope ~persist_collapse b
 
 let row_title s u =
