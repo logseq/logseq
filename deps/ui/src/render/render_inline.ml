@@ -1395,6 +1395,17 @@ type run_spec =
    text by definition. *)
 type span_tok = { tok_start : int; tok_stop : int; tok_spec : run_spec }
 
+let footnote_anchor ~back name =
+  let encoded = Ui_services.uri_encode_component name in
+  let own, target = if back then "fn.", "fnr." else "fnr.", "fn." in
+  link ~url:"#" ~target:`self_
+    ~accessibility_identifier:(own ^ encoded)
+    ~data_attrs:[(if back then "data-footnote-back" else "data-footnote-ref"), name]
+    ~on_press:(fun _ ->
+      Option.iter (fun el -> el.Ui_services.scroll_into_view ())
+        (Ui_services.dom_query ("[id=\"" ^ target ^ encoded ^ "\"]")))
+    [text ~as_:`Sup ~value:(name ^ if back then "↩︎" else "") []]
+
 (* refs: uuids/names of the enclosing reference chain (cljs :ref-set) —
    a ref whose target is in it renders nothing, breaking self- and
    cycle-references. self: uuid of the block/page whose title is being
@@ -1464,6 +1475,13 @@ and try_bracket ~find ~refs ~self s i =
           , j + 2 - i
           , Rs_atomic (String.trim inner, "ed-page-ref") )
     | _ -> None
+  else if Str_util.starts_at s i "[^" then
+    (match find (i + 2) "]" with
+     | j when j > i + 2 ->
+         let name = sub s (i + 2) (j - i - 2) in
+         if String.exists (fun c -> c = '\n' || c = '\r') name then None
+         else Some (footnote_anchor ~back:false name, j + 1 - i, Rs_plain)
+     | _ -> None)
   else if Str_util.starts_at s i "[:" then try_hiccup ~refs ~self s i
   else
     match find (i + 1) "](" with

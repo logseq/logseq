@@ -680,6 +680,34 @@ let body_el ~self s : t option =
   | Some rest -> Some (quote_el ~self rest)
   | None -> Option.map (table_el ~self) (table_parts s)
 
+let footnote_parts source =
+  let definition line =
+    if not (Str_util.starts_with line "[^") then None
+    else match String.index_from_opt line 2 ']' with
+      | Some stop when stop > 2 && stop + 1 < String.length line && line.[stop + 1] = ':' ->
+          Some (String.sub line 2 (stop - 2),
+                String.trim (String.sub line (stop + 2) (String.length line - stop - 2)))
+      | _ -> None in
+  let rec continuation body = function
+    | line :: rest when Str_util.starts_with line "    " ->
+        continuation (String.sub line 4 (String.length line - 4) :: body) rest
+    | line :: rest when Str_util.starts_with line "\t" ->
+        continuation (String.sub line 1 (String.length line - 1) :: body) rest
+    | rest -> String.concat "\n" (List.rev body), rest in
+  let rec trim_tail = function
+    | line :: rest when String.trim line = "" -> trim_tail rest
+    | lines -> lines in
+  let rec collect body definitions = function
+    | [] -> String.concat "\n" (List.rev (trim_tail body)), List.rev definitions
+    | line :: rest ->
+        match definition line with
+        | Some (name, first) ->
+            let value, rest = continuation [first] rest in
+            collect body ((name, value) :: definitions) rest
+        | None -> collect (line :: body) definitions rest in
+  if String.contains source '^' then collect [] [] (String.split_on_char '\n' source)
+  else source, []
+
 (* cljs block-title picks the .block-head-wrap carrier by
    logseq.property.node/display-type: code -> .flex.flex-1.w-full,
    math -> bare .math-block (no carrier), text -> .w-full.inline. *)
@@ -697,20 +725,32 @@ let title_outer_kind (b : Model.block) =
         let s = b.Model.block_title in
         if src_block s <> None || src_eval_parts s <> None then
           Some `flex
-        else if quote_body s <> None || horizontal_rule s then Some `block
+        else if quote_body s <> None || horizontal_rule s
+             || snd (footnote_parts s) <> [] then Some `block
         else Some `inline
 
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references.
    is_cards: class-Cards blocks append "Practice". *)
-let title ?heading ?(is_cards = false)
+let rec title ?heading ?(is_cards = false)
     ?(card_eid : int option = None) ?(self = "")
     ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
 
   | None ->
-      if deprecated_quote s then
+      let body, notes =
+        if src_block s <> None || src_eval_parts s <> None then s, []
+        else footnote_parts s in
+      if notes <> [] then
+        (if body = "" then [] else
+           title ?heading ~card_eid ~self ~wrap_attrs ~prefix body)
+        @ List.mapi (fun index (name, definition) ->
+            row ~key:("footnote-" ^ string_of_int index) ~cross:`center ~gap:4
+              ~data_attrs:["data-footnote-definition", name]
+              [content ~self definition; Render_inline.footnote_anchor ~back:true name]) notes
+        @ (if is_cards then [practice_el ~eid:card_eid] else [])
+      else if deprecated_quote s then
         [ (* data-node-type attr is an e2e selector *)
           box ~key:"rc-quote"
             ~data_attrs:[ ("data-node-type", "quote") ]

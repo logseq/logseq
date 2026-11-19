@@ -871,6 +871,45 @@ let run_views ~registry ~profile ~finish =
     (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
       (nodes inline_image));
   ignore (Lui_app.dispose inline_image.S.app);
+  let footnote_document : Js.Json.t = Stub_dom.get_field Stub_dom.global "document" in
+  let previous_query : string -> Js.Json.t = Stub_dom.get_field footnote_document "querySelector" in
+  let jumped = ref [] in
+  let target name =
+    let el = Stub_dom.make_element "a" in
+    Stub_dom.set_field el "scrollIntoView" (fun () -> jumped := name :: !jumped);
+    el in
+  let note_target = target "definition" and reference_target = target "reference" in
+  Stub_dom.set_field footnote_document "querySelector" (fun selector ->
+    if selector = "[id=\"fn.1\"]" then note_target
+    else if selector = "[id=\"fnr.1\"]" then reference_target
+    else if selector = "[id=\"fn.missing\"]" then Js.Json.null
+    else previous_query selector);
+  Fun.protect ~finally:(fun () -> Stub_dom.set_field footnote_document "querySelector" previous_query)
+    (fun () ->
+      let notes = mount (fun _ -> Lui_elements.column
+        (Render.title "Footnote[^1]\n\n[^1]: footnote text")) in
+      let anchor id = List.find (fun node ->
+        M.string_prop node "accessibility-identifier" = Some id) (nodes notes) in
+      check "Footnote definitions render their body instead of raw Markdown syntax"
+        (List.exists (fun node -> M.string_prop node "text" = Some "footnote text") (nodes notes));
+      S.press notes (anchor "fnr.1").M.id;
+      S.press notes (anchor "fn.1").M.id;
+      check "Footnote links navigate to the definition and back to their reference"
+        (!jumped = ["reference"; "definition"]);
+      ignore (Lui_app.dispose notes.S.app);
+      List.iter (fun source ->
+        let session = mount (fun _ -> Lui_elements.column (Render.title source)) in
+        check "Empty and malformed footnotes do not create navigation targets"
+          (not (List.exists (fun node ->
+            Option.fold ~none:false ~some:(fun id -> Str_util.starts_with id "fn.")
+              (M.string_prop node "accessibility-identifier")) (nodes session)));
+        ignore (Lui_app.dispose session.S.app)) [""; "Footnote[^]\n\n[^]: invalid"];
+      let missing = mount (fun _ -> Lui_elements.column (Render.title "Unresolved[^missing]")) in
+      let link = List.find (fun node ->
+        M.string_prop node "accessibility-identifier" = Some "fnr.missing") (nodes missing) in
+      S.press missing link.M.id;
+      check "An unresolved footnote leaves navigation unchanged" (!jumped = ["reference"; "definition"]);
+      ignore (Lui_app.dispose missing.S.app));
   let startup_error=I18n.t "graph/load-error" in
   let failed_startup=mount (fun _ context parent ->
     Page.region (Signal.constant context.Lui_ui.ui_scheduler
