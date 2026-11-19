@@ -1,6 +1,7 @@
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
+const { fileURLToPath } = require('url')
 const { ipcRenderer, contextBridge, shell, clipboard, webFrame, webUtils } = require('electron')
 
 const IS_MAC = process.platform === 'darwin'
@@ -90,9 +91,9 @@ contextBridge.exposeInMainWorld('apis', {
   },
 
   async openPath (relativePath) {
-    const absolutePath = path.resolve(
-      relativePath.startsWith('~') ? path.join(os.homedir(), relativePath.slice(1)) : relativePath
-    );
+    const absolutePath = /^file:/i.test(relativePath)
+      ? fileURLToPath(relativePath)
+      : path.resolve(relativePath.startsWith('~') ? path.join(os.homedir(), relativePath.slice(1)) : relativePath)
     await shell.openPath(absolutePath)
   },
 
