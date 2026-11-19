@@ -90,6 +90,14 @@ contextBridge.exposeInMainWorld('apis', {
     await shell.openExternal(url, options)
   },
 
+  fileURLToPath (url) {
+    try {
+      return fileURLToPath(url)
+    } catch {
+      return null
+    }
+  },
+
   async openPath (relativePath) {
     const absolutePath = /^file:/i.test(relativePath)
       ? fileURLToPath(relativePath)

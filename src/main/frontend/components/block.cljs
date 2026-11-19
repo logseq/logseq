@@ -227,7 +227,7 @@
 (defonce *resizing-image? (atom false))
 
 (hsx/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view? file-url]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
@@ -250,8 +250,13 @@
        (fn []))
      [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
-          image-src (when (seq src)
-                      (fs/asset-path-normalize src))
+          image-src (if file-url
+                      (js/window.apis.fileURLToPath file-url)
+                      (when (seq src) (fs/asset-path-normalize src)))
+          file-src? (and (seq image-src)
+                         (or file-url
+                             (and (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                                  (not (util/starts-with? src "//")))))
           src' (if (and (seq src)
                         (or (string/starts-with? src "/")
                             (string/starts-with? src "~")))
@@ -286,14 +291,7 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
-                  ;; image-src is a filesystem path when it has no URL
-                  ;; scheme (a Windows drive like C: is not one) and src is
-                  ;; not a protocol-relative URL — an assets:// UNC path
-                  ;; normalizes to //server/share but is still a file.
-                  (if (and (util/electron?)
-                           (seq image-src)
-                           (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
-                           (not (util/starts-with? src "//")))
+                  (if (and (util/electron?) file-src?)
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -403,14 +401,7 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   ;; http(s) opens in browser; a filesystem path reveals in
-                   ;; folder; anything else (data:, blob:, // src) supports
-                   ;; neither. src is checked for // since assets:// UNC
-                   ;; paths normalize to //server/share but are still files.
-                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))
-                         file-src? (and image-src
-                                        (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
-                                        (not (util/starts-with? src "//")))]
+                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))]
                      (when (or remote-src? file-src?)
                        (shui/dropdown-menu-item
                       {:on-click (fn [e]
@@ -457,7 +448,8 @@
                                              :positioned? positioned?
                                              :local? local?
                                              :full-text full-text
-                                             :gallery-view? (:gallery-view? config)})]
+                                             :gallery-view? (:gallery-view? config)
+                                             :file-url (:file-url config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
