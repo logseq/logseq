@@ -1,5 +1,5 @@
 (* Create-a-new-graph dialog body (.new-graph): name input, Logseq Sync /
-   E2EE checkboxes (rtc-test mode only), Submit. Mirrors
+   E2EE checkboxes for RTC-eligible environments, Submit. Mirrors
    components/repo.cljs new-db-graph-inner: validation toasts +
    create-or-open-db via Graph.create_graph; the sync path calls the
    worker db-sync endpoints like the cljs flow does. *)
@@ -76,11 +76,9 @@ let body (_ms : Model.t Signal.signal) : t =
             | _ -> ())
           ~on_submit:(fun _ -> submit name_st cloud e2ee creating)
           []
-      ; (* cljs new-db-graph-inner: the sync row shows when
-            a signed-in user can use RTC. ?rtc-test=true keeps it reachable
-            in e2e without auth *)
+      ; (* cljs new-db-graph-inner gates this row on rtc-group?, not login. *)
         (if Ui_services.env_rtc_test_mode ()
-            || (Rtc_flows.logged_in () && Rtc_flows.rtc_group ()) then
+            || Rtc_flows.rtc_group () then
            column ~key:"ng-rtc"
              [ row ~key:"ng-rtc-row" ~cross:`center ~gap:4
                  [ checkbox ~key:"rtc" ~id:"rtc-sync"

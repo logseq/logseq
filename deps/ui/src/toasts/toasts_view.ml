@@ -41,9 +41,7 @@ let toast_item (t : Model.toast) : t =
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
        ~style_class:kind
        [ overlay ~key:"ti-content"
-           [ Ui_components.with_props
-               (if reserved then [Ui_components.Prop.padding_right 24] else [])
-               (row ~key:"ti-body" ~gap:8 ~padding_vertical:8 ~cross:`start
+           [ (row ~key:"ti-body" ~gap:8 ~padding_vertical:8 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
                    ~width:20 ~height:20
                    ~foreground:(toast_icon_color kind) []
@@ -55,11 +53,12 @@ let toast_item (t : Model.toast) : t =
                     | None when reserved ->
                         (match String.split_on_char '\n' t.toast_text with
                          | title :: rows ->
-                             column ~key:"ti-reserved" ~grow:1. ~gap:4
-                               [ text ~value:title []
+                             column ~key:"ti-reserved" ~grow:1. ~min_width:0 ~gap:8
+                               ~margin_top:8 ~margin_bottom:4
+                               [ text ~line_height:"1.5" ~value:title []
                                ; column ~gap:4
                                    (List.mapi (fun i line ->
-                                      row ~key:(string_of_int i) ~gap:6 ~cross:`start
+                                      row ~key:(string_of_int i) ~gap:9 ~cross:`start
                                         [ text ~value:{js|◦|js} []; text ~grow:1. ~min_width:0 ~value:line [] ])
                                     rows) ]
                          | [] -> assert false)

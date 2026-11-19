@@ -1115,6 +1115,76 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let () =
+    let token = Ui_services.storage_get "id-token"
+    and server = Ui_services.storage_get "sync-server-url" in
+    Ui_services.storage_remove "id-token";
+    let set key = function Some value -> Ui_services.storage_set key value | None -> Ui_services.storage_remove key in
+    let check_sync server =
+      set "sync-server-url" server;
+      let expected = Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () in
+      let graph = mount New_graph.body in
+      check "Signed-out Create graph follows Master's RTC group eligibility"
+        (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")
+          (nodes graph) = expected);
+      if expected then begin
+        let sync = List.find (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")
+          (nodes graph) in
+        S.dispatch graph (P.ToggleChanged (sync.M.id,true));
+        check "Signed-out eligible Create graph retains the Sync encryption option"
+          (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-graph-e2ee")
+            (nodes graph))
+      end;
+      ignore (Lui_app.dispose graph.S.app)
+    in
+    Fun.protect ~finally:(fun () -> set "id-token" token;set "sync-server-url" server) (fun () ->
+      check_sync (Some "https://sync.example.test");
+      check_sync None)
+  in
+  let () =
+    let warning : Model.toast =
+      {toast_id=810;toast_text="Reserved characters:\n/ (forward slash)";
+       toast_kind="warning";toast_key=Some Toast.reserved_graph_name_key;
+       toast_code=None;toast_duration=Some 0} in
+    let toast = mount (fun _ -> Toasts_view.toast_item warning) in
+    let description = List.find (fun n -> n.M.kind="column"
+      && Hashtbl.find_opt n.M.props "margin-top"=Some (P.IntValue 8)) (nodes toast) in
+    check "Reserved graph warning keeps Master's paragraph margins and available description width"
+      (Hashtbl.find_opt description.M.props "margin-bottom" = Some (P.IntValue 4)
+       && Hashtbl.find_opt description.M.props "gap" = Some (P.IntValue 8)
+       && not (List.exists (fun n -> Hashtbl.find_opt n.M.props "padding-right" = Some (P.IntValue 24)) (nodes toast)));
+    ignore (Lui_app.dispose toast.S.app)
+  in
+  let () =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    let writes = ref [] in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "query-page-grouping-fixture"});
+    ignore (Fake_worker.install (fun name args ->
+      if name="thread-api/apply-outliner-ops" then
+        writes := Option.value (List.nth_opt args 1) ~default:Wire.Nil :: !writes;
+      Wire.Nil));
+    Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model) (fun () ->
+      let uuid = "00000000-0000-0000-0000-000000000081" in
+      let test kind display group data should_group =
+        writes:=[];
+        let inst = Views_state.make ~sched:(Signal.scheduler ()) ~kind ~feature:"query-result" ~owner:(Wire.Uuid uuid) in
+        Views_state.set inst {(Views_state.empty_vstate ()) with
+          view_uuid=uuid; display_type=display; group_by=group; data};
+        Views_state.persist_display_type inst;
+        let group_op = Outliner_ops.op "set-block-property"
+          [Wire.Uuid uuid;Wire.Keyword "logseq.property.view/group-by-property";Wire.Keyword "block/page"] in
+        let grouped = List.exists (function Wire.Array ops -> List.mem group_op ops | _ -> false) !writes in
+        check "Query List selection atomically persists page grouping without overriding explicit groups"
+          (grouped=should_group && List.length !writes=1);
+        check "Query page grouping remains available when returning to Table or Gallery"
+          ((Views_state.get inst).group_by = (if should_group then Some "block/page" else group))
+      in
+      test (Views_state.KQuery {block_uuid=uuid}) "list" None (Views_wire.VFlat {rows=["a";"b";"c"];count=3;previews=Hashtbl.create 0;qprops=[]}) true;
+      test (Views_state.KQuery {block_uuid=uuid}) "list" None Views_wire.VEmpty true;
+      test (Views_state.KQuery {block_uuid=uuid}) "list" (Some "fixture/custom-group") Views_wire.VEmpty false;
+      test (Views_state.KQuery {block_uuid=uuid}) "table" None Views_wire.VEmpty false;
+      test Views_state.KAllPages "list" None Views_wire.VEmpty false)
+  in
   let login = mount Login_view.body in
   let login_links () = List.filter (fun node -> class_has node "ls-auth-link") (nodes login) in
   check "Login links use the same accent-first color as Master anchors"
@@ -4696,6 +4766,98 @@ let run_views ~registry ~profile ~finish =
   let full_text_rendered = try S.flush sorting;true with Invalid_argument _ -> false in
   check "query builder full-text input only uses supported component properties" full_text_rendered;
   Views_popup.close_all ();
+  let () =
+    let saved = ref [] and active = ref true in
+    let editor = { (Views_builder.editor_of_inst inst ~active:(fun () -> !active)) with
+      save=(fun clause -> saved := Views_builder.tree_to_dsl clause :: !saved) } in
+    let open_range () =
+      Views_builder.between_picker editor ~tree:(ref (Views_builder.COp ("and",[])))
+        ~loc:[0] ~anchor:(popup_anchor ()); S.flush sorting
+    in
+    let press label =
+      match List.find_opt (fun n -> n.M.kind="button" && M.string_prop n "text"=Some label) (nodes sorting) with
+      | Some node -> S.press sorting node.M.id
+      | None -> check ("Between exposes " ^ label) false
+    in
+    let pick () =
+      match List.find_opt (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes sorting) with
+      | Some input -> S.text_changed sorting input.M.id "2026-11-19";S.submit sorting input.M.id
+      | None -> check "Between date field opens a retained calendar" false
+    in
+    open_range ();
+    check "Between opens Start / End / Submit without forcing a calendar"
+      (List.for_all (fun label -> List.exists (fun n -> M.string_prop n "text"=Some label) (nodes sorting))
+        [I18n.t "query.builder/between-start-label";I18n.t "query.builder/between-end-label";I18n.t "ui/submit"]
+       && not (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes sorting)));
+    press (I18n.t "ui/submit");
+    check "An empty Between range does not submit or dismiss" (!saved=[] && List.length !Views_popup.open_popups=1);
+    press (I18n.t "query.builder/between-start-label");
+    S.flush sorting;
+    check "Between keeps its range form mounted beneath the selected date calendar"
+      (List.length !Views_popup.open_popups=2);
+    pick ();
+    check "Picking the start date returns to End date without auto-opening another calendar"
+      (!saved=[] && List.length !Views_popup.open_popups=1
+       && List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-end-label")) (nodes sorting));
+    press (I18n.t "ui/submit");
+    check "A partial Between range waits for its second date" (!saved=[]);
+    press (I18n.t "query.builder/between-end-label");pick ();
+    check "Both Between dates remain uncommitted until Submit" (!saved=[]);
+    press (I18n.t "ui/submit");
+    let title = Dates.journal_title_of (Dates.make ~year:2026 ~month:11 ~day:19 ()) in
+    check "Between submits the two selected journal dates and dismisses the range"
+      (!saved=["(between [[" ^ title ^ "]] [[" ^ title ^ "]])"] && !Views_popup.open_popups=[]);
+    saved:=[];open_range ();press (I18n.t "query.builder/between-start-label");
+    active:=false;pick ();
+    check "A retired query cannot receive a date or submit a stale Between clause" (!saved=[]);
+    Views_popup.close_all ()
+  in
+  let () =
+    let uuid = "00000000-0000-0000-0000-000000000091" in
+    let cache_key = Runtime.repo (),uuid in
+    let previous_stack = !Views_popup.stack_st in
+    Views_popup.stack_st:=None;
+    let owner = mount (fun _ -> Lui_elements.column
+      [Views_view.query_title_el ~block_uuid:uuid ~title:None;popup_layer]) in
+    let previous_id : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+    let trigger = Stub_dom.make_element "button" in
+    let attr : string -> string -> unit = Stub_dom.get_field trigger "setAttribute" in
+    Stub_dom.set_field document "getElementById" (fun id -> attr "id" id;trigger);
+    Fun.protect ~finally:(fun () ->
+      Stub_dom.set_field document "getElementById" previous_id;
+      Views_popup.close_all ();
+      ignore (Lui_app.dispose owner.S.app);
+      Option.iter Views_builder.drop_tree (Hashtbl.find_opt Views_view.query_insts cache_key);
+      Hashtbl.remove Views_view.query_insts cache_key;
+      Views_popup.stack_st:=previous_stack;
+      Runtime.app_flush:=(fun () -> S.flush sorting)) (fun () ->
+      let press label =
+        let node = List.find (fun n -> button_label n=Some label) (nodes owner) in
+        S.press owner node.M.id in
+      press (I18n.t "view.filter/filter");
+      press (Views_builder.item_label "between");
+      press (I18n.t "query.builder/between-start-label");
+      let input = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes owner) in
+      let query = Hashtbl.find Views_view.query_insts cache_key in
+      Views_state.update query (fun s -> {s with loading=not s.loading;query_rows=["refresh-row"]});
+      check "A query result refresh does not unmount the active Between calendar"
+        (List.exists (fun n -> n.M.id=input.M.id) (nodes owner));
+      S.text_changed owner input.M.id "2026-11-19";
+      S.submit owner input.M.id;
+      let title = Dates.journal_title_of (Dates.make ~year:2026 ~month:11 ~day:19 ()) in
+      check "A date remains selectable after its query builder rerenders for result data"
+        (List.exists (fun n -> M.string_prop n "text"=Some title) (nodes owner)
+         && not (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-start-label")) (nodes owner)));
+      press (I18n.t "query.builder/between-end-label");
+      let input = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes owner) in
+      Views_state.update query (fun s -> {s with qsrc="\"replacement\""});
+      S.text_changed owner input.M.id "2026-11-20";S.submit owner input.M.id;
+      check "Changing the query source retires its older date range draft"
+        (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-end-label")) (nodes owner));
+      press (I18n.t "ui/submit");
+      check "A stale Between form cannot overwrite a newer query source"
+        ((Views_state.get query).qsrc="\"replacement\""))
+  in
   ignore (Lui_app.dispose sorting.S.app);
   Views_popup.stack_st := previous_popup_stack;
   Views_state.ops_ref := previous_view_ops;

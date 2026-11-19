@@ -149,6 +149,53 @@ headers; and the absence of query console errors. Graph deletion is also accepte
 as described above. This does not establish recovery from an already-rejected
 browser patch batch.
 
+### Table81 query grouping, date range and graph creation follow-up
+
+The paired query entities explain the three-journal grouping difference:
+Master's query already stores `group-by-property = block/page`; LUI's same UUID
+does not. Table80's positive-views evidence records a successful List selection
+for this same query UUID in both clients. Master persists this property when a
+query is switched to List without an explicit grouping (`property/value.cljs`
+`<add-property!`). LUI previously
+only inferred page grouping while displaying List and lost it on return to
+Table. Query List selection now writes the display type and missing page group
+in one transaction, retaining the group in Table/Gallery and after reload;
+explicit custom groups are not replaced. This does not make every new table
+query grouped: Master does not do that. Already-created queries whose earlier
+List selection lost this property must be switched to List once to persist it;
+there is no speculative migration of ungrouped tables.
+
+Between now opens one retained Start date / End date / Submit form. Each date
+field opens a child calendar without disposing the form; picking a date returns
+to the same form, not an immediately forced second calendar. Incomplete ranges
+do not save, and a retired query cannot receive a stale date. Shared-host
+regressions exercise the range and nested calendar lifecycle, including the
+reported calendar-unmount timing boundary. Result updates also used to retire
+the builder's reactive scope and its action guard even though the query title
+remained mounted. The guard now belongs to the containing query title and source
+instead; a mounted regression refreshes result data while its calendar is open and then
+selects a date successfully. Attribution of the original browser timing to this
+specific refresh remains unverified, as does rebuilt-browser interaction.
+
+Signed-out graph creation now shows the existing translated Sync control when
+`rtc-group?` permits it (development build or custom Sync server), matching
+Master without an extra login gate. Non-eligible environments still omit it;
+authenticated remote graph creation is not newly verified.
+
+The reserved-character warning keeps Master's full description width instead
+of reserving another 24px for its overlaid close control. Its title uses the
+paragraph's 1.5 line height and 8px top margin; paragraph/list collapsed margins
+and circle-list indentation are represented with typed layout props. The
+provided screenshots have the same toast top, y=48; their content, wrapping and
+bottom differ, rather than the viewport anchor. The repair remains
+rebuilt-browser/visually unverified; no application web build, `static/` write or
+shared `:3010` access was used.
+
+Follow-up gates: `pnpm test:ui` reports 6473 checks with zero failures; native
+experimental tests and the native experimental build pass. Known journal
+diagnostics remain at their baseline 102 invalid-response lines and 52 load
+failures; the native non-fatal properties diagnostic is unchanged.
+
 The Pages path is `nav_items` to `nav_route` to `nav_link` to the typed LUI Link;
 there is no alternate Pages component. The link's TargetValue maps `_self`
 correctly, but the web renderer's UrlValue handler unconditionally wrote `_blank`.

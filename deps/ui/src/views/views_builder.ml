@@ -508,24 +508,47 @@ let tag_picker inst ~tree ~loc ~anchor =
            ()))
 
 let between_picker inst ~tree ~loc ~anchor =
-  let pick label on_pick =
-    if inst.active () then
-      ignore (P.show_custom ~anchor ~cls:"query-builder-picker"
-        (column ~padding:8 ~gap:8
-          [ text ~value:label []
-          ; Ui_components.date_picker
-              ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
-              ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
-              ~translate:I.t
-              ~on_pick:(fun ms ->
-                P.close_top ();
-                if inst.active () then on_pick (Dates.journal_title_of ms)) ]))
-  in
-  pick (I.t "query.builder/between-start-label") (fun start ->
-    pick (I.t "query.builder/between-end-label") (fun finish ->
-      let arg title = { a_dsl = "[[" ^ title ^ "]]"; a_disp = title } in
-      tree := append_at !tree loc (CItem ("between", [ arg start; arg finish ]));
-      commit inst ~tree ()))
+  if inst.active () then
+    ignore (P.show_custom ~anchor ~cls:"query-builder-picker"
+      (fun context parent ->
+        let start = Signal.state context.Lui_ui.ui_scheduler None
+        and finish = Signal.state context.Lui_ui.ui_scheduler None in
+        let field key label value =
+          let id = inst.key ^ "-between-" ^ key in
+          Ui_components.button ~variant:`secondary ~size:`sm
+            ~accessibility_identifier:id
+            ~text:(reactive (fun date -> Option.value date ~default:label) (Signal.value value))
+            ~on_press:(fun _ ->
+              if inst.active () then
+                ignore (P.push ~anchor:id
+                  (P.anchored_popover ~key:(id ^ "-calendar") ~id:(id ^ "-calendar")
+                    ~anchor:(P.Target id) ~align_end:false ~cls:"query-builder-picker" ~card:true
+                    ~on_dismiss:(fun _ -> P.close_top ())
+                    [Ui_components.date_picker
+                      ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
+                      ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
+                      ~translate:I.t
+                      ~on_pick:(fun ms ->
+                        P.close_top ();
+                        if inst.active () then begin
+                          Signal.set value (Some (Dates.journal_title_of ms));
+                          Runtime.flush ()
+                        end)]))) []
+        in
+        column ~padding:16 ~gap:8
+          [row ~cross:`center ~gap:8
+            [field "start" (I.t "query.builder/between-start-label") start;
+             text ~value:"~" [];
+             field "end" (I.t "query.builder/between-end-label") finish];
+           Ui_components.button ~variant:`primary ~text:(I.t "ui/submit")
+             ~on_press:(fun _ ->
+               match Signal.get_state start, Signal.get_state finish with
+               | Some start, Some finish when inst.active () ->
+                   let arg title = { a_dsl = "[[" ^ title ^ "]]"; a_disp = title } in
+                   tree := append_at !tree loc (CItem ("between", [arg start;arg finish]));
+                   P.close_all ();
+                   commit inst ~tree ()
+               | _ -> ()) []] context parent))
 
 let full_text_picker inst ~tree ~loc ~anchor =
   ignore
@@ -795,10 +818,10 @@ let editor_of_inst inst ~active =
         Views_query.save_src ~after:(fun () -> refresh inst) inst qsrc)
     }
 
-let builder_el inst ~tree : t = fun context ->
+let builder_el inst ~tree ~active : t =
   editor_el
-    (editor_of_inst inst ~active:(fun () -> not (Signal.scope_is_disposed context.Lui_ui.ui_scope)))
-    ~tree context
+    (editor_of_inst inst ~active)
+    ~tree
 
 (* per-inst clause trees, re-parsed when the query source changed *)
 let trees : (int, clause ref * string) Hashtbl.t = Hashtbl.create 8
