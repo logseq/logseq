@@ -255,6 +255,21 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
     "bullet-container cursor"
     ^ if order_list then " as-order-list typed-list" else ""
   in
+  (* cljs block-control: an untitled block between its first and last
+     sibling renders a bare .bullet-container until the row is hovered *)
+  let empty_bullet =
+    String.trim b.Model.block_title = ""
+    &&
+    match S.find_parent_in_scope ~scope uuid with
+    | Some (parent, i) ->
+        let siblings =
+          match parent with
+          | Some p -> S.children_of p
+          | None -> S.blocks_in_scope scope
+        in
+        i > 0 && i < List.length siblings - 1
+    | None -> false
+  in
   let heading_attrs =
     ( "data-has-children"
     , string_of_bool (b.block_children <> []) )
@@ -361,7 +376,8 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
                  if c && not order_list then Ui_components.block_bullet_ring
                  else "transparent") cs)
                ~data_attrs:
-                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ])
+                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
+                  ; ("data-empty-bullet", string_of_bool empty_bullet) ])
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
                   | None when order_list ->

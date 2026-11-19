@@ -239,7 +239,6 @@ let sorting_popup inst anchor =
        [ Ui_components.with_props
            [Ui_components.Prop.font_size "0.875rem"]
          (select ~style_class:"ls-sort-order"
-           ~accessibility_identifier:(sort_order_id (Signal.sample so_s).V.s_id)
            ~text:(reactive (fun so -> if so.V.s_asc then (I.t "view.table/ascending") else (I.t "view.table/descending")) so_s)
            ~height:32 ~min_height:32 ~padding_horizontal:8
            ~width:107
@@ -263,7 +262,8 @@ let sorting_popup inst anchor =
     let so = Signal.sample so_s in
     let c = List.find (fun c -> c.V.c_id = so.V.s_id) s.V.columns in
     row ~style_class:"ls-sort-row" ~cross:`center ~main:`space_between ~gap:8
-      ~padding_horizontal:8
+      ~padding_horizontal:8 ~accessibility_identifier:(sort_order_id so.V.s_id)
+      ~data_attrs:[ ("tabindex", "0") ]
       [ row ~cross:`center ~gap:4
           [ icon ~name:(Icons.name_ref "grip-vertical") ~point_size:14 []
           ; text ~value:(c.V.c_name ^ ":") ~white_space:"nowrap"
@@ -278,7 +278,7 @@ let sorting_popup inst anchor =
                  ~label:(I.t "view.table/delete-sort") ~icon:(Icons.name_ref "x")
                  ~on_press:(fun _ -> remove_sort (Signal.get so_s)) []) ] ]
   in
-  (* cljs focuses the first sort row when the popup opens *)
+  (* cljs focuses the first sort row itself when the popup opens *)
   (match (V.get inst).V.sorting with
    | first :: _ ->
        ignore

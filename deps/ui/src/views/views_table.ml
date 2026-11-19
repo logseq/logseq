@@ -1746,12 +1746,26 @@ let ref_breadcrumb inst uuid : t =
     Ui_components.with_props
       [Ui_components.Prop.font_size "14px"; Ui_components.Prop.opacity 0.7;
        Ui_components.Prop.hover_opacity 1.]
-    (row ~margin_left:16 ~margin_top:4 ~gap:4 ~cross:`center
+    (row ~margin_left:16 ~margin_top:8 ~gap:4 ~cross:`center ~min_height:21
       (List.concat (List.mapi (fun i (b : Model.block) ->
         (if i = 0 then [] else [Ui_components.with_props [Ui_components.Prop.opacity 0.5] (text ~value:"/" [])]) @
-        [link ~text:(if b.block_is_query then I.t "property.built-in/query" else b.block_title)
-           ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_
-           ~foreground:"var(--ls-primary-text-color)" []]) blocks))))
+        (* cljs breadcrumb segment-label: query blocks show only their
+           structural search icon, untitled blocks a point-filled one *)
+        let query_parent =
+          List.exists (fun t -> List.mem t b.Model.block_tag_idents)
+            [ "logseq.class/Query"; "logseq.class/Cards" ]
+        in
+        let segment_icon name =
+          Ui_components.with_props [Ui_components.Prop.opacity 0.7]
+            (icon ~name:(Icons.name_ref name) ~point_size:12 [])
+        in
+        [link ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_
+           ~foreground:"var(--ls-primary-text-color)"
+           ?text:(if query_parent || String.trim b.block_title = ""
+                  then None else Some b.block_title)
+           (if query_parent then [segment_icon "search"]
+            else if String.trim b.block_title = "" then [segment_icon "point-filled"]
+            else [])]) blocks))))
     (Signal.value parents)) ctx parent
 
 let ref_header inst ~key ~title : t =
