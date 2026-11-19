@@ -1524,8 +1524,17 @@
        resource-key
        #{[:bidirectional resource-block]}
        [{:class-uuid bidirectional-class
+         :title "Projects"
          :entity-uuids [bidirectional-entity]}]
        response))))
+
+(deftest block-bidirectional-properties-resource-uses-custom-title-test
+  (when-let [api (render-resource-api)]
+    (let [{:keys [conn resource-block bidirectional-class]} (render-resource-fixture)
+          _ (d/transact! conn [{:block/uuid bidirectional-class
+                                :logseq.property.class/bidirectional-property-title "Initiatives"}])
+          response (call-resource api conn [:block-bidirectional-properties resource-block])]
+      (is (= ["Initiatives"] (mapv :title (:value response)))))))
 
 (deftest block-bidirectional-properties-resource-has-an-authoritative-empty-value-test
   (when-let [api (render-resource-api)]
