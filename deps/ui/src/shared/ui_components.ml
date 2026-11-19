@@ -849,7 +849,10 @@ let form_desc ~key ~value : t =
    the same content box on every host. Trailing controls remain in row flow. *)
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
     ?pad_right ?background ?focus_background ?line_height ?(focus_shadow = "none") ?(borderless = false) ?(trailing = []) ?autofocus
-    ?clear_label ?on_clear ?on_appear ?input_identifier ~placeholder ~text_signal:text ~on_text () : t =
+    ?clear_label ?on_clear ?on_appear ?on_focus_within ?input_opacity_signal ?input_identifier ~placeholder ~text_signal:text ~on_text () : t =
+  let input_opacity element = match input_opacity_signal with
+    | None -> element
+    | Some value -> Ui_parts.float_prop P.Opacity ~value_signal:value element in
   let background =
     match background, borderless with
     | None, true -> Some "transparent"
@@ -877,9 +880,9 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
   in
   with_props
     [ Prop.position `relative ]
-    (row ~key ~cross:`center ~gap:0 ~min_width:0 ?on_appear
+    (row ~key ~cross:`center ~gap:0 ~min_width:0 ?on_appear ?on_focus_within
        ([
-          with_props
+          input_opacity (with_props
             ([ Prop.font_size font_size; Prop.padding_left pad_left ]
             @ Option.to_list (Option.map Prop.line_height line_height)
             @ Option.to_list (Option.map Prop.focus_within_background focus_background)
@@ -891,7 +894,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
                ?style_class:
                  (Option.map (fun _ -> "ls-search-with-clear") clear_label)
                ?accessibility_identifier:input_identifier
-               ~placeholder ?autofocus ~text_signal:text ~on_input []);
+               ~placeholder ?autofocus ~text_signal:text ~on_input []));
           with_props
             [
               Prop.position `absolute;

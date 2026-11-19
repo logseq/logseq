@@ -32,12 +32,17 @@ let category_ok cat pkg =
   | "themes" -> Plugin_host.jbool pkg "theme"
   | _ -> not (Plugin_host.jbool pkg "theme")
 
-let search_input ~key st =
-  Ui_components.search_row ~key ~height:30 ~pad_left:28
+let search_input ~key st : t = fun ctx parent ->
+  let focused = Signal.state ctx.Lui_ui.ui_scheduler false in
+  (Ui_components.search_row ~key ~height:30 ~pad_left:29
+    ~background:"var(--ls-primary-background-color)"
+    ~focus_background:"var(--ls-secondary-background-color)"
+    ~on_focus_within:(Runtime.signal_set focused)
+    ~input_opacity_signal:(reactive (fun focused -> if focused then 1. else 0.7) (Signal.value focused))
     ~autofocus:true ~clear_label:(t "ui/close")
     ~placeholder:(t "plugin/search-plugin")
     ~text_signal:(Signal.value st)
-    ~on_text:(fun q -> Runtime.signal_set st q) ()
+    ~on_text:(fun q -> Runtime.signal_set st q) ()) ctx parent
 
 (* cljs plugins.cljs category-tabs: "Plugins (n)" / "Themes (n)" —
    counts render only on the installed tab (marketplace passes nil).
@@ -67,15 +72,22 @@ let category_tabs ~key ~nums cat_st =
     ; category_tab ~key cat_st "themes" (t "nav/themes") nt
     ]
 
-let toolbar_menu ~key ~icon ~label ~items : t =
+let toolbar_menu ~picked ~key ~icon ~label ~items : t =
  fun ctx parent ->
   let opened = Signal.state ctx.ui_scheduler false in
   let close () = Runtime.signal_set opened false in
   row ~key
-    [ Ui_components.button ~key:"trigger" ~variant:`ghost ~size:`icon
-        ~width:28 ~height:28 ~min_width:28 ~min_height:28
+    [ Ui_components.with_props [Ui_components.Prop.position `relative]
+      (Ui_components.button ~key:"trigger" ~variant:`ghost ~size:`icon
+        ~width:30 ~height:28 ~min_width:30 ~min_height:28
         ~icon:(`app icon) ~label
-        ~on_press:(fun _ -> Runtime.signal_set opened (not (Runtime.signal_get opened))) []
+        ~on_press:(fun _ -> Runtime.signal_set opened (not (Runtime.signal_get opened)))
+        (if not picked then [] else
+          [Ui_components.with_props [Ui_components.Prop.position `absolute;
+             Ui_components.Prop.inset_top (-2.); Ui_components.Prop.inset_right 4.;
+             Ui_components.Prop.pointer_enabled false]
+            (box ~width:4 ~height:4 ~corner_radius:2 ~background:"red"
+               ~data_attrs:["data-plugin-option-active", ""] [])]))
     ; if_ ~test:(Signal.value opened)
         (Ui_components.menu_card ~key:"menu" ~anchor:`below ~anchor_alignment:`end_
            ~on_dismiss:(fun _ -> close ())
@@ -84,13 +96,29 @@ let toolbar_menu ~key ~icon ~label ~items : t =
                 ?checked ~on_click:(fun () -> close (); run ()) ()) items))
     ] ctx parent
 
+let contribution : t = fun ctx parent ->
+  let width = Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.ui_scope in
+  (Ui_parts.string_prop Lui_protocol.DisplayValue
+    ~value:(reactive (fun width -> if width >= 640. then "inline-flex" else "none") width)
+    (Ui_components.with_props [Ui_components.Prop.position `absolute;
+      Ui_components.Prop.inset_top (-42.); Ui_components.Prop.inset_right 20.;
+      Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.font_weight 500;
+      Ui_components.Prop.line_height "20px"; Ui_components.Prop.opacity 0.6]
+      (link ~key:"contribute" ~url:"https://github.com/logseq/marketplace" ~target:`blank
+        ~height:28 ~padding_horizontal:12 ~padding_vertical:4
+        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
+        ~text:(t "plugin/contribute") []))) ctx parent
+
 let control_tabs ~key ~search_st ~cat_st ~nums toolbar =
-  Ui_components.with_props [Ui_components.Prop.padding_bottom 12; Ui_components.Prop.padding_top 4]
+  Ui_components.with_props [Ui_components.Prop.padding_bottom 12; Ui_components.Prop.position `relative]
     (row ~key:(key ^ "-ctls") ~style_class:"control-tabs" ~padding_horizontal:6
     ~main:`space_between ~cross:`center
     [ category_tabs ~key ~nums cat_st
-    ; row ~key:(key ^ "-r") ~cross:`center ~gap:8
-        (box ~width:204 [search_input ~key:(key ^ "-search") search_st] :: toolbar)
+    ; row ~key:(key ^ "-r") ~cross:`center
+        (box ~width:204 ~margin_horizontal:13 ~margin_vertical:3
+           [search_input ~key:(key ^ "-search") search_st] :: toolbar)
+    ; contribution
     ])
 
 let options_menu ~key ~icon ~label ~state options =
@@ -98,7 +126,8 @@ let options_menu ~key ~icon ~label ~state options =
     let items = List.map (fun (value, label) ->
       (label, (if current = value then "check" else "circle"), None,
        fun () -> Runtime.signal_set state value)) options in
-    toolbar_menu ~key ~icon ~label ~items) (Signal.value state)
+    let picked = match options with (first, _) :: _ -> current <> first | [] -> false in
+    toolbar_menu ~picked ~key ~icon ~label ~items) (Signal.value state)
 
 let report_plugin = ref None
 
@@ -312,7 +341,8 @@ let market_card ~stats ~search_st pkg =
     ; Ui_components.with_props
         [ Ui_components.Prop.position `absolute
         ; Ui_components.Prop.inset_bottom (-8.)
-        ; Ui_components.Prop.inset_left 77.
+        ; Ui_components.Prop.inset_left (-7.)
+        ; Ui_components.Prop.padding_left 8
         ; Ui_components.Prop.inset_right 7. ]
       (row ~key:"ctl" ~main:`space_between
              ~cross:`center
@@ -669,7 +699,7 @@ let body (_ms : Model.t Signal.signal) : t =
                      Stars, t "plugin/stars"; Title, I18n.tf "plugin/title" ["A - Z"];
                      Supports_db, t "plugin/supports-db"; Added, t "plugin/date-added"]
     ; reactive (fun enabled ->
-        toolbar_menu ~key:"more" ~icon:"dots-vertical" ~label:(t "header/more")
+        toolbar_menu ~picked:false ~key:"more" ~icon:"dots-vertical" ~label:(t "header/more")
           ~items:([ t "plugin/refresh-lists", "rotate-clockwise", None, (fun () -> refresh true)
                  ; t "plugin/report-security", "alert-triangle", None, (fun () -> open_report None)
                  ] @ if not Plugin_host.supports_auto_updates then [] else
@@ -715,7 +745,7 @@ let body (_ms : Model.t Signal.signal) : t =
           [ Ui_components.with_props [Ui_components.Prop.padding_bottom 8]
               (heading ~key:"pl-h" ~level:1 ~font_size:"1.375rem" ~font_weight:600
                  ~line_height:"1.75rem" ~value:(t "nav/plugins") [])
-          ; grid ~key:"pl-tabs" ~style_class:"tabs" ~columns:3 ~margin_bottom:8
+          ; grid ~key:"pl-tabs" ~style_class:"tabs" ~columns:3 ~margin_bottom:12
               [ box []
               ; row ~main:`center ~cross:`center
                   [ row ~key:"pl-tabs-in" ~style_class:"tabs-inner"
@@ -723,10 +753,7 @@ let body (_ms : Model.t Signal.signal) : t =
                       ~cross:`center ~gap:8
                       [ tab_btn "installed" "plugin/installed"
                       ; tab_btn "marketplace" "plugin/marketplace" ] ]
-              ; row ~main:`end_ ~cross:`center
-                  [ Ui_components.with_props [Ui_components.Prop.font_size "0.75rem"]
-                      (link ~url:"https://github.com/logseq/marketplace" ~target:`blank
-                        ~text:(t "plugin/contribute") []) ]
+              ; box []
               ]
           ; box ~key:"pl-panels"
               [ if_ ~test:(reactive ((=) "marketplace") (Signal.value tab))

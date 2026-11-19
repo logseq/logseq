@@ -1102,6 +1102,45 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let market_state = ref None in
+  let marketplace = mount (fun _ -> fun ctx parent ->
+    let filter = Signal.state ctx.Lui_ui.ui_scheduler Plugins_view.All
+    and search = Signal.state ctx.ui_scheduler "" in
+    market_state := Some (filter, search);
+    (Lui_elements.column
+      [Plugins_view.search_input ~key:"market-search" search;
+       Plugins_view.options_menu ~key:"market-filter" ~icon:"filter"
+         ~label:(I18n.t "cmdk.action/filter") ~state:filter
+         [Plugins_view.All, I18n.t "plugin/all";
+          Plugins_view.Installed, I18n.t "plugin/installed"]]) ctx parent) in
+  let market_option label =
+    let trigger = List.find (fun node -> button_label node = Some (I18n.t "cmdk.action/filter"))
+      (nodes marketplace) in
+    S.press marketplace trigger.M.id;
+    let option = List.find (fun node -> M.string_prop node "text" = Some label)
+      (nodes marketplace) in
+    S.press marketplace option.M.id in
+  let applied_market_option () = List.exists (fun node ->
+    match M.string_prop node "data-attrs" with
+    | Some value -> I18n.contains_ci value "data-plugin-option-active"
+    | None -> false) (nodes marketplace) in
+  check "The default marketplace filter has no applied marker" (not (applied_market_option ()));
+  market_option (I18n.t "plugin/installed");
+  check "Choosing the installed marketplace filter applies its state and marker"
+    (Runtime.signal_get (fst (Option.get !market_state)) = Plugins_view.Installed
+     && applied_market_option ());
+  market_option (I18n.t "plugin/all");
+  check "Clearing the marketplace filter clears its state and applied marker"
+    (Runtime.signal_get (fst (Option.get !market_state)) = Plugins_view.All
+     && not (applied_market_option ()));
+  let market_input = List.find (fun node -> node.M.kind = "search-field") (nodes marketplace) in
+  S.text_changed marketplace market_input.M.id "No marketplace match";
+  check "Marketplace search remains editable while filtering"
+    (Runtime.signal_get (snd (Option.get !market_state)) = "No marketplace match");
+  S.text_changed marketplace market_input.M.id "";
+  check "Marketplace search accepts an empty query"
+    (Runtime.signal_get (snd (Option.get !market_state)) = "");
+  ignore (Lui_app.dispose marketplace.S.app);
   List.iter (fun (source, expected) ->
     check "Markdown thematic breaks accept repeated markers but not empty or malformed text"
       (Render.horizontal_rule source = expected))
