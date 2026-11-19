@@ -1707,6 +1707,29 @@ let test_task_cycle (h : host) =
   let* () = h.wait_ms 25 in
   check "An empty editor does not create a task or a content block"
     (!reads = before && current_titles () = []);
+  let services = Cmdk_host.services () in
+  let shortcut_cycle uuids =
+    check "The shortcut host uses an implemented task dispatch"
+      (try services.Cmdk_services.cycle_todo uuids; true
+       with Invalid_argument _ -> false)
+  in
+  shortcut_cycle [];
+  check "The shortcut host does not invent a task target" (!reads = before);
+  stage_page h [Test_check.block "b1" "task fixture"];
+  set_editing ~uuid:"b1" ~buffer:"task fixture" ~caret:4 ~base:"task fixture";
+  available := true;
+  shortcut_cycle ["b1"];
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "The capture-phase shortcut host cycles the editing target without splitting"
+    (!status = Some 31 && S.editing_uuid () = Some "b1"
+     && current_titles () = ["task fixture"]
+     && !writes = [Some 31;Some 32;Some 33;None;Some 31]);
+  available := false;
+  shortcut_cycle ["b1"];
+  let* () = h.wait_ms 25 in
+  check "The shortcut host rejects unavailable task values without writing"
+    (!writes = [Some 31;Some 32;Some 33;None;Some 31]);
   Runtime.worker := Some worker;
   Js.Promise.resolve ()
 
@@ -1961,17 +1984,21 @@ let test_scoped_collapse_commands (h : host) =
         let complete_read = ref (fun () -> ()) in
         Option.iter (fun collapsed ->
           S.set (fun st -> { st with S.collapsed =
-            (if collapsed then S.String_set.empty else S.String_set.singleton uuid) });
+            (if collapsed = Some true then S.String_set.empty else S.String_set.singleton uuid) });
           let worker = Option.get !Runtime.worker in
+          let selector = ref "" in
           let pending = Js.Promise.make (fun ~resolve ~reject:_ ->
             complete_read := (fun () -> resolve
-              (W.Map [W.Keyword "block/collapsed?", W.Bool collapsed]) [@u])) in
+              (match collapsed with
+               | Some collapsed -> W.Map [W.Keyword "block/collapsed?", W.Bool collapsed]
+               | None when !selector = "[:block/collapsed?]" -> W.Nil
+               | None -> W.Map [W.Keyword "db/id", W.Int 1]) [@u])) in
           Runtime.worker := Some { worker with Worker_client.invoke_fn =
             (fun name args ->
               match name, args with
               | "thread-api/pull",
-                [W.String repo; _; W.Array [W.Keyword "block/uuid"; W.Uuid id]]
-                when repo = h.repo && id = uuid -> pending
+                [W.String repo; W.String selected; W.Array [W.Keyword "block/uuid"; W.Uuid id]]
+                when repo = h.repo && id = uuid -> selector := selected; pending
               | _ -> worker.Worker_client.invoke_fn name args) }) db_before;
         List.iter (fun id ->
           S.set_collapsed ~scope:"main" id (not before);
@@ -2007,9 +2034,10 @@ let test_scoped_collapse_commands (h : host) =
         reset_editor ();
         run rest
   in
-  run [ "selected toggle", "editor/toggle-block-children", false, false, false, Some true;
-        "editing toggle", "editor/toggle-block-children", true, true, true, Some false;
-        "editing Meta+;", "Meta+;", true, false, true, Some false;
+  run [ "selected toggle", "editor/toggle-block-children", false, false, false, Some (Some true);
+        "editing toggle", "editor/toggle-block-children", true, true, true, Some (Some false);
+        "editing Meta+;", "Meta+;", true, false, true, Some (Some false);
+        "editing absent collapse flag", "Meta+;", true, false, true, Some None;
         "selected collapse", "editor/collapse-block-children", false, false, true, None;
         "selected expand", "editor/expand-block-children", false, true, false, None ]
 

@@ -369,7 +369,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
   ; toggle_collapse = Editor_actions.toggle_collapse
   ; set_collapsed = Editor_actions.set_collapsed
   ; toggle_open_blocks = Editor_actions.toggle_open_blocks
-  ; cycle_todo = (fun _ -> ignore (Editor_cmds.run ~scope:(Editor_state.interaction_scope ()) ~command:"cycle-todo" ~block:None ~value:None))
+  ; cycle_todo = List.iter Editor_commands.cycle_todo
   ; undo = Editor_actions.undo
   ; redo = Editor_actions.redo
   ; quick_add = Editor_actions.quick_add

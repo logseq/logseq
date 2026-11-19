@@ -2865,7 +2865,7 @@ let toggle_children_collapse () =
           ignore
             (let* block = Runtime.invoke3 "thread-api/pull"
                  (Wire.String repo)
-                 (Wire.String "[:block/collapsed?]")
+                 (Wire.String "[:db/id :block/collapsed?]")
                  (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid u ]) in
              Ops.check_loader_result block;
              if Ops.context_current context then (
