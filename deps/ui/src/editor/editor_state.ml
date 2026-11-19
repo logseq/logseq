@@ -92,6 +92,7 @@ type t =
   { editing : editing option
   ; selected : String_set.t
   ; selection_scope : string
+  ; selected_footer : string option
   ; anchor : string option (* selection focus end for shift-arrow *)
   ; action_bar : bool
   ; collapsed : String_set.t
@@ -113,6 +114,7 @@ let initial =
   { editing = None
   ; selected = String_set.empty
   ; selection_scope = "main"
+  ; selected_footer = None
   ; anchor = None
   ; action_bar = false
   ; collapsed = String_set.empty
@@ -397,8 +399,8 @@ let selection_scope () = (selection_state ()).selection_scope
 let interaction_scope () =
   match editing () with Some e -> e.scope | None -> selection_scope ()
 let is_selected uuid = String_set.mem uuid (selected ())
-let is_selected_in_view ~scope uuid (owner_scope, selected) =
-  scope = owner_scope && String_set.mem uuid selected
+let is_selected_in_view ~scope:_ uuid (_, selected) =
+  String_set.mem uuid selected
 let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
 let is_expanded uuid = String_set.mem uuid (read ()).expanded
@@ -611,6 +613,13 @@ let original_owner_in_scope ~scope uuid =
   | None -> uuid, scope
 
 let original_uuid_in_scope ~scope uuid = fst (original_owner_in_scope ~scope uuid)
+
+let rec selection_owner_scope scope =
+  match block_source scope with
+  | Some source -> (match source.source_blocks () with
+      | {Model.block_original = Some (_, owner); _} :: _ -> selection_owner_scope owner
+      | _ -> scope)
+  | None -> scope
 
 let find uuid =
   match find_in (page_blocks ()) uuid with

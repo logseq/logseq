@@ -67,6 +67,7 @@ let modifier_select ev uuid =
   let meta = ev.Ui_services.meta || ev.Ui_services.ctrl in
   if not (shift || meta) then false
   else (
+    S.set (fun st -> {st with S.selected_footer = None});
     suppress_click := true;
     ev.Ui_services.prevent_default ();
     (if shift && meta then
@@ -137,7 +138,10 @@ let pointerdown ev =
         | Some uuid ->
             let scope = Editor_actions.scope_of_el block_el in
             S.set (fun st ->
-                if st.S.selection_scope = scope then st
+                if st.S.selection_scope = scope
+                   || ((ev.Ui_services.shift || ev.Ui_services.meta || ev.Ui_services.ctrl)
+                       && S.selection_owner_scope st.selection_scope = S.selection_owner_scope scope)
+                then st
                 else
                   {
                     st with
@@ -164,7 +168,8 @@ let pointermove ev =
     | Some anchor -> (
         match closest ".ls-block" ev.Ui_services.target with
         | Some block_el
-          when Editor_actions.scope_of_el block_el = S.selection_scope () -> (
+          when S.selection_owner_scope (Editor_actions.scope_of_el block_el)
+               = S.selection_owner_scope (S.selection_scope ()) -> (
             match block_el.Ui_services.attr "data-blockid" with
             | Some uuid when uuid <> anchor || !dragged ->
                 let range = Editor_actions.range_between anchor uuid in

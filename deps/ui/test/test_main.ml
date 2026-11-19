@@ -3955,7 +3955,40 @@ let test_scoped_keyboard_selection () =
         expect "Upward range retains explicit children when its direction reverses" expected)
         [true, ["c2"; "sibling"]; true, ["c1"; "c2"; "sibling"];
          true, ["parent"; "c1"; "c2"; "sibling"];
-         false, ["c1"; "c2"; "sibling"]])
+         false, ["c1"; "c2"; "sibling"]];
+      let linked = block ~children:[block "child" "Child"] "linked" "Linked" in
+      let linking = {(block "linking" "") with Model.block_link = Some 9;
+        block_embed_children = [linked]} in
+      let linked_page = {(block ~children:[linked; block "t2" "Tail"] "target" "Target") with
+        Model.block_is_page = true} in
+      let page_link = {(block "page-link" "") with Model.block_link = Some 10;
+        block_embed_children = [linked_page]} in
+      model_stub := {Model.initial with route_page = Some
+        (page [block "h1" "Head"; linking; page_link; block "h2" "Host tail"])};
+      S.extra_sources := [];
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "h1"; anchor = Some "h1"});
+      check "Selection visual order projects linked identities at host depth"
+        (A.flat_uuids () = ["h1"; "linked"; "child"; "target"; "linked"; "child"; "t2"; "h2"]);
+      check "Cross-embed range includes duplicate linked occurrences in visual order"
+        (A.range_between "child" "h2" = ["child"; "target"; "linked"; "child"; "t2"; "h2"]);
+      check "An unavailable visual range endpoint yields no selection"
+        (A.range_between "missing" "h2" = []);
+      List.iter (fun expected -> A.extend_selection false;
+        check "Shift-Down crosses projected embed subtrees using linked identities"
+          (A.selected_uuids () = expected))
+        [["h1"; "linked"]; ["h1"; "linked"; "target"]; ["h1"; "linked"; "target"; "h2"]];
+      A.extend_selection false;
+      check "Shift-Down selects the visual add-block footer without inventing a UUID"
+        ((S.read ()).S.selected_footer = (Option.get (!model_stub).Model.route_page).Model.page_uuid
+         && List.length (A.selected_uuids ()) = 4);
+      A.extend_selection true;
+      check "Shift-Up reverses footer selection before changing UUID membership"
+        ((S.read ()).S.selected_footer = None && List.length (A.selected_uuids ()) = 4);
+      check "Selection membership highlights a UUID in every scope"
+        (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.selected ()));
+      check "Empty selection does not highlight an embedded occurrence"
+        (not (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.String_set.empty))))
 
 (* ---- Update.update: remaining arm ---- *)
 
