@@ -1582,6 +1582,19 @@ a.page-title {
   display: revert;
 }
 
+/* cljs block-control hides an untitled middle block's dot until the
+   row shows its controls */
+.bullet-container[data-empty-bullet="true"] .bullet {
+  visibility: hidden;
+}
+
+.block-main-container:hover
+  > .block-control-wrap
+  .bullet-container[data-empty-bullet="true"]
+  .bullet {
+  visibility: visible;
+}
+
 .bullet-container {
   display: inline-flex;
   height: 1em;

@@ -255,6 +255,21 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
     "bullet-container cursor"
     ^ if order_list then " as-order-list typed-list" else ""
   in
+  (* cljs block-control: an untitled block between its first and last
+     sibling renders a bare .bullet-container until the row is hovered *)
+  let empty_bullet =
+    String.trim b.Model.block_title = ""
+    &&
+    match S.find_parent_in_scope ~scope uuid with
+    | Some (parent, i) ->
+        let siblings =
+          match parent with
+          | Some p -> S.children_of p
+          | None -> S.blocks_in_scope scope
+        in
+        i > 0 && i < List.length siblings - 1
+    | None -> false
+  in
   let heading_attrs =
     ( "data-has-children"
     , string_of_bool (b.block_children <> []) )
@@ -361,7 +376,8 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
                  if c && not order_list then Ui_components.block_bullet_ring
                  else "transparent") cs)
                ~data_attrs:
-                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ()))) ])
+                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
+                  ; ("data-empty-bullet", string_of_bool empty_bullet) ])
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
                   | None when order_list ->
@@ -407,7 +423,7 @@ let block_bg_css = function
   | "gray" -> "var(--ls-highlight-color-gray, #e8e8e8)"
   | c -> c
 
-let content_el uuid (b : Model.block) : t =
+let content_el ?highlight uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable. cursor:text in the style
      string is ignored by the native host; the cursor prop is what it
@@ -439,36 +455,41 @@ let content_el uuid (b : Model.block) : t =
                match Render.title_outer_kind b with
                | Some `block ->
                    [ column ~key:("bt-" ^ uuid) ~grow:1. ~min_width:0 ~cross:`stretch
-                       (Render.title_block ~self:uuid ~annot:true
+                       (Render.title_block ~self:uuid ~annot:true ?highlight
                           ~resolved:(S.title_for uuid b.block_title) b) ]
                | Some `flex ->
                    [ row ~key:("bt-" ^ uuid) ~grow:1.
-                       (Render.title_block ~self:uuid ~annot:true
+                       (Render.title_block ~self:uuid ~annot:true ?highlight
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
                    ]
                | Some `inline_flex ->
-                   [ row ~key:("bt-" ^ uuid)
-                       (Render.title_block ~self:uuid ~annot:true
-                          ~resolved:(S.title_for uuid b.block_title)
-                          b)
+                   [ Views_view.query_title_el ~block_uuid:uuid
+                       ~title:
+                         (if String.trim b.Model.block_title = "" then None
+                          else
+                            Some
+                              (row ~key:("bt-" ^ uuid)
+                                 (Render.title_block ~self:uuid ~annot:true ?highlight
+                                    ~resolved:(S.title_for uuid b.block_title)
+                                    b)))
                    ]
                | Some `inline ->
                    [ row ~key:("bt-" ^ uuid)
                        ~grow:(if block_heading_lvl b <> None then 1. else 0.)
-                       (Render.title_block ~self:uuid ~annot:true
+                       (Render.title_block ~self:uuid ~annot:true ?highlight
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
                    ]
                | None ->
-                   Render.title_block ~self:uuid ~annot:true
+                   Render.title_block ~self:uuid ~annot:true ?highlight
                      ~resolved:(S.title_for uuid b.block_title)
                      b))       ]
     ])
 
 let editor_el ?(cls = "") uuid scope : t = Editor_surface.mount ~cls uuid scope
 
-let content_wrapper ~scope ~editable uuid (b : Model.block) : t =
+let content_wrapper ?highlight ~scope ~editable uuid (b : Model.block) : t =
   (* cljs puts .block-content-wrapper only around display content;
      the editor replaces it directly under .block-row *)
   row ~key:("cw-" ^ uuid)
@@ -476,7 +497,7 @@ let content_wrapper ~scope ~editable uuid (b : Model.block) : t =
     ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
     [ Jump_state.target ~enabled:editable ~key:"content"
         ~owner:(Jump_state.owner ~scope ~container:uuid)
-        ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el uuid b)
+        ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el ?highlight uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
 
@@ -1116,7 +1137,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
    keeps the row from claiming the live row's DOM node on reconciliation —
    both are keyed ls-…/rfs-… on the same uuid but are distinct logical
    nodes. *)
-and block_row_static ?(depth = 0) ?(library = false) ~collapse_scope
+and block_row_static ?(depth = 0) ?(library = false) ?highlight ~collapse_scope
     ~persist_collapse (b : Model.block) : t =
  fun ctx parent ->
   (* references rows can be the first block render on a page (journals
@@ -1155,7 +1176,7 @@ and block_row_static ?(depth = 0) ?(library = false) ~collapse_scope
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
                                     [ Properties_area.block_left_chips ~scope:"reference" ~uuid
-                                    ; content_wrapper ~scope:"ref" ~editable:false uuid b
+                                    ; content_wrapper ?highlight ~scope:"ref" ~editable:false uuid b
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
                                         ~gap:4 ~cross:`center
@@ -1187,14 +1208,14 @@ and block_row_static ?(depth = 0) ?(library = false) ~collapse_scope
         ]
     ; Properties_area.block_area ~scope:"reference" ~uuid
     ; (if has_children then
-         children_static_el ~depth ~library ~collapse_scope ~persist_collapse
-           ~on_toggle uuid b
+         children_static_el ~depth ~library ?highlight ~collapse_scope
+           ~persist_collapse ~on_toggle uuid b
        else Logseq_el.nothing)
     ]))))
   ctx parent
 
-and children_static_el ~depth ~library ~collapse_scope ~persist_collapse
-    ~on_toggle uuid (b : Model.block) : t =
+and children_static_el ~depth ~library ?highlight ~collapse_scope
+    ~persist_collapse ~on_toggle uuid (b : Model.block) : t =
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
   let collapsed = Logseq_el.own ctx (collapsed_sig ~scope:collapse_scope b) in
@@ -1202,8 +1223,8 @@ and children_static_el ~depth ~library ~collapse_scope ~persist_collapse
     (children_container ~on_toggle ~library uuid bs
        (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
           (List.map
-             (block_row_static ~depth:(depth + 1) ~library ~collapse_scope
-                ~persist_collapse)
+             (block_row_static ~depth:(depth + 1) ~library ?highlight
+                ~collapse_scope ~persist_collapse)
              b.block_children)))
     ctx parent
 
@@ -1350,8 +1371,8 @@ let () = Render_state.page_embed := page_embed
    the blocks layer directly (cycle via comments -> render -> views) *)
 let () =
   Render_state.block_row_static :=
-    (fun ~collapse_scope ~persist_collapse b ->
-      block_row_static ~collapse_scope ~persist_collapse b)
+    (fun ?highlight ~collapse_scope ~persist_collapse b ->
+      block_row_static ?highlight ~collapse_scope ~persist_collapse b)
 
 (* Named signal arguments let a projected row borrow its live block and
    depth through the reactive prop form without remounting its editor. *)

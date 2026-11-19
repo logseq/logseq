@@ -30,6 +30,7 @@ let page_embed : (string -> Lui_elements.t) ref =
    Registered by tree.ml — views_table cannot import the blocks layer
    (cycle via comments -> render -> views). *)
 let block_row_static :
-    (collapse_scope:string -> persist_collapse:bool -> Model.block -> Lui_elements.t) ref
-    = ref (fun ~collapse_scope:_ ~persist_collapse:_ _ ->
+    (?highlight:string -> collapse_scope:string -> persist_collapse:bool ->
+     Model.block -> Lui_elements.t) ref
+    = ref (fun ?highlight:_ ~collapse_scope:_ ~persist_collapse:_ _ ->
         Logseq_el.el ~tag:"div" ~style_class:"ls-block" [])

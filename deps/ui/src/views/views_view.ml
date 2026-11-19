@@ -266,32 +266,34 @@ let query_setting_el inst : t =
     [ tooltip ~key:"query-setting-tip" ~text:label ~anchor:`above
         ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500 [] ]
 
-let query_builder_header inst (s : V.vstate) : t =
-  let builder =
-    match Views_query.parse_src_result s.V.qsrc with
-    | Error _ -> []
-    | Ok (Views_query.QDatalog query) ->
-        [text ~font_weight:500
-           ~value:(Option.value (W.map_get_string query "title")
-             ~default:(I.t "block/untitled-query")) []]
-    | Ok _ ->
-        if s.V.is_advanced then []
-        else [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ]
+let query_builder_el inst (s : V.vstate) : t =
+  let untitled =
+    Ui_components.with_props
+      [ Ui_components.Prop.opacity 0.75; Ui_components.Prop.hover_opacity 1. ]
+      (text ~font_size:"1rem" ~value:(I.t "block/untitled-query") [])
   in
-  let settings =
-    if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
-      [ query_setting_el inst ]
-    else []
-  in
-  row ~key:"query-builder-header" ~style_class:"block-head-wrap"
-    ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap (builder @ settings)
+  match Views_query.parse_src_result s.V.qsrc with
+  | Ok (Views_query.QDatalog query) -> (
+      match W.map_get_string query "title" with
+      | Some title -> text ~font_weight:500 ~value:title []
+      | None -> untitled)
+  | _ when s.V.is_advanced -> untitled
+  | Error _ -> D.nothing
+  | Ok _ ->
+      row ~key:"query-builder-header" ~style_class:"block-head-wrap"
+        ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap
+        [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ]
+
+let query_settings_el inst (s : V.vstate) : t =
+  if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
+    query_setting_el inst
+  else D.nothing
 
 let query_view_el inst : t =
   Logseq_el.fragment
     [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
         [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
-            [ reactive ~equal:body_eq (query_builder_header inst) (sig_of inst)
-            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b
+            [ reactive ~equal:(fun a b -> query_content_key a=query_content_key b
                 && (a.V.query_view = W.Nil || a.V.blocks == b.V.blocks))
                 (query_content inst) (sig_of inst)
             ]
@@ -1075,36 +1077,56 @@ let query_insts : (string * string, V.inst) Hashtbl.t = Hashtbl.create 8
    broadcast; an inst leaves the table when its host unmounts *)
 let live : (int, V.inst) Hashtbl.t = Hashtbl.create 16
 
+let query_inst ~sched ~kind ~owner block_uuid =
+  let repo = Runtime.repo () in
+  match Hashtbl.find_opt query_insts (repo, block_uuid) with
+  | Some inst ->
+      if !(inst.V.data_context_revision) <>
+          (Runtime.model ()).Model.context_revision then begin
+        incr inst.V.data_gen;
+        Signal.set inst.V.st (V.table_clear_selection (V.get inst))
+      end;
+      (inst, false)
+  | None ->
+      let inst =
+        V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
+      in
+      Hashtbl.replace query_insts (repo, block_uuid) inst;
+      (* staged, not flushed — V.update flushes, and a flush inside
+         the element mount corrupts the pending op stream *)
+      Signal.set inst.V.st
+        { (V.get inst) with
+          V.is_advanced =
+            (let t = String.trim (V.get inst).V.qsrc in
+             String.length t > 0 && t.[0] = '{')
+        ; view_uuid = block_uuid
+        };
+      (inst, true)
+
+(* cljs block-title-aux: a class-Query block's title row carries the
+   query builder (or "Untitled query" for advanced queries) when the
+   title is blank, followed by the query-setting button *)
+let query_title_el ~block_uuid ~(title : t option) : t =
+ fun ctx parent ->
+  let kind = V.KQuery { block_uuid } in
+  let inst, _ =
+    query_inst ~sched:ctx.Lui_ui.ui_scheduler ~kind
+      ~owner:(W.Uuid block_uuid) block_uuid
+  in
+  row ~key:"query-title" ~cross:`center ~gap:4 ~min_width:0
+    [ (match title with
+       | Some t -> t
+       | None -> reactive ~equal:body_eq (query_builder_el inst) (sig_of inst))
+    ; reactive ~equal:body_eq (query_settings_el inst) (sig_of inst)
+    ] ctx parent
+
 let view_with_virtualization ~virtualize ~kind ~owner : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
   let repo = Runtime.repo () in
   let inst, fresh =
     match kind with
-    | V.KQuery { block_uuid } -> (
-        match Hashtbl.find_opt query_insts (repo, block_uuid) with
-        | Some inst ->
-            if !(inst.V.data_context_revision) <>
-                (Runtime.model ()).Model.context_revision then begin
-              incr inst.V.data_gen;
-              Signal.set inst.V.st (V.table_clear_selection (V.get inst))
-            end;
-            (inst, false)
-        | None ->
-            let inst =
-              V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
-            in
-            Hashtbl.replace query_insts (repo, block_uuid) inst;
-            (* staged, not flushed — V.update flushes, and a flush inside
-               the element mount corrupts the pending op stream *)
-            Signal.set inst.V.st
-              { (V.get inst) with
-                V.is_advanced =
-                  (let t = String.trim (V.get inst).V.qsrc in
-                   String.length t > 0 && t.[0] = '{')
-              ; view_uuid = block_uuid
-              };
-            (inst, true))
+    | V.KQuery { block_uuid } -> query_inst ~sched ~kind ~owner block_uuid
     | _ ->
         (V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner, true)
   in

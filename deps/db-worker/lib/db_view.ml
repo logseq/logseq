@@ -1572,7 +1572,7 @@ let build_fast_filter_pred db (filters : view_filters) (input : string) :
 let row_matched db (row : entity) (filters : view_filters) (input : string) : bool =
   let title_ok =
     Unicode.trim input = ""
-    || (match Ldb.string_value row "block/title" with
+    || (match Db_content.block_title row with
         | Some t -> contains_substring (lowercase t) (lowercase input)
         | None -> false)
   in

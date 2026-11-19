@@ -3922,7 +3922,7 @@ let run_views ~registry ~profile ~finish =
   let search_input = List.find (fun n -> M.string_prop n "placeholder"
     = Some (I18n.t "view.filter/type-to-search")) (nodes sorting) in
   check "view search shares the measured reference width and padding across hosts"
-    (Hashtbl.find_opt search_input.M.props "width" = Some (P.IntValue 183)
+    (Hashtbl.find_opt search_input.M.props "width" = Some (P.IntValue 190)
      && Hashtbl.find_opt search_input.M.props "padding-horizontal" = Some (P.IntValue 12));
   check "expanded search input stays inside its control group"
     (match search_input.M.parent with

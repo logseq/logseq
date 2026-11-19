@@ -1379,9 +1379,7 @@ let table_header ?rows inst cols : t =
          | None -> [])
       @ [ dnd_described "1"; dnd_live "1" ]
     in
-    match add_property with
-    | Some _ -> row ~grow:1. items
-    | None -> row items
+    row ~grow:1. items
   in
   Ui_components.with_props
     [ Ui_components.Prop.padding_top 1
@@ -1521,10 +1519,17 @@ let list_row_el inst ~row_uuid ~blk : t =
       | Some (W.Int n) -> n | None -> 2
       | Some _ -> invalid_arg "Reference open depth must be an integer" in
     let rec with_depth level (b : Model.block) =
-      { b with Model.block_default_collapsed = b.block_default_collapsed || level >= limit
+      { b with Model.block_default_collapsed =
+          b.block_default_collapsed || (level >= limit && b.block_children <> [])
       ; block_children = List.map (with_depth (level + 1)) b.block_children } in
     with_depth 1 b in
-  !Render_state.block_row_static
+  let highlight =
+    match inst.V.kind, (Runtime.model ()).Model.route_page with
+    | V.KUnlinkedRefs, Some page when String.trim page.Model.page_title <> "" ->
+        Some page.Model.page_title
+    | _ -> None
+  in
+  !Render_state.block_row_static ?highlight
     ~collapse_scope:inst.V.collapse_scope ~persist_collapse b
 
 let row_title s u =
@@ -1574,10 +1579,10 @@ let foldable inst ~key ~title ~(body : t) : t =
                        [ Ui_components.Prop.cursor `pointer
                        ; Ui_components.Prop.hover_opacity 1. ]
                        (Ui_parts.float_prop L.Opacity
-                        ~value:(reactive (fun h c -> if h || c then 1. else 0.)
+                        ~value:(reactive (fun h c -> if h || c then 0.4 else 0.)
                           (Signal.value hovered) collapsed_sig)
                        (Ui_components.foldable_control
-                          [icon ~key:"caret" ~point_size:13
+                          [icon ~key:"caret" ~point_size:16
                              ~name:(reactive (fun c -> `app (if c then
                                "rotating-arrow" else "rotating-arrow-down")) collapsed_sig) []])))
                 ; title ] ]
@@ -1593,10 +1598,18 @@ let foldable inst ~key ~title ~(body : t) : t =
                [ body ] ]) ])
     ctx parent
 
+(* the worker encodes a nil group value as {:kind :empty} *)
+let empty_group_value gv =
+  match gv with
+  | W.Nil -> true
+  | W.Map _ -> W.get gv "kind" = Some (W.Keyword "empty")
+  | _ -> false
+
 let group_title inst s gv =
   let missing_group () =
     I.no_group_value (Option.value s.V.group_by ~default:"")
   in
+  let gv = if empty_group_value gv then W.Nil else gv in
   match Wr.group_value_uuid gv with
   | Some uuid ->
       if Hashtbl.mem s.V.blocks uuid || Hashtbl.mem s.V.ref_titles uuid then
@@ -1723,22 +1736,73 @@ let ref_breadcrumb inst uuid : t =
   let alive () = current () && not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope) in
   ignore (Js.Promise.then_ (fun blocks ->
     if alive () then begin
-      Signal.set parents (List.filter (fun (b : Model.block) -> not b.block_is_page) blocks);
+      (* the group header already names the owning page; deeper page
+         ancestors (e.g. a property-value block's property) stay *)
+      Signal.set parents
+        (match blocks with
+         | (root : Model.block) :: rest when root.block_is_page -> rest
+         | _ -> blocks);
       Ui_services.request_flush ()
     end;
     Js.Promise.resolve ()) (Outliner_ops.fetch_zoom_parents (Runtime.repo ()) uuid)
     |> Views_db.catch_quiet);
-  (reactive (fun blocks ->
-    if blocks = [] then Logseq_el.nothing else
+  (* cljs block-breadcrumb appends the created-from-property entity
+     (e.g. the Query property of a query's value block) *)
+  let property_seg = Signal.state ctx.Lui_ui.ui_scheduler None in
+  ignore (Js.Promise.then_ (fun w ->
+    (match Wire.get w "logseq.property/created-from-property" with
+     | Some prop when alive () -> (
+         match Wire.map_get_string prop "block/title",
+               Wire.map_get_uuid prop "block/uuid" with
+         | Some title, Some prop_uuid ->
+             Signal.set property_seg (Some (title, prop_uuid));
+             Ui_services.request_flush ()
+         | _ -> ())
+     | _ -> ());
+    Js.Promise.resolve ())
+    (Runtime.invoke3 "thread-api/pull" (Wire.String (Runtime.repo ()))
+       (Wire.String
+          "[{:logseq.property/created-from-property [:block/uuid :block/title]}]")
+       (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ]))
+    |> Views_db.catch_quiet);
+  (reactive (fun blocks property ->
+    let crumb ~text ~url children =
+      link ~url ~target:`self_ ~foreground:"var(--ls-primary-text-color)"
+        ?text children
+    in
+    (* cljs breadcrumb segment-label: query blocks show only their
+       structural search icon, untitled blocks a point-filled one *)
+    let segment_icon name =
+      Ui_components.with_props [Ui_components.Prop.opacity 0.7]
+        (icon ~name:(Icons.name_ref name) ~point_size:12 [])
+    in
+    let block_crumb (b : Model.block) =
+      let query_parent =
+        List.exists (fun t -> List.mem t b.Model.block_tag_idents)
+          [ "logseq.class/Query"; "logseq.class/Cards" ]
+      in
+      let url = "#/page/" ^ Option.get b.block_uuid in
+      if query_parent then crumb ~text:None ~url [segment_icon "search"]
+      else if String.trim b.block_title = "" then
+        crumb ~text:None ~url [segment_icon "point-filled"]
+      else crumb ~text:(Some b.block_title) ~url []
+    in
+    let crumbs =
+      List.map block_crumb blocks
+      @ (match property with
+         | Some (title, prop_uuid) ->
+             [crumb ~text:(Some title) ~url:("#/page/" ^ prop_uuid) []]
+         | None -> [])
+    in
+    if crumbs = [] then Logseq_el.nothing else
     Ui_components.with_props
       [Ui_components.Prop.font_size "14px"; Ui_components.Prop.opacity 0.7;
        Ui_components.Prop.hover_opacity 1.]
-    (row ~margin_left:16 ~margin_top:4 ~gap:4 ~cross:`center
-      (List.concat (List.mapi (fun i (b : Model.block) ->
-        (if i = 0 then [] else [text ~value:"/" []]) @
-        [link ~text:(if b.block_is_query then I.t "property.built-in/query" else b.block_title)
-           ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_ []]) blocks))))
-    (Signal.value parents)) ctx parent
+    (row ~margin_left:16 ~margin_top:8 ~gap:4 ~cross:`center ~min_height:21
+      (List.concat (List.mapi (fun i el ->
+        (if i = 0 then [] else [Ui_components.with_props [Ui_components.Prop.opacity 0.5] (text ~value:"/" [])]) @
+        [el]) crumbs))))
+    (Signal.value parents) (Signal.value property_seg)) ctx parent
 
 let ref_header inst ~key ~title : t =
  fun ctx parent ->
@@ -1757,11 +1821,14 @@ let ref_header inst ~key ~title : t =
                      V.Sset.remove key st.V.collapsed_groups
                    else V.Sset.add key st.V.collapsed_groups)
               }))
-        (Ui_parts.float_prop L.Opacity
-           ~value:(reactive (fun h -> if h || collapsed then 1. else 0.) (Signal.value hovered))
-           (Ui_components.foldable_control
-              [icon ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down"))
-                 ~point_size:13 []]))
+        (Ui_components.with_props
+           [ Ui_components.Prop.cursor `pointer
+           ; Ui_components.Prop.hover_opacity 1. ]
+           (Ui_parts.float_prop L.Opacity
+              ~value:(reactive (fun h -> if h || collapsed then 0.4 else 0.) (Signal.value hovered))
+              (Ui_components.foldable_control
+                 [icon ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down"))
+                    ~point_size:16 []])))
     ; title ] ctx parent
 
 (* One virtual row per header and per block, so a collapsed group drops
@@ -1785,7 +1852,7 @@ let ref_grouped_list_lines inst (s : V.vstate)
     let key = "g" ^ string_of_int i in
     let title = group_title inst s g.Wr.glv in
     let header = ref_header inst ~key
-        ~title:(if g.Wr.glv = W.Nil then
+        ~title:(if empty_group_value g.Wr.glv then
           text ~font_size:"14px" ~foreground:"hsl(var(--muted-foreground))" ~value:title []
         else link ~url:("#/page/" ^ Ui_services.uri_encode_component title)
           ~target:`self_ ~style_class:"page-ref" ~text:title []) in

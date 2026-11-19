@@ -228,6 +228,9 @@ let sorting_popup inst anchor =
     V.persist_sorting inst;
     refresh inst
   in
+  let sort_order_id col_id =
+    Printf.sprintf "view-%d-sort-order-%s" inst.V.id col_id
+  in
   let order_select so_s context parent =
     let opened = Signal.state context.Lui_ui.ui_scheduler false in
     let close () = Runtime.signal_set opened false in
@@ -259,7 +262,8 @@ let sorting_popup inst anchor =
     let so = Signal.sample so_s in
     let c = List.find (fun c -> c.V.c_id = so.V.s_id) s.V.columns in
     row ~style_class:"ls-sort-row" ~cross:`center ~main:`space_between ~gap:8
-      ~padding_horizontal:8
+      ~padding_horizontal:8 ~accessibility_identifier:(sort_order_id so.V.s_id)
+      ~data_attrs:[ ("tabindex", "0") ]
       [ row ~cross:`center ~gap:4
           [ icon ~name:(Icons.name_ref "grip-vertical") ~point_size:14 []
           ; text ~value:(c.V.c_name ^ ":") ~white_space:"nowrap"
@@ -274,9 +278,20 @@ let sorting_popup inst anchor =
                  ~label:(I.t "view.table/delete-sort") ~icon:(Icons.name_ref "x")
                  ~on_press:(fun _ -> remove_sort (Signal.get so_s)) []) ] ]
   in
+  (* cljs focuses the first sort row itself when the popup opens *)
+  (match (V.get inst).V.sorting with
+   | first :: _ ->
+       ignore
+         (Ui_services.timers_timeout
+            (fun () ->
+              match Ui_services.dom_by_id (sort_order_id first.V.s_id) with
+              | Some el -> el.Ui_services.focus ()
+              | None -> ())
+            0)
+   | [] -> ());
   P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
     (Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
-       (column ~gap:8 ~padding_vertical:8 ~width:310
+       (column ~gap:8 ~padding_vertical:8 ~width:270
           [ keyed
               ~source:(reactive (fun state ->
                 List.filter (fun so ->
@@ -676,8 +691,8 @@ let display_type_el inst : t =
             refresh inst
           in
           ignore
-            (P.show_select ~anchor ~align_end:true
-               ~placeholder:(I.t "property.built-in/view-type")
+            (P.show_select ~anchor
+               ~placeholder:(I.tf "property/set-placeholder" [ I.t "property.built-in/view-type" ])
                ~show_check:true ~selected_values:[(V.get inst).V.display_type]
                ~item_icon:(fun item -> Some (Icons.name_ref (match item.P.si_value with
                  | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table")))
@@ -737,7 +752,7 @@ let search_items inst : t list =
               target.Ui_services.closest ("#" ^ input_id) <> None) ev.target then begin
            ev.prevent_default ();
            ev.stop_immediate ();
-           V.update inst (fun s -> {s with V.input = ""; search_open = false});
+           V.update inst (fun s -> {s with V.input = ""; search_open = false; fetch_limit = 0});
            refresh inst
          end);
      if_ ~test:(open_cond ctx)
@@ -750,13 +765,13 @@ let search_items inst : t list =
           (Ui_components.input ~accessibility_identifier:input_id
              ~placeholder:(I.t "view.filter/type-to-search")
              ~text:(reactive (fun (s : V.vstate) -> s.V.input) (sig_of inst))
-             ~width:183 ~height:28 ~autofocus:true ~border_width:0
+             ~width:190 ~height:28 ~autofocus:true ~border_width:0
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
              ~on_input:(fun ev ->
                match ev with
                | L.TextChanged (_, v) ->
                    let view_uuid = (V.get inst).V.view_uuid in
-                   V.update inst (fun s -> { s with V.input = v });
+                   V.update inst (fun s -> { s with V.input = v; fetch_limit = 0 });
                    deb (fun () ->
                        let s = V.get inst in
                        if not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
@@ -774,7 +789,7 @@ let search_items inst : t list =
      if_ ~test:(open_cond ctx)
        (ghost_btn "x" ~title_:(I.t "ui/close") ~on_click:(fun () ->
           V.update inst (fun s ->
-              { s with V.input = ""; search_open = false });
+              { s with V.input = ""; search_open = false; fetch_limit = 0 });
           refresh inst))
        ctx parent)
   ]
@@ -1148,16 +1163,17 @@ let ref_filter_dialog ~owner_scope inst anchor =
       ignore (Ui_effect.timeout ~scope 0 refresh_counts);
       let ref_button title count_opt =
         Ui_components.with_props
-          [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px" ]
+          [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px"
+          ; Ui_components.Prop.font_weight 500 ]
           ((* ls-ref-btn keeps its class as the imperative hook *)
            Ui_components.with_props
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
              (Ui_components.button ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
-                ~height:22 ~min_height:22
-                ~padding_vertical:2 ~padding_horizontal:8
-                ~background:"transparent" ~style_class:"ls-ref-btn"
+                ~height:24 ~min_height:24
+                ~padding_vertical:0 ~padding_horizontal:12
+                ~background:"var(--ls-primary-background-color)" ~style_class:"ls-ref-btn"
                 ~foreground:"inherit"
                 ~border_color:"var(--ls-border-color, hsl(var(--border)))"
              ~on_press_detail:(fun ev ->
@@ -1200,7 +1216,9 @@ let ref_filter_dialog ~owner_scope inst anchor =
       let chip_rows =
         reactive
           (fun s ->
-            box ~display:`contents
+            if s.V.ref_includes = [] && s.V.ref_excludes = [] then D.nothing
+            else
+            column ~style_class:"cp__filters" ~margin_bottom:16 ~margin_left:8
               ((if s.V.ref_includes <> [] then
                   [ chip_row (I.t "reference.filter/includes")
                       s.V.ref_includes ]
@@ -1260,24 +1278,25 @@ let ref_filter_dialog ~owner_scope inst anchor =
                  [ heading ~level:3 ~font_size:"1.125rem"
                      ~line_height:"1.5rem" ~font_weight:500
                      ~value:(I.t "reference.filter/title") []
-                 ; text ~font_size:"0.75rem"
+                 ; text ~font_size:"0.75rem" ~line_height:"1.5rem"
                      ~value:(I.t "reference.filter/directions") [] ]
              ]
-         ; (* cp__filters keeps its class — the :empty rule is a
-              leftover hook *)
-           column ~style_class:"cp__filters" ~margin_bottom:16
-             ~margin_left:8 [ chip_rows ]
-         ; row ~cross:`center ~gap:0 ~padding_vertical:0
-             ~padding_horizontal:8 ~corner_radius:4
+         ; chip_rows
+         ; Ui_components.with_props [ Ui_components.Prop.padding_left 8 ] @@
+           row ~cross:`center ~gap:0 ~corner_radius:4 ~padding_vertical:0
              ~background:"var(--ls-primary-background-color)"
              ~style_class:"cp__filters-input-panel"
-             ~foreground:
-               "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
              [ icon ~name:(Icons.name_ref "search")
                  ~style_class:"ls-icon-search" []
-             ; (Ui_components.input ~style_class:"cp__filters-input"
+             ; Ui_components.with_props
+                 [ Ui_components.Prop.font_size "1rem"
+                 ; Ui_components.Prop.focus_shadow
+                     "0 0 0 1px oklch(0.546 0.245 262.881)" ]
+               (Ui_components.input ~style_class:"cp__filters-input"
                     ~padding:8 ~height:42 ~min_height:42
-                    ~grow:1. ~background:"transparent" ~border_width:0
+                    ~grow:1. ~background:"transparent" ~border_width:1
+                    ~border_color:"var(--ls-border-color, hsl(var(--border)))"
+                    ~corner_radius:0
                     ~text:(reactive Fun.id (Signal.value draft))
                     ~kind:`text ~accessibility_identifier:input_id
                     ~placeholder:(I.t "reference.filter/search-placeholder")
@@ -1386,7 +1405,8 @@ let render_head inst : t =
     ~style_class:
       "ls-view-head"
     ~cross:`center ~main:`space_between ~gap:4
-    ~height:28 ~min_width:0 ~grow:1.
+    ~height:(match inst.V.kind with V.KQuery _ -> 24 | _ -> 28)
+    ~min_width:0 ~grow:1.
     [ row ~style_class:"ls-view-head-left" ~cross:`center ~gap:8
         [ (match inst.V.kind with
            | V.KQuery _ ->

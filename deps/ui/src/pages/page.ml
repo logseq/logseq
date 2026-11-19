@@ -839,10 +839,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
 
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
-    Ui_components.foldable_control ~key
+    Ui_components.with_props
+      [ Ui_components.Prop.opacity 0.4; Ui_components.Prop.hover_opacity 1. ]
+    @@ Ui_components.foldable_control ~key
       [ box ~key:"ch"
           ~style_class:(if collapsed then "" else "control-hide")
-          [ icon ~key:(key ^ "-svg") ~point_size:13
+          [ icon ~key:(key ^ "-svg") ~point_size:16
               ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down")) []
           ]
       ]
@@ -1415,7 +1417,7 @@ let unlinked_refs_el (m : Model.t) : t =
       (* cljs when-not class-page?/property-page? — the unlinked
          section is omitted entirely on node pages *)
       if page.page_is_tag || page.page_is_property then Logseq_el.nothing
-      else box ~key:"urefs" ~margin_left:4 ~margin_top:24 [ unlinked_references_view m ]
+      else box ~key:"urefs" ~margin_left:4 ~margin_top:30 [ unlinked_references_view m ]
 
 (* Class and property objects share the same panel spacing in every container. *)
 let object_tabs_el ~key_prefix (page : Model.page) : t =
