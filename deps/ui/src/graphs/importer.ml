@@ -68,9 +68,9 @@ let finish_import repo =
 let ask_name_and_run ?(restored=false) run =
   Dialogs_state.prompt ~title:(T.t "import/new-graph-name") ~on_submit:(fun name ->
       let name = String.trim name in
-      if name = "" then Toast.warning (T.t "import/empty-graph-name")
-      else if Graphs_ops.invalid_chars name <> [] then
-        Toast.warning (Printf.sprintf "%s \"%s\"" (T.t "graph.validation/name-invalid") name)
+      if name = "" then Toast.error (T.t "import/empty-graph-name")
+      else if Graphs_ops.invalid_name name then
+        Graphs_ops.warn_invalid_name ()
       else if Graphs_ops.already_exists name then
         Toast.error (T.already_exists name)
       else (

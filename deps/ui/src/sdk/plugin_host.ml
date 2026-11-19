@@ -58,6 +58,23 @@ let rec json_to_js : Json.t -> Js.Json.t = function
   | Json.Object kvs -> jobj (List.map (fun (k, v) -> (k, json_to_js v)) kvs)
 let jstr_ s = Js.Json.string s
 
+external on_plugin_log_change : Js.Json.t -> string -> (unit -> unit) -> unit = "on" [@@mel.send]
+external off_plugin_log_change : Js.Json.t -> string -> (unit -> unit) -> unit = "off" [@@mel.send]
+
+let plugin_logs id =
+  let entries = meth (core ()) "getPluginLogs" [| jstr_ id |] in
+  Option.fold ~none:[] ~some:Array.to_list (Js.Json.decodeArray entries)
+
+let clear_plugin_logs id = ignore (meth (core ()) "clearPluginLogs" [| jstr_ id |])
+
+let watch_plugin_logs ~scope id listener =
+  let logger = meth (core ()) "getPluginLogger" [| jstr_ id |] in
+  match Js.Json.decodeObject logger with
+  | None -> ()
+  | Some _ ->
+      on_plugin_log_change logger "change" listener;
+      Signal.on_dispose scope (fun () -> off_plugin_log_change logger "change" listener)
+
 (* JSON.stringify(j, null, 2) — the code-mode settings editor's
    pretty-printed view of the settings object *)
 let json_pretty : Js.Json.t -> string =
@@ -243,7 +260,10 @@ let on_lsp_update (e : Js.Json.t) =
       let id = jstr payload "id" in
       if jbool e "onlyCheck" then (
         let v = jstr payload "latest-version" in
-        if id <> "" && v <> "" then (
+        let current =
+          Option.map (fun pl -> jstr (getf pl "options") "version")
+            (Js.Dict.get installed id) in
+        if id <> "" && v <> "" && current <> Some v then (
           Hashtbl.replace updates id v;
           bump ()))
       else if id <> "" then
@@ -335,7 +355,8 @@ let marketplace_url =
 external resp_json : Js.Json.t -> Js.Json.t Js.Promise.t = "json" [@@mel.send]
 external fetch_ : string -> Js.Json.t Js.Promise.t = "fetch" [@@mel.scope "window"]
 
-let marketplace_pkgs owner =
+let marketplace_pkgs ?(refresh = false) owner =
+  if refresh then marketplace := None;
   match !marketplace with
   | Some p -> p
   | None ->
@@ -389,7 +410,8 @@ type pkg_stat = { stars : int; downloads : int }
 
 let marketplace_stats : Js.Json.t Js.Promise.t option ref = ref None
 
-let fetch_stats () =
+let fetch_stats ?(refresh = false) () =
+  if refresh then marketplace_stats := None;
   match !marketplace_stats with
   | Some p -> p
   | None ->
@@ -431,6 +453,12 @@ let package_stat stats id =
             | None -> 0
           in
           Some { stars; downloads })
+
+let last_auto_updates_key = "lsp-last-auto-updates"
+let supports_auto_updates = true
+let auto_updates () = Ui_services.storage_get last_auto_updates_key <> Some "false"
+let set_auto_updates enabled =
+  Ui_services.storage_set last_auto_updates_key (string_of_bool enabled)
 
 let r2_entry_url repo version =
   "https://plugins.logseq.io/r2/" ^ repo ^ "/" ^ version
@@ -1211,6 +1239,27 @@ let installed_version pid =
   | Some pl -> jstr (getf pl "options") "version"
   | None -> ""
 
+let auto_check_updates () =
+  let now = Js.Date.now () in
+  let last = Option.bind (Ui_services.storage_get last_auto_updates_key) float_of_string_opt in
+  if Ui_services.env_online () && auto_updates ()
+     && Option.fold ~none:true ~some:(fun last -> now -. last > 43_200_000.) last
+  then begin
+    Js.Dict.entries installed |> Array.to_list
+    |> List.filter_map (fun (id, pl) ->
+        if jbool pl "disabled" then None else
+        let manifest = meth pl "toJSON" [| Js.Json.boolean false |] in
+        let repo =
+          match Js.Json.decodeObject (getf manifest "webPkg") with
+          | Some _ -> jstr (getf manifest "webPkg") "repo"
+          | None -> "" in
+        let repo = if repo = "" then jstr manifest "repo" else repo in
+        if repo = "" then None else Some (id, repo))
+    |> List.take 16
+    |> List.iter (fun (id, repo) -> check_or_update id repo true);
+    Ui_services.storage_set last_auto_updates_key (string_of_float now)
+  end
+
 let diagnostic_plugins () =
   Array.to_list (Js.Dict.keys installed) |> List.map (fun id -> id,installed_version id)
 
@@ -1566,6 +1615,7 @@ let setup () =
     (Web_dom.js_call2 (getf window_ "apis") "addListener"
        (jstr_ "lsp-updates") on_lsp_update);
   boot_register ();
+  ignore (Ui_services.timers_timeout auto_check_updates 60_000);
   (* cljs frontend/modules/layout/core.cljs — interact.js drag/resize
      helpers the LSPlugin user class pulls off window.frontend.modules
      .layout.core for its main UI window *)

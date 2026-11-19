@@ -212,12 +212,14 @@ let members_st ctx =
 
 (* dialog body — cljs dialog content: [:div.p-2.-mb-8
    [:h1.text-3xl.-mt-2.-ml-2 "Members:"] (settings-collaboration)] *)
-let body (_ms : Model.t Signal.signal) : t =
+let members_view ~in_settings : t =
  fun ctx parent ->
   let members_st = members_st ctx in
   let email_st = Signal.state ctx.Lui_ui.ui_scheduler "" in
+  let repo = (Runtime.model ()).Model.repo in
+  let graph_uuid = ref (if in_settings then None else !Rtc_flows.db_rtc_uuid) in
   let graph () =
-    (Runtime.model ()).Model.repo, !Rtc_flows.db_rtc_uuid
+    repo, !graph_uuid
   in
   let rec refresh () =
     match graph () with
@@ -250,17 +252,26 @@ let body (_ms : Model.t Signal.signal) : t =
     | _ -> ()
   in
   (* mount-time fetch replaces the old 32ms defer-to-DOM timer *)
-  refresh ();
+  (match in_settings, repo with
+   | true, Some repo ->
+       Ui_effect.task ~scope:ctx.ui_scope
+         (Subs_state.task_of_promise
+            (Runtime.invoke1 "thread-api/get-rtc-graph-uuid" (Wire.String repo)))
+         ~ok:(fun result -> graph_uuid := Wire.as_uuid result; refresh ())
+         ~error:(fun err -> Ui_services.log_error ("Could not load graph ID", err))
+   | _ -> refresh ());
   (* own the derived source to the view scope: a bare Signal.map stays
      subscribed upstream after unmount and leaks computations *)
   let members_src =
     Logseq_el.own ctx (Signal.map fst (Signal.value members_st))
   in
-  column ~key:"collab" ~padding:8 ~margin_bottom:(-32)
-    [ heading ~key:"collab-h" ~level:1 ~font_size:"1.875rem"
-        ~data_attrs:[ ("style", "margin-top:-8px;margin-left:-8px") ]
-        ~value:(T.t "collaboration/members") []
-    ; column ~key:"collab-w"
+  column ~key:"collab" ~padding:(if in_settings then 0 else 8)
+    ~margin_bottom:(if in_settings then 0 else -32)
+    ((if in_settings then [] else
+        [ heading ~key:"collab-h" ~level:1 ~font_size:"1.875rem"
+            ~margin_top:(-8) ~margin_left:(-8)
+            ~value:(T.t "collaboration/members") [] ])
+    @ [ column ~key:"collab-w"
         ~style_class:"panel-wrap" ~margin_bottom:32
         [ column ~key:"collab-m" ~gap:8 ~margin_top:16
             [ column ~key:"collab-users" ~gap:4
@@ -276,7 +287,7 @@ let body (_ms : Model.t Signal.signal) : t =
                       in
                       member_row ~manager
                         ~uuid:
-                          (Option.value !Rtc_flows.db_rtc_uuid
+                          (Option.value !graph_uuid
                              ~default:"")
                         m ~refresh)
                 ]
@@ -299,8 +310,11 @@ let body (_ms : Model.t Signal.signal) : t =
                 ]
             ]
         ]
-    ]
+    ])
     ctx parent
+
+let body (_ms : Model.t Signal.signal) = members_view ~in_settings:false
+let settings_body = members_view ~in_settings:true
 
 (* ---------- header widget (.rtc-collaborators) ---------- *)
 

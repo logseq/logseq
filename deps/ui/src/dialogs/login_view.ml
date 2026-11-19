@@ -457,12 +457,15 @@ let submit_btn fields ~key label on_submit =
 let action_link fields ~key ctx text_ tab =
   Ui_components.with_props
     [ Ui_components.Prop.cursor `pointer
-    ; Ui_components.Prop.hover_opacity 1.
-    ; Ui_components.Prop.opacity 0.8
+    ; Ui_components.Prop.hover_opacity 0.8
+    ; Ui_components.Prop.opacity 0.6
     ; Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.font_weight 400
+    ; Ui_components.Prop.line_height "1.25rem"
     ; Ui_components.Prop.text_decoration "underline" ]
     (button ~key ~style_class:"ls-auth-link" ~text:text_ ~label:text_
-       ~variant:`ghost ~height:24 ~min_height:24 ~padding:0
+       ~variant:`ghost ~height:20 ~min_height:20 ~padding:0
+       ~foreground:"var(--ls-link-text-color, var(--lx-accent-11))"
        ~background:"transparent" ~border_width:0
        ~disabled_signal:(Signal.value fields.pending)
        ~on_press:(fun _ -> set_tab ctx fields tab)
@@ -484,16 +487,16 @@ let login_panel ctx fields =
     ; Ui_components.with_props [ Ui_components.Prop.padding_top 16 ]
       (column ~key:"lg-foot" ~cross:`center ~gap:0
         ~style_class:"ls-auth-foot"
-        [ row ~key:"f1" ~gap:4 ~min_height:24
-            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
+        [ row ~key:"f1" ~gap:4 ~cross:`center
+            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.5 ]
               (text ~key:"f1a" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
                 ~value:(I18n.t "account/dont-have-account-question" ^ " ")
                 [])
             ; action_link fields ~key:"f1b" ctx (I18n.t "account/sign-up")
                 Signup ]
-        ; row ~key:"f2" ~gap:4 ~min_height:24
-            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
+        ; row ~key:"f2" ~gap:4 ~cross:`center
+            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.5 ]
               (text ~key:"f1d" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
                 ~value:(I18n.t "account/or" ^ " ") [])

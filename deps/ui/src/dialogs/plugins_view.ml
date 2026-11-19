@@ -20,7 +20,9 @@ let text_of ev =
 (* cljs marketplace search: fuzzy title match + description substring;
    substring on title/name/description covers the e2e queries *)
 let matches search pkg =
-  search = ""
+  if String.starts_with ~prefix:"@" search then
+    Plugin_host.jstr pkg "author" = String.sub search 1 (String.length search - 1)
+  else search = ""
   || I18n.contains_ci (Plugin_host.jstr pkg "title") search
   || I18n.contains_ci (Plugin_host.jstr pkg "description") search
   || I18n.contains_ci (Plugin_host.jstr pkg "name") search
@@ -31,7 +33,7 @@ let category_ok cat pkg =
   | _ -> not (Plugin_host.jbool pkg "theme")
 
 let search_input ~key st =
-  Ui_components.search_row ~key ~height:28 ~pad_left:28
+  Ui_components.search_row ~key ~height:30 ~pad_left:28
     ~placeholder:(t "plugin/search-plugin")
     ~text_signal:(Signal.value st)
     ~on_text:(fun q -> Runtime.signal_set st q) ()
@@ -45,10 +47,16 @@ let category_tab ~key cat_st id caption n =
     | Some n -> Printf.sprintf "%s (%d)" caption n
     | None -> caption
   in
-  Ui_components.chip_toggle ~key:(key ^ "-" ^ id) ~radius:6 ~pad_v:4
-    ~pad_h:12 ~font_size:"0.8125rem" ~text
-    ~checked_signal:(Signal.map (fun c -> c = id) (Signal.value cat_st))
-    ~on_toggle:(fun _ -> Runtime.signal_set cat_st id) ()
+  reactive (fun category ->
+    let selected = category = id in
+    toggle_button ~key:(key ^ "-" ^ id) ~variant:`ghost ~text
+      ~icon:(`app (if id = "plugins" then "puzzle" else "palette"))
+      ~checked:selected ~height:28 ~min_height:0 ~padding_horizontal:8
+      ~corner_radius:6 ~border_width:1 ~background:"transparent"
+      ~border_color:(if selected then "var(--ls-link-text-color)" else "currentColor")
+      ~foreground:(if selected then "var(--ls-link-text-color)" else "inherit")
+      ~on_toggle:(fun _ -> Runtime.signal_set cat_st id) [])
+    (Signal.value cat_st)
 
 let category_tabs ~key ~nums cat_st =
   let np = Option.map fst nums in
@@ -58,40 +66,122 @@ let category_tabs ~key ~nums cat_st =
     ; category_tab ~key cat_st "themes" (t "nav/themes") nt
     ]
 
-let open_url_ = Ui_services.env_open_url
+let toolbar_menu ~key ~icon ~label ~items : t =
+ fun ctx parent ->
+  let opened = Signal.state ctx.ui_scheduler false in
+  let close () = Runtime.signal_set opened false in
+  row ~key
+    [ Ui_components.button ~key:"trigger" ~variant:`ghost ~size:`icon
+        ~width:28 ~height:28 ~min_width:28 ~min_height:28
+        ~icon:(`app icon) ~label
+        ~on_press:(fun _ -> Runtime.signal_set opened (not (Runtime.signal_get opened))) []
+    ; if_ ~test:(Signal.value opened)
+        (Ui_components.menu_card ~key:"menu" ~anchor:`below ~anchor_alignment:`end_
+           ~on_dismiss:(fun _ -> close ())
+           (List.mapi (fun i (label, icon, checked, run) ->
+              Menu_item.el ~key:(string_of_int i) ~label ~icon:(`app icon)
+                ?checked ~on_click:(fun () -> close (); run ()) ()) items))
+    ] ctx parent
 
-(* cljs plugins.cljs panel-control-tabs .r: search + filter + more +
-   contribute link. The filter/more buttons are inert stubs upstream
-   (no handler) — kept as icon buttons for parity. *)
-let control_tabs ~key ~search_st ~cat_st ~nums =
-  let ghost_btn id cls (ic : icon) caption =
-    Ui_components.with_props [ Ui_components.Prop.cursor `pointer ]
-      (Ui_components.button ~key:(key ^ "-" ^ id) ~variant:`ghost ~size:`icon
-         ~style_class:("ui__button ls-icon-btn-md " ^ cls)
-         ~width:32 ~height:32 ~min_width:32 ~min_height:32
-         ~corner_radius:6 ~foreground:"inherit"
-         ~icon:ic ~label:caption [])
+let control_tabs ~key ~search_st ~cat_st ~nums toolbar =
+  Ui_components.with_props [Ui_components.Prop.padding_bottom 12]
+    (row ~key:(key ^ "-ctls") ~style_class:"control-tabs" ~padding_horizontal:6
+    ~main:`space_between ~cross:`center
+    [ category_tabs ~key ~nums cat_st
+    ; row ~key:(key ^ "-r") ~cross:`center ~gap:8
+        (box ~width:204 [search_input ~key:(key ^ "-search") search_st] :: toolbar)
+    ])
+
+let options_menu ~key ~icon ~label ~state options =
+  reactive (fun current ->
+    let items = List.map (fun (value, label) ->
+      (label, (if current = value then "check" else "circle"), None,
+       fun () -> Runtime.signal_set state value)) options in
+    toolbar_menu ~key ~icon ~label ~items) (Signal.value state)
+
+let report_plugin = ref None
+
+let open_report plugin =
+  report_plugin := plugin;
+  Dialogs_state.open_ "plugin-report"
+
+let report_body (_ms : Model.t Signal.signal) =
+  let address = "support@logseq.com" in
+  let subject = "Report plugin from Logseq Marketplace" ^
+    (match !report_plugin with Some (id, _) -> " (#" ^ id ^ ")" | None -> "") in
+  let url = "mailto:" ^ address ^ "?subject=" ^ Ui_services.uri_encode_component subject in
+  let message =
+    match String.split_on_char '\001' (I18n.tf "plugin/report-modal-desc" ["\001"]) with
+    | [before; after] ->
+        paragraph
+          [text ~value:before [];
+           link ~url ~text:address ~foreground:"var(--ls-link-text-color)" [];
+           text ~value:after []]
+    | _ -> paragraph ~value:(I18n.tf "plugin/report-modal-desc" [address]) []
   in
-  Ui_components.with_props
-    [ Ui_components.Prop.position `relative ]
-    (row ~key:(key ^ "-ctls") ~style_class:"control-tabs"
-       ~main:`space_between ~cross:`center
-       ~data_attrs:[ "style", "padding-bottom: 12px" ]
-       [ row ~key:(key ^ "-l") ~style_class:"l" ~cross:`center ~gap:8
-           [ category_tabs ~key ~nums cat_st ]
-       ; row ~key:(key ^ "-r") ~style_class:"r" ~cross:`center ~gap:8
-           [ search_input ~key:(key ^ "-search") search_st
-           ; ghost_btn "filter" "sort-or-filter-by" (`app "filter")
-               (t "cmdk.action/filter")
-           ; ghost_btn "more" "more-do" (`app "dots-vertical")
-               (t "header/more")
-           ; text ~key:(key ^ "-contrib")
-               ~value:(t "plugin/contribute")
-               ~on_press:(fun _ ->
-                 open_url_ "https://github.com/logseq/marketplace")
-               []
-           ]
-       ])
+  let header =
+    match !report_plugin with
+    | None -> []
+    | Some (id, name) ->
+        [row ~gap:4 ~cross:`center
+           [icon ~name:(`app "alert-triangle") ~foreground:"var(--lx-red-11)" [];
+            text ~font_weight:700 ~value:(name ^ "  #" ^ id) []]]
+  in
+  column ~padding:4 ~gap:8 (header @ [message])
+
+let logs_plugin = ref None
+
+let open_logs ~id ~name =
+  logs_plugin := Some (id, name);
+  Dialogs_state.open_ "plugin-logs"
+
+let logs_body (_ms : Model.t Signal.signal) : t =
+ fun ctx parent ->
+  match !logs_plugin with
+  | None -> box [] ctx parent
+  | Some (id, name) ->
+      let log = Signal.state ctx.ui_scheduler (Plugin_host.plugin_logs id) in
+      let query = Signal.state ctx.ui_scheduler "" in
+      let level = Signal.state ctx.ui_scheduler None in
+      Plugin_host.watch_plugin_logs ~scope:ctx.ui_scope id (fun () ->
+        Runtime.signal_set log (Plugin_host.plugin_logs id));
+      let format_line entry =
+        let open Plugin_host in
+        let timestamp = Option.value ~default:0. (Js.Json.decodeNumber (getf entry "ts")) in
+        let time = Ui_services.time_local_fields timestamp in
+        Printf.sprintf "[%02d:%02d:%02d] %s [%s] %s"
+          time.hours time.minutes time.seconds
+          (jstr entry "level") (jstr entry "tag") (jstr entry "message") in
+      column ~gap:12
+        [ heading ~level:1 ~font_size:"1.125rem" ~font_weight:600
+            ~value:(t "plugin/logs-title" ^ " · " ^ name) []
+        ; row ~gap:8 ~cross:`center
+            [ box ~grow:1. [Ui_components.search_row ~key:"filter" ~height:32
+                ~placeholder:(t "plugin/logs-filter-placeholder")
+                ~text_signal:(Signal.value query)
+                ~on_text:(Runtime.signal_set query) ()]
+            ; options_menu ~key:"levels" ~icon:"filter" ~label:(t "plugin/logs-level-all")
+                ~state:level ((None, t "plugin/logs-level-all") ::
+                  List.map (fun s -> Some s, s) ["DEBUG"; "INFO"; "WARN"; "ERROR"])
+            ; Ui_components.button ~variant:`outline ~size:`sm ~text:(t "plugin/logs-copy")
+                ~on_press:(fun _ ->
+                  Ui_services.clipboard_copy
+                    (String.concat "\n" (List.map format_line (Runtime.signal_get log)));
+                  Toast.success (t "plugin/logs-copied")) []
+            ; Ui_components.button ~variant:`outline ~size:`sm ~text:(t "plugin/logs-clear")
+                ~on_press:(fun _ -> Plugin_host.clear_plugin_logs id) []
+            ]
+        ; scroll ~max_height:480 ~orientation:`vertical
+            [ reactive (fun entries query level ->
+                let filtered = List.filter (fun e ->
+                    (level = None || level = Some (Plugin_host.jstr e "level")) &&
+                    I18n.contains_ci (Plugin_host.jstr e "message") query)
+                    (List.rev entries) in
+                text ~white_space:"pre-wrap" ~font_size:"0.75rem"
+                  ~value:(if filtered = [] then t "plugin/logs-empty"
+                          else String.concat "\n" (List.map format_line filtered)) [])
+                (Signal.value log) (Signal.value query) (Signal.value level) ]
+        ] ctx parent
 
 let empty_item key =
   column ~key ~style_class:"ls-pl-empty" ~cross:`center ~gap:8
@@ -120,10 +210,9 @@ let list_wrap ~key children =
 
 (* ---------- marketplace card ---------- *)
 
-(* cljs util/format-number: "1.2k" shorthand for >=1000 *)
 let format_number n =
   if n < 1000 then string_of_int n
-  else Printf.sprintf "%.1fk" (float_of_int n /. 1000.)
+  else Printf.sprintf "%.2fk" (float_of_int n /. 1000.)
 
 let market_card ~stats ~search_st pkg =
   let open Plugin_host in
@@ -136,30 +225,35 @@ let market_card ~stats ~search_st pkg =
   (* cljs get-open-plugin-readme-handler: icon .l and h3 .l both open
      the readme dialog *)
   let open_readme _ = Plugin_readme.open_readme pkg in
-  (* cljs plugin-thumb-icon shows the pkg-asset <img>; the native port
-     has no remote image fetcher, so the folder fallback always shows. *)
-  let thumb = icon ~key:"ic-f" ~name:(`app "folder") ~point_size:28 [] in
+  let icon_url = pkg_asset id (jstr pkg "icon") in
+  let thumb =
+    if icon_url = "" then icon ~key:"ic-f" ~name:(`app "folder") ~point_size:28 []
+    else Ui_components.with_props [Ui_components.Prop.image_fit `fit]
+        (image ~key:"ic-img" ~url:icon_url ~width:60 ~height:60
+           ~alt:"" ~loading:`lazy_ []) in
   let repo = jstr pkg "repo" in
-  Ui_components.plugin_card ~key:("mkt-" ^ id) ~classes:cls
-    (row ~key:"r" ~gap:12 ~cross:`start
+  Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+    (card ~key:("mkt-" ^ id) ~style_class:("cp__plugins-item-card" ^ cls)
+       ~height:150 ~min_width:0 ~border_width:0 ~corner_radius:6
+       ~padding_vertical:12 ~padding_horizontal:12
+       ~background:"var(--ls-tertiary-background-color, hsl(var(--muted)))"
+    [row ~key:"r" ~gap:12 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (Ui_components.with_props
            [ Ui_components.Prop.cursor `pointer ]
            (box ~key:"l" ~style_class:"l link-block"
-              [ row ~key:"ic" ~style_class:"plugin-icon" ~width:40
-                  ~height:40 ~corner_radius:6 ~main:`center ~cross:`center
-                  ~background:"var(--lx-gray-03, hsl(var(--muted)))"
+              [ row ~key:"ic" ~style_class:"plugin-icon" ~width:60
+                  ~height:60 ~margin_top:8 ~main:`center ~cross:`center
                   [ thumb ] ]))
-    ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0
-        ([ row ~key:"h" ~style_class:"head" ~cross:`center ~gap:8
+    ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0 ~margin_top:4
+        [ row ~key:"h" ~cross:`center ~gap:8
              ~main:`space_between
-             ~data_attrs:[ "style", "padding-top: 6px" ]
-             [ Ui_components.with_props
-                 [ Ui_components.Prop.font_size "1.25rem"
-                 ; Ui_components.Prop.font_weight 700 ]
-                 (text ~key:"t" ~style_class:"l link-block" ~value:title
-                    ~on_press:open_readme [])
-             ; row ~key:"flag" ~style_class:"flag is-top" ~cross:`center
+             [ text ~key:"t" ~style_class:"link-block" ~grow:1. ~min_width:0
+                 ~font_size:"1.25rem" ~font_weight:700 ~line_height:"24px"
+                 ~white_space:"nowrap" ~text_overflow:"ellipsis" ~overflow:"hidden"
+                 ~value:(if title = "" then jstr pkg "name" else title)
+                 ~on_press:open_readme []
+             ; row ~key:"flag" ~cross:`center
                  ~gap:6
                  ([ (* cljs flag icon opens the plugin readme dialog *)
                     Ui_components.with_props
@@ -177,15 +271,14 @@ let market_card ~stats ~search_st pkg =
                          ~label:"GitHub" [] ])) ]
          ; Ui_components.with_props
              [ Ui_components.Prop.opacity 0.7 ]
-             (paragraph ~key:"desc" ~style_class:"desc"
+             (text ~key:"desc" ~height:56 ~line_clamp:2 ~overflow:"hidden"
                 ~font_size:"0.75rem"
                 ~value:(jstr pkg "description") [])
          ; box ~key:"flag-meta"
              [ Ui_components.with_props
-                 [ Ui_components.Prop.font_size "0.75rem" ]
+                 [ Ui_components.Prop.font_size "0.625rem"; Ui_components.Prop.opacity 0.8 ]
                  (row ~style_class:"ls-pl-meta"
                     ~main:`space_between
-                    ~data_attrs:[ "style", "padding-right: 8px" ]
                     [ (* cljs: clicking the author searches "@author" *)
                       text ~key:"a" ~value:(jstr pkg "author")
                         ~on_press:(fun _ ->
@@ -193,12 +286,10 @@ let market_card ~stats ~search_st pkg =
                             ("@" ^ jstr pkg "author"))
                         []
                     ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ]
-         ]
-         @
-         [ row ~key:"ctl" ~style_class:"ctl" ~main:`space_between
+         ; row ~key:"ctl" ~main:`space_between ~margin_top:6
              ~cross:`center
-             ~data_attrs:[ "style", "margin-top: 6px" ]
-             [ row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
+             [ Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
+               (row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
                  ((* cljs card-ctls-of-market .l: stars + total downloads
                      from stats.json *)
                   match package_stat stats id with
@@ -217,9 +308,14 @@ let market_card ~stats ~search_st pkg =
                              ; text ~key:"n"
                                  ~value:(format_number st.downloads) [] ]
                          ]
-                       else []))
+                       else [])))
              ; row ~key:"ctl-r" ~style_class:"r" ~cross:`center ~gap:4
-                 [ Ui_components.button ~variant:`primary ~key:"btn"
+                 [ Ui_components.with_props
+                     [Ui_components.Prop.font_size "0.8125rem";
+                      Ui_components.Prop.hover_opacity 0.8]
+                    (Ui_components.button ~variant:`ghost ~key:"btn"
+                     ~height:21 ~min_height:0 ~padding_horizontal:0 ~padding_vertical:0
+                     ~foreground:"var(--ls-link-text-color, var(--lx-accent-11))"
                      ~style_class:
                        ("btn" ^ if installed_ then " disabled" else "")
                      (* cljs CSS gives a.btn.disabled pointer-events:none;
@@ -230,11 +326,11 @@ let market_card ~stats ~search_st pkg =
                         else t "plugin/install")
                      ~on_press:(fun _ ->
                        if not installed_ then install_marketplace pkg)
-                     []
+                     [])
                  ]
              ]
-         ])
-    ])
+         ]
+    ]])
 
 (* ---------- installed card ---------- *)
 
@@ -351,13 +447,10 @@ let installed_card (pl : Js.Json.t) =
                             (t "plugin/open-settings") (fun () ->
                               open_settings_pid := Some pid;
                               Dialogs_state.open_ "plugin-settings")
-                        (* web has no plugin-logs view or report modal
-                           (cljs open-plugin-logs!/open-report-modal!) —
-                           li kept for menu parity *)
-                        ; list_item ~key:"logs"
-                            ~text:(t "plugin/open-logs") []
-                        ; list_item ~key:"report"
-                            ~text:(t "plugin/report-security") []
+                        ; menu_li ~key:"logs" (t "plugin/open-logs")
+                            (fun () -> open_logs ~id:pid ~name)
+                        ; menu_li ~key:"report" (t "plugin/report-security")
+                            (fun () -> open_report (Some (pid, name)))
                         ; menu_li ~key:"uninstall" (t "plugin/uninstall")
                             (fun () ->
                               (* cljs plugins.cljs: content-only
@@ -422,24 +515,73 @@ let installed_panel ~key ~search ~cat ~search_st ~cat_st =
   let n_plugins = List.length all - n_themes in
   column ~key ~style_class:"cp__plugins-installed" ~gap:8
     [ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st
-        ~nums:(Some (n_plugins, n_themes))
+        ~nums:(Some (n_plugins, n_themes)) []
     ; list_wrap ~key:(key ^ "-list") (List.map installed_card plugins)
     ]
 
 (* cljs plugins.cljs .cp__plugins-marketplace-cnt: category tabs carry
    the whole marketplace counts *)
-let market_panel ~key ~search ~cat ~search_st ~cat_st ~pkgs ~stats
-    ~loading =
+type market_filter = All | Installed | Not_installed
+type market_sort = Popular | Downloads | Stars | Title | Supports_db | Added
+
+let sort_marketplace sort stats packages =
+  let open Plugin_host in
+  let now = Js.Date.now () in
+  let day = 86_400_000. in
+  let entries = List.map (fun pkg ->
+    let id = jstr pkg "id" in
+    let stat = package_stat stats id in
+    let updated =
+      match Js.Json.decodeObject stats with
+      | Some d -> Option.fold ~none:"" ~some:(fun s -> jstr s "updated_at") (Js.Dict.get d id)
+      | None -> "" in
+    let age = Option.fold ~none:0. ~some:(fun ts -> (now -. ts) /. day)
+        (if updated = "" then None else Ui_services.time_parse updated) in
+    let added = Js.Json.decodeNumber (getf pkg "addedAt") in
+    pkg, stat, age, added) packages in
+  let descending key a b = compare (key b) (key a) in
+  let downloads (_, stat, _, _) = Option.map (fun s -> s.downloads) stat
+  and stars (_, stat, _, _) = Option.map (fun s -> s.stars) stat
+  and title (pkg, _, _, _) =
+    let title = jstr pkg "title" in
+    String.lowercase_ascii (if title = "" then jstr pkg "name" else title) in
+  let rows = match sort with
+    | Downloads -> List.stable_sort (descending downloads) entries
+    | Stars -> List.stable_sort (descending stars) entries
+    | Title -> List.stable_sort (fun a b -> String.compare (title a) (title b)) entries
+    | Supports_db ->
+        List.stable_sort (descending (fun (pkg, _, _, _) -> jbool pkg "supportsDB")) entries
+    | Added -> List.stable_sort (descending (fun (_, _, _, added) -> added)) entries
+    | Popular ->
+        let pinned, rest = List.partition (fun (_, _, _, added) ->
+            Option.fold ~none:false ~some:(fun ts -> now -. ts < 6. *. day) added) entries in
+        let normalize metric =
+          match List.filter_map metric rest with
+          | [] -> fun _ -> 0.
+          | first :: others ->
+              let lo, hi = List.fold_left (fun (lo, hi) n -> min lo n, max hi n)
+                  (first, first) others in
+              fun entry ->
+                if lo = hi then 0. else
+                  float_of_int (Option.value (metric entry) ~default:1 - lo)
+                  /. float_of_int (hi - lo)
+        in
+        let norm_downloads = normalize downloads and norm_stars = normalize stars in
+        let score ((_, _, age, _) as entry) =
+          0.8 *. norm_downloads entry +. 0.2 *. norm_stars entry +. exp (-0.001 *. age) in
+        pinned @ List.stable_sort (descending score) rest in
+  List.map (fun (pkg, _, _, _) -> pkg) rows
+
+let market_panel ~key ~search ~cat ~search_st ~pkgs ~stats ~filter ~sort ~loading =
   let filtered =
-    List.filter (fun p -> category_ok cat p && matches search p) pkgs
+    List.filter (fun p ->
+      let installed = Js.Dict.get Plugin_host.installed (Plugin_host.jstr p "id") <> None in
+      category_ok cat p && matches search p &&
+      (match filter with All -> true | Installed -> installed | Not_installed -> not installed)) pkgs
+    |> sort_marketplace sort stats
   in
-  let n_themes = List.length (List.filter (fun p -> Plugin_host.jbool p "theme") pkgs) in
-  let n_plugins = List.length pkgs - n_themes in
   column ~key  ~gap:8
-    ([ control_tabs ~key:(key ^ "-tabs") ~search_st ~cat_st
-         ~nums:(Some (n_plugins, n_themes)) ]
-    @
-    if loading && pkgs = [] then
+    (if loading && pkgs = [] then
       [ row ~key:"pl-loading" ~style_class:"ls-pl-loading"
           ~main:`center ~padding_vertical:80
           [ icon ~name:(`app "loader-2") [] ] ]
@@ -457,6 +599,9 @@ let body (_ms : Model.t Signal.signal) : t =
   let tab = Signal.state owner "installed" in
   let mkt_search = Signal.state owner "" in
   let mkt_cat = Signal.state owner "plugins" in
+  let filter = Signal.state owner All in
+  let sort = Signal.state owner Popular in
+  let auto_updates = Signal.state owner (Plugin_host.auto_updates ()) in
   let inst_search = Signal.state owner "" in
   (* cljs show_themes/:open-pid preselects the dialog's starting tab *)
   let start_cat =
@@ -467,31 +612,58 @@ let body (_ms : Model.t Signal.signal) : t =
   let inst_cat = Signal.state owner start_cat in
   let pkgs = Signal.state owner ([] : Js.Json.t list) in
   let stats = Signal.state owner Js.Json.null in
-  let loading = Signal.state owner true in
+  let loading = Signal.state owner false in
   ignore (Plugin_host.dirty_signal owner);
-  ignore
-    (let* j = (Plugin_host.marketplace_pkgs owner) in
-    let xs =
-      match Js.Json.decodeArray j with
-      | Some a -> Array.to_list a
-      | None -> []
-    in
-    Signal.set pkgs xs;
-    Signal.set loading false;
-    Runtime.flush ();
-    Js.Promise.resolve Js.Json.null);
-  (* cljs load-marketplace-stats fires alongside load-marketplace-plugins;
-     stars/downloads render once it lands *)
-  ignore
-    (let* j = Plugin_host.fetch_stats () in
-     Signal.set stats j;
-     Runtime.flush ();
-     Js.Promise.resolve ());
+  let refresh force =
+    if not (Runtime.signal_get loading) then begin
+      Runtime.signal_set loading true;
+      let request =
+        let* j = Plugin_host.marketplace_pkgs ~refresh:force owner in
+        let xs = Option.fold ~none:[] ~some:Array.to_list (Js.Json.decodeArray j) in
+        let* stat = Plugin_host.fetch_stats ~refresh:force () in
+        Js.Promise.resolve (xs, stat)
+      in
+      Ui_effect.task ~scope:ctx.ui_scope (Subs_state.task_of_promise request)
+        ~ok:(fun (xs, stat) ->
+          Signal.set pkgs xs;
+          Signal.set stats stat;
+          Runtime.signal_set loading false)
+        ~error:(fun err ->
+          Runtime.signal_set loading false;
+          Ui_services.log_error ("Plugin marketplace refresh failed", err))
+    end in
+  refresh false;
+  let marketplace_toolbar =
+    [ options_menu ~key:"filter" ~icon:"filter" ~label:(t "cmdk.action/filter")
+        ~state:filter [All, t "plugin/all"; Installed, t "plugin/installed";
+                       Not_installed, t "plugin/not-installed"]
+    ; options_menu ~key:"sort" ~icon:"arrows-sort" ~label:(t "block/sort-order")
+        ~state:sort [Popular, t "plugin/popular"; Downloads, t "plugin/downloads";
+                     Stars, t "plugin/stars"; Title, I18n.tf "plugin/title" ["A - Z"];
+                     Supports_db, t "plugin/supports-db"; Added, t "plugin/date-added"]
+    ; reactive (fun enabled ->
+        toolbar_menu ~key:"more" ~icon:"dots-vertical" ~label:(t "header/more")
+          ~items:([ t "plugin/refresh-lists", "rotate-clockwise", None, (fun () -> refresh true)
+                 ; t "plugin/report-security", "alert-triangle", None, (fun () -> open_report None)
+                 ] @ if not Plugin_host.supports_auto_updates then [] else
+                 [ t "plugin/auto-update-check", "refresh", Some enabled, (fun () ->
+                     let next = not enabled in
+                     Plugin_host.set_auto_updates next;
+                     Runtime.signal_set auto_updates next;
+                     Toast.show ~kind:(if next then "success" else "info")
+                       (I18n.tf "plugin/auto-update-check-feedback"
+                          [t (if next then "ui/on" else "ui/off")])) ]))
+        (Signal.value auto_updates)
+    ] in
   let tab_btn id label =
-    Ui_components.chip_toggle ~key:("tab-" ^ id) ~radius:6 ~pad_v:4
-      ~pad_h:12 ~font_size:"0.8125rem" ~text:(t label)
-      ~checked_signal:(Signal.map (fun tb -> tb = id) (Signal.value tab))
-      ~on_toggle:(fun _ -> Runtime.signal_set tab id) ()
+    toggle_button ~key:("tab-" ^ id) ~variant:`ghost
+      ~height:28 ~min_height:0 ~padding_horizontal:10 ~corner_radius:6
+      ?icon:(if id = "marketplace" then Some (`app "apps") else None)
+      ~text:(t label) ~checked:(reactive ((=) id) (Signal.value tab))
+      ~background:(reactive (fun selected ->
+        if selected = id then "var(--lx-gray-04)" else "transparent") (Signal.value tab))
+      ~foreground:"var(--ls-primary-text-color)"
+      ~on_toggle:(fun _ -> Runtime.signal_set tab id) []
   in
   let pair a b = (a, b) in
   (* every derivation is owned into the mount's scope — unowned map2s
@@ -513,24 +685,38 @@ let body (_ms : Model.t Signal.signal) : t =
       (fun (tab_now, _dirty) ->
         column ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
-          [ heading ~key:"pl-h" ~level:1 ~value:(t "nav/plugins") []
-          ; row ~key:"pl-tabs" ~style_class:"tabs"
-              ~main:`center ~cross:`center
-              [ row ~key:"pl-tabs-in" ~style_class:"tabs-inner"
-                  ~cross:`center ~gap:8
-                  [ tab_btn "installed" "plugin/installed"
-                  ; tab_btn "marketplace" "plugin/marketplace"
-                  ]
+          [ Ui_components.with_props [Ui_components.Prop.padding_bottom 8]
+              (heading ~key:"pl-h" ~level:1 ~font_size:"1.375rem" ~font_weight:600
+                 ~line_height:"1.75rem" ~value:(t "nav/plugins") [])
+          ; grid ~key:"pl-tabs" ~style_class:"tabs" ~columns:3 ~margin_bottom:8
+              [ box []
+              ; row ~main:`center ~cross:`center
+                  [ row ~key:"pl-tabs-in" ~style_class:"tabs-inner"
+                      ~background:"var(--lx-gray-02)" ~padding:4 ~corner_radius:6
+                      ~cross:`center ~gap:8
+                      [ tab_btn "installed" "plugin/installed"
+                      ; tab_btn "marketplace" "plugin/marketplace" ] ]
+              ; row ~main:`end_ ~cross:`center
+                  [ Ui_components.with_props [Ui_components.Prop.font_size "0.75rem"]
+                      (link ~url:"https://github.com/logseq/marketplace" ~target:`blank
+                        ~text:(t "plugin/contribute") []) ]
               ]
           ; box ~key:"pl-panels" 
               [ (if tab_now = "marketplace" then
-                   reactive
-                     (fun (((search, cat), (pkg_now, load_now)), stat_now) ->
-                       market_panel ~key:"mkt" ~search ~cat
-                         ~search_st:mkt_search ~cat_st:mkt_cat
-                         ~pkgs:pkg_now ~stats:stat_now
-                         ~loading:load_now)
-                     mkt_sig
+                   column
+                     [ reactive (fun pkgs ->
+                         let themes = List.length
+                           (List.filter (fun p -> Plugin_host.jbool p "theme") pkgs) in
+                         control_tabs ~key:"mkt-tabs" ~search_st:mkt_search ~cat_st:mkt_cat
+                           ~nums:(Some (List.length pkgs - themes, themes)) marketplace_toolbar)
+                         (Signal.value pkgs)
+                     ; reactive
+                         (fun (((search, cat), (pkg_now, load_now)), stat_now) filter sort ->
+                           market_panel ~key:"mkt" ~search ~cat
+                             ~search_st:mkt_search ~pkgs:pkg_now ~stats:stat_now
+                             ~filter ~sort ~loading:load_now)
+                         mkt_sig (Signal.value filter) (Signal.value sort)
+                     ]
                  else
                    reactive
                      (fun (search, cat) ->

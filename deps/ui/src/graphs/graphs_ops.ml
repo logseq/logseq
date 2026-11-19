@@ -9,16 +9,37 @@ module T = I18n
 let repos () = (Runtime.model ()).Model.repos
 
 (* cljs repo.cljs invalid-graph-name? reserved chars *)
-let reserved = ":|\\*\\?\"<>|\\#\\\\/"
+let reserved_characters () =
+  [ '<', T.t "graph.validation/reserved-character-less-than"
+  ; '>', T.t "graph.validation/reserved-character-greater-than"
+  ; ':', T.t "graph.validation/reserved-character-colon"
+  ; '"', T.t "graph.validation/reserved-character-double-quote"
+  ; '/', T.t "graph.validation/reserved-character-forward-slash"
+  ; '\\', T.t "graph.validation/reserved-character-backslash"
+  ; '|', T.t "graph.validation/reserved-character-pipe"
+  ; '?', T.t "graph.validation/reserved-character-question-mark"
+  ; '*', T.t "graph.validation/reserved-character-asterisk"
+  ; '#', T.t "graph.validation/reserved-character-hash"
+  ; '+', T.t "graph.validation/reserved-character-plus" ]
 
 let invalid_chars name =
   let out = ref [] in
   String.iter
     (fun c ->
-      if String.contains reserved c then out := c :: !out)
+      if String.contains "<>:\"/\\|?*#" c then out := c :: !out)
     name;
   if String.contains name '+' then out := '+' :: !out;
   List.rev !out
+
+let invalid_name name = invalid_chars name <> []
+
+let warn_invalid_name () =
+  let lines =
+    List.map (fun (character, label) -> Printf.sprintf "%s  %c (%s)" {js|◦|js} character label)
+      (reserved_characters ())
+  in
+  Toast.show ~kind:"warning" ~duration:0
+    (String.concat "\n" (T.t "graph.validation/name-reserved-characters-warning" :: lines))
 
 let is_demo repo =
   let suffixed = "Demo" in
@@ -45,7 +66,9 @@ let remote_graphs : (string * string * bool * string) list ref = ref []
 let list_remote_graphs () =
   (* the sync server rejects list-remote-graphs without a token — skip
      the request entirely when logged out and keep the local list *)
-  if not (Rtc_flows.logged_in ()) then Js.Promise.resolve !remote_graphs
+  if not (Rtc_flows.logged_in ()) then (
+    remote_graphs := [];
+    Js.Promise.resolve [])
   else begin
     (let* _ = Rtc_ops.sync_app_state (Runtime.model ()).Model.repo in
      let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in

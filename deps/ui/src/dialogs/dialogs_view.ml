@@ -20,6 +20,8 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "new-graph" | "add-graph" -> New_graph.body ms
   | "settings" -> Settings_page.modal_body ms
   | "plugins" -> Plugins_view.body ms
+  | "plugin-report" -> Plugins_view.report_body ms
+  | "plugin-logs" -> Plugins_view.logs_body ms
   | "plugin-readme" -> Plugin_readme.body ms
   | "plugin-settings" -> Plugins_view.settings_body ms
   | "login" -> Login_view.body ms
@@ -43,6 +45,7 @@ let dialog_spec name =
       [Ui_components.Prop.overflow `hidden]
   | "plugins" -> 24, (fun viewport -> Float.min 1246. (viewport *. 0.9)),
       [Ui_components.Prop.max_height_viewport 0.94;Ui_components.Prop.overflow `hidden]
+  | "plugin-logs" -> 24, (fun viewport -> Float.min 800. (viewport *. 0.9)), []
   | "sync-server" | "publish-server" -> 24, (fun _ -> 672.), []
   | "plugin-readme" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.86]
   | "export-page" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.8]

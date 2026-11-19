@@ -515,12 +515,12 @@ let keymap_pill st ~key ~title filter =
                { model with
                  km_filter =
                    (if model.km_filter = filter then Keymap_data.All else filter) })
-           [ row ~key:"label" ~cross:`center ~gap:0
+           [ row ~key:"label" ~cross:`center ~gap:3
                [ text ~key:"title" ~font_weight:(if checked then 500 else 400)
                    ~foreground:"inherit" ~value:title []
                ; Ui_components.with_props [ Ui_components.Prop.opacity 0.6 ]
                    (text ~key:"count" ~font_weight:400 ~foreground:"inherit"
-                      ~value:(reactive (fun model -> {js| · |js} ^ count model)
+                      ~value:(reactive (fun model -> {js|· |js} ^ count model)
                         (Signal.value st)) [])
                ] ])))
     (Signal.value st)
@@ -1165,20 +1165,23 @@ let storage_url key default =
       if String.trim v = "" then default else v
   | None -> default
 
+let toggle_detail ~key label =
+  Ui_components.with_props [Ui_components.Prop.opacity 0.5]
+    (text ~key ~grow:1. ~min_width:0 ~font_size:"0.875rem"
+       ~line_height:"1.25rem" ~value:(T.t label) [])
+
 let advanced_pane () =
   panel ~key:"pane-advanced"
     [ C.toggle_row ~key:"usage"
         ~label:(T.t "settings.advanced/disable-sentry")
         ~detail:
-          [ text ~key:"usage-d" ~style_class:"ls-desc"
-              ~value:(T.t "settings.advanced/disable-sentry-desc") [] ]
+          [ toggle_detail ~key:"usage-d" "settings.advanced/disable-sentry-desc" ]
         ~on:(not (S.instrument_disabled ()))
         ~on_checked:S.set_usage_diagnostics ()
     ; C.toggle_row ~key:"devm"
         ~label:(T.t "settings.advanced/developer-mode")
         ~detail:
-          [ text ~key:"devm-d" ~style_class:"ls-desc"
-              ~value:(T.t "settings.advanced/developer-mode-desc") [] ]
+          [ toggle_detail ~key:"devm-d" "settings.advanced/developer-mode-desc" ]
         ~on:(S.developer_mode ()) ~on_checked:S.set_developer_mode ()
     ; C.action_row ~key:"syncurl"
         ~label:(T.t "settings.sync-server/url")
@@ -1216,11 +1219,11 @@ let home_page_row ctx =
   let saved = ref current in
   C.it_row ~key:"homep" ~label:(T.t "settings.features/home-default-page")
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
-        [ Ui_components.input ~key:"homep-in"
-            ~accessibility_identifier:"home-default-page" ~width:220
-            ~height:26
+        [ Ui_components.with_props [Ui_components.Prop.font_size "0.75rem"]
+          (Ui_components.form_input ~key:"homep-in"
+            ~accessibility_identifier:"home-default-page" ~width:200
+            ~height:30 ~corner_radius:4
             ~submit_on_blur:true
-            ~style_class:"form-input is-small"
             ~text:(reactive (fun value -> value) (Signal.value home_text))
             ~disabled:(reactive (fun value -> value) (Signal.value saving))
             ~on_input:(fun ev ->
@@ -1246,7 +1249,7 @@ let home_page_row ctx =
                       | S.Home_error -> Toast.error (T.t "ui/save-changes-error")
                   end)
               end)
-            []
+            [])
         ]
     ]
 
@@ -1286,6 +1289,9 @@ let nav_items () =
   ; ("advanced", (T.t "settings/advanced"), "bulb")
   ; ("features", (T.t "settings/features"), "app-feature")
   ]
+  @ if Rtc_flows.logged_in () then
+      [ ("collaboration", (T.t "settings/collaboration"), "users") ]
+    else []
 
 let nav_gap = 8
 
@@ -1321,6 +1327,7 @@ let pane_of ~modal ~keymap ctx tab =
         (keymap_pane ~state:keymap ~embedded:true ())
   | "advanced" -> advanced_pane ()
   | "features" -> features_pane ctx
+  | "collaboration" when Rtc_flows.logged_in () -> Collaborators.settings_body
   | _ -> general_pane ~modal ctx
 
 let same_config ((s : S.t),(a : Model.t)) ((t : S.t),(b : Model.t)) =

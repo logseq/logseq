@@ -752,6 +752,7 @@ let chord_may_run ~target ~control editing cid =
   else if cid = "editor/indent" || cid = "editor/outdent" then
     not control && (S.editing () <> None || not (S.String_set.is_empty (S.selected ()))
                     || !S.pending_focus <> None)
+  else if control && cid = "editor/select-all-blocks" then false
   else if cid = "editor/select-parent" then
     not control
     && (match S.editing () with

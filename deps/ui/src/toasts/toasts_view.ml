@@ -51,6 +51,7 @@ let toast_item (t : Model.toast) : t =
                    ; Ui_components.Prop.opacity 0.9 ]
                    (match t.toast_code with
                     | None -> text ~key:"ti-desc" ~grow:1.
+                      ~white_space:"pre-line"
                       ~foreground:"var(--ls-primary-text-color)"
                       ~value:t.toast_text []
                     | Some code ->
