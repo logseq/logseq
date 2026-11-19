@@ -186,6 +186,7 @@ let calc_results_el code =
            (List.map
               (fun line ->
                 text ~style_class:"extensions__code-calc-output-line"
+                  ~white_space:"nowrap" ~line_height:"1.45rem" ~min_height:23
                   ~value:line [])
               lines))
 

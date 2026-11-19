@@ -1188,6 +1188,19 @@ let run_views ~registry ~profile ~finish =
     (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
       (nodes inline_image));
   ignore (Lui_app.dispose inline_image.S.app);
+  List.iter (fun code ->
+    let results = mount (fun _ -> Option.get (Render.calc_results_el code)) in
+    let lines = List.filter (fun node ->
+      class_has node "extensions__code-calc-output-line") (nodes results) in
+    check "Calculator results retain one single-height line per expression"
+      (List.map (fun node -> M.string_prop node "text") lines
+       = List.map Option.some (Render_calc.results code)
+       && List.for_all (fun node ->
+         M.string_prop node "white-space" = Some "nowrap"
+         && M.string_prop node "line-height" = Some "1.45rem"
+         && Hashtbl.find_opt node.M.props "min-height" = Some (P.IntValue 23)) lines);
+    ignore (Lui_app.dispose results.S.app))
+    ["1+1"; "2^256"; ""; "bad(" ];
   let footnote_document : Js.Json.t = Stub_dom.get_field Stub_dom.global "document" in
   let previous_query : string -> Js.Json.t = Stub_dom.get_field footnote_document "querySelector" in
   let jumped = ref [] in

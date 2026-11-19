@@ -356,6 +356,7 @@ let update_calc c =
             (fun line ->
               D.el_append_child res
                 (D.h ~cls:"extensions__code-calc-output-line" ~text:line
+                   ~attrs:["style", "white-space:pre;line-height:1.45rem;height:1.45rem"]
                    ()))
             (Render_calc.results (get_value c))
       | None -> ())

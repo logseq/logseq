@@ -77,7 +77,34 @@ let test_video_player () =
     check "Without an embedded video timestamp insertion has no target"
       (Render_libs.video_timestamp () = Runtime.No_video))
 
+let calc_fixture : string -> Code_mirror.t = [%mel.raw {|function (source) {
+  const output = document.createElement('div');
+  const wrapper = document.createElement('div');
+  const container = document.createElement('div');
+  wrapper.closest = () => container;
+  container.querySelector = () => output;
+  return {output, getValue() {return source}, getWrapperElement() {return wrapper}};
+}|}]
+
+let calc_lines : Code_mirror.t -> Js.Json.t array = [%mel.raw
+  "cm => Array.from(cm.output.children)"]
+
+let test_calc_output () =
+  List.iter (fun source ->
+    let cm = calc_fixture source in
+    Code_mirror.update_calc cm;
+    Code_mirror.update_calc cm;
+    let lines = Array.to_list (calc_lines cm) in
+    check "Live calculator updates replace results without wrapping long lines"
+      (List.map (fun line -> Stub_dom.get_field line "textContent") lines
+       = Render_calc.results source
+       && List.for_all (fun line ->
+         let get : string -> string = Stub_dom.get_field line "getAttribute" in
+         get "style" = "white-space:pre;line-height:1.45rem;height:1.45rem") lines))
+    ["1+1"; "2^256"; ""; "bad("]
+
 let run () =
+  test_calc_output ();
   test_video_player ();
   let raw=clipboard_event () in
   attach_clipboard_owner raw;
