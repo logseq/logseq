@@ -435,6 +435,12 @@ let test_acknowledged_save_before_broadcast (h : host) =
         let* () = h.wait_ms 25 in
         check "Navigation does not resave an acknowledged buffer before its broadcast"
           (!writes = 1 && S.editing () = None);
+        stage_page h [Test_check.block "b1" "old"];
+        set_editing ~uuid:"b1" ~buffer:"old" ~caret:3 ~base:title;
+        A.flush_edit ();
+        let* () = h.wait_ms 25 in
+        check "Returning to the stale page title still saves a changed buffer"
+          (!writes = 2 && S.editing () = None);
         run rest
   in
   let* () = run ["saved", false; "", false; "saved", true] in

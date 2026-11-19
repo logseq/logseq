@@ -593,10 +593,10 @@ let model_title uuid =
 let display_title uuid = S.title_for uuid (model_title uuid)
 
 let buffer_needs_save uuid buf =
-  buf <> model_title uuid
-  && match S.editing () with
-     | Some e when e.S.uuid = uuid -> buf <> Ops.trim_title uuid e.S.base
-     | _ -> true
+  let saved = match S.editing () with
+    | Some e when e.S.uuid = uuid -> Ops.trim_title uuid e.S.base
+    | _ -> model_title uuid in
+  buf <> saved
 
 let commit_result ?(after = fun () -> ()) uuid buf =
   if buffer_needs_save uuid buf then (
