@@ -45,8 +45,6 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Area / finding | Remaining work |
 |---|---|
 | Table72 persisted seed duplicates | Previously written incorrect value entities are not automatically removed by the canonical UUID repair. No live graph cleanup has been performed. |
-| Table72 tags selector | Evidence has different input states (Master `Tags`, LUI empty); retain Master's viewport-based cap pending an equal-query comparison rather than imposing the observed 288px as a universal maximum. |
-| Table72 shell follow-up | N20 Escape-to-body, N3 menu origin, N6 tooltip dimensions, N7 origin/actions, N9 highlighted Create foreground, and N19 initial keyboard index still fail on the served build. |
 | Table72 built-in writes | The restoration delta's triggering path remains unknown. A native Master-fixture probe with the real pipeline changes neither refs nor raw-title during ensure or a rejected built-in Tag-to-Page rename. The SDK dispatches that rename through the guarded, temporary-connection outliner path. Actual transaction metadata/physical-datom evidence is still needed; do not attribute these changes to rename or the seed repair yet. |
 | Editor E1 / E12 | Embedded page/block root identity, title/structure and selection count; preserve source-block ownership while including embedded roots. |
 | Editor E10 | Rich/structured clipboard formats and cut/delete focus restoration, including the previous page-title editing position. Plain-text copy alone is insufficient. |
@@ -68,6 +66,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 |---|---|
 | Table72 seeded values | Preserve keyword syntax in deterministic property-value UUID seeds, matching Master. A real Master-created 65.36 graph grows from 190 to 200 entities before the repair; native ensure/reload now preserves every original identity and creates none. Served-build acceptance remains pending. |
 | Table72 Features input | Restore Master's 4px small-input top margin without changing the 200×30 control. Source/native acceptance only; browser geometry remains unverified. |
+| Table72 tags selector | Isolated equal-stage checks at 1600×998 show both property-name pickers at 226×288 for `Tags`; after choosing that property, both tag-value pickers return Card/Cards for `Card` and measure 226×114 (Master 113.953px). The original comparison mixed the property-name and tag-value stages. No production cap change is needed; retain the viewport-based cap rather than a universal 288px maximum. These checks use the prior build with unchanged selector/dialog source, not combined-build acceptance of other repairs. |
 | Editor E3 / E4 | CodeMirror height and fold-control visibility/geometry; current source includes padding and caret adjustments. |
 | Editor E12 / E23 / E30 / E32 | Select-all save/exit, four reported menu-action cleanups, real autocomplete Tab focus traversal, and image clipping after the crash repair. |
 | Editor E13 / E16 | Persisted collapse through the real Meta+; edit-key path is source-tested. Drag ownership now preserves move roots without a source selection/toolbar; indicator width and bottom origin follow Master. Browser acceptance is pending. |
