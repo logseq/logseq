@@ -1519,7 +1519,8 @@ let list_row_el inst ~row_uuid ~blk : t =
       | Some (W.Int n) -> n | None -> 2
       | Some _ -> invalid_arg "Reference open depth must be an integer" in
     let rec with_depth level (b : Model.block) =
-      { b with Model.block_default_collapsed = b.block_default_collapsed || level >= limit
+      { b with Model.block_default_collapsed =
+          b.block_default_collapsed || (level >= limit && b.block_children <> [])
       ; block_children = List.map (with_depth (level + 1)) b.block_children } in
     with_depth 1 b in
   !Render_state.block_row_static
