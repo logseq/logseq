@@ -3417,10 +3417,10 @@ let test_properties_data () =
   check "row_hidden" (Properties_data.row_hidden row);
   check "row_hide_empty" (Properties_data.row_hide_empty row);
   check "row_position"
-    (Properties_data.row_position row = "logseq.property.ui-position/block-left");
+    (Properties_data.row_position row = "block-left");
   check "row_position default"
     (Properties_data.row_position (Wire.Map [])
-     = "logseq.property.ui-position/properties");
+     = "properties");
   check "row_effective default"
     (Properties_data.row_effective_value row = Wire.Int 99);
   let rowv =
@@ -4510,7 +4510,7 @@ let test_props_data () =
     (List.length (Properties_data.row_closed_values row));
   check "row_hidden" (Properties_data.row_hidden row);
   check "row_hide_empty" (Properties_data.row_hide_empty row);
-  eqs "row_position" "logseq.property.ui-position/block-right"
+  eqs "row_position" "block-right"
     (Properties_data.row_position row);
   check "row_is_class_schema no"
     (not (Properties_data.row_is_class_schema row));
@@ -4520,7 +4520,7 @@ let test_props_data () =
   (* defaults on sparse row *)
   let bare = wmap [ ("property-id", Wire.kw "p") ] in
   eqs "row defaults" "default" (Properties_data.row_type bare);
-  eqs "row_position default" "logseq.property.ui-position/properties"
+  eqs "row_position default" "properties"
     (Properties_data.row_position bare);
   check "row_ident missing" (Properties_data.row_ident (wmap []) = None)
 

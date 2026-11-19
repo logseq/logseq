@@ -111,18 +111,24 @@ let row_hidden row =
 let row_hide_empty row =
   getb (row_prop row) "logseq.property/hide-empty-value"
 
-(* ui-position is a ref attr: the display map carries a ref summary with
-   db/ident (e.g. :logseq.property.ui-position/block-left) *)
+(* ui-position enum name (cljs :block-left), the value the worker's enum
+   schema accepts *)
 let row_position row =
+  let enum_name s =
+    match String.rindex_opt s '/' with
+    | Some i -> String.sub s (i + 1) (String.length s - i - 1)
+    | None -> s
+  in
+  enum_name @@
   match getf (row_prop row) "logseq.property/ui-position" with
   | Some w -> (
       match untag w with
       | W.Map _ as m ->
           Option.value (getk m "db/ident")
-            ~default:"logseq.property.ui-position/properties"
+            ~default:"properties"
       | W.Keyword s | W.String s -> s
-      | _ -> "logseq.property.ui-position/properties")
-  | None -> "logseq.property.ui-position/properties"
+      | _ -> "properties")
+  | None -> "properties"
 
 (* cljs resolved-property-value-for-render: when the block has no own
    value, the property's :logseq.property/default-value renders instead *)

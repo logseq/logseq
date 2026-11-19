@@ -307,7 +307,7 @@ and on_type_chosen d name ty =
    switches to the anchored popover spec (32px input + 32px rows) —
    master's mod+p picker is that compact dropdown, not the roomier
    centered-card variant *)
-let async_select ~placeholder ?(compact = false) ?(presentation = Sel.Standard) ?(new_case_sensitive = false) ?new_option ?on_search ?selected_keys
+let async_select ~placeholder ?(compact = false) ?(presentation = Sel.Standard) ?(multiple_choices = false) ?(clear_input_on_choice = false) ?(new_case_sensitive = false) ?new_option ?on_search ?selected_keys
     fetch : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -323,7 +323,7 @@ let async_select ~placeholder ?(compact = false) ?(presentation = Sel.Standard) 
         match m with
         | None -> column ~gap:2 []
         | Some items ->
-            Sel.view ~placeholder ~compact ~presentation ~new_case_sensitive ?new_option ?on_search ?selected_keys items)
+            Sel.view ~placeholder ~compact ~presentation ~multiple_choices ~clear_input_on_choice ~new_case_sensitive ?new_option ?on_search ?selected_keys items)
      (Signal.value items_st))
     context parent
 
@@ -655,7 +655,11 @@ let value_edit_view d prop : t =
           ~block_uuid:d.d_target.uuid ~prop
           ~on_pick
       in
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered) ~selected_keys:(Signal.value selected)
+      (* cljs select-node: the same node picker as a value cell —
+         left checkboxes for many-cardinality, viewport-bound results *)
+      (async_select ~placeholder ~presentation:Sel.Node_picker
+         ~multiple_choices:(is_many prop) ~clear_input_on_choice:true
+         ~selected_keys:(Signal.value selected)
          ?new_option:on_new
          ~on_search:(Some on_search) initial)
         context parent
@@ -694,7 +698,10 @@ let dialog_content ?compact_width ~phase d : t =
           && (List.mem ty ["node"; "page"; "class"; "property"; "number"]
               || Option.fold ~none:false ~some:(fun values -> W.elems values <> [])
                    (D.getf prop "property/closed-values"))
-      | Prop_select | Type_select _ | Node_tags _ -> false in
+      (* cljs property-key popup is w-auto: an unmatched name's
+         nowrap "+ New option: …" row widens it past the 224 minimum *)
+      | Prop_select -> d.d_placement <> Centered
+      | Type_select _ | Node_tags _ -> false in
     Ui_components.with_props
       (if content_sized then [Ui_components.Prop.width_auto;
         Ui_components.Prop.min_width 224; Ui_components.Prop.max_width 600] else [])

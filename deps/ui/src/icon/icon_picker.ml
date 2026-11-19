@@ -64,11 +64,8 @@ let rec take n xs =
   | 0, _ | _, [] -> []
   | n, x :: tl -> x :: take (n - 1) tl
 
-let search_icons q =
-  icon_items ()
-  |> List.filter (fun (display, kebab) ->
-         I18n.contains_ci display q || I18n.contains_ci kebab q)
-  |> take 100
+(* cljs search-tabler-icons: fuzzy-search over the display names *)
+let search_icons q = Fuzzy.fuzzy_search ~extract:fst ~limit:100 (icon_items ()) q
 
 (* ---------- frequently used (storage :ui/ls-icons-used) ---------- *)
 
@@ -399,6 +396,30 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          [content])
   in
 
+  (* cljs a.x: link-colored anchor filling the input height, 50% opacity *)
+  let clear_search =
+    if_ ~test:(reactive (fun s -> s.q <> "") sv)
+      (Ui_components.with_props
+         [ Ui_components.Prop.position `absolute
+         ; Ui_components.Prop.inset_right 0.
+         ; Ui_components.Prop.inset_top 0.
+         ; Ui_components.Prop.opacity 0.5
+         ; Ui_components.Prop.hover_opacity 0.8
+         ; Ui_components.Prop.hover_foreground
+             "var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))))"
+         ; Ui_components.Prop.cursor `pointer ]
+         (button ~key:"clear" ~variant:`ghost ~height:32 ~min_width:0 ~min_height:0
+            ~padding_horizontal:8 ~padding_vertical:0 ~cross:`center ~border_width:0
+            ~background:"transparent"
+            ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
+            ~label:(I.t "icon/clear-search")
+            ~on_press:(fun _ ->
+              on_input "";
+              Option.iter (fun input -> input.Ui_services.focus ())
+                (Ui_services.dom_query ".cp__emoji-icon-picker input"))
+            [ Icons.icon ~size:14. "x" ]))
+  in
+
   let tabs =
     if emoji_only then [ (Tab_emoji, I.t "icon/tab-emojis") ]
     else
@@ -450,8 +471,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                      [ Ui_components.Prop.position `relative
                      ; Ui_components.Prop.overflow `hidden ]
                      (Ui_components.button ~variant:`outline ~style_class:(btn_outline_sm ^ " color-picker")
-                        ~height:28 ~width:24 ~padding_vertical:4
-                        ~padding_horizontal:12 ~corner_radius:4
+                        ~height:24 ~width:24 ~min_width:0 ~min_height:0
+                        ~padding:0 ~main:`center ~cross:`center ~corner_radius:6
                         ~label:(I.t "icon/select-color") ~icon:(`app "palette")
                      ~foreground:(reactive (fun s ->
                        Option.value s.preset ~default:"inherit") sv)
@@ -503,10 +524,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                   ~placeholder:(placeholder_of s.tab)
                   ~text_signal:(reactive (fun s -> s.q) sv)
                   ~on_text:on_input
-                  ~clear_label:(I.t "icon/clear-search")
-                  ~on_clear:(fun () ->
-                    Option.iter (fun input -> input.Ui_services.focus ())
-                      (Ui_services.dom_query ".cp__emoji-icon-picker input"))
+                  ~trailing:[ clear_search ]
                   ())
              sv ])
      ; reactive

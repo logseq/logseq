@@ -1083,7 +1083,8 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
 let not_found_view name : t =
   column ~key:"not-found" ~style_class:"page"
     [ column ~key:"nf-inner" ~opacity:0.75
-        [ paragraph ~key:"nf-t" ~margin:0 ~font_size:"16px" ~line_height:"24px"
+        [ paragraph ~key:"nf-t" ~margin:0
+                 ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))" ~font_size:"16px" ~line_height:"24px"
             ~value:((I18n.page_not_found ()) ^ name) [] ]
     ]
 
@@ -1554,7 +1555,8 @@ let region (ms : Model.t Signal.signal) : t =
                 ~owner:(Wire.String "$$$views") ]
       | Model.Ready, Model.All_graphs -> Graphs_view.view ms
       | Model.Ready, Model.Page "Recycle" ->
-          column ~key:"recycle-page" ~gap:32
+          (* cljs .page: px-2 like a regular page root *)
+          column ~key:"recycle-page" ~gap:32 ~padding_horizontal:8
             [ top_view m; box ~margin_top:(-20) [Recycle.view ms] ]
       | Model.Ready, Model.Settings -> Settings_page.view ms
       | Model.Ready, Model.File path -> File_view.view ~path ms
@@ -1568,7 +1570,8 @@ let region (ms : Model.t Signal.signal) : t =
               (* cljs page-aux: missing page/block renders inline
                  (t :page/not-found) inside the content wrap *)
               box ~key:"pg-missing" ~opacity:0.75
-                [ paragraph ~key:"pgm-t" ~margin:0 ~font_size:"16px" ~line_height:"24px"
+                [ paragraph ~key:"pgm-t" ~margin:0
+                 ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))" ~font_size:"16px" ~line_height:"24px"
                     ~value:(I18n.t "page/not-found") [] ]
           | None, false -> empty_state ())
       | _ -> empty_state ())
