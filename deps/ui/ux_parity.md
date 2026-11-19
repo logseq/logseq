@@ -79,12 +79,13 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Table72 Marketplace | Cards now use Master's 60px thumbnail geometry, separate icon/content columns, reserved title space, independently positioned flags/metadata/actions, and primary foreground. The grid wraps at Master's viewport breakpoints and the list uses typed viewport height/overflow. Empty marketplace filters no longer show the Installed-only placeholder. Artwork glyph fidelity, wrapping, positioning and combined-build appearance remain visually unverified; failed-image fallback is listed as SDK-limited above. |
 | Table72 Set View Type | The display-type selector now uses the unpadded popover/dialog surface rather than 4px-padded menu chrome. This removes 8px from width/height while retaining the inner input/results padding. Other selectors retain their existing menu/overflow behavior. Combined-build geometry and keyboard acceptance remain unverified. |
 | Table72 Property Configure | The heading now has Master's 8px vertical/horizontal padding and 0.8 opacity, adding the missing 8px before the first row without changing row metrics. Combined-build height remains visually unverified. |
+| Shell N9 | Cmdk footer actions now use Master's primary-text semantic color instead of the SDK foreground token; existing label/button opacity is unchanged. Open, Create and sidebar actions share the correction. Browser color acceptance remains unverified. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
 | Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |
 | Shell N1 / N20 | Decorative `#` Tab stop, empty-cmdk footer focus and Escape-to-body. The Escape path was reviewed, not newly browser-verified. |
 | Shell N3 / N6 / N17 | Navigation-menu origin and tooltip geometry/typography. |
-| Shell N9 / N12 | Cmdk Create-footer foreground and title-action offset/gap/foreground. |
+| Shell N12 | Title-action offset/gap/foreground. |
 | Shell N14 / N19 / N24 | Help-link typography/geometry, page-menu arrow focus and sidebar Contents-tab background. |
 | Shell N31 | Cmdk Shift-click opens the sidebar without changing the main route; capture-event handling is repaired and tested, browser acceptance pending. |
 | Reference disclosure | Re-collapse repair is source-tested; the references child's latest round did not exercise it. |
