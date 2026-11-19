@@ -699,7 +699,7 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
     (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28
        ~padding_vertical:4 ~padding_horizontal:12
        ~style_class:"cp__cmdk-hint"
-       ~foreground:"var(--ls-primary-text-color)"
+       ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ row ~key:"inner" ~cross:`center ~gap:4 children ])
 
 (* -- cmdk misc -------------------------------------------------------- *)
