@@ -195,10 +195,11 @@ let view ~placeholder ?(compact = false) ?(presentation = Standard)
                    ~height:(if vis = [] then 0
                      else if compact then min 250 (32 * List.length vis)
                      else if node_picker then
-                       (if multiple_choices then
+                       min (node_results_max_height ())
+                       ((if multiple_choices then
                           List.fold_left (fun height item ->
                             height + if item.it_has_header then 36 else 32) 0 vis
-                        else 36 * List.length vis) + 8
+                        else 36 * List.length vis) + 8)
                      else 280)
                    (List.mapi
                      (fun index it ->

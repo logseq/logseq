@@ -657,6 +657,34 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
                       ; title = p.Model.page_title
                       }
                 | None -> ())
+          else if p.Model.page_is_property then
+            (* cljs: a property page's title action opens its config
+               dropdown (property-dropdown page nil {}) *)
+            add_btn ~a11y:(anchor_id ^ "-prop")
+              (I18n.t "ui/configure") (fun _ ->
+                match Ui_services.dom_query ("#" ^ anchor_id ^ "-prop") with
+                | Some anchor ->
+                    ignore
+                      (let* prop = D.entity_by_uuid uuid in
+                       match D.untag prop, D.getk (D.untag prop) "db/ident" with
+                       | W.Map fields, Some ident ->
+                           (* the row-shape display map carries the
+                              property's closed values; a bare entity
+                              does not *)
+                           let* closed = D.closed_values (W.Keyword ident) in
+                           let prop =
+                             W.Map ((W.Keyword "property/closed-values", closed) :: fields)
+                           in
+                            Menu.open_menu ~anchor ~owner_uuid:uuid
+                              ~owner_id:p.Model.page_db_id ~owner_is_tag:false
+                              ~owner_title:p.Model.page_title
+                              ~refresh:S.refresh_all ~has_owner:false
+                              (W.Map
+                                 [ (W.Keyword "property", prop)
+                                 ; (W.Keyword "property-id", W.Keyword ident) ]);
+                           Js.Promise.resolve ()
+                       | _ -> Js.Promise.resolve ())
+                | None -> ())
           else
             add_btn ~a11y:(anchor_id ^ "-prop")
               (I18n.t "property/set-property") (fun _ ->

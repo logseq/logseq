@@ -16,6 +16,7 @@ type menu_ctx =
   ; owner_id : int option
   ; owner_is_tag : bool (* owner entity is a class/tag *)
   ; owner_title : string
+  ; has_owner : bool (* false on the property page: no owner block *)
   ; refresh : unit -> unit
   ; row : W.t
   }
@@ -544,7 +545,10 @@ let main_items context m ~set_pane ~close =
           "logseq.property/hide?"
       ; toggle_view (I18n.t "property/hide-empty-value")
           "logseq.property/hide-empty-value"
-      ; menu_item ~text:(I18n.t "property/go-to-this-property")
+      ]
+    (* cljs: go-to / delete only when opened for an owner block *)
+    @ (if not m.has_owner then [] else
+      [ menu_item ~text:(I18n.t "property/go-to-this-property")
           ~on_press:(fun _ ->
             (match prop_uuid m with
              | Some u ->
@@ -564,7 +568,7 @@ let main_items context m ~set_pane ~close =
               ~view:(delete_confirm_dialog context m ~close)
               ~on_escape:(fun () -> ()))
           []
-      ]
+      ])
 
 (* the pane-swapping body shared by menu_view (in-tree anchor) and
    open_menu (element anchor): MMain lists more_options + the config
@@ -583,7 +587,7 @@ let menu_body_view ~more_options ~with_title m ~close : t =
                  column ~gap:0
                    ((if with_title then
                        [ text ~style_class:"ls-menu-h3"
-                           ~value:(I18n.t "ui/configure") [] ]
+                           ~value:(I18n.t "property/configure") [] ]
                      else [])
                     @ more_options
                     @ main_items context m ~set_pane:pane ~close)
@@ -599,8 +603,9 @@ let menu_body_view ~more_options ~with_title m ~close : t =
 let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
     ~close row : t =
  fun context parent ->
+  let has_owner = true in
   let m =
-    { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row }
+    { owner_uuid; owner_id; owner_is_tag; owner_title; has_owner; refresh; row }
   in
   (popover ~anchor:`below ~anchor_alignment:`start ~role:`menu
      ~anchor_offset:4.0 ~min_width:200
@@ -616,9 +621,9 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
    Configure title. *)
 let open_menu ~(anchor : Ui_services.el) ~owner_uuid ~owner_id
     ~owner_is_tag ~owner_title ~refresh ?(more_options = [])
-    ?(with_title = true) row =
+    ?(with_title = true) ?(has_owner = true) row =
   let m =
-    { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row }
+    { owner_uuid; owner_id; owner_is_tag; owner_title; has_owner; refresh; row }
   in
   let close = ref (fun () -> ()) in
   let content =
