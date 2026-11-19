@@ -872,7 +872,8 @@ let sidebar instance : t =
 
 let focus_body_after_close st =
   ignore (Ui_services.timers_timeout (fun () ->
-    if not (S.get st).S.open_ then Ui_services.dom_focus_body ()) 0)
+    ignore (Ui_services.timers_timeout (fun () ->
+      if not (S.get st).S.open_ then Ui_services.dom_focus_body ()) 0)) 0)
 
 let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   let v = S.get st in

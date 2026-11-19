@@ -4240,6 +4240,7 @@ let run_views ~registry ~profile ~finish =
     }
   in
   let search = mount (fun ms -> Cmdk_view.render ~services ms) in
+  let search_st = Option.get !Cmdk_state.latest_t in
   let footer_effects = ref [] in
   let record_effect value = footer_effects := value :: !footer_effects in
   let footer_services =
@@ -4354,6 +4355,68 @@ let run_views ~registry ~profile ~finish =
     select [] (-1);
     check "An empty palette without footer actions does not swallow Tab"
       (not (tab false).prevent));
+  let () =
+  let window : Js.Json.t = Stub_dom.get_field Stub_dom.global "window" in
+  let previous_timeout : Js.Json.t = Stub_dom.get_field window "setTimeout"
+  and previous_clear : Js.Json.t = Stub_dom.get_field window "clearTimeout" in
+  let previous_schedule = !Runtime.schedule_flush and previous_flush = !Runtime.app_flush
+  and previous_pending = !Runtime.flush_pending in
+  let previous_view = Cmdk_state.get search_st in
+  let body : Js.Json.t = Stub_dom.get_field document "body" in
+  let trigger = Stub_dom.make_element "button"
+  and surface = Stub_dom.make_element "div"
+  and input = Stub_dom.make_element "input" in
+  ignore (Stub_dom.append_child body trigger);
+  ignore (Stub_dom.append_child body surface);
+  ignore (Stub_dom.append_child surface input);
+  let focus element = (Stub_dom.get_field element "focus" : unit -> unit) () in
+  let pending = Queue.create () and cancelled = Hashtbl.create 4 and next_timer = ref 0 in
+  let run_timer () =
+    let id, callback = Queue.take pending in
+    if not (Hashtbl.mem cancelled id) then callback () in
+  let drain () = while not (Queue.is_empty pending) do run_timer () done in
+  let was_open = ref previous_view.open_ in
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field window "setTimeout" previous_timeout;
+    Stub_dom.set_field window "clearTimeout" previous_clear;
+    Runtime.schedule_flush := previous_schedule; Runtime.app_flush := previous_flush;
+    Runtime.flush_pending := previous_pending;
+    Signal.set search_st.Cmdk_state.vs previous_view; S.flush search;
+    Stub_dom.detach trigger; Stub_dom.detach surface;
+    Stub_dom.set_field document "activeElement" previous_active) (fun () ->
+    Stub_dom.set_field window "setTimeout" (fun callback _ ->
+      incr next_timer; Queue.add (!next_timer, callback) pending; !next_timer);
+    Stub_dom.set_field window "clearTimeout" (fun id -> Hashtbl.replace cancelled id ());
+    Runtime.flush_pending := false;
+    Runtime.schedule_flush := (fun callback -> ignore (Ui_services.timers_timeout callback 0));
+    Runtime.app_flush := (fun () ->
+      S.flush search;
+      let open_ = (Cmdk_state.get search_st).open_ in
+      if !was_open && not open_ then begin
+        focus trigger;
+        ignore (Ui_services.timers_timeout (fun () ->
+          if Stub_dom.get_field document "activeElement" == body then focus trigger) 0)
+      end;
+      was_open := open_);
+    let open_search items =
+      Cmdk_state.set search_st {Cmdk_state.initial_view with open_=true;persist=false;
+        groups=[{gid=G_nodes;gtitle="Results";gitems=items;gtotal=List.length items;
+          glimit=10;gexpanded=false;gfilter_active=false}]};
+      drain (); focus input in
+    let escape () = ignore (Cmdk_view.handle_keydown search_st
+      {key="Escape";meta=false;ctrl=false;shift=false;alt=false;composing=false}) in
+    List.iter (fun items ->
+      open_search items; escape (); drain ();
+      check "Palette Escape focuses BODY after deferred host trigger restoration"
+        (not (Cmdk_state.get search_st).open_
+         && Stub_dom.get_field document "activeElement" == body)) [pages;[]];
+    open_search pages; escape ();
+    run_timer (); run_timer ();
+    Cmdk_state.set search_st {Cmdk_state.initial_view with open_=true;persist=false};
+    focus input; drain ();
+    check "Reopening the palette cancels pending Escape body focus"
+      ((Cmdk_state.get search_st).open_
+       && Stub_dom.get_field document "activeElement" == input)) in
   List.iter (fun (action, shift, expected) ->
     select [item 0 action] 0;
     Cmdk_view.handle_click footer_st
