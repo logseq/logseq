@@ -1145,6 +1145,64 @@ let test_indent_outdent (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_indent_type_double_undo_caret (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "Parent";Test_check.block "b2" "Level two"];
+  set_editing ~uuid:"b2" ~buffer:"Level two" ~caret:0 ~base:"Level two";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let committed = ref !Runtime.current_page and history = ref [] and undos = ref 0 in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        let before = !committed in
+        let* result = worker.invoke_fn name args in
+        if before <> !Runtime.current_page then begin
+          history := (opts,before) :: !history;
+          committed := !Runtime.current_page
+        end;
+        Js.Promise.resolve result
+    | "thread-api/undo-redo-undo",_ ->
+        incr undos;
+        (match !history with
+         | (opts,page) :: rest ->
+             history := rest; committed := page;
+             Runtime.current_page := page; h.sync_page ();
+             let cursors = List.filter_map (W.get opts)
+               ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+             Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool true;
+               W.kw "editor-cursors",W.List cursors])
+         | [] -> Js.Promise.resolve (W.Map []))
+    | _ -> worker.invoke_fn name args)};
+  Editor_keys.apply_input "b2" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  Editor_keys.apply_input "b2" (EI.Insert "abc");
+  let* () = Ops.flush_pending_save () in
+  let* () = settle h 40 in
+  check "Indent and subsequent typing record separate before/after cursor pairs"
+    (List.length !history=2
+     && List.for_all (fun (opts,_) ->
+       match W.get opts "undo-redo/editor-info" with
+       | Some cursor -> W.get cursor "caret"=Some (W.Int 0)
+           && W.get cursor "block-uuid"=Some (W.Uuid "b2")
+       | None -> false) !history);
+  let rec undo_twice n =
+    if n=0 then Js.Promise.resolve () else begin
+      A.undo ();
+      let* () = h.wait_ms 25 in
+      let* () = settle h 40 in
+      check "Indent/type undo restores the recorded zero caret rather than the end of the block"
+        (S.editing_uuid ()=Some "b2" && (editing_now ()).model.EM.caret=0
+         && (editing_now ()).buffer="Level two");
+      undo_twice (n-1)
+    end in
+  let* () = undo_twice 2 in
+  check "The double-undo workflow consumes both recorded mutations" (!undos=2 && !history=[]);
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 (* ---------- run ---------- *)
 
 let test_exit_waits_for_save (h : host) =
@@ -2578,6 +2636,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_continuous_delete_xfail h in
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
+  let* () = test_indent_type_double_undo_caret h in
   let* () = test_exit_waits_for_save h in
   let* () = test_select_all_exit h in
   let* () = test_task_cycle h in
