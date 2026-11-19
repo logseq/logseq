@@ -13,6 +13,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.journal :as db-journal]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -586,22 +587,13 @@
 (defn- journal-title-format-tx
   [{:keys [db-after] :as tx-report}]
   (when (journal-title-format-changed? tx-report)
-    (mapcat (fn [{:keys [e v]}]
-            (let [journal (d/entity db-after e)
-                  title (journal-title db-after v)
-                  page-name (common-util/page-name-sanity-lc title)]
-              (when (and (ldb/journal? journal)
-                         (not-any? #(not= e (:e %)) (d/datoms db-after :avet :block/name page-name)))
-                (cond-> []
-                  (not= title (stored-attr-value db-after e :block/title))
-                  (conj [:db/add e :block/title title])
-                  (not= page-name (stored-attr-value db-after e :block/name))
-                  (conj [:db/add e :block/name page-name])))))
-          (d/datoms db-after :avet :block/journal-day))))
+    (db-journal/title-format-tx db-after)))
 
 (defn- ensure-journal-page-protected-attrs-not-updated!
   [{:keys [db-before db-after tx-data] :as tx-report}]
-  (when-let [violation
+  (let [formatted-values (when (journal-title-format-changed? tx-report)
+                           (db-journal/title-format-values db-after))]
+    (when-let [violation
              (some (fn [{:keys [e a v added]}]
                      (when (and added
                                 (contains? journal-protected-update-attrs a))
@@ -610,13 +602,7 @@
                          (when (and before-ent
                                     (ldb/journal? before-ent)
                                     (not= before-v v)
-                                    (not (and (contains? #{:block/title :block/name} a)
-                                              (journal-title-format-changed? tx-report)
-                                              (let [title (journal-title db-after (:block/journal-day before-ent))
-                                                    page-name (common-util/page-name-sanity-lc title)]
-                                                (and (= v (if (= a :block/title) title page-name))
-                                                     (not-any? #(not= e (:e %))
-                                                               (d/datoms db-after :avet :block/name page-name)))))))
+                                    (not= v (get-in formatted-values [e a])))
                            {:type :journal-page-protected-attr-updated
                             :entity-id e
                             :attr a
@@ -624,7 +610,7 @@
                             :after v
                             :journal-day (:block/journal-day before-ent)}))))
                    tx-data)]
-    (throw (ex-info "journal page protected attr updated" violation))))
+      (throw (ex-info "journal page protected attr updated" violation)))))
 
 (defn- projected-reference-content-datom?
   [datom]

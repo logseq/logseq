@@ -1029,6 +1029,25 @@
                (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other]))))
       (finally (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest journal-title-format-name-swap-test
+  (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20240102}}
+                                               {:page {:build/journal 20240201}}])
+        journals (mapv #(ldb/get-journal-page-by-day @conn %) [20240102 20240201])
+        names #(mapv (fn [journal] (:block/name (d/entity @conn (:db/id journal)))) journals)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+      (is (= ["2024/01/02" "2024/02/01"] (names)))
+      (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/dd/MM"]])
+      (is (= ["2024/02/01" "2024/01/02"] (names)))
+      (is (= ["2024/02/01" "2024/01/02"] (mapv #(raw-block-title @conn %) journals)))
+      (is (= 20240102 (:block/journal-day (ldb/get-page @conn "2024/02/01"))))
+      (is (= 20240201 (:block/journal-day (ldb/get-page @conn "2024/01/02"))))
+      (d/transact! conn [[:db/add (:db/id (first journals)) :block/name "2024/01/02"]
+                         [:db/add (:db/id (second journals)) :block/name "2024/02/01"]])
+      (is (= 20240102 (:block/journal-day (ldb/get-page @conn "2024/02/01"))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
 (deftest get-page-resolves-current-journal-format-test
   (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20241216}}])
         journal (ldb/get-journal-page-by-day @conn 20241216)]

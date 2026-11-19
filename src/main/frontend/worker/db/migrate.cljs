@@ -8,9 +8,9 @@
             [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
+            [logseq.db.common.journal :as db-journal]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
@@ -125,20 +125,7 @@
 
 (defn- repair-journal-titles-and-names
   [db]
-  (let [formatter (:logseq.property.journal/title-format (d/entity db :logseq.class/Journal))]
-    (mapcat
-     (fn [{:keys [e v]}]
-       (when (ldb/journal? (d/entity db e))
-         (let [title (date-time-util/int->journal-title v formatter)
-               page-name (common-util/page-name-sanity-lc title)
-               stored (fn [attr] (:v (first (d/datoms db :eavt e attr))))]
-           (when (not-any? #(not= e (:e %)) (d/datoms db :avet :block/name page-name))
-             (cond-> []
-               (not= title (stored :block/title))
-               (conj [:db/add e :block/title title])
-               (not= page-name (stored :block/name))
-               (conj [:db/add e :block/name page-name]))))))
-     (d/datoms db :avet :block/journal-day))))
+  (db-journal/title-format-tx db))
 
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
