@@ -43,6 +43,11 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 
 | Area / finding | Remaining work |
 |---|---|
+| Table72 persisted seed duplicates | Previously written incorrect value entities are not automatically removed by the canonical UUID repair. No live graph cleanup has been performed. |
+| Table72 settings / marketplace | Features home-input offset; Keymap recorder Remove/Close footer; marketplace artwork, wrapping, layout and empty-filter state. |
+| Table72 property popups | Set View Type and Property Configure sizing; tags selector maximum height. |
+| Table72 shell follow-up | N20 Escape-to-body, N3 menu origin, N6 tooltip dimensions, N7 origin/actions, N9 highlighted Create foreground, and N19 initial keyboard index still fail on the served build. |
+| Table72 built-in writes | Investigate unexpected refs and raw-title changes in the restoration delta; their triggering path is not established yet. |
 | Editor E1 / E12 | Embedded page/block root identity, title/structure and selection count; preserve source-block ownership while including embedded roots. |
 | Editor E10 | Rich/structured clipboard formats and cut/delete focus restoration, including the previous page-title editing position. Plain-text copy alone is insufficient. |
 | History UI state | Master also records sidebar open/collapse/items. The current local repair records routes only, not sidebar layout history. |
@@ -61,6 +66,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 
 | Area / finding | Verification still needed |
 |---|---|
+| Table72 seeded values | Preserve keyword syntax in deterministic property-value UUID seeds, matching Master. A real Master-created 65.36 graph grows from 190 to 200 entities before the repair; native ensure/reload now preserves every original identity and creates none. Served-build acceptance remains pending. |
 | Editor E3 / E4 | CodeMirror height and fold-control visibility/geometry; current source includes padding and caret adjustments. |
 | Editor E12 / E23 / E30 / E32 | Select-all save/exit, four reported menu-action cleanups, real autocomplete Tab focus traversal, and image clipping after the crash repair. |
 | Editor E13 / E16 | Persisted collapse through the real Meta+; edit-key path is source-tested. Drag ownership now preserves move roots without a source selection/toolbar; indicator width and bottom origin follow Master. Browser acceptance is pending. |

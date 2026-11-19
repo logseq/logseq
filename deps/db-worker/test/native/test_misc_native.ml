@@ -278,6 +278,37 @@ let test_ensure_built_in_data_exists () =
       check "ensure-built-in-data-exists!: graph-created-at unchanged"
         (kv_value db' "logseq.kv/graph-created-at" = graph_created_at)
 
+let test_ensure_current_master_seed_after_reload () =
+  let conn = Option.get
+    (conn_from_transit_fixture "deps/db-worker/test/fixtures/migration/65.36.transit") in
+  check "master fixture has schema 65.36"
+    (Option.map Db_schema.parse_schema_version
+       (kv_value (db_of conn) "logseq.kv/schema-version")
+     = Some (Db_schema.parse_schema_version (String "65.36")));
+  let uuid = "00000004-4485-6574-6000-000000000000" in
+  let description db = Option.get (entity db (Lookup_ref ("block/uuid",Uuid uuid))) in
+  let original = description (db_of conn) in
+  check "master fixture retains the reported built-in description"
+    (Ldb.string_value original "block/title"
+     = Some "This enables tags to inherit properties from other tags");
+  let entity_ids db =
+    datoms db Eavt () |> List.of_seq |> List.map (fun d -> d.e)
+    |> List.sort_uniq Int.compare in
+  let ids = entity_ids (db_of conn) in
+  let ensure conn =
+    ignore (Db_migrate.ensure_built_in_data_exists conn);
+    Alcotest.(check int) "ensuring a Master seed creates zero new entities"
+      (List.length ids) (List.length (entity_ids (db_of conn)));
+    Alcotest.(check (list int)) "all original entity identities survive ensuring"
+      ids (entity_ids (db_of conn));
+    Alcotest.(check int) "the original description entity remains canonical"
+      original.id (description (db_of conn)).id in
+  ensure conn;
+  let reloaded = Datascript.conn_from_db
+    (Datascript.from_serializable (Datascript.serializable (db_of conn))) in
+  ensure reloaded;
+  ensure reloaded
+
 let test_ensure_built_in_data_live_repair_assigns_canonical_revision () =
   let conn = Db_test_util.create_conn_bare () in
   ignore
@@ -827,6 +858,8 @@ let migrate_cases : unit Alcotest.test_case list =
       test_delete_property_cleans_property_usages
   ; Alcotest.test_case "ensure-built-in-data-exists!" `Quick
       test_ensure_built_in_data_exists
+  ; Alcotest.test_case "ensure-current-master-seed-after-reload" `Quick
+      test_ensure_current_master_seed_after_reload
   ; Alcotest.test_case
       "ensure-built-in-data-live-repair-assigns-canonical-revision"
       `Quick
