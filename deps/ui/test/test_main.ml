@@ -1095,6 +1095,33 @@ let test_decode6 () =
 (* ---- Editor_state pure helpers ---- *)
 
 let test_editor_state () =
+  let module P = Outliner_projection in
+  let linked = block ~children:[block "embed-child" "child"] "linked" "Linked" in
+  let linking = {(block "linking" "") with Model.block_link = Some 9;
+    block_embed_children = [linked]} in
+  let project blocks = P.create ~expanded:(fun ~scope:_ _ -> true)
+      ~children_of:Editor_state.children_of
+      [{P.section_key = "host"; repository = None; scope = "main";
+        page = page blocks; is_last = true}] in
+  let rows projection = List.filter_map (function P.Block row -> Some row | _ -> None)
+      projection.P.rows in
+  let projected = rows (project [linking]) in
+  check "Embed projection replaces the linking row at the same depth"
+    (List.map (fun (row : P.block_row) -> row.block.block_uuid, row.depth) projected
+     = [Some "linked", 0; Some "embed-child", 1]);
+  check "Embed projection preserves the host owner on the linked root only"
+    (List.map (fun (row : P.block_row) -> row.block.block_original) projected
+     = [Some ("linking", "main"); None]);
+  let empty_page = {linked with Model.block_is_page = true; block_children = []} in
+  check "Empty page embed retains its linked title row"
+    (List.map (fun (row : P.block_row) -> row.block.block_title)
+       (rows (project [{linking with block_embed_children = [empty_page]}])) = ["Linked"]);
+  check "Loop-protected embed renders the original block"
+    (List.map (fun (row : P.block_row) -> row.block.block_uuid)
+       (rows (project [{linking with block_embed_children = []}])) = [Some "linking"]);
+  check "Malformed embed projection fails fast"
+    (try ignore (project [{linking with block_embed_children = [linked; linked]}]); false
+     with Invalid_argument _ -> true);
   let grandchild = block "g" "gc" in
   let child = block ~children:[ grandchild ] "c" "child" in
   let embed =

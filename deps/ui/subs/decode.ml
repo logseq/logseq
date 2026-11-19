@@ -425,6 +425,7 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
   ; block_children = children
   ; block_link = link
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page =
       Option.is_some (Wire.map_get_string w "block/name")
   ; block_heading =

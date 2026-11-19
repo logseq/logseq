@@ -65,6 +65,7 @@ type block =
   ; (* fetched blocks of the linked entity; never written back by
        structure ops (they belong to the source page) *)
     block_embed_children : block list
+  ; block_original : (string * string) option (* projected embed's host UUID and scope *)
   ; block_is_page : bool
   ; block_heading : int option (* resolved h1..h6 level *)
     (* page-typed outline child (carries block/name; cljs entity/page?) *)
@@ -368,6 +369,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_children = []
   ; block_link = None
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page = is_page
   ; block_heading = None
   ; block_default_collapsed = false

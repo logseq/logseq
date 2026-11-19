@@ -59,16 +59,18 @@ let find_path ~children_of ~scope ~uuid (sections : section list) =
   let rec blocks ~exact scope ancestors = function
     | [] -> None
     | (block : Model.block) :: rest ->
+        let sibling_scope = scope in
+        let scope, block = match block.block_link with
+          | Some _ -> embedded_scope ~scope block, Editor_state.rendered_block ~scope block
+          | None -> scope, block in
         let path = {ancestor_block = block; ancestor_scope = scope} :: ancestors in
         if block.block_uuid = Some uuid && (not exact || scope = requested_scope) then Some path
         else
           let children = children_of block in
-          let child_scope = match block.block_link, children with
-            | Some _, _ :: _ -> embedded_scope ~scope block
-            | _ -> scope in
+          let child_scope = scope in
           (match blocks ~exact child_scope path children with
            | Some _ as found -> found
-           | None -> blocks ~exact scope ancestors rest)
+           | None -> blocks ~exact sibling_scope ancestors rest)
   in
   let preferred, others = List.partition (fun (section : section) -> section.scope = scope) sections in
   let in_sections ~exact = List.find_map (fun (section : section) ->
@@ -93,21 +95,21 @@ let create ~expanded ~children_of (sections : section list) =
     let rec blocks ~section ~scope ~depth ~ancestors reversed = function
     | [] -> reversed
     | (block : Model.block) :: rest ->
-          let reversed = push (Block {block; scope; section; depth; ancestors}) reversed in
+        let row_scope, block = match block.block_link with
+          | Some _ ->
+              let source_scope = embedded_scope ~scope block in
+              let displayed = Editor_state.rendered_block ~scope block in
+              embedded_sources := {source_scope; source_blocks = [displayed]} :: !embedded_sources;
+              source_scope, displayed
+          | None -> scope, block in
+          let reversed = push (Block {block; scope = row_scope; section; depth; ancestors}) reversed in
         let reversed =
-          if not (expanded ~scope block) then reversed
+          if not (expanded ~scope:row_scope block) then reversed
           else
             let children = children_of block in
-            let child_scope =
-              match block.block_link, children with
-              | Some _, _ :: _ ->
-                  let source_scope = embedded_scope ~scope block in
-                  embedded_sources := {source_scope; source_blocks = children} :: !embedded_sources;
-                  source_scope
-              | _ -> scope
-            in
+            let child_scope = row_scope in
               blocks ~section ~scope:child_scope ~depth:(depth + 1)
-                     ~ancestors:({ancestor_block = block; ancestor_scope = scope} :: ancestors)
+                     ~ancestors:({ancestor_block = block; ancestor_scope = row_scope} :: ancestors)
                      reversed children
         in
           blocks ~section ~scope ~depth ~ancestors reversed rest

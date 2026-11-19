@@ -525,9 +525,19 @@ let page_blocks () =
    linked page's fetched blocks in place of its own children — so lookups
    and visible order must consult block_embed_children for them *)
 let children_of (b : Model.block) =
-  match b.Model.block_link with
-  | Some _ -> b.Model.block_embed_children
-  | None -> b.Model.block_children
+  match b.Model.block_original, b.Model.block_link with
+  | Some _, _ -> b.Model.block_children
+  | None, Some _ -> b.Model.block_embed_children
+  | None, None -> b.Model.block_children
+
+let rendered_block ~scope (b : Model.block) =
+  match b.block_link, b.block_embed_children with
+  | Some _, [target] ->
+      {target with Model.block_original = Some (Option.get b.block_uuid, scope);
+        block_default_collapsed = false}
+  | Some _, [] -> {b with Model.block_original = Some (Option.get b.block_uuid, scope)}
+  | Some _, _ -> invalid_arg "Expected one linked embed root"
+  | None, _ -> b
 
 let rec find_in blocks uuid =
   match blocks with
@@ -592,6 +602,15 @@ let outliner_blocks_in_scope scope =
       match block_source scope with
       | Some { source_kind = Outliner; source_blocks; _ } -> Some (source_blocks ())
       | Some { source_kind = Field_editor; _ } | None -> None
+
+let original_owner_in_scope ~scope uuid =
+  match outliner_blocks_in_scope scope with
+  | Some blocks -> (match find_in blocks uuid with
+      | Some {Model.block_original = Some original; _} -> original
+      | _ -> uuid, scope)
+  | None -> uuid, scope
+
+let original_uuid_in_scope ~scope uuid = fst (original_owner_in_scope ~scope uuid)
 
 let find uuid =
   match find_in (page_blocks ()) uuid with

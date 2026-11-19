@@ -55,6 +55,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_comment_target_ids = []
   ; block_link = None
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page = false
   ; block_heading = None
   ; block_default_collapsed = false

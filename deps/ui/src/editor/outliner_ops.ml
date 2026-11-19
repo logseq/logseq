@@ -520,8 +520,30 @@ let rec fill_embed_children repo ancestors collapsed
           in
           check_loader_result w;
           collapsed := collect_collapsed !collapsed w;
-          fill_embed_children repo (link_id :: ancestors)
-            collapsed (Decode.blocks_of_wire w)
+          let blocks = Decode.blocks_of_wire w in
+          let* roots =
+            match blocks with
+            | root :: _ when root.Model.block_db_id = Some link_id ->
+                Js.Promise.resolve blocks
+            | _ ->
+                let* entities = Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+                    (Wire.Array [Wire.Map [Wire.String "id", Wire.Int link_id;
+                      Wire.String "opts", Wire.Map []]]) in
+                check_loader_result entities;
+                let pairs = match entities with
+                  | Wire.Array pairs | Wire.List pairs -> pairs
+                  | _ -> failwith "Expected linked entity results" in
+                let root = match pairs with
+                  | [pair] -> (match Wire.block_of_pair pair with
+                      | Some entity ->
+                          collapsed := collect_collapsed !collapsed entity;
+                          Decode.block_of_wire entity
+                      | None -> failwith "Linked entity is unavailable")
+                  | _ -> failwith "Expected one linked entity" in
+                Js.Promise.resolve [{root with Model.block_children = blocks;
+                  block_default_collapsed = false}]
+          in
+          fill_embed_children repo (link_id :: ancestors) collapsed roots
       | _ -> Js.Promise.resolve []
     in
     let* a = Js.Promise.all [| children_p; embed_p |] in

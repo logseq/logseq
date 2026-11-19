@@ -20,7 +20,6 @@
    Editor_state's signal; each row derives its class/attrs/branch from it via
    style_class_signal, attrs_signal_v, reactive and if_. *)
 
-open Promise_ext
 open Lui_elements
 
 module S = Editor_state
@@ -77,7 +76,7 @@ let row_class_str ~scope (b : Model.block) uuid selection
     (drag : S.drag_preview option) =
   let order_list = b.Model.block_order_list = Some "number" in
   let blank = String.trim b.block_title = "" in
-  let embed = b.Model.block_link <> None in
+  let embed = b.Model.block_original <> None in
   (* cljs :class order — dynamic flags first, base classes last *)
   (if S.is_selected_in_view ~scope uuid selection then "selected " else "")
   ^ (match drag with
@@ -101,7 +100,7 @@ let effective_collapsed_cv ~scope uuid default (v : S.collapse_view) =
 let row_attrs_of ~scope ~depth ~editable uuid (b : Model.block)
     (v : S.collapse_view) =
   let has_children = S.children_of b <> [] in
-  let embed = b.Model.block_link <> None in
+  let embed = b.Model.block_original <> None in
   (* the row's DOM id is the kind's accessibility-identifier — it stays
      out of data_attrs so the id prop owns it *)
   [ ("data-blockid", uuid)
@@ -124,10 +123,7 @@ let row_attrs_of ~scope ~depth ~editable uuid (b : Model.block)
   ; ( "style"
     , "position:relative;padding:0.125rem 0;width:100%" )
   ]
-  (* cljs sets blockid to the linked entity's uuid and
-     originalblockid to the linking block's — we keep blockid as the
-     embed block's own uuid so delegated editing/ops resolve it *)
-  @ (if embed then [ ("data-originalblockid", uuid); ("data-embed", "true") ]
+  @ (if embed then [ ("data-originalblockid", fst (Option.get b.block_original)); ("data-embed", "true") ]
      else [])
 
 let row_attrs_sig ~scope ~depth ~editable uuid (b : Model.block) =
@@ -158,6 +154,8 @@ let block_heading_lvl (b : Model.block) =
 (* Library keeps default page controls as bullets; explicit, inherited
    and PDF icons remain visible. Type precedence is shared with search. *)
 let node_icon ~(library : bool) (b : Model.block) : Model.icon option =
+  if b.block_original <> None then Some (Node_icon.tabler "arrow-narrow-right")
+  else
   let cls name = List.mem ("logseq.class/" ^ name) b.block_tag_idents in
   let has_default = cls "Tag" || cls "Property" || cls "Page" || cls "Journal" in
   if b.block_icon <> None || b.block_tag_icons <> []
@@ -1239,144 +1237,6 @@ and children_static_el ~depth ~library ?highlight ~collapse_scope
              b.block_children)))
     ctx parent
 
-
-(* -- {{embed [[page]]}}: live page block tree inside .embed-block --
-
-   render_inline cannot import this module (tree -> render), so the embed
-   view registers itself into Render_state and render_inline calls the
-   hook. Each mounted embed refetches on "sync-db-changes" so edits show up
-   without remounting (cljs embeds are datascript subscriptions). *)
-
-let embed_refreshes : (int, unit -> unit) Hashtbl.t = Hashtbl.create 8
-let embed_refresh_seq = ref 0
-let embed_chained = ref false
-
-(* a broadcast can arrive per applied op — coalesce embed refetches into
-   one fan-out per burst so N embeds issue N fetches, not N x ops *)
-(* created at first use (post-install) — a top-level timers_debounce
-   call would hit Ui_services.get during module init, before install *)
-let embed_refresh_debouncer = ref None
-
-let debounced_embed_refresh f =
-  match !embed_refresh_debouncer with
-  | Some d -> d f
-  | None ->
-      let d = Ui_services.timers_debounce 150 in
-      embed_refresh_debouncer := Some d;
-      d f
-
-let chain_embed_worker () =
-  if not !embed_chained then begin
-    embed_chained := true;
-    (* embeds fetch whole page trees by name — their content can change
-       under affected-keys we don't know the uuids for, so they keep
-       the watch-all default *)
-    ignore
-      (Runtime.on_sync (fun _affected ->
-           debounced_embed_refresh (fun () ->
-               Hashtbl.iter
-                 (fun _ f ->
-                   try f ()
-                   with e ->
-                     Ui_services.log_error ("embed refresh failed", e))
-                 embed_refreshes)))
-  end
-
-let fetch_embed_blocks name st =
-  Render_state.with_repo (fun repo ->
-      ignore
-        ((let* w =
-           Runtime.invoke3 "thread-api/get-page-blocks-tree"
-             (Wire.String repo) (Wire.String name) Wire.Nil
-         in
-         let* blocks = Outliner_ops.resolve_block_tags (Decode.blocks_of_wire w) in
-         Signal.set st blocks;
-         Js.Promise.resolve ())
-         |> Js.Promise.catch (fun e ->
-                Ui_services.log_error ("embed blocks fetch failed", e);
-                Js.Promise.resolve ())))
-
-(* cheap reactive equality for fetched trees: uuid + title covers structure
-   and content edits; a full structural compare walks every field of a
-   rebuilt-per-fetch tree on each publish *)
-let rec same_blocks a b =
-  match a, b with
-  | [], [] -> true
-  | x :: xs, y :: ys ->
-      x.Model.block_uuid = y.Model.block_uuid
-      && x.Model.block_title = y.Model.block_title
-      && same_blocks x.Model.block_children y.Model.block_children
-      && same_blocks xs ys
-  | _ -> false
-
-(* embed block cap: an embed renders at most this many blocks; a larger
-   node opens through the click-through row instead of inflating the
-   embed *)
-let embed_block_cap = 50
-
-(* prune a fetched tree to the first [cap] blocks in depth-first order;
-   returns the pruned tree and whether anything was dropped *)
-let cap_embed_blocks cap blocks =
-  let n = ref 0 and dropped = ref false in
-  let rec go_list = function
-    | [] -> []
-    | bs when !n >= cap ->
-        dropped := true;
-        ignore bs;
-        []
-    | b :: rest ->
-        incr n;
-        let b' =
-          { b with
-            Model.block_children = go_list b.Model.block_children
-          ; block_embed_children = go_list b.Model.block_embed_children
-          }
-        in
-        b' :: go_list rest
-  in
-  let out = go_list blocks in
-  (out, !dropped)
-
-(* the overflow row — clicking it navigates to the embedded node's own
-   detail page *)
-let embed_more_el (name : string) : t =
-  Ui_parts.pressable
-    ~on_press:(fun _ ->
-      Runtime.send (Action.Navigate_to (Model.Page name)))
-    (Ui_components.with_props
-       [ Ui_components.Prop.cursor `pointer ]
-       (row ~key:"embed-more"
-          ~style_class:"ls-block"
-          ~transition:"transform 0.3s ease"
-       [ text ~key:"embed-more-t" ~value:(I18n.t "ui/show-more") [] ]))
-
-let page_embed (name : string) : t =
- fun ctx parent ->
-  chain_embed_worker ();
-  let st =
-    Signal.state ctx.Lui_ui.ui_scheduler ([] : Model.block list)
-  in
-  let id = !embed_refresh_seq in
-  embed_refresh_seq := id + 1;
-  let load () = fetch_embed_blocks name st in
-  load ();
-  Hashtbl.replace embed_refreshes id load;
-  (* a destroyed embed must stop refetching on every tx broadcast *)
-  Signal.on_dispose ctx.ui_scope (fun () ->
-      Hashtbl.remove embed_refreshes id);
-  (reactive ~equal:same_blocks
-     (fun blocks ->
-       let shown, capped = cap_embed_blocks embed_block_cap blocks in
-       (* embed copies render read-only — the same uuid can exist in the
-          sidebar/main tree, and only that instance should own the editor *)
-       box ~key:"embed-page" ~style_class:"embed-page"
-         ~padding:8 ~margin_top:8 ~margin_bottom:8
-         (List.map (block_row ~scope:"embed" ~editable:false) shown
-          @ (if capped then [ embed_more_el name ] else [])))
-     (Signal.value st))
-    ctx parent
-
-let () = Render_state.page_embed := page_embed
 
 (* views_table renders list rows through this hook — it cannot import
    the blocks layer directly (cycle via comments -> render -> views) *)
