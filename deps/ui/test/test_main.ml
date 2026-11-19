@@ -3988,7 +3988,21 @@ let test_scoped_keyboard_selection () =
       check "Selection membership highlights a UUID in every scope"
         (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.selected ()));
       check "Empty selection does not highlight an embedded occurrence"
-        (not (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.String_set.empty))))
+        (not (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.String_set.empty)));
+      let embedded scope owner = {S.source_scope = scope; source_kind = S.Outliner;
+        source_blocks = (fun () -> [{linked with Model.block_original = Some ("link", owner)}])} in
+      S.extra_sources := [embedded "first-embed" "main"; embedded "second-embed" "main";
+        embedded "nested-embed" "second-embed"];
+      let collapsed = S.collapsed_ui_transform ~scope:"first-embed" "linked" true S.initial in
+      check "Embedded occurrences share immediate containing-outliner collapse state"
+        (List.for_all (fun scope -> S.collapsed_in ~scope collapsed "linked")
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]);
+      check "Independent sidebar containers retain independent root presentation"
+        (not (S.collapsed_in ~scope:"sidebar" collapsed "linked"));
+      let expanded = S.collapsed_ui_transform ~scope:"second-embed" "linked" false collapsed in
+      check "Expanding another occurrence synchronizes without a worker refresh"
+        (List.for_all (fun scope -> not (S.collapsed_in ~scope expanded "linked"))
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]))
 
 (* ---- Update.update: remaining arm ---- *)
 

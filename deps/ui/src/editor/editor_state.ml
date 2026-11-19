@@ -405,10 +405,34 @@ let collapsed () = (read ()).collapsed
 let is_collapsed uuid = String_set.mem uuid (collapsed ())
 let is_expanded uuid = String_set.mem uuid (read ()).expanded
 
+type block_source_kind = Outliner | Field_editor
+
+type block_source =
+  { source_scope : string
+  ; source_kind : block_source_kind
+  ; source_blocks : unit -> Model.block list
+  }
+
+let extra_sources : block_source list ref = ref []
+
+let add_block_source ~scope ~kind source_blocks =
+  extra_sources := { source_scope = scope; source_kind = kind; source_blocks }
+                   :: !extra_sources
+
+let block_source scope =
+  List.find_opt (fun source -> source.source_scope = scope) !extra_sources
+
+let rec selection_owner_scope scope =
+  match block_source scope with
+  | Some source -> (match source.source_blocks () with
+      | {Model.block_original = Some (_, owner); _} :: _ -> selection_owner_scope owner
+      | _ -> scope)
+  | None -> scope
+
 (* per-scope collapse: cljs scopes UI collapse overrides by container
    (the same block can render collapsed in the page but expanded as a
    sidebar/zoom root); "scope\x00uuid" keys the override sets *)
-let collapse_key scope uuid = scope ^ "\x00" ^ uuid
+let collapse_key scope uuid = selection_owner_scope scope ^ "\x00" ^ uuid
 
 (* cljs get-block-collapsed: the per-scope UI override wins, then the
    global expanded override, then the persisted :block/collapsed? datom *)
@@ -450,7 +474,7 @@ let clear_collapse_scope ~scope =
     String.length s >= String.length prefix
     && String.sub s 0 (String.length prefix) = prefix
   in
-  if ready () then
+  if ready () && selection_owner_scope scope = scope then
     set_silent (fun st ->
         { st with
           collapsed_ui = String_set.filter (fun key -> not (has_prefix key)) st.collapsed_ui
@@ -553,23 +577,6 @@ let rec find_in blocks uuid =
 
 (* Field sources support editing lookup but do not own an outliner
    presentation. The distinction is explicit at each registration. *)
-type block_source_kind = Outliner | Field_editor
-
-type block_source =
-  { source_scope : string
-  ; source_kind : block_source_kind
-  ; source_blocks : unit -> Model.block list
-  }
-
-let extra_sources : block_source list ref = ref []
-
-let add_block_source ~scope ~kind source_blocks =
-  extra_sources := { source_scope = scope; source_kind = kind; source_blocks }
-                   :: !extra_sources
-
-let block_source scope =
-  List.find_opt (fun source -> source.source_scope = scope) !extra_sources
-
 let remove_block_source ~scope =
   extra_sources := List.filter (fun source -> source.source_scope <> scope) !extra_sources
 
@@ -613,13 +620,6 @@ let original_owner_in_scope ~scope uuid =
   | None -> uuid, scope
 
 let original_uuid_in_scope ~scope uuid = fst (original_owner_in_scope ~scope uuid)
-
-let rec selection_owner_scope scope =
-  match block_source scope with
-  | Some source -> (match source.source_blocks () with
-      | {Model.block_original = Some (_, owner); _} :: _ -> selection_owner_scope owner
-      | _ -> scope)
-  | None -> scope
 
 let find uuid =
   match find_in (page_blocks ()) uuid with
