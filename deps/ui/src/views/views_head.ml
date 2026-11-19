@@ -1148,16 +1148,17 @@ let ref_filter_dialog ~owner_scope inst anchor =
       ignore (Ui_effect.timeout ~scope 0 refresh_counts);
       let ref_button title count_opt =
         Ui_components.with_props
-          [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px" ]
+          [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px"
+          ; Ui_components.Prop.font_weight 500 ]
           ((* ls-ref-btn keeps its class as the imperative hook *)
            Ui_components.with_props
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
              (Ui_components.button ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
-                ~height:22 ~min_height:22
-                ~padding_vertical:2 ~padding_horizontal:8
-                ~background:"transparent" ~style_class:"ls-ref-btn"
+                ~height:24 ~min_height:24
+                ~padding_vertical:0 ~padding_horizontal:12
+                ~background:"var(--ls-primary-background-color)" ~style_class:"ls-ref-btn"
                 ~foreground:"inherit"
                 ~border_color:"var(--ls-border-color, hsl(var(--border)))"
              ~on_press_detail:(fun ev ->
@@ -1267,17 +1268,21 @@ let ref_filter_dialog ~owner_scope inst anchor =
               leftover hook *)
            column ~style_class:"cp__filters" ~margin_bottom:16
              ~margin_left:8 [ chip_rows ]
-         ; row ~cross:`center ~gap:0 ~padding_vertical:0
-             ~padding_horizontal:8 ~corner_radius:4
+         ; Ui_components.with_props [ Ui_components.Prop.padding_left 8 ] @@
+           row ~cross:`center ~gap:0 ~corner_radius:4
              ~background:"var(--ls-primary-background-color)"
              ~style_class:"cp__filters-input-panel"
-             ~foreground:
-               "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
              [ icon ~name:(Icons.name_ref "search")
                  ~style_class:"ls-icon-search" []
-             ; (Ui_components.input ~style_class:"cp__filters-input"
+             ; Ui_components.with_props
+                 [ Ui_components.Prop.font_size "1rem"
+                 ; Ui_components.Prop.focus_shadow
+                     "0 0 0 1px oklch(0.546 0.245 262.881)" ]
+               (Ui_components.input ~style_class:"cp__filters-input"
                     ~padding:8 ~height:42 ~min_height:42
-                    ~grow:1. ~background:"transparent" ~border_width:0
+                    ~grow:1. ~background:"transparent" ~border_width:1
+                    ~border_color:"var(--ls-border-color, hsl(var(--border)))"
+                    ~corner_radius:0
                     ~text:(reactive Fun.id (Signal.value draft))
                     ~kind:`text ~accessibility_identifier:input_id
                     ~placeholder:(I.t "reference.filter/search-placeholder")

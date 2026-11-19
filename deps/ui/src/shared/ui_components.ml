@@ -39,7 +39,9 @@ let block_transition =
   "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)"
 
 let foldable_control ?key children : t =
-  box ?key ~style_class:"ls-foldable-title-control block-control"
+  box ?key ~data_attrs:[ ("tabindex", "0") ]
+    ~foreground:"var(--ls-primary-text-color)"
+    ~style_class:"ls-foldable-title-control block-control"
     ~width:22 ~height:22 ~padding:2 ~margin_top:1 ~margin_left:(-27) children
 
 (* Typed prop binds — see Ui_parts.Prop. *)

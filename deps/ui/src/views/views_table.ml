@@ -1574,10 +1574,10 @@ let foldable inst ~key ~title ~(body : t) : t =
                        [ Ui_components.Prop.cursor `pointer
                        ; Ui_components.Prop.hover_opacity 1. ]
                        (Ui_parts.float_prop L.Opacity
-                        ~value:(reactive (fun h c -> if h || c then 1. else 0.)
+                        ~value:(reactive (fun h c -> if h || c then 0.4 else 0.)
                           (Signal.value hovered) collapsed_sig)
                        (Ui_components.foldable_control
-                          [icon ~key:"caret" ~point_size:13
+                          [icon ~key:"caret" ~point_size:16
                              ~name:(reactive (fun c -> `app (if c then
                                "rotating-arrow" else "rotating-arrow-down")) collapsed_sig) []])))
                 ; title ] ]
@@ -1735,9 +1735,10 @@ let ref_breadcrumb inst uuid : t =
        Ui_components.Prop.hover_opacity 1.]
     (row ~margin_left:16 ~margin_top:4 ~gap:4 ~cross:`center
       (List.concat (List.mapi (fun i (b : Model.block) ->
-        (if i = 0 then [] else [text ~value:"/" []]) @
+        (if i = 0 then [] else [Ui_components.with_props [Ui_components.Prop.opacity 0.5] (text ~value:"/" [])]) @
         [link ~text:(if b.block_is_query then I.t "property.built-in/query" else b.block_title)
-           ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_ []]) blocks))))
+           ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_
+           ~foreground:"var(--ls-primary-text-color)" []]) blocks))))
     (Signal.value parents)) ctx parent
 
 let ref_header inst ~key ~title : t =
@@ -1757,11 +1758,14 @@ let ref_header inst ~key ~title : t =
                      V.Sset.remove key st.V.collapsed_groups
                    else V.Sset.add key st.V.collapsed_groups)
               }))
-        (Ui_parts.float_prop L.Opacity
-           ~value:(reactive (fun h -> if h || collapsed then 1. else 0.) (Signal.value hovered))
-           (Ui_components.foldable_control
-              [icon ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down"))
-                 ~point_size:13 []]))
+        (Ui_components.with_props
+           [ Ui_components.Prop.cursor `pointer
+           ; Ui_components.Prop.hover_opacity 1. ]
+           (Ui_parts.float_prop L.Opacity
+              ~value:(reactive (fun h -> if h || collapsed then 0.4 else 0.) (Signal.value hovered))
+              (Ui_components.foldable_control
+                 [icon ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down"))
+                    ~point_size:16 []])))
     ; title ] ctx parent
 
 (* One virtual row per header and per block, so a collapsed group drops

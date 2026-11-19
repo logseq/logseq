@@ -839,10 +839,12 @@ let blocks_inner ?puuid ?(virtualize = false) ?(library = false)
 
 let fold_arrow ?on_click ?(collapsed = false) key : t =
   let arrow =
-    Ui_components.foldable_control ~key
+    Ui_components.with_props
+      [ Ui_components.Prop.opacity 0.4; Ui_components.Prop.hover_opacity 1. ]
+    @@ Ui_components.foldable_control ~key
       [ box ~key:"ch"
           ~style_class:(if collapsed then "" else "control-hide")
-          [ icon ~key:(key ^ "-svg") ~point_size:13
+          [ icon ~key:(key ^ "-svg") ~point_size:16
               ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down")) []
           ]
       ]
