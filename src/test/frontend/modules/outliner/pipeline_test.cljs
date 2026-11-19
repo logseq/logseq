@@ -46,6 +46,29 @@
       (finally
         (state/replace-state! original-state)))))
 
+(deftest journal-format-deltas-update-settings-cache-through-undo-test
+  (let [original-state (state/get-state)
+        repo "journal-format-history"
+        journal-class-uuid (random-uuid)]
+    (try
+      (state/replace-state! {:client-id "client" :git/current-repo repo})
+      (with-redefs [db-subs/apply-delta! (constantly true)
+                    state/get-current-page (constantly nil)
+                    state/pub-event! (constantly nil)]
+        (doseq [[formatter tx-meta] [["yyyy-MM-dd" {}]
+                                     ["yyyy/MM/dd" {}]
+                                     ["yyyy-MM-dd" {:undo? true}]
+                                     ["yyyy/MM/dd" {:redo? true}]]]
+          (pipeline/invoke-hooks
+           {:repo repo
+            :tx-meta (assoc tx-meta :client-id "client")
+            :delta {:blocks {journal-class-uuid {:block/uuid journal-class-uuid
+                                                :db/ident :logseq.class/Journal
+                                                :logseq.property.journal/title-format formatter}}
+                    :deleted {}}})
+          (is (= formatter (state/get-date-formatter)))))
+      (finally (state/replace-state! original-state)))))
+
 (deftest deleted-blocks-are-removed-from-the-sidebar-test
   (let [original-state (state/get-state)
         removed-ids (atom nil)
