@@ -120,11 +120,6 @@ let root_body root : t =
         ~value:(title_of root) []
     ]
 
-let root_title root : t =
-  column ~key:("rbn-" ^ uuid_of root) ~style_class:"ls-block"
-    ~transition:Ui_components.block_transition
-    [ text ~key:("rbnt-" ^ uuid_of root) ~value:(title_of root) [] ]
-
 let render_roots ~restore ~delete_forever roots : t =
   column ~key:"roots" ~gap:32
     (text ~key:"desc"
@@ -150,7 +145,6 @@ let render_roots ~restore ~delete_forever roots : t =
                       (List.concat_map
                          (fun root ->
                            [ root_header ~restore ~delete_forever root
-                           ; root_title root
                            ; root_body root
                            ])
                          rs)

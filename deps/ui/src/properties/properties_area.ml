@@ -141,7 +141,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
     match Ui_services.dom_by_id anchor_id with
     | Some anchor ->
         Menu.open_menu ~anchor ~owner_uuid:ctx.block_uuid ~owner_id:ctx.block_id
-          ~owner_is_tag ~owner_title ~refresh:ctx.refresh ~with_title:false
+          ~owner_is_tag ~owner_title ~refresh:ctx.refresh
           ~more_options:(reorder_options ctx reorder_rows row) row
     | None -> () in
   (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
@@ -266,13 +266,13 @@ let toggle_row () : t =
 let partition_rows rows =
   let left, rest =
     List.partition
-      (fun r -> D.row_position r = "logseq.property.ui-position/block-left")
+      (fun r -> D.row_position r = "block-left")
       rows
   in
   let below, panel =
     List.partition
       (fun r ->
-        D.row_position r = "logseq.property.ui-position/block-below")
+        D.row_position r = "block-below")
       rest
   in
   (left, below, panel)
@@ -678,7 +678,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
                             Menu.open_menu ~anchor ~owner_uuid:uuid
                               ~owner_id:p.Model.page_db_id ~owner_is_tag:false
                               ~owner_title:p.Model.page_title
-                              ~refresh:S.refresh_all ~has_owner:false
+                              ~refresh:S.refresh_all ~has_owner:false ~anchor_alignment:`center
                               (W.Map
                                  [ (W.Keyword "property", prop)
                                  ; (W.Keyword "property-id", W.Keyword ident) ]);

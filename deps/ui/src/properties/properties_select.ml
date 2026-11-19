@@ -102,7 +102,9 @@ let view ~placeholder ?(compact = false) ?(presentation = Standard)
   let st = Signal.state sched { q = ""; searched = None; active = 0; scroll_token = 0 } in
   let request = Ui_effect.request () in
   let node_results_max_height () =
-    max 0 (int_of_float (0.75 *. Ui_services.dom_viewport_height () -. 64.))
+    (* cljs .property-select .item-results-wrap: calc(75vh - 64px - 150px)
+       inside a py-1 wrapper; the list carries that 8px padding itself *)
+    max 0 (int_of_float (0.75 *. Ui_services.dom_viewport_height () -. 206.))
   in
   let highlight_background =
     "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))"
