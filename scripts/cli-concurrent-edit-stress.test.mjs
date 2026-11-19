@@ -5,15 +5,18 @@ import { join } from "node:path";
 import test from "node:test";
 
 import {
+  buildPropertyReadbackDiagnostic,
   bootstrapStressPageNames,
   blockByUuidQuery,
   blockExistsFromQueryResult,
   classifyHttpResult,
   classifyCliResult,
   clientRuntimeOptions,
+  completeVolatilePropertyDelete,
   checksumDiagnosticsMatch,
   cliCommand,
   createStressInvocationTracker,
+  createVolatilePropertyDeleteHistory,
   graphValidateArgs,
   isIdleSyncStatus,
   isSettledSyncStatus,
@@ -26,6 +29,7 @@ import {
   stressPageNames,
   stressConfigText,
   stressReferenceViewOrder,
+  startVolatilePropertyDelete,
   syncDownloadArgs,
   syncEnsureKeysArgs,
   syncNeedsEnsureKeys,
@@ -165,6 +169,163 @@ test("classifies concurrent volatile property delete as a race outcome", () => {
       "race-conflict",
     );
   }
+});
+
+test("reports bounded volatile property readback candidates without claiming causality", () => {
+  const property = "cli-stress-volatile-prop";
+  const unsafePayload = {
+    args: ["unsafe-args-value"],
+    stdout: "unsafe-stdout-value",
+    stderr: "unsafe-stderr-value",
+    graph: "unsafe-graph-value",
+    page: "unsafe-page-value",
+  };
+  const context = {
+    clientIndex: 0,
+    workerId: 1,
+    seq: 10,
+    op: "property-upsert",
+    property,
+    ...unsafePayload,
+  };
+  const parsed = {
+    status: "error",
+    error: { code: "property-not-found", message: "property not found after upsert" },
+  };
+  const addDelete = (history, { clientIndex = 1, workerId, seq, startMs, endMs, success, outcome }) => {
+    const record = startVolatilePropertyDelete(history, {
+      clientIndex,
+      workerId,
+      seq,
+      startMs,
+      ...unsafePayload,
+    });
+    if (endMs != null) {
+      completeVolatilePropertyDelete(record, { endMs, success, outcome });
+    }
+  };
+  const createHistoryWithDelete = (options) => {
+    const history = createVolatilePropertyDeleteHistory();
+    addDelete(history, options);
+    return history;
+  };
+  const makeDiagnostic = (options) =>
+    buildPropertyReadbackDiagnostic({
+      clientIndex: 0,
+      context,
+      parsed,
+      startMs: 10,
+      endMs: 20,
+      ...options,
+    });
+  const overlapCases = [
+    {
+      name: "completed overlap",
+      history: createHistoryWithDelete({ workerId: 2, seq: 20, startMs: 15, endMs: 25, success: true, outcome: "ok" }),
+      overlaps: true,
+      inFlight: false,
+      success: true,
+      outcome: "ok",
+    },
+    {
+      name: "completed non-overlap",
+      history: createHistoryWithDelete({ workerId: 3, seq: 30, startMs: 0, endMs: 9, success: false, outcome: "failed" }),
+      overlaps: false,
+      inFlight: false,
+      success: false,
+      outcome: "failed",
+    },
+    {
+      name: "in-flight overlap",
+      history: createHistoryWithDelete({ workerId: 4, seq: 40, startMs: 18, endMs: null }),
+      overlaps: true,
+      inFlight: true,
+      success: null,
+      outcome: null,
+    },
+  ];
+
+  for (const example of overlapCases) {
+    const diagnostic = makeDiagnostic({ history: example.history });
+    assert.equal(diagnostic.readbackOrdering, "unknown", example.name);
+    assert.ok(typeof diagnostic.readbackOrderingReason === "string" && diagnostic.readbackOrderingReason.length > 0);
+    assert.equal(diagnostic.deleteCandidates[0].commandOverlap, example.overlaps, example.name);
+    assert.equal(diagnostic.deleteCandidates[0].inFlight, example.inFlight, example.name);
+    assert.equal(diagnostic.deleteCandidates[0].success, example.success, example.name);
+    assert.equal(diagnostic.deleteCandidates[0].outcome, example.outcome, example.name);
+  }
+  const safeDiagnostic = makeDiagnostic({ history: overlapCases[0].history });
+  assert.deepEqual(safeDiagnostic.failedCommand, {
+    clientIndex: 0,
+    workerId: 1,
+    seq: 10,
+    startMs: 10,
+    endMs: 20,
+    elapsedMs: 10,
+  });
+
+  const recreateContext = { ...context, op: "property-delete-recreate", phase: "recreate" };
+  assert.ok(makeDiagnostic({ history: createVolatilePropertyDeleteHistory(), context: recreateContext }));
+  for (const options of [
+    { context: { ...context, property: "another-property" } },
+    { context: { ...context, op: "tag-upsert" } },
+    { context: { ...context, op: "property-delete-recreate", phase: "delete" } },
+    { parsed: { status: "error", error: { code: "ambiguous-property-name", message: "property not found after upsert" } } },
+    { parsed: { status: "error", error: { code: "property-not-found", message: "different failure" } } },
+    { parsed: { status: "ok", error: parsed.error } },
+  ]) {
+    assert.equal(makeDiagnostic({ history: createVolatilePropertyDeleteHistory(), ...options }), null);
+  }
+
+  const priorityHistory = createVolatilePropertyDeleteHistory();
+  addDelete(priorityHistory, { workerId: 99, seq: 99, startMs: 0, endMs: 30, success: true, outcome: "ok" });
+  for (let index = 0; index < 8; index += 1) {
+    addDelete(priorityHistory, {
+      workerId: index,
+      seq: index,
+      startMs: 30 + index,
+      endMs: 31 + index,
+      success: true,
+      outcome: "ok",
+    });
+  }
+  const priorityDiagnostic = makeDiagnostic({ history: priorityHistory });
+  assert.equal(priorityDiagnostic.deleteCandidates.length, 8);
+  assert.equal(priorityDiagnostic.deleteCandidates[0].workerId, 99);
+  assert.equal(priorityDiagnostic.deleteCandidates[0].commandOverlap, true);
+
+  const boundedHistory = createVolatilePropertyDeleteHistory();
+  for (let index = 0; index < 65; index += 1) {
+    addDelete(boundedHistory, {
+      clientIndex: index % 3,
+      workerId: index,
+      seq: index,
+      startMs: index,
+      endMs: index + 0.5,
+      success: true,
+      outcome: "ok",
+    });
+  }
+  const boundedDiagnostic = makeDiagnostic({ history: boundedHistory });
+  assert.equal(boundedHistory.records.length, 64);
+  assert.equal(boundedDiagnostic.deleteHistory.totalCount, 65);
+  assert.equal(boundedDiagnostic.deleteHistory.evictedCount, 1);
+  assert.equal(boundedDiagnostic.deleteHistory.truncated, true);
+  assert.equal(boundedDiagnostic.deleteCandidates.length, 8);
+  assert.equal(boundedDiagnostic.deleteCandidateListTruncated, true);
+  assert.equal(boundedDiagnostic.deleteCandidateOmittedCount, 57);
+  assert.equal(boundedDiagnostic.retainedDeleteOverlapCount, 11);
+  assert.equal(boundedDiagnostic.deleteCandidates.filter((candidate) => candidate.commandOverlap).length, 8);
+  assert.equal(Object.hasOwn(boundedDiagnostic, "graph"), false);
+  assert.equal(Object.hasOwn(boundedDiagnostic, "page"), false);
+  const serialized = JSON.stringify(boundedDiagnostic);
+  for (const unsafeValue of [property, ...Object.values(unsafePayload).flat()]) {
+    assert.equal(serialized.includes(unsafeValue), false, unsafeValue);
+  }
+
+  const classification = classifyCliResult({ code: 1 }, parsed, context);
+  assert.equal(classification.outcome, "failed");
+  assert.equal(classification.expectedRace, false);
 });
 
 test("classifies concurrent volatile tag delete as a race outcome", () => {
