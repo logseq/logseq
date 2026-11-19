@@ -35,10 +35,10 @@ let invalid_name name = invalid_chars name <> []
 
 let warn_invalid_name () =
   let lines =
-    List.map (fun (character, label) -> Printf.sprintf "%s  %c (%s)" {js|◦|js} character label)
+    List.map (fun (character, label) -> Printf.sprintf "%c (%s)" character label)
       (reserved_characters ())
   in
-  Toast.show ~kind:"warning" ~duration:0
+  Toast.show ~key:Toast.reserved_graph_name_key ~kind:"warning" ~duration:0
     (String.concat "\n" (T.t "graph.validation/name-reserved-characters-warning" :: lines))
 
 let is_demo repo =

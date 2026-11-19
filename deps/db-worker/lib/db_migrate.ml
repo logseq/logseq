@@ -61,6 +61,47 @@ let remove_block_path_refs (db : db) : Wire.t list =
 let missing_internal_page_parent_orders (db : db) : Wire.t list =
   List.map wire_map (Db_order.missing_internal_page_parent_order_tx db)
 
+module Journal_updates = Map.Make (Int)
+
+let repair_journal_titles_and_names db =
+  let formatter = Ldb.journal_title_format db in
+  let proposed =
+    Seq.fold_left
+      (fun updates (d : datom) ->
+        match d.v, Ldb.ent_of_id db d.e with
+        | Int64 day, Some page when Ldb.is_journal page ->
+            let title = Ldb.journal_title_of_day (Int64.to_int day) formatter in
+            Journal_updates.add d.e (title, Ldb.page_name_sanity_lc title) updates
+        | _ -> updates)
+      Journal_updates.empty (datoms db Avet ~a:"block/journal-day" ())
+  in
+  let rec available updates =
+    let filtered =
+      Journal_updates.filter
+        (fun eid (_, name) ->
+          Seq.for_all
+            (fun (d : datom) ->
+              d.e = eid ||
+              (match Journal_updates.find_opt d.e updates with
+               | Some (_, other_name) -> name <> other_name
+               | None -> false))
+            (datoms db Avet ~a:"block/name" ~v:(String name) ()))
+        updates
+    in
+    if Journal_updates.cardinal filtered = Journal_updates.cardinal updates
+    then filtered else available filtered
+  in
+  Journal_updates.to_seq (available proposed)
+  |> Seq.flat_map (fun (eid, (title, name)) ->
+    ["block/title", title; "block/name", name]
+    |> List.to_seq
+    |> Seq.filter_map (fun (attr, value) ->
+      let v = String value in
+      match Seq.uncons (datoms db Eavt ~e:eid ~a:attr ()) with
+      | Some ((d : datom), _) when d.v = v -> None
+      | _ -> Some (Ds_wire.transit_of_tx_op (Add (Entity_id eid, attr, v)))))
+  |> List.of_seq
+
 (* db-migrate/remove-position-property-from-url-properties *)
 let remove_position_property_from_url_properties (db : db) : Wire.t list =
   List.of_seq
@@ -293,7 +334,9 @@ let schema_version_updates : (string * update_spec) list =
             missing_internal_page_parent_orders) ()
   ; "65.35", update ~delete_properties:
       [ "block/scheduled"; "block/deadline"; "block/marker"; "block/priority"
-      ; "block/properties-text-values"; "block/invalid-properties" ] () ]
+      ; "block/properties-text-values"; "block/invalid-properties" ] ()
+  ; "65.36", update
+      ~fix:("repair-journal-titles-and-names", repair_journal_titles_and_names) () ]
 
 (* cljs (sqlite-create-graph/build-db-initial-data config-content) restricted
    to what ensure-built-in-data-exists! consumes: the seed entity maps

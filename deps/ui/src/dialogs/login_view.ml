@@ -484,14 +484,15 @@ let login_panel ctx fields =
     ; input_row fields ~key:"r-pw" ~id:"password" ~caption:(I18n.t "account/password")
         ~secure:true ~value:fields.password ~on_submit
     ; submit_btn fields ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
-    ; Ui_components.with_props [ Ui_components.Prop.padding_top 16 ]
+    ; Ui_components.with_props [ Ui_components.Prop.padding_top 8 ]
       (column ~key:"lg-foot" ~cross:`center ~gap:0
         ~style_class:"ls-auth-foot"
         [ row ~key:"f1" ~gap:4 ~cross:`center
             [ Ui_components.with_props [ Ui_components.Prop.opacity 0.5 ]
               (text ~key:"f1a" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
-                ~value:(I18n.t "account/dont-have-account-question" ^ " ")
+                ~line_height:"1.25rem"
+                ~value:(I18n.t "account/dont-have-account-question")
                 [])
             ; action_link fields ~key:"f1b" ctx (I18n.t "account/sign-up")
                 Signup ]
@@ -499,7 +500,7 @@ let login_panel ctx fields =
             [ Ui_components.with_props [ Ui_components.Prop.opacity 0.5 ]
               (text ~key:"f1d" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
-                ~value:(I18n.t "account/or" ^ " ") [])
+                ~line_height:"1.25rem" ~value:(I18n.t "account/or") [])
             ; action_link fields ~key:"f2a" ctx
                 (I18n.t "encryption/forgot-password-question") Reset_pw ]
         ])

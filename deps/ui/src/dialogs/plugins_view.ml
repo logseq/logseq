@@ -34,6 +34,7 @@ let category_ok cat pkg =
 
 let search_input ~key st =
   Ui_components.search_row ~key ~height:30 ~pad_left:28
+    ~autofocus:true ~clear_label:(t "ui/close")
     ~placeholder:(t "plugin/search-plugin")
     ~text_signal:(Signal.value st)
     ~on_text:(fun q -> Runtime.signal_set st q) ()
@@ -84,7 +85,7 @@ let toolbar_menu ~key ~icon ~label ~items : t =
     ] ctx parent
 
 let control_tabs ~key ~search_st ~cat_st ~nums toolbar =
-  Ui_components.with_props [Ui_components.Prop.padding_bottom 12]
+  Ui_components.with_props [Ui_components.Prop.padding_bottom 12; Ui_components.Prop.padding_top 4]
     (row ~key:(key ^ "-ctls") ~style_class:"control-tabs" ~padding_horizontal:6
     ~main:`space_between ~cross:`center
     [ category_tabs ~key ~nums cat_st
@@ -237,13 +238,14 @@ let market_card ~stats ~search_st pkg =
        ~height:150 ~min_width:0 ~border_width:0 ~corner_radius:6
        ~padding_vertical:12 ~padding_horizontal:12
        ~background:"var(--ls-tertiary-background-color, hsl(var(--muted)))"
-    [row ~key:"r" ~gap:12 ~cross:`start
+    [column ~cross:`stretch
+    [row ~key:"r" ~gap:8 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (Ui_components.with_props
            [ Ui_components.Prop.cursor `pointer ]
            (box ~key:"l" ~style_class:"l link-block"
               [ row ~key:"ic" ~style_class:"plugin-icon" ~width:60
-                  ~height:60 ~margin_top:8 ~main:`center ~cross:`center
+                  ~height:60 ~margin_top:4 ~main:`center ~cross:`center
                   [ thumb ] ]))
     ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0 ~margin_top:4
         [ row ~key:"h" ~cross:`center ~gap:8
@@ -253,22 +255,20 @@ let market_card ~stats ~search_st pkg =
                  ~white_space:"nowrap" ~text_overflow:"ellipsis" ~overflow:"hidden"
                  ~value:(if title = "" then jstr pkg "name" else title)
                  ~on_press:open_readme []
-             ; row ~key:"flag" ~cross:`center
-                 ~gap:6
-                 ([ (* cljs flag icon opens the plugin readme dialog *)
-                    Ui_components.with_props
-                      [ Ui_components.Prop.cursor `pointer ]
-                      (Ui_components.button ~key:"doc" ~variant:`ghost ~size:`icon
-                         ~width:18 ~height:18 ~min_width:18 ~min_height:18
-                         ~icon:(`app "book") ~label:"Readme"
-                         ~on_press:open_readme [])
-                  ]
+             ; row ~key:"flag" ~cross:`center ~gap:8
+                 ((match Js.Json.decodeBoolean (getf pkg "supportsDB") with
+                   | Some supported ->
+                       [ icon ~name:(`app (if supported then "database-heart" else "database-off"))
+                           ~point_size:17
+                           ~tooltip:(t (if supported then "plugin/supports-db" else "plugin/does-not-support-db"))
+                           ~foreground:"var(--lx-gray-11)" [] ]
+                   | None -> [])
                   @
                   (if repo = "" then []
                    else
                      [ link ~key:"gh-a" ~url:(gh_repo_url repo)
                          ~target:`blank ~icon:(`app "brand-github")
-                         ~label:"GitHub" [] ])) ]
+                         ~foreground:"var(--lx-gray-11)" ~label:"GitHub" [] ])) ]
          ; Ui_components.with_props
              [ Ui_components.Prop.opacity 0.7 ]
              (text ~key:"desc" ~height:56 ~line_clamp:2 ~overflow:"hidden"
@@ -285,8 +285,8 @@ let market_card ~stats ~search_st pkg =
                           Runtime.signal_set search_st
                             ("@" ^ jstr pkg "author"))
                         []
-                    ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ]
-         ; row ~key:"ctl" ~main:`space_between ~margin_top:6
+                    ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ] ] ]
+    ; row ~key:"ctl" ~main:`space_between ~margin_top:4
              ~cross:`center
              [ Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
                (row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
@@ -329,7 +329,6 @@ let market_card ~stats ~search_st pkg =
                      [])
                  ]
              ]
-         ]
     ]])
 
 (* ---------- installed card ---------- *)
@@ -973,16 +972,36 @@ let settings_item pid s =
         ~font_size:"1.125rem" ~font_weight:700 ~padding_vertical:16
         ~value:(I18n.tf "plugin/setting-not-handled" [ key ]) []
 
+let settings_plugins () =
+  let open Plugin_host in
+  Js.Dict.entries installed |> Array.to_list
+  |> List.filter_map (fun (id, p) ->
+      if jbool p "disabled" || plugin_settings_schema id = [] then None
+      else
+        let opts = getf p "options" in
+        let name = jstr opts "name" in
+        Some (id, if name = "" then id else name))
+  |> List.sort (fun (_, a) (_, b) -> String.compare a b)
+
+let browse_settings = ref false
+
+let open_settings ?(browse = false) id =
+  browse_settings := browse;
+  Plugin_host.open_settings_pid := Some id;
+  Dialogs_state.open_ "plugin-settings"
+
 let settings_body (_ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let owner = ctx.ui_scheduler in
   let code_mode = Signal.state owner false in
+  let pid_state = Signal.state owner !Plugin_host.open_settings_pid in
+  let browse = !browse_settings in
+  browse_settings := false;
   ignore (Plugin_host.dirty_signal owner);
-  let pair a b = (a, b) in
   let node =
     reactive
-      (fun (_d, code) ->
-        match !(Plugin_host.open_settings_pid) with
+      (fun _d code pid ->
+        match pid with
         | None -> spacer ~key:"ps-empty" []
         | Some pid ->
             let schema = Plugin_host.plugin_settings_schema pid in
@@ -1024,16 +1043,24 @@ let settings_body (_ms : Model.t Signal.signal) : t =
                          List.map (settings_item pid) schema ))
                 ]
             in
-            column ~key:"ps"
+            row ~key:"ps" ~gap:16
+              ((if not browse then [] else
+                  [ column ~key:"ps-nav" ~min_width:140 ~gap:4
+                      (List.map (fun (id, label) ->
+                          Ui_components.nav_item ~key:id ~data_id:id ~icon:"puzzle"
+                            ~text:label ~selected_signal:(Signal.constant owner (id = pid))
+                            ~on_press:(fun _ ->
+                              Runtime.signal_set code_mode false;
+                              Runtime.signal_set pid_state (Some id)) ())
+                         (settings_plugins ())) ])
+              @
               [ Ui_components.with_props
                   [ ( Ui_components.Prop.min_height_viewport 0.55 )
                   ; ( Ui_components.Prop.max_height_viewport 0.75 ) ]
                   (column ~key:"si"
-                     ~style_class:"cp__settings-inner no-aside"
+                     ~style_class:"cp__settings-inner no-aside" ~grow:1. ~min_width:0
                      [ column ~key:"pw" ~style_class:"panel-wrap" ~gap:16
-                         body ]) ])
-      (Signal.map2 pair
-         (Plugin_host.dirty_value owner)
-         (Signal.value code_mode))
+                         body ]) ]))
+      (Plugin_host.dirty_value owner) (Signal.value code_mode) (Signal.value pid_state)
   in
   node ctx parent
