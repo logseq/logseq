@@ -366,7 +366,7 @@ let flashcards_config ~registry ~profile =
           {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state ["flashcards";"all-pages"];
            nav_tag_titles=state [];block_sources = Hashtbl.create 8; items = state [];open_menu=state "";groups_collapsed=state [];
            left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.;
-           restored_repo=ref None;restoring=ref true} in
+           restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
         popup:=Some (Popups_state.make ctx.Lui_ui.ui_scheduler);
         Left_sidebar_view.nav_group ms sidebar) () in
     Runtime.app_flush:=(fun () -> S.flush session);
@@ -955,13 +955,133 @@ let keymap_recording_workflow ~registry ~profile ~finish =
         Runtime.app_flush := previous_flush;
         finish ())))
 
+let sidebar_history ~registry ~profile ~finish =
+  let open Promise_ext in
+  let previous_model = !Runtime.read_model and previous_send = !Runtime.app_send
+  and previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker
+  and previous_sidebar_model = !Sidebar_state.model_signal
+  and previous_snapshot = !Editor_actions.History_ui.sidebar_snapshot
+  and previous_restore = !Editor_actions.History_ui.restore_sidebar
+  and previous_paused = !Editor_actions.History_ui.paused
+  and previous_restoring = !Editor_actions.History_ui.restoring in
+  let previous_storage = Ui_services.storage_get Sidebar_state.right_sidebar_storage_key in
+  let sidebar = ref None in
+  let session = S.mount ~registry ~profile
+    ~initial:{Model.initial with repo=Some "sidebar-history-fixture";
+      route=Model.Page "Current"; phase=Model.Ready}
+    ~reducer:Update.update ~view:(fun ctx ms _ ->
+      let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
+      let st : Sidebar_state.t =
+        { favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];
+          nav_checked=state [];nav_tag_titles=state [];items=state [];
+          block_sources=Hashtbl.create 4;open_menu=state "";groups_collapsed=state [];
+          left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
+          restored_repo=ref (Some "sidebar-history-fixture");restoring=ref false;
+          history_repo=ref None;history_state=ref None } in
+      sidebar:=Some st;
+      Sidebar_state.model_signal:=Some ms;
+      Sidebar_state.bind_history st;
+      let subscription = Signal.subscribe ~emit_initial:false ms
+        (fun _ -> Sidebar_state.persist_right_sidebar st) in
+      Signal.on_dispose ctx.ui_scope (fun () -> Signal.dispose_subscription subscription);
+      Lui_elements.column []) () in
+  let st = Option.get !sidebar in
+  Runtime.read_model := (fun () -> Lui_app.model session.S.app);
+  Runtime.app_flush := (fun () -> S.flush session);
+  Runtime.app_send := (fun action ->
+    let changed = Lui_app.send session.S.app action in S.flush session; changed);
+  Editor_actions.History_ui.paused:=false;
+  Editor_actions.History_ui.restoring:=None;
+  let payloads = ref [] and reject_page = ref false in
+  Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/undo-redo-record-ui-state",[Wire.String "sidebar-history-fixture";Wire.String payload] ->
+        payloads:= !payloads @ [payload];Js.Promise.resolve Wire.Nil
+    | "thread-api/get-page-route-info",_ when !reject_page ->
+        Js.Promise.then_ (fun () -> failwith "sidebar history fixture rejection") (Js.Promise.resolve ())
+    | _ -> Js.Promise.resolve Wire.Nil);
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let rec settle n = if n=0 then Js.Promise.resolve () else
+    Js.Promise.then_ (fun () -> settle (n-1)) (Js.Promise.resolve ()) in
+  let restore undo payload = Editor_actions.restore_history
+    (Wire.Map [Wire.kw "undo?",Wire.Bool undo;Wire.kw "ui-state-str",Wire.String payload]) in
+  let items () = Runtime.signal_get st.items in
+  let cleanup () =
+    st.restoring:=true;Sidebar_state.set_items st [];
+    ignore (Lui_app.dispose session.S.app);
+    Runtime.read_model:=previous_model;Runtime.app_send:=previous_send;
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;
+    Sidebar_state.model_signal:=previous_sidebar_model;
+    Editor_actions.History_ui.sidebar_snapshot:=previous_snapshot;
+    Editor_actions.History_ui.restore_sidebar:=previous_restore;
+    Editor_actions.History_ui.paused:=previous_paused;
+    Editor_actions.History_ui.restoring:=previous_restoring;
+    (match previous_storage with
+     | Some value -> Ui_services.storage_set Sidebar_state.right_sidebar_storage_key value
+     | None -> Ui_services.storage_remove Sidebar_state.right_sidebar_storage_key);
+    finish () in
+  ignore ((let* () = settle 8 in
+    Sidebar_state.persist_right_sidebar st;
+    Sidebar_state.open_sticky_item st "help";
+    let* () = settle 8 in
+    check "Sidebar membership and open state enter UI undo history" (!payloads<>[]);
+    Sidebar_state.open_sticky_item st "shortcut-settings";
+    Sidebar_state.toggle_collapsed st "help";
+    let* () = settle 8 in
+    let collapsed_payload = List.hd (List.rev !payloads) in
+    let count = List.length !payloads in
+    let* () = restore true collapsed_payload in
+    check "Sidebar undo preserves order and expands the previously open item"
+      (List.map (fun (it : Sidebar_state.item) -> it.key,it.collapsed) (items ()) =
+       ["shortcut-settings",false;"help",false]
+       && (Runtime.model ()).right_sidebar_open);
+    let* () = restore false collapsed_payload in
+    check "Sidebar redo restores the recorded collapse without recording itself"
+      (List.map (fun (it : Sidebar_state.item) -> it.key,it.collapsed) (items ()) =
+       ["shortcut-settings",false;"help",true] && List.length !payloads=count);
+    Sidebar_state.clear_items st;
+    let* () = settle 8 in
+    check "Closing every sidebar item records an empty closed sidebar"
+      (items ()=[] && not (Runtime.model ()).right_sidebar_open);
+    let closed_payload = List.hd (List.rev !payloads) in
+    let* () = restore true closed_payload in
+    check "Undo of sidebar close restores its open state"
+      ((Runtime.model ()).right_sidebar_open);
+    let* () = restore false closed_payload in
+    check "Redo of sidebar close restores an empty closed sidebar"
+      (items ()=[] && not (Runtime.model ()).right_sidebar_open);
+    let page = Option.get (Sidebar_state.static_item "page-missing" "page" "Missing") in
+    let page = {page with Sidebar_state.uuid=Some "missing"} in
+    let old_state = Editor_actions.History_ui.snapshot (Runtime.route ()) in
+    st.restoring:=true;Sidebar_state.set_items st [page];st.restoring:=false;
+    let new_state = Editor_actions.History_ui.snapshot (Runtime.route ()) in
+    st.restoring:=true;Sidebar_state.set_items st [];st.restoring:=false;
+    Sidebar_state.persist_right_sidebar st;
+    let failing = Transit.to_string (Editor_actions.History_ui.map
+      ["old-state",old_state;"new-state",new_state]) in
+    reject_page:=true;
+    let rejected=ref false in
+    let* () = restore false failing |> Js.Promise.catch (fun _ ->
+      rejected:=true;Js.Promise.resolve ()) in
+    check "Failed sidebar hydration leaves membership intact and releases history pause"
+      (!rejected && items ()=[] && not !Editor_actions.History_ui.paused);
+    let count=List.length !payloads in
+    Sidebar_state.open_sticky_item st "help";
+    let* () = settle 8 in
+    check "Sidebar actions can be recorded after a failed history restoration"
+      (List.length !payloads>count);
+    cleanup ();Js.Promise.resolve ())
+    |> Js.Promise.catch (fun _ -> check "Sidebar history workflow completes" false;
+      cleanup ();Js.Promise.resolve ()))
+
 let run_views ~registry ~profile ~finish =
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;
   preview_reference_disclosure ~registry ~profile;
   show_brackets_rendering ~registry ~profile;
-  let finish () = keymap_recording_workflow ~registry ~profile
-    ~finish:(fun () -> configured_continuations finish) in
+  let finish () = sidebar_history ~registry ~profile ~finish:(fun () ->
+    keymap_recording_workflow ~registry ~profile
+      ~finish:(fun () -> configured_continuations finish)) in
   configured_popup_ownership ();
   table_resize_transaction ();
   table_range_selection ();
@@ -3140,7 +3260,7 @@ let run_views ~registry ~profile ~finish =
          nav_tag_titles=state [];block_sources = Hashtbl.create 8; items = state [];
          open_menu=state "";groups_collapsed=state [];
          left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
-         restored_repo=ref None;restoring=ref true} in
+         restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) () in
   let st = Option.get !sidebar in

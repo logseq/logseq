@@ -2918,6 +2918,12 @@ let toggle_open_blocks () =
 module History_ui = struct
   let map fields = Wire.Map (List.map (fun (key, value) -> Wire.kw key, value) fields)
 
+  let sidebar_snapshot = ref (fun () -> [])
+  let restore_sidebar = ref (fun (_ : Wire.t) -> Js.Promise.resolve ())
+  let paused = ref false
+  let restore_task = ref (Js.Promise.resolve ())
+  let restore_epoch = ref 0
+
   let snapshot route =
     let destination, parameters = match route with
       | Model.Home -> "home", []
@@ -2932,8 +2938,8 @@ module History_ui = struct
       | Model.Settings -> "settings", []
       | Model.File path -> "file", ["path", Wire.String path]
       | Model.Not_found path -> "not-found", ["path", Wire.String path] in
-    map ["route-data", map ["to", Wire.Keyword destination;
-      "path-params", map parameters; "query-params", Wire.Nil]]
+    map (("route-data", map ["to", Wire.Keyword destination;
+      "path-params", map parameters; "query-params", Wire.Nil]) :: !sidebar_snapshot ())
 
   let href state =
     match Wire.get state "route-data" with
@@ -2950,22 +2956,33 @@ module History_ui = struct
 
   let restoring : string option ref = ref None
 
-  let record_navigation ~before ~after =
-    let old_state = snapshot before and new_state = snapshot after in
-    let paused = match !restoring with Some path -> href new_state = Some path | None -> false in
-    restoring := None;
-    if not paused && old_state <> new_state then
+  let record_states old_state new_state =
+    if not !paused && old_state <> new_state then
       match (Runtime.model ()).Model.repo with
       | None -> ()
       | Some repo ->
           let payload = Wire.String (Transit.to_string
             (map ["old-state", old_state; "new-state", new_state])) in
           Ops.after_saves repo (fun () ->
-            ignore (Runtime.invoke2 "thread-api/undo-redo-record-ui-state" (Wire.String repo) payload
+            ignore (Js.Promise.resolve ()
+              |> Js.Promise.then_ (fun () ->
+                Runtime.invoke2 "thread-api/undo-redo-record-ui-state" (Wire.String repo) payload)
               |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
               |> Js.Promise.catch (fun error ->
                 Ui_services.log_error ("navigation history failed", error);
                 Js.Promise.resolve ())))
+
+  let record_navigation ~before ~after =
+    let old_state = snapshot before and new_state = snapshot after in
+    let restoring_route = match !restoring with
+      | Some path -> href new_state = Some path | None -> false in
+    restoring := None;
+    if not restoring_route then record_states old_state new_state
+
+  let record_sidebar ~before ~after =
+    let route = Option.get (Wire.get (snapshot (Runtime.route ())) "route-data") in
+    let state sidebar = map (("route-data", route) :: sidebar) in
+    record_states (state before) (state after)
 
   let restore result =
     match Wire.get result "ui-state-str" with
@@ -2979,12 +2996,21 @@ module History_ui = struct
              restoring := Some target;
              Ui_services.nav_set_hash (Runtime.nav_hash target)
          | _ -> ());
+        paused := true;
+        incr restore_epoch;
+        let epoch = !restore_epoch in
+        let finish () = if epoch = !restore_epoch then paused := false in
+        let task = Js.Promise.resolve ()
+          |> Js.Promise.then_ (fun () -> !restore_sidebar state)
+          |> Js.Promise.then_ (fun () -> finish (); Js.Promise.resolve ()) in
+        ignore (task |> Js.Promise.catch (fun _ -> finish (); Js.Promise.resolve ()));
+        restore_task := task;
         true
     | Some _ -> invalid_arg "Navigation history must contain a Transit string"
 end
 
 let restore_history result =
-  if History_ui.restore result then Js.Promise.resolve () else
+  if History_ui.restore result then !(History_ui.restore_task) else
   let context = action_context () in
   let editing = S.editing () in
   let current () = context = action_context ()

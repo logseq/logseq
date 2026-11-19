@@ -1489,7 +1489,8 @@ let test_sidebar_nav () =
           ; left_width = state 246.
           ; right_fraction = state 0.3
           ; viewport_w = state 1280.
-          ; restored_repo = ref None; restoring = ref true }
+          ; restored_repo = ref None; restoring = ref true
+          ; history_repo = ref None; history_state = ref None }
         in
         Left_sidebar_view.nav_group ms sidebar)
       ()

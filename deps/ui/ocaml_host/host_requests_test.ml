@@ -1948,7 +1948,7 @@ let () = with_test_entry (fun () ->
            nav_tag_titles=state []; items=state []; block_sources=Hashtbl.create 8;
            open_menu=state ""; groups_collapsed=state [];
            left_width=state 246.; right_fraction=state 0.3; viewport_w=state 1440.;
-           restored_repo=ref None;restoring=ref true} in
+           restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
         Left_sidebar_view.content_group st ~key:"native-recent" ~class_:"recent"
           ~label:"Recent" ~items_sig:(Signal.value st.recents)
           ~li_class:"recent-item" ~ul_class:"" ~always_bd:true ~recent:true) in
@@ -5310,7 +5310,7 @@ let () = with_test_entry (fun () ->
            nav_tag_titles=state []; items=state []; block_sources=Hashtbl.create 8;
            open_menu=state ""; groups_collapsed=state [];
            left_width=state 246.; right_fraction=state 0.3; viewport_w=state 240.;
-           restored_repo=ref None;restoring=ref true} in
+           restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
         (* Leave room for a real outside-click target below the anchored menu. *)
         Lui_elements.column ~width:240 ~height:640
           [Left_sidebar_view.page_item_el st page
@@ -5447,7 +5447,7 @@ let () = with_test_entry (fun () ->
          nav_tag_titles=state [];items=state [];block_sources=Hashtbl.create 8;
          open_menu=state "";groups_collapsed=state [];
          left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
-         restored_repo=ref None;restoring=ref true} in
+         restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) in
   Fun.protect ~finally:(fun () ->
@@ -5927,7 +5927,7 @@ let () = with_test_entry (fun () ->
           let st:Sidebar_state.t={favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
             nav_tag_titles=state [];items=state [];block_sources=Hashtbl.create 8;open_menu=state "";groups_collapsed=state [];
             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1000.;
-            restored_repo=ref None;restoring=ref true} in
+            restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
           sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
           Sidebar_state.bind_editor_sources st context;
           let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
@@ -6019,7 +6019,7 @@ let () = with_test_entry (fun () ->
             {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];block_sources=Hashtbl.create 8;open_menu=state "";groups_collapsed=state [];
              left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1140.;
-             restored_repo=ref None;restoring=ref true} in
+             restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
           Sidebar_state.st_ref:=Some sidebar;Sidebar_state.model_signal:=Some model;
           let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
             ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
@@ -11316,7 +11316,7 @@ let () = with_test_entry (fun () ->
             {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];block_sources=Hashtbl.create 8;open_menu=state "";groups_collapsed=state [];
              left_width=state 246.;right_fraction=state 0.3;viewport_w=state 800.;
-             restored_repo=ref None;restoring=ref true} in
+             restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
           sidebar:=Some st;
           let items = Signal.value (if recent then st.recents else st.favorites) in
           Lui_elements.column ~width:240
