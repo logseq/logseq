@@ -253,7 +253,7 @@ let hidden_tag_ident (ident : string) : bool =
 
 (* cljs block-control-icon-size: heading chrome sizes differ, collapsed
    bullets shrink *)
-let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
+let control_wrap ?on_toggle ?siblings ~scope ~collapse_scope ~library uuid
     (b : Model.block) : t =
  fun ctx parent ->
   Settings_state.ensure ctx;
@@ -267,15 +267,21 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
   let empty_bullet =
     String.trim b.Model.block_title = ""
     &&
-    match S.find_parent_in_scope ~scope uuid with
-    | Some (parent, i) ->
-        let siblings =
-          match parent with
-          | Some p -> S.children_of p
-          | None -> S.blocks_in_scope scope
-        in
-        i > 0 && i < List.length siblings - 1
-    | None -> false
+    match siblings with
+    | Some siblings ->
+        (match List.find_index (fun b -> b.Model.block_uuid = Some uuid) siblings with
+         | Some i -> i > 0 && i < List.length siblings - 1
+         | None -> false)
+    | None ->
+        (match S.find_parent_in_scope ~scope uuid with
+         | Some (parent, i) ->
+             let siblings =
+               match parent with
+               | Some p -> S.children_of p
+               | None -> S.blocks_in_scope scope
+             in
+             i > 0 && i < List.length siblings - 1
+         | None -> false)
   in
   let heading_attrs =
     ( "data-has-children"
@@ -1157,7 +1163,7 @@ and children_el ?extras ~depth ~editable ~library ~virtualize uuid scope
    keeps the row from claiming the live row's DOM node on reconciliation —
    both are keyed ls-…/rfs-… on the same uuid but are distinct logical
    nodes. *)
-and block_row_static ?(depth = 0) ?(library = false) ?highlight ~collapse_scope
+and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight ~collapse_scope
     ~persist_collapse (b : Model.block) : t =
  fun ctx parent ->
   (* references rows can be the first block render on a page (journals
@@ -1183,7 +1189,7 @@ and block_row_static ?(depth = 0) ?(library = false) ?highlight ~collapse_scope
     [ row ~key:("main-" ^ key)
         ~style_class:"block-main-container" ~gap:4
         ~data_attrs:(heading_attrs b)
-        [ control_wrap ~on_toggle ~scope:"ref" ~collapse_scope ~library uuid b
+        [ control_wrap ~on_toggle ~siblings ~scope:"ref" ~collapse_scope ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)
                 [ row ~key:("bmc-" ^ key)
@@ -1245,7 +1251,7 @@ and children_static_el ~depth ~library ?highlight ~collapse_scope
     (children_container ~on_toggle ~library uuid bs
        (column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1. ~min_width:0
           (List.map
-             (block_row_static ~depth:(depth + 1) ~library ?highlight
+             (block_row_static ~depth:(depth + 1) ~library ~siblings:b.block_children ?highlight
                 ~collapse_scope ~persist_collapse)
              b.block_children)))
     ctx parent

@@ -2765,6 +2765,16 @@ let test_views_state () =
      = Some (Wire.Keyword "p/g"))
 
 let test_views_query () =
+  let inst = Views_state.make ~sched:test_sched
+      ~kind:(Views_state.KQuery {block_uuid = "property-query"})
+      ~feature:"query-result" ~owner:Wire.Nil in
+  Views_state.update inst (fun s ->
+      {s with Views_state.query_idents = ["logseq.property/type"; "block/tags"]});
+  Signal.stabilize test_sched;
+  check "Query columns include the built-in Property type metadata"
+    (List.exists (fun c -> c.Views_state.c_id = "logseq.property/type"
+       && c.Views_state.c_name = I18n.t "property.built-in/type")
+       (Views_table.build_columns inst []));
   check "plain-text query source becomes a full-text DSL string"
     (Views_query.parse_src "Search seed parity" = Views_query.QDsl "\"Search seed parity\"");
   check "plain-text query quoting preserves literal quotes and backslashes"

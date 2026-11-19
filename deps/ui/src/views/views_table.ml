@@ -170,6 +170,10 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
   | "block/page" -> Some (page_column ())
   | "block/journal-day" ->
       Some (builtin_column ident (titleize_ident ident) "datetime" ())
+  | "logseq.property/type" ->
+      (match Hashtbl.find_opt s.V.all_props ident with
+       | Some p -> column_of_property p
+       | None -> Some (builtin_column ident (I.t "property.built-in/type") "default" ()))
   | _ when
       String.length ident > 7
       && String.sub ident 0 7 = "logseq." -> None

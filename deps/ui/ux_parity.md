@@ -78,6 +78,38 @@ still do not display result headers. The UI aggregate passes with 6427 assertion
 and exit zero; native tests and the native build pass. This header repair remains
 rebuilt-browser unverified.
 
+The Table80 imported-SQLite broad sweep found three further query differences.
+Full-text `Imported` returned only the parent because LUI promoted search hits
+to entities and removed nested matches using their canonical database parents.
+Master returns search maps with scalar parent IDs; its top-level filter reads
+the nested parent entity's ID, so both search hits remain. The worker now keeps
+that search-map shape and filters projected results using their supplied parent
+shape, while entity results retain canonical parent handling. The real-worker
+regression retains the parent and child alongside hidden/current-block filtering.
+
+Switching to List also exposed `control_wrap` looking up blank read-only rows
+in an unregistered editable `ref` scope. Static rows now derive the empty-bullet
+condition from their supplied sibling list, including nested children, without
+consulting an editable outliner source. The supplied console trace first raises
+this `Not_found`, then rejects a batch detaching an unknown node. Removing the
+render exception addresses that trigger; no SDK validation or error reporting
+is weakened. Mounted regressions exercise Table-to-List switching, blank child
+rendering, disposal and a fresh persisted-List mount with both results, followed
+by empty and rejected queries. Actual browser-store recovery from a previously
+rejected batch has not been tested.
+
+The `audit` query's `logseq.property/type` metadata was suppressed by LUI's
+blanket exclusion of `logseq.*` query columns. Property type now uses its existing
+property metadata or built-in translated column; Name, Tags and timestamp columns
+are preserved. Column and mounted-query regressions cover this path.
+The UI aggregate passes with 6437 assertions and exit zero; native tests and the
+native build pass. All 84 worker render-resource tests pass. The worker aggregate
+still reports the same three platform/keychain failures as the earlier Table75b
+baseline (993 native cases), including `Native secrets require the OS keychain
+host`; it is not an all-green worker gate. These three repairs remain
+rebuilt-browser and visually unverified. No `static/` files or shared `:3010`
+server were touched.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

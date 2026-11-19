@@ -795,6 +795,9 @@ let reference_disclosure ~registry ~profile =
     ~children:[Test_check.block leaf_id "Reference leaf"]) in
   let empty = default (Test_check.block "reference-empty" "Empty reference") in
   let root = Test_check.block "reference-root" "Reference root" ~children:[child;empty] in
+  let blank = Test_check.block "reference-blank" "" in
+  let child = {child with Model.block_children = child.Model.block_children @ [blank]} in
+  let root = {root with Model.block_children = [child;empty]} in
   Fun.protect ~finally:(fun () ->
     Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
     Settings_state.st := previous_settings;
@@ -812,6 +815,8 @@ let reference_disclosure ~registry ~profile =
         ~collapse_scope:scope ~persist_collapse:false root) () in
     Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
       Runtime.app_flush := (fun () -> S.flush session);
+      check "Static reference rows mount without registering an editable ref scope"
+        (Option.is_none (Editor_state.block_source "ref"));
       Editor_state.set_collapsed ~scope:"other-reference" child_id false;
       S.flush session;
       let leaf_visible () = List.exists (fun node ->

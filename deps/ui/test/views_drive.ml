@@ -50,6 +50,9 @@ let query_block_ent uuid : W.t =
     [ kw "block/uuid", W.Uuid uuid
     ; kw "db/id", W.Int 90
     ; kw "block/title", W.String ""
+    ; kw "logseq.property.view/type", kw
+        (if flag_view uuid "query-list" then "logseq.property.view/type.list"
+         else "logseq.property.view/type.table")
     ; kw "logseq.property/query", W.Map [ kw "block/uuid", W.Uuid vbu ]
     ; ( kw "block/children"
       , W.Array
@@ -772,6 +775,88 @@ let plain_text_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
           "failed-plain-query", "Rejected search", Some "search unavailable";
           "plain-query", "Search seed parity", None]
 
+let positive_query_views (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  let uuid = "positive-query" and parent_uuid = "imported-parent"
+  and child_uuid = "imported-child" and blank_uuid = "imported-blank" in
+  Runtime.read_model := (fun () -> {Model.initial with repo=Some "positive-query"});
+  Hashtbl.replace query_src uuid "Imported";
+  Hashtbl.replace query_rows uuid [parent_uuid;child_uuid];
+  Hashtbl.replace titles parent_uuid "Imported parent";
+  Hashtbl.replace titles child_uuid "Imported child";
+  Hashtbl.replace flat_children parent_uuid
+    [W.Map [kw "block/uuid",W.Uuid blank_uuid; kw "block/title",W.String "";
+            kw "block/parent-uuid",W.Uuid parent_uuid]];
+  Hashtbl.replace view_data_overrides uuid
+    (W.Map [kw "partition",kw "flat"; kw "count",W.Int 2;
+            kw "rows",W.Array [W.Uuid parent_uuid;W.Uuid child_uuid];
+            kw "properties",W.Array [kw "logseq.property/type"]]);
+  install_worker ();
+  let mount () =
+    let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+      ~initial:Model.initial ~reducer:Update.update
+      ~view:(fun _ _ _ -> Views_view.view
+        ~kind:(Views_state.KQuery {block_uuid=uuid}) ~owner:(W.Uuid uuid)) () in
+    Runtime.app_flush := (fun () -> S.flush mounted);
+    mounted in
+  let inst () = Hashtbl.find Views_view.query_insts (Runtime.repo (),uuid) in
+  let dispose mounted =
+    ignore (Lui_app.dispose mounted.S.app);
+    Views_builder.drop_tree (inst ());
+    Hashtbl.remove Views_view.query_insts (Runtime.repo (),uuid) in
+  let check_rows mounted label =
+    S.flush mounted;
+    let state = Views_state.get (inst ()) in
+    check label (state.Views_state.query_rows=[parent_uuid;child_uuid]
+      && Views_head.count_of state=2
+      && Views_wire.row_count state.Views_state.data=2) in
+  let first = mount () in
+  h.after 40 (fun () ->
+    check_rows first "Full-text Table queries retain parent and child rows";
+    check "Positive query tables retain the Property type column"
+      (List.exists (fun c -> c.Views_state.c_id="logseq.property/type")
+        (Views_state.get (inst ())).Views_state.columns);
+    Hashtbl.replace view_flags uuid ["query-list"];
+    Hashtbl.replace view_data_overrides uuid
+      (W.Map [kw "partition",kw "grouped-list"; kw "count",W.Int 2;
+        kw "groups",W.Array [W.Map [kw "value",W.Nil;
+          kw "partitions",W.Array [W.Map [kw "breadcrumb-uuid",W.Uuid parent_uuid;
+            kw "rows",W.Array [W.Uuid parent_uuid;W.Uuid child_uuid]]]]]]);
+    Views_view.refresh (inst ());
+    h.after 40 (fun () ->
+      check_rows first "Switching a full-text query to List preserves both rows";
+      check "List results render blank descendants without an editable outliner scope"
+        (List.exists (fun n -> M.string_prop n "accessibility-identifier"
+          =Some ("ls-block-" ^ blank_uuid)) (M.all_nodes first.S.tree));
+      dispose first;
+      let reloaded = mount () in
+      h.after 40 (fun () ->
+        check_rows reloaded "Reloading the persisted List query preserves both rows";
+        check "Reloaded query retains its List display type and search source"
+          (let state=Views_state.get (inst ()) in
+           state.Views_state.display_type="list" && state.Views_state.qsrc="Imported");
+        Hashtbl.replace query_rows uuid [];
+        Views_view.refresh (inst ());
+        h.after 40 (fun () ->
+          check "An empty List query clears prior results"
+            (Views_head.count_of (Views_state.get (inst ()))=0);
+          Hashtbl.replace query_err uuid "search unavailable";
+          Views_view.refresh (inst ());
+          h.after 40 (fun () ->
+            check "A rejected List query exposes the error without stale rows"
+              (let state=Views_state.get (inst ()) in
+               state.Views_state.query_error=Some "search unavailable"
+               && Views_head.count_of state=0);
+            dispose reloaded;
+            List.iter (Hashtbl.remove titles) [parent_uuid;child_uuid];
+            Hashtbl.remove flat_children parent_uuid;
+            Hashtbl.remove view_flags uuid; Hashtbl.remove view_data_overrides uuid;
+            Hashtbl.remove query_src uuid; Hashtbl.remove query_rows uuid;
+            Hashtbl.remove query_err uuid;
+            Runtime.worker:=previous_worker; Runtime.read_model:=previous_model;
+            Runtime.app_flush:=previous_flush; finish ())))))
+
 let short_page_spacing ~finish =
   let previous_flush = !Runtime.app_flush in
   let section : Outliner_projection.section =
@@ -819,6 +904,6 @@ let short_page_spacing ~finish =
 let run ~finish =
   query_result_replacement ();
   let h = host () in
-  plain_text_queries h ~finish:(fun () -> short_page_spacing ~finish:(fun () ->
+  plain_text_queries h ~finish:(fun () -> positive_query_views h ~finish:(fun () -> short_page_spacing ~finish:(fun () ->
     grouped_entity_headers h ~finish:(fun () ->
-      Shared_scenarios_views.run h ~finish)))
+      Shared_scenarios_views.run h ~finish))))
