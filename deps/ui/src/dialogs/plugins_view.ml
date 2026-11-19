@@ -192,22 +192,28 @@ let empty_item key =
         ~font_size:"0.875rem" ~value:(t "plugin/empty") []
     ]
 
-(* height/overflow stay on the data_attrs style channel — calc() clamps
-   and overflow-y have no typed-prop form; max-height rides
-   MaxHeightViewport *)
-let list_wrap ~key children =
+let list_wrap ?(show_empty = true) ~key children : t =
+ fun ctx parent ->
+  let width = Ui_services.viewport_width_signal
+    ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.ui_scope in
+  let height = Ui_services.viewport_height_signal
+    ~scheduler:ctx.ui_scheduler ~scope:ctx.ui_scope in
   Ui_components.with_props
-    [ Ui_components.Prop.max_height_viewport 0.8 ]
+    [ Ui_components.Prop.max_height_viewport 0.8
+    ; Ui_components.Prop.overflow `auto ]
+    (Ui_parts.int_prop Lui_protocol.HeightValue
+      ~value:(reactive (fun h -> max 0 (int_of_float h - 320)) height)
     (column ~key ~style_class:"cp__plugins-item-lists"
-       ~data_attrs:
-         [ "style", "height: calc(100vh - 320px); overflow-y: auto" ]
-       (if children = [] then [ empty_item (key ^ "-empty") ]
+       (if children = [] && show_empty then [ empty_item (key ^ "-empty") ]
         else
           [ (* cljs .cp__plugins-item-lists-inner is a wrapping card grid —
                the grid kind's fixed columns give equal-width cells *)
-            grid ~key:(key ^ "-in")
-              ~style_class:"cp__plugins-item-lists-inner" ~columns:3
-              ~gap:12 children ]))
+            Ui_parts.int_prop Lui_protocol.GridColumns
+              ~value:(reactive (fun w -> if w >= 1024. then 3
+                else if w >= 768. then 2 else 1) width)
+              (grid ~key:(key ^ "-in")
+                ~style_class:"cp__plugins-item-lists-inner" ~columns:1
+                ~padding_horizontal:4 ~gap:12 children) ]))) ctx parent
 
 (* ---------- marketplace card ---------- *)
 
@@ -228,7 +234,8 @@ let market_card ~stats ~search_st pkg =
   let open_readme _ = Plugin_readme.open_readme pkg in
   let icon_url = pkg_asset id (jstr pkg "icon") in
   let thumb =
-    if icon_url = "" then icon ~key:"ic-f" ~name:(`app "folder") ~point_size:28 []
+    if icon_url = "" then icon ~key:"ic-f" ~name:(`app "folder")
+      ~width:60 ~height:60 ~point_size:60 []
     else Ui_components.with_props [Ui_components.Prop.image_fit `fit]
         (image ~key:"ic-img" ~url:icon_url ~width:60 ~height:60
            ~alt:"" ~loading:`lazy_ []) in
@@ -236,26 +243,35 @@ let market_card ~stats ~search_st pkg =
   Ui_components.with_props [Ui_components.Prop.overflow `hidden]
     (card ~key:("mkt-" ^ id) ~style_class:("cp__plugins-item-card" ^ cls)
        ~height:150 ~min_width:0 ~border_width:0 ~corner_radius:6
-       ~padding_vertical:12 ~padding_horizontal:12
+       ~padding_vertical:12 ~padding_horizontal:4
+       ~foreground:"var(--ls-primary-text-color, var(--lx-gray-12))"
        ~background:"var(--ls-tertiary-background-color, hsl(var(--muted)))"
-    [column ~cross:`stretch
-    [row ~key:"r" ~gap:8 ~cross:`start
+    [Ui_components.with_props [Ui_components.Prop.position `relative]
+      (column ~cross:`stretch ~height:126
+    [row ~key:"r" ~gap:0 ~cross:`start
     [ Ui_parts.pressable ~on_press:open_readme
         (Ui_components.with_props
            [ Ui_components.Prop.cursor `pointer ]
            (box ~key:"l" ~style_class:"l link-block"
-              [ row ~key:"ic" ~style_class:"plugin-icon" ~width:60
-                  ~height:60 ~margin_top:4 ~main:`center ~cross:`center
+              [ row ~key:"ic" ~style_class:"plugin-icon" ~width:76
+                  ~height:76 ~opacity:0.8 ~main:`center ~cross:`center
                   [ thumb ] ]))
-    ; column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0 ~margin_top:4
-        [ row ~key:"h" ~cross:`center ~gap:8
+    ; Ui_components.with_props [Ui_components.Prop.position `relative]
+      (column ~key:"r" ~style_class:"r" ~grow:1. ~min_width:0 ~height:126
+        [ Ui_components.with_props [Ui_components.Prop.padding_right 24]
+          (row ~key:"h" ~cross:`center ~margin_top:6 ~max_height:50
              ~main:`space_between
              [ text ~key:"t" ~style_class:"link-block" ~grow:1. ~min_width:0
                  ~font_size:"1.25rem" ~font_weight:700 ~line_height:"24px"
                  ~white_space:"nowrap" ~text_overflow:"ellipsis" ~overflow:"hidden"
                  ~value:(if title = "" then jstr pkg "name" else title)
                  ~on_press:open_readme []
-             ; row ~key:"flag" ~cross:`center ~gap:8
+             ])
+         ; Ui_components.with_props
+             [ Ui_components.Prop.position `absolute
+             ; Ui_components.Prop.inset_top 4.
+             ; Ui_components.Prop.inset_right 6. ]
+             (row ~key:"flag" ~cross:`center ~gap:8
                  ((match Js.Json.decodeBoolean (getf pkg "supportsDB") with
                    | Some supported ->
                        [ icon ~name:(`app (if supported then "database-heart" else "database-off"))
@@ -268,13 +284,20 @@ let market_card ~stats ~search_st pkg =
                    else
                      [ link ~key:"gh-a" ~url:(gh_repo_url repo)
                          ~target:`blank ~icon:(`app "brand-github")
-                         ~foreground:"var(--lx-gray-11)" ~label:"GitHub" [] ])) ]
+                         ~foreground:"var(--lx-gray-11)" ~label:"GitHub" [] ])))
          ; Ui_components.with_props
              [ Ui_components.Prop.opacity 0.7 ]
-             (text ~key:"desc" ~height:56 ~line_clamp:2 ~overflow:"hidden"
-                ~font_size:"0.75rem"
+             (text ~key:"desc" ~height:60 ~padding_vertical:4
+                ~line_clamp:2 ~overflow:"hidden"
+                ~font_size:"0.75rem" ~line_height:"16px"
                 ~value:(jstr pkg "description") [])
-         ; box ~key:"flag-meta"
+         ; Ui_components.with_props
+             [ Ui_components.Prop.position `absolute
+             ; Ui_components.Prop.inset_bottom 16.
+             ; Ui_components.Prop.inset_left 0.
+             ; Ui_components.Prop.inset_right 0.
+             ; Ui_components.Prop.padding_right 8 ]
+           (box ~key:"flag-meta" ~padding_vertical:4
              [ Ui_components.with_props
                  [ Ui_components.Prop.font_size "0.625rem"; Ui_components.Prop.opacity 0.8 ]
                  (row ~style_class:"ls-pl-meta"
@@ -285,8 +308,13 @@ let market_card ~stats ~search_st pkg =
                           Runtime.signal_set search_st
                             ("@" ^ jstr pkg "author"))
                         []
-                    ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ] ] ]
-    ; row ~key:"ctl" ~main:`space_between ~margin_top:4
+                    ; text ~key:"i" ~value:("ID: " ^ id) [] ]) ]) ]) ]
+    ; Ui_components.with_props
+        [ Ui_components.Prop.position `absolute
+        ; Ui_components.Prop.inset_bottom (-8.)
+        ; Ui_components.Prop.inset_left 77.
+        ; Ui_components.Prop.inset_right 7. ]
+      (row ~key:"ctl" ~main:`space_between
              ~cross:`center
              [ Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
                (row ~key:"ctl-l" ~style_class:"l" ~cross:`center ~gap:8
@@ -328,8 +356,8 @@ let market_card ~stats ~search_st pkg =
                        if not installed_ then install_marketplace pkg)
                      [])
                  ]
-             ]
-    ]])
+             ])
+    ])])
 
 (* ---------- installed card ---------- *)
 
@@ -587,7 +615,7 @@ let market_panel ~key ~search ~cat ~search_st ~pkgs ~stats ~filter ~sort ~loadin
     else
       [ column ~key:(key ^ "-cnt")
           ~style_class:"cp__plugins-marketplace-cnt" ~gap:8
-          [ list_wrap ~key:(key ^ "-list")
+          [ list_wrap ~show_empty:false ~key:(key ^ "-list")
               (List.map (market_card ~stats ~search_st) filtered) ] ])
 
 (* ---------- page ---------- *)
@@ -702,7 +730,7 @@ let body (_ms : Model.t Signal.signal) : t =
               ]
           ; box ~key:"pl-panels"
               [ if_ ~test:(reactive ((=) "marketplace") (Signal.value tab))
-                  (column ~key:"marketplace-panel"
+                  (column ~key:"marketplace-panel" ~padding_vertical:5
                      [ reactive (fun pkgs ->
                          let themes = List.length
                            (List.filter (fun p -> Plugin_host.jbool p "theme") pkgs) in

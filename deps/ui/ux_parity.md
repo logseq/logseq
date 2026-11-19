@@ -36,6 +36,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | PAT expiration | Native date input chrome, segmented entry and min/max affordances. The typed calendar is not exact native-input parity. |
 | Unpacked plugins | LUI web cannot load unpacked plugins, so the unpacked hint/badge and reload control are not provided. |
 | Native plugin logs | Native host has no plugin logger; web installed-card logging still needs live verification. |
+| Plugin thumbnails | Master replaces failed remote images with its folder SVG. The typed image kind exposes load notifications but no error event, so that failure fallback is not supported yet. |
 
 ## 3. Not yet aligned (known, pending)
 
@@ -44,7 +45,6 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Area / finding | Remaining work |
 |---|---|
 | Table72 persisted seed duplicates | Previously written incorrect value entities are not automatically removed by the canonical UUID repair. No live graph cleanup has been performed. |
-| Table72 marketplace | Artwork, wrapping, layout and empty-filter state. |
 | Table72 property popups | Set View Type and Property Configure sizing; tags selector maximum height. |
 | Table72 shell follow-up | N20 Escape-to-body, N3 menu origin, N6 tooltip dimensions, N7 origin/actions, N9 highlighted Create foreground, and N19 initial keyboard index still fail on the served build. |
 | Table72 built-in writes | The restoration delta's triggering path remains unknown. A native Master-fixture probe with the real pipeline changes neither refs nor raw-title during ensure or a rejected built-in Tag-to-Page rename. The SDK dispatches that rename through the guarded, temporary-connection outliner path. Actual transaction metadata/physical-datom evidence is still needed; do not attribute these changes to rename or the seed repair yet. |
@@ -76,6 +76,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E22 | Indent, type `abc`, then undo twice now passes the shared cursor round-trip workflow at offset 0. The test records real transaction cursor options and restores mocked worker history; full DB/browser acceptance remains pending. No speculative caret change was made. |
 | Editor E23 | User dismissal clears a live context menu's selection/action bar. Late dismissal after command close preserves asynchronous ownership and newer selections. UI/native gates pass; integrated runtime acceptance remains pending. |
 | Table72 Keymap recorder | The binding editor now auto-evaluates after 400ms, accepts nonconflicting bindings, retains explicit conflict reassignment, and distinguishes pending Escape cancellation from idle Close. Backspace removes the last binding. Footer hints and conditional Reset follow Master; successful Reset closes after feedback. Shared workflows cover persistence, cancellation, removal and storage failure. Browser acceptance remains pending. |
+| Table72 Marketplace | Cards now use Master's 60px thumbnail geometry, separate icon/content columns, reserved title space, independently positioned flags/metadata/actions, and primary foreground. The grid wraps at Master's viewport breakpoints and the list uses typed viewport height/overflow. Empty marketplace filters no longer show the Installed-only placeholder. Artwork glyph fidelity, wrapping, positioning and combined-build appearance remain visually unverified; failed-image fallback is listed as SDK-limited above. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
 | Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |
