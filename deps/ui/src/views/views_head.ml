@@ -276,7 +276,7 @@ let sorting_popup inst anchor =
   in
   P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
     (Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
-       (column ~gap:8 ~padding_vertical:8 ~width:310
+       (column ~gap:8 ~padding_vertical:8 ~width:270
           [ keyed
               ~source:(reactive (fun state ->
                 List.filter (fun so ->
@@ -676,7 +676,7 @@ let display_type_el inst : t =
             refresh inst
           in
           ignore
-            (P.show_select ~anchor ~align_end:true
+            (P.show_select ~anchor
                ~placeholder:(I.t "property.built-in/view-type")
                ~show_check:true ~selected_values:[(V.get inst).V.display_type]
                ~item_icon:(fun item -> Some (Icons.name_ref (match item.P.si_value with
