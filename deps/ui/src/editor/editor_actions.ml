@@ -2683,8 +2683,24 @@ let paste_history_opts target_uuid =
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
 let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
-  Ops.apply_and_refresh_result ~opts:(paste_history_opts target_uuid)
-    [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ]
+  let context = Runtime.repo (), Runtime.route () in
+  let session_current = paste_session_current () in
+  let input_seq = !S.edit_input_seq in
+  let opts = Ops.history_opts ~opts:(Ops.op_opts "paste")
+      ~before:(S.history_cursor ()) ~after:Wire.Nil () in
+  let* resp = Ops.apply_and_refresh_result ~opts
+      [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
+  if context = (Runtime.repo (), Runtime.route ()) && session_current ()
+     && input_seq = !S.edit_input_seq && Option.is_some (Ops.last_inserted_uuid resp)
+  then begin
+    clear_pending_blur ();
+    cancel_pending_focus ();
+    Option.iter (fun e -> Editor_sink.invalidate e.S.uuid) (S.editing ());
+    let editing = S.editing () in
+    S.set (fun st -> {st with S.editing = None});
+    Option.iter (fun e -> S.notify_edit_exit e.S.uuid) editing
+  end;
+  Js.Promise.resolve resp
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks
@@ -2800,21 +2816,9 @@ let paste_into_editor ~clipboard ev =
             && String.trim e.S.buffer = ""
             && (not has_children || List.length blocks = 1)
           in
-          let focus = paste_focus () in
           ignore
-            (let* resp = paste_copied_blocks copied e.uuid
-                ~sibling:(not has_children) ~replace_empty in
-            (* replace-empty swaps the editing block's entity
-                      in place (same uuid, new title) — resync the live
-                      model buffer first, else edit_last_inserted's
-                      save_if_dirty reads the stale "" and commits it
-                      over the pasted title *)
-            let* () =
-              (if replace_empty then Ops.resync_open_editor ()
-               else Js.Promise.resolve ())
-            in
-            focus resp;
-            Js.Promise.resolve ())
+            (paste_copied_blocks copied e.uuid
+                ~sibling:(not has_children) ~replace_empty)
       | None -> ())
   | Some e, _ ->
       (* external paste while editing (no stored trees, or the event
@@ -2898,15 +2902,10 @@ let paste_blocks ~clipboard ev =
           ev.Ui_services.prevent_default ();
           match selected_uuids () with
           | _ :: _ as sel ->
-              let focus = paste_focus () in
               ignore
-                (let* resp =
-                  paste_copied_blocks copied
+                (paste_copied_blocks copied
                     (List.nth sel (List.length sel - 1))
-                    ~sibling:true ~replace_empty:false
-                in
-                focus resp;
-                Js.Promise.resolve ())
+                    ~sibling:true ~replace_empty:false)
           | [] -> ())
       | None ->
           paste_external ev

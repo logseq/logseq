@@ -2202,6 +2202,52 @@ let run_views ~registry ~profile ~finish =
               next rest) 0)) 0)
     in next [true;false]
   in
+  let optimistic_reactions_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_flush = !Runtime.app_flush
+    and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+    and previous_settings = !Settings_state.st in
+    Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+    Runtime.read_model := (fun () -> {Model.initial with repo = Some "optimistic-reactions"});
+    let persisted = ref false and premature = ref false and source = ref None in
+    Runtime.worker := Some {
+      Worker_client.invoke_fn = (fun name args -> Js.Promise.resolve (match name,args with
+        | "thread-api/get-render-snapshots", [_;request] ->
+            let resources = Option.value (Wire.get request "resources") ~default:Wire.Nil in
+            Wire.Map [Wire.kw "slots", Wire.Map (List.filter_map (fun key ->
+              match Wire.elems key with
+              | Wire.Keyword "block-reactions" :: Wire.Uuid "optimistic-target" :: _ ->
+                  if not !persisted then premature := true;
+                  let value = if not !persisted then Wire.Map [] else Wire.Array [Wire.Map
+                    [Wire.kw "emoji-id", Wire.String "grinning"; Wire.kw "count", Wire.Int 1;
+                     Wire.kw "reacted-by-me?", Wire.Bool false; Wire.kw "usernames", Wire.Nil]] in
+                  Some (Wire.Array [Wire.kw "resource";key], Wire.Map [Wire.kw "value",value])
+              | _ -> None) (Wire.elems resources))]
+        | _ -> Wire.Nil));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let block = Test_check.block "optimistic-target" "new block" in
+    let mounted = mount (fun _ context parent ->
+      let state = Signal.state context.Lui_ui.ui_scheduler block in
+      source := Some state;
+      Tree.block_row_sig ~scope:"optimistic-reactions" ~editable:false
+        (Signal.value state) context parent) in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "Optimistic rows do not read reactions before their worker entity exists" (not !premature);
+      persisted := true;
+      Runtime.signal_set (Option.get !source) {block with Model.block_db_id = Some 101};
+      S.flush mounted;
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        S.flush mounted;
+        check "Canonical new rows load reactions after insertion is acknowledged"
+          (List.exists (fun node -> button_label node = Some "grinning 1") (nodes mounted));
+        ignore (Lui_app.dispose mounted.S.app);
+        Runtime.worker := previous_worker;
+        Runtime.read_model := previous_model;
+        Runtime.app_flush := previous_flush;
+        Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+        Settings_state.st := previous_settings;
+        done_ ()) 0)) 0)
+  in
   let reaction_refresh_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_flush = !Runtime.app_flush in
@@ -3024,9 +3070,9 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    batch_property_check (fun () -> property_picker_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
+    batch_property_check (fun () -> property_picker_check (fun () -> optimistic_reactions_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
       (fun () -> property_text_many_check (fun () -> property_value_completion_check
-        (fun () -> next [false,false;false,true;true,false;true,true]))))))))
+        (fun () -> next [false,false;false,true;true,false;true,true])))))))))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in

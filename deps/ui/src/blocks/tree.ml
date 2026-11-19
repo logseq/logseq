@@ -888,7 +888,9 @@ and row_main ?extras ~editable ~library scope (b : Model.block) : t =
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid
+            ; (match b.Model.block_db_id with
+               | None -> Logseq_el.nothing
+               | Some _ -> Comments_view.reactions_el uuid)
             ]
         ]
 
@@ -1221,7 +1223,9 @@ and block_row_static ?(depth = 0) ?(library = false) ?highlight ~collapse_scope
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid
+            ; (match b.Model.block_db_id with
+               | None -> Logseq_el.nothing
+               | Some _ -> Comments_view.reactions_el uuid)
             ]
         ]
     ; Properties_area.block_area ~scope:"reference" ~uuid

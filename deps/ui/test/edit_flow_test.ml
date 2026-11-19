@@ -2688,6 +2688,55 @@ let test_authoritative_route_miss (h : host) =
     Ui_services.log_error ("Authoritative route miss test failed", error);
     failwith "Authoritative route miss test failed")
 
+let test_structured_paste_completion (h : host) =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | outcome :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [Test_check.block "paste-target" ""; Test_check.block "other" "other"];
+        set_editing ~uuid:"paste-target" ~buffer:"" ~caret:0 ~base:"";
+        install_worker ~repo:h.repo h;
+        let worker = Option.get !Runtime.worker in
+        let release = ref (fun () -> ()) and after = ref None in
+        let gate = Js.Promise.make (fun ~resolve ~reject:_ ->
+            release := (fun () -> resolve true [@u])) in
+        let inserted = W.Map [W.kw "block/uuid", W.Uuid "paste-target";
+          W.kw "block/title", W.String "Clipboard parent"] in
+        Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+          if name <> "thread-api/apply-outliner-ops" then worker.Worker_client.invoke_fn name args
+          else begin
+            (match args with [_;_;opts] -> after := W.get opts "undo-redo/editor-info-after" | _ -> ());
+            let* _ = gate in
+            if outcome = "rejected" then h.reject_promise "paste rejected"
+            else if outcome = "empty" then Js.Promise.resolve (W.Map [W.kw "result", W.Nil])
+            else begin
+              Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+                [Test_check.block "paste-target" "Clipboard parent"; Test_check.block "other" "other"]}) !Runtime.current_page;
+              h.sync_page ();
+              Js.Promise.resolve (W.Map [W.kw "result", W.Map [W.kw "blocks", W.Array [inserted]]])
+            end
+          end)};
+        let failed = ref false in
+        let operation = A.paste_copied_blocks (false, [inserted]) "paste-target"
+            ~sibling:true ~replace_empty:true
+          |> Js.Promise.catch (fun _ -> failed := true; Js.Promise.resolve None) in
+        let* () = h.wait_ms 10 in
+        if outcome = "newer editor" then set_editing ~uuid:"other" ~buffer:"other" ~caret:5 ~base:"other";
+        !release ();
+        let* _ = operation in
+        let* () = h.wait_ms 10 in
+        check ("Structured paste completes without stealing focus: " ^ outcome)
+          (if outcome = "saved" then S.editing () = None && !S.pending_focus = None
+           else Option.map (fun e -> e.S.uuid) (S.editing ()) =
+             Some (if outcome = "newer editor" then "other" else "paste-target"));
+        check ("Structured paste retains failure state: " ^ outcome) (!failed = (outcome = "rejected"));
+        if outcome = "saved" then check "Structured paste redo does not reopen an editor" (!after = Some W.Nil);
+        reset_editor ();
+        run rest
+  in
+  run ["saved"; "empty"; "rejected"; "newer editor"]
+
 let test_numbering_preserves_unedited_title (h : host) =
   let* () = settle h 40 in
   stage_page h [Test_check.block "b1" "Plain second block"];
@@ -2727,6 +2776,7 @@ let run (_h : host) =
 (* async stage: chained into the drive runner's promise drain *)
 let async_stage (h : host) : unit Js.Promise.t =
   let saved = h.snapshot () in
+  let* () = test_structured_paste_completion h in
   let* () = test_numbering_preserves_unedited_title h in
   let* () = test_code_conversion_focus h in
   let* () = test_calculator_exit_structure h in
