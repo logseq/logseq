@@ -1784,6 +1784,7 @@
                (when (seq blocks-to-remove-set) (search/delete-blocks! db blocks-to-remove-set))
                (when (seq blocks-to-add) (search/upsert-blocks! db (clj->js blocks-to-add)))
                (is (= expected (query "2024-12-16 Monday")))
+               (is (= "2024-12-16 monday" (:block/name (d/entity @conn (:db/id journal)))))
                (is (empty? (query "Dec 16th, 2024"))))
              (.close db)))
           (p/catch (fn [e] (is false (str e))))

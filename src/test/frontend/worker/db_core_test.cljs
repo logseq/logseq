@@ -649,6 +649,7 @@
                (-> (p/let [_ (#'db-core/<handle-migrate-result-local-txs! test-repo (db-migrate/migrate conn))]
                      (let [query #(set (map :block/uuid (search/search-blocks conn db % {:limit 20 :enable-snippet? false})))]
                        (is (= expected (query "2024-12-16 Monday")))
+                       (is (= "2024-12-16 monday" (:block/name (d/entity @conn (:db/id journal)))))
                        (is (empty? (query "Dec 16th, 2024")))))
                    (p/finally (fn []
                                 (ldb/register-transact-pipeline-fn! identity)

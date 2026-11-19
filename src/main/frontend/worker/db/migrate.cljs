@@ -130,15 +130,14 @@
      (fn [{:keys [e v]}]
        (when (ldb/journal? (d/entity db e))
          (let [title (date-time-util/int->journal-title v formatter)
-               canonical-name (-> (date-time-util/int->journal-title v date-time-util/default-journal-title-formatter)
-                                  common-util/page-name-sanity-lc)
+               page-name (common-util/page-name-sanity-lc title)
                stored (fn [attr] (:v (first (d/datoms db :eavt e attr))))]
-           (cond-> []
-             (not= title (stored :block/title))
-             (conj [:db/add e :block/title title])
-             (and (not= canonical-name (stored :block/name))
-                  (not-any? #(not= e (:e %)) (d/datoms db :avet :block/name canonical-name)))
-             (conj [:db/add e :block/name canonical-name])))))
+           (when (not-any? #(not= e (:e %)) (d/datoms db :avet :block/name page-name))
+             (cond-> []
+               (not= title (stored :block/title))
+               (conj [:db/add e :block/title title])
+               (not= page-name (stored :block/name))
+               (conj [:db/add e :block/name page-name]))))))
      (d/datoms db :avet :block/journal-day))))
 
 (def schema-version->updates

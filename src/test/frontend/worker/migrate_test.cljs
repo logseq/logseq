@@ -9,7 +9,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]))
 
-(deftest migrate-journal-titles-and-canonical-names-test
+(deftest migrate-journal-titles-and-current-format-names-test
   (let [conn (d/create-conn db-schema/schema)
         stored #(-> (d/datoms @conn :eavt %1 %2) first :v)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data ""))
@@ -17,15 +17,15 @@
                       [:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]
                       {:db/id -1 :block/title "stale" :block/name "2024-12-16" :block/journal-day 20241216 :block/tags :logseq.class/Journal}
                       {:db/id -2 :block/title "stale" :block/name "2024-12-17" :block/journal-day 20241217 :block/tags :logseq.class/Journal}
-                      {:block/title "collision" :block/name "dec 17th, 2024"}])
+                      {:block/title "2024-12-17 Tuesday" :block/name "2024-12-17 tuesday"}])
     (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
     (try
       (db-migrate/migrate conn)
       (let [journal-id (:e (first (d/datoms @conn :avet :block/journal-day 20241216)))
             collision-id (:e (first (d/datoms @conn :avet :block/journal-day 20241217)))]
         (is (= "2024-12-16 Monday" (stored journal-id :block/title)))
-        (is (= "dec 16th, 2024" (stored journal-id :block/name)))
-        (is (= "2024-12-17 Tuesday" (stored collision-id :block/title)))
+        (is (= "2024-12-16 monday" (stored journal-id :block/name)))
+        (is (= "stale" (stored collision-id :block/title)))
         (is (= "2024-12-17" (stored collision-id :block/name)))
         (is (nil? (db-migrate/migrate conn))))
       (finally (ldb/register-transact-pipeline-fn! identity)))))

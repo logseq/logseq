@@ -684,8 +684,6 @@
                              (let [page-m (sqlite-util/build-new-page title)]
                                (assoc page-m
                                       :block/uuid (common-uuid/gen-uuid :journal-page-uuid date-int)
-                                      :block/name (-> (date-time-util/int->journal-title date-int date-time-util/default-journal-title-formatter)
-                                                      common-util/page-name-sanity-lc)
                                       :block/journal-day date-int)))
                          (assoc :block/tags #{:logseq.class/Journal}))
         time-long (deadline-scheduled-time-ms value)]
