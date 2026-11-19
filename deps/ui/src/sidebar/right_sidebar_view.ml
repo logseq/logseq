@@ -113,8 +113,8 @@ let item_menu st (it : Sidebar_state.item) =
     match anchor with
     | Sidebar_state.Item_trigger ->
         popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:128
-          ~anchor:`below ~anchor_alignment:`start ~anchor_offset:0.
-          ~anchor_alignment_offset:9.
+          ~anchor:`below ~anchor_alignment:`center ~anchor_offset:0.
+          ~anchor_alignment_offset:0.5
           ~anchor_target:("sbi-more-icon-" ^ it.key)
           ~transition:Ui_components.popover_transition
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
