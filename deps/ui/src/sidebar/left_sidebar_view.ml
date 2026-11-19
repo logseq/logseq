@@ -105,6 +105,7 @@ let nav_edit_menu st =
     [ Ui_components.menu_surface
         (popover ~key:"menu-box" ~role:`menu
           ~anchor:`below ~anchor_alignment:`center ~anchor_offset:0.
+          ~anchor_alignment_offset:1.
           ~anchor_target:"nav-edit-trigger" ~min_width:128
           ~transition:Ui_components.popover_transition
           ~style_class:"ui__dropdown-menu-content"

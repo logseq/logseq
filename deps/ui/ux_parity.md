@@ -82,11 +82,12 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Shell N9 | Cmdk footer actions now use Master's primary-text semantic color instead of the SDK foreground token; existing label/button opacity is unchanged. Open, Create and sidebar actions share the correction. Browser color acceptance remains unverified. |
 | Table72 N19 | The toolbar menu explicitly focuses the last main action on appearance, excluding the late session tail from initial focus only. ArrowDown then reaches Login and wraps to the first page action; pointer/context menus retain container focus. Mounted appearance/keyboard regression covers the sequence and empty DOM. Browser acceptance remains unverified. |
 | Shell N20 | Escape body focus now runs after the deferred render and the host's deferred trigger restoration, with the closed-state guard retained. A mounted palette workflow covers normal/empty results and reopening during close using the production timer schedule and a modeled host focus-restoration boundary. Browser acceptance remains unverified. |
+| Shell N3 | The navigation editor popup accounts for the positive-pixel bias of Master's one-pixel virtual reference instead of centering solely on the full trigger. The correction is scoped to this popup; its shorter action list still intentionally excludes Graph View. Browser geometry remains unverified. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
 | Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |
-| Shell N1 / N20 | Decorative `#` Tab stop, empty-cmdk footer focus and Escape-to-body. The Escape path was reviewed, not newly browser-verified. |
-| Shell N3 / N6 / N17 | Navigation-menu origin and tooltip geometry/typography. |
+| Shell N1 / N20 | Decorative `#` Tab stop and empty-cmdk footer focus remain pending. Escape-to-body is source-repaired above; browser acceptance remains pending. |
+| Shell N6 / N17 | Tooltip geometry/typography. |
 | Shell N12 | Title-action offset/gap/foreground. |
 | Shell N14 / N19 / N24 | Help-link typography/geometry, page-menu arrow focus and sidebar Contents-tab background. |
 | Shell N31 | Cmdk Shift-click opens the sidebar without changing the main route; capture-event handling is repaired and tested, browser acceptance pending. |
