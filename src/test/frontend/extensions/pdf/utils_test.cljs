@@ -29,7 +29,7 @@
       "\u00B4z" "ź"
       "\u02D9z" "ż"
       "\u00B4i" "í"
-      "`e" "è"
+      "\u02CBe" "è"
       "\u02C6a" "â")))
 
 (deftest compose-pdf-spacing-diacritics-text-layer-whitespace
@@ -40,7 +40,9 @@
       "e \u00B4" "é"
       "z \u02D9" "ż"))
   (testing "two spaces are not treated as an overlay pair"
-    (is (= "s  \u02C7" (pdf-utils/compose-pdf-spacing-diacritics "s  \u02C7")))))
+    (is (= "s  \u02C7" (pdf-utils/compose-pdf-spacing-diacritics "s  \u02C7"))))
+  (testing "prefix accent across a word space binds to the following letter"
+    (is (= "Pli ška č" (pdf-utils/compose-pdf-spacing-diacritics "Pli \u02C7ska \u010D")))))
 
 (deftest compose-pdf-spacing-diacritics-non-regression
   (testing "standalone accents, non-composing pairs, and ASCII caret stay put"
@@ -52,6 +54,7 @@
       "š" "š"
       "hello" "hello"
       "a^2" "a^2"
+      "`echo`" "`echo`"
       "Pli s\u02C7 ka \u010D" "Pli š ka č"
       "s\u02C7c\u02C7r\u02C7" "ščř"))
   (testing "nil and non-strings pass through"

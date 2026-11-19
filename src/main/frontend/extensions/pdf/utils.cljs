@@ -161,7 +161,7 @@
 (def ^:private spacing-diacritic->combining
   {"\u02C7" "\u030C" ; caron ˇ
    "\u00B4" "\u0301" ; acute ´
-   "\u0060" "\u0300" ; grave `
+   "\u02CB" "\u0300" ; modifier grave ˋ (not ASCII `)
    "\u00A8" "\u0308" ; diaeresis ¨
    "\u02D8" "\u0306" ; breve ˘
    "\u02D9" "\u0307" ; dot above ˙
@@ -184,27 +184,43 @@
   [ch]
   (boolean (and ch (.test whitespace-char-re ch))))
 
+(defn- spacing-diacritic?
+  [ch]
+  (contains? spacing-diacritic->combining ch))
+
+(defn- composable-base-letter?
+  [ch]
+  (and (unicode-letter? ch)
+       (not (spacing-diacritic? ch))))
+
 (defn- compose-letter-and-spacing-diacritic
   [letter spacing-diacritic]
-  (when (and (unicode-letter? letter)
-             (not (contains? spacing-diacritic->combining letter)))
+  (when (composable-base-letter? letter)
     (when-let [combining (get spacing-diacritic->combining spacing-diacritic)]
       (let [composed (.normalize (str letter combining) "NFC")]
         (when (and (= 1 (.-length composed))
                    (not= composed letter))
           composed)))))
 
-(defn- following-char
-  "Next code point after idx, skipping a single whitespace from the PDF text layer."
+(defn- try-compose-pair
+  [left right]
+  ;; Accent-before-letter first: U+02C7/U+02C6 are Unicode Lm.
+  (or (compose-letter-and-spacing-diacritic right left)
+      (compose-letter-and-spacing-diacritic left right)))
+
+(defn- codepoint-at
   [^js codepoints idx]
-  (let [n (alength codepoints)
-        j (inc idx)]
-    (when (< j n)
-      (let [ch (aget codepoints j)]
-        (if (and (whitespace-char? ch)
-                 (< (inc j) n))
-          [(aget codepoints (inc j)) (+ j 2)]
-          [ch (inc j)])))))
+  (when (and (<= 0 idx) (< idx (alength codepoints)))
+    (aget codepoints idx)))
+
+(defn- whitespace-blocked-pair?
+  "Do not compose across a space when the accent already sits next to another letter."
+  [^js codepoints left-idx right-idx]
+  (boolean
+   (or (and (spacing-diacritic? (aget codepoints right-idx))
+            (composable-base-letter? (codepoint-at codepoints (inc right-idx))))
+       (and (spacing-diacritic? (aget codepoints left-idx))
+            (composable-base-letter? (codepoint-at codepoints (dec left-idx)))))))
 
 (defn compose-pdf-spacing-diacritics
   "Compose overlay spacing accents from PDF text into precomposed letters.
@@ -213,8 +229,9 @@
   exposes those as adjacent characters; NFC does not compose them. Convert a
   spacing accent that directly follows or precedes a letter (optionally with one
   text-layer space) into its combining mark and keep the NFC form only when that
-  yields a single precomposed character. Standalone accents, ASCII ^, and
-  non-composing pairs are left unchanged."
+  yields a single precomposed character. Direct adjacency wins over a pair
+  across whitespace. Standalone accents, ASCII ^/`, and non-composing pairs
+  are left unchanged."
   [text]
   (if-not (string? text)
     text
@@ -225,15 +242,20 @@
         (if (>= i n)
           (.join out "")
           (let [ch (aget codepoints i)
-                partner (following-char codepoints i)
-                composed-pair (when partner
-                                (let [[pch next-i] partner]
-                                  (when-let [composed
-                                             ;; Accent-before-letter first: U+02C7/U+02C6 are
-                                             ;; Unicode Lm and would otherwise look like bases.
-                                             (or (compose-letter-and-spacing-diacritic pch ch)
-                                                 (compose-letter-and-spacing-diacritic ch pch))]
-                                    [composed next-i])))]
+                j (inc i)
+                next-ch (codepoint-at codepoints j)
+                adjacent (when (and next-ch (not (whitespace-char? next-ch)))
+                           (when-let [composed (try-compose-pair ch next-ch)]
+                             [composed (inc j)]))
+                across-space (when (and (nil? adjacent)
+                                        (whitespace-char? next-ch)
+                                        (< (inc j) n))
+                               (let [right-idx (inc j)
+                                     partner (aget codepoints right-idx)]
+                                 (when-not (whitespace-blocked-pair? codepoints i right-idx)
+                                   (when-let [composed (try-compose-pair ch partner)]
+                                     [composed (inc right-idx)]))))
+                composed-pair (or adjacent across-space)]
             (if composed-pair
               (let [[composed next-i] composed-pair]
                 (.push out composed)

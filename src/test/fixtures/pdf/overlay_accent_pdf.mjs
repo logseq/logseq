@@ -19,16 +19,20 @@ const CARON = String.fromCharCode(207);
 const CCARON = String.fromCharCode(232);
 
 function buildOverlayAccentPdf() {
-  // Overlay /caron on the preceding "s" by stepping back one Helvetica "s" width
-  // (556/1000 em) at 12pt, then continue with " ka " + /ccaron.
+  // Helvetica widths at 12pt: P=8.664, l=i=space=3.336, s=6.672.
+  // "Pli " ends at 72+18.672=90.672, which is the origin of "s".
+  // Tm places /caron on that same origin; Td would move the line matrix
+  // instead of the glyph position advanced by Tj.
   const stream =
     "BT\n" +
     "/F1 12 Tf\n" +
-    "72 50 Td\n" +
-    "(Pli s) Tj\n" +
-    "-6.672 0 Td\n" +
+    "1 0 0 1 72 50 Tm\n" +
+    "(Pli ) Tj\n" +
+    "1 0 0 1 90.672 50 Tm\n" +
+    "(s) Tj\n" +
+    "1 0 0 1 90.672 50 Tm\n" +
     `(${CARON}) Tj\n` +
-    "6.672 0 Td\n" +
+    "1 0 0 1 97.344 50 Tm\n" +
     `( ka ${CCARON}) Tj\n` +
     "ET\n";
 
@@ -86,7 +90,13 @@ async function extractWithPdfjs(pdfBytes) {
   const page = await pdf.getPage(1);
   const withNorm = await page.getTextContent({ disableNormalization: false });
   const noNorm = await page.getTextContent({ disableNormalization: true });
-  const itemsOf = (tc) => tc.items.map((it) => it.str);
+  const itemsOf = (tc) =>
+    tc.items.map((it) => ({
+      str: it.str,
+      x: it.transform?.[4],
+      y: it.transform?.[5],
+      width: it.width,
+    }));
   return {
     version: pdfjs.version,
     disableNormalizationFalse: itemsOf(withNorm),
@@ -105,14 +115,16 @@ if (writeIdx >= 0) {
 
 const extracted = await extractWithPdfjs(pdfBytes);
 const items = extracted.disableNormalizationTrue;
-const joined = items.join("");
+const joined = items.map((it) => it.str).join("");
 const nfc = joined.normalize("NFC");
 const nfkc = joined.normalize("NFKC");
+const sItem = items.find((it) => it.str.includes("s"));
+const caronItem = items.find((it) => it.str.includes("\u02C7"));
 
 console.log(JSON.stringify({
   pdfjsVersion: extracted.version,
   itemsNoNorm: items,
-  itemsNoNormCodes: items.map(codePoints),
+  itemsNoNormCodes: items.map((it) => codePoints(it.str)),
   itemsWithNorm: extracted.disableNormalizationFalse,
   joined,
   joinedCodes: codePoints(joined),
@@ -120,4 +132,8 @@ console.log(JSON.stringify({
   nfkcEqualsJoined: nfkc === joined,
   hasSThenSpacingCaron: joined.includes("s\u02C7"),
   nfcStillHasSpacingCaron: nfc.includes("s\u02C7"),
+  caronOverlaysS: sItem != null && caronItem != null &&
+    caronItem.x >= sItem.x && caronItem.x < sItem.x + sItem.width,
+  sItem,
+  caronItem,
 }, null, 2));
