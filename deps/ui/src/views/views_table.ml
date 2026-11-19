@@ -1736,37 +1736,73 @@ let ref_breadcrumb inst uuid : t =
   let alive () = current () && not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope) in
   ignore (Js.Promise.then_ (fun blocks ->
     if alive () then begin
-      Signal.set parents (List.filter (fun (b : Model.block) -> not b.block_is_page) blocks);
+      (* the group header already names the owning page; deeper page
+         ancestors (e.g. a property-value block's property) stay *)
+      Signal.set parents
+        (match blocks with
+         | (root : Model.block) :: rest when root.block_is_page -> rest
+         | _ -> blocks);
       Ui_services.request_flush ()
     end;
     Js.Promise.resolve ()) (Outliner_ops.fetch_zoom_parents (Runtime.repo ()) uuid)
     |> Views_db.catch_quiet);
-  (reactive (fun blocks ->
-    if blocks = [] then Logseq_el.nothing else
+  (* cljs block-breadcrumb appends the created-from-property entity
+     (e.g. the Query property of a query's value block) *)
+  let property_seg = Signal.state ctx.Lui_ui.ui_scheduler None in
+  ignore (Js.Promise.then_ (fun w ->
+    (match Wire.get w "logseq.property/created-from-property" with
+     | Some prop when alive () -> (
+         match Wire.map_get_string prop "block/title",
+               Wire.map_get_uuid prop "block/uuid" with
+         | Some title, Some prop_uuid ->
+             Signal.set property_seg (Some (title, prop_uuid));
+             Ui_services.request_flush ()
+         | _ -> ())
+     | _ -> ());
+    Js.Promise.resolve ())
+    (Runtime.invoke3 "thread-api/pull" (Wire.String (Runtime.repo ()))
+       (Wire.String
+          "[{:logseq.property/created-from-property [:block/uuid :block/title]}]")
+       (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ]))
+    |> Views_db.catch_quiet);
+  (reactive (fun blocks property ->
+    let crumb ~text ~url children =
+      link ~url ~target:`self_ ~foreground:"var(--ls-primary-text-color)"
+        ?text children
+    in
+    (* cljs breadcrumb segment-label: query blocks show only their
+       structural search icon, untitled blocks a point-filled one *)
+    let segment_icon name =
+      Ui_components.with_props [Ui_components.Prop.opacity 0.7]
+        (icon ~name:(Icons.name_ref name) ~point_size:12 [])
+    in
+    let block_crumb (b : Model.block) =
+      let query_parent =
+        List.exists (fun t -> List.mem t b.Model.block_tag_idents)
+          [ "logseq.class/Query"; "logseq.class/Cards" ]
+      in
+      let url = "#/page/" ^ Option.get b.block_uuid in
+      if query_parent then crumb ~text:None ~url [segment_icon "search"]
+      else if String.trim b.block_title = "" then
+        crumb ~text:None ~url [segment_icon "point-filled"]
+      else crumb ~text:(Some b.block_title) ~url []
+    in
+    let crumbs =
+      List.map block_crumb blocks
+      @ (match property with
+         | Some (title, prop_uuid) ->
+             [crumb ~text:(Some title) ~url:("#/page/" ^ prop_uuid) []]
+         | None -> [])
+    in
+    if crumbs = [] then Logseq_el.nothing else
     Ui_components.with_props
       [Ui_components.Prop.font_size "14px"; Ui_components.Prop.opacity 0.7;
        Ui_components.Prop.hover_opacity 1.]
     (row ~margin_left:16 ~margin_top:8 ~gap:4 ~cross:`center ~min_height:21
-      (List.concat (List.mapi (fun i (b : Model.block) ->
+      (List.concat (List.mapi (fun i el ->
         (if i = 0 then [] else [Ui_components.with_props [Ui_components.Prop.opacity 0.5] (text ~value:"/" [])]) @
-        (* cljs breadcrumb segment-label: query blocks show only their
-           structural search icon, untitled blocks a point-filled one *)
-        let query_parent =
-          List.exists (fun t -> List.mem t b.Model.block_tag_idents)
-            [ "logseq.class/Query"; "logseq.class/Cards" ]
-        in
-        let segment_icon name =
-          Ui_components.with_props [Ui_components.Prop.opacity 0.7]
-            (icon ~name:(Icons.name_ref name) ~point_size:12 [])
-        in
-        [link ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_
-           ~foreground:"var(--ls-primary-text-color)"
-           ?text:(if query_parent || String.trim b.block_title = ""
-                  then None else Some b.block_title)
-           (if query_parent then [segment_icon "search"]
-            else if String.trim b.block_title = "" then [segment_icon "point-filled"]
-            else [])]) blocks))))
-    (Signal.value parents)) ctx parent
+        [el]) crumbs))))
+    (Signal.value parents) (Signal.value property_seg)) ctx parent
 
 let ref_header inst ~key ~title : t =
  fun ctx parent ->
