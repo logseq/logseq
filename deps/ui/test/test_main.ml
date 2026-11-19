@@ -3158,7 +3158,26 @@ let test_calc_variables () =
 
 let test_calc_error_lines () =
   check "Calculator errors preserve subsequent result positions"
-    (Render_calc.results "1/0\nbad(\n2+2\n" = ["Infinity"; "?"; "4"])
+    (Render_calc.results "1/0\nbad(\n2+2\n" = ["Infinity"; "?"; "4"]);
+  List.iter (fun (source, expected) ->
+    check ("Calculator decimal precision: " ^ source)
+      (Render_calc.results source = expected))
+    [ "0.1+0.2\n1/3\n1e20+1",
+      ["0.3"; "0.33333333333333333333"; "100000000000000000001"]
+    ; "a=9007199254740993\na*3\na-9007199254740992",
+      ["9007199254740993"; "27021597764222979"; "1"]
+    ; "-2/3\n1/6\n0/0\n-1/0\n0.000000000000000000005/1",
+      ["-0.66666666666666666667"; "0.16666666666666666667"; "NaN"; "-Infinity";
+       "0.00000000000000000001"]
+    ; "1e20-1\n2^70\n2^-3\n0.01*0.02\n1e-23",
+      ["99999999999999999999"; "1.18059162071741130342e+21"; "0.125"; "0.0002"; "1e-23"]
+    ; "1e\n.\n1..2\nlast\n2+2", ["?"; "?"; "?"; "?"; "4"]
+    ; "0-0.01\n0.01-0\n-0.01+0\n0*1e-20", ["-0.01"; "0.01"; "-0.01"; "0"]
+    ; "sqrt(2)\nsqrt(1e60)\nsqrt(-1)\nsqrt(0)",
+      ["1.4142135623730950488"; "1e+30"; "NaN"; "0"]
+    ; "sin(0.5)\nln(2)\nexp(1)",
+      ["0.479425538604203"; "0.6931471805599453"; "2.718281828459045"]
+    ; "", [""] ]
 
 let test_editor_actions () =
   let b = block ~children:[ block "c1" "C1"; block "c2" "C2" ] "b" "B" in
