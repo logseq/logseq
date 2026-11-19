@@ -691,7 +691,7 @@ let display_type_el inst : t =
             refresh inst
           in
           ignore
-            (P.show_select ~anchor
+            (P.show_select ~anchor ~surface:`popover
                ~placeholder:(I.tf "property/set-placeholder" [ I.t "property.built-in/view-type" ])
                ~show_check:true ~selected_values:[(V.get inst).V.display_type]
                ~item_icon:(fun item -> Some (Icons.name_ref (match item.P.si_value with

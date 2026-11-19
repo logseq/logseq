@@ -131,7 +131,7 @@ let anchor_identifier (anchor : U.el) =
    (menu surfaces); select/custom popups keep caller-driven classes. *)
 type popup_anchor = Target of string | Rectangle of (float * float * float * float)
 
-let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role
+let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ?(padding = 4)
     ?max_height_viewport ~on_dismiss children : t =
   let anchor_target, anchor_rect, alignment = match anchor with
     | Target target -> Some target, None, (if align_end then `end_ else `start)
@@ -151,7 +151,7 @@ let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role
        ?border_width:(if card then Some 1 else None)
        ?corner_radius:(if card then Some 6 else None)
        ?min_width:(if card then Some 128 else None)
-       ?padding:(if card then Some 4 else None)
+       ?padding:(if card then Some padding else None)
        ~data_attrs:[ ("data-keep-selection", ""); ("tabindex", "-1") ]
        ~style_class:cls ~on_dismiss children)
 
@@ -389,6 +389,7 @@ let show_custom_rect ~rect ~cls content =
     ~align_end:false ~cls ~card:true ~on_dismiss:(fun _ -> close_entry id) [content]))
 
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
+    ?(surface = `menu)
     ?(item_icon = fun _ -> None)
     ?(show_check = false)
     ?(selected_values = [])
@@ -551,10 +552,13 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             | None -> [])
            @ [ select_col ])
     in
-    anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
+    let role, padding, cls = match surface with
+      | `menu -> `menu, 4, "ui__dropdown-menu-content"
+      | `popover -> `dialog, 0, "ui__popover-content" in
+    anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role ~padding
       ~id:("vpsel-p" ^ string_of_int id) ~anchor:(Target anchor_target) ~align_end ~card:true
       ?max_height_viewport:(if fit_results then Some 0.75 else None)
-      ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
+      ~cls:(cls ^ " " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
   in
