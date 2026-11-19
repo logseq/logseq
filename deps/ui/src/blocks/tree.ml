@@ -448,10 +448,15 @@ let content_el uuid (b : Model.block) : t =
                           b)
                    ]
                | Some `inline_flex ->
-                   [ row ~key:("bt-" ^ uuid)
-                       (Render.title_block ~self:uuid ~annot:true
-                          ~resolved:(S.title_for uuid b.block_title)
-                          b)
+                   [ Views_view.query_title_el ~block_uuid:uuid
+                       ~title:
+                         (if String.trim b.Model.block_title = "" then None
+                          else
+                            Some
+                              (row ~key:("bt-" ^ uuid)
+                                 (Render.title_block ~self:uuid ~annot:true
+                                    ~resolved:(S.title_for uuid b.block_title)
+                                    b)))
                    ]
                | Some `inline ->
                    [ row ~key:("bt-" ^ uuid)

@@ -335,7 +335,8 @@ let is_cards_block (b : Model.block) =
    (a sibling inside .ls-block) — mounted declaratively as a KQuery view
    (.views-query-inner + raw-source .CodeMirror when the editor is open) *)
 let query_below_el uuid =
-  box ~key:("cq-" ^ uuid) 
+  Ui_components.with_props [ Ui_components.Prop.padding_left 42 ] @@
+  box ~key:("cq-" ^ uuid)
     [ box ~style_class:"bd"
         [ box ~style_class:"custom-query-results"
             [ Views_view.view
