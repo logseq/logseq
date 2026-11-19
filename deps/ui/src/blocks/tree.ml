@@ -25,6 +25,11 @@ open Lui_elements
 
 module S = Editor_state
 
+type row_extras =
+  { right_of_block : Model.block -> t option
+  ; below_block : Model.block -> t option
+  }
+
 let with_editor_font elem : t =
  fun ctx parent ->
   Settings_state.ensure ctx;
@@ -801,19 +806,19 @@ let row_drop_indicators ~scope uuid =
 
 let rec block_row
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    ?(virtualize = false) (b : Model.block) : t =
+    ?(virtualize = false) ?extras (b : Model.block) : t =
 
  fun ctx parent ->
   S.ensure ctx;
   (* host fixups (stripped lui-node ids) — registered at first mount;
      module init runs before Ui_services.install so it can't live there *)
   Ui_services.dom_ensure_fixups ();
-  (row_el ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope b) ctx parent
+  (row_el ?extras ~depth ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope b) ctx parent
 
 
 (* The title/editor row; properties, query results and children follow
    in the block shell. *)
-and row_main ~editable ~library scope (b : Model.block) : t =
+and row_main ?extras ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
@@ -839,13 +844,15 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
                                     ~min_width:0
-                                    [ Properties_area.block_left_chips ~scope ~uuid
+                                    ([ Properties_area.block_left_chips ~scope ~uuid ~page_title:false
                                     ; (if Comments.is_comments_area b then
                                          Comments.area_view uuid b
                                        else
                                          content_or_editor ~editable uuid
                                            scope b)
-                                    ; row ~key:("br-" ^ key)
+                                    ] @ (match extras with None -> []
+                                         | Some extras -> Option.to_list (extras.right_of_block b))
+                                    @ [ row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
                                         ~gap:4 ~cross:`center
                                         ~data_attrs:
@@ -867,7 +874,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                                             spacer ~key:("tags-" ^ uuid) []
                                           else tags_el uuid b
                                         ]
-                                    ]
+                                    ])
                                 ])
                             ]
                         ; (* cljs .flex.flex-col.w-full inner column:
@@ -883,7 +890,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
             ]
         ]
 
-and row_el ~depth ~editable ~virtualize scope ~(library : bool)
+and row_el ?extras ~depth ~editable ~virtualize scope ~(library : bool)
     (b : Model.block) : t =
 
   let uuid = Option.value b.block_uuid ~default:"" in
@@ -910,7 +917,7 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
           only visible while the fill shows *)
        ~corner_radius:4
        ~data_attrs_signal:(row_attrs_sig ~scope ~depth ~editable uuid b)
-    ([ row_main ~editable ~library scope b
+    ([ row_main ?extras ~editable ~library scope b
     ; (* .ls-block-content-indent: block properties area + block-below
          pills, sibling of .block-main-container *)
       Properties_area.block_area ~scope ~uuid
@@ -921,15 +928,16 @@ and row_el ~depth ~editable ~virtualize scope ~(library : bool)
          (* class-Cards blocks get the same results shell *)
          Render.query_below_el uuid
        else Logseq_el.nothing)
-    ; (if has_children && not (Comments.is_comments_area b) then
-         children_el ~depth ~editable ~library ~virtualize uuid scope b
+    ] @ (match extras with None -> [] | Some extras -> Option.to_list (extras.below_block b))
+      @ [ (if has_children && not (Comments.is_comments_area b) then
+         children_el ?extras ~depth ~editable ~library ~virtualize uuid scope b
        else Logseq_el.nothing)
     ] @ row_drop_indicators ~scope uuid)))))
 
 (* keyed-row variant of row_el: the .ls-block shell is a stable node
    (keyed reconcile needs a node per item) and the content inside it is
    rebuilt only when the row's own block record changes *)
-and row_sig ?depth_signal ?(flat = false) ~depth ~editable ~library ~virtualize scope
+and row_sig ?extras ?depth_signal ?(flat = false) ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let b0 = Signal.get bs in
@@ -981,7 +989,7 @@ and row_sig ?depth_signal ?(flat = false) ~depth ~editable ~library ~virtualize 
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
           a == b && ga = gb && not (gen_bumped a ia ib))
         (fun ((b : Model.block), _g, _i) ->
-          row_main ~editable ~library scope b)
+          row_main ?extras ~editable ~library scope b)
         (Logseq_el.own ctx
            (Signal.map2
               (fun (b : Model.block) (_tick : int) ->
@@ -1003,13 +1011,16 @@ and row_sig ?depth_signal ?(flat = false) ~depth ~editable ~library ~virtualize 
                 bs))
         (Render.query_below_el
            (Option.value b0.Model.block_uuid ~default:""))
-    ; (if flat then Logseq_el.nothing
-       else row_children ~depth ~editable ~library ~virtualize scope bs)
-    ] @ row_drop_indicators ~scope
+    ] @ (match extras with None -> []
+         | Some extras -> [reactive
+             (fun b -> Option.value (extras.below_block b) ~default:Logseq_el.nothing) bs])
+      @ [ (if flat then Logseq_el.nothing
+           else row_children ?extras ~depth ~editable ~library ~virtualize scope bs) ]
+      @ row_drop_indicators ~scope
           (Option.value b0.Model.block_uuid ~default:"")))))))
     ctx parent
 
-and row_children ~depth ~editable ~library ~virtualize scope
+and row_children ?extras ~depth ~editable ~library ~virtualize scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   (* gate only on show/hide: children membership changes go through the
@@ -1031,19 +1042,19 @@ and row_children ~depth ~editable ~library ~virtualize scope
   let b = Signal.get bs in
   let uuid = Option.value b.block_uuid ~default:"" in
   if_ ~test:show_sig
-    (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
+    (children_dom ?extras ~depth ~editable ~library ~virtualize uuid scope bs)
     ctx parent
 
 and block_row_sig
     ?(depth = 0) ?(scope = "main") ?(editable = true) ?(library = false)
-    ?(virtualize = false) ?depth_signal ?(flat = false)
+    ?(virtualize = false) ?depth_signal ?(flat = false) ?extras
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   S.ensure ctx;
   let b0 = Signal.get bs in
   (if b0.Model.block_is_comments_area then
      comments_row ?depth_signal ~flat ~scope ~depth ~editable ~library bs
-   else row_sig ?depth_signal ~flat ~depth
+   else row_sig ?extras ?depth_signal ~flat ~depth
      ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
     ctx parent
 
@@ -1063,7 +1074,7 @@ and estimate_children_height (b : Model.block) : float =
 (* the content of .block-children: cljs virtualizable-block-list is the
    render-children at every nesting level — a sibling list of >=64 gets
    its own windowed list inside .blocks-list-wrap *)
-and child_list ~depth ~editable ~library ~virtualize uuid scope
+and child_list ?extras ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   let kids = S.children_of (Signal.get bs) in
@@ -1081,12 +1092,12 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
                | _ -> None) (S.editing_target_sig ()))))
            ~estimate_height:(fun block -> 32. +. estimate_children_height block)
            ~source:(Logseq_el.own ctx (Signal.map S.children_of bs))
-           ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
+           ~mount:(block_row_sig ?extras ~depth:(depth + 1) ~scope ~editable
                      ~library ~virtualize) ]
      else if virtualize && List.length kids >= 64 then
        [ Virt_list.list ~key_of:block_key ~estimate_size:(fun _ -> 32.)
            ~initial_rows:48
-           ~render:(block_row ~scope ~editable ~depth:(depth + 1) ~library
+           ~render:(block_row ?extras ~scope ~editable ~depth:(depth + 1) ~library
                       ~virtualize)
            (Array.of_list kids) ]
      else
@@ -1096,11 +1107,11 @@ and child_list ~depth ~editable ~library ~virtualize uuid scope
        [ Lui_elements.keyed
            ~source:(Logseq_el.own ctx (Signal.map S.children_of bs))
            ~key:block_key ~cmp:String.compare
-           ~mount:(block_row_sig ~depth:(depth + 1) ~scope ~editable
+           ~mount:(block_row_sig ?extras ~depth:(depth + 1) ~scope ~editable
                      ~library ~virtualize) ]))
     ctx parent
 
-and children_dom ~depth ~editable ~library ~virtualize uuid scope
+and children_dom ?extras ~depth ~editable ~library ~virtualize uuid scope
     (bs : Model.block Signal.signal) : t =
   let b = Signal.get bs in
   children_container ~library uuid bs
@@ -1109,12 +1120,12 @@ and children_dom ~depth ~editable ~library ~virtualize uuid scope
          [ Lazy_children.lazy_children ~key:("clist-" ^ uuid) ~uuid
              ~min_height:(estimate_children_height b)
              ~render:(fun () ->
-               child_list ~depth ~editable ~library ~virtualize uuid scope bs) ]
+               child_list ?extras ~depth ~editable ~library ~virtualize uuid scope bs) ]
      else
        column ~key:("clist-" ^ uuid) ~style_class:"block-children" ~grow:1.
-         [ child_list ~depth ~editable ~library ~virtualize uuid scope bs ])
+         [ child_list ?extras ~depth ~editable ~library ~virtualize uuid scope bs ])
 
-and children_el ~depth ~editable ~library ~virtualize uuid scope
+and children_el ?extras ~depth ~editable ~library ~virtualize uuid scope
     (b : Model.block) : t =
  fun ctx parent ->
   let bs = Signal.constant ctx.Lui_ui.ui_scheduler b in
@@ -1127,7 +1138,7 @@ and children_el ~depth ~editable ~library ~virtualize uuid scope
                 (effective_collapsed_cv ~scope uuid
                    b.block_default_collapsed v))
             (S.collapse_sig ())))
-    (children_dom ~depth ~editable ~library ~virtualize uuid scope bs)
+    (children_dom ?extras ~depth ~editable ~library ~virtualize uuid scope bs)
     ctx parent
 
 (* Read-only row for linked-reference lists: same shell as row_el but the

@@ -694,6 +694,13 @@ let item_body ?search st idx (it : Sidebar_state.item) =
         ~padding_horizontal:8
         ~data_attrs:[ ("style", "padding-top:8px") ]
         [ help_pane st ]
+  | "block-ref" ->
+      box ~key:("body-" ^ it.key)
+        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~style_class:"sidebar-panel-content" ~padding:8
+        [match it.Sidebar_state.uuid with
+         | Some uuid -> Page.references_view ~page_uuid:uuid ~has_refs:true ()
+         | None -> Logseq_el.nothing]
   | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)

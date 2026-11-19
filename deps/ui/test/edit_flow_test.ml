@@ -667,6 +667,90 @@ let test_node_reference_suggestions (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_reference_preview (h : host) =
+  let* () = settle h 40 in
+  let target = "00000000-0000-0000-0000-000000000001"
+  and child = "00000000-0000-0000-0000-000000000002"
+  and parent = "00000000-0000-0000-0000-000000000003" in
+  let previous_worker = !Runtime.worker in
+  let empty = ref false and failed_counts = ref false and failed_tree = ref false in
+  let parent_lookups = ref 0 and requested_counts = ref [] in
+  let summary uuid title = W.Map
+    [W.kw "block/uuid",W.Uuid uuid; W.kw "block/title",W.String title] in
+  let body = W.Array [W.Map
+    [W.kw "block/uuid",W.Uuid target; W.kw "block/title",W.String "Target block";
+     W.kw "block/children",W.Array [summary child "Nested block"]]] in
+  Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/get-page-route-info",[_;W.Uuid uuid] when uuid=target ->
+        Js.Promise.resolve (summary target "Target block")
+    | "thread-api/get-page-route-info",_ ->
+        Js.Promise.resolve (summary parent "Containing Page")
+    | "thread-api/get-block-page-info",_ ->
+        incr parent_lookups; Js.Promise.resolve (summary parent "Containing Page")
+    | "thread-api/get-blocks",_ ->
+        Js.Promise.resolve (W.Array [W.Map [W.kw "block",summary target "Target block";
+          W.kw "children",W.Array []]])
+    | "thread-api/get-block-parents",_ -> Js.Promise.resolve (W.Array [])
+    | "thread-api/get-page-blocks-tree",_ ->
+        if !failed_tree then h.reject_promise "preview tree transport"
+        else Js.Promise.resolve (if !empty then W.Array [] else body)
+    | "thread-api/get-render-snapshots",[_;request] ->
+        let keys = Option.value (Option.map W.elems (W.get request "resources")) ~default:[] in
+        requested_counts := keys :: !requested_counts;
+        if !failed_counts then h.reject_promise "preview count transport"
+        else Js.Promise.resolve (W.Map [W.kw "slots",W.Map
+          (List.map (fun key -> W.Array [W.kw "resource";key],
+            W.Map [W.kw "value",W.Int
+              (if key=W.Array [W.kw "block-ref-count";W.Uuid child] then 3 else 0)]) keys)])
+    | _ -> Js.Promise.resolve (h.base_handler name args));
+    on_message=(fun _ _ -> ()); dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let* preview = Popups_state.fetch_preview h.repo target in
+  check "A block preview uses its containing page for the header, not the block's title"
+    (preview.Popups_state.pc_title="Containing Page"
+     && Option.bind preview.pc_page (fun page -> page.Model.page_uuid)=Some parent);
+  check "A block preview retains its target as the insertion root and keeps descendants"
+    (preview.pc_root_uuid=Some target
+     && List.map (fun block -> block.Model.block_uuid) preview.pc_blocks=[Some target]
+     && match preview.pc_blocks with
+        | [block] -> List.map (fun child -> child.Model.block_uuid) block.block_children=[Some child]
+        | _ -> false);
+  check "Preview reference counts include nested blocks and omit zero badges"
+    (preview.pc_ref_counts=Some [child,3]
+     && match !requested_counts with
+        | [keys] -> List.length keys=2
+            && List.mem (W.Array [W.kw "block-ref-count";W.Uuid target]) keys
+            && List.mem (W.Array [W.kw "block-ref-count";W.Uuid child]) keys
+        | _ -> false);
+  let lookups = !parent_lookups in
+  let* page = Popups_state.fetch_preview h.repo "Containing Page" in
+  check "Named page previews retain their own root without looking up a block parent"
+    (page.pc_root_uuid=Some parent && page.pc_title="Containing Page"
+     && !parent_lookups=lookups);
+  let saved_item = { (Option.get (Sidebar_state.static_item
+    ("block-ref-" ^ target) "block-ref" "Old title")) with Sidebar_state.uuid=Some target } in
+  let* restored = Sidebar_state.refresh_item h.repo saved_item in
+  check "Restored block-reference panes retain their kind and refresh their title without an invisible outliner root"
+    (restored.kind="block-ref" && restored.title="Target block"
+     && restored.key=saved_item.key && restored.blocks=[]);
+  empty := true;
+  let batches = List.length !requested_counts in
+  let* blank = Popups_state.fetch_preview h.repo "Containing Page" in
+  check "Empty previews keep page metadata without requesting any reference counts"
+    (blank.pc_blocks=[] && blank.pc_ref_counts=Some []
+     && blank.pc_title="Containing Page" && List.length !requested_counts=batches);
+  empty := false; failed_counts := true;
+  let* partial = Popups_state.fetch_preview h.repo target in
+  check "A failed count resource retains the preview body without inventing zero counts"
+    (partial.pc_ref_counts=None && partial.pc_blocks<>[] && partial.pc_title="Containing Page");
+  failed_tree := true;
+  let* rejected =
+    (let* _ = Popups_state.fetch_preview h.repo target in Js.Promise.resolve false)
+    |> Js.Promise.catch (fun _ -> Js.Promise.resolve true) in
+  check "A failed preview tree is rejected instead of displaying an empty valid page" rejected;
+  Runtime.worker := previous_worker;
+  Js.Promise.resolve ()
+
 let test_autocomplete_dismiss_resumes_pending_save (h : host) =
   let* () = settle h 40 in
   let source = "[[P]]" in
@@ -2434,6 +2518,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_pending_save_order h in
   let* () = test_suggestion_selection_commits_pending_save h in
   let* () = test_node_reference_suggestions h in
+  let* () = test_reference_preview h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in
   let* () = test_autocomplete_save_gate_is_block_scoped h in

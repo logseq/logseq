@@ -14,6 +14,7 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 module P = Lui_protocol
+module Preview_rows = Map.Make (String)
 
 (* -- autocomplete item ----------------------------------------------- *)
 
@@ -1047,6 +1048,38 @@ let close_pv st =
   pv_cancel_hide ();
   S.close_pv st
 
+let preview_row_extras ~open_in_sidebar ~render_references context counts : Tree.row_extras =
+  let rows = List.fold_left (fun rows (uuid,count) ->
+    if count <= 0 then rows else
+    let expanded = Signal.state context.Lui_ui.ui_scheduler false in
+    let activate event =
+      let shift = match event with
+        | P.PressDetail (_,detail) -> detail.P.modifiers land 2 <> 0
+        | P.PressModifiers (_,modifiers) -> modifiers land 2 <> 0
+        | _ -> false in
+      if shift then open_in_sidebar uuid
+      else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ())
+    in
+    let right =
+      Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
+        (button ~key:("preview-count-" ^ uuid) ~variant:`ghost ~size:`sm
+          ~accessibility_identifier:("preview-reference-count-" ^ uuid)
+          ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
+          ~tooltip:(U.t "block/open-block-references")
+          ~on_press:activate ~on_press_detail:activate
+          [text ~font_size:"14px" ~value:(string_of_int count) []]) in
+    let below =
+      if_ ~test:(Signal.value expanded)
+        (column ~key:("preview-references-" ^ uuid)
+          ~margin_left:42 ~margin_vertical:8 ~padding_horizontal:16 ~padding_vertical:8
+          ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
+          [render_references uuid]) in
+    Preview_rows.add uuid (right,below) rows) Preview_rows.empty counts in
+  let find b = Option.bind b.Model.block_uuid (fun uuid -> Preview_rows.find_opt uuid rows) in
+  { Tree.right_of_block = (fun b -> Option.map fst (find b))
+  ; below_block = (fun b -> Option.map snd (find b))
+  }
+
 let pv_open st (wrap : Ui_services.el) =
   incr pv_generation;
   let generation = !pv_generation and graph = Router.repo () in
@@ -1066,7 +1099,7 @@ let pv_open st (wrap : Ui_services.el) =
       let x = rx +. (rw /. 2.0) -. 305.0
       and y = ry +. rh in
       ignore
-        (let* (title, page, blocks) =
+        ((let* content =
             S.fetch_preview graph name
         in
         (match !pv_pending with
@@ -1078,12 +1111,15 @@ let pv_open st (wrap : Ui_services.el) =
                (Some
                   { S.pv_x = x
                   ; S.pv_y = y
-                  ; S.pv_title = title
-                  ; S.pv_page = page
-                  ; S.pv_blocks = blocks
+                  ; S.pv_content = content
                   });
          | _ -> ());
         Js.Promise.resolve ())
+        |> Js.Promise.catch (fun error ->
+          Ui_services.log_error ("preview loading failed",error);
+          if generation = !pv_generation && graph = Router.repo () then
+            S.set_pv st None;
+          Js.Promise.resolve ()))
 
 let pv_track st (el : Ui_services.el) =
   if el.Ui_services.closest ".ls-preview-popup" <> None then (
@@ -1118,35 +1154,41 @@ let pv_track st (el : Ui_services.el) =
 let pv_popover (st : S.t) (p : S.pv) : t =
  fun context parent ->
   Editor_state.ensure context;
+  let content = p.S.pv_content in
+  let extras = preview_row_extras context
+    (Option.value content.S.pc_ref_counts ~default:[])
+    ~open_in_sidebar:(fun uuid ->
+      Sidebar_state.open_block_references
+        (Sidebar_state.ensure (Option.get !Runtime.model_source)) uuid)
+    ~render_references:(fun uuid ->
+      Views_view.view ~kind:Views_state.KLinkedRefs ~owner:(Wire.Uuid uuid)) in
   (* same hover-reveal contract as the page title: actions only show
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
-  (Ui_components.with_props [ Ui_components.card_shadow ]
+  (Ui_components.with_props [ Ui_components.card_shadow; Ui_components.Prop.padding_left 24 ]
      (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
-        ~padding:6
+        ~padding:4
         ~border_color:"hsl(var(--border))" ~border_width:1
         ~corner_radius:6
         ~available_height:
           (Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)
         ~style_class:"ui__popover-content ls-preview-popup"
-        ~data_attrs:[ ("style", "padding-left:1.5rem") ]
         ~on_dismiss:(fun _ -> close_pv st)
-    [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
+    [ Ui_components.with_props
+        [Ui_components.Prop.padding_left 28; Ui_components.Prop.padding_bottom 64;
+         Ui_components.Prop.font_weight 500]
+      (column ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
         ~min_width:200 ~padding:8
-        ~data_attrs:
-          [ ("tabindex", "-1")
-          ; ( "style"
-            , "margin-left:-1.25rem;padding-left:1.75rem;\
-               padding-bottom:64px;text-align:left;font-weight:500" ) ]
+        ~margin_left:(-20) ~data_attrs:[ ("tabindex", "-1") ]
         [ box ~key:"pvp" ~style_class:"page"
             [ box ~key:"pvt"
                 ~style_class:"ls-page-title content title"
                 ~accessibility_identifier:"page title"
                 [ box ~key:"pvtc"
                     ~style_class:"ls-page-title-container"
-                    [ box ~key:"pvtcw"
+                    [ Ui_components.with_props [Ui_components.Prop.position `relative]
+                      (row ~key:"pvtcw" ~cross:`center ~gap:8
                         ~style_class:"block-content-wrapper"
-                        ~data_attrs:[ ("style", "position:relative") ]
                         ~on_pointer_enter:(fun _ ->
                           Signal.set hover true;
                           Runtime.flush ())
@@ -1154,13 +1196,14 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                           if Runtime.signal_get hover then (
                             Signal.set hover false;
                             Runtime.flush ()))
-                        ([ text ~key:"pvtw"
-                             ~style_class:"block-title-wrap"
-                             ~value:p.S.pv_title [] ]
-                         @ (match p.S.pv_page with
+                        ([ Render.wrap ~cls:"block-title-wrap"
+                             ~self:(Option.value (Option.bind content.S.pc_page
+                               (fun page -> page.Model.page_uuid)) ~default:"")
+                             content.S.pc_title ]
+                         @ (match content.S.pc_page with
                             | Some page ->
                                 [ Properties_area.title_actions ~hover page ]
-                            | None -> []))
+                            | None -> [])))
                     ]
                 ]
             ; box ~key:"pvb" ~style_class:"ls-page-blocks"
@@ -1169,28 +1212,25 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                 [ column ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
                     (List.map
-                       (Tree.block_row ~scope:"preview" ~editable:false)
-                       p.S.pv_blocks
+                       (Tree.block_row ~scope:"preview" ~editable:false ~extras)
+                       content.S.pc_blocks
                      @ [ (* cljs page-preview-content mounts the real
                             page-cp, which carries add-button *)
                          Add_button.el ~scope:"preview"
                            ~previous_blank:(reactive
-                             (Add_button.previous_blank ~scope:"preview" p.S.pv_blocks)
+                             (Add_button.previous_blank ~scope:"preview" content.S.pc_blocks)
                              (Editor_state.collapse_sig ()))
-                           ~library:(match p.S.pv_page with
+                           ~library:(match content.S.pc_page with
                              | Some page -> page.Model.page_is_library
                              | None -> false)
-                           ?puuid:
-                             (match p.S.pv_page with
-                              | Some pg -> pg.Model.page_uuid
-                              | None -> None)
+                           ?puuid:content.S.pc_root_uuid
                            ~flags:(fun ctx ->
                              Signal.constant ctx.Lui_ui.ui_scheduler
-                               (p.S.pv_blocks <> [], false)) ()
+                               (content.S.pc_blocks <> [], false)) ()
                        ])
                 ]
             ]
-        ]]))
+        ])]))
     context parent
 
 let pv_dyn (st : S.t) : t =

@@ -45,7 +45,6 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 |---|---|
 | Editor E1 / E12 | Embedded page/block root identity, title/structure and selection count; preserve source-block ownership while including embedded roots. |
 | Editor E10 | Rich/structured clipboard formats and cut/delete focus restoration, including the previous page-title editing position. Plain-text copy alone is insufficient. |
-| Editor E14 | Page/block hover preview header/body, reference count, spacing and dimensions. |
 | Editor E22 | Indent, type and undo twice: caret 0 in Master versus end-of-block in the reported LUI case. |
 | Editor E23 | Generic context-menu dismissal selection lifecycle beyond the four repaired actions; preserve asynchronous clipboard/delete ownership. |
 | History UI state | Master also records sidebar open/collapse/items. The current local repair records routes only, not sidebar layout history. |
@@ -68,6 +67,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E12 / E23 / E30 / E32 | Select-all save/exit, four reported menu-action cleanups, real autocomplete Tab focus traversal, and image clipping after the crash repair. |
 | Editor E13 / E16 | Persisted collapse through the real Meta+; edit-key path is source-tested. Drag ownership now preserves move roots without a source selection/toolbar; indicator width and bottom origin follow Master. Browser acceptance is pending. |
 | Editor E7 | Page-ref search now uses canonical worker candidates, all 33 localized NLP dates, Master fuzzy ranking/page-first ordering, entity icons and resolved titles. Whitespace and failed/empty searches are source-tested; browser acceptance is pending. |
+| Editor E14 | Containing-page preview headings retain the original block insertion root. Nested reference counts support inline disclosure and Shift-click sidebar references; restored reference panes do not register invisible editing roots. UI/native gates pass. Typed preview dimensions/spacing and combined-build acceptance remain visually unverified. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
 | Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |

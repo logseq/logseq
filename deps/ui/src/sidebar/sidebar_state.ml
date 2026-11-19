@@ -959,6 +959,19 @@ let open_uuid ?(edit = false) st uuid =
        | None -> ());
       Js.Promise.resolve ())
 
+let open_block_references st uuid =
+  let repo = Runtime.repo () in
+  ignore ((let* item = block_item_of_uuid repo uuid in
+    (match item with
+     | Some item when Runtime.repo () = repo ->
+         ensure_right_open ();
+         push_item st {item with key = "block-ref-" ^ uuid; kind = "block-ref"; blocks = []}
+     | _ -> ());
+    Js.Promise.resolve ())
+    |> Js.Promise.catch (fun error ->
+      Ui_services.log_error ("Opening block references failed",error);
+      Js.Promise.resolve ()))
+
 let open_today_journal st =
   let repo = Runtime.repo () in
   if repo <> "" then
@@ -1026,11 +1039,13 @@ let refresh_item repo (it : item) : item Js.Promise.t =
           match v with Some it' -> Js.Promise.resolve it'
         | None -> fallback)
       | None -> fallback)
-  | "block" -> (
+  | "block" | "block-ref" -> (
       match it.uuid with
       | Some u ->
           (let* v = block_item_of_uuid repo u in
-          match v with Some it' -> Js.Promise.resolve { it' with key = it.key }
+          match v with Some it' -> Js.Promise.resolve
+            { it' with key = it.key; kind = it.kind;
+              blocks = (if it.kind="block-ref" then [] else it'.blocks) }
         | None -> fallback)
       | None -> fallback)
   | _ -> fallback

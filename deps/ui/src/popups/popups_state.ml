@@ -183,14 +183,18 @@ type cm =
        block context menu *)
   }
 
+type preview_content =
+  { pc_title : string
+  ; pc_page : Model.page option
+  ; pc_root_uuid : string option
+  ; pc_blocks : Model.block list
+  ; pc_ref_counts : (string * int) list option
+  }
+
 type pv =
   { pv_x : float
   ; pv_y : float
-  ; pv_title : string
-  ; pv_page : Model.page option (* feeds the title actions — cljs
-                                     page-preview renders page-cp with
-                                     with-actions? *)
-  ; pv_blocks : Model.block list
+  ; pv_content : preview_content
   }
 
 type view =
@@ -360,24 +364,72 @@ let () = Editor_state.on_edit_exit (fun _uuid ->
 (* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
 
-let fetch_preview repo name
-    : (string * Model.page option * Model.block list) Js.Promise.t =
+let preview_ref_counts repo blocks =
+  let rec collect acc blocks =
+    List.fold_left (fun acc (block : Model.block) ->
+      let acc = match block.block_uuid with Some uuid -> uuid :: acc | None -> acc in
+      collect acc block.block_children) acc blocks
+  in
+  let uuids = List.sort_uniq String.compare (collect [] blocks) in
+  if uuids = [] then Js.Promise.resolve (Some [])
+  else
+    (let keys = List.map (fun uuid ->
+       Wire.Array [Wire.kw "block-ref-count";Wire.Uuid uuid]) uuids in
+     let* snapshot = Runtime.invoke2 "thread-api/get-render-snapshots"
+       (Wire.String repo)
+       (Wire.Map [Wire.kw "blocks",Wire.Array [];Wire.kw "children",Wire.Array [];
+                  Wire.kw "resources",Wire.Array keys]) in
+     Outliner_ops.check_loader_result snapshot;
+     let slots = match Wire.get snapshot "slots" with
+       | Some (Wire.Map slots) -> slots
+       | _ -> failwith "Invalid preview reference-count snapshot" in
+     Js.Promise.resolve (Some (List.filter_map (fun (key,slot) ->
+       let value = Wire.get slot "value" in
+       Option.iter Outliner_ops.check_loader_result value;
+       match key, value with
+       | Wire.Array [Wire.Keyword "resource";
+           Wire.Array [Wire.Keyword "block-ref-count";Wire.Uuid uuid]],
+         Some (Wire.Int n) when n > 0 -> Some (uuid,n)
+       | _ -> None) slots)))
+    |> Js.Promise.catch (fun error ->
+      Ui_services.log_error ("preview reference counts failed",error);
+      Js.Promise.resolve None)
+
+let fetch_preview repo name : preview_content Js.Promise.t =
   let* info =
     Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
       (Wire.page_ref name)
   in
-  let page = Decode.page_of_summary info in
-  let title =
-    match page with
-    | Some p -> p.Model.page_title
-    | None -> name
-  in
+  Outliner_ops.check_loader_result info;
+  let root = Decode.page_of_summary info in
   let* w =
     Runtime.invoke3 "thread-api/get-page-blocks-tree"
       (Wire.String repo) (Wire.page_ref name) Wire.Nil
   in
+  Outliner_ops.check_loader_result w;
+  let blocks = Decode.blocks_of_wire w in
+  let* page = match Wire.page_ref name with
+    | Wire.Uuid uuid ->
+        let* parent = Runtime.invoke2 "thread-api/get-block-page-info"
+          (Wire.String repo) (Wire.Uuid uuid) in
+        Outliner_ops.check_loader_result parent;
+        (match Wire.map_get_uuid parent "block/uuid" with
+         | Some parent_uuid when parent_uuid <> uuid ->
+             let* parent_info = Runtime.invoke2 "thread-api/get-page-route-info"
+               (Wire.String repo) (Wire.Uuid parent_uuid) in
+             Outliner_ops.check_loader_result parent_info;
+             Js.Promise.resolve (Decode.page_of_summary parent_info)
+         | _ -> Js.Promise.resolve root)
+    | _ -> Js.Promise.resolve root
+  in
+  let* counts = preview_ref_counts repo blocks in
   Js.Promise.resolve
-    (title, page, Decode.blocks_of_wire w)
+    { pc_title = (match page with Some page -> page.Model.page_title | None -> name)
+    ; pc_page = page
+    ; pc_root_uuid = Option.bind root (fun page -> page.Model.page_uuid)
+    ; pc_blocks = blocks
+    ; pc_ref_counts = counts
+    }
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"

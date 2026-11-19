@@ -836,9 +836,56 @@ let reference_disclosure ~registry ~profile =
          && not (leaf_visible ()));
       check "Reference disclosure never writes a graph collapse property" (!writes=0)))
 
+let preview_reference_disclosure ~registry ~profile =
+  let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker in
+  let previous_settings = !Settings_state.st in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
+  let opened = ref [] in
+  let root_id = "preview-reference-root" and child_id = "preview-reference-child" in
+  let root = Test_check.block root_id "Preview root"
+    ~children:[Test_check.block child_id "Preview child"] in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+    Settings_state.st := previous_settings;
+    Runtime.worker := previous_worker; Runtime.app_flush := previous_flush) (fun () ->
+    Editor_state.st := None; Editor_state.field_sigs_opt := None;
+    Settings_state.st := None;
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ context parent ->
+        let extras = Popups_view.preview_row_extras context [root_id,0;child_id,3]
+          ~open_in_sidebar:(fun uuid -> opened := uuid :: !opened)
+          ~render_references:(fun uuid -> Lui_elements.text
+            ~value:("references for " ^ uuid) []) in
+        Tree.block_row ~scope:"preview-reference-count-test" ~editable:false ~extras root
+          context parent) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      Runtime.app_flush := (fun () -> S.flush session);
+      let counter uuid = List.find_opt (fun node ->
+        M.string_prop node "accessibility-identifier"=Some ("preview-reference-count-" ^ uuid))
+        (nodes session) in
+      let references_visible () = List.exists (fun node ->
+        M.string_prop node "text"=Some ("references for " ^ child_id)) (nodes session) in
+      check "A nested preview block exposes its positive count without a zero-count root badge"
+        (Option.is_some (counter child_id) && Option.is_none (counter root_id)
+         && not (references_visible ()));
+      let child_counter = Option.get (counter child_id) in
+      List.iter (fun expected ->
+        S.press session child_counter.M.id; S.flush session;
+        check "Preview count presses expand and re-collapse the referenced block's inline references"
+          (references_visible ()=expected)) [true;false];
+      S.dispatch session (P.PressDetail (child_counter.M.id,
+        {x=0.;y=0.;modifiers=2;button=0;target_class=""}));
+      S.flush session;
+      check "Shift-clicking a preview count opens that block's sidebar references without expanding inline"
+        (!opened=[child_id] && not (references_visible ()))))
+
 let run_views ~registry ~profile ~finish =
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;
+  preview_reference_disclosure ~registry ~profile;
   show_brackets_rendering ~registry ~profile;
   let finish () = configured_continuations finish in
   configured_popup_ownership ();
