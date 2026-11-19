@@ -38,7 +38,7 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
 (* cljs icon-btn: data-tooltip/data-tooltip-keys feed the tooltip
    reader (popups/tooltip.ml el_closest [data-tooltip],[aria-label]);
    ~label lands as aria-label *and* the tooltip text *)
-let icon_btn ?tip ?keys ?tip_side ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click () =
+let icon_btn ?tip ?shortcut_id ?tip_side ~key ~id ~cls ~icon ~on_click () =
   (* chrome 32px icon button: 8px pad, 20px glyph, radius, opacity
      states — what the deleted .cp__header/.left-sidebar-top icon-btn
      rules styled *)
@@ -49,18 +49,15 @@ let icon_btn ?tip ?keys ?tip_side ?(with_shortcut = false) ~key ~id ~cls ~icon ~
        ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
     ~data_attrs:(
       (match tip with Some t -> ["data-tooltip", t] | None -> [])
-      @ (match keys with Some k -> ["data-tooltip-keys", k] | None -> [])
-      @ (if with_shortcut then ["data-tooltip-shortcut", "true"] else [])
+      @ (match shortcut_id with Some id -> Keymap_data.tooltip_attrs id | None -> [])
       @ (match tip_side with Some side -> ["data-tooltip-side", side] | None -> []))
        ~on_press:(fun _ -> on_click None) [])
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
 (* The shared leading toolbar mounts this control in its active owner. *)
 let search_button ?(key = "search-btn") () =
-  let keys = Keymap_data.tooltip_keys "go/search" in
-  icon_btn ~key ~id:"search-button" ~cls:(ghost_btn_cls ()) ~with_shortcut:true
+  icon_btn ~key ~id:"search-button" ~cls:(ghost_btn_cls ()) ~shortcut_id:"go/search"
     ~icon:"search" ~tip:(I18n.t "nav/search") ~tip_side:"right"
-    ?keys:(if keys = "" then None else Some keys)
     ~on_click:(fun _ -> Cmdk_state.open_latest ()) ()
 
 (* cljs ui/tooltip (t :header/more) — .toolbar-dots-btn stays the
@@ -630,10 +627,9 @@ let index_progress (ms : Model.t Signal.signal) : t =
 
 (* cljs header.cljs with-shortcut :ui/toggle-left-sidebar *)
 let left_menu_button ?(key = "left-menu-btn") () =
-  icon_btn ~key ~id:"left-menu" ~with_shortcut:true
+  icon_btn ~key ~id:"left-menu" ~shortcut_id:"ui/toggle-left-sidebar"
     ~cls:(ghost_btn_cls ())
     ~icon:"menu-2" ~tip:(I18n.t "header/toggle-left-sidebar")
-    ~keys:"T L"
     ~on_click:(fun _ -> Runtime.send Action.Toggle_left_sidebar) ()
 
 (* cljs header.cljs: home button hidden on the :home route and on a
@@ -659,18 +655,14 @@ let home_button ms =
 (* cljs header.cljs back-and-forward — Electron-only there; desktop LUI
    (web Electron + native) always mounts the pair so history matches. *)
 let back_and_forward () =
-  let back_keys = Keymap_data.tooltip_keys "go/backward" in
-  let fwd_keys = Keymap_data.tooltip_keys "go/forward" in
   row ~key:"nav-hist" ~cross:`center
-    [ icon_btn ~key:"nav-back" ~id:"" ~with_shortcut:true
+    [ icon_btn ~key:"nav-back" ~id:"" ~shortcut_id:"go/backward"
         ~cls:(ghost_btn_cls ~tail:"navigation nav-left" ())
         ~icon:"arrow-left" ~tip:(I18n.t "header/go-back")
-        ?keys:(if back_keys = "" then None else Some back_keys)
         ~on_click:(fun _ -> Ui_services.nav_back ()) ()
-    ; icon_btn ~key:"nav-fwd" ~id:"" ~with_shortcut:true
+    ; icon_btn ~key:"nav-fwd" ~id:"" ~shortcut_id:"go/forward"
         ~cls:(ghost_btn_cls ~tail:"navigation nav-right" ())
         ~icon:"arrow-right" ~tip:(I18n.t "header/go-forward")
-        ?keys:(if fwd_keys = "" then None else Some fwd_keys)
         ~on_click:(fun _ -> Ui_services.nav_forward ()) ()
     ]
 
@@ -678,10 +670,10 @@ let back_and_forward () =
    is empty (state/sidebar-add-content-when-open!) *)
 let right_toggle_button ms =
   Ui_components.header_right_sidebar_toggle
-  (icon_btn ~key:"rs-toggle" ~id:"" ~with_shortcut:true
+  (icon_btn ~key:"rs-toggle" ~id:"" ~shortcut_id:"ui/toggle-right-sidebar"
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar" ())
     ~icon:"layout-sidebar-right"
-    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~keys:"T R" ~tip_side:"left"
+    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~tip_side:"left"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))

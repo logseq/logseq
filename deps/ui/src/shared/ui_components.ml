@@ -587,7 +587,7 @@ let keycap_separator ~key : t =
    the surviving stylesheet still paints the same chrome, so the typed
    props below carry identical values for the native host, not a
    second paint. *)
-let shortcut_combo ~key ~glow children : t =
+let shortcut_combo ~key ~glow ?(natural_height = false) children : t =
   with_props
     ([ ( Prop.background "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
      ; Prop.corner_radius 4
@@ -604,7 +604,7 @@ let shortcut_combo ~key ~glow children : t =
        ; ( Prop.border_color "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
        ])
     (row ~key ~style_class:"shui-shortcut-combo" ~cross:`stretch
-       ~height:20 ~gap:0 children)
+       ?height:(if natural_height then None else Some 20) ~gap:0 children)
 
 (* Separate: transparent container; the glow lives on each boxed key,
    matching .shui-shortcut-separate.shui-shortcut-glow kbd (no container
@@ -785,11 +785,6 @@ let tooltip_content ~key ~at ~arrow_x ~side children : t =
 
 let ls_tooltip_col ~key children : t =
   column ~key ~cross:`start ~gap:4 children
-
-let ls_tooltip_keys ~key children : t =
-  with_props [ Prop.opacity 0.8 ]
-    (row ~key ~cross:`center ~gap:1
-       children)
 
 (* -- settings & properties recipes (task 5) ----------------------------- *)
 

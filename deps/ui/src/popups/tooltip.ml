@@ -17,6 +17,7 @@ open Lui_elements
 type tip = {
   tip_label : string;
   tip_keys : string;
+  tip_binding : string option;
   tip_x : float; (* bubble left, viewport coords *)
   tip_y : float; (* bubble top *)
   tip_arrow_x : float; (* arrow left offset inside the bubble *)
@@ -132,6 +133,7 @@ let show_for (trig : Ui_services.el) =
       let keys =
         Option.value (trig.Ui_services.attr "data-tooltip-keys") ~default:""
       in
+      let binding = trig.Ui_services.attr "data-tooltip-binding" in
       let rec mount measure_attempts =
         if !layer_blocks_tip () || not (trig.Ui_services.connected ()) then hide ()
         else
@@ -149,6 +151,7 @@ let show_for (trig : Ui_services.el) =
                  {
                    tip_label = label;
                    tip_keys = keys;
+                   tip_binding = binding;
                    tip_x = trig_cx;
                    tip_y = trig_bottom;
                    tip_arrow_x = 0.;
@@ -202,6 +205,7 @@ let show_for (trig : Ui_services.el) =
                            {
                              tip_label = label;
                              tip_keys = keys;
+                             tip_binding = binding;
                              tip_x = x;
                              tip_y = y;
                              tip_arrow_x = Float.max 4.
@@ -222,23 +226,44 @@ let show_for (trig : Ui_services.el) =
    .flex.flex-col.items-start.gap-1 column; the arrow is a rotated
    square half-overlapping the bubble edge, centred on the trigger *)
 let tip_view (tip : tip) : t =
-  let keys_cells =
-    tip.tip_keys |> String.split_on_char ' '
-    |> List.filter (fun k -> k <> "")
-    |> List.mapi (fun i k ->
-        Ui_components.keycap
-          ~key:("k" ^ string_of_int i)
-          ~boxed:false ~glow:false ~min_slot:20 ~value:k)
+  let words value = String.split_on_char ' ' value |> List.filter ((<>) "") in
+  let groups = match tip.tip_binding with
+    | Some binding -> words binding |> List.map (fun stroke ->
+        String.contains stroke '+', Keymap_record.keycaps stroke)
+    | None -> words tip.tip_keys |> List.map (fun key -> false, [key]) in
+  let keycap ~boxed key value =
+    Ui_components.keycap ~key ~boxed ~glow:false ~min_slot:20 ~value in
+  let combo key keys =
+    Ui_components.shortcut_combo ~key ~glow:false ~natural_height:true
+      (List.mapi (fun index value ->
+        (if index = 0 then [] else [Ui_components.keycap_separator
+          ~key:("separator-" ^ string_of_int index)])
+        @ [keycap ~boxed:false ("key-" ^ string_of_int index) value]) keys
+       |> List.concat) in
+  let shortcut = match groups with
+    | [true, keys] -> combo "keys" keys
+    | groups when List.for_all (fun (combo, _) -> not combo) groups ->
+        Ui_components.shortcut_separate ~key:"keys" ~glow:false
+          (List.concat_map snd groups |> List.mapi (fun index value ->
+            keycap ~boxed:true ("key-" ^ string_of_int index) value))
+    | groups ->
+        Ui_components.shortcut_chord ~key:"keys"
+          (List.mapi (fun index (_, keys) ->
+            (if index = 0 then [] else [Ui_components.chord_separator
+              ~key:("then-" ^ string_of_int index)])
+            @ [combo ("group-" ^ string_of_int index) keys]) groups
+           |> List.concat)
+  in
+  let label =
+    Ui_components.with_props
+      (if groups <> [] || tip.tip_binding <> None
+       then [Ui_components.Prop.opacity 0.8] else [])
+      (text ~key:"lbl" ~font_size:"12px" ~line_height:"16px" ~value:tip.tip_label [])
   in
   let body =
-    match keys_cells with
-    | [] -> text ~key:"lbl" ~value:tip.tip_label []
-    | cells ->
-        Ui_components.ls_tooltip_col ~key:"col"
-          [
-            text ~key:"lbl" ~value:tip.tip_label [];
-            Ui_components.ls_tooltip_keys ~key:"keys" cells;
-          ]
+    match groups with
+    | [] -> label
+    | _ -> Ui_components.ls_tooltip_col ~key:"col" [label; shortcut]
   in
   Ui_components.tooltip_content ~key:"lui-tip" ~at:(tip.tip_x, tip.tip_y)
     ~arrow_x:tip.tip_arrow_x ~side:tip.tip_side [ body ]

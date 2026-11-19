@@ -31,20 +31,21 @@ open Lui_elements
    parity form. rtc/plugin toolbar items keep hidden DOM mounts below
    so their emitters stay live. *)
 
-let icon_btn ~key ?(acc = "") ~icon_name ~label ?keys ?disabled_signal
+let icon_btn ~key ?(acc = "") ~icon_name ~label ?shortcut_id ?disabled_signal
     ?foreground_signal ?style_class on_press =
   Ui_components.chrome_button
   (Ui_components.button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
     ~main:`center ~cross:`center
     ~accessibility_identifier:(if acc = "" then key else acc)
     ?disabled_signal ?foreground_signal ?style_class
-    ~data_attrs:(match keys with Some value -> ["data-tooltip-keys",value] | None -> [])
+    ~data_attrs:(match shortcut_id with Some id -> Keymap_data.tooltip_attrs id | None -> [])
     ~on_press:(fun _ -> on_press ())
     [ Icons.icon ~size:20. icon_name ])
 
 (* The sidebar toggle belongs beside search in the leading toolbar. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
   icon_btn ~key ~acc:"left-menu" ~icon_name:"layout-sidebar"
+    ~shortcut_id:"ui/toggle-left-sidebar"
     ~label:(I18n.t "header/toggle-left-sidebar")
     (fun () -> Runtime.send Action.Toggle_left_sidebar)
 
@@ -52,9 +53,8 @@ let left_menu_btn ?(key = "left-menu-btn") () =
    handler; the semantic button calls the palette opener directly
    (Action.Toggle_search is a no-op reducer on native) *)
 let search_btn ?(key = "search-btn") () =
-  let keys = Keymap_data.tooltip_keys "go/search" in
   icon_btn ~key ~acc:"search-button" ~icon_name:"search"
-    ?keys:(if keys = "" then None else Some keys)
+    ~shortcut_id:"go/search"
     ~label:(I18n.t "nav/search") (fun () -> Cmdk_state.open_latest ())
 
 (* The shared menu owns this trigger and follows its retained bounds. *)
@@ -99,17 +99,15 @@ let home_item (ms : Model.t Signal.signal) : t =
 (* cljs header.cljs back-and-forward (Electron); native desktop always
    mounts the pair so history matches the packaged Electron chrome. *)
 let back_and_forward () =
-  let back_keys = Keymap_data.tooltip_keys "go/backward" in
-  let fwd_keys = Keymap_data.tooltip_keys "go/forward" in
   row ~key:"nav-hist" ~cross:`center
     [ icon_btn ~key:"nav-back" ~acc:"nav-back" ~icon_name:"arrow-left"
         ~style_class:"navigation nav-left"
-        ?keys:(if back_keys = "" then None else Some back_keys)
+        ~shortcut_id:"go/backward"
         ~label:(I18n.t "header/go-back")
         (fun () -> Ui_services.nav_back ())
     ; icon_btn ~key:"nav-fwd" ~acc:"nav-fwd" ~icon_name:"arrow-right"
         ~style_class:"navigation nav-right"
-        ?keys:(if fwd_keys = "" then None else Some fwd_keys)
+        ~shortcut_id:"go/forward"
         ~label:(I18n.t "header/go-forward")
         (fun () -> Ui_services.nav_forward ())
     ]
@@ -119,6 +117,7 @@ let back_and_forward () =
 let right_toggle_btn ms =
   Ui_components.header_right_sidebar_toggle
   (icon_btn ~key:"rs-toggle" ~icon_name:"layout-sidebar-right"
+    ~shortcut_id:"ui/toggle-right-sidebar"
     ~label:(I18n.t "command.ui/toggle-right-sidebar")
     (fun () ->
       Runtime.send Action.Toggle_right_sidebar;

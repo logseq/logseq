@@ -148,6 +148,14 @@ let tooltip_keys id =
       |> List.concat_map Keymap_record.keycaps
       |> String.concat " "
 
+let tooltip_attrs id =
+  let binding = match effective_shortcut id with
+    | Binds (binding :: _) -> binding
+    | Unbound | Disabled | Binds [] -> "" in
+  let keys = tooltip_keys id in
+  ["data-tooltip-shortcut", "true"; "data-tooltip-binding", binding]
+  @ (if keys = "" then [] else ["data-tooltip-keys", keys])
+
 let command_id title =
   let title = String.sub title 1 (String.length title - 1) in
   match String.index_opt title '#' with
