@@ -1206,9 +1206,10 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                                (fun page -> page.Model.page_uuid)) ~default:"")
                              content.S.pc_title ]
                          @ (match content.S.pc_page with
-                            | Some page ->
+                            | Some page when Option.is_some content.S.pc_root_uuid
+                                && content.S.pc_root_uuid = page.Model.page_uuid ->
                                 [ Properties_area.title_actions ~hover page ]
-                            | None -> [])))
+                            | _ -> [])))
                     ]
                 ]
             ; box ~key:"pvb" ~style_class:"ls-page-blocks"
