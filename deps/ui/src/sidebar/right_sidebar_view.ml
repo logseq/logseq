@@ -35,7 +35,7 @@ let topbar_btn key label on_click =
   Ui_components.with_props [Ui_components.Prop.font_weight 400]
   (Ui_components.button ~variant:`ghost ~key:("tb-" ^ key) ~text:label
     ~height:32 ~padding_horizontal:10 ~padding_vertical:4 ~corner_radius:6
-    ~background:"var(--lx-gray-03, var(--rx-gray-03))"
+    ~background:"var(--ls-secondary-background-color)"
     ~on_press:(fun _ -> on_click ()) [])
 
 let topbar st =
@@ -388,14 +388,18 @@ let help_pane st =
   let icon_item ~key label ic =
     box ~key ~style_class:"ls-hp-item"
       ~data_attrs:[ ("style", item_style) ]
-      [ Ui_components.button ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
+      [ Ui_components.with_props
+          [ Ui_components.Prop.font_size "16px"
+          ; Ui_components.Prop.line_height "24px"
+          ; Ui_components.Prop.font_weight 400 ]
+        (Ui_components.button ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
           ~height:24 ~padding:0 ~main:`start ~cross:`center ~gap:4
           ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
           ~data_attrs:[ ("style", "cursor:pointer") ]
           ~on_press:(fun _ ->
             Sidebar_state.open_sticky_item st "shortcut-settings")
           [ text ~value:label ~font_size:"16px" ~line_height:"24px" []
-          ; icon_ ~size:18 ic ]
+          ; icon_ ~size:18 ic ])
       ]
   in
   let icon_ext_item ~key label ic url =
