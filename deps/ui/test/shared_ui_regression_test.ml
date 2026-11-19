@@ -1125,6 +1125,20 @@ let run_views ~registry ~profile ~finish =
     (List.exists (fun node -> M.string_prop node "accessibility-identifier" = Some "auth-username")
        (nodes login));
   ignore (Lui_app.dispose login.S.app);
+  let contribution = mount (fun _ -> Plugins_view.contribution) in
+  check "Marketplace contribution props are accepted by their component kinds"
+    (List.for_all (fun node ->
+       let props = List.fold_left (fun props property ->
+         match Hashtbl.find_opt node.M.props (Lui_wire_schema.property_name property) with
+         | Some value -> P.Property_map.add property value props
+         | None -> props) P.Property_map.empty Lui_wire_schema.all_properties in
+       let kind = Lui_wire.kind_of_name node.M.kind in
+       P.node_properties_supported kind props
+       && P.Property_map.for_all (fun property value ->
+         P.property_supported kind property
+         && P.property_value_supported_for_kind kind property value) props)
+       (nodes contribution));
+  ignore (Lui_app.dispose contribution.S.app);
   let market_state = ref None in
   let marketplace = mount (fun _ -> fun ctx parent ->
     let filter = Signal.state ctx.Lui_ui.ui_scheduler Plugins_view.All

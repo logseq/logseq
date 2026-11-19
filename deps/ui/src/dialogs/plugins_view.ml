@@ -105,10 +105,11 @@ let contribution : t = fun ctx parent ->
       Ui_components.Prop.inset_top (-42.); Ui_components.Prop.inset_right 20.;
       Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.font_weight 500;
       Ui_components.Prop.line_height "20px"; Ui_components.Prop.opacity 0.6]
-      (link ~key:"contribute" ~url:"https://github.com/logseq/marketplace" ~target:`blank
+      (row ~key:"contribution"
+       [link ~key:"contribute" ~url:"https://github.com/logseq/marketplace" ~target:`blank
         ~height:28 ~padding_horizontal:12 ~padding_vertical:4
         ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
-        ~text:(t "plugin/contribute") []))) ctx parent
+        ~text:(t "plugin/contribute") []]))) ctx parent
 
 let control_tabs ~key ~search_st ~cat_st ~nums toolbar =
   Ui_components.with_props [Ui_components.Prop.padding_bottom 12; Ui_components.Prop.position `relative]
