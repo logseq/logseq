@@ -284,6 +284,40 @@ attributes and rejected invalid targets. It fails against the prior renderer
 with `_blank` instead of `_self` and passes after repair. The rendered Pages
 target repair is accepted in Table82's rebuilt-application browser comparison.
 
+### Table83 Between journal-reference evaluation
+
+Table83 on `bad73920` accepts the Between calendar lifecycle: Start and End
+remain selectable and the range form persists. The Nov 18–20 query still
+returned zero rows after reload, while Master returned the Nov 19 marker.
+Paired evidence is under `/Users/devin/table83/evidence/`, including
+`lui-fresh-between-after-reload.png` and
+`master-fresh-between-after-reload.png`.
+
+The title shown by the builder is not a raw-storage check. Both builders start
+with journal titles; LUI's existing `save_src` → `save_block_parsed` →
+`Title_refs.parse` → `resolve_page_refs` path resolves those references to the
+canonical journal UUIDs. A real native save/read/query regression verifies that
+the stored Nov 18/20 arguments are `00000001-2026-1118-0000-000000000000` and
+`00000001-2026-1120-0000-000000000000`. Before the repair, the storage assertion
+passed but evaluating that reloaded source returned no rows; title arguments
+on the same journal fixture did return Nov 19. The missing step was worker
+evaluation of the stored UUID references, not a second builder-only serializer.
+
+`db_query_dsl.ml` now decodes canonical journal UUID references into journal-day
+bounds. The existing title and relative-date forms, inclusive range rule and
+reference-save path remain unchanged. The existing native Between test covers
+the real save/read/evaluate path over Nov 17/19/21 blocks, title and UUID inputs,
+an empty interval, and rejection of an invalid calendar date by the decoder.
+This is a database-source reread, not a browser or disk-close/reopen test.
+
+Verification: the focused native query-DSL group passes all 23 tests; the UI
+aggregate passes 6473 checks with zero failures, and native experimental tests
+and build pass. The worker aggregate still has the same three native keychain-host
+platform failures recorded in Table80 (`Native secrets require the OS keychain
+host`); its query-DSL group passes. Full rebuilt-application filtering and reload
+remain browser/visually unverified. No `static/` writes or `:3010` access were
+used. UI journal diagnostics retain their 102/52 baseline.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

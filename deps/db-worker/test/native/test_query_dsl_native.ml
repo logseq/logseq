@@ -794,7 +794,45 @@ let test_between_queries () =
        "(and (task todo done) (between created-at [[Dec 26th, 2020]]))");
   expect_len "between created-at +1d" 3
     (dsl_rows db
-       "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))")
+       "(and (task todo done) (between created-at [[Dec 26th, 2020]] +1d))");
+  let range_conn = load_test_files
+    (List.map (fun day ->
+      ({default_page with pg_journal=Some (20261100 + day)},
+       [{default_block with b_title=Some ("Between83Marker " ^ string_of_int day)}]))
+      [17;19;21]
+     @ [({default_page with pg_title=Some "Query host"},
+         [{default_block with b_title=Some "Query value";
+           b_uuid=Some "10000000-0000-4000-8000-000000000083"}])]) in
+  let canonical_source = "(and \"Between83Marker\" (between [[00000001-2026-1118-0000-000000000000]] [[00000001-2026-1120-0000-000000000000]]))" in
+  let new_journal uuid title : Datascript.value = Map
+    [Keyword "block/uuid",Uuid uuid; Keyword "block/title",String title;
+     Keyword "block/name",String (String.lowercase_ascii title);
+     Keyword "block/tags",Vector [Keyword "logseq.class/Page"]] in
+  ignore (Outliner_core.save_block_conn range_conn
+    ["block/uuid",Uuid "10000000-0000-4000-8000-000000000083";
+     "block/title",String "(and \"Between83Marker\" (between [[10000000-0000-4000-8000-000000000018]] [[10000000-0000-4000-8000-000000000020]]))";
+     "block/refs",Vector
+       [new_journal "10000000-0000-4000-8000-000000000018" "Nov 18th, 2026";
+        new_journal "10000000-0000-4000-8000-000000000020" "Nov 20th, 2026"]]
+    Outliner_core.default_save_opts []);
+  let range_db = Datascript.db range_conn in
+  let stored_source = Option.get (Option.bind
+    (entity range_db (Lookup_ref ("block/uuid",Uuid "10000000-0000-4000-8000-000000000083")))
+    (fun e -> Ldb.string_value e "block/title")) in
+  check "saving Between journals persists canonical date UUIDs" (stored_source=canonical_source);
+  expect "reloaded Between source selects the matching journal" ["Between83Marker 19"]
+    (titles (dsl_rows range_db stored_source));
+  check "invalid canonical journal dates are not decoded"
+    (Db_query_dsl.to_journal_day_int
+       (QueryFormString "[[00000001-2026-1131-0000-000000000000]]")=None);
+  List.iter (fun (label,start,finish,expected) ->
+    expect label expected (titles (dsl_rows range_db
+      ("(and \"Between83Marker\" (between [[" ^ start ^ "]] [[" ^ finish ^ "]]))"))))
+    [ "between journal titles", "Nov 18th, 2026", "Nov 20th, 2026", ["Between83Marker 19"]
+    ; "between canonical journal references", "00000001-2026-1118-0000-000000000000",
+      "00000001-2026-1120-0000-000000000000", ["Between83Marker 19"]
+    ; "between empty journal interval", "00000001-2026-1118-0000-000000000000",
+      "00000001-2026-1118-0000-000000000000", [] ]
 
 (* ============ custom-query-test ============ *)
 
