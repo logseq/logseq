@@ -756,6 +756,36 @@ let test_editor_ctrl_np () =
    block-context-menu-content + ui.cljs dropdown menu
    ================================================================ *)
 
+let test_cm_dismissal st =
+  stage_main_session [block "b1" "First";block "b2" "Second"];
+  let select uuid = Editor_state.set (fun state ->
+    {state with selection_scope="main"; selected=Editor_state.String_set.singleton uuid;
+      anchor=Some uuid;action_bar=true}) in
+  let open_menu () = P.open_cm ~scope:"main" st
+    ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false in
+  select "b1";
+  open_menu ();
+  Popups_view.close_cm st;
+  check "Dismissing a live context menu clears its block selection and action bar"
+    (cm_of st=None && Editor_state.String_set.is_empty (Editor_state.selected ())
+     && not (Editor_state.read ()).Editor_state.action_bar);
+  open_menu ();
+  Popups_view.close_cm st;
+  check "Dismissing a menu with no selected blocks remains safe"
+    (cm_of st=None && Editor_state.String_set.is_empty (Editor_state.selected ()));
+  select "b1";
+  open_menu ();
+  let action_owner = Editor_state.value () in
+  P.close_cm st;
+  Popups_view.close_cm st;
+  check "A delayed dismissal after command close does not invalidate asynchronous action ownership"
+    (Editor_state.value () == action_owner);
+  select "b2";
+  Popups_view.close_cm st;
+  check "An already-closed menu never clears a newer selection"
+    (Editor_state.selected ()=Editor_state.String_set.singleton "b2");
+  Editor_actions.clear_selection ()
+
 let test_cm_entries st =
   P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
   (match cm_of st with
@@ -1574,6 +1604,7 @@ let run ~finish =
   test_ac_paren_warn st s;
   (* C. block context menu *)
   test_cm_entries st;
+  test_cm_dismissal st;
   test_cm_activation st;
   test_cm_scope st;
   test_cm_submenu st;

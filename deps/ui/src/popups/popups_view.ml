@@ -587,7 +587,9 @@ let cm_close_sub st =
 
 let close_cm st =
   cm_cancel_pending st;
-  S.close_cm st
+  let opened = (S.get st).S.cm <> None in
+  S.close_cm st;
+  if opened then Editor_actions.clear_selection ()
 
 let cm_color_row (st : S.t) : t =
   (* tailwind <color>-500 paints the web swatch dot; the --color-*

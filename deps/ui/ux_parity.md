@@ -45,7 +45,6 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 |---|---|
 | Editor E1 / E12 | Embedded page/block root identity, title/structure and selection count; preserve source-block ownership while including embedded roots. |
 | Editor E10 | Rich/structured clipboard formats and cut/delete focus restoration, including the previous page-title editing position. Plain-text copy alone is insufficient. |
-| Editor E23 | Generic context-menu dismissal selection lifecycle beyond the four repaired actions; preserve asynchronous clipboard/delete ownership. |
 | History UI state | Master also records sidebar open/collapse/items. The current local repair records routes only, not sidebar layout history. |
 | Editor E38 | Video timestamp shortcut insertion, including actual current playback time. |
 | Editor E40 | Cross-page five-step undo: stored `A` versus `AB` after the reported sequence. Do not assume route restoration alone fixes transaction progress. |
@@ -68,6 +67,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E7 | Page-ref search now uses canonical worker candidates, all 33 localized NLP dates, Master fuzzy ranking/page-first ordering, entity icons and resolved titles. Whitespace and failed/empty searches are source-tested; browser acceptance is pending. |
 | Editor E14 | Containing-page preview headings retain the original block insertion root. Nested reference counts support inline disclosure and Shift-click sidebar references; restored reference panes do not register invisible editing roots. UI/native gates pass. Typed preview dimensions/spacing and combined-build acceptance remain visually unverified. |
 | Editor E22 | Indent, type `abc`, then undo twice now passes the shared cursor round-trip workflow at offset 0. The test records real transaction cursor options and restores mocked worker history; full DB/browser acceptance remains pending. No speculative caret change was made. |
+| Editor E23 | User dismissal clears a live context menu's selection/action bar. Late dismissal after command close preserves asynchronous ownership and newer selections. UI/native gates pass; integrated runtime acceptance remains pending. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
 | Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |
