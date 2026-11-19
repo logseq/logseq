@@ -1627,9 +1627,13 @@ let test_preview_lifetime st ~finish =
   let previous_worker = !Runtime.worker in
   let child = "00000000-0000-0000-0000-000000000321" in
   let rejected = ref false and reads = ref 0 in
+  let targets = ref [] in
   Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
-    (fun name _ ->
+    (fun name args ->
       incr reads;
+      (match name, args with
+       | "thread-api/get-page-route-info", [_; target] -> targets := target :: !targets
+       | _ -> ());
       Js.Promise.resolve
         (if !rejected then W.Tagged ("error", W.String "preview fixture failure")
          else match name with
@@ -1643,15 +1647,16 @@ let test_preview_lifetime st ~finish =
                [W.Array [W.kw "resource"; W.Array [W.kw "block-ref-count"; W.Uuid child]],
                 W.Map [W.kw "value", W.Int 2]]]
          | _ -> W.Nil)) };
-  let trigger name =
+  let trigger ?uuid name =
     let wrap = Stub_dom.make_element "span" and link = Stub_dom.make_element "a" in
     let set : string -> string -> unit = Stub_dom.get_field link "setAttribute" in
     set "data-ref" name;
+    Option.iter (set "data-uuid") uuid;
     Stub_dom.append_child wrap link;
     Ui_dom_web.el_of wrap in
-  let open_preview name =
+  let open_preview ?uuid name =
     Popups_view.close_pv st;
-    Popups_view.pv_open st (trigger name);
+    Popups_view.pv_open st (trigger ?uuid name);
     for _ = 0 to Ui_dom_web.token_ring_size do
       ignore (Ui_dom_web.el_of (Stub_dom.make_element "span"))
     done in
@@ -1661,13 +1666,19 @@ let test_preview_lifetime st ~finish =
         let before = !reads in
         Popups_view.pv_open st (Ui_dom_web.el_of (Stub_dom.make_element "span"));
         check "An empty reference trigger does not fetch preview data" (!reads = before);
+        targets := [];
+        open_preview ~uuid:child "lowercased block title";
+        after 40 (fun () ->
+          check "Resolved block hover fetches by entity identity rather than its lowercased display title"
+            (List.mem (W.Uuid child) !targets
+             && not (List.mem (W.String "lowercased block title") !targets));
         rejected := true;
         open_preview "rejected preview";
         after 40 (fun () ->
           check "A failed reference preview does not leave stale content" ((P.get st).P.pv = None);
           Popups_view.close_pv st;
           Runtime.worker := previous_worker;
-          finish ())
+          finish ()))
     | name :: rest ->
         open_preview name;
         after 40 (fun () ->

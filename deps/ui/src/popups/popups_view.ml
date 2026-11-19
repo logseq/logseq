@@ -1092,7 +1092,9 @@ let pv_open st (wrap : Ui_services.el) =
       (if wrap.Ui_services.connected () then
          wrap.Ui_services.query "a[data-ref]"
        else None)
-      (fun a -> a.Ui_services.attr "data-ref")
+      (fun a -> match a.Ui_services.attr "data-uuid" with
+        | Some uuid when uuid <> "" -> Some uuid
+        | _ -> a.Ui_services.attr "data-ref")
   with
   | None -> ()
   | Some name ->
