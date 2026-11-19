@@ -1219,7 +1219,9 @@ let home_page_row ctx =
   let saved = ref current in
   C.it_row ~key:"homep" ~label:(T.t "settings.features/home-default-page")
     [ box ~key:"homep-w" ~style_class:"ls-select-wrap" ~grow:1.
-        [ Ui_components.with_props [Ui_components.Prop.font_size "0.75rem"]
+        [ Ui_components.with_props
+            [ Ui_components.Prop.font_size "0.75rem"
+            ; Ui_components.Prop.margin_top 4 ]
           (Ui_components.form_input ~key:"homep-in"
             ~accessibility_identifier:"home-default-page" ~width:200
             ~height:30 ~corner_radius:4
