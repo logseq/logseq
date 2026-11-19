@@ -45,6 +45,11 @@ external options :
   getItemKey:(int -> string) ->
   overscan:int ->
   scrollMargin:float ->
+  (* defer ResizeObserver work (rect + item measurement) to the next
+     frame so layout written by onChange cannot re-trigger observers in
+     the same delivery ("ResizeObserver loop completed with undelivered
+     notifications") *)
+  useAnimationFrameWithResizeObserver:bool ->
   (* (element, entry, instance) -> size; entry is the
      ResizeObserverEntry when the library observes resizes, undefined in
      the MutationObserver-driven path *)

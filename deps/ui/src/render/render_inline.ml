@@ -982,6 +982,9 @@ let video_width arguments =
 (* cljs youtube-video iframe + attrs; enablejsapi=1 is required for the
    timestamp seek postMessage *)
 let youtube_iframe id start =
+  (* the iframe-API driver behind Runtime.video_timestamp registers from
+     the document scan — an embed alone must install it *)
+  Render_libs.ensure ();
   let src =
     "https://www.youtube.com/embed/" ^ id ^ "?enablejsapi=1"
     ^ match start with Some s -> "&start=" ^ s | None -> ""
