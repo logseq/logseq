@@ -102,7 +102,7 @@ let contribution : t = fun ctx parent ->
   (Ui_parts.string_prop Lui_protocol.DisplayValue
     ~value:(reactive (fun width -> if width >= 640. then "inline-flex" else "none") width)
     (Ui_components.with_props [Ui_components.Prop.position `absolute;
-      Ui_components.Prop.inset_top (-42.); Ui_components.Prop.inset_right 8.;
+      Ui_components.Prop.inset_top (-39.5); Ui_components.Prop.inset_right 8.;
       Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.font_weight 500;
       Ui_components.Prop.line_height "16px"; Ui_components.Prop.opacity 0.6]
       (row ~key:"contribution" ~height:28 ~padding_horizontal:12 ~padding_vertical:4 ~cross:`center
@@ -222,15 +222,16 @@ let empty_item key =
         ~font_size:"0.875rem" ~value:(t "plugin/empty") []
     ]
 
-let list_wrap ?(show_empty = true) ~key children : t =
+let list_wrap ?(show_empty = true) ?padding_top ~key children : t =
  fun ctx parent ->
   let width = Ui_services.viewport_width_signal
     ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.ui_scope in
   let height = Ui_services.viewport_height_signal
     ~scheduler:ctx.ui_scheduler ~scope:ctx.ui_scope in
   Ui_components.with_props
-    [ Ui_components.Prop.max_height_viewport 0.8
-    ; Ui_components.Prop.overflow `auto ]
+    ([ Ui_components.Prop.max_height_viewport 0.8
+     ; Ui_components.Prop.overflow `auto ]
+     @ Option.to_list (Option.map Ui_components.Prop.padding_top padding_top))
     (Ui_parts.int_prop Lui_protocol.HeightValue
       ~value:(reactive (fun h -> max 0 (int_of_float h - 320)) height)
     (column ~key ~style_class:"cp__plugins-item-lists"
@@ -648,7 +649,7 @@ let market_panel ~key ~search ~cat ~search_st ~pkgs ~stats ~filter ~sort ~loadin
     else
       [ column ~key:(key ^ "-cnt")
           ~style_class:"cp__plugins-marketplace-cnt" ~gap:8
-          [ list_wrap ~show_empty:false ~key:(key ^ "-list")
+          [ list_wrap ~show_empty:false ~padding_top:3 ~key:(key ^ "-list")
               (List.map (market_card ~stats ~search_st) filtered) ] ])
 
 (* ---------- page ---------- *)

@@ -13,6 +13,16 @@ Meta+Enter task cycling, footnotes, N9 foreground and first-block focus.
 Those paired results supersede the earlier browser-pending notes below for
 those exact scenarios; they do not close other findings in the same area.
 
+Table77 on `7760653a` accepts E1 structure/range and the stored Tab/Shift+Tab
+round-trip, structured-paste focus with no reaction warnings, Marketplace
+control dimensions, E40, nested geometry, N19 and dialogs. These results
+supersede the earlier browser-pending notes for those scenarios below.
+The separate Tab stack overflow is source-repaired in `d8dfa4ed`; its rebuilt
+browser check remains pending. The final Marketplace offsets (grid 3px high,
+contribution link 2.5px high) are now source-repaired without changing the
+fixed list viewport or accepted control dimensions; rebuilt-browser position
+verification remains pending.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -72,7 +82,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Reference filters | Equal-count tag chips use alphabetical order instead of Master's worker order. |
 | Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
 | Marketplace cards | Residual title truncation, icon artwork and description wrapping. |
-| Marketplace controls | Statistics use an 18px start inset, 16px icons and 12px item padding; the measured stats block is 81px at Master's x position. Table76 exposed further footer residuals, now source-repaired: use Master's marketplace-specific bottom offset of -5px rather than the generic -8px, producing a 7px card-bottom inset; the contribution wrapper retains its spacing while its anchor exposes only the unpadded text hitbox (181x15 rather than 205x28); Install uses normal weight with 13px unit line-height and 4px padding, matching Master's anchor typography instead of the shared button's medium weight. Width remains content-sized, not fixed to a measured English label. Browser verification of these repairs remains pending. Empty filter (unmatched search) matches Master: dialog, tabs and toolbar remain, the content area is empty and the search stays editable. Search margins, toolbar actions and filter/sort dots follow Master's source. |
+| Marketplace controls | Table77 accepts the control dimensions: an 81px statistics block at Master's x position, 7px footer inset, 181x15 contribution hitbox and normal-weight Install control. Statistics retain an 18px start inset, 16px icons and 12px item padding; Install uses 13px unit line-height and 4px padding. Width remains content-sized, not fixed to an English label. The last vertical offsets are source-repaired: a 3px inset inside the Marketplace's fixed-height list viewport moves the grid without resizing the dialog or changing Installed; the absolute contribution wrapper moves down 2.5px without changing its hitbox or horizontal alignment. These position adjustments await rebuilt-browser verification. Empty filter (unmatched search) matches Master: dialog, tabs and toolbar remain, the content area is empty and the search stays editable. Search margins, toolbar actions and filter/sort dots follow Master's source. |
 | Login | Table74 measured LUI 488×390 versus Master 490×405.97; link RGB(16,107,163) versus RGB(27,104,152). Source now includes the dialog's two border pixels in its responsive width, uses Master's accent-first link token, and models the footer paragraph's 8px vertical margins, 16px top padding and 24px line boxes without a form gap before it. Authentication logic is unchanged. Exact geometry/tone and shared dialog opening still need browser acceptance. |
 | Signup validation | Native email-validity and required-field validation behavior is not aligned. Entry-screen appearance does not establish submission parity. |
 
