@@ -831,8 +831,12 @@ let menu_body_view ~more_options ~with_title m ~close : t =
                  (* cljs .ls-property-dropdown: w-[260px] p-1.5 *)
                  column ~gap:0 ~width:260 ~padding:6
                    ((if with_title then
-                       [ text ~style_class:"ls-menu-h3"
-                           ~value:(I18n.t "property/configure") [] ]
+                       [ Ui_components.with_props
+                           [ Ui_components.Prop.padding_vertical 8
+                           ; Ui_components.Prop.padding_horizontal 8
+                           ; Ui_components.Prop.opacity 0.8 ]
+                           (text ~style_class:"ls-menu-h3"
+                              ~value:(I18n.t "property/configure") []) ]
                      else [])
                     @ more_options
                     @ main_items context m ~set_pane:pane ~close)
