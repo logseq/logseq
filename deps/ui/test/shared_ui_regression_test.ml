@@ -2311,7 +2311,7 @@ let run_views ~registry ~profile ~finish =
       | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
           Runtime.app_flush:=previous_flush;done_ ()
       | count::rest ->
-          let stored=ref None and source_op=ref None in
+          let stored=ref None and source_op=ref None and history_source=ref None in
           ignore (Fake_worker.install (fun name args -> match name,args with
             | "thread-api/get-render-snapshots",[_;request] ->
                 let resources=Option.value (Wire.get request "resources") ~default:Wire.Nil in
@@ -2336,7 +2336,8 @@ let run_views ~registry ~profile ~finish =
                       Wire.Map [Wire.kw "block/uuid",id;Wire.kw "block/children",Wire.Array []]
                     else Option.value !stored ~default:Wire.Nil in
                   Wire.Map [Wire.kw "id",id;Wire.kw "block",block]) requests)
-            | "thread-api/apply-outliner-ops",[_;Wire.Array ops;_] ->
+            | "thread-api/apply-outliner-ops",[_;Wire.Array ops;tx_opts] ->
+                history_source:=Wire.get tx_opts "source-outliner-op";
                 List.iter (function
                   | Wire.Array [Wire.Keyword "insert-blocks";
                       Wire.Array [Wire.List [block];_;opts]] ->
@@ -2360,6 +2361,8 @@ let run_views ~registry ~profile ~finish =
                | Some _ -> Option.is_some !stored && !source_op=Some (Wire.kw "create-view")
                    && state.views<>[] && state.view_error=None
                | None -> !stored=None && Option.is_some state.view_error);
+            check "Automatic reference views carry the worker's non-undoable source marker"
+              (!history_source=(if !stored=None then None else Some (Wire.kw "create-view")));
             ignore (Lui_app.dispose mounted.S.app);next rest) 0)
     in next [Some 0;Some 1;None]
   in

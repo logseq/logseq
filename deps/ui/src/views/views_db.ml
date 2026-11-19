@@ -472,7 +472,7 @@ let insert_view_block ~current ?(on_error = fun () -> ())
                      ]
                  ]
              ])
-          (W.Map [])
+          (W.Map [ W.kw "source-outliner-op", W.Keyword "create-view" ])
       in
       Outliner_ops.check_loader_result result;
       if current () then after ();
