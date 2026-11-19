@@ -1201,7 +1201,9 @@ let ref_filter_dialog ~owner_scope inst anchor =
       let chip_rows =
         reactive
           (fun s ->
-            box ~display:`contents
+            if s.V.ref_includes = [] && s.V.ref_excludes = [] then D.nothing
+            else
+            column ~style_class:"cp__filters" ~margin_bottom:16 ~margin_left:8
               ((if s.V.ref_includes <> [] then
                   [ chip_row (I.t "reference.filter/includes")
                       s.V.ref_includes ]
@@ -1261,15 +1263,12 @@ let ref_filter_dialog ~owner_scope inst anchor =
                  [ heading ~level:3 ~font_size:"1.125rem"
                      ~line_height:"1.5rem" ~font_weight:500
                      ~value:(I.t "reference.filter/title") []
-                 ; text ~font_size:"0.75rem"
+                 ; text ~font_size:"0.75rem" ~line_height:"1.5rem"
                      ~value:(I.t "reference.filter/directions") [] ]
              ]
-         ; (* cp__filters keeps its class — the :empty rule is a
-              leftover hook *)
-           column ~style_class:"cp__filters" ~margin_bottom:16
-             ~margin_left:8 [ chip_rows ]
+         ; chip_rows
          ; Ui_components.with_props [ Ui_components.Prop.padding_left 8 ] @@
-           row ~cross:`center ~gap:0 ~corner_radius:4
+           row ~cross:`center ~gap:0 ~corner_radius:4 ~padding_vertical:0
              ~background:"var(--ls-primary-background-color)"
              ~style_class:"cp__filters-input-panel"
              [ icon ~name:(Icons.name_ref "search")
