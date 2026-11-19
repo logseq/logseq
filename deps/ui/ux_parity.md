@@ -45,17 +45,21 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Area / finding | Remaining work |
 |---|---|
 | Table72 persisted seed duplicates | The canonical UUID repair prevents new duplicates but does not remove incorrectly persisted entities. Master `d85d8f6a` has no repair migration for these values: `frontend/worker/db/migrate.cljs` ends at schema 65.36 (journal repair), and `ensure-built-in-data-exists!` merges canonical entities without retracting legacy duplicates. Follow Master: do not add a cleanup migration. No live graph cleanup has been performed. |
-| Table72 built-in writes | The restoration delta's triggering path remains unknown. A native Master-fixture probe with the real pipeline changes neither refs nor raw-title during ensure or a rejected built-in Tag-to-Page rename. The SDK dispatches that rename through the guarded, temporary-connection outliner path. Actual transaction metadata/physical-datom evidence is still needed; do not attribute these changes to rename or the seed repair yet. |
 | Editor E1 / E12 | Embedded page/block root identity, title/structure and selection count; preserve source-block ownership while including embedded roots. |
 | Editor E10 | Rich/structured clipboard formats and cut/delete focus restoration, including the previous page-title editing position. Plain-text copy alone is insufficient. |
 | Editor E38 | Video timestamp shortcut insertion, including actual current playback time. |
 | Editor E40 | Cross-page five-step undo: stored `A` versus `AB` after the reported sequence. Do not assume route restoration alone fixes transaction progress. |
+| Table73 editor shortcuts | Meta+; and Meta+Enter reach the textarea but do not collapse or cycle task state in the served browser build. Earlier source tests do not establish browser dispatch parity. |
+| Table73 reference previews | Page- and block-reference hover previews do not open in the served build. |
+| Table73 footnotes | Backlink text has mojibake and the footnote layout is taller than Master. |
+| Table73 N9 | Cmdk Create footer foreground remains RGB(67,63,56), not RGB(23,23,23); the earlier semantic-color correction is insufficient. |
+| Table73 N19 | Rapid Journals-menu entry initially reaches Import then Login; the expected sequence only passes after a 150ms settle. |
 | Calculator extra root | Global plain-Enter dispatch and newline/empty-input save-and-Escape tests do not append roots, including failed saves. The explicit Shift+Enter action appends one empty sibling. The original full CodeMirror flow remains unverified; this does not establish which event ran there. No speculative fix. |
 | Shell N7 | Sidebar-menu action comparison needs equivalent target classification: Master conditionally includes Open as page for page/contents or a resolved page entity. The retained pair shows different sidebar contents and LUI explicitly has a page item; unconditional removal would diverge from Master. The horizontal-origin source repair is recorded below. |
 | Reference filters | Equal-count tag chips use alphabetical order instead of Master's worker order. |
 | Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
 | Marketplace cards | Residual title truncation, icon artwork and description wrapping. |
-| Marketplace controls | Contribution-link color and some spacing. |
+| Marketplace controls | Contribution-link color, statistics/footer spacing and some other spacing. |
 | Login | Residual modal sizing and tone. |
 | Signup validation | Native email-validity and required-field validation behavior is not aligned. Entry-screen appearance does not establish submission parity. |
 
@@ -64,6 +68,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Area / finding | Verification still needed |
 |---|---|
 | Table72 seeded values | Preserve keyword syntax in deterministic property-value UUID seeds, matching Master. A real Master-created 65.36 graph grows from 190 to 200 entities before the repair; native ensure/reload now preserves every original identity and creates none. Served-build acceptance remains pending. |
+| Table73 built-in writes | The first Escape/save after Tomorrow reuses a fetched ref summary whose tags contain SDK-expanded entity maps, including virtual raw-title. The worker previously transacted those maps as nested entity updates. Existing ref tags now collapse to their entity IDs, matching Master's entity-to-ID conversion rather than upserting metadata. A native Master-fixture workflow creates the journal, fetches it through the real block getter, saves that reference and checks the source link plus every built-in's physical attrs; clearing and rejected saves are covered too. Browser acceptance and attribution of the broader Table72 restoration delta remain pending. |
 | Table72 Features input | Restore Master's 4px small-input top margin without changing the 200×30 control. Source/native acceptance only; browser geometry remains unverified. |
 | Table72 tags selector | Isolated equal-stage checks at 1600×998 show both property-name pickers at 226×288 for `Tags`; after choosing that property, both tag-value pickers return Card/Cards for `Card` and measure 226×114 (Master 113.953px). The original comparison mixed the property-name and tag-value stages. No production cap change is needed; retain the viewport-based cap rather than a universal 288px maximum. These checks use the prior build with unchanged selector/dialog source, not combined-build acceptance of other repairs. |
 | Editor E3 / E4 | CodeMirror height and fold-control visibility/geometry; current source includes padding and caret adjustments. |

@@ -309,6 +309,82 @@ let test_ensure_current_master_seed_after_reload () =
   ensure reloaded;
   ensure reloaded
 
+let test_create_journal_preserves_master_built_ins () =
+  let conn = Option.get
+    (conn_from_transit_fixture "deps/db-worker/test/fixtures/migration/65.36.transit") in
+  let page_uuid = Common_uuid.new_block_id () in
+  let block_uuid = Common_uuid.new_block_id () in
+  ignore (Datascript.transact_conn_string conn
+    (Printf.sprintf
+      "[{:block/uuid #uuid \"%s\" :block/title \"Fixture\" :block/name \"fixture\" :block/tags [:logseq.class/Page] :block/created-at 1 :block/updated-at 1} {:block/uuid #uuid \"%s\" :block/title \"\" :block/parent [:block/uuid #uuid \"%s\"] :block/page [:block/uuid #uuid \"%s\"] :block/order \"a1\" :block/created-at 1 :block/updated-at 1}]"
+      page_uuid block_uuid page_uuid page_uuid));
+  let before = db_of conn in
+  let built_ins = datoms before Aevt ~a:"logseq.property/built-in?" ()
+    |> List.of_seq |> List.map (fun (d : datom) -> d.e) in
+  check "fixture includes the built-ins under observation" (List.length built_ins > 170);
+  let page_class = Option.get (entity before (Ident "logseq.class/Page")) in
+  check "fixture Page has no stored raw-title" (Ldb.value page_class "block/raw-title" = None);
+  check "fixture Page has no stored refs" (Ldb.values page_class "block/refs" = []);
+  let attrs db id = datoms db Eavt ~e:id () |> List.of_seq
+    |> List.map (fun (d : datom) -> d.a, d.v) in
+  let pipeline_before = !Db_tx.transact_pipeline_fn in
+  Fun.protect ~finally:(fun () -> Db_tx.transact_pipeline_fn := pipeline_before)
+    (fun () ->
+      Db_tx.transact_pipeline_fn := Some Worker_pipeline.transact_pipeline;
+      let title = Ldb.journal_title_of_day 20970102 (Ldb.journal_title_format before) in
+      let journal_uuid = Common_uuid.new_block_id () in
+      let field key value = Wire.String key, value in
+      let journal = Wire.Map
+        [field "block/title" (Wire.String title)
+        ;field "block/name" (Wire.String (Ldb.page_name_sanity_lc title))
+        ;field "block/uuid" (Wire.Uuid journal_uuid)
+        ;field "block/tags" (Wire.Array [Wire.Keyword "logseq.class/Page"])] in
+      let result = Outliner_op.apply_ops conn
+        (Wire.List [Wire.List [Wire.Keyword "save-block"; Wire.List
+          [ Wire.Map [field "block/uuid" (Wire.Uuid block_uuid)
+                    ;field "block/title" (Wire.String ("[[" ^ journal_uuid ^ "]]"))
+                    ;field "block/refs" (Wire.Array [journal])]
+          ; Wire.Map []]]]) (Wire.Map []) in
+      check "saving an E7 journal reference succeeds" (Cljs_map.get result "error" = None);
+      let after = db_of conn in
+      check "journal creation stores the requested day"
+        (Option.is_some (Ldb.get_journal_page_by_day after 20970102));
+      let saved_journal = Option.get (Ldb.get_journal_page_by_day after 20970102) in
+      let saved_uuid = Option.get (Ldb.uuid_value saved_journal "block/uuid") in
+      let fetched = Endpoint_block.get_block_and_children after (Uuid saved_uuid)
+        (Endpoint_block.opts_of_wire (Wire.Map [])) in
+      let fetched = Option.get (Wire.get "block" fetched) in
+      let known_ref = Wire.Map (List.filter_map (fun key ->
+        Option.map (fun value -> field key value) (Wire.get key fetched))
+        ["db/id"; "block/uuid"; "block/title"; "block/name"; "db/ident"; "block/tags"]) in
+      let resaved = Outliner_op.apply_ops conn
+        (Wire.List [Wire.List [Wire.Keyword "save-block"; Wire.List
+          [ Wire.Map [field "block/uuid" (Wire.Uuid block_uuid)
+                    ;field "block/title" (Wire.String ("[[" ^ saved_uuid ^ "]]"))
+                    ;field "block/refs" (Wire.Array [known_ref])]
+          ; Wire.Map []]]]) (Wire.Map []) in
+      check "saving the fetched journal reference succeeds" (Cljs_map.get resaved "error" = None);
+      let after = db_of conn in
+      let saved_block = Option.get (entity after (Lookup_ref ("block/uuid", Uuid block_uuid))) in
+      check "the saved block links the created journal"
+        (List.mem saved_journal.id (Ldb.ref_ids saved_block "block/refs"));
+      Alcotest.(check (list int)) "journal creation leaves every built-in unchanged" []
+        (List.filter (fun id -> attrs before id <> attrs after id) built_ins);
+      let cleared = Outliner_op.apply_ops conn
+        (Wire.List [Wire.List [Wire.Keyword "save-block"; Wire.List
+          [Wire.Map [field "block/uuid" (Wire.Uuid block_uuid)
+                    ;field "block/title" (Wire.String "")
+                    ;field "block/refs" (Wire.Array [])]; Wire.Map []]]]) (Wire.Map []) in
+      check "clearing the reference succeeds" (Cljs_map.get cleared "error" = None);
+      let rejected = try
+        let result = Outliner_op.apply_ops conn
+          (Wire.List [Wire.List [Wire.Keyword "save-block"; Wire.List []]]) (Wire.Map []) in
+        Cljs_map.get result "error" <> None
+        with _ -> true in
+      check "a malformed save is rejected" rejected;
+      Alcotest.(check (list int)) "empty and rejected saves leave built-ins unchanged" []
+        (List.filter (fun id -> attrs before id <> attrs (db_of conn) id) built_ins))
+
 let test_ensure_built_in_data_live_repair_assigns_canonical_revision () =
   let conn = Db_test_util.create_conn_bare () in
   ignore
@@ -860,6 +936,8 @@ let migrate_cases : unit Alcotest.test_case list =
       test_ensure_built_in_data_exists
   ; Alcotest.test_case "ensure-current-master-seed-after-reload" `Quick
       test_ensure_current_master_seed_after_reload
+  ; Alcotest.test_case "create-journal-preserves-master-built-ins" `Quick
+      test_create_journal_preserves_master_built_ins
   ; Alcotest.test_case
       "ensure-built-in-data-live-repair-assigns-canonical-revision"
       `Quick
