@@ -26,6 +26,7 @@ let icon_el = Views_table.icon_el
 
 let action_button ?(extra = "") ~label ?accessibility_identifier ~on_press children : t =
   Ui_components.button ~variant:`ghost ~size:`sm ~label ~style_class:extra
+    ~data_attrs:["data-tooltip", ""]
     ~width:24 ~min_width:24 ~height:24 ~min_height:24 ~padding:0
     ~main:`center ~cross:`center ~foreground:"hsl(var(--muted-foreground))"
     ?accessibility_identifier ~on_press children
@@ -35,7 +36,10 @@ let ghost_btn ?(extra = "") ~title_ icon_name ~on_click : t =
     [ icon ~name:(Icons.name_ref icon_name) ~point_size:18 [] ]
 
 let count_of (s : V.vstate) =
-  max s.V.items_count (Wr.row_count s.V.data)
+  let decoded = match s.V.data with
+    | Wr.VGrouped _ | Wr.VGroupedList _ -> List.length (Views_table.all_row_uuids s)
+    | _ -> Wr.row_count s.V.data in
+  max s.V.items_count decoded
 
 let set_filters inst fs or_ =
   V.update inst (fun s -> { s with V.filters = fs; filters_or = or_ });
@@ -234,6 +238,7 @@ let sorting_popup inst anchor =
          (select ~style_class:"ls-sort-order"
            ~text:(reactive (fun so -> if so.V.s_asc then (I.t "view.table/ascending") else (I.t "view.table/descending")) so_s)
            ~height:32 ~min_height:32 ~padding_horizontal:8
+           ~width:107
            ~corner_radius:6 ~background:"transparent"
            ~border_width:1 ~border_color:"var(--ls-border-color)"
            ~foreground:"var(--ls-primary-text-color)"
@@ -263,7 +268,7 @@ let sorting_popup inst anchor =
           [ order_select so_s
           ; Ui_components.with_props
               [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-              (Ui_components.button ~variant:`ghost ~size:`sm ~height:32
+              (Ui_components.button ~variant:`ghost ~size:`sm ~height:28
                  ~padding_horizontal:4 ~corner_radius:4 ~style_class:"ls-sort-x"
                  ~foreground:"hsl(var(--muted-foreground))"
                  ~label:(I.t "view.table/delete-sort") ~icon:(Icons.name_ref "x")
@@ -271,7 +276,7 @@ let sorting_popup inst anchor =
   in
   P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
     (Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
-       (column ~gap:8 ~padding_vertical:8
+       (column ~gap:8 ~padding_vertical:8 ~width:310
           [ keyed
               ~source:(reactive (fun state ->
                 List.filter (fun so ->
@@ -280,9 +285,9 @@ let sorting_popup inst anchor =
               ~key:(fun so -> so.V.s_id) ~cmp:String.compare ~mount:sort_row
           ; Ui_components.with_props
               [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-              (Ui_components.button ~variant:`ghost ~main:`start
+              (Ui_components.button ~variant:`ghost ~size:`sm ~main:`start
                  ~corner_radius:4 ~style_class:"ls-sort-delete"
-                 ~padding_vertical:6 ~padding_horizontal:8
+                 ~padding_vertical:4 ~padding_horizontal:12
                  ~foreground:"hsl(var(--muted-foreground))"
                  ~icon:(Icons.name_ref "trash") ~text:(I.t "view.table/delete-sort")
                  ~on_press:(fun _ ->
@@ -671,10 +676,15 @@ let display_type_el inst : t =
             refresh inst
           in
           ignore
-            (P.show_menu ~anchor ~align_end:true
-               [ P.MItem ((I.t "property.view-type/table"), fun () -> set "table")
-               ; P.MItem ((I.t "property.view-type/list"), fun () -> set "list")
-               ; P.MItem ((I.t "property.view-type/gallery"), fun () -> set "gallery") ])
+            (P.show_select ~anchor ~align_end:true
+               ~placeholder:(I.t "property.built-in/view-type")
+               ~show_check:true ~selected_values:[(V.get inst).V.display_type]
+               ~item_icon:(fun item -> Some (Icons.name_ref (match item.P.si_value with
+                 | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table")))
+               ~items:(P.fixed_items (List.map (fun kind ->
+                 {P.si_label=I.t ("property.view-type/" ^ kind);
+                  si_value=kind;si_extra=None}) ["table";"list";"gallery"]))
+               ~on_chosen:(fun item _ _ -> set item.P.si_value) ())
       | None -> ())
     [ icon ~point_size:18
         ~name:(reactive (fun (s : V.vstate) ->
@@ -685,6 +695,18 @@ let display_type_el inst : t =
 
 (* ---------- search ---------- *)
 
+let load_ref_count inst =
+  let current = V.current_view inst in
+  Option.iter (fun uuid ->
+    Views_db.snapshots
+      ~on_error:(fun () -> if current () then
+        V.update inst (fun s -> {s with V.view_error = Some ""}))
+      ~f:(fun snap -> if current () then
+        match Views_db.snapshot_value snap (Views_db.key_ref_count uuid) with
+        | Some (W.Int n) -> V.update inst (fun s -> {s with V.refs_total = n})
+        | _ -> ())
+      [Views_db.resource_ref_count uuid]) (V.owner_uuid inst)
+
 (* Search keeps its trigger while expanded. ButtonGroup is admitted by
    Toolbar and preserves the reference's zero-gap search controls. *)
 let search_items inst : t list =
@@ -692,7 +714,7 @@ let search_items inst : t list =
   let input_id = "vsearch-" ^ string_of_int inst.V.id in
   let open_cond ctx =
     Logseq_el.own ctx
-      (Signal.map (fun (s : V.vstate) -> s.V.search_open) (sig_of inst))
+      (Signal.map (fun (s : V.vstate) -> s.V.search_open || String.trim s.V.input <> "") (sig_of inst))
   in
   [ ghost_btn "search" ~title_:(I.t "cmdk.action/search")
       ~on_click:(fun () ->
@@ -707,8 +729,17 @@ let search_items inst : t list =
                0)
         end)
   ; (fun ctx parent ->
-     (* DOM-only keydown lost its Escape-closes-search path — no
-        component event maps it *)
+     Ui_services.dom_subscribe_document_event ~scope:ctx.Lui_ui.ui_scope ~capture:true
+       "keydown" (fun ev ->
+         if ev.Ui_services.key = Some "Escape" && not ev.composing
+            && not ev.default_prevented
+            && Option.fold ~none:false ~some:(fun target ->
+              target.Ui_services.closest ("#" ^ input_id) <> None) ev.target then begin
+           ev.prevent_default ();
+           ev.stop_immediate ();
+           V.update inst (fun s -> {s with V.input = ""; search_open = false});
+           refresh inst
+         end);
      if_ ~test:(open_cond ctx)
        ((* input, not search_field: a native search box paints its own
            clear control — with the manual x ghost_btn below that made
@@ -729,8 +760,13 @@ let search_items inst : t list =
                    deb (fun () ->
                        let s = V.get inst in
                        if not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
-                          && s.V.search_open && s.V.view_uuid = view_uuid
-                          && s.V.input = v then refresh inst)
+                          && (s.V.search_open || String.trim s.V.input <> "")
+                          && s.V.view_uuid = view_uuid
+                          && s.V.input = v then begin
+                         if inst.V.kind = V.KLinkedRefs && s.V.refs_total = 0 then
+                           load_ref_count inst;
+                         refresh inst
+                       end)
                | _ -> ())
              []))
        ctx parent)
@@ -1026,16 +1062,7 @@ let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
           V.update inst (fun s ->
               { s with V.ref_includes = inc; ref_excludes = exc });
           on_done () end);
-      if count then
-        Views_db.snapshots
-          ~on_error
-          ~f:(fun snap ->
-            if current () then
-            match Views_db.snapshot_value snap (Views_db.key_ref_count uuid) with
-            | Some (W.Int n) ->
-                V.update inst (fun s -> { s with V.refs_total = n })
-            | _ -> ())
-          [ Views_db.resource_ref_count uuid ]
+      if count then load_ref_count inst
   | None -> ()
 
 (* page-handler/db-based-save-filter! — click toggles include,
@@ -1059,13 +1086,6 @@ let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
                   load_ref_filters ~count:true ~on_done inst;
                   refresh inst end)
           | None -> ())
-
-let refs_cog_class (s : V.vstate) =
-  match s.V.ref_includes <> [], s.V.ref_excludes <> [] with
-  | true, false -> " text-success"
-  | false, true -> " text-error"
-  | true, true -> " text-warning"
-  | false, false -> ""
 
 let ref_filter_dialog ~owner_scope inst anchor =
   let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
@@ -1128,13 +1148,14 @@ let ref_filter_dialog ~owner_scope inst anchor =
       ignore (Ui_effect.timeout ~scope 0 refresh_counts);
       let ref_button title count_opt =
         Ui_components.with_props
-          [ Ui_components.Prop.font_size "0.75rem" ]
+          [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px" ]
           ((* ls-ref-btn keeps its class as the imperative hook *)
            Ui_components.with_props
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
              (Ui_components.button ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
+                ~height:22 ~min_height:22
                 ~padding_vertical:2 ~padding_horizontal:8
                 ~background:"transparent" ~style_class:"ls-ref-btn"
                 ~foreground:"inherit"
@@ -1208,7 +1229,8 @@ let ref_filter_dialog ~owner_scope inst anchor =
               counts
               |> List.filter (fun (t, _) -> not (in_filters t))
               |> fun xs ->
-              if q = "" then xs
+              if q = "" then List.stable_sort (fun (a, n) (b, m) ->
+                let order = compare m n in if order = 0 then compare a b else order) xs
               else
                 Fuzzy.fuzzy_search ~extract:fst ~limit:100 xs q
                 |> List.stable_sort (fun (_, a) (_, b) -> compare b a)
@@ -1221,7 +1243,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
           (Signal.value query) (sig_of inst) (Signal.value counts)
       in
       (column ~style_class:"ls-filters filters" ~padding:16
-         ~min_width:320 ~max_width:500
+         ~width:632 ~min_width:632 ~max_width:632
          [ row ~cross:`start ~gap:16
              ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
              [ row ~cross:`center ~main:`center
@@ -1245,16 +1267,16 @@ let ref_filter_dialog ~owner_scope inst anchor =
               leftover hook *)
            column ~style_class:"cp__filters" ~margin_bottom:16
              ~margin_left:8 [ chip_rows ]
-         ; row ~cross:`center ~gap:8 ~padding_vertical:4
-             ~padding_horizontal:8 ~corner_radius:6
+         ; row ~cross:`center ~gap:0 ~padding_vertical:0
+             ~padding_horizontal:8 ~corner_radius:4
+             ~background:"var(--ls-primary-background-color)"
              ~style_class:"cp__filters-input-panel"
              ~foreground:
                "var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
              [ icon ~name:(Icons.name_ref "search")
                  ~style_class:"ls-icon-search" []
-             ; Ui_components.with_props
-                 [ Ui_components.Prop.focus_shadow "none" ]
-                 (Ui_components.input ~style_class:"cp__filters-input"
+             ; (Ui_components.input ~style_class:"cp__filters-input"
+                    ~padding:8 ~height:42 ~min_height:42
                     ~grow:1. ~background:"transparent" ~border_width:0
                     ~text:(reactive Fun.id (Signal.value draft))
                     ~kind:`text ~accessibility_identifier:input_id
@@ -1277,10 +1299,16 @@ let ref_filter_dialog ~owner_scope inst anchor =
 
 let refs_filter_btn inst : t =
  fun ctx parent ->
-  Ui_parts.class_signal
-    (Logseq_el.own ctx
-       (Signal.map (fun (s : V.vstate) -> refs_cog_class s) (sig_of inst)))
-    (fun c -> c)
+  Ui_parts.string_prop L.ForegroundValue
+    ~value:(reactive (fun (s : V.vstate) (model : Model.t) ->
+      match s.V.ref_includes <> [], s.V.ref_excludes <> [] with
+      | true, true -> if model.Model.theme_dark then
+          "color-mix(in oklab, oklch(79.5% 0.184 86.047) 70%, transparent)"
+          else "oklch(68.1% 0.162 75.834)"
+      | true, false -> "var(--rx-green-09)"
+      | false, true -> "var(--rx-red-09)"
+      | false, false -> "hsl(var(--muted-foreground))")
+      (sig_of inst) (Runtime.model_signal ()))
     (action_button ~label:(I.t "reference/page-filter")
        ~accessibility_identifier:("vrefcog-" ^ string_of_int inst.V.id)
        ~on_press:(fun _ ->
@@ -1330,7 +1358,9 @@ let render_head inst : t =
         | None -> false)
     | _ -> false
   in
-  let popup_open = P.open_signal sched in
+  let popup_open = Logseq_el.own ctx (P.open_for_anchors sched
+    (List.map (fun prefix -> prefix ^ "-" ^ string_of_int inst.V.id)
+      ["vsort"; "vfilter"; "vtype"; "vmore"; "vrefcog"])) in
   (* Views_popup's open_st is a global singleton — its owner is
      whichever scheduler created it first, so map2 inputs must both
      live on popup_open's scheduler, not this ctx's *)
@@ -1369,14 +1399,18 @@ let render_head inst : t =
                          (sig_of inst)))
                  []
            | _ -> tabs_el inst ~op) ]
-    ; Ui_components.with_props
+    ; row ~gap:4 ~cross:`center
+      [ (match inst.V.kind with
+         | V.KLinkedRefs -> Ui_parts.float_prop L.Opacity
+             ~value:(reactive (fun (s : V.vstate) opacity ->
+               if s.V.ref_includes <> [] || s.V.ref_excludes <> [] then 1.
+               else opacity) (sig_of inst) op) (refs_filter_btn inst)
+         | _ -> D.nothing)
+      ; Ui_components.with_props
         [ Ui_components.Prop.transition "opacity 300ms ease-in" ]
         (Ui_components.flat_toolbar ~key:"actions" ~cls:"view-actions"
            ~label:"View actions" ~opacity_signal:op
-        ((match inst.V.kind with
-          | V.KLinkedRefs -> [ refs_filter_btn inst ]
-          | _ -> [])
-         @ [ (* cljs (seq sorting): the button reacts to the applied
+         ([ (* cljs (seq sorting): the button reacts to the applied
                 view entity — mount-time sorting is [] until load_views
                 lands *)
              if_
@@ -1413,5 +1447,5 @@ let render_head inst : t =
          @ (if has_add_object then
               [ ghost_btn "plus" ~title_:(I.t "node/new")
                   ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]
-            else []))) ])
+            else []))) ] ])
     ctx parent

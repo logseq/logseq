@@ -1985,7 +1985,21 @@ let test_linked_references_row_limit_keeps_total () =
          ; "row-limit", Wire.Int 1 ])
   in
   check "row-limit keeps the index total" (view_count result = 2);
-  check "row-limit returns one group" (List.length (data_wire result) = 1)
+  check "row-limit returns one group" (List.length (data_wire result) = 1);
+  let check_filter ident value =
+    ignore (Datascript.transact_conn conn [Add (Entity_id target_id, ident, Ref value)]);
+    check "Reference filter is stored on the owner"
+      (Db_view.get_filters (Option.get (Ldb.ent_of_id (db_of conn) target_id)) <> None);
+    let filtered limit =
+      Db_view.get_view_data (db_of conn) (Some view_id)
+        (opts (["view-feature-type", kw "linked-references";
+                "view-for-id", Wire.Int target_id] @ limit)) in
+    let full = filtered [] in
+    let window = filtered ["row-limit", Wire.Int 1] in
+    check "Reference filters keep the same total with and without a row limit"
+      (view_count window = view_count full)
+  in
+  check_filter "logseq.property.linked-references/includes" a
 
 let test_class_objects_ref_filter_fast_path () =
   let conn =

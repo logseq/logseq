@@ -220,7 +220,6 @@ let delete_remote_http uuid =
 
 let delete_graph repo ~remote =
   let drop_from_repos () =
-    Graphs_meta.drop repo;
     Runtime.send (Action.Repos_loaded (List.filter (fun r -> r <> repo) (repos ())));
     !on_repos_changed ()
   in
@@ -234,28 +233,34 @@ let delete_graph repo ~remote =
        row non-local for the whole window *)
     drop_from_repos ();
     let* ok =
-      (let* _w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
-      Js.Promise.resolve true)
+      (let* w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
+       if Rtc_error.is_error w then begin
+         Rtc_error.report_outcome "unlink-db" w;
+         Js.Promise.resolve false
+       end else Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("unlink-db failed " ^ repo, e);
-             Runtime.send (Action.Repos_loaded (repo :: repos ()));
-             !on_repos_changed ();
              Js.Promise.resolve false)
     in
-    if not ok then Js.Promise.resolve ()
-    else
+    if not ok then begin
+      Runtime.send (Action.Repos_loaded (repo :: repos ()));
+      !on_repos_changed ();
+      Js.Promise.resolve ()
+    end else begin
+      Graphs_meta.drop repo;
       match (Runtime.model ()).Model.repo = Some repo, (repos ()) with
       | true, next :: _ ->
-          Toast.success (T.removed_redirecting repo next);
+          Toast.success (T.removed_redirecting (short_name repo) (short_name next));
           navigate_journal next
       | true, [] ->
-          Toast.success (T.removed repo);
+          Toast.success (T.removed (short_name repo));
           Runtime.send Action.Graph_closed;
           Router.resolve ();
           Js.Promise.resolve ()
       | false, _ ->
-          Toast.success (T.removed repo);
-          Js.Promise.resolve ())
+          Toast.success (T.removed (short_name repo));
+          Js.Promise.resolve ()
+    end)
   in
   if remote then
     match
@@ -277,8 +282,8 @@ let ask_delete ~remote repo =
      :title = confirm-desc, :description = delete-warning *)
   Dialogs_state.ask
     ~title:
-      (if remote then T.delete_remote_confirm repo
-       else T.delete_local_confirm repo)
+      (if remote then T.delete_remote_confirm (short_name repo)
+       else T.delete_local_confirm (short_name repo))
     ~desc:(T.t "graph/delete-warning")
     ~on_confirm:(fun () -> ignore (delete_graph repo ~remote))
     ()

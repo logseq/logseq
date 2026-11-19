@@ -46,6 +46,7 @@ let effects (action : Action.t) : unit =
            f ()
        | _ -> ())
   | Action.Page_load_failed ->
+      Subs_state.current_page := None;
       Subs_state.app_hooks.nav_load_done ();
       Subs_state.after_page_load := None
   | Action.Journals_loaded js ->
@@ -191,8 +192,9 @@ let update (model : t) (action : Action.t) : t =
       ; unlinked_blocks = []
       ; data_gen = model.data_gen + 1
       }
-  | Title_edit_start -> { model with editing_title = true }
-  | Title_edit_done -> { model with editing_title = false }
+  | Title_edit_start -> { model with editing_title = true; title_edit_click = None }
+  | Title_edit_start_at point -> { model with editing_title = true; title_edit_click = Some point }
+  | Title_edit_done -> { model with editing_title = false; title_edit_click = None }
   | Page_menu_set pos ->
       { model with page_menu = pos;
         appearance = model.appearance && Option.is_none pos }

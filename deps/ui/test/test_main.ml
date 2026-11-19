@@ -262,7 +262,7 @@ let test_update () =
    | Model.Page "foo", None -> check "navigate clears route_page" true
    | _ -> check "navigate clears route_page" false);
   (* toast ids are allocated sequentially *)
-  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None; toast_code = None } in
+  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None; toast_code = None; toast_duration = None } in
   let m3 = Update.update m2 (Action.Toast_push toast) in
   let m3 = Update.update m3 (Action.Toast_push toast) in
   eqi "two toasts" 2 (List.length m3.toasts);
@@ -365,7 +365,13 @@ let test_decode2 () =
        eqs "toast kind" "success" toast.toast_kind
    | None -> check "toast_of_wire" false);
   check "toast empty -> None"
-    (Decode.toast_of_wire (Wire.Array []) = None)
+    (Decode.toast_of_wire (Wire.Array []) = None);
+  List.iter (fun (tail, expected) ->
+    check "worker notification preserves lifetime"
+      ((Option.get (Decode.toast_of_wire
+          (Wire.Array ([Wire.String "validation"; Wire.Keyword "success"] @ tail)))).Model.toast_duration = expected))
+    [[], Some 1500; [Wire.Bool true], Some 2000; [Wire.Bool false], Some 0;
+     [Wire.Bool true; Wire.Nil; Wire.Int 4200], Some 4200]
 
 (* ---- Router.parse_path ---- *)
 
@@ -589,10 +595,19 @@ let test_edn2 () =
   check "negative int" (Edn.parse "-7" = Wire.Int (-7));
   check "float" (Edn.parse "2.5" = Wire.Float 2.5);
   check "bool" (Edn.parse "false" = Wire.Bool false);
-  (* #tag literals don't decode: '#uuid' lexes as a symbol token *)
-  check "tagged literal lexes as symbol + value"
+  check "tagged literal decodes UUID"
     (Edn.parse "[#uuid \"x\"]"
-     = Wire.Array [ Wire.Symbol "#uuid"; Wire.String "x" ]);
+     = Wire.Array [ Wire.Uuid "x" ]);
+  List.iter (fun value ->
+    check "EDN backup type round trip" (Edn.parse (Edn.to_string value) = value))
+    [ Wire.Map []; Wire.Uuid "audit-id"; Wire.Date_ms 99L;
+      Wire.Tagged ("audit/value", Wire.Array []);
+      Wire.Map [Wire.kw "block/uuid", Wire.Uuid "audit-id";
+        Wire.kw "block/created-at", Wire.Date_ms 1795056453000L] ];
+  List.iter (fun source ->
+    check "EDN rejects invalid tagged values"
+      (try ignore (Edn.parse source); false with Edn.Parse_error _ -> true))
+    ["#uuid nil"; "#inst \"not a date\""];
   (* string escapes, both directions *)
   let s = "a\"b\\c\nd\te" in
   check "string escapes decode"
@@ -602,18 +617,15 @@ let test_edn2 () =
   eqs "print uuid" "#uuid \"u-1\"" (Edn.to_string (Wire.Uuid "u-1"));
   eqs "print tagged" "#x 1"
     (Edn.to_string (Wire.Tagged ("x", Wire.Int 1)));
-  eqs "print inst" "#inst 99" (Edn.to_string (Wire.Date_ms 99L));
+  eqs "print inst" "#inst \"1970-01-01T00:00:00.099Z\"" (Edn.to_string (Wire.Date_ms 99L));
   eqs "print set" "#{1 2}"
     (Edn.to_string (Wire.Set [ Wire.Int 1; Wire.Int 2 ]));
   eqs "print list" "(1 :a)"
     (Edn.to_string (Wire.List [ Wire.Int 1; Wire.kw "a" ]));
   eqs "print int64" "42" (Edn.to_string (Wire.Int64 42L));
   eqs "print float" "2.5" (Edn.to_string (Wire.Float 2.5));
-  (* odd trailing key in a map literal is dropped *)
-  (match Edn.parse "{:a 1 :dangling}" with
-   | Wire.Map kvs -> check "odd map drops trailing key"
-                       (List.length kvs = 1)
-   | _ -> check "odd map drops trailing key" false)
+  check "EDN rejects odd map"
+    (try ignore (Edn.parse "{:a 1 :dangling}"); false with Edn.Parse_error _ -> true)
 
 (* ---- Fuzzy ---- *)
 
@@ -1723,14 +1735,11 @@ let test_cmdk_groups () =
       (Cmdk_state.group_order v q rows total)
   in
   let v = Cmdk_state.initial_view in
-  (* cljs :default refresh only fires on an input change, so a fresh-open
-     blank palette shows recents alone; the filters group appears once
-     the input has been edited *)
   check "blank input order"
     (gids v "" [] 0 = [ Cmdk_state.G_recently_updated ]);
   check "blank input order after edit"
     (gids { v with Cmdk_state.edited = true } "" [] 0
-     = [ Cmdk_state.G_recently_updated; Cmdk_state.G_filters ]);
+     = [ Cmdk_state.G_recently_updated ]);
   check "query order"
     (gids v "abc" [] 0
      = [ Cmdk_state.G_nodes
@@ -3140,6 +3149,17 @@ let test_popups_state () =
 
 (* ---- editor_actions pure helpers ---- *)
 
+let test_calc_variables () =
+  check "Calculator assignments and named functions share one block environment"
+    (Render_calc.results "a = 10\na*2\nsqrt(9)" = ["10"; "20"; "3"]);
+  check "An empty calculator retains its empty line" (Render_calc.results "" = [""]);
+  check "Calculator bindings do not leak to a fresh block"
+    (Render_calc.results "a" = ["?"])
+
+let test_calc_error_lines () =
+  check "Calculator errors preserve subsequent result positions"
+    (Render_calc.results "1/0\nbad(\n2+2\n" = ["Infinity"; "?"; "4"])
+
 let test_editor_actions () =
   let b = block ~children:[ block "c1" "C1"; block "c2" "C2" ] "b" "B" in
   (match Editor_actions.move_children_ops b "tgt" with
@@ -3457,6 +3477,25 @@ let test_sidebar_recents () =
 let test_sidebar_state () =
   let p = page [ block "b" "B" ] in
   let it = Sidebar_state.item_of_page p in
+  let other = { it with Sidebar_state.key = "second"; title = "Second" } in
+  let snapshot = Sidebar_state.right_sidebar_snapshot ~previous:Wire.Nil
+      ~repo:"graph" ~open_:true [it; other] in
+  check "sidebar state survives its storage round trip"
+    (Edn.parse (Edn.to_string snapshot) = snapshot);
+  let unchanged = Sidebar_state.right_sidebar_snapshot ~previous:snapshot
+      ~repo:"graph" ~open_:false [{ other with collapsed = true }; it] in
+  check "sidebar open state persists without reorder or collapse"
+    (Wire.get unchanged "open?" = Some (Wire.Bool false)
+     && Wire.get unchanged "items" = Wire.get snapshot "items");
+  check "closing all sidebar items persists empty membership"
+    (Sidebar_state.saved_sidebar_items
+      (Sidebar_state.right_sidebar_snapshot ~previous:snapshot
+        ~repo:"graph" ~open_:false []) = []);
+  check "a different graph cannot reuse saved sidebar membership"
+    (Sidebar_state.saved_sidebar_items
+      (Sidebar_state.right_sidebar_snapshot ~previous:snapshot
+        ~repo:"other" ~open_:true [other]) <>
+      Sidebar_state.saved_sidebar_items snapshot);
   check "item_of_page"
     (it.Sidebar_state.key = "page-p" && it.kind = "page"
     && it.title = "p" && it.page_ref = Some "p"
@@ -3579,7 +3618,7 @@ let test_boot () =
 let test_update3 () =
   let keyed k =
     { Model.toast_id = 0; toast_text = "t"; toast_kind = "info"
-    ; toast_key = k; toast_code = None }
+    ; toast_key = k; toast_code = None; toast_duration = None }
   in
   let m =
     Update.update Model.initial (Action.Toast_push (keyed (Some "k1")))
@@ -4894,6 +4933,8 @@ let () =
   test_views_table ();
   test_popups_state ();
   test_editor_actions ();
+  test_calc_variables ();
+  test_calc_error_lines ();
   test_update2 ();
   test_decode_rtc ();
   test_properties_data ();

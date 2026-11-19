@@ -269,7 +269,11 @@ let query_setting_el inst : t =
 let query_builder_header inst (s : V.vstate) : t =
   let builder =
     match Views_query.parse_src_result s.V.qsrc with
-    | Error _ | Ok (Views_query.QDatalog _) -> []
+    | Error _ -> []
+    | Ok (Views_query.QDatalog query) ->
+        [text ~font_weight:500
+           ~value:(Option.value (W.map_get_string query "title")
+             ~default:(I.t "block/untitled-query")) []]
     | Ok _ ->
         if s.V.is_advanced then []
         else [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ]
@@ -791,6 +795,7 @@ let ensure_default_view inst =
       owner_uuid inst ~on_error (function
         | _ when not (current ()) -> ()
         | Some ouuid ->
+            let create () =
             let uuid =
               Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
             in
@@ -810,6 +815,19 @@ let ensure_default_view inst =
                               refresh inst)) ()
               | None ->
                   V.update inst (fun s -> { s with V.loading = false }))
+            in
+            if inst.V.kind = V.KLinkedRefs then
+              let key = Db.key_ref_count ouuid in
+              Db.snapshots ~on_error [Db.res key] ~f:(fun snap ->
+                if current () then
+                  match Db.snapshot_value snap key with
+                  | Some (W.Int count) when count > 0 -> create ()
+                  | Some (W.Int 0) ->
+                      V.update inst (fun s -> {s with V.loading=false; items_count=0;
+                        data=Wr.VGroupedList []; view_error=None});
+                      kick_page_extras inst
+                  | _ -> invalid_arg "Missing linked-reference count before default view creation")
+            else create ()
         | None -> V.update inst (fun s -> { s with V.loading = false }))
 
 (* ---------- actions ---------- *)
@@ -850,7 +868,7 @@ let export_edn inst =
      Runtime.send
        (A.Toast_push
           { M.toast_id = 0; toast_key = None; toast_text = (I.t "export/view-nodes-data-copied")
-          ; toast_kind = "success"; toast_code = None });
+          ; toast_kind = "success"; toast_code = None; toast_duration = None });
      Ui_task.resolve ()))
 
 (* Next reference window. A worker that ignored row-limit left every

@@ -657,7 +657,8 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
   let kept = List.filter keep titles in
   Js.Promise.resolve
     { page with
-      Model.page_tags =
+      Model.page_icon = Node_icon.own w
+    ; page_tags =
         List.map (fun (_, (t, _, _, _, _)) -> t) kept
     ; page_tag_idents =
         List.map (fun (_, (_, ident, _, _, _)) -> ident) kept

@@ -172,7 +172,7 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
       | Some ic ->
           [ row ~key:"ic" ~style_class:"ls-ac-ic" ~cross:`center ~gap:4
               ~min_width:0
-              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~point_size:14
+              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~point_size:18
                   ~style_class:"ui__icon" []
               ; text ~key:"s" ~value:txt [] ] ]
       (* no-icon commands render the label as a bare text node *)
@@ -370,8 +370,8 @@ let ac_inner (st : S.t) : t =
                 box ~key:("grp" ^ g.g_key)
                   (text ~key:"ghdr"
                      ~style_class:"ui__ac-group-name" ~padding_horizontal:8
-                     ~padding_vertical:4
-                     ~font_size:"0.75rem" ~font_weight:500
+                     ~padding_vertical:8
+                     ~font_size:"0.75rem" ~line_height:"1rem" ~font_weight:500
                      ~foreground:"hsl(var(--popover-foreground) / 0.2)"
                      ~value:(Option.value ~default:"" g.g_hdr)
                      []
@@ -414,7 +414,9 @@ let ac_popover (st : S.t) : t =
      an inner box because the overlay CSS keys
      [data-editor-popup-ref]/[data-side] on that class, and ~data_attrs
      land on the positioner *)
-  (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+  (Ui_components.with_props [ Ui_components.card_shadow ]
+   (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+     ~background:"transparent" ~border_width:0 ~padding:0 ~corner_radius:6
      ~at_signal:
        (Logseq_el.own context
           (Signal.map
@@ -486,7 +488,8 @@ let ac_popover (st : S.t) : t =
                                | None -> "") ) ]
                       | None -> [])
                     vs))
-            ~padding:6
+            ~padding:6 ~border_width:1 ~border_color:"hsl(var(--border))"
+            ~background:"hsl(var(--popover))" ~corner_radius:6
             [ ac_inner st
             ; (* cljs page-search-aux: mod+enter hint under the tag list *)
               if_
@@ -524,7 +527,7 @@ let ac_popover (st : S.t) : t =
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
             ]))
-     ])
+     ]))
     context parent
 ;;
 
@@ -546,7 +549,7 @@ let cm_item_attrs key attrs v =
   :: (if highlighted then ("data-highlighted", "") :: attrs else attrs)
 
 let cm_item_background key v =
-  if cm_highlighted key v then "var(--lx-gray-05, hsl(var(--muted)))"
+  if cm_highlighted key v then "hsl(var(--muted))"
   else "transparent"
 
 let cm_item_id ~sub idx = function
@@ -605,11 +608,11 @@ let cm_color_row (st : S.t) : t =
       ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t "ui/remove-background")
       ~on_press:(fun _ -> run_cm_color st "")
-      [ box ~key:"bg" ~style_class:"heading-bg remove" ~width:18
+      [ row ~key:"bg" ~style_class:"heading-bg remove" ~width:18
           ~height:18 ~corner_radius:9999 ~main:`center ~cross:`center
           ~border_width:1
           ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
-          [ text ~key:"t" ~value:"-" ~font_size:"10px" ~line_height:"1"
+          [ text ~key:"t" ~value:"-" ~font_size:"inherit" ~line_height:"1"
               [] ] ]
   in
   row ~key:"colors" ~style_class:"ls-cm-colors" ~main:`space_between
@@ -922,7 +925,7 @@ let cm_popover (st : S.t) : t =
   let vs = (Signal.value (st.S.vs)) in
   (Ui_parts.class_signal vs
      (fun (v : S.view) ->
-       "ls-context-menu-content ls-anchor-cx"
+       "ui__dropdown-menu-content ls-context-menu-content ls-anchor-cx"
        ^
        (match v.S.cm with
         | Some m ->
@@ -939,14 +942,10 @@ let cm_popover (st : S.t) : t =
               ~accessibility_identifier:"block-context-menu"
               ~on_appear:(fun _ ->
                 match (S.get st).S.cm with
-                | Some cm when not (Ui_services.env_component_menus ()) ->
+                | Some _ when not (Ui_services.env_component_menus ()) ->
                     Option.iter
-                      (fun (idx, item) -> focus_cm_item st ~sub:false idx item)
-                      (List.find_mapi
-                         (fun idx -> function
-                           | (S.Ci_item _ | S.Ci_sub _) as item -> Some (idx, item)
-                           | _ -> None)
-                         cm.S.entries)
+                      (fun menu -> menu.Ui_services.focus ())
+                      (Ui_services.dom_query ".ls-context-menu-content")
                 | _ -> ())
               ~at_signal:
           (Logseq_el.own context
@@ -1351,7 +1350,20 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               | None -> ())
           | _ -> ())
       | None ->
-      if el.Ui_services.closest ".ls-page-title" <> None then ()
+      if el.Ui_services.closest ".ls-page-title-context" <> None then (
+        let title = Option.get (el.Ui_services.closest ".ls-page-title-context") in
+        let uuid = title.Ui_services.attr "data-page-uuid" in
+        let model = Runtime.model () in
+        match List.find_opt (fun (page : Model.page) -> page.page_uuid = uuid)
+          (Option.to_list model.route_page @ model.journals) with
+        | Some page ->
+            ev.Ui_services.prevent_default ();
+            ev.Ui_services.stop_propagation ();
+            let ax, atop, abot = S.anchor_of_ev ev el in
+            Runtime.send (Action.Page_menu_set
+              (Some (ax, atop, abot, false, page.page_uuid)));
+            Runtime.flush ()
+        | None -> ())
       else
       (* cljs app-context-menu-observer: the block menu only opens from
          .bullet-container[data-blockid] (or a :block/link row's

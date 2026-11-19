@@ -238,6 +238,7 @@ type toast =
   ; toast_code : toast_code option
   ; toast_kind : string (* "success" | "error" | "warning" | ... *)
   ; toast_key : string option (* sdk show_msg key — close_msg targets it *)
+  ; toast_duration : int option
   }
 
 type journals_status = Journal_pending | Journal_loaded | Journal_failed
@@ -264,6 +265,7 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
+  ; title_edit_click : (float * float) option
   ; page_menu
       : (float * float * float * bool * string option) option
         (* anchor cx/top/bottom, with_app_items, page uuid *)
@@ -313,6 +315,7 @@ let initial =
        | _ -> false)
   ; right_sidebar_open = false
   ; editing_title = false
+  ; title_edit_click = None
   ; page_menu = None
   ; appearance = false
   ; confirm = None

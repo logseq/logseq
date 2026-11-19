@@ -378,7 +378,9 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
       (fun ~repo ~uuids ->
         if Runtime.repo () = repo then Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids)
   ; toggle_left_sidebar = (fun () -> Runtime.send Action.Toggle_left_sidebar)
-  ; toggle_right_sidebar = (fun () -> Runtime.send Action.Toggle_right_sidebar)
+  ; toggle_right_sidebar = (fun () ->
+      Runtime.send Action.Toggle_right_sidebar;
+      Option.iter Sidebar_state.ensure_contents !Sidebar_state.st_ref)
   ; toggle_help = (fun () -> Runtime.send Action.Help_toggle)
   ; rtc_start = Rtc_ops.start
   ; rtc_stop = Rtc_ops.stop

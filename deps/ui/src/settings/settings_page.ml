@@ -734,7 +734,12 @@ let keymap_key_control ?editing st =
         (keymap_recorder st);
     ]
 
-let keymap_controls ?editing st =
+let keymap_escape st =
+  let current = Runtime.signal_get st in
+  if String.trim current.km_query = "" then Ui_services.dom_focus_body ()
+  else Runtime.signal_set st { current with km_query = "" }
+
+let keymap_controls ?editing ?identifier ?on_appear ?search_identifier st =
   let categories =
     List.filter_map
       (function Keymap_data.Category title -> Some title | _ -> None)
@@ -748,6 +753,7 @@ let keymap_controls ?editing st =
     ; Ui_components.Prop.padding_bottom 5
     ]
   (column ~key:"km-ctl" ~style_class:"cp__shortcut-page-x-pane-controls" ~gap:8
+    ?accessibility_identifier:identifier ?on_appear
     ~padding_horizontal:16
     ~background:"hsl(var(--background))"
     [
@@ -762,6 +768,7 @@ let keymap_controls ?editing st =
                 ~text_signal:(reactive (fun s -> s.km_query) (Signal.value st))
                 ~clear_label:(I18n.t "keymap/clear-search")
                 ~on_clear:S.focus_keymap_search
+                ?input_identifier:search_identifier
                 ~on_text:(fun query ->
                   Runtime.signal_set st
                     {
@@ -1018,6 +1025,19 @@ let keymap_row st editing ~key (r : Keymap_data.row) =
 
 let keymap_pane ?state ?(embedded=false) () : t =
  fun context parent ->
+  let viewport = Ui_services.viewport_height_signal
+      ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.ui_scope in
+  let width = Ui_services.viewport_width_signal
+      ~scheduler:context.ui_scheduler ~scope:context.ui_scope in
+  let header_height = Signal.state context.ui_scheduler 120. in
+  let identifier = "keymap-controls-" ^ Ui_services.env_random_uuid () in
+  let measure_header () =
+    Ui_effect.task ~scope:context.ui_scope (Ui_services.dom_measure_rect identifier)
+      ~ok:(fun (_, _, _, height) ->
+        if height > 0. then Runtime.signal_set header_height height)
+      ~error:(fun error -> Ui_services.log_error ("Shortcut header measurement failed", error)) in
+  let subscription = Signal.subscribe ~emit_initial:false width (fun _ -> measure_header ()) in
+  Signal.on_dispose context.ui_scope (fun () -> Signal.dispose_subscription subscription);
   Keymap_data.reload_shortcuts ();
   let st =
     match state with
@@ -1025,6 +1045,17 @@ let keymap_pane ?state ?(embedded=false) () : t =
     | None -> Signal.state context.Lui_ui.ui_scheduler (initial_keymap ())
   in
   let editing = Signal.state context.Lui_ui.ui_scheduler None in
+  let search_identifier = identifier ^ "-search" in
+  Ui_services.dom_subscribe_document_event ~scope:context.ui_scope ~capture:true
+    "keydown" (fun ev ->
+      if ev.Ui_services.key = Some "Escape" && not ev.composing
+         && not ev.default_prevented
+         && Option.fold ~none:false ~some:(fun target ->
+           target.Ui_services.closest ("#" ^ search_identifier) <> None) ev.target then begin
+        ev.prevent_default ();
+        ev.stop_immediate ();
+        keymap_escape st
+      end);
   Signal.set st { (Runtime.signal_get st) with km_recording = false;
     km_revision = Keymap_data.revision () };
   let rows model =
@@ -1063,11 +1094,17 @@ let keymap_pane ?state ?(embedded=false) () : t =
         ("", true, []) items
     in
     if items = [] then
-      column ~key:"km-empty" ~cross:`center ~gap:8 ~padding:24
+      Ui_components.with_props
+        [Ui_components.Prop.foreground "var(--lx-gray-09, var(--rx-gray-09))"]
+      (Ui_parts.int_prop Lui_protocol.MinHeight
+        ~value:(reactive (fun height header ->
+          max 0 (int_of_float ((height *. 0.6) -. header))) viewport (Signal.value header_height))
+      (column ~key:"km-empty" ~cross:`center ~main:`center ~gap:8
+        ~on_appear:(fun _ -> measure_header ())
         [
-          icon ~name:(`app "search") ~size:`lg [];
+          Icons.icon ~size:24. "list-search";
           text ~value:(I18n.t "keymap/no-matching-shortcuts") [];
-        ]
+        ]))
     else
       Ui_components.with_props [Ui_components.Prop.overflow `visible]
         (column ~key:"km-ul" ~style_class:"ls-plain-list"
@@ -1090,7 +1127,8 @@ let keymap_pane ?state ?(embedded=false) () : t =
      (column ~key:"pane-keymap" ~style_class:"cp__shortcut-page-x" ~grow:(if embedded then 0. else 1.)
         ~min_height:0
         [
-          keymap_controls ~editing st;
+          keymap_controls ~editing ~identifier ~search_identifier
+            ~on_appear:(fun _ -> measure_header ()) st;
           results_container
             [
               reactive

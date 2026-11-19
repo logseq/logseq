@@ -8,6 +8,18 @@
 open Lui_elements
 module S = Properties_state
 
+let value_hover_eligible property_type =
+  not (List.mem property_type ["default"; "url"; "number"; "string"; "date"; "datetime"])
+
+let with_value_hover ~property_type content =
+  if not (value_hover_eligible property_type) then content
+  else Ui_components.with_props
+    [ Ui_components.Prop.hover_background
+        "var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)))"
+    ; Ui_components.Prop.corner_radius 4
+    ; Ui_components.Prop.transition "background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1)" ]
+    content
+
 (* one view-overlay entry per mounted popup — the key is the removal
    handle callers get back (the imperative version returned its root
    el for the same purpose) *)
@@ -17,25 +29,49 @@ let next_key () =
   incr key_seq;
   "popup-" ^ string_of_int !key_seq
 
+let virtual_anchor_rect (x, y, _, height) =
+  let reference_width = 1. in
+  let arrow_padding = 5. in
+  let ratio = Ui_services.dom_device_pixel_ratio () in
+  let round value = Float.floor (value *. ratio +. 0.5) /. ratio in
+  let top = round y in
+  (* Base UI's zero-size fallback arrow still applies its padding. *)
+  round (x +. reference_width /. 2. -. arrow_padding), top,
+  reference_width, round (y +. (if height > 0. then height else 1.)) -. top
+
+let virtual_anchor_for_id identifier =
+  Option.bind (Ui_services.dom_by_id identifier) (fun anchor ->
+    if anchor.Ui_services.rect_pending () then None
+    else
+      let (_, _, width, height) as rect = anchor.Ui_services.rect () in
+      if width = 0. && height = 0. then None
+      else Some (virtual_anchor_rect rect))
+
 (* Wrap content in a positioned popover under the point (x, y). `cls`
    is the extra root class the e2e contract requires (e.g.
    "ui__popover-content", "ls-property-dropdown"). Returns the
    view-overlay key. *)
-let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?(right = false) ~x ~y (content : t) =
+let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?anchor_rect
+    ?anchor_offset:anchor_offset_override
+    ?anchor_alignment_offset:anchor_alignment_offset_override
+    ?(right = false) ~x ~y (content : t) =
   (* cap at the space left below the anchor so long menus scroll instead
      of overflowing the viewport (radix's available-height behaviour) *)
   let avail = Ui_services.dom_viewport_height () -. y -. 8. in
   let at, anchor_offset, anchor_alignment_offset =
-    match anchor_target with
-    | None -> Some (x, y), 0., 0.
-    | Some _ -> None, (if right then -4. else 4.), (if right then -4. else 0.)
+    match anchor_target, anchor_rect with
+    | None, None -> Some (x, y), 0., 0.
+    | _ ->
+        None,
+        Option.value anchor_offset_override ~default:(if right then -4. else 0.),
+        Option.value anchor_alignment_offset_override ~default:(if right then -4. else 0.)
   in
   let view =
     Ui_components.with_props
       [ Ui_components.card_shadow
       ; Ui_components.Prop.font_size "1rem"
       ; Ui_components.Prop.line_height "1.5" ]
-    (popover ~key ~role ?at ?anchor_target ~anchor:(if right then `right else `below)
+    (popover ~key ~role ?at ?anchor_target ?anchor_rect ~anchor:(if right then `right else `below)
       ~anchor_alignment:`start ~anchor_offset ~anchor_alignment_offset ~style_class:cls
       ?padding ~background:"hsl(var(--popover))"
       ~foreground:"hsl(var(--popover-foreground))"
@@ -72,7 +108,8 @@ let measure_anchor ~is_current (anchor : Ui_services.el) f =
   in
   go 4
 
-let open_from_anchor ?role ?(cls = "") ?padding ~right (anchor : Ui_services.el) content =
+let open_from_anchor ?role ?(cls = "") ?padding ?(freeze_anchor = false) ?anchor_offset
+    ?anchor_alignment_offset ~right (anchor : Ui_services.el) content =
   let key = next_key () in
   incr S.overlay_generation;
   let generation = !S.overlay_generation in
@@ -81,15 +118,34 @@ let open_from_anchor ?role ?(cls = "") ?padding ~right (anchor : Ui_services.el)
     | Some identifier when identifier <> "" -> Some identifier
     | _ -> None
   in
+  let anchor_offset =
+    Option.value anchor_offset ~default:(if right then -4. else 0.)
+  in
+  let anchor_alignment_offset =
+    Option.value anchor_alignment_offset ~default:(if right then -4. else 0.)
+  in
   (* Closing or superseding a pending popup must also retire its measurement. *)
   measure_anchor ~is_current:(fun () -> !S.overlay_generation = generation)
     anchor (fun x y w h ->
-      let x, y = if right then x +. w -. 4., y -. 4. else x, y +. h +. 4. in
-      open_at_key ~key ?role ~cls ?padding ?anchor_target ~right ~x ~y content);
+      let x, y, w, h =
+        if right then x, y, w, h else virtual_anchor_rect (x, y, w, h)
+      in
+      let anchor_rect = if freeze_anchor || not right then Some (x, y, w, h) else None in
+      let x, y =
+        if right then
+          x +. w +. anchor_alignment_offset, y +. anchor_offset
+        else
+          x +. anchor_alignment_offset, y +. h +. anchor_offset
+      in
+      open_at_key ~key ?role ~cls ?padding
+        ?anchor_target:(if freeze_anchor || not right then None else anchor_target) ?anchor_rect ~anchor_offset
+        ~anchor_alignment_offset ~right ~x ~y content);
   key
 
-let open_anchored ?role ?cls ?padding anchor content =
-  open_from_anchor ?role ?cls ?padding ~right:false anchor content
+let open_anchored ?role ?cls ?padding ?freeze_anchor ?anchor_offset ?anchor_alignment_offset
+    anchor content =
+  open_from_anchor ?role ?cls ?padding ?freeze_anchor ?anchor_offset ?anchor_alignment_offset
+    ~right:false anchor content
 
 (* submenu positioning: at the anchor's right edge, top-aligned
    (base-ui dropdown-menu-sub-content placement inline-end) *)

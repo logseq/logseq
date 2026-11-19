@@ -3,6 +3,8 @@
    (previously the web fetched it as a lazy chunk while the native copy
    generated its own table). *)
 
+let inventory_count = Array.length Icon_names_data.items
+
 (* Package helper exports have no registry name and cannot be selected. *)
 let items : (string * string) array =
   Icon_names_data.items |> Array.to_seq

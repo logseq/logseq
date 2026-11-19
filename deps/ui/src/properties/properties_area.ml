@@ -192,10 +192,10 @@ let value_cell ~(hover : bool Signal.state option) ctx row : t =
     ~transition:Ui_components.block_transition
     ~padding_vertical:0
     ((if show_panel_bullet row then
-        [ Lui_elements.row ~key:"vpb" ~cross:`center ~margin_left:7 ~margin_right:(-7)
+        [ Lui_elements.row ~key:"vpb" ~cross:`center ~margin_left:2
             ~style_class:"property-panel-bullet"
             ~min_height:24 ~opacity:0.6
-            [ Lui_elements.row ~width:18 ~height:24 ~main:`center ~cross:`center
+            [ Lui_elements.row ~width:16 ~height:24 ~main:`center ~cross:`center
                 ~style_class:"bullet-container"
                 [ Ui_components.block_bullet ~font_size:14. () ]
             ]
@@ -210,7 +210,8 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title ?(reorder_rows = []) row 
      the whole property-pair, so the hover signal lives at row level
      and value cells read it through [view ?hover] *)
   let hover = Signal.state sched false in
-  (Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0 ~min_width:0
+  (Ui_components.with_props [Ui_components.Prop.padding_right 12]
+   (Lui_elements.row ~gap:12 ~cross:`start ~grow:1.0 ~min_width:0
     ~style_class:
       ("property-pair property-panel-row"
       ^ (if D.value_empty_p (D.row_value row) then
@@ -231,7 +232,7 @@ let panel_row (ctx : V.ctx) ~owner_is_tag ~owner_title ?(reorder_rows = []) row 
         ~style_class:"property-key-panel"
         [ key_cell ctx ~owner_is_tag ~owner_title ~reorder_rows row ]
     ; value_cell ~hover:(Some hover) ctx row
-    ])
+    ]))
     context parent
 
 (* hidden-properties toggle row — `p a` parity. Fresh element each
@@ -242,7 +243,8 @@ let toggle_row () : t =
       (if !S.show_hidden then "property/collapse-hidden-properties"
        else "property/show-hidden-properties")
   in
-  row ~gap:0 ~padding_horizontal:0 ~min_width:0
+  Ui_components.with_props [Ui_components.Prop.padding_right 12]
+  (row ~gap:0 ~padding_horizontal:0 ~min_width:0
     ~style_class:"property-pair property-panel-row hidden-properties-toggle-row"
     [ column ~min_width:80 ~max_width:200 ~style_class:"property-key-panel"
         ~main:`center ~min_height:28
@@ -258,7 +260,7 @@ let toggle_row () : t =
               S.refresh_all ())
             []
         ]
-    ]
+    ])
 
 (* split rows into block-left chips, block-below pills and panel rows *)
 let partition_rows rows =
@@ -484,7 +486,7 @@ let block_below_pills ~scope ~uuid : t =
 
 (* left chips: .positioned-properties.block-left inline in
    .block-main-content *)
-let block_left_chips ~scope ~uuid : t =
+let block_left_chips ?(page_title = false) ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
@@ -497,7 +499,7 @@ let block_left_chips ~scope ~uuid : t =
             Logseq_el.nothing
           else
             let ctx = block_ctx ~scope ~owner_key:(scope ^ ":left:" ^ key) uuid key in
-            row ~gap:4 ~cross:`center
+            row ~gap:4 ~cross:`center ~margin_top:(if page_title then 15 else 0)
               ~style_class:"positioned-properties block-left"
               (List.map
                  (fun r ->
@@ -509,7 +511,9 @@ let block_left_chips ~scope ~uuid : t =
                           block-row and crushes the title *)
                        Ui_components.with_props
                          [ Ui_components.Prop.grow 0. ]
-                         (V.view ~positioned:true ~hover:None ctx r) ])
+                         (V.view ~positioned:true
+                            ~positioned_icon_size:(if page_title then 24. else 18.)
+                            ~hover:None ctx r) ])
                  d.left))
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.left = b.left))
@@ -574,7 +578,7 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
      a 24px ghost text button, 12px text, 8px horizontal padding *)
   let add_btn ?a11y text on_press =
     Ui_components.with_props
-      [ Ui_components.Prop.font_size "12px" ]
+      [ Ui_components.Prop.font_size "12px"; Ui_components.Prop.line_height "16px" ]
       (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start
          ~style_class:"as-ghost" ~height:24 ~padding_horizontal:8
          ~padding_vertical:0
@@ -582,18 +586,13 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
          ?accessibility_identifier:a11y ~label:text ~text ~on_press [])
   in
   let node =
-    (* cljs .ls-page-title-actions: absolute, -top-5 (20px above the
-       title wrapper's top edge) — out of flow so it never shifts the
-       title text; the wrapper's relative position anchors it *)
     (Ui_components.with_props
        [ Ui_components.Prop.position `absolute
-       ; Ui_components.Prop.inset_top (-20.) ]
+       ; Ui_components.Prop.inset_top (-22.) ]
        (row ~key:"pta" ~accessibility_identifier:anchor_id
-       ~cross:`center ~gap:8
+       ~cross:`center ~gap:0
        ~style_class:"ls-page-title-actions"
-       ~opacity:(reactive
-                   (fun h -> if h then 1. else 0.)
-                   (Signal.value hover))
+       ~opacity:(reactive (fun h -> if h then 1. else 0.) (Signal.value hover))
        ~on_pointer_enter:(fun _ ->
          Signal.set hover true;
          Runtime.flush ())

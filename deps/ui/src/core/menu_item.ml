@@ -36,12 +36,15 @@ let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
     ?(after = []) ?(data_attrs = []) ?icon ?label ?label_signal
     ?disabled ?disabled_signal ?checked ?checked_signal ~on_click () =
   ignore attrs;
-  chrome
+  Ui_components.with_props
+    [Ui_components.Prop.focus_shadow
+      "inset 0 0 0 999px var(--lx-gray-05, hsl(var(--muted)))"]
+  (chrome
     (menu_item ~key ~style_class:cls ~data_attrs ?text:label ?text_signal:label_signal ?icon
        ?disabled ?disabled_signal ?checked ?checked_signal
        ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
        ~on_press:(fun _ -> on_click ())
-       (before @ after))
+       (before @ after)))
 
 (* retained-tree separator — the old lui-core rule carried height:1px,
    margin:0.25rem -0.25rem, background:hsl(var(--muted)); ls-property-
@@ -55,7 +58,7 @@ let separator ?(mv = 4) ?(mh = -4) ~key =
    dropdown-menu pairing used by the graphs rows and the collaborators
    member rows. [items] = (extra class, label, disabled, on_click); the
    dropdown anchors below the button (its previous sibling in the row). *)
-let dots_menu ~key ?(menu_cls = "") items : t =
+let dots_menu ~key ?(menu_cls = "") ?(compact = false) items : t =
  fun ctx parent ->
   let open_ = Signal.state ctx.Lui_ui.ui_scheduler false in
   let close () = Runtime.signal_set open_ false in
@@ -68,16 +71,19 @@ let dots_menu ~key ?(menu_cls = "") items : t =
         on_click ())
       [])
   in
-  row ~key
-    [ Ui_components.button ~key:(key ^ "-btn") ~variant:`ghost ~size:`icon
-        ~icon:(Icons.name_ref "dots")
+  row ~key ?gap:(if compact then Some 0 else None)
+    [ Ui_components.button ~key:(key ^ "-btn") ~variant:`ghost
+        ~size:(if compact then `sm else `icon)
+        ?width:(if compact then Some 23 else None)
+        ?padding_horizontal:(if compact then Some 4 else None)
+        ?icon:(if compact then None else Some (Icons.name_ref "dots"))
         ~style_class:"graph-action-btn"
         ~label:(I18n.t "ui/more-actions")
         ~data_attrs:(reactive (fun expanded ->
             [ ("aria-haspopup", "menu")
             ; ("aria-expanded", string_of_bool expanded) ]) (Signal.value open_))
         ~on_press:(fun _ -> Runtime.signal_set open_ (not (Runtime.signal_get open_)))
-        []
+        (if compact then [Icons.icon ~size:15. "dots"] else [])
     ; if_ ~test:(Signal.value open_)
         (Ui_components.menu_card ~key:(key ^ "-dm") ~cls:menu_cls
            ~anchor:`below ~anchor_alignment:`end_

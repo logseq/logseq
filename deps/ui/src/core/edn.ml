@@ -92,6 +92,18 @@ exception Parse_error of string
 let rec parse_value s i =
   match read_token s i with
   | Some (TStr v), j -> (Wire.String v, j)
+  | Some (TAtom tag), j when String.starts_with ~prefix:"#" tag ->
+      let value, j = parse_value s j in
+      let tag = String.sub tag 1 (String.length tag - 1) in
+      let value = match tag, value with
+        | "uuid", Wire.String uuid -> Wire.Uuid uuid
+        | "inst", Wire.String date ->
+            (match Ui_services.time_parse date with
+             | Some ms when Float.is_finite ms -> Wire.Date_ms (Int64.of_float ms)
+             | _ -> raise (Parse_error "Invalid #inst literal"))
+        | ("uuid" | "inst"), _ -> raise (Parse_error ("Invalid #" ^ tag ^ " literal"))
+        | _ -> Wire.Tagged (tag, value) in
+      value, j
   | Some (TAtom a), j -> (atom_to_wire a, j)
   | Some (TOpen c), j -> parse_collection s j c
   | Some TDiscard, j ->
@@ -121,7 +133,8 @@ and parse_collection s j open_c =
   | '{' -> (
       let rec pairs acc = function
         | k :: v :: rest -> pairs ((k, v) :: acc) rest
-        | _ -> acc
+        | [] -> acc
+        | [_] -> raise (Parse_error "Map requires an even number of forms")
       in
       (Wire.Map (List.rev (pairs [] elems)), j'))
   | '[' -> (Wire.Array elems, j')
@@ -158,7 +171,8 @@ let rec write b (w : Wire.t) =
       write b v
   | Wire.Uuid s -> Buffer.add_string b ("#uuid \"" ^ s ^ "\"")
   | Wire.Date_ms ms ->
-      Buffer.add_string b (Printf.sprintf "#inst %Ld" ms)
+      Buffer.add_string b "#inst ";
+      write b (Wire.String (Js.Date.toISOString (Js.Date.fromFloat (Int64.to_float ms))))
   | _ -> Buffer.add_string b "nil"
 
 and write_seq b o xs c =

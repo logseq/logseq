@@ -182,7 +182,10 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let get () = Runtime.signal_get st in
   let update f = Runtime.signal_set st (f (get ())) in
 
+  let chosen = ref false in
   let choose c =
+    if not !alive || !chosen then () else (
+    chosen := true;
     close ();
     (match c with
      | Emoji id ->
@@ -203,7 +206,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          in
          add_used_item ("tabler-icon", id, display)
      | Remove -> ());
-    on_chosen c
+    on_chosen c)
   in
 
   let item_btn (it : item) : t =
@@ -267,7 +270,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   (* Keep item data in the source, and construct cells only for the live
      viewport. Leaving rows release their scopes, tooltips and DOM nodes. *)
   let section label items =
-    (`Heading label) :: List.map (fun items -> `Cells items) (chunks 9 items)
+    [label, chunks 9 items]
   in
   let used_item_data () =
     used_items ()
@@ -284,13 +287,15 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   in
   let render_row = function
     | `Heading label ->
-      row ~height:44 ~padding_horizontal:8 ~cross:`center
+      Ui_components.with_props
+        [Ui_components.Prop.line_height "16px"; Ui_components.Prop.padding_bottom 4]
+      (box ~height:22 ~min_height:22 ~margin_left:8 ~padding_horizontal:4 ~style_class:"hd"
         [text ~as_:`Strong ~style_class:"ls-ep-section-title" ~value:label
-          ~font_size:"0.75rem" ~font_weight:500
-          ~foreground:"hsl(var(--muted-foreground))" []]
+          ~font_size:"0.75rem" ~line_height:"16px" ~font_weight:500
+          ~foreground:"var(--lx-gray-07, var(--ls-quaternary-background-color, var(--rx-gray-07)))" []])
     | `Cells items ->
-      grid ~columns:9 ~gap:0 ~height:44 ~min_width:0
-        ~padding_horizontal:8 ~padding_vertical:4 (List.map item_btn items)
+      row ~gap:4 ~height:36 ~min_width:0
+        ~padding_horizontal:8 (List.map item_btn items)
   in
 
   let set_tab t =
@@ -345,14 +350,16 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
           used_section (used_item_data ())
           @ section (I.tf "icon/emojis-count" [string_of_int (Emoji_mart.emoji_count ())])
               (emoji_items (take 32 (Emoji_mart.all_emojis ())))
-          @ section (I.tf "icon/icons-count" [string_of_int (Array.length Icon_picker_names.items)])
+          @ section (I.tf "icon/icons-count" [string_of_int Icon_picker_names.inventory_count])
               (tabler_items (take 48 (icon_items ())))
         | Tab_emoji ->
-          used_section (List.filter (function Emoji_item _ -> true | _ -> false) (used_item_data ()))
+          (if emoji_only then
+             used_section (List.filter (function Emoji_item _ -> true | _ -> false) (used_item_data ()))
+           else [])
           @ section (I.tf "icon/emojis-count" [string_of_int (Emoji_mart.emoji_count ())])
               (emoji_items (Emoji_mart.all_emojis ()))
         | Tab_icon ->
-          section (I.tf "icon/icons-count" [string_of_int (Array.length Icon_picker_names.items)])
+          section (I.tf "icon/icons-count" [string_of_int Icon_picker_names.inventory_count])
             (tabler_items (icon_items ()))
       else
         let icons = if s.tab = Tab_emoji then [] else tabler_items (search_icons s.q) in
@@ -360,13 +367,36 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
         if items = [] then []
         else section (I.tf "icon/matched-count" [string_of_int (List.length items)]) items
     in
-    let source = Signal.constant sched (List.mapi (fun index row -> index, row) rows) in
-    virtual_list ~key:("bd-" ^ tab_name s.tab ^ "-" ^ s.q)
-      ~style_class:("bd " ^ tab_name s.tab) ~grow:1. ~min_height:0
-      ~padding_horizontal:4 ~padding_vertical:4 ~item_extent:44. ~overscan:2
-      [virtual_rows ~source ~key:fst ~cmp:Int.compare
-        ~mount:(fun row -> box ~height:44 ~min_width:0
-          [reactive (fun (_, value) -> render_row value) row]) ()]
+    let static_section (label, rows) =
+      [render_row (`Heading label);
+       column ~gap:4 ~padding_vertical:4
+         (List.map (fun items -> render_row (`Cells items)) rows)]
+    in
+    let content =
+      if s.tab = Tab_all && String.trim s.q = "" then
+        scroll ~grow:1. ~min_height:0 ~padding:0
+          [column ~gap:0 (List.concat_map static_section rows)]
+      else
+        match List.rev rows with
+        | [] -> column ~grow:1. []
+        | (label, items) :: prefix ->
+            let source = Signal.constant sched (List.mapi (fun index row -> index, row) items) in
+            column ~grow:1. ~min_height:0 ~gap:0
+              (List.concat_map (fun section -> static_section section @ [box ~height:4 []]) (List.rev prefix)
+               @ [render_row (`Heading label);
+                  virtual_list ~key:("items-" ^ tab_name s.tab ^ "-" ^ s.q)
+                    ~grow:1. ~min_height:0 ~padding:0 ~gap:0 ~item_extent:44. ~overscan:2
+                    [virtual_rows ~source ~key:fst ~cmp:Int.compare
+                      ~mount:(fun row -> box ~height:44 ~padding_vertical:4
+                        [reactive (fun (_, items) -> render_row (`Cells items)) row]) ()]])
+    in
+    Ui_components.with_props
+      [Ui_components.Prop.padding_top 96; Ui_components.Prop.padding_bottom 4;
+       Ui_components.Prop.padding_horizontal 0]
+      (column ~key:("bd-" ^ tab_name s.tab ^ "-" ^ s.q)
+         ~style_class:("bd " ^ tab_name s.tab) ~grow:1. ~min_height:0
+         ~background:"transparent"
+         [content])
   in
 
   let tabs =
@@ -376,47 +406,41 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       ; (Tab_icon, I.t "icon/tab-icons") ]
   in
 
-  (Ui_components.with_props
+  (Ui_parts.int_prop Lui_protocol.HeightValue
+     ~value:(reactive (fun s -> if s.tab = Tab_all || emoji_only then 408 else 400) sv)
+   (Ui_components.with_props
      [ Ui_components.Prop.position `relative
      ; Ui_components.Prop.max_width_viewport 1.
      ; Ui_components.Prop.max_height_viewport 1.
      ; Ui_components.Prop.overflow `hidden ]
-     (* fixed height: the picker is a shrink-to-fit popover and the
-       scroll body contributes no intrinsic height — without an explicit
-       height the layer collapses to header+footer chrome. Web clamps
-       the always-tall icon grid to the same 408px cap anyway. *)
     (column ~style_class:"cp__emoji-icon-picker"
-        ~width:380 ~height:408
+        ~width:380
         ~data_attrs:[ ("data-keep-selection", "true") ]
-        [ row ~key:"ft" ~cross:`center ~padding:12 ~height:40
+        [ Ui_components.with_props
+            [Ui_components.Prop.position `absolute; Ui_components.Prop.inset_top (-1.);
+             Ui_components.Prop.inset_left 0.; Ui_components.Prop.inset_right 0.]
+          (row ~key:"ft" ~cross:`center ~padding:12 ~height:40
             ~background:
               "var(--lx-gray-02, var(--ls-secondary-background-color, \
-                hsl(var(--popover))))"
+                var(--rx-gray-02)))"
             ~data_attrs:
               [ ( "style"
                 , "box-sizing: border-box; border-top: 1px solid \
                    var(--lx-gray-05, var(--ls-border-color, \
                    hsl(var(--border))))" ) ]
-            ([ box ~key:"tabs" ~grow:1.
-                 [ Ui_components.with_props
-                     [ Ui_components.Prop.corner_radius 8 ]
-                     (row ~gap:2 ~padding:2
-                        ~background:
-                          "var(--lx-gray-03, var(--ls-tertiary-background-color, \
-                           hsl(var(--muted))))"
+            ([ row ~key:"tabs" ~grow:1. ~cross:`center ~gap:8
                         (List.map
                            (fun (t, label) ->
-                             Ui_components.chip_toggle ~key:("tab-" ^ tab_name t)
-                               ~radius:6 ~pad_v:4 ~pad_h:12
-                               ~font_size:"0.8125rem" ~off_opacity:0.55
-                               ~on_border:false
-                               ~on_background:
-                                 "var(--lx-gray-01, var(--ls-primary-background-color, \
-                                  hsl(var(--popover))))"
-                               ~text:label
-                               ~checked_signal:(reactive (fun s -> s.tab = t) sv)
-                               ~on_toggle:(fun _ -> set_tab t) ())
-                           tabs)) ] ]
+                             Ui_parts.class_signal sv (fun s ->
+                               if s.tab = t then "active tab-item" else "tab-item")
+                               (Ui_components.with_props
+                                  [ Ui_components.Prop.opacity 1.
+                                  ; Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)"
+                                  ; Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" ]
+                                  (Ui_components.button ~key:("tab-" ^ tab_name t)
+                                     ~variant:`ghost ~size:`sm ~corner_radius:4
+                                     ~text:label ~label ~on_press:(fun _ -> set_tab t) [])))
+                           tabs) ]
           (* cljs hides the color picker on the emoji tab *)
           @
           [ if_
@@ -451,8 +475,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ~label:(I.t "ui/delete")
                  ~on_press:(fun _ -> choose Remove)
                  [ icon_el ~size:17. (Node_icon.tabler "trash") ] ]
-           else []))
-     ; box ~key:"hd" ~background:"hsl(var(--popover))"
+           else [])))
+     ; Ui_components.with_props
+         [Ui_components.Prop.position `absolute; Ui_components.Prop.inset_top 38.;
+          Ui_components.Prop.inset_left 0.; Ui_components.Prop.inset_right 0.;
+          Ui_components.Prop.padding_top 10]
+       (box ~key:"hd" ~background:"hsl(var(--popover))"
          ~padding_horizontal:12 ~padding_vertical:4
          [ reactive
              ~equal:(fun (a : pstate) b ->
@@ -461,10 +489,17 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                 Ui_components.search_row
                   ~key:
                     ("sr-" ^ tab_name s.tab ^ "-" ^ string_of_int s.reset)
-                  ~height:32 ~pad_left:32 ~borderless:true ~autofocus:true
+                  ~height:32 ~font_size:"14px" ~line_height:"1" ~pad_left:32 ~borderless:true ~autofocus:true
+                  ~on_appear:(fun _ ->
+                    ignore (Ui_services.timers_timeout (fun () ->
+                      if !alive && (get ()).reset = s.reset then
+                        Option.iter (fun input -> input.Ui_services.focus ())
+                          (Ui_services.dom_query ".cp__emoji-icon-picker input")) 0))
                   ~background:
-                    "var(--lx-gray-03, var(--ls-tertiary-background-color, \
-                     hsl(var(--muted))))"
+                    "var(--lx-gray-03, var(--ls-tertiary-background-color, var(--rx-gray-03)))"
+                  ~focus_background:
+                    "var(--lx-gray-02, var(--ls-secondary-background-color, var(--rx-gray-02)))"
+                  ~focus_shadow:"0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))"
                   ~placeholder:(placeholder_of s.tab)
                   ~text_signal:(reactive (fun s -> s.q) sv)
                   ~on_text:on_input
@@ -473,12 +508,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                     Option.iter (fun input -> input.Ui_services.focus ())
                       (Ui_services.dom_query ".cp__emoji-icon-picker input"))
                   ())
-             sv ]
+             sv ])
      ; reactive
          ~equal:(fun (a : pstate) b ->
            a.q = b.q && a.tab = b.tab && a.preset = b.preset
            && a.emoji_results = b.emoji_results)
-         content_view sv ]))
+         content_view sv ])))
     context parent
 ;;
 

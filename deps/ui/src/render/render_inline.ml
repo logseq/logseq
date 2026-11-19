@@ -96,15 +96,14 @@ let page_link ~(tag : bool) ?label ?uuid_sig name : t =
   in
   let cls = if tag then "tag" else "page-ref" in
   let fg =
-    if tag then "var(--lx-accent-11, var(--ls-tag-text-color))"
+    if tag then Ui_components.tag_link_foreground
     else "var(--lx-accent-11, var(--ls-link-text-color))"
   in
   let tag_style =
     if tag then
       [ ( "style"
-        , "font-size:0.875rem;line-height:1.42857;display:inline-flex;\
-           align-items:center;cursor:pointer;border-radius:4px;\
-           opacity:0.7" )
+        , "display:inline-flex;\
+           align-items:center;cursor:pointer;border-radius:4px" )
       ]
     else []
   in
@@ -115,7 +114,11 @@ let page_link ~(tag : bool) ?label ?uuid_sig name : t =
   in
   (* .page-ref:hover accent — typed channel, no stylesheet hook *)
   let hover =
-    if tag then (fun x -> x)
+    if tag then fun element ->
+      Ui_components.with_props
+        [ Ui_components.Prop.font_size "1rem"
+        ; Ui_components.Prop.line_height "1.42857" ]
+        (Ui_components.tag_link_appearance ~in_block:true element)
     else
       Ui_components.with_props
         [ ( Ui_components.Prop.hover_foreground
@@ -469,11 +472,14 @@ let block_ref uuid =
    (absolute-filled span) and collapses to 0x0 without explicit dims *)
 let image_el ~src ~alt =
   D.el ~tag:"div" ~style_class:"asset-container image normalize"
-    [ D.el ~tag:"img"
+    [ Ui_components.with_props
+        [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
+        (row ~corner_radius:4 ~cross:`start
+        [D.el ~tag:"img"
         ~attrs:
           [ ("src", src); ("alt", alt); ("loading", "lazy")
           ; ("referrerpolicy", "no-referrer") ]
-        [] ]
+        []]) ]
 
 (* cljs asset-link pdf branch: a ![alt](x.pdf) embed renders
    a.asset-ref.is-pdf whose click opens the in-app pdf viewer — an
@@ -1614,7 +1620,7 @@ and resolved_tag_ref ~refs ~self uuid : t =
     uuid_meta_state context uuid ~fallback:(plain_ref_meta uuid false false) ()
   in
   let title_sig = (Signal.value st) in
-  (Ui_components.with_props
+  (Ui_components.tag_link_appearance ~in_block:true (Ui_components.with_props
      [ Ui_components.Prop.position `relative ]
      (link ~url:"#" ~target:`self_ ~style_class:"tag"
     ~data_attrs:
@@ -1623,7 +1629,8 @@ and resolved_tag_ref ~refs ~self uuid : t =
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig) [] ]))
+    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig)
+        ~foreground:Ui_components.tag_link_foreground [] ])))
     context parent
 
 and macro_el ~refs ~self body =

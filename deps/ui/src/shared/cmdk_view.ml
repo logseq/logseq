@@ -371,9 +371,9 @@ let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
          ~data_attrs:(reactive attrs item_sig) content)
   else text ~key ~as_:`Span ~data_attrs:(reactive attrs item_sig) content
 
-let badge_el svs key =
-  Ui_components.cmdk_badge ~key
-    ~value:(svs.Svs.i18n "cmdk/current-page-badge")
+let badge_el ?(compact=false) svs key =
+  Ui_components.cmdk_badge ~key ~compact
+    ~value:(svs.Svs.i18n "cmdk/current-page-badge") ()
 
 (* -- item row -------------------------------------------------------- *)
 
@@ -422,8 +422,10 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
     | Some _ ->
         Some
           (Ui_components.cmdk_item_header ~key:"hdr"
-             [ hl_span ~single_line:true "hdr-hl" item_sig
-                 (fun it -> Option.value ~default:"" it.S.header)
+             [ text ~key:"hdr-text" ~font_weight:300 ~font_size:"12px" ~line_height:"16px"
+                 ~grow:1. ~min_width:0 ~white_space:"nowrap" ~text_overflow:"ellipsis"
+                 ~overflow:"hidden"
+                 ~value:(reactive (fun it -> Option.value ~default:"" it.S.header) item_sig) []
              ; if_
                  ~test:
                    (reactive
@@ -438,12 +440,21 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
     [ (* pressable: the delegated document click can't see inside the
          native tree — on_press routes row clicks to the item directly *)
       Ui_parts.pressable
-        ~on_press:(fun _ -> S.run_item st (Signal.get item_sig))
+        ~on_press:(fun _ ->
+          if (S.get st).open_ then S.run_item st (Signal.get item_sig))
         ((* state-channel signals bound on the item column: kb highlight
             paints the chosen-row tokens; a mouse hover paints the same
             bg plus the light ring (cleared in dark via the --lx-cmdk-*
             tokens) *)
          Ui_components.cmdk_item_row ~key:"item"
+           ~on_press_detail:(function
+             | Lui_protocol.PressDetail (_, detail) when (S.get st).open_ ->
+                 let item = Signal.get item_sig in
+                 if detail.modifiers land 2 <> 0 then begin
+                   S.set_hl st item.S.idx true;
+                   S.run_highlighted_sidebar st
+                 end else S.run_item st item
+             | _ -> ())
            ~data_attrs:(reactive row_data_attrs item_sig)
            ~background:
              (reactive
@@ -512,7 +523,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                                           it.S.ibadge = S.Text_badge)
                                         item_sig)
                                    (Ui_components.with_props [Ui_components.Prop.margin_left 4]
-                                      (badge_el svs "tb"))
+                                      (badge_el ~compact:true svs "tb"))
                                ; if_
                                    ~test:
                                      (reactive
@@ -818,7 +829,15 @@ let hints svs st : t =
           hint_variant a = hint_variant b)
         (action_hints svs st)
         (Signal.map
-           S.highlighted_item
+           (fun v ->
+             let selected = S.highlighted_item v in
+             match selected, S.flat_items v with
+             | Some { S.act = (S.Create_page _ | S.Create_tag _); _ }, items
+               when Array.length items > 0 ->
+                 (match items.(0).S.act with
+                  | S.Open_page _ | S.Open_block _ -> Some items.(0)
+                  | _ -> selected)
+             | _ -> selected)
            (Signal.value (st.S.vs)))
     ])
     ctx parent
@@ -851,6 +870,10 @@ let sidebar instance : t =
 
 (* -- delegated event handlers -------------------------------------------- *)
 
+let focus_body_after_close st =
+  ignore (Ui_services.timers_timeout (fun () ->
+    if not (S.get st).S.open_ then Ui_services.dom_focus_body ()) 0)
+
 let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   let v = S.get st in
   let no = { Svs.prevent = false; stop = false } in
@@ -858,7 +881,7 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   let mod_key = if st.S.svs.Svs.is_mac () then ev.Svs.meta else ev.Svs.ctrl in
   if ev.Svs.composing && ev.Svs.key = "Enter" then no
   else if matches "go/search" ev || matches "command-palette/toggle" ev then begin
-    if v.S.open_ then S.close st
+    if v.S.open_ then (if matches "command-palette/toggle" ev then S.close st)
     else if matches "command-palette/toggle" ev then S.open_commands st
     else S.open_palette st;
     { Svs.prevent = true; stop = true }
@@ -868,7 +891,9 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
   end else if v.S.open_ then
     match ev.Svs.key with
     | "Escape" ->
-        if S.clear_or_close st then { Svs.prevent = true; stop = true }
+        if S.clear_or_close st then (
+          if not (S.get st).S.open_ then focus_body_after_close st;
+          { Svs.prevent = true; stop = true })
         else no
     | "ArrowDown" ->
         if mod_key then
@@ -936,7 +961,9 @@ let modal_shell svs st =
   (* prod .ui__dialog-content measures 898 border-box at 1280 *)
   let width viewport = Float.min 898. ((viewport *. 0.9) +. 2.) in
   Ui_components.dialog ~key:"cmdk-shell" ~width ~padding:0 ~style_class:"ls-dialog-cmdk"
-    ~on_dismiss:(fun _ -> S.close st)
+    ~on_dismiss:(fun _ ->
+      S.close st;
+      focus_body_after_close st)
     [ Ui_components.cmdk_modal ~key:"modal" [ palette svs st ] ]
 
 let render ~(services : Svs.t) (_ms : 'a Signal.signal) : t =

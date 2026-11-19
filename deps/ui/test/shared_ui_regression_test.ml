@@ -365,7 +365,8 @@ let flashcards_config ~registry ~profile =
         let sidebar : Sidebar_state.t =
           {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state ["flashcards";"all-pages"];
            nav_tag_titles=state [];block_sources = Hashtbl.create 8; items = state [];open_menu=state "";groups_collapsed=state [];
-           left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.} in
+           left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.;
+           restored_repo=ref None;restoring=ref true} in
         popup:=Some (Popups_state.make ctx.Lui_ui.ui_scheduler);
         Left_sidebar_view.nav_group ms sidebar) () in
     Runtime.app_flush:=(fun () -> S.flush session);
@@ -422,6 +423,16 @@ let grouped_table_selection ~registry ~profile =
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
     (fun () ->
       let inst = Option.get !instance in
+      List.iter (fun (data,items_count,expected) ->
+        let state={(V.get inst) with V.data;items_count} in
+        check "View totals count unique grouped entities while preserving full result counts"
+          (Views_head.count_of state=expected))
+        [(V.get inst).V.data,0,3;
+         Views_wire.VGroupedList [{glv=Wire.Nil;glparts=["first",["a";"b"];"second",["b";"c"]]}],0,3;
+         (V.get inst).V.data,7,7;
+         Views_wire.VFlat {rows=["a";"b"];count=9;previews=Hashtbl.create 0;qprops=[]},0,9;
+         Views_wire.VEmpty,0,0;
+         Views_wire.VEmpty,7,7];
       let headers = List.filter
           (fun node -> M.string_prop node "accessibility-identifier" =
             Some "header-checkbox") (nodes session) in
@@ -772,8 +783,62 @@ let page_disclosure ~registry ~profile =
       ignore (Lui_app.dispose session.S.app);
       Hashtbl.remove Properties_state.areas (Properties_area.page_key uuid)) [false;true])
 
+let reference_disclosure ~registry ~profile =
+  let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker in
+  let previous_settings = !Settings_state.st in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
+  let writes = ref 0 in
+  let scope = "reference-disclosure" in
+  let child_id = "reference-default-child" and leaf_id = "reference-default-leaf" in
+  let default block = {block with Model.block_default_collapsed = true} in
+  let child = default (Test_check.block child_id "Reference child"
+    ~children:[Test_check.block leaf_id "Reference leaf"]) in
+  let empty = default (Test_check.block "reference-empty" "Empty reference") in
+  let root = Test_check.block "reference-root" "Reference root" ~children:[child;empty] in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+    Settings_state.st := previous_settings;
+    Runtime.worker := previous_worker; Runtime.app_flush := previous_flush) (fun () ->
+    Editor_state.st := None; Editor_state.field_sigs_opt := None;
+    Settings_state.st := None;
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun name _ ->
+      if name = "thread-api/apply-outliner-ops" then incr writes;
+      Js.Promise.resolve Wire.Nil);
+      on_message=(fun _ _ -> ());
+      dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ -> Tree.block_row_static
+        ~collapse_scope:scope ~persist_collapse:false root) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      Runtime.app_flush := (fun () -> S.flush session);
+      Editor_state.set_collapsed ~scope:"other-reference" child_id false;
+      S.flush session;
+      let leaf_visible () = List.exists (fun node ->
+        M.string_prop node "accessibility-identifier"=Some ("ls-block-" ^ leaf_id))
+        (nodes session) in
+      let press uuid =
+        let control = List.find (fun node -> M.string_prop node "accessibility-identifier"
+          = Some ("control-" ^ uuid)) (nodes session) in
+        S.press session control.M.id; S.flush session in
+      check "A default-collapsed reference child initially hides its descendants" (not (leaf_visible ()));
+      List.iter (fun expanded ->
+        press child_id;
+        check "Repeated reference caret presses expand and collapse the same child"
+          (leaf_visible ()=expanded
+           && Editor_state.effective_collapsed ~scope child=not expanded);
+        check "Reference disclosure leaves another projection's override unchanged"
+          (not (Editor_state.effective_collapsed ~scope:"other-reference" child)))
+        [true;false;true;false];
+      press "reference-empty";
+      check "An empty reference child cannot create a collapse override"
+        (not (Editor_state.is_collapsed_in ~scope "reference-empty")
+         && not (leaf_visible ()));
+      check "Reference disclosure never writes a graph collapse property" (!writes=0)))
+
 let run_views ~registry ~profile ~finish =
   page_disclosure ~registry ~profile;
+  reference_disclosure ~registry ~profile;
   show_brackets_rendering ~registry ~profile;
   let finish () = configured_continuations finish in
   configured_popup_ownership ();
@@ -796,6 +861,16 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  List.iter (fun (source, expected) ->
+    check "Markdown thematic breaks accept repeated markers but not empty or malformed text"
+      (Render.horizontal_rule source = expected))
+    ["---",true;"* * *",true;"___",true;"",false;"--",false;"--x",false];
+  let inline_image = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse "![Fixture](https://example.invalid/fixture.png)after-image-fixture")) in
+  check "A Markdown image commits its render transaction and preserves following content"
+    (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
+      (nodes inline_image));
+  ignore (Lui_app.dispose inline_image.S.app);
   let startup_error=I18n.t "graph/load-error" in
   let failed_startup=mount (fun _ context parent ->
     Page.region (Signal.constant context.Lui_ui.ui_scheduler
@@ -1731,8 +1806,8 @@ let run_views ~registry ~profile ~finish =
           ignore (Js.Global.setTimeout ~f:(fun () ->
             S.flush picker;
             let popup=List.find (fun n -> n.M.kind="popover") (nodes picker) in
-            check "Batch property pickers keep the toolbar trigger rectangle"
-              (M.string_prop popup "anchor-rect"=Some "120. 80. 104. 32."
+            check "Batch property pickers keep the toolbar trigger's virtual reference"
+              (M.string_prop popup "anchor-rect"=Some "116. 80. 1. 32."
                && M.string_prop popup "anchor"=Some "below"
                && M.string_prop popup "anchor-alignment"=Some "start");
             check "Batch property pickers have one compact surface without a modal card"
@@ -1756,7 +1831,415 @@ let run_views ~registry ~profile ~finish =
               next rest) 0)) 0)
     in next [true;false]
   in
+  let reaction_refresh_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_flush = !Runtime.app_flush in
+    Runtime.read_model := (fun () -> { Model.initial with repo = Some "reaction-refresh" });
+    let count = ref 0 and failed = ref false in
+    Runtime.worker := Some {
+      Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/get-render-snapshots" && !failed then
+          Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "reaction read failed") [@u])
+        else Js.Promise.resolve (match name, args with
+          | "thread-api/get-render-snapshots", [_; request] ->
+              let resources = Option.value (Wire.get request "resources") ~default:Wire.Nil in
+              Wire.Map [ Wire.kw "slots", Wire.Map (List.map (fun key ->
+                let value = if !count = 0 then Wire.Array [] else Wire.Array [Wire.Map
+                  [ Wire.kw "emoji-id", Wire.String "grinning";
+                    Wire.kw "count", Wire.Int !count;
+                    Wire.kw "reacted-by-me?", Wire.Bool true;
+                    Wire.kw "usernames", Wire.Nil ]] in
+                Wire.Array [Wire.kw "resource"; key], Wire.Map [Wire.kw "value", value])
+                (Wire.elems resources)) ]
+          | "thread-api/apply-outliner-ops", _ ->
+              count := 1;
+              Wire.Map [Wire.kw "result", Wire.Nil]
+          | _ -> Wire.Nil));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+    let mounted = mount (fun _ -> Comments_view.reactions_el "reaction-target") in
+    let has_count n = S.flush mounted;
+      List.exists (fun node -> button_label node = Some ("grinning " ^ string_of_int n)) (nodes mounted) in
+    let changed () = Subs_state.run_sync_subs
+      [Wire.Array [Wire.kw "reactions"; Wire.Uuid "reaction-target"]] in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "A block without reactions has no reaction badge" (not (has_count 1));
+      Comments_view.toggle_reaction "reaction-target" "grinning";
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        check "A local reaction appears without navigating away" (has_count 1);
+        failed := true;
+        changed ();
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "A failed reaction refresh retains the successful badge" (has_count 1);
+          failed := false;
+          count := 0;
+          changed ();
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check "A remote reaction removal clears the badge without navigation" (not (has_count 1));
+            ignore (Lui_app.dispose mounted.S.app);
+            Runtime.worker := previous_worker;
+            Runtime.read_model := previous_model;
+            Runtime.app_flush := previous_flush;
+            done_ ()) 0)) 0)) 0)) 0)
+  in
+  let graph_delete_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_send = !Runtime.app_send and previous_changed = !Graphs_ops.on_repos_changed
+    and metadata = Graphs_meta.read () in
+    let first = "logseq_db_Delete fixture" and last = "logseq_db_Last fixture" in
+    let state = ref { Model.initial with repos = [first;last] } in
+    let mode = ref `Success and requests = ref [] in
+    Runtime.read_model := (fun () -> !state);
+    Runtime.app_send := (fun action -> state := Update.update !state action; true);
+    Graphs_ops.on_repos_changed := (fun () -> ());
+    List.iter (fun repo -> Graphs_meta.remember_uuid repo repo) [first;last];
+    Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
+      requests := (name,args) :: !requests;
+      match !mode with
+      | `Success -> Js.Promise.resolve Wire.Nil
+      | `Error -> Js.Promise.resolve (Wire.Tagged ("error", Wire.String "locked"))
+      | `Reject -> Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "locked") [@u]));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+    let success_text name =
+      List.exists (fun (toast : Model.toast) -> toast.toast_text = I18n.removed name) (!state).toasts in
+    let open Promise_ext in
+    ignore (
+      let* () = Graphs_ops.delete_graph first ~remote:false in
+      check "Graph deletion sends the internal repo to storage but displays its name"
+        (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
+         && (!state).repos = [last] && success_text "Delete fixture"
+         && Graphs_meta.uuid_of first = None);
+      let rec failures = function
+        | [] -> Js.Promise.resolve ()
+        | failure :: rest ->
+            mode := failure;
+            state := { !state with toasts = [] };
+            let* () = Graphs_ops.delete_graph last ~remote:false in
+            check "Failed graph deletion restores membership and retains metadata without a success toast"
+              ((!state).repos = [last] && Graphs_meta.uuid_of last = Some last
+               && (!state).toasts = []);
+            failures rest
+      in
+      let* () = failures [`Error;`Reject] in
+      mode := `Success;
+      let* () = Graphs_ops.delete_graph last ~remote:false in
+      check "Deleting the final listed graph leaves an empty list and uses its display name"
+        ((!state).repos = [] && success_text "Last fixture" && Graphs_meta.uuid_of last = None);
+      Runtime.worker := previous_worker;
+      Runtime.read_model := previous_model;
+      Runtime.app_send := previous_send;
+      Graphs_ops.on_repos_changed := previous_changed;
+      Graphs_meta.write metadata;
+      done_ ();
+      Js.Promise.resolve ())
+  in
+  let missing_reference_view_check done_ =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model
+    and previous_flush= !Runtime.app_flush in
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "missing-reference-view"});
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Runtime.app_flush:=previous_flush;done_ ()
+      | count::rest ->
+          let stored=ref None and source_op=ref None in
+          ignore (Fake_worker.install (fun name args -> match name,args with
+            | "thread-api/get-render-snapshots",[_;request] ->
+                let resources=Option.value (Wire.get request "resources") ~default:Wire.Nil in
+                Wire.Map [Wire.kw "slots",Wire.Map (List.map (fun key ->
+                  let value=match key with
+                    | Wire.Array [Wire.Keyword "block-ref-count";_] ->
+                        (match count with Some n -> Wire.Int n | None -> Wire.Nil)
+                    | Wire.Array [Wire.Keyword "page-identity";_] -> Wire.Uuid "views-page"
+                    | Wire.Array [Wire.Keyword "views";_;_] ->
+                        Wire.Array (match !stored with None -> [] | Some block ->
+                          [Option.get (Wire.get block "block/uuid")])
+                    | Wire.Array (Wire.Keyword "view-data"::_) -> Wire.Map
+                        [Wire.kw "count",Wire.Int 0;Wire.kw "partition",Wire.kw "grouped";
+                         Wire.kw "groups",Wire.Array []]
+                    | _ -> Wire.Nil in
+                  Wire.Array [Wire.kw "resource";key],Wire.Map [Wire.kw "value",value])
+                  (Wire.elems resources))]
+            | "thread-api/get-blocks",[_;Wire.Array requests] ->
+                Wire.Array (List.map (fun request ->
+                  let id=Option.get (Wire.get request "id") in
+                  let block=if id=Wire.Uuid "views-page" then
+                      Wire.Map [Wire.kw "block/uuid",id;Wire.kw "block/children",Wire.Array []]
+                    else Option.value !stored ~default:Wire.Nil in
+                  Wire.Map [Wire.kw "id",id;Wire.kw "block",block]) requests)
+            | "thread-api/apply-outliner-ops",[_;Wire.Array ops;_] ->
+                List.iter (function
+                  | Wire.Array [Wire.Keyword "insert-blocks";
+                      Wire.Array [Wire.List [block];_;opts]] ->
+                      stored:=Some block;source_op:=Wire.get opts "outliner-op"
+                  | _ -> ()) ops;
+                Wire.Map [Wire.kw "result",Wire.Nil]
+            | _ -> Wire.Nil));
+          let instance=ref None in
+          let mounted=mount (fun _ context parent ->
+            instance:=Some (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KLinkedRefs ~feature:"linked-references" ~owner:(Wire.Uuid "owner"));
+            Lui_elements.column [] context parent) in
+          let inst=Option.get !instance in
+          Views_view.ensure_default_view inst;
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            let state=Views_state.get inst in
+            check "Missing linked-reference views are created only after a positive count, never on failure"
+              (match count with
+               | Some 0 -> !stored=None && not state.loading && state.view_error=None
+                   && state.data=Views_wire.VGroupedList []
+               | Some _ -> Option.is_some !stored && !source_op=Some (Wire.kw "create-view")
+                   && state.views<>[] && state.view_error=None
+               | None -> !stored=None && Option.is_some state.view_error);
+            ignore (Lui_app.dispose mounted.S.app);next rest) 0)
+    in next [Some 0;Some 1;None]
+  in
+  let node_picker_lifetime_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_overlays = !Properties_state.view_overlays_state
+    and previous_flush = !Runtime.app_flush in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "node-lifetime-fixture"});
+    let entity id title = Wire.Map [Wire.kw "db/id",Wire.Int id;
+      Wire.kw "block/uuid",Wire.Uuid ("node-" ^ string_of_int id);
+      Wire.kw "block/title",Wire.String title] in
+    let page = Wire.Map [Wire.kw "db/id",Wire.Int 4;
+      Wire.kw "db/ident",Wire.kw "logseq.class/Page";Wire.kw "block/title",Wire.String "Page"] in
+    let audit = entity 80 "Audit Target" and card = entity 81 "Card" in
+    let rec next = function
+      | [] ->
+          Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Properties_state.view_overlays_state:=previous_overlays;
+          Runtime.app_flush:=previous_flush;done_ ()
+      | (table_view, ident, metadata, initial, closes)::rest ->
+          Properties_state.view_overlays_state:=None;
+          let chosen = ref initial in
+          let prop = Wire.Map [Wire.kw "db/id",Wire.Int 100;
+            Wire.kw "db/ident",Wire.kw ident;
+            Wire.kw "logseq.property/type",Wire.kw (if ident="block/tags" then "class" else "node");
+            Wire.kw "db/cardinality",Wire.kw "db.cardinality/many"] in
+          ignore (Fake_worker.install (fun name args -> match name with
+            | "thread-api/entity" ->
+                (match List.nth_opt args 1 with
+                 | Some (Wire.List [Wire.Keyword "db/ident";Wire.Keyword "block/tags"]) -> prop
+                 | _ -> Wire.Map [Wire.kw ident,Wire.Set (List.map (fun id -> Wire.Int id) !chosen)])
+            | "thread-api/get-property-node-selector-data" -> Wire.Map
+                [Wire.kw "all-classes",Wire.Array [page;audit;card];
+                 Wire.kw "initial-choices",Wire.Array [page;audit;card];
+                 Wire.kw "class-options",Wire.Array [audit;card]]
+            | "thread-api/apply-outliner-ops" ->
+                (match List.nth_opt args 1 with
+                 | Some (Wire.Array ops) -> List.iter (function
+                     | Wire.Array [Wire.Keyword "batch-set-property";
+                         Wire.Array [Wire.List [Wire.Uuid "node-owner"];Wire.Keyword key;Wire.Int id;
+                           Wire.Map [(Wire.Keyword "entity-id?",Wire.Bool true)]]] when key=ident ->
+                         chosen:=id::List.filter ((<>) id) !chosen
+                     | Wire.Array [Wire.Keyword "delete-property-value";
+                         Wire.Array [_;Wire.Keyword key;Wire.Int id]] when key=ident ->
+                         chosen:=List.filter ((<>) id) !chosen
+                     | _ -> ()) ops
+                 | _ -> ());
+                Wire.Map [Wire.kw "result",Wire.Nil]
+            | _ -> Wire.Nil));
+          let ctx : Properties_value.ctx = {owner_key="node-lifetime";block_uuid="node-owner";
+            jump_owner=Jump_state.owner ~scope:"main" ~container:"node-owner";
+            block_id=Some 196;refresh=ignore;is_page=false;class_schema=false} in
+          let values = Wire.Array (List.filter (fun entity ->
+            List.mem (Option.get (Properties_data.entity_id_of entity)) initial) [page;audit;card]) in
+          let row = Wire.Map [Wire.kw "property-id",Wire.kw ident;
+            Wire.kw "value",values;Wire.kw "property",prop] in
+          let owner = ref ctx.owner_key in
+          let picker = mount (fun _ context parent ->
+            let cell = if not table_view then
+              Properties_value.node_view ~jump_target:false ctx row
+            else
+              let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+                ~kind:Views_state.KAllPages ~feature:"node-lifetime-fixture" ~owner:Wire.Nil in
+              owner:="view-" ^ string_of_int inst.Views_state.id;
+              let column={(Views_table.tags_column ()) with Views_state.c_id=ident;
+                c_prop=(if metadata then Some prop else None)} in
+              let blk=Wire.Map [Wire.kw ident,values] in
+              Views_table.cell_el inst ~row_uuid:ctx.block_uuid ~blk column in
+            Lui_elements.column [cell;Properties_view.overlays] context parent) in
+          if table_view && ident="block/tags" then
+            check "Table Tags hide the implicit Page chip without changing stored references"
+              (not (List.exists (fun n -> List.mem (button_label n) [Some "Page";Some "#Page"])
+                (nodes picker)) && !chosen=initial);
+          let id = "property-node-" ^ !owner ^ "-node-owner-" ^ ident in
+          let control_id=id ^ "-picker" in
+          let trigger = List.find_opt (fun n -> M.string_prop n "accessibility-identifier"=Some control_id)
+            (nodes picker) in
+          match trigger with
+          | None ->
+              check "Populated table node cells expose an editable picker" false;
+              ignore (Lui_app.dispose picker.S.app);next rest
+          | Some trigger ->
+          if List.mem 81 initial then begin
+            let chip=List.find (fun n -> (n.M.kind="button" || n.M.kind="link")
+              && List.mem (button_label n) [Some "Card";Some "#Card"]) (nodes picker) in
+            let actions=ref [] and previous_send= !Runtime.app_send in
+            Runtime.app_send:=(fun action -> actions:=action::!actions;true);
+            S.press picker chip.M.id;
+            Runtime.app_send:=previous_send;
+            check "A populated table node chip navigates without editing or opening a picker"
+              (!actions=[Action.Navigate_to (Model.Page "node-81")]
+               && !chosen=initial && not (Properties_state.view_overlay_open ()))
+          end;
+          let document = !(Stub_dom.document_ref) in
+          let lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+          let anchor = Stub_dom.make_element "button" in
+          let set : string -> string -> unit = Stub_dom.get_field anchor "setAttribute" in
+          set "id" id;
+          Stub_dom.set_field document "getElementById" (fun key -> if key=id then anchor else lookup key);
+          S.press picker trigger.M.id;
+          Stub_dom.set_field document "getElementById" lookup;
+          let toggle title checked =
+            let option = List.find (fun n -> n.M.kind="checkbox"
+              && M.string_prop n "accessibility-label"=Some title) (nodes picker) in
+            S.toggle picker option.M.id checked in
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check "Reopening a table node picker preserves and checks its existing values"
+              (!chosen=initial && List.for_all (fun (title,id) ->
+                List.exists (fun n -> n.M.kind="checkbox"
+                  && M.string_prop n "accessibility-label"=Some title
+                  && Hashtbl.find_opt n.M.props "checked"=Some (P.BoolValue (List.mem id initial)))
+                  (nodes picker)) ["Page",4;"Card",81]);
+            toggle "Audit Target" true;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check "A many-node add updates values and retains its popup"
+                (List.sort compare !chosen=List.sort compare (80::initial)
+                 && Properties_state.view_overlay_open ());
+              toggle "Audit Target" false;
+              ignore (Js.Global.setTimeout ~f:(fun () ->
+                check "Table removal dismissal uses the opening raw value count, not the live count"
+                  (List.sort compare !chosen=List.sort compare initial
+                   && Properties_state.view_overlay_open ()=not closes);
+                let finish () =
+                  Properties_state.close_all_view_overlays ();
+                  ignore (Lui_app.dispose picker.S.app);next rest in
+                if table_view && initial=[4;81] then begin
+                  toggle "Card" false;
+                  ignore (Js.Global.setTimeout ~f:(fun () ->
+                    check "An initially plural table value does not close merely because its last visible tag is removed"
+                      (!chosen=[4] && Properties_state.view_overlay_open ());
+                    finish ()) 0)
+                end else finish ()) 0)) 0)) 0)
+    in
+    next [true,"block/tags",false,[4],true;true,"block/tags",false,[],true;
+      true,"block/tags",false,[4;81],false;false,"block/tags",false,[4],false;
+      true,"block/tags",true,[4;81],false;true,"fixture/nodes",true,[4;81],false;
+      false,"fixture/nodes",true,[4;81],false;false,"fixture/nodes",true,[],false]
+  in
   let property_picker_check done_ =
+    let items =
+      List.map
+        (fun (key, title) -> Properties_select.item ~key title (fun () -> ()))
+        [ "entity-83", "Gamma"; "entity-81", "Alpha"; "entity-82", "Beta" ]
+    in
+    let visible ?(filter = "") ?(selected_keys = []) () =
+      Properties_select.visible_items_with_selection ~multiple_choices:true ~selected_keys
+        ~items ~filter ~searched:None ~new_option:None ~new_case_sensitive:false ()
+    in
+    let item_keys items = List.filter_map (fun item -> item.Properties_select.it_key) items in
+    let initial = visible () in
+    check "Selecting a many-value option does not reorder the unfiltered choices"
+      (item_keys initial = item_keys (visible ~selected_keys:[ "entity-81" ] ()));
+    let searched = visible ~filter:"a" () in
+    let selected_searched = visible ~filter:"a" ~selected_keys:[ "entity-81" ] () in
+    let selected, unselected =
+      List.partition
+        (fun item -> item.Properties_select.it_key = Some "entity-81") searched
+    in
+    check "A selected matching many-value choice leads the fuzzy results"
+      (item_keys selected_searched = item_keys (selected @ unselected));
+    let toggle_count = ref 0 and selected_signal = ref None in
+    let previous_flush = !Runtime.app_flush in
+    let selector = mount (fun _ context parent ->
+      let selected = Signal.state context.Lui_ui.ui_scheduler [] in
+      selected_signal := Some selected;
+      let choose () =
+        incr toggle_count;
+        let current = Runtime.signal_get selected in
+        Runtime.signal_set selected
+          (if List.mem "entity-91" current then [] else ["entity-91"])
+      in
+      Properties_select.view ~placeholder:"Search" ~multiple_choices:true
+        ~clear_input_on_choice:true
+        ~selected_keys:(Signal.value selected)
+        [Properties_select.item ~key:"entity-91" "Alpha" choose]
+        context parent)
+    in
+    let input () = List.find (fun node -> node.M.kind = "text-field") (nodes selector) in
+    let original_input = (input ()).M.id in
+    S.text_changed selector original_input "a";
+    S.flush selector;
+    let option () = List.find_opt (fun node -> node.M.kind = "checkbox"
+      && M.string_prop node "accessibility-label" = Some "Alpha") (nodes selector) in
+    let checked = function
+      | Some node -> Hashtbl.find_opt node.M.props "checked" = Some (P.BoolValue true)
+      | None -> false
+    in
+    let selected () = Runtime.signal_get (Option.get !selected_signal) in
+    check "A many-value property option has reactive checkbox semantics"
+      (Option.is_some (option ()) && not (checked (option ())));
+    Option.iter (fun node -> S.toggle selector node.M.id true)
+      (option ());
+    S.flush selector;
+    check "A checkbox selection toggles once and clears the search query"
+      (!toggle_count = 1 && selected () = ["entity-91"]
+       && (input ()).M.id = original_input
+       && M.string_prop (input ()) "text" = Some ""
+       && checked (option ()));
+    S.submit selector original_input;
+    S.flush selector;
+    check "Enter toggles the active many-value choice once and clears search"
+      (!toggle_count = 2 && selected () = []
+       && (input ()).M.id = original_input
+       && M.string_prop (input ()) "text" = Some ""
+       && not (checked (option ())));
+    ignore (Lui_app.dispose selector.S.app);
+    Runtime.app_flush := previous_flush;
+    List.iter (fun (presentation, multiple_choices, query, index, enter) ->
+      let chosen = ref [] in
+      let selector = mount (fun _ -> Properties_select.view ~placeholder:"Search"
+        ~presentation ~multiple_choices ~clear_input_on_choice:true
+        (List.map (fun (key, title) -> Properties_select.item ~key title
+          (fun () -> chosen:=key::!chosen))
+          ["page","Page";"audit","Audit Target";"card","Card"])) in
+      let input () = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
+      let original_input = (input ()).M.id in
+      S.text_changed selector original_input query;
+      for _ = 1 to index do
+        S.dispatch selector (P.NavigateNext original_input)
+      done;
+      let list = List.find (fun n -> n.M.kind="list") (nodes selector) in
+      let picked = Option.get (M.string_prop list "scroll-target") in
+      let title = List.assoc picked ["page","Page";"audit","Audit Target";"card","Card"] in
+      let option = List.find (fun n ->
+        n.M.kind=(if multiple_choices then "checkbox" else "list-item")
+        && M.string_prop n "text"=Some title) (nodes selector) in
+      S.dispatch selector (P.PointerEnter option.M.id);
+      if enter then S.submit selector original_input
+      else if multiple_choices then S.toggle selector option.M.id true
+      else S.press selector option.M.id;
+      let expected = if presentation=Properties_select.Node_picker && multiple_choices
+        then List.nth ["page";"audit";"card"] index else "page" in
+      let list = List.find (fun n -> n.M.kind="list") (nodes selector) in
+      check "Choice clears the query while only many-node pickers retain the numeric active index"
+        (!chosen=[picked] && (input ()).M.id=original_input
+         && M.string_prop (input ()) "text"=Some ""
+         && M.string_prop list "scroll-target"=Some expected);
+      S.submit selector original_input;
+      check "Repeated Enter chooses the active index in the restored unfiltered results"
+        (!chosen=[expected;picked]);
+      ignore (Lui_app.dispose selector.S.app))
+      [Properties_select.Node_picker,true,"",1,false;
+       Properties_select.Node_picker,true,"",1,true;
+       Properties_select.Node_picker,true,"Audit",0,false;
+       Properties_select.Node_picker,true,"Audit",0,true;
+       Properties_select.Node_picker,true,"a",1,false;
+       Properties_select.Node_picker,true,"a",1,true;
+       Properties_select.Standard,true,"",1,false;
+       Properties_select.Standard,true,"",1,true;
+       Properties_select.Node_picker,false,"",1,false;
+       Properties_select.Node_picker,false,"",1,true];
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     let previous_dialog = !Properties_dialog.current in
     let previous_dialog_sig = !Properties_dialog.current_sig in
@@ -2127,8 +2610,8 @@ let run_views ~registry ~profile ~finish =
                | Some (Wire.Array ops) -> List.iter (function
                    | Wire.Array [Wire.Keyword "create-page";Wire.Array [Wire.String title;_]] ->
                        if Dates.journal_title_parts title=Some (10,11,2026) then journal:=Some page
-                   | Wire.Array [Wire.Keyword "set-block-property";
-                       Wire.Array [Wire.Uuid "date-owner";Wire.Keyword "fixture/date";value]] ->
+                   | Wire.Array [Wire.Keyword "batch-set-property";
+                       Wire.Array [Wire.List [Wire.Uuid "date-owner"];Wire.Keyword "fixture/date";value;_]] ->
                        written:=Some value
                    | _ -> ()) ops
                | _ -> ());
@@ -2138,7 +2621,7 @@ let run_views ~registry ~profile ~finish =
             Some (mount (fun _ -> Properties_value.date_picker_content ctx
               ~ident:"fixture/date" ~is_datetime:false
               ~value:(Wire.Map [Wire.kw "block/journal-day",Wire.Int 20261101])
-              ~on_value:(fun value -> Properties_value.set_scalar ctx ~ident:"fixture/date" ~value)
+              ~on_value:(fun value -> Properties_value.set_picker_value ctx ~ident:"fixture/date" ~value)
               ~on_clear:(fun () -> ()) ~on_dismiss:(fun () -> ())))
             else None in
           (match selector with
@@ -2167,8 +2650,9 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    batch_property_check (fun () -> property_picker_check (fun () -> property_text_many_check
-      (fun () -> property_value_completion_check (fun () -> next [false,false;false,true;true,false;true,true]))))
+    batch_property_check (fun () -> property_picker_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
+      (fun () -> property_text_many_check (fun () -> property_value_completion_check
+        (fun () -> next [false,false;false,true;true,false;true,true]))))))))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in
@@ -2495,7 +2979,8 @@ let run_views ~registry ~profile ~finish =
         {favorites=state [target];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
          nav_tag_titles=state [];block_sources = Hashtbl.create 8; items = state [];
          open_menu=state "";groups_collapsed=state [];
-         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in
+         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
+         restored_repo=ref None;restoring=ref true} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) () in
   let st = Option.get !sidebar in
@@ -2603,6 +3088,26 @@ let run_views ~registry ~profile ~finish =
    | None -> check "icon picker renders icon buttons" false);
   ignore (Lui_app.dispose picker.S.app);
   restore_storage "ls-icon-color-preset" previous_preset;
+  List.iter (fun fail ->
+    let accepted = ref [] and closed = ref 0 in
+    let terminal = mount (fun _ ->
+      Icon_picker.picker_view ~del:true ~emoji_only:false
+        ~on_chosen:(fun choice ->
+          accepted := choice :: !accepted;
+          if fail then failwith "icon selection failed")
+        ~close:(fun () -> incr closed)) in
+    check "An unopened icon choice has no commit" (!accepted=[] && !closed=0);
+    let choices = nodes terminal |> List.filter (fun n ->
+      n.M.kind="button" && class_has n "ls-emoji-cell") in
+    let activate node =
+      try S.press terminal node.M.id with Failure _ -> () in
+    activate (List.hd choices);
+    activate (List.hd choices);
+    activate (List.nth choices 1);
+    check (if fail then "Failed icon selection remains terminal before teardown"
+           else "One icon selection cannot commit again before teardown")
+      (List.length !accepted=1 && !closed=1);
+    ignore (Lui_app.dispose terminal.S.app)) [false;true];
   restore_storage "ls-icons-used" previous_used;
   let actions = ref 0 in
   let menu = mount (fun _ -> Menu_item.dots_menu ~key:"parity-actions"
@@ -2828,7 +3333,11 @@ let run_views ~registry ~profile ~finish =
       move (Some button); fire ();
       check "Closing the surface restores normal tooltip delay and display" (shown ()<>None))
       [1;2;3]);
-  let keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  let keymap_state = ref None in
+  let keymap = mount (fun _ context parent ->
+    let state = Signal.state context.Lui_ui.ui_scheduler (Settings_page.initial_keymap ()) in
+    keymap_state := Some state;
+    Settings_page.keymap_pane ~state () context parent) in
   check "keycap modifier glyphs are ready for the host text runtime"
     (Keymap_record.keycaps "meta+shift+k" =
       [{js|⌘|js};{js|⇧|js};"K"]);
@@ -2970,6 +3479,11 @@ let run_views ~registry ~profile ~finish =
        (fun n ->
          M.string_prop n "text" = Some (I18n.t "keymap/no-matching-shortcuts"))
        (keymap_nodes ()));
+  Settings_page.keymap_escape (Option.get !keymap_state);
+  S.flush keymap;
+  check "Escape clears shortcut search without replacing its owner"
+    (M.string_prop input "text" = Some ""
+     && List.exists (fun n -> n.M.id = input.M.id) (keymap_nodes ()));
   S.text_changed keymap input.M.id "  ";
   check "whitespace query restores categories and hides clear"
     (category_headers () <> [] && clear_buttons () = []);
@@ -3110,7 +3624,7 @@ let run_views ~registry ~profile ~finish =
   let push kind text =
     ignore (Lui_app.send notifications.S.app
         (Action.Toast_push { Model.toast_id = 0; toast_text = text;
-          toast_kind = kind; toast_key = None; toast_code = None }));
+          toast_kind = kind; toast_key = None; toast_code = None; toast_duration = None }));
     S.flush notifications
   in
   push "success" "First";
@@ -3650,6 +4164,35 @@ let run_views ~registry ~profile ~finish =
     ((Cmdk_state.get footer_st).filter = Some G_commands
      && (Cmdk_state.get footer_st).open_);
   let pages = [item 0 (Open_page "first-page"); item 1 (Open_page "second-page")] in
+  List.iter (fun (action, modifiers, expected) ->
+    select [item 0 action] 0;
+    let pointer = mount (fun _ context parent ->
+      let value = Signal.state context.Lui_ui.ui_scheduler (item 0 action) in
+      Cmdk_view.item_row footer_services footer_st (Signal.value value) context parent) in
+    let target = List.find (fun node ->
+      Option.fold ~none:false ~some:(fun attrs ->
+        List.assoc_opt "data-cmdk-item" (P.data_attrs_decode attrs) = Some "true")
+        (M.string_prop node "data-attrs")) (nodes pointer) in
+    S.dispatch pointer (P.PressDetail (target.M.id,
+      {x=0.;y=0.;modifiers;button=0;target_class=""}));
+    check "cmdk pointer activation respects Shift without changing command actions"
+      (List.mem expected !footer_effects && not (Cmdk_state.get footer_st).open_);
+    let effects = !footer_effects in
+    S.press pointer target.M.id;
+    check "the following plain press cannot replay a closed cmdk result"
+      (!footer_effects = effects);
+    ignore (Lui_app.dispose pointer.S.app))
+    [Open_page "first-page", 2, "sidebar:first-page";
+     Open_page "first-page", 0, "#/page/first-page";
+     Run "ui/toggle-left-sidebar", 2, "toggle-sidebar"];
+  select [item 0 (Open_page "first-page"); item 1 (Create_page "New page")] 1;
+  let fallback_open = List.find_opt (fun n ->
+    M.string_prop n "accessibility-label" = Some (I18n.t "cmdk.action/open")) (nodes footer) in
+  check "a create selection keeps the matched-result footer actions" (fallback_open <> None);
+  Option.iter (fun button -> S.press footer button.M.id;
+    check "fallback footer actions dispatch the live create selection"
+      (List.mem "page:New page" !footer_effects
+       && not (Cmdk_state.get footer_st).open_)) fallback_open;
   select pages 0;
   let open_id = (footer_button "cmdk.action/open").M.id in
   select pages 1;
@@ -3819,7 +4362,7 @@ let run_views ~registry ~profile ~finish =
        toggle_search ();
        check "search reopens after host dismissal" (search_inputs () <> []);
        toggle_search ();
-       check "search shortcut closes the reopened input" (search_inputs () = []));
+       check "search shortcut keeps the reopened input open" (search_inputs () <> []));
   ignore (Lui_app.dispose search.S.app);
   let vs, current, shortcuts, services = previous_cmdk in
   Cmdk_state.latest_vs := vs;
@@ -3861,9 +4404,12 @@ let run_views ~registry ~profile ~finish =
     d.Signal.stabilization_rounds + d.Signal.stabilization_dirty_tasks
   in
   let baseline = publish_work () in
+  let metadata = Graphs_meta.read () in
+  Graphs_meta.upsert "logseq_db_Layout fixture" [Wire.kw "created-at", Wire.Int 0];
   let graph_rows=mount (fun _ -> Lui_elements.column
     [Graphs_view.graph_row "logseq_db_Layout fixture";
      Graphs_view.remote_row ("Remote fixture","layout-fixture",false,"manager")]) in
+  Graphs_meta.write metadata;
   List.iter (fun label ->
     let name=List.find (fun n -> M.string_prop n "text"=Some label) (nodes graph_rows) in
     check "Graph names use the current theme accent"

@@ -468,7 +468,7 @@ let insert_view_block ~current ?(on_error = fun () -> ())
                  ; W.Map
                      [ (W.kw "sibling?", W.Bool sibling)
                      ; (W.kw "keep-uuid?", W.Bool true)
-                     ; (W.kw "outliner-op", W.Keyword "insert-blocks")
+                     ; (W.kw "outliner-op", W.Keyword "create-view")
                      ]
                  ]
              ])

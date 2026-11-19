@@ -192,11 +192,11 @@ let mode_file lang =
 
 let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 
-(* theme ("solarized <light|dark>") follows the root .dark class the same
+(* theme ("lsradix <light|dark>") follows the root .dark class the same
    way cljs theme-name does via the ui/theme subscription *)
 let theme_name () =
-  if D.el_class_contains D.document_element "dark" then "solarized dark"
-  else "solarized light"
+  if D.el_class_contains D.document_element "dark" then "lsradix dark"
+  else "lsradix light"
 
 (* -- instances keyed by block uuid -- *)
 
@@ -708,6 +708,7 @@ let copy_button uuid =
            (Action.Toast_push
               { Model.toast_id = 0
               ; toast_key = None
+              ; toast_duration = None
               ; toast_code = None
               ; toast_text = I18n.t "notification/copied"
               ; toast_kind = "success"

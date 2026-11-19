@@ -862,12 +862,7 @@ let group_order ?(source_rows = []) v q rows total =
         cp () @ [ nodes_g (); files_g () ]
         @ Option.to_list (create_g ()) @ [ filters_g () ]
       else if String.trim q = "" then
-        (* cljs :default on blank input runs :initial + :filters — but a
-           fresh-open palette never triggers :default (refresh-key
-           unchanged), so a blank-opened palette shows only recents;
-           filters appear once the user edits the input *)
-        if v.edited then cp () @ [ recents_g (); filters_g () ]
-        else cp () @ [ recents_g () ]
+        cp () @ [ recents_g () ]
       else
         cp () @ [ nodes_g (); recents_g (); commands_g (); files_g () ]
         @ Option.to_list (create_g ()) @ [ filters_g () ]
@@ -1931,7 +1926,7 @@ let dispatch_id (cid : string) =
   match !latest_st with
   | Some st -> (
       match cid with
-      | "go/search" -> open_palette st
+      | "go/search" -> if not (get st).open_ then open_palette st
       | "command-palette/toggle" ->
           if (get st).open_ then close st
           else open_commands st
@@ -1964,8 +1959,8 @@ let hl_group st =
 let open_latest ?(move = false) () =
   match !latest_t with
   | Some st ->
-      (* mod+k toggles; move mode always switches the open palette over *)
-      if (get st).open_ && not move then close st else open_palette ~move st
+      (* Move mode switches an already open palette over. *)
+      if (get st).open_ && not move then () else open_palette ~move st
   | None -> ()
 
 (* mod+shift+k (go/search-in-page): the command-table arm only scopes an

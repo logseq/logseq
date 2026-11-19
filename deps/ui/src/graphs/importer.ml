@@ -105,17 +105,32 @@ let import_edn repo (file : Ui_services.file) =
   let* text = promise_of (file.Ui_services.file_text ()) in
   match (try Some (Edn.parse text) with _ -> None) with
   | None ->
-      Toast.warning (T.t "import/invalid-edn-file");
+      Toast.error (T.t "import/invalid-edn-file");
       Js.Promise.resolve false
   | Some w ->
-      let* _ = Graph.create_graph (Graphs_ops.short_name repo) in
-      let* result =
-        (Runtime.invoke2 "thread-api/import-edn"
-           (Wire.String repo) w)
-      in
-      if Wire.get result "error" <> None then
-        Js.Promise.reject (Failure "EDN import failed")
-      else Js.Promise.resolve true
+      let error_text = function
+        | Wire.String message -> message | error -> Edn.to_string error in
+      let* validation = Runtime.invoke1 "thread-api/validate-export" w in
+      (match Wire.get validation "error" with
+       | Some error when error <> Wire.Nil ->
+           Toast.error (error_text error);
+           Js.Promise.resolve false
+       | _ ->
+           let* _ = Graph.create_graph (Graphs_ops.short_name repo) in
+           let* outcome =
+             (let* result = Runtime.invoke2 "thread-api/import-edn" (Wire.String repo) w in
+              Js.Promise.resolve (match Wire.get result "error" with
+                | Some error when error <> Wire.Nil -> Error (error_text error)
+                | _ -> Ok ()))
+             |> Js.Promise.catch (fun error ->
+               Ui_services.log_error ("EDN import failed", error);
+               Js.Promise.resolve (Error (T.t "import/import-error"))) in
+           match outcome with
+           | Ok () -> Js.Promise.resolve true
+           | Error message ->
+               let* _ = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
+               Toast.error message;
+               Js.Promise.resolve false)
 
 let import_error message =
   Ui_services.log_error_message ("directory import: " ^ message);

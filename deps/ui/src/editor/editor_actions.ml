@@ -207,7 +207,13 @@ let rec apply_focus () =
           cancel_pending_focus ();
           last_focus_emitted := None;
       | None when Option.is_some request.S.focus_owner -> cancel_pending_focus ()
-      | None -> retry_focus ()
+      | None ->
+          if !(S.code_focus) ~caret uuid then begin
+            S.pending_focus := None;
+            focus_attempts := 0;
+            last_focus_emitted := None;
+            drain_pending_focus_actions ()
+          end else retry_focus ()
       | Some editing when editing.S.uuid <> uuid -> retry_focus ()
       | Some editing ->
         request.S.focus_owner <- Some (editing.S.scope, editing.S.epoch);
@@ -503,6 +509,9 @@ let run_structure ?recover ?current_guard ~restore p finish =
         completion := Some (fun result -> resolve (fun () -> result) [@u])) in
     finished ()
   in
+  ignore (owner_complete |> Js.Promise.catch (fun error ->
+    Ui_services.log_error ("editor structure failed", error);
+    Js.Promise.resolve ()));
   if claimed then begin
     structure_owner := Some (owner, owner_complete);
     S.structure_pending := true
@@ -1583,7 +1592,16 @@ let selected_uuids () =
 let open_selected_block ~at_end () =
   let uuids = selected_uuids () in
   match (if at_end then List.rev uuids else uuids) with
-  | uuid :: _ -> enter_edit ~scope:(S.selection_scope ()) uuid (if at_end then -1 else 0)
+  | uuid :: _ ->
+      (match (Runtime.model ()).Model.route_page with
+       | Some page when page.page_uuid = Some uuid
+                        && page.page_journal_day = None
+                        && S.selection_scope () = "main" ->
+           S.set (fun state -> {state with S.selected = S.String_set.empty;
+             anchor = None; action_bar = false});
+           Runtime.send Action.Title_edit_start;
+           Runtime.flush ()
+       | _ -> enter_edit ~scope:(S.selection_scope ()) uuid (if at_end then -1 else 0))
   | [] -> ()
 
 let index_of lst u =
@@ -1669,7 +1687,8 @@ let extend_selection up =
                     S.selected = S.String_set.of_list range
                   ; anchor = Some anchor
                   ; action_bar = true
-                  })
+                  });
+              !(S.scroll_key_into_view) first
           | _ -> ())
       | Some h when h <> anchor
           && (if up then index_of uuids h > index_of uuids anchor
@@ -1711,7 +1730,8 @@ let extend_selection up =
                         S.selected = S.String_set.add nu base
                       ; anchor = Some anchor
                       ; action_bar = true
-                      }))))
+                      });
+                  !(S.scroll_key_into_view) nu)))
 
 let select_single_in ~scope uuid =
   S.set (fun st ->
@@ -2378,6 +2398,32 @@ let paste_source_text ~text ~html =
         | None -> text
       else text)
 
+let selection_within_link source lo hi =
+  let n = String.length source in
+  let rec scan i start destination =
+    if i >= n then false else
+    match source.[i], start, destination with
+    | '\n', _, _ -> scan (i + 1) None false
+    | '[', None, _ -> scan (i + 1) (Some i) false
+    | ']', Some _, false when Str_util.starts_at source i "](" ->
+        scan (i + 2) start true
+    | ')', Some first, true ->
+        (first <= lo && hi <= i + 1) || scan (i + 1) None false
+    | _ -> scan (i + 1) start destination
+  in
+  scan 0 None false
+
+let paste_editor_text (model : Edit_model.t) ~text ~html =
+  let lo, hi = sel_span_of model in
+  let selected = String.sub model.source lo (hi - lo) in
+  let text = String.concat "" (String.split_on_char '\r' text) in
+  let text_url = is_url text and selected_url = is_url selected in
+  if String.trim selected <> "" && (text_url || selected_url) then
+    if (text_url && selected_url) || selection_within_link model.source lo hi then text
+    else if selected_url then "[" ^ text ^ "](" ^ selected ^ ")"
+    else "[" ^ selected ^ "](" ^ text ^ ")"
+  else paste_source_text ~text ~html
+
 (* cljs edit-last-block-after-inserted! — after a paste, editing moves to
    the last inserted block so sequential pastes append in order *)
 let edit_last_inserted ?scope resp =
@@ -2535,7 +2581,7 @@ let paste_into_editor ~clipboard:(trees, copied_text) ev =
   | Some e, _ when S.is_draft e ->
       ev.Ui_services.prevent_default ();
       ev.Ui_services.stop_immediate ();
-      let text = paste_source_text ~text:clip_text ~html:clip_html in
+      let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
       if not (trees <> [] && clip_text = copied_text)
          && not (markdown_blocks text || has_paragraph_break text) then
         splice_clipboard_text e.uuid text
@@ -2568,7 +2614,7 @@ let paste_into_editor ~clipboard:(trees, copied_text) ev =
   | Some e, _ ->
       (* external paste while editing (no stored trees, or the event
          text differs from what our copy wrote) *)
-      let text = paste_source_text ~text:clip_text ~html:clip_html in
+      let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
       if String.trim text <> "" then (
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ();
@@ -2672,6 +2718,7 @@ let toggle_collapse_block ~scope ~persist (b : Model.block) =
   | Some uuid when S.children_of b <> [] ->
       if b.Model.block_default_collapsed
          && not (S.is_collapsed_in ~scope uuid)
+         && S.effective_collapsed ~scope b
       then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs

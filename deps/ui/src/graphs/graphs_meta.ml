@@ -25,13 +25,16 @@ let field repo name =
   | Some (_, Wire.Map fields) -> Wire.map_get (Wire.Map fields) name
   | _ -> None
 
-let last_seen repo =
-  match field repo "last-seen-at" with
+let timestamp repo name =
+  match field repo name with
   | Some (Wire.Int n) -> Some (float_of_int n)
   | Some (Wire.Int64 n) -> Some (Int64.to_float n)
   | Some (Wire.Float f) -> Some f
   | Some (Wire.Date_ms n) -> Some (Int64.to_float n)
   | _ -> None
+
+let last_seen repo = timestamp repo "last-seen-at"
+let created_at repo = timestamp repo "created-at"
 
 (* merge fields into repo's entry (creates the entry when missing) *)
 let upsert repo fields =

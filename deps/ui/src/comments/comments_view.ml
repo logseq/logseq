@@ -62,11 +62,19 @@ let fetch_target_titles ids =
          | _ -> None)
     | _ -> None) (Wire.elems wire))
 
+let reaction_refreshes : ((string * string), (int * (unit -> unit)) list) Hashtbl.t =
+  Hashtbl.create 16
+let reaction_refresh_seq = ref 0
+
 let toggle_reaction uuid emoji =
+  let repo = Runtime.repo () in
   let user = match Rtc_flows.user_uuid () with
     | Some uuid -> Wire.Uuid uuid | None -> Wire.Nil in
-  ignore (Ops.apply_and_refresh
-    [ Ops.op "toggle-reaction" [ Wire.Uuid uuid; Wire.String emoji; user ] ])
+  ignore (let* () = Ops.apply_and_refresh
+    [ Ops.op "toggle-reaction" [ Wire.Uuid uuid; Wire.String emoji; user ] ] in
+    Option.iter (List.iter (fun (_, refresh) -> refresh ()))
+      (Hashtbl.find_opt reaction_refreshes (repo, uuid));
+    Js.Promise.resolve ())
 
 let open_reaction_picker uuid button_id =
   Option.iter (fun anchor ->
@@ -75,23 +83,26 @@ let open_reaction_picker uuid button_id =
       ~on_chosen:(function Icon_picker.Emoji emoji -> toggle_reaction uuid emoji | _ -> ())))
     (Ui_services.dom_by_id button_id)
 
-let reaction_owned_by current = function
-  | None -> current = None
-  | Some author -> author.Model.author_uuid <> None && author.author_uuid = current
+let reaction_summary wire =
+  List.map (fun row ->
+    let emoji = Option.get (Wire.map_get_string row "emoji-id") in
+    let count = Option.get (Wire.map_get_int row "count") in
+    let selected = match Wire.get row "reacted-by-me?" with
+      | Some (Wire.Bool selected) -> selected
+      | _ -> invalid_arg "Invalid reaction ownership" in
+    let names = match Wire.get row "usernames" with
+      | Some Wire.Nil -> []
+      | Some (Wire.Array names) -> List.map (fun name -> Option.get (Wire.as_string name)) names
+      | _ -> invalid_arg "Invalid reaction usernames" in
+    emoji, count, selected, names) (Wire.elems wire)
 
-let reactions_el uuid reactions users =
+let reaction_badges uuid reactions =
   match reactions with
   | [] -> Logseq_el.nothing
   | _ ->
-      let current = Rtc_flows.user_uuid () in
       row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         ~cross:`center ~flex_wrap:`wrap ~gap:2 ~margin_top:4
-        (List.map (fun (emoji, count) ->
-          let authors = List.filter_map (fun (id, user) ->
-            if id = emoji then Some user else None) users in
-          let selected = List.exists (reaction_owned_by current) authors in
-          let names = List.filter_map (fun author ->
-            Option.bind author (fun a -> a.Model.author_name)) authors in
+        (List.map (fun (emoji, count, selected, names) ->
           Ui_components.button ~key:("rxb-" ^ uuid ^ "-" ^ emoji)
             ~variant:`ghost ~height:24 ~padding_horizontal:8 ~padding_vertical:0
             ~corner_radius:999 ~selected
@@ -101,13 +112,56 @@ let reactions_el uuid reactions users =
             ~on_press:(fun _ -> if not (Ui_services.env_publishing ()) then toggle_reaction uuid emoji)
             [ Logseq_emoji.el ~name:emoji ()
             ; typography "0.75rem" 400 (text ~value:(string_of_int count) []) ])
-          (List.sort (fun (a, ac) (b, bc) ->
-             let count = Int.compare bc ac in if count = 0 then String.compare a b else count) reactions)
+          reactions
          @ if Ui_services.env_publishing () then [] else
            [ Ui_components.button ~variant:`ghost ~height:24 ~width:24 ~padding:0
                ~accessibility_identifier:("rx-add-" ^ uuid)
                ~label:(I.t "command.editor/add-reaction") ~icon:(`app "plus")
                ~on_press:(fun _ -> open_reaction_picker uuid ("rx-add-" ^ uuid)) [] ])
+
+let reactions_el uuid : t =
+ fun ctx parent ->
+  if uuid = "" || (Runtime.model ()).Model.repo = None then
+    Logseq_el.nothing ctx parent
+  else
+  let repo = Runtime.repo () in
+  let state = Signal.state ctx.Lui_ui.ui_scheduler [] in
+  let alive = ref true and generation = ref 0 in
+  let subscription = ref None in
+  let load () =
+    if !alive && Runtime.repo () = repo then begin
+      incr generation;
+      let token = !generation in
+      let user = match Rtc_flows.user_uuid () with Some id -> Wire.Uuid id | None -> Wire.Nil in
+      let key = Wire.Array [Wire.kw "block-reactions"; Wire.Uuid uuid; user] in
+      Views_db.snapshots [key] ~f:(fun snapshot ->
+        if !alive && token = !generation && Runtime.repo () = repo then
+          Option.iter (fun value ->
+            let keys, all = Views_wire.snapshot_slot_watch snapshot key in
+            Subs_state.set_watch (Option.get !subscription)
+              { Subs_state.w_all = all; w_tags = []; w_keys = keys };
+            Runtime.signal_set state (reaction_summary value))
+            (Views_db.snapshot_value snapshot key))
+    end in
+  let sub = Runtime.on_sync
+    ~watch:{ Subs_state.w_all = false; w_tags = [];
+      w_keys = [Subs_state.watch_key_uuid "reactions" uuid] }
+    (fun _ -> load ()) in
+  subscription := Some sub;
+  let id = !reaction_refresh_seq in
+  incr reaction_refresh_seq;
+  let registry_key = repo, uuid in
+  let previous = Option.value (Hashtbl.find_opt reaction_refreshes registry_key) ~default:[] in
+  Hashtbl.replace reaction_refreshes registry_key ((id, load) :: previous);
+  Signal.on_dispose ctx.ui_scope (fun () ->
+    alive := false;
+    Runtime.off_sync sub;
+    let remaining = List.filter (fun (other, _) -> other <> id)
+      (Hashtbl.find reaction_refreshes registry_key) in
+    if remaining = [] then Hashtbl.remove reaction_refreshes registry_key
+    else Hashtbl.replace reaction_refreshes registry_key remaining);
+  load ();
+  (reactive (reaction_badges uuid) (Signal.value state)) ctx parent
 
 (* Draft ownership survives worker-driven render remounts. *)
 let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~current_activation ~asset_target ~initial
@@ -254,7 +308,7 @@ let comment_body ~scope ~area_uuid st (comment : Model.block Signal.signal) =
             | None -> content in
           column ~style_class:"ls-comment-body" ~min_width:0
             (content
-             @ [reactions_el uuid comment.block_reactions comment.block_reaction_users])) comment)
+             @ [reactions_el uuid])) comment)
     (Signal.value st)
 
 let comment_actions st (comment : Model.block) =

@@ -129,8 +129,8 @@ let render_roots ~restore ~delete_forever roots : t =
   column ~key:"roots" ~gap:32
     (text ~key:"desc"
       
-       ~as_:`Small
-       ~foreground:"var(--ls-secondary-text-color)"
+       ~font_size:"14px" ~line_height:"20px" ~margin_left:4
+       ~foreground:"hsl(var(--muted-foreground))"
        ~value:(T.t "storage.recycle/retention-desc") []
     :: (if roots = [] then
           [ text ~key:"empty" ~as_:`Small

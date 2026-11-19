@@ -548,6 +548,7 @@ let ops : Ui_services.dom =
         | None -> None)
   ; doc_root = (fun () -> el_of doc_root_js)
   ; viewport_width = (fun () -> Web_dom.win_inner_width)
+  ; device_pixel_ratio = (fun () -> Option.value Web_dom.win_device_pixel_ratio ~default:1.)
   ; dispatch = (fun name -> Web_dom.dispatch_custom name Js.Json.null)
   ; emit_json =
       (fun (_ : string) (_ : string) ->

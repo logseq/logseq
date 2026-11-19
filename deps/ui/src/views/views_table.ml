@@ -215,7 +215,8 @@ let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   | V.KQuery _ ->
       (* cljs get-query-columns: build-columns over view-data :properties
          (idents); created/updated only when pulled for advanced queries *)
-      let qcols = List.filter_map (column_of_ident s) s.V.query_idents in
+      let qcols = List.filter_map (fun ident ->
+        if ident = "block/page" then None else column_of_ident s ident) s.V.query_idents in
       let tail =
         if s.V.is_advanced then []
         else [ (created_column ()); (updated_column ()) ]
@@ -390,7 +391,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
         Ui_components.button ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref icon_name)
           ~width:24 ~height:24 ~padding:4
           ~foreground:"muted-foreground"
-          ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
+          ~background:"var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
           ~label:title_ ~on_press:(fun _ -> on_press ()) []
       in
       (* Actions overlay the title's trailing edge and share its hover owner.
@@ -424,6 +425,14 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                               (fun () -> open_row_sidebar row_uuid) ]))
                  ]) ]) context parent
 
+let visible_multi_values (c : V.column) xs =
+  List.filter
+    (fun x ->
+      Wr.prop_text x <> ""
+      && (c.V.c_id <> "block/tags"
+          || Wr.ident_of_value x <> Some "logseq.class/Page"))
+    xs
+
 let prop_cell ~blk (c : V.column) : t =
   match cell_value blk c with
   | W.Map _ as v when Wr.ref_uuid v <> None ->
@@ -441,14 +450,7 @@ let prop_cell ~blk (c : V.column) : t =
   | W.Array xs when c.V.c_many ->
       (* cljs pv: .property-value-inner > .multi-values > select-items;
          the implicit Page class is hidden *)
-      let items =
-        List.filter
-          (fun x ->
-            Wr.prop_text x <> ""
-            && (c.V.c_id <> "block/tags"
-                || Wr.ident_of_value x <> Some "logseq.class/Page"))
-          xs
-      in
+      let items = visible_multi_values c xs in
       let item_els =
         List.concat
           (List.mapi
@@ -475,7 +477,7 @@ let prop_cell ~blk (c : V.column) : t =
                      ([ ("data-tag-title", t_) ]
                       @ if tuuid <> "" then [ ("data-tag-uuid", tuuid) ]
                         else [])
-                   [ Ui_components.with_props
+                   [ Ui_components.tag_link_appearance (Ui_components.with_props
                        [ Ui_components.Prop.position `relative ]
                        (link ~style_class:"tag" ~text:("#" ^ t_)
                        ~data_attrs:
@@ -484,7 +486,7 @@ let prop_cell ~blk (c : V.column) : t =
                           @ if tuuid <> ""
                             then [ ("data-uuid", tuuid) ]
                             else [])
-                       []) ]) ]
+                       [])) ]) ]
             else
               (if i > 0 then [ text ~value:"," [] ] else [])
               @ [ box
@@ -542,7 +544,12 @@ let table_cell_navigation inst ~row_uuid ~column = function
 
 let cell_el inst ~row_uuid ~blk (c : V.column) : t =
   with_column_width inst c
-  (Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
+  (Ui_components.with_props
+     ([ Ui_components.Prop.overflow `hidden ]
+      @ (if c.V.c_id = "select" then []
+         else
+           [ Ui_components.Prop.shadow "inset -1px 0 0 hsl(var(--border))"
+           ; Ui_components.Prop.padding_right 1 ]))
   (Ui_parts.class_signal (sig_of inst)
      (fun s -> "ls-table-cell" ^
        if s.V.table_cell_focus = Some (row_uuid, c.V.c_id) then " selected" else "")
@@ -576,7 +583,49 @@ let cell_el inst ~row_uuid ~blk (c : V.column) : t =
                  ; class_schema = false }
                in
                inner_cell [ Properties_value.view ~table_view:true ~hover:None pctx row ]
-           | None -> prop_cell ~blk c)) ])))
+           | None -> (
+               match cell_value blk c with
+               | W.Array xs
+                 when c.V.c_id = "block/tags" && c.V.c_many
+                      && not (Ui_services.env_publishing ()) ->
+                   let values = visible_multi_values c xs in
+                   let property =
+                     W.Map
+                       [ (W.Keyword "db/ident", W.Keyword c.V.c_id)
+                       ; (W.Keyword "logseq.property/type", W.Keyword "class")
+                       ; (W.Keyword "db/cardinality", W.Keyword "db.cardinality/many")
+                       ; (W.Keyword "block/title", W.String c.V.c_name)
+                       ]
+                   in
+                   let value_row =
+                     W.Map
+                       [ (W.Keyword "property", property)
+                       ; (W.Keyword "property-id", W.Keyword c.V.c_id)
+                       ; (W.Keyword "value", W.Array values)
+                       ]
+                   in
+                   let pctx : Properties_value.ctx =
+                     { owner_key = "view-" ^ string_of_int inst.V.id
+                     ; jump_owner = Jump_state.owner
+                         ~scope:("view-" ^ string_of_int inst.V.id) ~container:row_uuid
+                     ; block_uuid = row_uuid
+                     ; block_id = Properties_data.entity_id_of blk
+                     ; refresh = (fun () -> refresh inst)
+                     ; is_page = is_page_row blk
+                     ; class_schema = false }
+                   in
+                   let value_view =
+                     Properties_value.view ~table_view:true ~hover:None pctx value_row
+                   in
+                   inner_cell
+                     [ Ui_components.with_props
+                         [ Ui_components.Prop.cursor `pointer
+                         ; Ui_components.Prop.hover_background
+                             "var(--lx-gray-02,var(--ls-secondary-background-color,var(--rx-gray-02)))" ]
+                         (row ~grow:1. ~min_width:0 ~height:(if values = [] then 24 else 20) ~cross:`center
+                            ~corner_radius:4 ~transition:"background-color 300ms"
+                            ~style_class:"property-value-inner" [ value_view ]) ]
+               | _ -> prop_cell ~blk c))) ])))
 
 (* ---------- header ---------- *)
 
@@ -766,10 +815,11 @@ let resize_handle inst (c : V.column) : t =
       [Ui_components.Prop.position `absolute
       ;Ui_components.Prop.inset_right 0.; Ui_components.Prop.inset_top 0.
       ;Ui_components.Prop.cursor `pointer
-      ;Ui_components.Prop.hover_opacity 1.]
+      ;Ui_components.Prop.hover_opacity 0.7
+      ;Ui_components.Prop.pressed_opacity 1.]
       (box ~style_class:"ls-table-resize-handle" ~width:6 ~height:32
-        ~min_width:6 ~opacity:0.5
-        ~background:"hsl(var(--border))"
+        ~min_width:6 ~opacity:0. ~corner_radius:4
+        ~background:"var(--lx-accent-08, hsl(var(--accent) / 0.6))"
         ~data_attrs:["data-no-dnd", "true"]
         ~pointer_capture:true
         ~on_pointer_down:(function
@@ -810,7 +860,9 @@ let header_cell ?rows inst (c : V.column) : t =
       Ui_components.with_props
         [ Ui_components.Prop.font_size "0.875rem"
         ; Ui_components.Prop.line_height "1.25rem"
-        ; Ui_components.Prop.font_weight 500 ]
+        ; Ui_components.Prop.font_weight 500
+        ; Ui_components.Prop.border_width 0
+        ; Ui_components.Prop.hover_background "hsl(var(--muted) / 0.5)" ]
         (box ~style_class:"ls-table-header-cell"
            ~foreground:fg
            [ header_select_cell ?rows inst ])
@@ -839,8 +891,9 @@ let header_cell ?rows inst (c : V.column) : t =
            ; Ui_components.Prop.cursor `pointer
            ; Ui_components.Prop.position `relative
            ; Ui_components.Prop.padding_right 1
-           ; Ui_components.Prop.shadow "inset -1px 0 0 hsl(var(--border))" ]
-           (box ~style_class:"ls-table-header-cell"
+           ; Ui_components.Prop.shadow "inset -1px 0 0 hsl(var(--border))"
+           ; Ui_components.Prop.hover_background "hsl(var(--muted) / 0.5)" ]
+           (row ~cross:`center ~style_class:"ls-table-header-cell"
               ~accessibility_identifier:(header_cell_id inst c)
               ~foreground:fg
               [ Ui_components.with_props
@@ -959,6 +1012,7 @@ let delete_selected inst s current () =
       in
       ignore
         (P.show_dialog
+           ~wide:true
            ~headline:(I.t "page.delete/batch-confirm-title")
            ~body:
              [ Ui_components.with_props [Ui_components.Prop.padding_top 16]
@@ -1067,7 +1121,8 @@ let action_bar inst : t =
        [
          toolbar ~style_class:"table-action-bar" ~orientation:`horizontal
            ~label:(I.t "view.table/selection-actions-label")
-           ~gap:0 ~height:32 ~padding:0 ~background:"var(--lx-gray-01)"
+           ~gap:0 ~height:32 ~padding:0
+           ~background:"var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
            ~border_width:0 ~corner_radius:0
            [
              text ~padding_horizontal:8 ~margin_right:4 ~font_size:"14px"
@@ -1090,9 +1145,6 @@ let action_bar inst : t =
                ~label:(I.t "ui/delete")
                ~icon:(`app "trash") ~width:31 ~corner_radius:6
                (fun () -> with_full_selection inst ~scope (fun s current -> delete_selected inst s current ()));
-             Ui_components.button ~variant:`outline ~height:32 ~width:31 ~corner_radius:6
-               ~label:(I.t "ui/cancel") ~icon:(`app "x")
-               ~on_press:(fun _ -> V.update inst V.table_clear_selection) [];
            ];
        ]) ctx parent
 
@@ -1171,6 +1223,22 @@ let table_row_navigation inst ~row_uuid ~columns = function
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
  fun ctx parent ->
   let cell_wrap c = box ~height:32 [ cell_el inst ~row_uuid ~blk c ] in
+  let row_background selected =
+    if selected then "hsl(var(--muted))"
+    else
+      "var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
+  in
+  let row_hover_background selected =
+    if selected then "hsl(var(--muted))" else "hsl(var(--muted) / 0.5)"
+  in
+  let with_row_feedback ?background_signal ?hover_background_signal (element : t) : t =
+    Ui_components.with_signal_props
+      (List.filter_map Fun.id
+         [ Option.map Ui_components.Prop.s_background background_signal
+         ; Option.map Ui_components.Prop.s_hover_background hover_background_signal
+         ])
+      element
+  in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
@@ -1183,13 +1251,14 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
   (Ui_parts.class_signal sel_sig
         (fun sel ->
           "ls-table-row ls-block" ^ if sel then " selected" else "")
-        (Ui_parts.prop_signal Lui_protocol.BackgroundValue sel_sig
-           (fun sel ->
-             if sel then "hsl(var(--muted))" else "transparent")
-           (Ui_components.with_props
+        (Ui_components.with_props
               [ Ui_components.Prop.overflow `hidden
               ; Ui_components.Prop.padding_bottom 1
               ; Ui_components.Prop.shadow "inset 0 -1px 0 hsl(var(--border))" ]
+              (with_row_feedback
+                 ~background:(reactive (fun selected -> row_background selected) sel_sig)
+                 ~hover_background:
+                   (reactive (fun selected -> row_hover_background selected) sel_sig)
               (row ~key:("ls-tr-" ^ row_uuid) ~cross:`stretch ~height:33 ~min_height:33
                  ~on_navigation_key:(table_row_navigation inst ~row_uuid ~columns:(pinned @ free))
                  ~max_height:33 ~transition:"background-color 150ms"
@@ -1205,8 +1274,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
                      ; Ui_components.Prop.z_index 8 ]
                      (row ~style_class:"sticky-columns"
                         ~background:
-                          "var(--lx-gray-01, \
-                           var(--ls-primary-background-color))"
+                          "var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
                         (List.map cell_wrap pinned))
                  ; row
                      (List.map cell_wrap free
@@ -1274,46 +1342,64 @@ let table_header ?rows inst cols : t =
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
   in
+  let add_property =
+    if Ui_services.env_publishing () then None else show_add_property inst
+  in
+  let free_row =
+    let items =
+      List.map cell_item free
+      @ (match add_property with
+         | Some p ->
+             let add_property_button =
+               Ui_components.button ~variant:`ghost ~size:`sm
+                 ~icon:(`app "plus") ~text:(I.t "view/new-property")
+                 ~grow:1. ~main:`start ~height:32 ~padding_horizontal:8
+                 ~on_press:(fun _ ->
+                   match p.Model.page_uuid with
+                   | Some uuid ->
+                       Properties_dialog.open_dialog
+                         { Properties_dialog.uuid
+                         ; uuids = []
+                         ; db_id = p.Model.page_db_id
+                         ; is_tag = true
+                         ; title = p.Model.page_title
+                         }
+                   | None -> ()) []
+             in
+             let header_cell =
+               Ui_components.with_props
+                 [ Ui_components.Prop.border_width 0
+                 ; Ui_components.Prop.hover_background
+                     "hsl(var(--muted) / 0.5)" ]
+                 (row ~cross:`center ~style_class:"ls-table-header-cell"
+                    [ add_property_button ])
+             in
+             [ box ~grow:1. ~min_width:160
+                 ~accessibility_identifier:"add property" [ header_cell ] ]
+         | None -> [])
+      @ [ dnd_described "1"; dnd_live "1" ]
+    in
+    match add_property with
+    | Some _ -> row ~grow:1. items
+    | None -> row items
+  in
   Ui_components.with_props
     [ Ui_components.Prop.padding_top 1
     ; Ui_components.Prop.padding_bottom 1
     ; Ui_components.Prop.shadow
         "inset 0 1px 0 hsl(var(--border)), inset 0 -1px 0 hsl(var(--border))" ]
   (row ~style_class:"ls-table-header" ~cross:`center ~height:34
-    ~background:"var(--lx-gray-01, var(--ls-primary-background-color))"
+    ~background:
+      "var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
     [ Ui_components.with_props
         [ Ui_components.Prop.position `sticky
         ; Ui_components.Prop.inset_left 0.
         ; Ui_components.Prop.z_index 8 ]
         (row ~style_class:"sticky-columns"
            ~background:
-             "var(--lx-gray-01, var(--ls-primary-background-color))"
+             "var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
            (List.map cell_item pinned @ [ dnd_described "0"; dnd_live "0" ]))
-    ; row
-        (List.map cell_item free
-         @ (match (if Ui_services.env_publishing () then None else show_add_property inst) with
-            | Some p ->
-                (* cljs add-property-button: trailing "New property"
-                   header cell on class-objects tables only *)
-                [ box ~accessibility_identifier:"add property"
-                    [ box ~style_class:"ls-table-header-cell"
-                        [ Ui_components.button ~variant:`ghost ~size:`sm ~icon:(`app "plus")
-                            ~text:(I.t "view/new-property") ~grow:1. ~main:`start
-                            ~height:32 ~padding_horizontal:8
-                            ~on_press:(fun _ ->
-                              match p.Model.page_uuid with
-                              | Some uuid ->
-                                  Properties_dialog.open_dialog
-                                    { Properties_dialog.uuid
-                                    ; uuids = []
-                                    ; db_id = p.Model.page_db_id
-                                    ; is_tag = true
-                                    ; title = p.Model.page_title
-                                    }
-                              | None -> ())
-                            [] ] ] ]
-            | None -> [])
-         @ [ dnd_described "1"; dnd_live "1" ]) ])
+    ; free_row ])
 
 (* footer add-new-row (cljs: property-objects always; class-objects for
    non-private classes; all-pages/query never) *)
@@ -1428,6 +1514,16 @@ let list_row_el inst ~row_uuid ~blk : t =
     | V.KLinkedRefs | V.KUnlinkedRefs -> false
     | _ -> true
   in
+  let b = if not persist_collapse && b.Model.block_is_page then
+      { b with Model.block_children = [] } else b in
+  let b = if persist_collapse then b else
+    let limit = match Settings_state.config_get "ref/default-open-blocks-level" with
+      | Some (W.Int n) -> n | None -> 2
+      | Some _ -> invalid_arg "Reference open depth must be an integer" in
+    let rec with_depth level (b : Model.block) =
+      { b with Model.block_default_collapsed = b.block_default_collapsed || level >= limit
+      ; block_children = List.map (with_depth (level + 1)) b.block_children } in
+    with_depth 1 b in
   !Render_state.block_row_static
     ~collapse_scope:inst.V.collapse_scope ~persist_collapse b
 
@@ -1447,14 +1543,9 @@ let list_row_el_sig inst ~row_uuid (item_sig : row_item Signal.signal) : t =
 
 (* ---------- foldable groups ---------- *)
 
-(* cljs ui/foldable: .flex.flex-col > (.ls-foldable-title.content +
-   .ls-foldable-content > .ls-foldable-content-inner). The caret toggles
-   control-show only while the title is hovered — hover is DOM-only, so
-   the caret is always shown; its rotated state rides a reactive
-   style_class via Ui_parts.class_signal. caret-right is a custom path
-   icon (registered in app_icons). *)
 let foldable inst ~key ~title ~(body : t) : t =
  fun ctx parent ->
+  let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
   let collapsed_sig =
     Logseq_el.own ctx
       (Signal.map
@@ -1463,6 +1554,8 @@ let foldable inst ~key ~title ~(body : t) : t =
   in
   (column ~grow:1.
     [ row ~style_class:"ls-foldable-title content"
+        ~on_pointer_enter:(fun _ -> Signal.set hovered true; Runtime.flush ())
+        ~on_pointer_leave:(fun _ -> Signal.set hovered false; Runtime.flush ())
         [ row ~grow:1. ~style_class:"foldable-title"
             [ (* grow so .ls-view-head's justify-content:space-between
                  has room — cljs .foldable-title > * stretches *)
@@ -1479,25 +1572,14 @@ let foldable inst ~key ~title ~(body : t) : t =
                           }))
                     (Ui_components.with_props
                        [ Ui_components.Prop.cursor `pointer
-                       ; Ui_components.Prop.opacity 0.5
                        ; Ui_components.Prop.hover_opacity 1. ]
+                       (Ui_parts.float_prop L.Opacity
+                        ~value:(reactive (fun h c -> if h || c then 1. else 0.)
+                          (Signal.value hovered) collapsed_sig)
                        (Ui_components.foldable_control
-                       [ (* cljs foldable-caret: span.control-show only
-                            while the title is hovered or the group is
-                            collapsed — control-hide otherwise *)
-                          Ui_parts.class_signal collapsed_sig
-                           (fun c -> if c then "" else "control-hide")
-                           (box ~key:"ctrlh"
-                              [ Ui_parts.class_signal collapsed_sig
-                                  (fun c ->
-                                    "rotating-arrow"
-                                    ^ if c then " collapsed"
-                                      else " not-collapsed")
-                                  (box ~key:"caret"
-                                     [ icon ~name:(`app "caret-right")
-                                         ~point_size:16
-                                         ~transition:
-                                           "transform 100ms ease-in" [] ]) ]) ]))
+                          [icon ~key:"caret" ~point_size:13
+                             ~name:(reactive (fun c -> `app (if c then
+                               "rotating-arrow" else "rotating-arrow-down")) collapsed_sig) []])))
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig
@@ -1534,7 +1616,8 @@ let group_title inst s gv =
               | Some t when t <> "" -> t
               | _ -> missing_group ()))
       | W.Nil ->
-          if s.V.group_by = Some "block/page" then (I.t "view.table/pages")
+          if s.V.group_by = Some "block/page"
+             || (s.V.group_by = None && s.V.display_type = "list") then (I.t "view.table/pages")
           else missing_group ()
       | v -> Wr.prop_text v)
 
@@ -1630,12 +1713,40 @@ let ref_vlist inst ~paginate ~item_extent (rows : t list) : t =
 
 let block_line inst (s : V.vstate) u : t =
   match Hashtbl.find_opt s.V.blocks u with
-  | Some blk -> list_row_el inst ~row_uuid:u ~blk
+  | Some blk -> box ~margin_left:(-8) [list_row_el inst ~row_uuid:u ~blk]
   | None -> box ~key:("miss-" ^ u) []
 
+let ref_breadcrumb inst uuid : t =
+ fun ctx parent ->
+  let parents = Signal.state ctx.Lui_ui.ui_scheduler [] in
+  let current = V.current_view inst in
+  let alive () = current () && not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope) in
+  ignore (Js.Promise.then_ (fun blocks ->
+    if alive () then begin
+      Signal.set parents (List.filter (fun (b : Model.block) -> not b.block_is_page) blocks);
+      Ui_services.request_flush ()
+    end;
+    Js.Promise.resolve ()) (Outliner_ops.fetch_zoom_parents (Runtime.repo ()) uuid)
+    |> Views_db.catch_quiet);
+  (reactive (fun blocks ->
+    if blocks = [] then Logseq_el.nothing else
+    Ui_components.with_props
+      [Ui_components.Prop.font_size "14px"; Ui_components.Prop.opacity 0.7;
+       Ui_components.Prop.hover_opacity 1.]
+    (row ~margin_left:16 ~margin_top:4 ~gap:4 ~cross:`center
+      (List.concat (List.mapi (fun i (b : Model.block) ->
+        (if i = 0 then [] else [text ~value:"/" []]) @
+        [link ~text:(if b.block_is_query then I.t "property.built-in/query" else b.block_title)
+           ~url:("#/page/" ^ Option.get b.block_uuid) ~target:`self_ []]) blocks))))
+    (Signal.value parents)) ctx parent
+
 let ref_header inst ~key ~title : t =
+ fun ctx parent ->
   let collapsed = V.Sset.mem key (V.get inst).V.collapsed_groups in
+  let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
   row ~key:("h-" ^ key) ~cross:`center ~gap:4
+    ~on_pointer_enter:(fun _ -> Signal.set hovered true; Runtime.flush ())
+    ~on_pointer_leave:(fun _ -> Signal.set hovered false; Runtime.flush ())
     ~style_class:"ls-foldable-header"
     [ Ui_parts.pressable
         ~on_press:(fun _ ->
@@ -1646,13 +1757,12 @@ let ref_header inst ~key ~title : t =
                      V.Sset.remove key st.V.collapsed_groups
                    else V.Sset.add key st.V.collapsed_groups)
               }))
-        (box ~width:14 ~height:16
-           [ icon ~name:(`app "caret-right") ~point_size:16
-               ~style_class:
-                 ("rotating-arrow "
-                  ^ if collapsed then "collapsed" else "not-collapsed")
-               [] ])
-    ; title ]
+        (Ui_parts.float_prop L.Opacity
+           ~value:(reactive (fun h -> if h || collapsed then 1. else 0.) (Signal.value hovered))
+           (Ui_components.foldable_control
+              [icon ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down"))
+                 ~point_size:13 []]))
+    ; title ] ctx parent
 
 (* One virtual row per header and per block, so a collapsed group drops
    its blocks and an off-screen group is not laid out. *)
@@ -1671,40 +1781,17 @@ let ref_grouped_lines inst (s : V.vstate) (gs : Wr.vrow_group list) : t list =
 
 let ref_grouped_list_lines inst (s : V.vstate)
     (gs : Wr.vrow_group_list list) : t list =
-  List.concat
-    (List.mapi
-       (fun i g ->
-         List.concat
-           (List.mapi
-              (fun j (buuid, rows) ->
-                let key =
-                  "g" ^ string_of_int i ^ "-" ^ string_of_int j
-                in
-                let pname =
-                  match rows with
-                  | u :: _ -> (
-                      match Hashtbl.find_opt s.V.blocks u with
-                      | Some blk ->
-                          Option.value
-                            (Decode.block_of_wire blk).Model.block_page_name
-                            ~default:(row_title s buuid)
-                      | None -> row_title s buuid)
-                  | [] -> row_title s buuid
-                in
-                let header =
-                  ref_header inst ~key
-                    ~title:
-                      (link
-                         ~url:
-                           ("#/page/"
-                            ^ Ui_services.uri_encode_component pname)
-                         ~target:`self_ ~style_class:"page-ref" ~text:pname
-                         [])
-                in
-                if V.Sset.mem key s.V.collapsed_groups then [ header ]
-                else header :: List.map (block_line inst s) rows)
-              g.Wr.glparts))
-       gs)
+  List.concat (List.mapi (fun i g ->
+    let key = "g" ^ string_of_int i in
+    let title = group_title inst s g.Wr.glv in
+    let header = ref_header inst ~key
+        ~title:(if g.Wr.glv = W.Nil then
+          text ~font_size:"14px" ~foreground:"hsl(var(--muted-foreground))" ~value:title []
+        else link ~url:("#/page/" ^ Ui_services.uri_encode_component title)
+          ~target:`self_ ~style_class:"page-ref" ~text:title []) in
+    if V.Sset.mem key s.V.collapsed_groups then [header]
+    else header :: List.concat_map
+      (fun (uuid, rows) -> ref_breadcrumb inst uuid :: List.map (block_line inst s) rows) g.Wr.glparts) gs)
 
 let render_list inst s : t =
   let more = more_ref_rows inst s in

@@ -1989,10 +1989,8 @@ a.page-title {
     opacity: 1;
   }
 
-  /* cljs mounts no CodeMirror at rest (static pre); keep the mounted CM's
-     rest-state metrics identical — lib default is padding 4px 0 */
   .CodeMirror-lines {
-    padding: 0;
+    padding: 4px 0;
   }
 }
 

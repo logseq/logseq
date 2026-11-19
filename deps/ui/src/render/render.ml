@@ -647,8 +647,36 @@ let table_el ~self (header, rows) : t =
                        (List.map (cell "td") r))
                    rows) ] ] ]
 
+let horizontal_rule s =
+  let s = String.trim s in
+  let length = String.length s in
+  if length < 3 || not (List.mem s.[0] ['-'; '*'; '_']) then false
+  else
+    let rec scan i count =
+      if i = length then count >= 3
+      else if s.[i] = s.[0] then scan (i + 1) (count + 1)
+      else if s.[i] = ' ' || s.[i] = '\t' then scan (i + 1) count
+      else false
+    in
+    scan 0 0
+
+let rule_el ~self : t =
+ fun ctx parent ->
+  let viewport = Ui_services.viewport_width_signal
+    ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
+  (Ui_parts.int_prop Lui_protocol.MarginTop
+     ~value:(reactive (fun width -> if width >= 640. then 32 else 16) viewport)
+   (Ui_parts.int_prop Lui_protocol.MarginBottom
+     ~value:(reactive (fun width -> if width >= 640. then 32 else 16) viewport)
+   (divider ~key:("rule-" ^ self)
+     ~margin_horizontal:0
+     ~height:1 ~border_width:0
+     ~background:"var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)))" [])))
+    ctx parent
+
 let body_el ~self s : t option =
-  match quote_body s with
+  if horizontal_rule s then Some (rule_el ~self)
+  else match quote_body s with
   | Some rest -> Some (quote_el ~self rest)
   | None -> Option.map (table_el ~self) (table_parts s)
 
@@ -669,6 +697,7 @@ let title_outer_kind (b : Model.block) =
         let s = b.Model.block_title in
         if src_block s <> None || src_eval_parts s <> None then
           Some `flex
+        else if quote_body s <> None || horizontal_rule s then Some `block
         else Some `inline
 
 (* self: uuid of the block whose title this is — seeds the ref chain

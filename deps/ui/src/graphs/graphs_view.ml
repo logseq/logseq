@@ -114,7 +114,7 @@ let graph_row repo : t =
     ~style_class:"group"
     ~data_attrs:[ ("data-testid", repo) ]
     [ column ~key:("grl-" ^ repo)
-        [ row ~key:("grt-" ^ repo) ~gap:4 ~cross:`center
+        ([ row ~key:("grt-" ^ repo) ~gap:4 ~cross:`center
             (* e2e: div[data-testid='logseq_db_<n>'] span:has-text('<n>') *)
             [ text ~key:("grn-" ^ repo)
                 ~foreground:"var(--lx-accent-11)"
@@ -126,18 +126,18 @@ let graph_row repo : t =
                   ignore (Graphs_ops.navigate_journal repo))
                 []
             ]
-        ; text ~key:("grs-" ^ repo) ~as_:`Small
-            ~font_size:"0.8em" ~line_height:"1.5rem"
+        ] @ (match (match Graphs_ops.meta_last_seen repo with
+          | Some _ as time -> time | None -> Graphs_meta.created_at repo) with
+          | None -> []
+          | Some ms -> [box ~min_height:24 [text ~key:("grs-" ^ repo) ~as_:`Small
+            ~font_size:"0.8em" ~line_height:"normal"
             ~foreground:"hsl(var(--muted-foreground))"
             ~value:
               (T.last_opened_at
-                 (match Graphs_ops.meta_last_seen repo with
-                  | Some ms -> Ui_services.time_fmt_date ms
-                  | None -> "-"))
-            []
-        ]
+                 (Ui_services.time_fmt_date ms))
+            []]]))
     ; column ~key:("grc-" ^ repo) ~style_class:"controls"
-        [ Menu_item.dots_menu ~key:("grm-" ^ repo)
+        [ Menu_item.dots_menu ~key:("grm-" ^ repo) ~compact:true
             ([ ( "open-in-another-tab-menu-item"
                , (T.t "graph/open-in-another-tab-action")
                , false
@@ -222,7 +222,7 @@ let remote_row (name, uuid, e2ee, role) : t =
             ]
         ]
     ; column ~key:("rrc-" ^ uuid) ~style_class:"controls"
-        [ Menu_item.dots_menu ~key:("rrm-" ^ uuid) items ]
+        [ Menu_item.dots_menu ~key:("rrm-" ^ uuid) ~compact:true items ]
     ]
     ctx parent
 
@@ -270,9 +270,15 @@ let view (ms : Model.t Signal.signal) : t =
      remote renders once, under Remote graphs *)
   let local_repos (m : Model.t) remote =
     let remote_names = List.map (fun (n, _, _, _) -> n) remote in
-    List.filter
+    let repos = List.filter
       (fun r -> not (List.mem (short_name r) remote_names))
       m.Model.repos
+    in
+    if Graphs_meta.read () = [] then repos
+    else
+      let date repo = match Graphs_meta.last_seen repo with
+        | Some _ as time -> time | None -> Graphs_meta.created_at repo in
+      List.stable_sort (fun a b -> compare (date b) (date a)) repos
   in
   (* mount effects: repos usually arrive via Action.Repos_loaded at
      boot; a cold open of #/all-graphs refreshes once, and the remote
@@ -293,7 +299,8 @@ let view (ms : Model.t Signal.signal) : t =
   in
   column ~key:"graphs-root"
     [ Ui_components.page_heading ~key:"title" ~value:(T.t "graph/all-graphs") ()
-    ; column ~key:"content" ~style_class:"content" ~padding_horizontal:4
+    ; Ui_components.with_props [Ui_components.Prop.padding_left 4]
+        (column ~key:"content" ~style_class:"content"
         [ row ~key:"create-row" ~padding_vertical:32
             [ Ui_components.button ~key:"create" ~variant:`primary ~size:`sm
                 ~text:(T.t "graph/create-new")
@@ -307,6 +314,6 @@ let view (ms : Model.t Signal.signal) : t =
                 ~mount:(fun rs -> graph_row (Signal.get rs))
             ]
         ; if_ ~test:remote_non_empty (remote_section remote_sig)
-        ]
+        ])
     ]
     ctx parent

@@ -565,8 +565,7 @@ let test_editor_format_wraps () =
    | None -> check "editing survives removing markers" false);
   clear_editing ()
 
-(* cljs config: ctrl+shift+b/f are the mac word-movement bindings;
-   ctrl+w kills a word backward *)
+(* cljs config: ctrl+shift+b/f are the mac word-movement bindings. *)
 let test_editor_word_nav () =
   stage_main_session [ block "b1" "hello world" ];
   set_editing "b1" "hello world" ~caret:11;
@@ -574,7 +573,7 @@ let test_editor_word_nav () =
   (match Editor_state.editing () with
    | Some e ->
        check "ctrl+shift+b moves a word left"
-         (e.Editor_state.model.Edit_model.caret = 6)
+         (e.Editor_state.model.Edit_model.caret = 5)
    | None -> check "editing survives word-left" false);
   Editor_keys.on_keydown (key_event ~ctrl:true ~shift:true "f");
   (match Editor_state.editing () with
@@ -583,28 +582,154 @@ let test_editor_word_nav () =
          (e.Editor_state.model.Edit_model.caret = 11)
    | None -> check "editing survives word-right" false);
   Editor_keys.on_keydown (key_event ~ctrl:true "w");
-  check "ctrl+w deletes a word backward"
-    (Editor_actions.live_buffer "b1" = "hello ");
+  check "ctrl+w at the block end has no forward word to delete"
+    (Editor_actions.live_buffer "b1" = "hello world");
+  clear_editing ();
+  stage_main_session [ block "b1" "Plain second block" ];
+  set_editing "b1" "Plain second block" ~caret:6;
+  Editor_keys.dispatch_command "editor/forward-kill-word";
+  check "Forward word deletion consumes its following separator"
+    (Editor_actions.live_buffer "b1" = "Plain block");
+  Editor_keys.dispatch_command "editor/backward-word";
+  check "Backward word movement stops at the separator before the caret"
+    (match Editor_state.editing () with
+     | Some e -> e.Editor_state.model.Edit_model.caret = 5
+     | None -> false);
   clear_editing ()
 
-(* cljs :editor/insert-link "mod+l" opens the link form overlay for the
-   editing block *)
 let test_editor_link () =
-  stage_main_session [ block "b1" "hello" ];
-  set_editing "b1" "hello" ~caret:5;
-  Editor_keys.on_keydown (key_event ~meta:true "l");
-  check "mod+l opens the link form"
-    (match !Editor_commands.active with
-     | Some (p : Editor_commands.popup) -> (
-         match p.kind with
-         | Editor_commands.Link_form _ -> p.uuid = "b1"
-         | _ -> false)
-     | None -> false);
-  Editor_commands.active := None;
-  Runtime.editor_popup_open := false;
+  List.iter (fun (source, anchor, caret, expected, expected_caret) ->
+    stage_main_session [ block "b1" source ];
+    set_editing "b1" source ~caret;
+    Editor_actions.update_model "b1" (fun m ->
+      Edit_model.select m ~anchor ~focus:caret);
+    Editor_keys.on_keydown (key_event ~meta:true "l");
+    check "mod+l formats the selected label or destination"
+      (Editor_actions.live_buffer "b1" = expected);
+    check "mod+l places the caret at the next input position"
+      (match Editor_state.editing () with
+       | Some e -> e.Editor_state.model.Edit_model.caret = expected_caret
+           && not (Edit_model.has_selection e.model)
+       | None -> false);
+    check "mod+l does not open a form" (!Editor_commands.active = None);
+    ignore (Editor_commands.click_guard ());
+    clear_editing ())
+    ["Plain first block", 0, 5, "[Plain]() first block", 8;
+     "hello", 3, 3, "hel[]()lo", 4;
+     "https://example.com", 0, 19, "[](https://example.com)", 1];
+  Editor_keys.dispatch_command "editor/insert-link";
+  check "Insert link without an editing target is inert"
+    (Editor_state.editing () = None && !Editor_commands.active = None)
+
+let test_editor_ac_tab st s =
+  stage_main_session [ block "b1" "[[Tar]]" ];
+  set_editing "b1" "[[Tar]]" ~caret:5;
+  P.open_ac st P.Page_ref;
+  S.flush s;
+  let prevented = ref false in
+  let ev = { (key_event "Tab") with
+    Ui_services.prevent_default = (fun () -> prevented := true) } in
+  Editor_keys.on_global_key ev;
+  Editor_keys.on_keydown ev;
+  check "Page-reference autocomplete leaves Tab available for focus traversal"
+    (not !prevented && Editor_actions.live_buffer "b1" = "[[Tar]]");
+  let document = Stub_dom.get_field Stub_dom.global "document" in
+  let sink = Logseq_editor.create 0 document (fun name fields ->
+    Option.iter (Editor_keys.apply_input "b1") (Edit_input.decode name fields)) in
+  Stub_dom.set_field (Logseq_editor.el_json sink) "ownerDocument" document;
+  Logseq_editor.set_property sink "block-id" (Wv.StringValue "b1");
+  Fun.protect ~finally:(fun () ->
+    Logseq_editor.cleanup sink;
+    P.close_ac st;
+    S.flush s;
+    clear_editing ()) (fun () ->
+      let tab ?(shift = false) () =
+        let event = Stub_dom.make_event ~target:(Logseq_editor.el_json sink)
+          ~fields:["key", Js.Json.string "Tab"; "shiftKey", Js.Json.boolean shift]
+          "keydown" in
+        Logseq_editor.on_keydown sink event;
+        Stub_dom.ev_flag event "defaultPrevented" in
+      check "The live editor conduit preserves autocomplete Tab focus traversal"
+        (not (tab ()) && Editor_actions.live_buffer "b1" = "[[Tar]]");
+      check "The live editor conduit preserves reverse autocomplete focus traversal"
+        (not (tab ~shift:true ()));
+      clear_editing ();
+      check "A retired autocomplete does not release the conduit's Tab default"
+        (tab ());
+      P.close_ac st;
+      S.flush s;
+      stage_main_session [ block "b1" "Plain" ];
+      set_editing "b1" "Plain";
+      check "Ordinary editor Tab stays owned by the conduit" (tab ()))
+
+let test_editor_unbound_enter () =
+  stage_main_session [ block "b1" "Plain second block" ];
+  set_editing "b1" "Plain second block" ~caret:6;
+  Editor_keys.on_keydown (key_event ~meta:true ~shift:true "Enter");
+  check "Unbound mod+shift+Enter preserves the block and caret"
+    (Editor_actions.live_buffer "b1" = "Plain second block"
+     && match Editor_state.editing () with
+        | Some e -> e.Editor_state.model.Edit_model.caret = 6
+        | None -> false);
   clear_editing ()
+
+let test_code_editor_enter () =
+  stage_main_session [ block "b1" "1+2" ];
+  set_editing "b1" "1+2" ~caret:3;
+  let base = Ui_services.dom_body () in
+  let target = { base with Ui_services.editable = (fun () -> true);
+    closest = (fun selector ->
+      if Str_util.contains selector ".CodeMirror" then Some base else None) } in
+  let prevented = ref false in
+  Editor_keys.on_global_key
+    { (key_event "Enter") with Ui_services.target = Some target;
+      prevent_default = (fun () -> prevented := true) };
+  check "CodeMirror retains plain Enter instead of the outliner command"
+    (not !prevented);
+  clear_editing ()
+
+let test_editor_paste_link () =
+  List.iter (fun (source, anchor, caret, pasted, expected) ->
+    stage_main_session [ block "b1" source ];
+    set_editing "b1" source ~caret;
+    Editor_actions.update_model "b1" (fun m ->
+      Edit_model.select m ~anchor ~focus:caret);
+    let ev = key_event "" in
+    Editor_actions.paste_into_editor ~clipboard:([], "")
+      { ev with Ui_services.clipboard_get =
+          (function "text/plain" -> pasted | _ -> "") };
+    check "Pasted links preserve labels and replace existing link ranges"
+      (Editor_actions.live_buffer "b1" = expected);
+    clear_editing ())
+    ["Plain first block", 0, 5, "https://example.com", "[Plain](https://example.com) first block";
+     "hello", 0, 0, "https://example.com", "https://example.comhello";
+     "Plain first block", 0, 5, "words", "words first block";
+     "https://old.example", 0, 19, "https://example.com", "https://example.com";
+     "[label](url)", 0, 7, "https://example.com", "https://example.com(url)"]
 
 (* cljs ctrl+p/ctrl+n inside editing move to the previous/next block *)
+let test_selected_clipboard_paste () =
+  let clipboard = !Editor_state.clipboard and copied = !Editor_state.clipboard_text in
+  let previous = Editor_state.read () in
+  List.iter (fun (internal, text) ->
+    stage_main_session [ block "b1" "Plain second block" ];
+    clear_editing ();
+    Editor_actions.select_single "b1";
+    Editor_state.clipboard := (if internal then [ block "b1" "Plain second block" ] else []);
+    Editor_state.clipboard_text := "Plain second block";
+    let prevented = ref false in
+    Editor_keys.on_paste { (key_event "") with
+      Ui_services.clipboard_get = (function "text/plain" -> text | _ -> "");
+      prevent_default = (fun () -> prevented := true) };
+    check "Document paste outside an editor preserves the selected block without taking ownership"
+      (not !prevented && Editor_state.editing () = None
+       && Editor_state.String_set.elements (Editor_state.selected ()) = ["b1"]
+       && List.length (Editor_state.page_blocks ()) = 1))
+    [true,"Plain second block";false,"external text";false,""];
+  Editor_state.clipboard := clipboard;
+  Editor_state.clipboard_text := copied;
+  Editor_state.set (fun _ -> previous)
+
 let test_editor_ctrl_np () =
   stage_main_session
     [ block "b1" "first"; block "b2" "second"; block "b3" "third" ];
@@ -801,7 +926,14 @@ let test_cm_scope st =
         else previous event);
       P.run_cm_item st "collapse-children";
       check "menu activation keeps the captured scope despite ambient editing"
-        (E.is_collapsed_in ~scope uuid && not (E.is_collapsed_in ~scope:"main" uuid)))
+        (E.is_collapsed_in ~scope uuid && not (E.is_collapsed_in ~scope:"main" uuid));
+      check "Completing a context-menu action releases its block selection"
+        (E.String_set.is_empty (E.selected ()) && (E.read ()).anchor = None
+         && not (E.read ()).action_bar);
+      A.select_single_in ~scope uuid;
+      P.close_cm st;
+      check "Closing an absent context menu preserves unrelated block selection"
+        (E.String_set.equal (E.selected ()) (E.String_set.singleton uuid)))
 
 (* submenu state: opening marks the trigger highlighted; closing the
    sub returns highlight to the trigger (base-ui parity) *)
@@ -855,10 +987,11 @@ let test_cm_submenu st =
    items (Ci_item + Ci_sub only; separators and composite rows are
    skipped), Enter runs the highlighted command. The cljs menu owns
    keys only while the target sits inside #block-context-menu *)
-let test_cm_keynav st =
+let test_cm_keynav st s =
   let document = Stub_dom.get_field Stub_dom.global "document" in
   let prev_byid : string -> Js.Json.t =
     Stub_dom.get_field document "getElementById" in
+  let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
   let menu_el = Stub_dom.make_element "div" in
   let item_el = Stub_dom.make_element "div" in
   let rect =
@@ -872,6 +1005,8 @@ let test_cm_keynav st =
   let set_attr : string -> string -> unit =
     Stub_dom.get_field menu_el "setAttribute" in
   set_attr "id" "block-context-menu";
+  Stub_dom.set_field menu_el "className" "ls-context-menu-content";
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") menu_el);
   Stub_dom.set_field document "getElementById" (fun id ->
       if id = "block-context-menu"
          || Str_util.starts_with id "cm-item-"
@@ -879,9 +1014,19 @@ let test_cm_keynav st =
       then menu_el else prev_byid id);
   Fun.protect
     ~finally:(fun () ->
-      Stub_dom.set_field document "getElementById" prev_byid)
+      Stub_dom.set_field document "getElementById" prev_byid;
+      Stub_dom.detach menu_el;
+      Stub_dom.set_field document "activeElement" previous_focus)
     (fun () ->
       P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      S.flush s;
+      let popup = List.find (fun n ->
+        M.string_prop n "accessibility-identifier" = Some "block-context-menu")
+          (nodes s) in
+      S.appear s popup.M.id;
+      check "A pointer-opened block menu focuses its container without selecting an action"
+        (Option.fold ~none:false ~some:(fun cm -> cm.P.highlighted = None) (cm_of st)
+         && Stub_dom.get_field document "activeElement" == menu_el);
       let first_interactive_idx entries =
         Option.get
           (List.find_mapi
@@ -969,6 +1114,43 @@ let test_cm_keynav st =
    ================================================================ *)
 
 let test_page_menu () =
+  let document = Stub_dom.get_field Stub_dom.global "document" in
+  let previous_query : string -> Js.Json.t =
+    Stub_dom.get_field document "querySelectorAll" in
+  let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
+  let previous_model = !Runtime.read_model in
+  let root = Stub_dom.make_element "div" in
+  let first = Stub_dom.make_element "button" in
+  let second = Stub_dom.make_element "button" in
+  ignore (Stub_dom.append_child root first);
+  ignore (Stub_dom.append_child root second);
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") root);
+  let entries = ref [| first; second |] in
+  let open_menu = ref (Some (100., 10., 100., true, None)) in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model := previous_model;
+    Stub_dom.set_field document "querySelectorAll" previous_query;
+    Stub_dom.detach root;
+    Stub_dom.set_field document "activeElement" previous_focus) (fun () ->
+      Runtime.read_model := (fun () ->
+        { Model.initial with Model.page_menu = !open_menu });
+      Stub_dom.set_field document "querySelectorAll" (fun selector ->
+        if selector = ".ls-dots-menu [role='menuitem']:not([aria-disabled='true'])"
+        then Stub_dom.with_item_fn (Stub_dom.arr_of !entries)
+        else previous_query selector);
+      Stub_dom.set_field document "activeElement" root;
+      Editor_keys.on_global_key (key_event "ArrowDown");
+      check "The first page-menu Down focuses its first action"
+        (Stub_dom.get_field document "activeElement" == first);
+      Editor_keys.on_global_key (key_event "ArrowDown");
+      check "The next page-menu Down advances past the focused action"
+        (Stub_dom.get_field document "activeElement" == second);
+      entries := [||];
+      check "An empty page menu does not claim arrow navigation"
+        (not (Editor_keys.page_menu_key (key_event "ArrowDown")));
+      open_menu := None;
+      check "A closed page menu does not claim arrow navigation"
+        (not (Editor_keys.page_menu_key (key_event "ArrowDown"))));
   let session =
     S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
       ~initial:Model.initial ~reducer:(fun m _ -> m)
@@ -1236,7 +1418,8 @@ let test_sidebar_nav () =
           ; groups_collapsed = state []
           ; left_width = state 246.
           ; right_fraction = state 0.3
-          ; viewport_w = state 1280. }
+          ; viewport_w = state 1280.
+          ; restored_repo = ref None; restoring = ref true }
         in
         Left_sidebar_view.nav_group ms sidebar)
       ()
@@ -1390,13 +1573,18 @@ let run ~finish =
   test_cm_activation st;
   test_cm_scope st;
   test_cm_submenu st;
-  test_cm_keynav st;
+  test_cm_keynav st s;
   (* B. editor keys *)
   test_editor_escape ();
   test_editor_shift_enter ();
   test_editor_format_wraps ();
   test_editor_word_nav ();
   test_editor_link ();
+  test_editor_ac_tab st s;
+  test_editor_unbound_enter ();
+  test_code_editor_enter ();
+  test_editor_paste_link ();
+  test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
   test_editor_tab ();
   test_editor_enter_split ();

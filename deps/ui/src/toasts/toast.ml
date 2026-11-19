@@ -6,7 +6,7 @@ let dismiss id =
   Runtime.send (Action.Toast_dismiss id);
   Runtime.flush ()
 
-let show ?key ?code ~kind msg =
+let show ?key ?code ?duration ~kind msg =
   Option.iter (fun key -> Runtime.send (Action.Toast_dismiss_key key)) key;
   Runtime.send
     (Action.Toast_push
@@ -15,6 +15,7 @@ let show ?key ?code ~kind msg =
        ; toast_code = code
        ; toast_kind = kind
        ; toast_key = key
+       ; toast_duration = duration
        });
   Runtime.flush ()
 

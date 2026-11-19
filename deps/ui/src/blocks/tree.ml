@@ -273,7 +273,8 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
      [data-has-children] rule); hover-less backends keep it visible at
      rest whenever the block can fold *)
   let caret_shown c =
-    c || (Ui_services.env_native_block_controls () && has_children)
+    (c && (order_list || Ui_services.env_publishing ()))
+    || (Ui_services.env_native_block_controls () && has_children)
   in
   (* #dot-<uuid> + data-blockid/draggable on the bullet ride data_attrs
      and accessibility-identifier on the box (e2e target + imperative
@@ -315,13 +316,10 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
             (box ~key:("ctrlspan-" ^ uuid)
                (* control-hide is a stylesheet display:none — the opacity
                   signal carries the same hide to style-less backends *)
-               ~opacity_signal:
-                 (Signal.map
-                    (fun c ->
-                      if c then 1.0
-                      else if caret_shown c then 0.4
-                      else 0.0)
-                    cs)
+               ~opacity:(reactive (fun c ->
+                 if not (Ui_services.env_native_block_controls ()) || c then 1.0
+                 else if caret_shown c then 0.4
+                 else 0.0) cs)
             [ Ui_parts.class_signal cs
                 (fun c ->
                   "rotating-arrow"
@@ -394,13 +392,6 @@ let control_wrap ?on_toggle ~scope ~collapse_scope ~library uuid
     ]
     ctx parent
 
-(* cljs *control-show? (block-mouse-over/-leave on the main container):
-   the fold caret shows only while hovering a collapsable-or-collapsed
-   block — the hover half lives in lui-core.css as a
-   .block-main-container:hover > .block-control-wrap[data-has-children]
-   reveal; control-show/hide still follows the collapsed signal, which
-   keeps the caret visible on collapsed blocks. *)
-
 (* -- content vs editor -- *)
 
 (* cljs .with-bg-color: the built-in closed values resolve to their
@@ -417,18 +408,13 @@ let block_bg_css = function
   | c -> c
 
 let content_el uuid (b : Model.block) : t =
-  let title_bg =
-    match b.Model.block_bg_color with
-    | Some c -> block_bg_css c
-    | None -> "transparent"
-  in
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable. cursor:text in the style
      string is ignored by the native host; the cursor prop is what it
      reads, and an I-beam is the pointer for rendered block text. *)
   Ui_components.with_props [ Ui_components.Prop.cursor `text ]
   (column ~key:("content-" ^ uuid) ~style_class:"block-content"
-    ~min_height:24 ~min_width:0 ~main:`center ~cross:`stretch ~grow:1. ~background:title_bg
+    ~min_height:24 ~min_width:0 ~main:`center ~cross:`stretch ~grow:1.
     ~accessibility_identifier:("block-content-" ^ uuid)
     ~data_attrs:
       ([ ("data-blockid", uuid); ("data-containerid", uuid)
@@ -451,6 +437,10 @@ let content_el uuid (b : Model.block) : t =
             (if b.Model.block_is_query && not (Ui_services.env_publishing ()) then [ Query_builder.block_el uuid b ]
              else
                match Render.title_outer_kind b with
+               | Some `block ->
+                   [ column ~key:("bt-" ^ uuid) ~grow:1. ~min_width:0 ~cross:`stretch
+                       (Render.title_block ~self:uuid ~annot:true
+                          ~resolved:(S.title_for uuid b.block_title) b) ]
                | Some `flex ->
                    [ row ~key:("bt-" ^ uuid) ~grow:1.
                        (Render.title_block ~self:uuid ~annot:true
@@ -568,6 +558,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
     (Ui_components.with_props
        [ Ui_components.Prop.position `relative
        ; Ui_components.Prop.corner_radius 4
+       ; Ui_components.Prop.padding_left (if priv then 4 else 8)
+       ; Ui_components.Prop.padding_right 4
        ; ( Ui_components.Prop.hover_background "var(--lx-gray-03)" ) ]
        (row ~key:("tag-" ^ key) ~cross:`center
           ~style_class:"block-tag"
@@ -578,7 +570,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             ; ("data-tag-title", tag)
             ; ("data-tag-priv", if priv then "true" else "false")
             ; ( "style"
-              , "display:inline-flex;padding-left:8px;padding-right:4px" )
+              , "display:inline-flex" )
             ]
     [ row ~key:("tc-" ^ key) ~cross:`center
         ~on_pointer_enter:enter ~on_pointer_leave:leave
@@ -631,10 +623,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                             ~value:"x" [])))) ]
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
-          Ui_components.with_props
-            [ Ui_components.Prop.opacity 0.7
-            ; Ui_components.Prop.hover_opacity 1.
-            ; Ui_components.Prop.font_size "0.875rem"
+          Ui_components.tag_link_appearance (Ui_components.with_props
+            [ Ui_components.Prop.font_size "0.875rem"
             ; Ui_components.Prop.font_weight 400
             ; Ui_components.Prop.position `relative ]
             (link ~key:("ta-" ^ key)
@@ -649,9 +639,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                mid-word inside the chip; the child text gets the tag
                color itself — the anchor's accent doesn't cascade *)
             [ text ~key:"ts" ~value:tag ~white_space:"nowrap"
-                ~foreground:"var(--lx-accent-11, var(--ls-tag-text-color))"
+                ~foreground:Ui_components.tag_link_foreground
                 ~on_pointer_enter:enter ~on_pointer_leave:leave
-                [] ])
+                [] ]))
         ] ]))
       context parent
 
@@ -697,8 +687,17 @@ let tags_el uuid (b : Model.block) : t =
 
 let content_wrap key (b : Model.block) children =
   let quote = b.block_display_type = Some "quote" in
+  let color_props =
+    match b.block_bg_color with
+    | None -> []
+    | Some color ->
+        (if quote then [] else [ Ui_components.Prop.padding_horizontal 4 ])
+        @ [ Ui_components.Prop.background (block_bg_css color) ]
+        @ (if List.mem color ["yellow";"red";"pink";"green";"blue";"purple";"gray"] then []
+           else [ Ui_components.Prop.foreground "white" ])
+  in
   Ui_components.with_props
-    (if quote then
+    ((if quote then
        [ Ui_components.Prop.position `relative
        ; Ui_components.Prop.padding_vertical 8
        ; Ui_components.Prop.padding_left 20
@@ -706,7 +705,7 @@ let content_wrap key (b : Model.block) children =
        ; Ui_components.Prop.background
            "var(--ls-page-blockquote-bg-color, var(--lx-gray-04))"
        ; Ui_components.Prop.foreground "var(--ls-page-blockquote-color)" ]
-     else [])
+     else []) @ color_props)
     (row ~key:("cew-" ^ key) ~grow:1. ~min_width:0 ~gap:4 ~flex_wrap:`wrap
        ~margin_vertical:(if quote then 8 else 0)
        ~style_class:"block-content-or-editor-wrap"
@@ -863,7 +862,7 @@ and row_main ~editable ~library scope (b : Model.block) : t =
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
+            ; Comments_view.reactions_el uuid
             ]
         ]
 
@@ -1153,8 +1152,7 @@ and block_row_static ?(depth = 0) ?(library = false) ~collapse_scope
                 [ row ~key:("bmc-" ^ key)
                      ~gap:8
                     [ column ~key:("col3-" ^ key) ~grow:1.
-                        [ box ~key:("cew-" ^ key)
-                            ~style_class:"block-content-or-editor-wrap"
+                        [ content_wrap key b
                             [ box ~key:("cei-" ^ key)
                                 ~style_class:"block-content-or-editor-inner"
                                 [ row ~key:("row-" ^ key)
@@ -1188,7 +1186,7 @@ and block_row_static ?(depth = 0) ?(library = false) ~collapse_scope
                         ]
                     ]
                 ]
-            ; Comments_view.reactions_el uuid b.Model.block_reactions b.Model.block_reaction_users
+            ; Comments_view.reactions_el uuid
             ]
         ]
     ; Properties_area.block_area ~scope:"reference" ~uuid

@@ -552,7 +552,7 @@ let sel_rect_view (r_s : (int * rect) Signal.signal) : t =
   let wrap = (ed_pos_wrap rect_s) context parent in
   let bar =
     (Ui_components.with_props
-       [ ( Ui_components.Prop.background "var(--ls-block-highlight-color)" )
+       [ ( Ui_components.Prop.background "var(--ls-selection-background-color)" )
        ; Ui_components.Prop.corner_radius 2 ]
        (row ~style_class:"ed-sel" []))
       context (Some wrap)

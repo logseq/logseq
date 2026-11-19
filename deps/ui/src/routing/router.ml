@@ -453,7 +453,8 @@ let stale_page (p : Model.page) () =
   | None -> true
 
 (* get-page-route-info resolves name/uuid/lookup-ref -> summary *)
-let rec load_page_ref for_route ref_v =
+let rec load_page_ref ?(accept_missing = false) for_route ref_v =
+  if accept_missing then loaded_route := None;
   incr Runtime.load_gen;
   let gen = !Runtime.load_gen in
   let is_stale () = stale for_route || gen <> !Runtime.load_gen in
@@ -538,7 +539,7 @@ let rec load_page_ref for_route ref_v =
           (let* _ = Outliner_ops.apply_create_page n in
            load_page_ref for_route ref_v)
       | _ ->
-          if (not (is_stale ())) && !loaded_route <> Some for_route
+          if (not (is_stale ())) && (accept_missing || !loaded_route <> Some for_route)
           then Runtime.send Action.Page_load_failed;
           Js.Promise.resolve ())))
   |> Js.Promise.catch (fun _ ->

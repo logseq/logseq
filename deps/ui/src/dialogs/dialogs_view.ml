@@ -112,30 +112,25 @@ let confirm_view (c : Dialogs_state.confirm) =
           ([ ("role", "alertdialog"); ("aria-modal", "true") ]
            @ if c.title = "" then []
                else [ ("aria-labelledby", "ls-confirm-title") ])
-        (* cljs dialog/alert-inner: a confirm! with plain content
-           renders ui__alert-dialog-main-content only — no header *)
         ( (if c.title = "" then
-             [ column ~key:"cfrm-m"
-                 [ paragraph ~key:"cfrm-mc" ~value:c.desc [] ] ]
+             (if c.desc = "" then []
+              else [ Ui_components.alert_dialog_main_content ~key:"cfrm-d"
+                       [ paragraph ~key:"cfrm-dp" ~value:c.desc [] ] ])
            else
              [ Ui_components.alert_dialog_header ~key:"cfrm-h"
-                 [ heading ~key:"cfrm-t" ~level:2
+                 ([ heading ~key:"cfrm-t" ~level:2
                      ~font_size:"1.125rem" ~font_weight:600
                      ~line_height:"1.75rem"
+                     ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))"
                      ~style_class:"ui__alert-dialog-title"
                      ~value:c.title
-                     ~accessibility_identifier:"ls-confirm-title" [] ] ] )
-        (* cljs dialog-confirm! puts the description in :content, wrapped
-           in div.ui__alert-dialog-main-content — a grid sibling of the
-           header, not AlertDialogDescription inside it *)
-        @ (if c.desc = "" then []
-             else
-               [ Ui_components.alert_dialog_main_content ~key:"cfrm-d"
-                   [ paragraph ~key:"cfrm-dp"
-                       ~font_size:"1rem" ~line_height:"1.5rem"
+                     ~accessibility_identifier:"ls-confirm-title" [] ]
+                  @ if c.desc = "" then []
+                    else [ paragraph ~key:"cfrm-dp"
+                       ~font_size:"0.875rem" ~line_height:"1.25rem"
+                       ~foreground:"hsl(var(--muted-foreground))"
                        ~style_class:"ls-confirm-desc"
-                       ~data_attrs:[ ("style", "opacity:0.6") ]
-                       ~value:c.desc [] ] ])
+                       ~value:c.desc [] ]) ] )
         @ [ (* cljs dialog-confirm footer buttons are :size :sm *)
             Ui_components.alert_dialog_footer ~key:"cfrm-f"
               [ Ui_components.button ~key:"cfrm-cancel"
@@ -177,10 +172,12 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                ~placeholder:p.placeholder ~height:240 ~autofocus:true
                ~style_class:"ls-prompt-input"
                ~on_input:(function Lui_protocol.TextChanged (_, text) -> Signal.set value text | _ -> ()) []
-           else Ui_components.input ~key:"prmt-in"
+           else Ui_components.with_props
+             [Ui_components.Prop.font_size "14px"; Ui_components.Prop.line_height "20px";
+              Ui_components.Prop.margin_top 4; Ui_components.Prop.margin_bottom 16]
+            (Ui_components.form_input ~key:"prmt-in" ~height:38 ~min_height:38 ~corner_radius:4
             ~text:(reactive (Signal.value value))
             ~style_class:"form-input ls-prompt-input"
-            ~data_attrs:[ ("style", "display:block;width:100%;margin:0.5rem 0 1rem") ]
             ~autofocus:true
             ~on_input:(fun ev ->
               match ev with
@@ -188,10 +185,10 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                   Signal.set value s
               | _ -> ())
             ~on_submit:(fun _ -> submit ())
-            [])
-        ; Ui_components.button ~key:"prmt-ok" ~size:`sm
+            []))
+        ; row ~gap:0 [Ui_components.button ~key:"prmt-ok" ~size:`sm
             ~variant:`primary ~text:p.submit_label
-            ~on_press:(fun _ -> submit ()) [] ] )
+            ~on_press:(fun _ -> submit ()) []] ] )
   in
   node ctx parent
 
@@ -275,6 +272,8 @@ let render (ms : Model.t Signal.signal) : t =
           (* Custom dialog chrome (confirm/e2ee) still rides a cover
              popover for the layer owner and Escape dispatch. *)
           popover ~transition:Ui_components.popover_transition ~style_class:"ls-dialog-layer"
+            ?background:(if layer = Dialogs_state.Confirm then Some "transparent" else None)
+            ?border_width:(if layer = Dialogs_state.Confirm then Some 0 else None)
             ~on_dismiss:(fun _ -> close ()) [ view ])
       )
     ctx parent

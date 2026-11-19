@@ -271,6 +271,7 @@ let run () =
          ; body = fake_el
          ; viewport_width = (fun () -> 1024.)
          ; viewport_height = (fun () -> 768.)
+         ; device_pixel_ratio = (fun () -> 1.)
          ; document_visible = (fun () -> true)
          ; dispatch =
              (fun name ->

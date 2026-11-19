@@ -68,7 +68,12 @@ let open_palette (h : ('m, 'a) Shared_scenarios.host) =
 let close_palette (h : ('m, 'a) Shared_scenarios.host) =
   h.H.keydown ~meta:true "k";
   h.flush ();
-  h.H.check "mod+k closes the open palette"
+  h.H.check "mod+k keeps the open palette open"
+    (H.exists_class h "cp__cmdk__modal");
+  let shell = List.find (fun n -> H.has_class n "ls-dialog-cmdk") (H.nodes h) in
+  S.dismiss (h.session ()) shell.M.id;
+  h.flush ();
+  h.H.check "host dismissal closes the open palette"
     (not (H.exists_class h "cp__cmdk__modal"))
 
 

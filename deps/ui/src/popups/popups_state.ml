@@ -596,6 +596,9 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
                  ~icon:"puzzle" ?group:g ~desc:Desc_none
                  (Plugin_slash (pid, tag)))
              xs)
+    ; [mk_item ~key:"editor.slash/cloze" ~label:(U.t "editor.slash/cloze")
+         ~english:(U.en_text "editor.slash/cloze") ~icon:"brackets-contain"
+         (Emit ("{{cloze }}", 2))]
     ] in
   let labels = Hashtbl.create (List.length items) in
   let items = List.fold_right (fun item result ->
@@ -1759,17 +1762,21 @@ let apply_tag t ac ~create ~inline title =
               Js.Promise.resolve ())
   | _ -> ()
 
-let apply_template t _ac uuid =
+let apply_template t ac uuid =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
+      erase_trigger_text ac;
       let buf = Editor_actions.live_buffer buuid in
+      let focus = Editor_actions.paste_focus () in
       close_ac t;
       ignore
         (let* sop = Outliner_ops.save_block_parsed buuid buf in
-         Outliner_ops.apply_and_refresh
+         let* result = Outliner_ops.apply_and_refresh_result
            ~opts:(Outliner_ops.op_opts "apply-template")
-           [ sop; Outliner_ops.apply_template uuid buuid ])
+           [ sop; Outliner_ops.apply_template uuid buuid ] in
+         focus result;
+         Js.Promise.resolve ())
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it
@@ -2628,8 +2635,8 @@ let ac_keydown t ev =
         (* cljs enter/meta-complete/shift-complete: apply the chosen
            item — mod+enter inlines a tag — or the kind's on-enter when
            no item matched. shift+enter shares enter: no AC supplies
-           on-shift-chosen. Tab is NOT an ac binding on master
-           (:editor/indent) — it falls through to the editor keymap *)
+           on-shift-chosen. Tab is not an ac binding; master's active
+           editor action leaves browser focus traversal intact. *)
         | Keymap_data.Command command -> (
             let inline = command = "auto-complete/meta-complete" in
             (match List.nth_opt ac.items ac.chosen with
@@ -2961,6 +2968,10 @@ let run_cm_item t label =
            | _ -> ())
        | None -> emit_cmd label
            [ "block", Json.String cm.block_id; "scope", Json.String cm.scope ]);
+      (match cm.tag, label with
+       | None, ("copy-ref" | "toggle-numbered-list" | "expand-children" | "collapse-children") ->
+           Editor_actions.clear_selection ()
+       | _ -> ());
       close_cm t
   | None -> ()
 ;;

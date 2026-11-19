@@ -3100,7 +3100,8 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
     let linked_window =
       match feat_type, class_id, row_limit with
       | Some "linked-references", Some id, Some n
-        when n > 0 && (not filters.vf_present) && Unicode.trim input = "" ->
+        when n > 0 && (not filters.vf_present) && Unicode.trim input = ""
+             && Option.bind (Ldb.ent_of_id db id) get_filters = None ->
           let ents, total = linked_refs_window db id ~limit:n in
           let result =
             { ref_blocks = ents

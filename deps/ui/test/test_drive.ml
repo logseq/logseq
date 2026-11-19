@@ -709,7 +709,7 @@ let test_toasts () =
   send
     (Action.Toast_push
        { Model.toast_id = 1; toast_text = "Saved"; toast_kind = "success"
-       ; toast_key = None; toast_code = None });
+       ; toast_key = None; toast_code = None; toast_duration = None });
   (match find_where (fun n -> n.M.kind = "toast") with
    | [] -> check "toast node" false
    | t :: _ ->
@@ -2309,7 +2309,10 @@ let subs_stage_a () =
   subs_pipeline_t := Some (Subs.apply_pending ())
 
 let subs_stage_b () =
-  Subs_state.current_page := None;
+  ignore (Update.apply
+    { Model.initial with route = Model.Page "p";
+      route_page = !Subs_state.current_page }
+    Action.Page_load_failed);
   !subs_held_release ()
 
 let subs_stage_c () =

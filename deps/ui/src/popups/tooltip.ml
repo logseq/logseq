@@ -20,14 +20,14 @@ type tip = {
   tip_x : float; (* bubble left, viewport coords *)
   tip_y : float; (* bubble top *)
   tip_arrow_x : float; (* arrow left offset inside the bubble *)
-  tip_above : bool; (* bubble sits above the trigger *)
+  tip_side : Lui_elements.anchor;
 }
 
 let state : tip option Signal.state option ref = ref None
 let armed_on : Ui_services.el option ref = ref None
 let timer = ref (-1)
 let generation = ref 0
-let delay_ms = 500
+let delay_ms = 600
 let installed = ref false
 
 (* Inspect retained layer ownership on both hosts; tooltip surfaces and
@@ -152,7 +152,7 @@ let show_for (trig : Ui_services.el) =
                    tip_x = trig_cx;
                    tip_y = trig_bottom;
                    tip_arrow_x = 0.;
-                   tip_above = false;
+                   tip_side = `below;
                  });
             let rec place tries =
               if !layer_blocks_tip () || not (trig.Ui_services.connected ()) || label_for trig <> Some label
@@ -181,19 +181,35 @@ let show_for (trig : Ui_services.el) =
                         Ui_services.dom_viewport_height () -. trig_bottom -. h
                         < 8.
                       in
+                      let side = match trig.Ui_services.attr "data-tooltip-side" with
+                        | Some "right" ->
+                            if tx +. tw +. w <= Ui_services.dom_viewport_width () -. 5.
+                            then `right else `left
+                        | Some "left" -> if tx -. w >= 5. then `left else `right
+                        | _ -> if above then `above else `below in
+                      let horizontal = side = `left || side = `right in
+                      let x = if horizontal then
+                          Float.max 5. (Float.min
+                            (if side = `left then tx -. w else tx +. tw)
+                            (Ui_services.dom_viewport_width () -. w -. 5.))
+                        else x in
+                      let y = Float.max 5. (Float.min
+                        (if horizontal then ty +. ((th -. h) /. 2.)
+                         else if above then ty -. h else trig_bottom)
+                        (Ui_services.dom_viewport_height () -. h -. 5.)) in
                       set_tip
                         (Some
                            {
                              tip_label = label;
                              tip_keys = keys;
                              tip_x = x;
-                             tip_y = Float.max 5.
-                               (Float.min
-                                  (if above then ty -. h else trig_bottom)
-                                  (Ui_services.dom_viewport_height () -. h -. 5.));
+                             tip_y = y;
                              tip_arrow_x = Float.max 4.
-                               (Float.min (trig_cx -. x -. 4.) (w -. 12.));
-                             tip_above = above;
+                               (Float.min
+                                 (if horizontal then ty +. (th /. 2.) -. y -. 4.
+                                  else trig_cx -. x -. 4.)
+                                 ((if horizontal then h else w) -. 12.));
+                             tip_side = side;
                            })
             in
             schedule 16 (fun () -> place 8)
@@ -225,7 +241,7 @@ let tip_view (tip : tip) : t =
           ]
   in
   Ui_components.tooltip_content ~key:"lui-tip" ~at:(tip.tip_x, tip.tip_y)
-    ~arrow_x:tip.tip_arrow_x ~above:tip.tip_above [ body ]
+    ~arrow_x:tip.tip_arrow_x ~side:tip.tip_side [ body ]
 
 (* singleton bubble — one tip at a time, so the reactive can emit the
    popover directly under popups_view's fragment *)

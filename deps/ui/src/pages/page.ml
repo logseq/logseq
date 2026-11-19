@@ -131,44 +131,10 @@ let block_page_breadcrumb (page : Model.page) : t list =
                    parents)
               () ]) ]
 
-(* click position payload -> Page_menu_set (context menu = page items
-   only, so with_app_items = false) *)
-let open_menu (page : Model.page) name payload =
-  (* title-tag chips get their own context menu (.block-tag, cljs
-     block-tag popup) — only the bare title opens the page menu. Refs
-     and other anchors inside the title still open the page menu *)
-  let on_tag_chip =
-    I18n.contains (Json_payload.str payload "targetClass") "block-tag"
-  in
-  if name = "contextmenu" && not on_tag_chip then (
-    (* cljs popup-show! anchors the menu to the event target element,
-       not the raw pointer — elementFromPoint resolves that target *)
-    let ax, atop, abot =
-      match
-        Ui_services.dom_element_at
-          (Json_payload.num payload "clientX")
-          (Json_payload.num payload "clientY")
-      with
-      | Some el -> Popups_state.anchor_of_el el
-      | None ->
-          Popups_state.anchor_at_point
-            ~x:(Json_payload.num payload "clientX")
-            ~y:(Json_payload.num payload "clientY")
-    in
-    Runtime.send
-      (Action.Page_menu_set
-         (Some (ax, atop, abot, false, page.page_uuid)));
-    Runtime.flush ())
-
-(* cljs wires the title contextmenu on .ls-page-title (flex-1 w-full)
-   — the whole row is the right-click target, so the handler lives on
-   the row itself (the raw title el only hugs the text width) *)
 let title_ctx_row ~key (page : Model.page) (children : t list) : t =
- fun ctx parent ->
-  let node = row ~key ~main:`space_between children ctx parent in
-  Platform.register_dom_handler node ~events:"contextmenu"
-    (fun name payload -> open_menu page name payload);
-  node
+  row ~key ~main:`space_between ~style_class:"ls-page-title-context"
+    ~data_attrs:["data-page-uuid", Option.value page.page_uuid ~default:""]
+    children
 
 (* generic: works for any entity uuid (page or block) *)
 let set_icon (u : string) (c : Icon_picker.choice) =
@@ -229,6 +195,25 @@ let title_editor (page : Model.page) : t =
   let frame =
     Signal.state ctx.Lui_ui.ui_scheduler Edit_input.empty_frame
   in
+  let click = (Runtime.model ()).Model.title_edit_click in
+  let placing_click = ref (Option.is_some click) in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> placing_click := false);
+  let place_click () =
+    match click with
+    | Some (x, y) when !placing_click ->
+        (match Editor_actions.click_offset uuid (uuid, x, y) with
+         | Some offset ->
+             placing_click := false;
+             let model = Runtime.signal_get model_st in
+             let model = Edit_model.select model ~anchor:offset ~focus:offset in
+             Runtime.signal_set model_st model;
+             Option.iter (fun conduit ->
+               Runtime.signal_set frame (Edit_input.measure conduit model))
+               (Editor_sink.conduit uuid);
+             Editor_sink.select_range uuid offset offset
+         | None -> ())
+    | _ -> ()
+  in
   let commit ?(select = false) () =
     let value =
       String.trim
@@ -265,6 +250,7 @@ let title_editor (page : Model.page) : t =
     ; menu = (fun _ -> ()) }
   in
   let on_input ev =
+    (match ev with Edit_input.Focus | Edit_input.Blur -> () | _ -> placing_click := false);
     let m = Runtime.signal_get model_st in
     match ev with
     | Edit_input.Blur -> commit ()
@@ -297,7 +283,11 @@ let title_editor (page : Model.page) : t =
         Signal.update frame (fun _ -> Edit_input.measure conduit m2)
   in
   (Ui_parts.editor_wrapper ~key:"pt-edit" ~id:("editor-edit-block-" ^ uuid)
-     ~on_appear:(fun _ -> Editor_sink.focus_input uuid)
+     ~on_appear:(fun _ ->
+       Editor_sink.focus_input uuid;
+       List.iter (fun delay ->
+         ignore (Ui_effect.timeout ~scope:ctx.Lui_ui.ui_scope delay place_click))
+         [0; 40; 120; 300])
      [ Edit_view.view
          ~model:(Signal.value (model_st))
          ~frame:(Signal.value (frame)) ~block_id:uuid ~on_input ~cls:""
@@ -310,7 +300,7 @@ let title_editor (page : Model.page) : t =
    render even when the page has no tags (empty container). *)
 (* cljs tags-cp drops internal/private/hide-from-node class idents —
    journal pages never show a #Journal chip *)
-let title_tag_chips (page : Model.page) : t list =
+let title_tag_chips ~hover ~focused (page : Model.page) : t list =
   let opt_at l i =
     match List.nth_opt l i with
     | Some x -> x
@@ -319,18 +309,25 @@ let title_tag_chips (page : Model.page) : t list =
   let visible =
     List.filter_map
       (fun (i, tag) ->
-        if Tree.hidden_tag_ident (opt_at page.Model.page_tag_idents i) then
+        let ident = opt_at page.Model.page_tag_idents i in
+        if Tree.hidden_tag_ident ident
+           && ident <> "logseq.class/Tag" && ident <> "logseq.class/Property" then
           None
         else Some (i, tag))
       (List.mapi (fun i tag -> (i, tag)) page.Model.page_tags)
   in
-  [ row ~key:"pt-right" ~gap:4 ~cross:`center
+  [ Ui_components.with_props
+      [Ui_components.Prop.font_size "14px"; Ui_components.Prop.line_height "20px"]
+    (row ~key:"pt-right" ~gap:4 ~cross:`center
       ~style_class:"ls-block-right"
       [ box ~key:"ptr-ghost"
           (match visible with
            | [] -> []
            | _ ->
-               [ row ~key:"pt-tags" ~gap:4 ~style_class:"block-tags"
+               [ row ~key:"pt-tags" ~gap:4 ~style_class:"block-tags" ~margin_top:17
+                   ~opacity:(reactive (fun h f -> if h || f then 1. else 0.)
+                     (Signal.value hover) (Signal.value focused))
+                   ~transition:"opacity 150ms ease-in"
                    (List.map
                       (fun (i, tag) ->
                         Tree.tag_chip
@@ -346,7 +343,7 @@ let title_tag_chips (page : Model.page) : t list =
                                ~default:0))
                       visible)
                ])
-      ]
+      ])
   ]
 
 (* display-mode title: #block-content-<page-uuid>.block-content >
@@ -390,7 +387,8 @@ let title_content (page : Model.page) : t =
               if page.page_uuid <> None && not shift && not interactive then (
                 (* cljs edit entry clears any block selection *)
                 if S.ready () then Editor_actions.clear_selection ();
-                Runtime.send Action.Title_edit_start;
+                Runtime.send (Action.Title_edit_start_at
+                  (Json_payload.num payload "clientX", Json_payload.num payload "clientY"));
                 Runtime.flush ())) )
   in
   (* TODO(component): click needs the DOM payload (targetId/
@@ -500,6 +498,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
   (* cljs *control-show? atom: the fold caret appears only while the
      pointer is over the title row, and only for collapsable titles *)
   let caret_hover = Signal.state (Signal.signal_owner collapse) false in
+  let title_focused = Signal.state ctx.Lui_ui.ui_scheduler false in
   (* cljs shows .ls-page-title-actions on .block-content-wrapper:hover
      with delay-300 (opacity 0 at rest); no stylesheet on native
      backends, so pointer enter/leave feeds a 300ms reveal timer that
@@ -547,7 +546,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             (fun selected ->
               if S.String_set.mem uuid selected then "selected ls-block"
               else "ls-block")
-            (column ~key:"pt-block" ~padding_vertical:2
+            (column ~key:"pt-block" ~padding_vertical:2 ~corner_radius:4
                ~transition:Ui_components.block_transition
                ~accessibility_identifier:("ls-block-" ^ uuid)
                ~data_attrs:
@@ -563,6 +562,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
             [ (* The negative leading margin exposes the disclosure control
                  while stretch preserves the content's trailing edge. *)
               row ~key:"pt-row"
+                ?on_focus_within:(if Ui_services.env_native_block_controls () then None
+                  else Some (fun focused -> Runtime.signal_set title_focused focused))
                 ~gap:8 ~min_height:24 ~grow:1. ~min_width:0
                 ~style_class:
                   ("block-main-container is-page-title-row"
@@ -662,13 +663,17 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                     [ Ui_components.Prop.font_size
                                         "var(--ls-page-title-size, 32px)"
                                     ; Ui_components.Prop.font_weight 500 ]
-                                    (box ~key:"pt-wrap" ~grow:1.
+                                    (row ~key:"pt-wrap" ~grow:1. ~gap:4 ~cross:`start
                                        ~foreground:
                                          "var(--lx-gray-12, \
                                           var(--ls-title-text-color))"
                                        ~style_class:"ls-page-title-container block-content-or-editor-wrap"
                                        ~data_attrs:[ ("style", "width:100%") ]
-                                    [ box ~key:"pt-inner2" ~grow:1.
+                                    [ (if List.mem "logseq.class/Task" page.page_tag_idents then
+                                         Properties_area.block_left_chips
+                                           ~page_title:true ~scope:(scope_of_route m.route) ~uuid
+                                       else Logseq_el.nothing)
+                                    ; box ~key:"pt-inner2" ~grow:1.
                                         ~style_class:"block-content-or-editor-inner"
                                         ~data_attrs:
                                           [ ("style", "width:100%;\
@@ -678,10 +683,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                             ~min_width:0
                                             ~style_class:"block-row"
                                             ([ Ui_components.with_props
-                                                 (* the title-actions
-                                                    row anchors
-                                                    absolutely here *)
-                                                 [ Ui_components.Prop.position `relative ]
+                                                 [ Ui_components.Prop.position `static_ ]
                                                  (column ~key:"pt-cw" ~gap:8
                                                  ~grow:1. ~cross:`stretch
                                                  ~style_class:"block-content-wrapper"
@@ -713,7 +715,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                                        title_content page)
                                                   ]))
                                              ]
-                                            @ title_tag_chips page)
+                                            @ title_tag_chips ~hover:caret_hover ~focused:title_focused page)
                                         ]
                                     ])
                                 ]
@@ -840,11 +842,8 @@ let fold_arrow ?on_click ?(collapsed = false) key : t =
     Ui_components.foldable_control ~key
       [ box ~key:"ch"
           ~style_class:(if collapsed then "" else "control-hide")
-          [ box ~key:"ra"
-              ~style_class:
-                (if collapsed then "rotating-arrow collapsed"
-                 else "rotating-arrow not-collapsed")
-              [ Ui_parts.rotating_arrow (key ^ "-svg") ]
+          [ icon ~key:(key ^ "-svg") ~point_size:13
+              ~name:(`app (if collapsed then "rotating-arrow" else "rotating-arrow-down")) []
           ]
       ]
   in
@@ -904,16 +903,19 @@ let pagebar_slots_el (page : Model.page) : t =
    (tab text, no count) + a visible add-view + directly under
    .ls-foldable-header *)
 let unlinked_head_collapsed key : t =
-  row ~key:(key ^ "-views") ~gap:4 ~cross:`center ~style_class:"views"
-    [ Ui_components.button ~key:"uvt" ~variant:`ghost
+  row ~key:(key ^ "-views") ~gap:8 ~cross:`center ~style_class:"views"
+    [ Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
+      (Ui_components.button ~key:"uvt" ~variant:`ghost ~size:`sm
+        ~height:24 ~min_height:24 ~padding_horizontal:0 ~padding_vertical:0
         ~text:(I18n.t "view/unlinked-references")
         ~style_class:"as-text"
         ~accessibility_identifier:("view-tab-" ^ key)
-        []
-    ; Ui_components.button ~key:"uva" ~variant:`ghost ~size:`icon ~icon:(`app "plus")
+        [])
+    ; Ui_components.button ~key:"uva" ~variant:`ghost ~size:`sm
+        ~width:24 ~height:24 ~min_width:24 ~min_height:24 ~padding:0
         ~label:(I18n.t "view/add-new-view")
         ~style_class:"as-text"
-        []
+        [icon ~name:(`app "plus") ~point_size:15 []]
     ]
 
 (* cljs reference/unlinked-references — the section mounts the shared
@@ -1055,9 +1057,19 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
   let outline = Outline_viewport_state.ensure ctx ms in
   (column ~key:"journals" ~accessibility_identifier:"journals"
     ~grow:1. ~min_width:0 ~style_class:"content"
-    [ if_ ~test:(reactive (fun rows -> rows = []) outline.rows)
-        (box ~key:"journal-placeholder" ~padding:24
-          ~style_class:"journal-item-placeholder" [])
+    [ if_ ~test:(reactive (fun rows model ->
+          rows = [] && model.Model.journals_status = Model.Journal_pending) outline.rows ms)
+        (column ~key:"journal-placeholder" ~min_height:640 ~padding:24
+          ~style_class:"journal-item-placeholder"
+          ~data_attrs:["aria-hidden", "true"]
+          [ box ~height:32 ~width:192 ~corner_radius:4
+              ~background:"hsl(var(--secondary))" []
+          ; box ~height:20 ~margin_top:32 ~corner_radius:4
+              ~background:"hsl(var(--secondary))" []
+          ; row ~margin_top:12
+              [ box ~height:20 ~width:0 ~grow:2. ~corner_radius:4
+                  ~background:"hsl(var(--secondary))" []
+              ; box ~width:0 ~grow:1. [] ] ])
     ; Flat_outliner.view ~state:outline ~library:false ~padding_horizontal:8
         ~section_minimum_height:500.
         ~header:(fun ~source ->
@@ -1068,8 +1080,9 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
 
 let not_found_view name : t =
   column ~key:"not-found" ~style_class:"page"
-    [ column ~key:"nf-inner" ~cross:`center
-        [ text ~key:"nf-t" ~value:((I18n.page_not_found ()) ^ name) [] ]
+    [ column ~key:"nf-inner" ~opacity:0.75
+        [ paragraph ~key:"nf-t" ~margin:0 ~font_size:"16px" ~line_height:"24px"
+            ~value:((I18n.page_not_found ()) ^ name) [] ]
     ]
 
 (* cljs library/add-pages: secondary button opens a page-picker popup *)
@@ -1402,7 +1415,7 @@ let unlinked_refs_el (m : Model.t) : t =
       (* cljs when-not class-page?/property-page? — the unlinked
          section is omitted entirely on node pages *)
       if page.page_is_tag || page.page_is_property then Logseq_el.nothing
-      else box ~key:"urefs" ~margin_left:4 [ unlinked_references_view m ]
+      else box ~key:"urefs" ~margin_left:4 ~margin_top:24 [ unlinked_references_view m ]
 
 (* Class and property objects share the same panel spacing in every container. *)
 let object_tabs_el ~key_prefix (page : Model.page) : t =
@@ -1457,11 +1470,15 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
           ~style_class:"page-blocks-inner"
           ~data_attrs:(("data-cid", scope) ::
             (match section.page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> []))
-          [ Add_button.el ?puuid:section.page.page_uuid ~scope ~library
+          [ Ui_parts.int_prop Lui_protocol.MinHeight
+              ~value:(reactive (fun section ->
+                if section.Outliner_projection.page.page_blocks = [] then 60 else 0) source)
+              (column ~key:"page-blocks-minimum" ~style_class:"ls-page-blocks"
+              [ Add_button.el ?puuid:section.page.page_uuid ~scope ~library
               ~previous_blank:(reactive (fun section collapse ->
                 Add_button.previous_blank ~scope section.Outliner_projection.page.page_blocks collapse)
                 source (S.collapse_sig ()))
-              ~flags:(fun _ -> flags) () ])
+              ~flags:(fun _ -> flags) () ]) ])
       ; reactive ~equal:linked_refs_eq linked_refs_el ms
       ; reactive ~equal:unlinked_refs_eq unlinked_refs_el ms ]) context parent
   in
@@ -1534,7 +1551,9 @@ let region (ms : Model.t Signal.signal) : t =
             [ Views_view.view ~kind:Views_state.KAllPages
                 ~owner:(Wire.String "$$$views") ]
       | Model.Ready, Model.All_graphs -> Graphs_view.view ms
-      | Model.Ready, Model.Page "Recycle" -> Recycle.view ms
+      | Model.Ready, Model.Page "Recycle" ->
+          column ~key:"recycle-page" ~gap:32
+            [ top_view m; box ~margin_top:(-20) [Recycle.view ms] ]
       | Model.Ready, Model.Settings -> Settings_page.view ms
       | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
@@ -1546,8 +1565,9 @@ let region (ms : Model.t Signal.signal) : t =
           | None, true ->
               (* cljs page-aux: missing page/block renders inline
                  (t :page/not-found) inside the content wrap *)
-              box ~key:"pg-missing"
-                [ text ~key:"pgm-t" ~value:(I18n.t "page/not-found") [] ]
+              box ~key:"pg-missing" ~opacity:0.75
+                [ paragraph ~key:"pgm-t" ~margin:0 ~font_size:"16px" ~line_height:"24px"
+                    ~value:(I18n.t "page/not-found") [] ]
           | None, false -> empty_state ())
       | _ -> empty_state ())
     ms

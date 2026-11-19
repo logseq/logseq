@@ -38,7 +38,7 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
 (* cljs icon-btn: data-tooltip/data-tooltip-keys feed the tooltip
    reader (popups/tooltip.ml el_closest [data-tooltip],[aria-label]);
    ~label lands as aria-label *and* the tooltip text *)
-let icon_btn ?tip ?keys ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click () =
+let icon_btn ?tip ?keys ?tip_side ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click () =
   (* chrome 32px icon button: 8px pad, 20px glyph, radius, opacity
      states — what the deleted .cp__header/.left-sidebar-top icon-btn
      rules styled *)
@@ -47,12 +47,11 @@ let icon_btn ?tip ?keys ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click (
        ~padding:4 ~corner_radius:6
        ?accessibility_identifier:(if id = "" then None else Some id)
        ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
-    ~data_attrs:
-      ((match tip with Some t -> [ ("data-tooltip", t) ] | None -> [])
-       @ (match keys with
-          | Some k -> [ ("data-tooltip-keys", k) ]
-          | None -> [])
-       @ (if with_shortcut then [ ("data-tooltip-shortcut", "true") ] else []))
+    ~data_attrs:(
+      (match tip with Some t -> ["data-tooltip", t] | None -> [])
+      @ (match keys with Some k -> ["data-tooltip-keys", k] | None -> [])
+      @ (if with_shortcut then ["data-tooltip-shortcut", "true"] else [])
+      @ (match tip_side with Some side -> ["data-tooltip-side", side] | None -> []))
        ~on_press:(fun _ -> on_click None) [])
 
 (* cljs header.cljs with-shortcut :go/search — title + ⌘K keycap *)
@@ -60,7 +59,7 @@ let icon_btn ?tip ?keys ?(with_shortcut = false) ~key ~id ~cls ~icon ~on_click (
 let search_button ?(key = "search-btn") () =
   let keys = Keymap_data.tooltip_keys "go/search" in
   icon_btn ~key ~id:"search-button" ~cls:(ghost_btn_cls ()) ~with_shortcut:true
-    ~icon:"search" ~tip:(I18n.t "nav/search")
+    ~icon:"search" ~tip:(I18n.t "nav/search") ~tip_side:"right"
     ?keys:(if keys = "" then None else Some keys)
     ~on_click:(fun _ -> Cmdk_state.open_latest ()) ()
 
@@ -682,7 +681,7 @@ let right_toggle_button ms =
   (icon_btn ~key:"rs-toggle" ~id:"" ~with_shortcut:true
     ~cls:(ghost_btn_cls ~tail:"toggle-right-sidebar" ())
     ~icon:"layout-sidebar-right"
-    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~keys:"T R"
+    ~tip:(I18n.t "command.ui/toggle-right-sidebar") ~keys:"T R" ~tip_side:"left"
     ~on_click:(fun _ ->
       Runtime.send Action.Toggle_right_sidebar;
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))

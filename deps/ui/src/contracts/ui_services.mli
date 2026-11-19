@@ -297,6 +297,7 @@ type dom = {
   body : unit -> el;
   viewport_width : unit -> float;
   viewport_height : unit -> float;
+  device_pixel_ratio : unit -> float;
   document_visible : unit -> bool;
   dispatch : string -> unit;
   dispatch_json : string -> Json.t -> unit;
@@ -412,8 +413,10 @@ val dom_on_document_event : ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_subscribe_document_event : scope:Signal.scope -> ?capture:bool -> string -> (ev -> unit) -> unit
 val dom_on_window_event : string -> (ev -> unit) -> unit
 val viewport_width_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> float Signal.signal
+val viewport_height_signal : scheduler:Signal.scheduler -> scope:Signal.scope -> float Signal.signal
 val dom_query : string -> el option
 val dom_query_all : string -> el list
+val dom_focus_body : unit -> unit
 val dom_by_id : string -> el option
 
 (** Measure a mounted retained identifier in viewport logical pixels.
@@ -426,6 +429,7 @@ val dom_root : unit -> el
 val dom_body : unit -> el
 val dom_viewport_width : unit -> float
 val dom_viewport_height : unit -> float
+val dom_device_pixel_ratio : unit -> float
 val dom_document_visible : unit -> bool
 val dom_dispatch : string -> unit
 val dom_dispatch_json : string -> Json.t -> unit

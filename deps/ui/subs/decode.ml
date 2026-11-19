@@ -652,7 +652,7 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
     | _ -> None
   in
   match w with
-  | Wire.Array (m :: ty :: _) | Wire.List (m :: ty :: _) -> (
+  | Wire.Array (m :: ty :: options) | Wire.List (m :: ty :: options) -> (
       match text_of m with
       | Some text ->
           Some
@@ -661,6 +661,14 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
             ; toast_kind = Option.value (text_of ty) ~default:"info"
             ; toast_key = None
             ; toast_code = None
+            ; toast_duration = Some (
+                if text_of ty = Some "error" then 0
+                else match options with
+                | Wire.Bool false :: _ -> 0
+                | _ :: _ :: Wire.Int timeout :: _ -> timeout
+                | _ :: _ :: Wire.Float timeout :: _ -> int_of_float timeout
+                | [] -> 1500
+                | _ -> 2000)
             }
       | None -> None)
   | _ -> None

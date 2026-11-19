@@ -82,7 +82,7 @@ let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
        branch is structural — a reactive prop can't express it *)
     reactive
       (fun vis ->
-        let ctor = if vis then text_field else secure_field in
+        let ctor = if vis then Ui_components.text_field else Ui_components.secure_field in
         ctor ~key:(key ^ "-i")
           ~style_class:"form-input"
           ~placeholder ~autofocus

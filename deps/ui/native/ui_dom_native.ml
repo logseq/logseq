@@ -319,6 +319,7 @@ let ops : Ui_services.dom =
   ; body = (fun () -> el_of Dom_ext.document_el)
   ; viewport_width = Host.inner_width
   ; viewport_height = Host.inner_height
+  ; device_pixel_ratio = (fun () -> 1.)
   ; document_visible =
       (fun () -> true)
       (* a foreground native app has no hidden-document state *)

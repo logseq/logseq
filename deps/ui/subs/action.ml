@@ -22,6 +22,7 @@ type t =
   | Toggle_search
   | Block_content_changed of string * string
   | Title_edit_start
+  | Title_edit_start_at of (float * float)
   | Title_edit_done (* value already committed via page op *)
   | Page_menu_set of
       (float * float * float * bool * string option) option
@@ -75,6 +76,7 @@ let tag (a : t) : string =
   | Toggle_search -> "toggle-search"
   | Block_content_changed _ -> "block-content-changed"
   | Title_edit_start -> "title-edit-start"
+  | Title_edit_start_at _ -> "title-edit-start-at"
   | Title_edit_done -> "title-edit-done"
   | Page_menu_set _ -> "page-menu-set"
   | Appearance_set _ -> "appearance-set"

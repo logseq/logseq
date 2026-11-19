@@ -1283,6 +1283,45 @@ let test_delete_selection_history (h : host) =
 
 (* Explicit property commands must publish worker truth while the editor
    remains open, without waiting for a later autosave or broadcast. *)
+let test_code_conversion_focus (h : host) =
+  let previous_focus = !S.code_focus in
+  let mounted = ref false and focused = ref [] in
+  S.code_focus := (fun ~caret uuid ->
+    if !mounted then (focused := (uuid,caret) :: !focused; true) else false);
+  let convert () =
+    stage_page h [Test_check.block "b1" ""];
+    set_editing ~uuid:"b1" ~buffer:"/Code block" ~caret:11 ~base:"";
+    Editor_commands.run_editor_cmd "b1" "code-block" 0 11
+  in
+  let* () = settle h 40 in
+  install_worker ~repo:h.repo h;
+  convert ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Code conversion waits for its widget without reopening the text editor"
+    (S.editing () = None && !S.pending_focus <> None && !focused = []);
+  mounted := true;
+  A.focus_pending ();
+  check "A mounted code widget receives conversion focus after text editing exits"
+    (!focused = ["b1",0] && !S.pending_focus = None && S.editing () = None);
+  reset_editor ();
+  mounted := false;
+  focused := [];
+  let handler = worker_handler h in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
+    if name = "thread-api/apply-outliner-ops" then h.reject_promise "code conversion failed"
+    else Js.Promise.resolve (handler name args));
+    on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  convert ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "A failed code conversion restores editing without focusing a nonexistent widget"
+    (S.editing_uuid () = Some "b1" && !focused = []);
+  S.code_focus := previous_focus;
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  Js.Promise.resolve ()
+
 let test_property_command_refresh (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -1318,6 +1357,36 @@ let test_property_command_refresh (h : host) =
   in
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
+
+let test_page_icon_refresh (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [];
+  let previous_worker = !Runtime.worker in
+  let response = ref (Ok (Some (W.Map
+    [W.String "type", W.String "emoji"; W.String "id", W.String "100"]))) in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name="thread-api/get-case-page" then
+          match !response with
+          | Error () -> h.reject_promise "page icon read failed"
+          | Ok icon -> Js.Promise.resolve (W.Map
+              ([W.kw "block/uuid",W.Uuid "p"; W.kw "block/title",W.String "p"]
+               @ Option.to_list (Option.map (fun icon -> W.kw "logseq.property/icon",icon) icon)))
+        else Js.Promise.resolve (if owned_call name then worker_handler h name args
+                                 else h.base_handler name args))
+    ; on_message=(fun _ _ -> ())
+    ; dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let rec run = function
+    | [] -> Runtime.worker := previous_worker; Js.Promise.resolve ()
+    | (value, expected) :: rest ->
+        response := value;
+        let* () = Ops.refresh_page () in
+        check "Page refresh publishes authoritative own icons and preserves them on failed reads"
+          (Option.bind (h.snapshot ()).Model.route_page (fun p -> p.Model.page_icon)=expected);
+        run rest in
+  run [!response, Some (Node_icon.emoji "100");
+       Error (), Some (Node_icon.emoji "100"); Ok None, None]
 
 let test_selection_direction (h : host) =
   stage_page h
@@ -1370,9 +1439,32 @@ let test_selected_open (h : host) =
         reset_editor ();
         run rest
   in
-  run [ "Enter", (fun () -> Editor_keys.on_normal_key enter), "b2", 4;
+  let* () = run [ "Enter", (fun () -> Editor_keys.on_normal_key enter), "b2", 4;
         "Left", (fun () -> Editor_keys.dispatch_command "editor/left"), "b1", 0;
-        "Right", (fun () -> Editor_keys.dispatch_command "editor/right"), "b2", 4 ]
+        "Right", (fun () -> Editor_keys.dispatch_command "editor/right"), "b2", 4 ] in
+  stage_page h [];
+  reset_editor ();
+  Runtime.send Action.Title_edit_done;
+  let page = Option.get (h.snapshot ()).Model.route_page in
+  let uuid = Option.get page.Model.page_uuid in
+  A.select_single_in ~scope:"main" uuid;
+  Editor_keys.on_normal_key enter;
+  check "Enter on a selected page title resumes title editing, not block editing"
+    ((h.snapshot ()).Model.editing_title && S.editing () = None);
+  Runtime.send Action.Title_edit_done;
+  reset_editor ();
+  Editor_keys.on_normal_key enter;
+  check "Enter without selection does not start title editing"
+    (not (h.snapshot ()).Model.editing_title);
+  let journal = {page with Model.page_journal_day = Some 20260101} in
+  h.stage (Some journal);
+  Runtime.send (Action.Page_loaded journal);
+  A.select_single_in ~scope:"main" uuid;
+  Editor_keys.on_normal_key enter;
+  check "Protected journal titles do not enter title editing"
+    (not (h.snapshot ()).Model.editing_title);
+  reset_editor ();
+  Js.Promise.resolve ()
 
 let test_scoped_collapse_commands (h : host) =
   let scope = "collapse-sidebar" in
@@ -1932,6 +2024,76 @@ let test_append_owner (h : host) =
         "zoom-root", "zoom-owner"; "preview", "preview-owner" ]
 
 (* synchronous stage: pure-model checks that need no app drain *)
+let test_authoritative_route_miss (h : host) =
+  let old_read = !Runtime.read_model and old_send = !Runtime.app_send
+  and old_worker = !Runtime.worker and old_loaded = !Router.loaded_route
+  and old_gen = !Runtime.load_gen in
+  let route = Model.Page "renamed-route" in
+  let model = ref { (h.snapshot ()) with Model.route; page_missing = false } in
+  let replies = ref [] in
+  Runtime.read_model := (fun () -> !model);
+  Runtime.app_send := (fun action -> model := Update.update !model action; true);
+  Router.loaded_route := Some route;
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name _ ->
+        if name = "thread-api/get-page-route-info" then
+          Js.Promise.make (fun ~resolve ~reject:_ ->
+            replies := !replies @ [(fun () -> resolve W.Nil [@u])])
+        else Js.Promise.resolve W.Nil)
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let restore () =
+    Runtime.read_model := old_read; Runtime.app_send := old_send;
+    Runtime.worker := old_worker; Router.loaded_route := old_loaded;
+    Runtime.load_gen := old_gen in
+  let task =
+    let forced = Router.load_page_ref ~accept_missing:true route (W.String "renamed-route") in
+    let ordinary = Router.load_page_ref route (W.String "renamed-route") in
+    List.iter (fun reply -> reply ()) !replies;
+    let* () = forced in
+    let* () = ordinary in
+    check "An authoritative route miss survives an overlapping sync refresh"
+      (!model).Model.page_missing;
+    restore ();
+    Js.Promise.resolve ()
+  in
+  task |> Js.Promise.catch (fun error ->
+    restore ();
+    Ui_services.log_error ("Authoritative route miss test failed", error);
+    failwith "Authoritative route miss test failed")
+
+let test_numbering_preserves_unedited_title (h : host) =
+  let* () = settle h 40 in
+  stage_page h [Test_check.block "b1" "Plain second block"];
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  A.select_single_in ~scope:"main" "b1";
+  Editor_commands.toggle_own_list "b1" 0;
+  let* () = settle h 40 in
+  check "Numbering an unedited block preserves its stored title"
+    (Option.bind !Runtime.current_page (fun page ->
+       Option.map (fun (b : Model.block) -> b.Model.block_title)
+         (S.find_in page.Model.page_blocks "b1")) = Some "Plain second block");
+  Js.Promise.resolve ()
+
+let test_template_does_not_save_search_title (h : host) =
+  let* () = settle h 40 in
+  stage_page h [Test_check.block "b1" ""];
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  set_editing ~uuid:"b1" ~buffer:"Audit Template" ~caret:14 ~base:"";
+  let ac : Popups_state.ac =
+    { kind = Template_search; x = 0.; y = 0.; cy = 0.; pos_pending = false
+    ; flip = None; flipx = None; query = "Audit Template"; tpos = 0; tlen = 14
+    ; items = []; chosen = 0; auuid = "b1"; editor = None } in
+  Popups_state.apply_template (Option.get !Popups_state.active) ac "template";
+  let* () = h.wait_ms 20 in
+  check "Template search text is not persisted as a content block"
+    (Option.bind !Runtime.current_page (fun page ->
+       Option.map (fun (b : Model.block) -> b.Model.block_title)
+         (S.find_in page.Model.page_blocks "b1")) = Some "");
+  Js.Promise.resolve ()
+
 let run (_h : host) =
   test_measure_deferred ();
   test_stale_line_ranges ()
@@ -1939,6 +2101,10 @@ let run (_h : host) =
 (* async stage: chained into the drive runner's promise drain *)
 let async_stage (h : host) : unit Js.Promise.t =
   let saved = h.snapshot () in
+  let* () = test_numbering_preserves_unedited_title h in
+  let* () = test_code_conversion_focus h in
+  let* () = test_template_does_not_save_search_title h in
+  let* () = test_authoritative_route_miss h in
   let* () = test_composition h in
   let* () = test_save_debounce h in
   let* () = test_embed_persists_erased_buffer h in
@@ -1965,6 +2131,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
+  let* () = test_page_icon_refresh h in
   test_selection_direction h;
   let* () = test_selected_open h in
   let* () = test_scoped_collapse_commands h in

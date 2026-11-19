@@ -1,12 +1,14 @@
-(* Calculator block — evaluates simple arithmetic lines into result
+(* Calculator block — evaluates arithmetic, assignments and named functions into result
    strings shown in .extensions__code-calc-output-line elements.
    Grammar: expr := term (('+'|'-') term)*; term := unary (('*'|'/'|'%')
    unary)*; unary := '-' unary | power; power := atom ('^' unary)?;
-   atom := number | '(' expr ')'. *)
+   atom := number | '(' expr ')' | name ['(' expr ')']. *)
 
 let is_digit c = c >= '0' && c <= '9'
 
-type state = { s : string; mutable i : int }
+type state = { s : string; mutable i : int; env : (string, float) Hashtbl.t }
+
+let is_alpha c = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 
 let nst st = String.length st.s
 
@@ -25,6 +27,18 @@ let eat st c =
   match peek st with
   | Some c' when c' = c -> st.i <- st.i + 1; true
   | _ -> false
+
+let parse_name st =
+  let first = st.i in
+  while peek st = Some '_' do st.i <- st.i + 1 done;
+  (match peek st with
+   | Some c when is_alpha c -> ()
+   | _ -> failwith "expected name");
+  while st.i < nst st
+        && (let c = st.s.[st.i] in is_alpha c || is_digit c || c = '_') do
+    st.i <- st.i + 1
+  done;
+  String.sub st.s first (st.i - first)
 
 let rec parse_expr st = parse_add st
 
@@ -72,6 +86,32 @@ and parse_atom st =
       (if eat st ')' then () else failwith "unclosed paren");
       v
   | Some c when is_digit c || c = '.' -> parse_number st
+  | Some c when is_alpha c || c = '_' ->
+      let name = parse_name st in
+      if peek st = Some '(' then begin
+        st.i <- st.i + 1;
+        let value = parse_expr st in
+        if not (eat st ')') then failwith "unclosed paren";
+        match name with
+        | "abs" -> Float.abs value
+        | "sqrt" -> Float.sqrt value
+        | "log" -> Float.log10 value
+        | "ln" -> Float.log value
+        | "exp" -> Float.exp value
+        | "sin" -> Float.sin value
+        | "cos" -> Float.cos value
+        | "tan" -> Float.tan value
+        | "asin" -> Float.asin value
+        | "acos" -> Float.acos value
+        | "atan" -> Float.atan value
+        | _ -> failwith "unknown function"
+      end else
+        (match name with
+         | "PI" -> Float.pi
+         | "E" -> Float.exp 1.
+         | _ -> match Hashtbl.find_opt st.env name with
+           | Some value -> value
+           | None -> failwith "unknown variable")
   | _ -> failwith "expected number"
 
 and parse_number st =
@@ -94,26 +134,54 @@ and parse_number st =
   st.i <- j;
   float_of_string (String.sub st.s start (j - start))
 
-let eval (line : string) : float option =
-  let st = { s = line; i = 0 } in
+let eval ?env (line : string) : float option =
+  let env = match env with Some env -> env | None -> Hashtbl.create 16 in
+  let st = { s = line; i = 0; env } in
   match
-    (let v = parse_expr st in
+    (skip_ws st;
+     let first = st.i in
+     let binding = match peek st with
+       | Some c when is_alpha c || c = '_' ->
+           let name = parse_name st in
+           if eat st '=' then Some name else (st.i <- first; None)
+       | _ -> None in
+     let v = parse_expr st in
      skip_ws st;
-     if st.i = nst st then Some v else None)
+     if st.i <> nst st && peek st <> Some '#' then failwith "unexpected input";
+     (match binding with
+      | Some ("PI" | "E") -> failwith "cannot redefine constant"
+      | Some name -> Hashtbl.replace env name v
+      | None -> ());
+     Hashtbl.replace env "last" v;
+     Some v)
   with
   | v -> v
-  | exception _ -> None
+  | exception _ -> Hashtbl.remove env "last"; None
 
 let fmt_float v =
-  if Float.is_integer v && Float.abs v < 1e15 then
+  if Float.is_nan v then "NaN"
+  else if v = infinity then "Infinity"
+  else if v = neg_infinity then "-Infinity"
+  else if Float.is_integer v && Float.abs v < 1e15 then
     string_of_int (int_of_float v)
   else
     let s = Printf.sprintf "%.6g" v in
     s
 
 let results (source : string) : string list =
-  String.split_on_char '\n' source
-  |> List.filter_map (fun line ->
+  let env = Hashtbl.create 16 in
+  let lines = String.split_on_char '\n' source in
+  let count = List.length lines in
+  let lines = List.mapi (fun i line ->
+    let n = String.length line in
+    if i < count - 1 && n > 0 && line.[n - 1] = '\r' then String.sub line 0 (n - 1)
+    else line) lines in
+  let lines = match lines with
+    | [_] -> lines
+    | _ ->
+        let rec drop = function "" :: rest -> drop rest | rest -> rest in
+        List.rev (drop (List.rev lines)) in
+  List.map (fun line ->
          let line = String.trim line in
-         if line = "" then None
-         else Option.map fmt_float (eval line))
+         if line = "" || line.[0] = '#' then ""
+         else match eval ~env line with Some v -> fmt_float v | None -> "?") lines
