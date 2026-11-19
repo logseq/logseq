@@ -1641,6 +1641,45 @@ let test_delete_selection_history (h : host) =
                W.Keyword "editor-cursors", W.List [expected] ]) in
   check "undo restores the selected range anchor" ((S.read ()).anchor = Some "b2");
   reset_editor ();
+  let rec first_block = function
+    | [] -> Js.Promise.resolve ()
+    | (name, selected, reject, title_focus) :: rest ->
+        stage_page h [Test_check.block "b1" "first"];
+        Runtime.send Action.Title_edit_done;
+        S.set (fun st -> {st with S.selection_scope = "main";
+          selected = S.String_set.of_list selected; anchor = List.nth_opt selected 0});
+        options := W.Nil;
+        if reject then install_rejecting_worker h
+        else Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              if name = "thread-api/apply-outliner-ops" then
+                (match args with [_; _; opts] -> options := opts | _ -> ());
+              Js.Promise.resolve (worker_handler h name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        A.delete_selection ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("first-block deletion retains the correct focus: " ^ name)
+          ((h.snapshot ()).Model.editing_title = title_focus
+           && S.editing () = None
+           && (not reject || S.String_set.mem "b1" (S.selected ())));
+        let* () = if title_focus then begin
+          let after = Option.get (W.map_get !options "undo-redo/editor-info-after") in
+          Runtime.send Action.Title_edit_done;
+          A.restore_history (W.Map [ W.Keyword "undo?", W.Bool false;
+            W.Keyword "editor-cursors", W.List [after] ])
+        end else Js.Promise.resolve () in
+        check ("first-block redo retains the correct focus: " ^ name)
+          ((h.snapshot ()).Model.editing_title = title_focus);
+        Runtime.send Action.Title_edit_done;
+        reset_editor ();
+        first_block rest
+  in
+  let* () = first_block
+      ["selected", ["b1"], false, true;
+       "empty selection", [], false, false;
+       "rejected deletion", ["b1"], true, false] in
   Js.Promise.resolve ()
 
 (* Explicit property commands must publish worker truth while the editor

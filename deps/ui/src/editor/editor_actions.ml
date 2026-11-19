@@ -1951,6 +1951,15 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               Js.Promise.resolve (Some (Option.get b.block_uuid, buffer))
           | _ -> Js.Promise.resolve None
         in
+        let page_title =
+          match previous, scope, context.Model.route, context.Model.route_page with
+          | None, "main", Model.Page _, Some page
+            when page.Model.page_journal_day = None ->
+              (match page.page_uuid with
+               | Some uuid when not (List.mem uuid uuids) -> Some uuid
+               | _ -> None)
+          | _ -> None
+        in
         let after =
           match previous with
           | Some (uuid, buffer) -> Wire.Map
@@ -1959,9 +1968,12 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               ; Wire.Keyword "caret", Wire.Int (String.length buffer)
               ; Wire.Keyword "anchor", Wire.Nil ]
           | None -> Wire.Map
-              [ Wire.Keyword "scope", Wire.String scope
+              ([ Wire.Keyword "scope", Wire.String scope
               ; Wire.Keyword "selected-blocks", Wire.List []
               ; Wire.Keyword "selection-anchor", Wire.Nil ]
+              @ (match page_title with
+                 | Some uuid -> [Wire.Keyword "page-title", Wire.Uuid uuid]
+                 | None -> []))
         in
         if not (current ()) then Js.Promise.resolve ()
         else
@@ -1989,7 +2001,10 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
                    selected = S.String_set.empty; anchor = None; action_bar = false});
                 match editing with
                 | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
-                | None -> ());
+                | None -> Option.iter (fun uuid ->
+                    Runtime.send Action.Title_edit_start;
+                    Runtime.flush ();
+                    Editor_sink.focus_input uuid) page_title);
               Js.Promise.resolve ()
       in
       ignore
@@ -3060,6 +3075,13 @@ let restore_history result =
            let selection_scope = Option.get (Wire.map_get_string cursor "scope") in
            S.set (fun st -> { st with S.editing = None; selected; anchor;
              selection_scope; action_bar = false });
+           (match Wire.map_get_uuid cursor "page-title", (Runtime.model ()).Model.route_page with
+            | Some uuid, Some page when page.Model.page_uuid = Some uuid
+                && page.page_journal_day = None && selection_scope = "main" ->
+                Runtime.send Action.Title_edit_start;
+                Runtime.flush ();
+                Editor_sink.focus_input uuid
+            | _ -> ());
            Js.Promise.resolve ())
 
 let () = S.restore_history := restore_history
