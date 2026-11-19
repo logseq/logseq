@@ -1417,7 +1417,7 @@ let unlinked_refs_el (m : Model.t) : t =
       (* cljs when-not class-page?/property-page? — the unlinked
          section is omitted entirely on node pages *)
       if page.page_is_tag || page.page_is_property then Logseq_el.nothing
-      else box ~key:"urefs" ~margin_left:4 ~margin_top:24 [ unlinked_references_view m ]
+      else box ~key:"urefs" ~margin_left:4 ~margin_top:30 [ unlinked_references_view m ]
 
 (* Class and property objects share the same panel spacing in every container. *)
 let object_tabs_el ~key_prefix (page : Model.page) : t =
