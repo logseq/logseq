@@ -1,10 +1,12 @@
 # LUI UX parity status
 
-Compared against upstream master **`2a0dce92`**. Branches are in flight:
-verified child-branch repairs may not yet be integrated, and local editor/shell
-repairs are not necessarily present in the served build. Source/test completion
-is not browser acceptance. This is a residual register, not a list of every
-historical finding. Update or remove rows after paired verification.
+The paired-audit baseline is upstream master **`2a0dce92`**; the latest fetch is
+**`77bdb6c7`**. Settings, references and properties/icon child branches are now
+integrated. Their follow-up repairs and local editor/shell repairs still need
+combined-build browser acceptance. New upstream asset/clipboard changes have
+not been fully audited. Source/test completion is not browser acceptance. This
+is a residual register, not a list of every historical finding. Update or remove
+rows after paired verification.
 
 ## 1. Intentional / out of scope
 
@@ -27,6 +29,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Alert backdrop | Master's 8px backdrop blur. |
 | Toasts | Exact 6px radius and exit animation. |
 | Table resizing | `col-resize` cursor: SDK supports default/pointer/text. The handle remains 6px versus 4px, including nested-table scrolling constraints. |
+| Query table header | The header-overlay width remains different with the current typed table/overlay surface. |
 | Overdue | Browser-native title tooltip. |
 | Picker checkbox label | Exact label typography: weight/line-height 400/20 versus 500/14. |
 | Journals loading | Repeating loading pulse; transition support does not provide keyframe/repeating animation. |
@@ -50,19 +53,12 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E40 | Cross-page five-step undo: stored `A` versus `AB` after the reported sequence. Do not assume route restoration alone fixes transaction progress. |
 | Calculator extra root | Extra empty root after calculator flows is unexplained; Enter versus Escape has not been isolated. No speculative fix. |
 | Shell N7 | Right-sidebar item-menu horizontal origin; reported LUI menu is approximately 51.4px too far left. |
-| Reference filters | Input remains approximately 9px too low; equal-count chip ordering differs. |
+| Reference filters | Equal-count tag chips use alphabetical order instead of Master's worker order. |
 | Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
-| View Type menu | “View Type” versus “Set View Type” wording needs an i18n decision; popup dimensions/origin remain different. |
-| Sort popup | Initial focus is on a button instead of the first sort row; small origin difference remains. |
-| Reference lists | Hover isolation; unlinked highlighting/spacing and Pages section remain unaudited/unfixed. |
-| Reference geometry | Linked header/group gaps, breadcrumb spacing and multi-reference rows have residual vertical drift. Child-block bullets are ringed instead of plain dots. |
-| Queries | Result columns, header chips and Untitled query need coverage using a current `/Query` fixture, not deprecated `{{query}}`. |
-| Configure property | Menu remains 260×270 versus about 270×335; missing Checkbox state mapping, item summaries and matching icons/switches. Opening the correct menu was repaired. |
-| Title-path Tags picker | Left checkboxes work; results viewport/max-height still differs. Measurements depend on graph contents, so do not hard-code the original fixture's height. |
 | Marketplace cards | Residual title truncation, icon artwork and description wrapping. |
 | Marketplace controls | Contribution-link color and some spacing. |
 | Login | Residual modal sizing and tone. |
-| Recycle list | Deleted page title appears twice in LUI versus once in Master; new child observation, not repaired. |
+| Signup validation | Native email-validity and required-field validation behavior is not aligned. Entry-screen appearance does not establish submission parity. |
 
 ### Source-repaired or reviewed, still awaiting integrated acceptance
 
@@ -81,21 +77,26 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Shell N14 / N19 / N24 | Help-link typography/geometry, page-menu arrow focus and sidebar Contents-tab background. |
 | Shell N31 | Cmdk Shift-click opens the sidebar without changing the main route; capture-event handling is repaired and tested, browser acceptance pending. |
 | Reference disclosure | Re-collapse repair is source-tested; the references child's latest round did not exercise it. |
+| Reference follow-ups | Filter search-row layout, View Type wording/geometry, sort-row focus, group/breadcrumb spacing/icons, empty/leaf bullets and unlinked highlighting were subsequently repaired in the references branch. Combined-build acceptance is pending. |
+| Query follow-ups | Inline query builder, result indentation, Untitled query, clause chips and header height/width were repaired in the references branch. The header-overlay limitation remains listed above. |
+| Property follow-ups | Configure-property summaries, icons/switches and Checkbox state mapping, Tags-picker height policy and duplicate recycle titles were subsequently repaired in the properties branch. Combined-build acceptance is pending. |
+| Signed-in Settings | Account, PAT, Encryption and Collaboration layouts were source-aligned in the settings follow-up; authenticated browser acceptance is pending. |
 
 The child reports mark R1.2/R1.3 breadcrumbs/carets, reference search/reset,
 Table69 items 1/2/5–8 and the repaired Settings interactions as browser-verified
 on their respective branches. They are not re-listed as open defects here;
-integration and combined-build regression checks remain necessary.
+combined-build browser regression checks remain necessary after integration.
 
 ## 4. Not live-tested
 
 | Surface | Coverage boundary |
 |---|---|
-| Account flows | PAT, Encryption, Collaboration, account/plan controls and authenticated operations were source-compared, not live-tested. |
+| Account flows | PAT, Encryption, Collaboration, account/plan controls and authenticated operations were source-compared, not live-tested. Account is behind a feature flag; flag-on and signed-in states remain untested. |
 | Cloud graphs | Upload, authenticated listing, download and remote deletion were not live-tested. |
 | Authentication submission | Signup/confirmation, forgot-password/reset submission, errors, resend and countdown states were not live-tested. Entry screens alone do not cover these operations. |
 | Installed plugins | Live plugin settings/switching/saving, installation, installed-card reporting/log viewing/log actions, refresh and automatic updates were not live-tested. |
 | Reference filters | Exclude/red and combined/warning states were not live-tested in the child's latest round. |
+| Reference coverage | Hover isolation, the Pages section and all follow-up query/reference geometries still need paired acceptance. |
 | Native scrollbar | Thumb dragging was not live-tested. |
 | IME | Real composition interaction was not live-tested; shared controller tests are not native/browser acceptance. |
 
@@ -103,8 +104,8 @@ integration and combined-build regression checks remain necessary.
 
 - Lead queue and editor continuation: Table69–71, editor E1–E40 and shell N1–N31.
 - Settings child: `report.md`, branch
-  `devin/1795078620-parity-settings-plugins-graphs` (`a25149f5`).
+  `devin/1795078620-parity-settings-plugins-graphs` (`708e4748`).
 - References child: `parity-refs-report.md`, branch
-  `devin/1795078598-parity-refs`.
+  `devin/1795078598-parity-refs` (`436d6ca8`).
 - Properties/icons child: `parity-props-icons-report.md`, branch
-  `devin/1795078707-parity-props-icons` (`9957e658`).
+  `devin/1795078707-parity-props-icons` (`8dd860e4`).
