@@ -550,6 +550,31 @@
         (is (map? redo-result))
         (is (= "local-1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
 
+(deftest journal-format-changes-are-not-undoable-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        previous-pipeline @ldb/*transact-pipeline-fn
+        {:keys [child-uuid]} (seed-page-parent-child!)]
+    (sqlite-build/create-blocks conn {:pages-and-blocks [{:page {:build/journal 20240102}}]})
+    (worker-undo-redo/clear-history! test-repo)
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (save-block-title! conn child-uuid "before format change")
+      (doseq [formatter ["yyyy-MM-dd" "yyyy/MM/dd"]]
+        (apply-ops! conn
+                    [[:set-block-property [(:block/uuid (d/entity @conn :logseq.class/Journal))
+                                           :logseq.property.journal/title-format formatter]]]
+                    (local-tx-meta {:client-id "test-client"})))
+      (is (= 1 (count (:undo-ops (worker-undo-redo/get-debug-state test-repo)))))
+      (worker-undo-redo/undo test-repo)
+      (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (worker-undo-redo/undo test-repo)
+      (is (= "yyyy/MM/dd" (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))))
+      (let [journal (ldb/get-journal-page-by-day @conn 20240102)]
+        (is (= "2024/01/02" (:block/title journal)))
+        (is (= "2024/01/02" (:block/name journal))))
+      (finally
+        (reset! ldb/*transact-pipeline-fn previous-pipeline)))))
+
 (deftest undo-cycle-todo-removes-task-class-test
   (testing "undoing first status set should remove task class and status"
     (worker-undo-redo/clear-history! test-repo)

@@ -751,7 +751,9 @@
                              (:tx-data replace-tx-report))]
     (assoc tx-report'
            :tx-data full-tx-data
-           :tx-meta tx-meta
+           :tx-meta (cond-> tx-meta
+                      (journal-title-format-changed? tx-report)
+                      (assoc :gen-undo-ops? false))
            :db-before (:db-before tx-report)
            :db-after (or (:db-after tx-report')
                          (:db-after tx-report)))))

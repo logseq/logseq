@@ -903,7 +903,6 @@
 (hsx/defc settings-editor
   []
   (let [_config (rfx/use-sub [:config])
-        _date-formatters (rfx/use-sub [:ui/date-formatter])
         preferred-date-format (state/get-date-formatter)
         enable-all-pages-public? (state/all-pages-public?)
         logical-outdenting? (state/logical-outdenting?)

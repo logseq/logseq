@@ -48,9 +48,6 @@
         current-page (state/get-current-page)
         blocks (:blocks delta)
         deleted (:deleted delta)]
-    (when-let [journal-class (some #(when (= :logseq.class/Journal (:db/ident %)) %)
-                                   (vals blocks))]
-      (state/set-date-formatter! repo (:logseq.property.journal/title-format journal-class)))
     (when (= repo (state/get-current-repo))
       (let [deleted-ids (not-empty (keep :db/id (vals deleted)))
             recycled-ids (keep (fn [block]
