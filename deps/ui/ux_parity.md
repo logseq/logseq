@@ -75,8 +75,8 @@ source and live source evaluation.
 Mounted regressions reproduce the missing headers on first mount, a fresh
 same-query remount, and blank-to-search evaluation; blank and rejected queries
 still do not display result headers. The UI aggregate passes with 6427 assertions
-and exit zero; native tests and the native build pass. This header repair remains
-rebuilt-browser unverified.
+and exit zero; native tests and the native build pass. This header repair is
+accepted in Table81 below.
 
 The Table80 imported-SQLite broad sweep found three further query differences.
 Full-text `Imported` returned only the parent because LUI promoted search hits
@@ -106,16 +106,15 @@ The UI aggregate passes with 6437 assertions and exit zero; native tests and the
 native build pass. All 84 worker render-resource tests pass. The worker aggregate
 still reports the same three platform/keychain failures as the earlier Table75b
 baseline (993 native cases), including `Native secrets require the OS keychain
-host`; it is not an all-green worker gate. These three repairs remain
-rebuilt-browser and visually unverified. No `static/` files or shared `:3010`
-server were touched.
+host`; it is not an all-green worker gate. These three repairs are accepted
+in Table81 below. No `static/` files or shared `:3010` server were touched.
 
 The additional Table80 navigation sweep found that the Pages anchor inherited
-the SDK's default `_blank` target. It now explicitly targets `_self`, keeping
-the existing All pages URL and graph ID in the current application tab. A mounted
-regression checks both the All pages destination and target. Browser confirmation
-of the reported Journals landing, including whether an extra tab was opened,
-remains pending.
+the SDK's default `_blank` target. The source now explicitly supplies `_self`
+with the existing All pages URL and graph ID. A mounted regression checks the
+model destination and target. Table81 showed that this source-level repair was
+insufficient: the rendered anchor still opened another tab. The renderer repair
+and its stronger regression are described below.
 
 The sandbox-deletion evidence exposes a completion-boundary mismatch rather
 than proving an OPFS failure cause. `restore.cjs` selects Table33 NEW CP9 before
@@ -124,9 +123,10 @@ deleting T80 CP9 Sandbox, waits for the graph row to detach, then reloads after
 registration only after deletion resolves. LUI now retains the row and metadata
 until successful worker completion, then removes them and shows the existing
 toast. Pending, successful, final-graph, error-result and rejected-RPC cases are
-covered. No worker pool ordering was changed. Whether the actual sandbox unlink
-stalled, rejected or was interrupted by reload still requires its RPC completion
-and pool prepare/close/remove evidence; durable sandbox deletion is not accepted.
+covered. No worker pool ordering was changed. Table81 accepts graph deletion:
+extra tabs opened by Pages held the sandbox graph open, keeping unlink pending
+for over 20 seconds without false success. After those tabs closed, unlink
+succeeded in 393ms. This resolves the earlier sandbox-deletion uncertainty.
 
 Image link cancellation now retains `/link`, as Master's `image-link-steps`
 specifies, rather than `/image-link`. Template search retains `/` and tracks its
@@ -139,9 +139,32 @@ application's editor-command document listener. Other command execution and
 existing failed-save coverage are preserved.
 
 The follow-up UI aggregate passes with 6447 assertions and exit zero; native
-tests and the native build pass. These navigation, completion-boundary and
-cancellation repairs remain rebuilt-browser and visually unverified. No browser,
-web build, `static/` write or shared `:3010` access was used.
+tests and the native build pass. Slash cancellation remains rebuilt-browser
+unverified. No browser, application web build, `static/` write or shared `:3010`
+access was used.
+
+Table81 on `93f55221` accepts full-text parent and child matches across Table,
+List and Gallery, including reload; Property type columns; empty-result default
+headers; and the absence of query console errors. Graph deletion is also accepted
+as described above. This does not establish recovery from an already-rejected
+browser patch batch.
+
+The Pages path is `nav_items` to `nav_route` to `nav_link` to the typed LUI Link;
+there is no alternate Pages component. The link's TargetValue maps `_self`
+correctly, but the web renderer's UrlValue handler unconditionally wrote `_blank`.
+It therefore overwrote an explicit target when URL application followed it,
+including URL-only updates with an unchanged target. The SDK now derives target
+and security relation attributes from retained URL/target properties on either
+property's application or removal. URL-only links keep their existing `_blank`
+default; `_self` survives URL changes. The dependency installer pins SDK
+`bc4859db7a20717749c33517a0c0869663424374`.
+
+The SDK's existing web link-actions suite now asserts attributes written by the
+compiled DOM renderer, not just the abstract Link node. It covers both property
+orders, graph-ID URL changes, empty URL, removals, default `_blank` security
+attributes and rejected invalid targets. It fails against the prior renderer
+with `_blank` instead of `_self` and passes after repair. The rendered Pages
+target repair still requires rebuilt-application browser confirmation.
 
 ## 1. Intentional / out of scope
 
