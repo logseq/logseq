@@ -1569,7 +1569,8 @@ let selection_forest () =
     scope = "main"
     || match Runtime.route () with Model.Block_zoom u -> scope = "zoom-" ^ u | _ -> false
   in
-  if not main_scope then S.blocks_in_scope scope
+  if not main_scope then
+    (match S.outliner_blocks_in_scope scope with Some blocks -> blocks | None -> [])
   else
     let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
     List.concat_map
@@ -1892,10 +1893,12 @@ let move_selection_focus up =
 let indent_or_outdent ~indent =
   let sel = S.selected () in
   let uuids =
-    match S.editing_uuid () with
-    | Some u when S.String_set.mem u sel -> selected_uuids ()
-    | Some u -> [ u ]
-    | None -> selected_uuids ()
+    if Option.is_none (S.outliner_blocks_in_scope (S.interaction_scope ())) then []
+    else match S.editing_uuid () with
+    | Some u when not (S.String_set.mem u sel) -> [u]
+    | Some _ | None ->
+        let snapshot = selected_snapshot () in
+        if S.String_set.is_empty snapshot.unresolved then snapshot.uuids else []
   in
   let uuids = List.filter (within_focused_root ~outdent:(not indent)) uuids
   in

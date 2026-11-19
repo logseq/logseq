@@ -4017,6 +4017,30 @@ let test_scoped_keyboard_selection () =
           (A.selected_uuids () = expected))
         [["linked"; "between"]; ["linked"; "between"; "target"]])
 
+let test_retired_embed_selection () =
+  let module S = Editor_state in
+  let module A = Editor_actions in
+  let saved_model = !model_stub and saved_state = !S.st and saved_sources = !S.extra_sources in
+  let saved_focus = !S.pending_focus in
+  Fun.protect ~finally:(fun () ->
+    model_stub := saved_model; S.st := saved_state; S.extra_sources := saved_sources;
+    S.pending_focus := saved_focus) (fun () ->
+    model_stub := {Model.initial with route_page = Some (page [block "other" "Other"])};
+    S.extra_sources := [];
+    List.iter (fun selected ->
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selection_scope = "retired-embed"; selected = S.String_set.of_list selected});
+      S.pending_focus := None;
+      let snapshot = try Some (A.selected_snapshot ()) with Not_found -> None in
+      check "Retired embed selection remains unresolved instead of throwing"
+        (Option.fold ~none:false ~some:(fun snapshot ->
+          S.String_set.equal snapshot.A.unresolved (S.String_set.of_list selected)) snapshot);
+      List.iter (fun indent ->
+        let completed = try A.indent_or_outdent ~indent; true with Not_found -> false in
+        check "Tab and Shift-Tab do not act on a retired embedded identity"
+          (completed && !S.pending_focus = None && S.String_set.elements (S.selected ()) = selected))
+        [true;false]) [[];["linked-page"]])
+
 (* ---- Update.update: remaining arm ---- *)
 
 let test_update_sidebar2 () =
@@ -5078,6 +5102,7 @@ let () =
   test_block_source_remount ();
   test_selected_uuids ();
   test_scoped_keyboard_selection ();
+  test_retired_embed_selection ();
   test_update_sidebar2 ();
   test_decode7 ();
   test_edn3 ();

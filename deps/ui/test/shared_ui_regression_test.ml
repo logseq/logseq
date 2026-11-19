@@ -2229,6 +2229,13 @@ let run_views ~registry ~profile ~finish =
     Runtime.read_model := (fun () -> !model);
     Runtime.current_page := Some host;
     let moved = ref false and restored = ref false and writes = ref 0 and rejected = ref false in
+    let source_view = ref false and source_restored = ref false in
+    let completed = ref 0 and failures = ref 0 in
+    let observe_structure () =
+      Option.iter (fun (_, completion) -> ignore (completion
+        |> Js.Promise.then_ (fun () -> incr completed; Js.Promise.resolve ())
+        |> Js.Promise.catch (fun _ -> incr failures; Js.Promise.resolve ())))
+        !Editor_actions.structure_owner in
     let rec wire (block : Model.block) = Wire.Map
       ([Wire.kw "db/id", Wire.Int (Option.get block.block_db_id);
         Wire.kw "block/uuid", Wire.Uuid (Option.get block.block_uuid);
@@ -2247,6 +2254,10 @@ let run_views ~registry ~profile ~finish =
                 Wire.Array [Wire.List [Wire.Uuid owner]; Wire.Bool indent; opts]] ->
                 incr writes;
                 if owner = "page-link" && indent then moved := true
+                else if owner = "page-link" && not indent && !source_view
+                  && Wire.get opts "parent-original" = None then begin
+                  moved := false; source_restored := true
+                end
                 else if owner = "page-link" && not indent
                   && Option.bind (Wire.get opts "parent-original")
                       (fun value -> Wire.map_get_uuid value "block/uuid") = Some "second-link" then begin
@@ -2259,6 +2270,7 @@ let run_views ~registry ~profile ~finish =
           let blocks = match List.nth_opt args 1 with
             | Some (Wire.Int 213) -> [root]
             | Some (Wire.Int 207) -> [{page_root with Model.block_children = [root]}]
+            | _ when !source_view -> [root] @ if !moved then [] else [page_link]
             | _ -> [first;between;second] @ if !moved then [] else [page_link] in
           Wire.List (List.map wire blocks)
       | "thread-api/get-render-snapshots", [_;request] ->
@@ -2281,11 +2293,13 @@ let run_views ~registry ~profile ~finish =
     Editor_state.set_collapsed "embed-target" true;
     Editor_actions.select_single_in ~scope:page_scope "linked-page";
     Editor_actions.indent_or_outdent ~indent:true;
+    observe_structure ();
     check "Indenting an embedded root reveals only its target occurrence"
       (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" first) "embed-target"
        && not (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" second) "embed-target"));
     ignore (Js.Global.setTimeout ~f:(fun () ->
       S.flush mounted;
+      check "Embedded-root Tab completes without a structural failure" (!completed = 1 && !failures = 0);
       let rows = Signal.get (Option.get !viewport).Outline_viewport_state.rows in
       check "Canonical embed relocation retains a visible selected root and live source scope"
         (!moved && Editor_state.is_selected "linked-page"
@@ -2293,10 +2307,12 @@ let run_views ~registry ~profile ~finish =
               row.block.Model.block_uuid = Some "linked-page"
               && row.scope = Editor_state.selection_scope () | _ -> false) rows);
       Editor_actions.indent_or_outdent ~indent:false;
+      observe_structure ();
       ignore (Js.Global.setTimeout ~f:(fun () ->
         S.flush mounted;
         check "Outdenting the relocated embed moves its link back to the host container"
           (!restored && not !moved && Editor_state.is_selected "linked-page");
+        check "Embedded-root Shift-Tab completes without a structural failure" (!completed = 2 && !failures = 0);
         Editor_state.set (fun st -> {st with selected = Editor_state.String_set.empty; anchor = None});
         let before = !writes in
         Editor_actions.indent_or_outdent ~indent:true;
@@ -2307,13 +2323,29 @@ let run_views ~registry ~profile ~finish =
         ignore (Js.Global.setTimeout ~f:(fun () ->
           check "Rejected embedded moves retain selection ownership"
             (Editor_state.is_selected "linked-page" && not !moved);
+          rejected := false; source_view := true; moved := true;
+          Editor_state.set_collapsed "embed-target" false;
+          let source_page = {host with Model.page_uuid = Some "linked-page";
+            page_db_id = Some 207; page_blocks = [{root with Model.block_children = page_link :: root.block_children}]} in
+          model := {!model with Model.route = Model.Page "source"; route_page = Some source_page};
+          Runtime.current_page := Some source_page;
+          Option.iter (fun source -> Runtime.signal_set source !model) !state;
+          S.flush mounted;
+          Editor_actions.select_single_in ~scope:page_scope "page-link";
+          Editor_actions.indent_or_outdent ~indent:false;
+          observe_structure ();
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+          S.flush mounted;
+          check "Source-view outdent follows its actual parent instead of returning to the host"
+            (!source_restored && not !moved && Editor_state.is_selected "page-link"
+             && !completed = 3 && !failures = 0);
           ignore (Lui_app.dispose mounted.S.app);
           Runtime.worker := previous_worker; Runtime.read_model := previous_model;
           Runtime.app_send := previous_send; Runtime.app_flush := previous_flush;
           Runtime.current_page := previous_page;
           Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
           Settings_state.st := previous_settings;
-          done_ ()) 20)) 20)) 20)
+          done_ ()) 20)) 20)) 20)) 20)
   in
   let optimistic_reactions_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
