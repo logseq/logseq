@@ -6,6 +6,8 @@ settings:
 
 overrides:
   node-abi: 4.28.0
+  '@electron/universal@2.0.3>minimatch': 11.0.1
+  app-builder-lib@26.17.0>minimatch: 11.0.1
 
 importers:
 
@@ -97,8 +99,8 @@ importers:
         version: 4.3.6
     devDependencies:
       electron:
-        specifier: 42.3.0
-        version: 42.3.0
+        specifier: 42.11.16
+        version: 42.11.16
       electron-builder:
         specifier: 26.17.0
         version: 26.17.0(electron-builder-squirrel-windows@26.17.0)
@@ -123,6 +125,10 @@ importers:
         version: 0.5.0
 
 packages:
+
+  '@electron-internal/extract-zip@1.0.6':
+    resolution: {integrity: sha512-/aQLgFDdCSnwChfUwqekSmE1q2dCTzhUy5saIHBb5vyYn5LzWaKPaIz1wM0lDMCZYBoIG4svJNvAJb6vkI8BuA==}
+    engines: {node: '>=22.12.0'}
 
   '@electron/asar@3.4.1':
     resolution: {integrity: sha512-i4/rNPRS84t0vSRa2HorerGRXWyF4vThfHesw0dmcWHp+cspK743UanA0suA5Q5y8kzY2y6YKrvbIUn69BCAiA==}
@@ -194,6 +200,9 @@ packages:
   '@isaacs/fs-minipass@4.0.1':
     resolution: {integrity: sha512-wgm9Ehl2jpeqP3zw/7mo3kRHFp5MEDhqAdwy1fTGkHAwnkGOVsgpvQhL8B5n1qlb01jV3n/bI0ZfZp5lWA1k4w==}
     engines: {node: '>=18.0.0'}
+
+  '@isaacs/nonrecursive-glob-match@1.1.0':
+    resolution: {integrity: sha512-GPm/Dbvk5RLmhRnxXIa7nTpK0xtl4E0wj0MslsuNiJ1FIROU+2+9lgUC/dgF7Ey4QCWhfEsgxilMRMCdHPfDfw==}
 
   '@js-joda/core@3.2.0':
     resolution: {integrity: sha512-PMqgJ0sw5B7FKb2d5bWYIoxjri+QlW/Pys7+Rw82jSH0QN3rB05jZ/VrrsUdh1w4+i2kw9JOejXGq/KhDOX7Kg==}
@@ -428,9 +437,9 @@ packages:
   brace-expansion@2.1.0:
     resolution: {integrity: sha512-TN1kCZAgdgweJhWWpgKYrQaMNHcDULHkWwQIspdtjV4Y5aurRdZpjAqn6yX3FPqTA9ngHCc4hJxMAMgGfve85w==}
 
-  brace-expansion@5.0.5:
-    resolution: {integrity: sha512-VZznLgtwhn+Mact9tfiwx64fA9erHH/MCXEUfB/0bX/6Fz6ny5EGTXYltMocqg4xFAQZtnO3DHWWXi8RiuN7cQ==}
-    engines: {node: 18 || 20 || >=22}
+  brace-expansion@5.0.13:
+    resolution: {integrity: sha512-Vh3dmFbc4wZeox7M9I/0L9GfFd83Su4+yCck/OF9Gi/P/dAHn0RT7X4K9R7gMNMhDck3DvhR6QXsnQdjjgwNvQ==}
+    engines: {node: 20 || >=22}
 
   buffer-crc32@0.2.13:
     resolution: {integrity: sha512-VO9Ht/+p3SN7SKWqcrgEzjGbRSJYTx+Q1pTQC0wrWqHx0vpJraQ6GtHx8tvcg1rlK1byhU5gccxgOgj7B0TDkQ==}
@@ -721,8 +730,8 @@ packages:
     resolution: {integrity: sha512-bO3y10YikuUwUuDUQRM4KfwNkKhnpVO7IPdbsrejwN9/AABJzzTQ4GeHwyzNSrVO+tEH3/Np255a3sVZpZDjvg==}
     engines: {node: '>=8.0.0'}
 
-  electron@42.3.0:
-    resolution: {integrity: sha512-9ZiLdRXk+WDxW1OgIUz8J2rIQ5TYU9o629gCOjU48Q3dQiOmym7osWsH5Ubs/Jh4uuFLn6m6SBD2rmRXLAPz9g==}
+  electron@42.11.16:
+    resolution: {integrity: sha512-CHCEsZbWm9zspEnYsro+g8FFllh0e82A1Jtofi/XqPs/XqlrpDPdLP0OhzfhG/IkxNXQ8iHEoYms+wVepZNzZA==}
     engines: {node: '>= 22.12.0'}
     hasBin: true
 
@@ -1014,8 +1023,8 @@ packages:
     resolution: {integrity: sha512-ej4AhfhfL2Q2zpMmLo7U1Uv9+PyhIZpgQLGT1F9miIGmiCJIoCgSmczFdrc97mWT4kVY72KA+WnnhJ5pghSvSg==}
     engines: {node: '>= 0.4'}
 
-  hono@4.12.14:
-    resolution: {integrity: sha512-am5zfg3yu6sqn5yjKBNqhnTX7Cv+m00ox+7jbaKkrLMRJ4rAdldd1xPd/JzbBWspqaQv6RSTrgFN95EsfhC+7w==}
+  hono@4.13.16:
+    resolution: {integrity: sha512-AOLOEhvrV+iH92xXCnFr/5+3KjPKcI3xP63XJtX5spAnkznPdHijlIsUTpi7/9EhWqrTCekw5c5zh1K+YsVw7A==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@4.1.0:
@@ -1283,8 +1292,8 @@ packages:
     resolution: {integrity: sha512-z0yWI+4FDrrweS8Zmt4Ej5HdJmky15+L2e6Wgn3+iK5fWzb6T3fhNFq2+MeTRb064c6Wr4N/wv0DzQTjNzHNGQ==}
     engines: {node: '>=10'}
 
-  minimatch@10.2.5:
-    resolution: {integrity: sha512-MULkVLfKGYDFYejP07QOurDLLQpcjk7Fw+7jXS2R2czRQzR56yHRveU5NDJEOviH+hETZKSkIk5c+T23GjFUMg==}
+  minimatch@11.0.1:
+    resolution: {integrity: sha512-t+Vn6DX4wPCxS23y03C0uhF7S1jpi1GfqPrnlEipCJaA2ykiNbMkVlDutZtmvLfRcUN6R8AYVlzTsQrT4RZoLQ==}
     engines: {node: 18 || 20 || >=22}
 
   minimatch@3.1.5:
@@ -1293,10 +1302,6 @@ packages:
   minimatch@5.1.9:
     resolution: {integrity: sha512-7o1wEA2RyMP7Iu7GNba9vc0RWWGACJOCZBJX2GJWip0ikV+wcOsgVuY9uE8CPiyQhkGFSlhuSkZPavN7u1c2Fw==}
     engines: {node: '>=10'}
-
-  minimatch@9.0.9:
-    resolution: {integrity: sha512-OBwBN9AL4dqmETlpS2zasx+vTeWclWzkblfZk7KTA5j3jeOONz/tRCnZomUyvNg83wL5Zv9Ss6HMJXAgL8R2Yg==}
-    engines: {node: '>=16 || 14 >=14.17'}
 
   minimist@1.2.8:
     resolution: {integrity: sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==}
@@ -2089,6 +2094,8 @@ packages:
 
 snapshots:
 
+  '@electron-internal/extract-zip@1.0.6': {}
+
   '@electron/asar@3.4.1':
     dependencies:
       commander: 5.1.0
@@ -2165,7 +2172,7 @@ snapshots:
       debug: 4.4.3
       dir-compare: 4.2.0
       fs-extra: 11.3.4
-      minimatch: 9.0.9
+      minimatch: 11.0.1
       plist: 3.1.0
     transitivePeerDependencies:
       - supports-color
@@ -2209,13 +2216,15 @@ snapshots:
       '@fastify/forwarded': 3.0.1
       ipaddr.js: 2.3.0
 
-  '@hono/node-server@1.19.14(hono@4.12.14)':
+  '@hono/node-server@1.19.14(hono@4.13.16)':
     dependencies:
-      hono: 4.12.14
+      hono: 4.13.16
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
       minipass: 7.1.3
+
+  '@isaacs/nonrecursive-glob-match@1.1.0': {}
 
   '@js-joda/core@3.2.0': {}
 
@@ -2236,7 +2245,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.29.0(zod@4.3.6)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.14)
+      '@hono/node-server': 1.19.14(hono@4.13.16)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -2246,7 +2255,7 @@ snapshots:
       eventsource-parser: 3.0.7
       express: 5.2.1
       express-rate-limit: 8.3.2(express@5.2.1)
-      hono: 4.12.14
+      hono: 4.13.16
       jose: 6.2.2
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -2424,7 +2433,7 @@ snapshots:
       js-yaml: 4.1.1
       json5: 2.2.3
       lazy-val: 1.0.5
-      minimatch: 10.2.5
+      minimatch: 11.0.1
       pkijs: 3.4.1
       plist: 3.1.0
       proper-lockfile: 4.1.2
@@ -2508,7 +2517,7 @@ snapshots:
     dependencies:
       balanced-match: 1.0.2
 
-  brace-expansion@5.0.5:
+  brace-expansion@5.0.13:
     dependencies:
       balanced-match: 4.0.4
 
@@ -2844,11 +2853,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  electron@42.3.0:
+  electron@42.11.16:
     dependencies:
+      '@electron-internal/extract-zip': 1.0.6
       '@electron/get': 5.0.0
       '@types/node': 24.12.2
-      extract-zip: 2.0.1
     transitivePeerDependencies:
       - supports-color
 
@@ -3213,7 +3222,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.12.14: {}
+  hono@4.13.16: {}
 
   hosted-git-info@4.1.0:
     dependencies:
@@ -3440,19 +3449,16 @@ snapshots:
 
   mimic-response@3.1.0: {}
 
-  minimatch@10.2.5:
+  minimatch@11.0.1:
     dependencies:
-      brace-expansion: 5.0.5
+      '@isaacs/nonrecursive-glob-match': 1.1.0
+      brace-expansion: 5.0.13
 
   minimatch@3.1.5:
     dependencies:
       brace-expansion: 1.1.14
 
   minimatch@5.1.9:
-    dependencies:
-      brace-expansion: 2.1.0
-
-  minimatch@9.0.9:
     dependencies:
       brace-expansion: 2.1.0
 

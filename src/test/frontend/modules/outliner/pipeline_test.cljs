@@ -274,3 +274,34 @@
           "Graph load must not treat recycled pages as a user delete navigation.")
       (finally
         (state/replace-state! original-state)))))
+
+(deftest undo-redo-removes-deleted-pages-from-recent-test
+  (let [original-state (state/get-state)
+        repo "history-graph"
+        page-uuid (random-uuid)
+        page {:db/id 42
+              :block/uuid page-uuid
+              :block/tags [{:db/ident :logseq.class/Page}]
+              :logseq.property/deleted-at 1}]
+    (try
+      (with-redefs [db-subs/apply-delta! (constantly true)
+                    state/get-current-page (constantly nil)
+                    state/sidebar-remove-deleted-block! (constantly nil)
+                    state/pub-event! (constantly nil)]
+        (doseq [action [:undo? :redo?]
+                delta [{:blocks {page-uuid page} :deleted {}}
+                       {:blocks {} :deleted {page-uuid {:db/id 42}}}]]
+          (state/replace-state! {:client-id "client"
+                                :git/current-repo repo
+                                :ui/recent-pages {repo [42 7]}})
+          (pipeline/invoke-hooks {:repo repo
+                                  :tx-meta {:client-id "client" action true}
+                                  :delta delta})
+          (is (= [7] (state/get-recent-pages)))
+          (pipeline/invoke-hooks {:repo repo
+                                  :tx-meta {:client-id "client" action true}
+                                  :delta {:blocks {page-uuid (dissoc page :logseq.property/deleted-at)}
+                                          :deleted {}}})
+          (is (= [7] (state/get-recent-pages)))))
+      (finally
+        (state/replace-state! original-state)))))

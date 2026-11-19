@@ -101,10 +101,10 @@
     (assert/assert-is-visible ".ui__ac-group-name:has-text('FORMAT')")
     (assert/assert-is-visible ".ui__ac-group-name:has-text('Heading')")
     (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')"))
-  (testing "typed slash filter hides section headings"
+  (testing "typed slash filter keeps matching section headings"
     (util/press-seq "node" {:delay 20})
     (w/wait-for "a.menu-link:has-text('Node reference')")
-    (assert/assert-is-hidden ".ui__ac-group-name")))
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")))
 
 (defn- chosen-slash-command-visibility
   []
@@ -289,10 +289,13 @@
   (testing "/clear heading"
     (b/new-block "clear heading test")
     (util/input-command "h1")
-    (util/exit-edit)
-    (w/wait-for "h1.block-title-wrap.as-heading:has-text('clear heading test')")
-    (b/jump-to-block "clear heading test")
-    (util/input-command "Clear heading")
+    (util/press-seq " /")
+    (w/wait-for "a.menu-link:has-text('Clear heading')")
+    (w/click "a.menu-link:has-text('Clear heading')")
+    (util/press-seq " /")
+    (w/wait-for ".ui__popover-content")
+    (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')")
+    (k/backspace)
     (util/exit-edit)
     (assert/assert-is-hidden "h1.block-title-wrap.as-heading:has-text('clear heading test')")
     (assert/assert-is-visible "span.block-title-wrap:has-text('clear heading test')")
@@ -404,7 +407,9 @@
     ;; double `enter` convert the next block to bullet block
     (k/enter)
     (assert/assert-have-count "span.typed-list" 4)
-    (util/wait-timeout 60)
+    (-> (w/-query (str util/editor-q ":focus"))
+        assert/assert-that
+        (.hasValue ""))
     (k/enter)
     (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))

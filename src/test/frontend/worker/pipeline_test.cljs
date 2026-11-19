@@ -7,6 +7,7 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.input-test-helper :as input-helper]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -14,6 +15,7 @@
             [logseq.db.common.order :as db-order]
             [logseq.db.common.reference :as db-reference]
             [logseq.db.frontend.schema :as db-schema]
+            [logseq.db.sqlite.build :as sqlite-build]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.db.sqlite.export :as sqlite-export]
             [logseq.db.test.helper :as db-test]
@@ -107,12 +109,6 @@
   [db block]
   (when block
     (:v (first (d/datoms db :eavt (:db/id block) :block/title)))))
-
-(defn- default-journal-page-name
-  [journal-day]
-  (-> journal-day
-      (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-      common-util/page-name-sanity-lc))
 
 (defn- silence-stderr
   [f]
@@ -559,6 +555,36 @@
         ;; return global fn back to previous behavior
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest built-journals-use-current-title-format-test
+  (let [conn (db-test/create-conn-with-blocks [])
+        previous-pipeline @ldb/*transact-pipeline-fn]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+    (sqlite-build/create-blocks conn [{:page {:block/title "2024/01/03"}}
+                                     {:page {:build/journal 20240201}}])
+    (let [existing (ldb/get-journal-page-by-day @conn 20240201)]
+      (d/transact! conn [[:db/add (:db/id existing) :block/title "2024/01/04"]
+                         [:db/add (:db/id existing) :block/name "2024/01/04"]]))
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [txs (sqlite-export/build-import
+                 {:pages-and-blocks [{:page {:build/journal 20240102}}
+                                     {:page {:build/journal 20240103}}
+                                     {:page {:build/journal 20240104}}]}
+                 @conn {})]
+        (ldb/transact! conn (sqlite-export/import-tx-data txs) {::sqlite-export/imported-data? true}))
+      (let [journal (ldb/get-journal-page-by-day @conn 20240102)
+            collision (ldb/get-journal-page-by-day @conn 20240103)]
+        (is (= "2024/01/02" (:block/title journal)))
+        (is (= "2024/01/02" (:block/name journal)))
+        (is (= #uuid "00000001-2024-0102-0000-000000000000" (:block/uuid journal)))
+        (is (= "Jan 3rd, 2024" (:block/title collision)))
+        (is (= "jan 3rd, 2024" (:block/name collision)))
+        (is (= "Jan 4th, 2024" (:block/title (ldb/get-journal-page-by-day @conn 20240104))))
+        (is (= "2024/01/04" (:block/name (ldb/get-journal-page-by-day @conn 20240201))))
+        (is (not= (:db/id collision) (:db/id (ldb/get-page @conn "2024/01/03")))))
+      (finally
+        (reset! ldb/*transact-pipeline-fn previous-pipeline)))))
+
 (deftest batch-import-edn-datom-format-with-shifted-builtin-eids-test
   (let [source-conn (d/create-conn db-schema/schema)
         ;; Shift subsequent built-in eids without leaving invalid datoms in the export.
@@ -777,10 +803,12 @@
         run-pipeline (fn [tx-data]
                        (worker-pipeline/transact-pipeline
                         (d/with @conn tx-data)))]
-    (testing "updating journal :block/title should throw"
+    (d/transact! conn [[:db/add :logseq.class/Journal
+                        :logseq.property.journal/title-format "yyyy-MM-dd"]])
+    (testing "writing the formatted journal title without a format change must still reject a stored-title change"
       (let [error (try
                     (run-pipeline [{:db/id (:db/id journal)
-                                    :block/title "journal title changed"}])
+                                    :block/title "2025-02-03"}])
                     nil
                     (catch :default e
                       e))]
@@ -855,20 +883,235 @@
         (finally
           (ldb/register-transact-pipeline-fn! identity))))))
 
-(deftest create-journal-page-name-uses-default-formatter-test
+(deftest save-reference-with-same-name-journal-and-class-test
+  (doseq [reference-kind [:class-link :class-tag :journal-with-class-tag]]
+    (testing (name reference-kind)
+      (let [conn (db-test/create-conn-with-blocks
+                  [{:page {:build/journal 20240212}}
+                   {:page {:block/title "page1"}
+                    :blocks [{:block/title "target"}]}])
+            journal (db-test/find-journal-by-journal-day @conn 20240212)
+            [_ class-uuid] (outliner-page/create! conn "category" {:class? true})
+            target (db-test/find-block-by-content @conn "target")
+            reference-uuid (if (= :journal-with-class-tag reference-kind)
+                             (:block/uuid journal)
+                             class-uuid)
+            title (str (when (= :class-tag reference-kind) "#") "[[" reference-uuid "]]")]
+        (d/transact! conn [{:block/uuid class-uuid
+                           :block/title (:block/title journal)
+                           :block/name (:block/name journal)}])
+        (let [reference (if (= :journal-with-class-tag reference-kind)
+                          (gp-block/page-name->map (:block/title journal) @conn false
+                                                  date-time-util/default-journal-title-formatter)
+                          (select-keys (d/entity @conn [:block/uuid reference-uuid])
+                                       [:db/id :db/ident :block/uuid :block/title :block/name]))
+              tag (select-keys (d/entity @conn [:block/uuid class-uuid])
+                                [:db/id :db/ident :block/uuid :block/title :block/name])
+              tagged? (not= :class-link reference-kind)]
+          (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+          (try
+            (outliner-op/apply-ops!
+             conn
+             [[:save-block [(cond-> {:db/id (:db/id target)
+                                    :block/uuid (:block/uuid target)
+                                    :block/title title
+                                    :block/refs [reference]}
+                             tagged? (assoc :block/tags [tag]))
+                            nil]]]
+             {})
+            (let [saved (d/entity @conn (:db/id target))
+                  refs (set (map :block/uuid (:block/refs saved)))]
+              (is (= title (raw-block-title @conn saved)))
+              (is (contains? refs reference-uuid))
+              (when (not= :journal-with-class-tag reference-kind)
+                (is (not (contains? refs (:block/uuid journal)))))
+              (when tagged?
+                (is (contains? (set (map :block/uuid (:block/tags saved))) class-uuid))))
+            (finally
+              (ldb/register-transact-pipeline-fn! identity))))))))
+
+(deftest save-reference-restores-recycled-journal-test
+  (doseq [match-by [:day :stored-name]]
+    (testing (name match-by)
+      (let [journal-day 20240212
+            title-format "E, dd.MM.yyyy"
+            conn (db-test/create-conn-with-blocks
+                  [{:page {:build/journal journal-day}}
+                   {:page {:block/title "page1"}
+                    :blocks [{:block/title "target"}]}])
+            journal (db-test/find-journal-by-journal-day @conn journal-day)
+            target (db-test/find-block-by-content @conn "target")
+            stored-title (:block/title journal)
+            parsed-uuid (random-uuid)]
+        (d/transact! conn [[:db/add :logseq.class/Journal
+                            :logseq.property.journal/title-format title-format]])
+        (outliner-page/delete! conn (:block/uuid journal))
+        (is (true? (ldb/recycled? (d/entity @conn (:db/id journal)))))
+        (let [title (if (= :day match-by)
+                      (date-time-util/int->journal-title journal-day title-format)
+                      stored-title)
+              reference (cond-> {:block/uuid parsed-uuid
+                                 :block/title title
+                                 :block/name (common-util/page-name-sanity-lc title)
+                                 :block/tags [:logseq.class/Page]}
+                          (= :day match-by) (assoc :block/journal-day journal-day))]
+          (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+          (try
+            (outliner-op/apply-ops!
+             conn
+             [[:save-block [{:db/id (:db/id target)
+                             :block/uuid (:block/uuid target)
+                             :block/title (str "[[" parsed-uuid "]]")
+                             :block/refs [reference]}
+                            nil]]]
+             {})
+            (is (not (ldb/recycled? (d/entity @conn (:db/id journal)))))
+            (is (= (:block/uuid journal)
+                   (:block/uuid (first (:block/refs (d/entity @conn (:db/id target)))))))
+            (finally
+              (ldb/register-transact-pipeline-fn! identity))))))))
+
+(deftest custom-title-format-date-reference-preserves-journal-test
+  (let [journal-day 20240212
+        title-format "E, dd.MM.yyyy"
+        conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal journal-day}}
+               {:page {:block/title "page1"}
+                :blocks [{:block/title "target"}]}])
+        journal (db-test/find-journal-by-journal-day @conn journal-day)
+        target (db-test/find-block-by-content @conn "target")
+        stored-name (:block/name journal)
+        stored-title (raw-block-title @conn journal)
+        custom-title (date-time-util/int->journal-title journal-day title-format)]
+    (d/transact! conn [[:db/add :logseq.class/Journal
+                        :logseq.property.journal/title-format title-format]])
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (doseq [reference [(gp-block/page-name->map custom-title @conn true title-format)
+                        {:block/uuid (random-uuid)
+                         :block/title custom-title
+                         :block/name (common-util/page-name-sanity-lc custom-title)
+                         :block/tags [:logseq.class/Page]}]]
+        (outliner-op/apply-ops!
+         conn
+         [[:save-block [{:db/id (:db/id target)
+                         :block/uuid (:block/uuid target)
+                         :block/title (str "[[" (:block/uuid reference) "]]")
+                         :block/refs [reference]}
+                        nil]]]
+         {})
+        (let [journal-after (d/entity @conn (:db/id journal))
+              saved (d/entity @conn (:db/id target))]
+          (is (= stored-name (:block/name journal-after)))
+          (is (= stored-title (raw-block-title @conn journal-after)))
+          (is (= (str "[[" (:block/uuid journal) "]]") (raw-block-title @conn saved)))
+          (is (= (:block/uuid journal) (:block/uuid (first (:block/refs saved)))))))
+      (finally
+        (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest journal-title-format-change-updates-stored-titles-and-names-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:build/journal 20241216}}
+               {:page {:build/journal 20241217}}
+               {:page {:build/journal 20241218}}
+               {:page {:block/title "2024-12-18 Wednesday"}}])
+        journal (ldb/get-journal-page-by-day @conn 20241216)
+        other (ldb/get-journal-page-by-day @conn 20241217)
+        collision (ldb/get-journal-page-by-day @conn 20241218)
+        owner (ldb/get-page @conn "2024-12-18 Wednesday")
+        format-tx [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]]
+        stored-title #(raw-block-title @conn %)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (let [before @conn
+            report (ldb/transact! conn format-tx)]
+        (is (= ["2024-12-16 Monday" "2024-12-17 Tuesday"] (mapv stored-title [journal other])))
+        (is (= ["2024-12-16 monday" "2024-12-17 tuesday"]
+               (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other])))
+        (is (= "Dec 18th, 2024" (stored-title collision)))
+        (is (= "Dec 18th, 2024" (:block/title (d/entity @conn (:db/id collision)))))
+        (is (= "Dec 18th, 2024" (:block/raw-title (d/entity @conn (:db/id collision)))))
+        (is (= "2024-12-16 Monday" (:block/title (d/entity @conn (:db/id journal)))))
+        (is (= "2024-12-16 Monday" (:block/raw-title (d/entity @conn (:db/id journal)))))
+        (is (= "dec 18th, 2024" (:block/name (d/entity @conn (:db/id collision)))))
+        (is (= (:db/id owner) (:db/id (ldb/get-page @conn "2024-12-18 Wednesday"))))
+        (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
+        (doseq [tx [[[:db/add (:db/id journal) :block/title "wrong"]]
+                    [[:db/add (:db/id journal) :block/name "wrong"]]
+                    [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]
+                     [:db/add (:db/id journal) :block/title "wrong"]]
+                    [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]
+                     [:db/add (:db/id journal) :block/name "wrong"]]]]
+          (is (thrown-with-msg? js/Error #"journal page protected attr updated" (ldb/transact! conn tx))))
+        (let [remote (d/conn-from-db before)]
+          (ldb/transact! remote (:tx-data report) {:rtc-tx? true :transact-remote? true})
+          (is (= (raw-block-title @conn journal) (raw-block-title @remote journal)))
+          (is (= (:block/name (d/entity @conn (:db/id journal)))
+                 (:block/name (d/entity @remote (:db/id journal))))))
+        (ldb/transact! conn (map (fn [datom]
+                                 [(if (:added datom) :db/retract :db/add) (:e datom) (:a datom) (:v datom)])
+                               (reverse (:tx-data report))) {:reverse? true})
+        (is (= "Dec 16th, 2024" (stored-title journal)))
+        (is (= "dec 16th, 2024" (:block/name (d/entity @conn (:db/id journal)))))
+        (ldb/transact! conn (:tx-data report) {:reverse? true})
+        (is (= "2024-12-16 Monday" (stored-title journal)))
+        (outliner-op/apply-ops! conn
+                                [[:set-block-property [(:block/uuid (d/entity @conn :logseq.class/Journal))
+                                                       :logseq.property.journal/title-format "yyyy/MM/dd"]]]
+                                {})
+        (is (= ["2024/12/16" "2024/12/17"] (mapv stored-title [journal other])))
+        (is (= ["2024/12/16" "2024/12/17"]
+               (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other]))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest journal-title-format-name-swap-test
+  (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20240102}}
+                                               {:page {:build/journal 20240201}}])
+        journals (mapv #(ldb/get-journal-page-by-day @conn %) [20240102 20240201])
+        names #(mapv (fn [journal] (:block/name (d/entity @conn (:db/id journal)))) journals)]
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/MM/dd"]])
+      (is (= ["2024/01/02" "2024/02/01"] (names)))
+      (ldb/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy/dd/MM"]])
+      (is (= ["2024/02/01" "2024/01/02"] (names)))
+      (is (= ["2024/02/01" "2024/01/02"] (mapv #(raw-block-title @conn %) journals)))
+      (is (= 20240102 (:block/journal-day (ldb/get-page @conn "2024/02/01"))))
+      (is (= 20240201 (:block/journal-day (ldb/get-page @conn "2024/01/02"))))
+      (d/transact! conn [[:db/add (:db/id (first journals)) :block/name "2024/01/02"]
+                         [:db/add (:db/id (second journals)) :block/name "2024/02/01"]])
+      (is (= 20240102 (:block/journal-day (ldb/get-page @conn "2024/02/01"))))
+      (finally (ldb/register-transact-pipeline-fn! identity)))))
+
+(deftest get-page-resolves-current-journal-format-test
+  (let [conn (db-test/create-conn-with-blocks [{:page {:build/journal 20241216}}])
+        journal (ldb/get-journal-page-by-day @conn 20241216)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "2024-12-16 Monday"))))
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
+    (is (nil? (ldb/get-page @conn "2024-12-18 Wednesday")))
+    (is (nil? (ldb/get-page @conn "not a page")))
+    (is (nil? (ldb/get-page @conn ""))))
+  (let [conn (db-test/create-conn-with-blocks [{:page {:block/title "2021Q4"}}
+                                              {:page {:build/journal 20040120}}])
+        page (ldb/get-page @conn "2021Q4")
+        journal (ldb/get-journal-page-by-day @conn 20040120)]
+    (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "dd.MM.yyyy"]])
+    (is (= (:db/id page) (:db/id (ldb/get-page @conn "2021Q4"))))
+    (is (= (:db/id journal) (:db/id (ldb/get-page @conn "20.01.2004"))))))
+
+(deftest create-journal-page-name-uses-current-formatter-test
   (let [conn (db-test/create-conn)]
     (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
     (let [[_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {:journal? true})
           page (d/entity @conn [:block/uuid page-uuid])
           journal-day (:block/journal-day page)
           expected-title (date-time-util/int->journal-title journal-day "yyyy-MM-dd EEEE")
-          expected-name (-> journal-day
-                            (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-                            common-util/page-name-sanity-lc)]
+          expected-name (common-util/page-name-sanity-lc expected-title)]
       (is (= expected-title (:block/title page))
           "Journal title follows configured title format")
       (is (= expected-name (:block/name page))
-          "Journal block/name keeps the default formatter for stable identity"))))
+          "Journal block/name follows the configured title"))))
 
 (deftest apply-template-today-dynamic-variable-persists-journal-ref-test
   (testing "apply-template stores <% today %> as a DB graph id ref to the journal page"
@@ -919,7 +1162,7 @@
           tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
           journal-title-format "yyyy-MM-dd"
           expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
-          expected-tomorrow-name (default-journal-page-name tomorrow)
+          expected-tomorrow-name (common-util/page-name-sanity-lc expected-tomorrow-title)
           conn (db-test/create-conn-with-blocks
                 {:pages-and-blocks
                  [{:page {:build/journal today}
@@ -1046,7 +1289,7 @@
         tomorrow (date-time-util/ms->journal-day (+ (js/Date.now) (* 24 60 60 1000)))
         journal-title-format "yyyy-MM-dd"
         expected-tomorrow-title (date-time-util/int->journal-title tomorrow journal-title-format)
-        expected-tomorrow-name (default-journal-page-name tomorrow)
+        expected-tomorrow-name (common-util/page-name-sanity-lc expected-tomorrow-title)
         conn (db-test/create-conn-with-blocks
               {:pages-and-blocks
                [{:page {:build/journal today}
@@ -1430,6 +1673,38 @@
       (finally
         (ldb/register-transact-pipeline-fn! identity)))))
 
+(deftest page-to-block-repoints-descendant-block-page-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Alpha"}}
+               {:page {:block/title "Beta"}
+                :blocks [{:block/title "First"
+                          :build/children [{:block/title "Second"}]}]}])
+        parent (db-test/find-page-by-title @conn "Alpha")
+        nested (db-test/find-page-by-title @conn "Beta")
+        child (db-test/find-block-by-content @conn "First")
+        grandchild (db-test/find-block-by-content @conn "Second")]
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/move-blocks! conn [nested] parent {:sibling? false})
+        (let [nested' (d/entity @conn (:db/id nested))
+              child' (d/entity @conn (:db/id child))
+              grandchild' (d/entity @conn (:db/id grandchild))]
+          (is (ldb/internal-page? nested'))
+          (is (= [(:db/id nested') (:db/id nested')]
+                 (mapv (comp :db/id :block/page) [child' grandchild'])))
+          (outliner-property/delete-property-value! conn (:db/id nested') :block/tags :logseq.class/Page)
+          (let [demoted (d/entity @conn (:db/id nested'))
+                child-after (d/entity @conn (:db/id child'))
+                grandchild-after (d/entity @conn (:db/id grandchild'))]
+            (is (not (ldb/page? demoted)))
+            (is (nil? (:block/name demoted)))
+            (is (= [(:db/id parent) (:db/id demoted) (:db/id child-after)]
+                   (mapv (comp :db/id :block/parent) [demoted child-after grandchild-after]))
+                "Page conversion preserves the outline structure")
+            (is (= [(:db/id parent) (:db/id parent) (:db/id parent)]
+                   (mapv (comp :db/id :block/page) [demoted child-after grandchild-after]))
+                "The demoted block and its descendants belong to the parent page")))))))
+
 (defn- block-ref-ids
   [block]
   (set (map :db/id (:block/refs block))))
@@ -1437,6 +1712,88 @@
 (defn- linked-ref-ids
   [db page]
   (set (map :db/id (:ref-blocks (db-reference/get-linked-references db (:db/id page))))))
+
+(defn- complete-task-with-cli-ops!
+  [conn task]
+  ;; upsert task ensures the Task tag even when it is already present.
+  (input-helper/apply-ops!
+   conn
+   [[:batch-set-property [[(:block/uuid task)] :block/tags :logseq.class/Task {}]]
+    [:batch-set-property [[(:block/uuid task)] :logseq.property/status :logseq.property/status.done {}]]]
+   nil))
+
+(deftest repeating-task-completion-rebuilds-journal-refs-test
+  (doseq [property [:logseq.property/scheduled :logseq.property/deadline]
+          existing-journals? [false true]]
+    (testing (str property ", existing journals: " existing-journals?)
+      (let [now (t/local-date-time 2026 11 8 12)
+            conn (db-test/create-conn-with-blocks
+                  {:pages-and-blocks
+                   (into [{:page {:block/title "Inbox"}
+                           :blocks [{:block/title "weekly chore"
+                                     :build/tags [:logseq.class/Task]
+                                     :build/properties
+                                     {:logseq.property/status :logseq.property/status.todo
+                                      property (tc/to-long now)
+                                      :logseq.property.repeat/repeated? true
+                                      :logseq.property.repeat/recur-frequency 1
+                                      :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}}]}]
+                         (when existing-journals?
+                           [{:page {:build/journal 20261108}}
+                            {:page {:build/journal 20261115}}]))})
+            task (db-test/find-block-by-content @conn "weekly chore")
+            task-id (:db/id task)
+            journal-days #(set (keep :block/journal-day (:block/refs (d/entity @conn task-id))))]
+        (d/transact! conn [[:db/add task-id :logseq.property.repeat/repeat-type
+                            :logseq.property.repeat/repeat-type.plus]
+                           [:db/add task-id :logseq.property.repeat/temporal-property property]])
+        (with-transact-pipeline
+          (fn []
+            ;; Saving once establishes the starting refs when the old journal exists.
+            (outliner-core/save-block! conn {:db/id task-id :block/title "weekly chore"})
+            (is (= (if existing-journals? #{20261108} #{}) (journal-days)))
+            (with-redefs [t/now (constantly now)]
+              (doseq [[previous-day next-day] [[20261108 20261115] [20261115 20261122]]]
+                (complete-task-with-cli-ops! conn task)
+                (let [updated-task (d/entity @conn task-id)
+                      next-journal (db-test/find-journal-by-journal-day @conn next-day)
+                      previous-journal (db-test/find-journal-by-journal-day @conn previous-day)]
+                  (is (= next-day (date-time-util/ms->journal-day (get updated-task property))))
+                  (is (= :logseq.property/status.todo (:db/ident (:logseq.property/status updated-task))))
+                  (is (= #{next-day} (journal-days)) "Refs follow the rescheduled date immediately")
+                  (is (contains? (linked-ref-ids @conn next-journal) task-id))
+                  (when previous-journal
+                    (is (not (contains? (linked-ref-ids @conn previous-journal) task-id)))))))))))))
+
+(deftest repeating-task-keeps-content-journal-refs-test
+  (let [now (t/local-date-time 2026 11 8 12)
+        conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "Inbox"}
+                :blocks [{:block/title "weekly chore"
+                          :build/tags [:logseq.class/Task]
+                          :build/properties
+                          {:logseq.property/status :logseq.property/status.todo
+                           :logseq.property/scheduled (tc/to-long now)
+                           :logseq.property.repeat/repeated? true
+                           :logseq.property.repeat/recur-frequency 1
+                           :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.week}}]}
+               {:page {:build/journal 20261108}}])
+        task (db-test/find-block-by-content @conn "weekly chore")
+        old-journal (db-test/find-journal-by-journal-day @conn 20261108)]
+    (d/transact! conn [[:db/add (:db/id task) :logseq.property.repeat/repeat-type
+                        :logseq.property.repeat/repeat-type.plus]])
+    (with-transact-pipeline
+      (fn []
+        (outliner-core/save-block! conn {:db/id (:db/id task)
+                                         :block/title (str "weekly chore [[" (:block/uuid old-journal) "]]")})
+        (with-redefs [t/now (constantly now)]
+          (complete-task-with-cli-ops! conn task))
+        (let [next-journal (db-test/find-journal-by-journal-day @conn 20261115)
+              journal-days (set (keep :block/journal-day (:block/refs (d/entity @conn (:db/id task)))))]
+          (is (= #{20261108 20261115} journal-days))
+          (is (contains? (linked-ref-ids @conn old-journal) (:db/id task))
+              "The title still references the old journal")
+          (is (contains? (linked-ref-ids @conn next-journal) (:db/id task))))))))
 
 (deftest clearing-past-deadline-removes-journal-linked-ref-test
   (let [past-day 20260923

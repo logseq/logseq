@@ -11,6 +11,9 @@
             [frontend.fs :as fs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.export :as export]
+            [frontend.handler.export.common :as export-common]
+            [frontend.handler.export.html :as export-html]
+            [frontend.handler.export.opml :as export-opml]
             [frontend.handler.export.text :as export-text]
             [frontend.handler.notification :as notification]
             [frontend.persist-db :as persist-db]
@@ -463,9 +466,9 @@
             without-properties (<export-blocks-as-markdown
                                 [(uuid "f81f4f64-578a-42ff-8741-19adac45f42a")]
                                 {:remove-options #{:property}})]
-      (is (= (string/trim "
-- issue
-  reproducible-steps:: Switch to a password protected graph")
+      (is (= (str "- issue\n"
+                  "  reproducible-steps::  \n"
+                  "\t- Switch to a password protected graph")
              (string/trim with-properties)))
       (is (= "- issue"
              (string/trim without-properties)))
@@ -499,6 +502,109 @@
   ```")
              (string/trim content)))
       (done))))
+
+(defn- global-get
+  [k]
+  (aget js/globalThis k))
+
+(defn- global-set!
+  [k v]
+  (aset js/globalThis k v))
+
+(defn- install-node-xml-prettify-stub!
+  "Node has no DOMParser. prettifyXml falls back to the original markup when
+   the stub serializer reports a parser error."
+  []
+  (global-set! "DOMParser"
+               (js* "class { parseFromString(source) { return {source: source}; } }"))
+  (global-set! "XSLTProcessor"
+               (js* "class { importStylesheet() {} transformToDocument(doc) { return doc; } }"))
+  (global-set! "XMLSerializer"
+               (js* "class { serializeToString(doc) { return '<parsererror>' + ((doc && doc.source) || ''); } }")))
+
+(defn- with-node-xml-prettify-stub
+  [f]
+  (let [parser (global-get "DOMParser")
+        xslt (global-get "XSLTProcessor")
+        serializer (global-get "XMLSerializer")]
+    (install-node-xml-prettify-stub!)
+    (try
+      (f)
+      (finally
+        (global-set! "DOMParser" parser)
+        (global-set! "XSLTProcessor" xslt)
+        (global-set! "XMLSerializer" serializer)))))
+
+(deftest prettify-xml-falls-back-when-xslt-import-fails
+  (let [parser (global-get "DOMParser")
+        xslt (global-get "XSLTProcessor")
+        serializer (global-get "XMLSerializer")
+        source "<div><ul><li>a</li><li>b</li></ul></div>"]
+    (global-set! "DOMParser"
+                 (js* "class { parseFromString(source) { return {source: source}; } }"))
+    (global-set! "XSLTProcessor"
+                 (js* "class { importStylesheet() { throw Object.assign(new Error('NS_ERROR_FAILURE'), {result: 0x80600001}); } transformToDocument() { throw new Error('unused'); } }"))
+    (global-set! "XMLSerializer"
+                 (js* "class { serializeToString() { return '<should-not-use/>'; } }"))
+    (try
+      (is (= source (browser-utils/prettifyXml source))
+          "Optional HTML prettify must return the original markup when XSLTProcessor.importStylesheet throws.")
+      (finally
+        (global-set! "DOMParser" parser)
+        (global-set! "XSLTProcessor" xslt)
+        (global-set! "XMLSerializer" serializer)))))
+
+(deftest export-image-asset-block-keeps-asset-reference
+  (testing "a nested image block keeps an asset reference in markdown, html, and opml"
+    (with-node-xml-prettify-stub
+      (fn []
+        (let [image-uuid #uuid "14630000-0000-4000-8000-000000000146"
+              parent-uuid #uuid "14630000-0000-4000-8000-000000000001"
+              db @(db-test/create-conn-with-blocks
+                   {:pages-and-blocks
+                    [{:page {:block/title "Image export"}
+                      :blocks
+                      [{:block/title "Notes"
+                        :block/uuid parent-uuid
+                        :build/keep-uuid? true
+                        :build/children
+                        [{:block/title "Nested text"}
+                         {:block/title "Sunset caption"
+                          :block/uuid image-uuid
+                          :build/keep-uuid? true
+                          :build/tags #{:logseq.class/Asset}
+                          :build/properties {:logseq.property.asset/type "png"
+                                             :logseq.property.asset/checksum "img-checksum"
+                                             :logseq.property.asset/size 128}}
+                         {:block/title "More text"}]}]}]})
+              content-config {:export-bullet-indentation "\t"
+                              :encode-highlight-as-mark? true}
+              options {:remove-options #{:property}}
+              asset-ref (str "../assets/" image-uuid ".png")
+              image-md (str "![Sunset caption](" asset-ref ")")
+              markdown (worker-export/export-blocks-as-format
+                        db parent-uuid :markdown options content-config)
+              image-only (worker-export/export-blocks-as-format
+                          db image-uuid :markdown options content-config)
+              {:keys [content format]} (worker-export/get-blocks-export-data
+                                        db parent-uuid
+                                        {:include-properties? false}
+                                        content-config)
+              html (export-html/export-helper content format options)
+              opml (export-opml/export-helper content format options)]
+          (is (= (string/trim (str "\n- Notes\n"
+                                   "\t- Nested text\n"
+                                   "\t- " image-md "\n"
+                                   "\t- More text"))
+                 (string/trim markdown))
+              "markdown copy/export keeps the image markup")
+          (is (= (str "- " image-md)
+                 (string/trim image-only))
+              "exporting the image block alone keeps the asset reference")
+          (is (string/includes? html "<img") html)
+          (is (string/includes? html asset-ref) html)
+          (is (string/includes? html "alt=\"Sunset caption\"") html)
+          (is (string/includes? opml image-md) opml))))))
 
 (deftest export-blocks-as-markdown-level<N
   (async done
@@ -586,28 +692,46 @@
                (string/trim all-content)))
         (done)))))
 
-(deftest export-block-embed-open-blocks-only
-  (testing "an embedded block's collapsed descendants are excluded when :open-blocks-only is enabled"
+(deftest embedded-export-inherits-filter-options
+  (testing "block and page embeds apply the enclosing export filters to all descendants"
     (let [parent-id #uuid "6b000000-0000-4000-8000-000000000001"
-          holder-id #uuid "6b000000-0000-4000-8000-000000000003"
+          block-holder-id #uuid "6b000000-0000-4000-8000-000000000003"
+          page-holder-id #uuid "6b000000-0000-4000-8000-000000000004"
           db @(db-test/create-conn-with-blocks
-               {:pages-and-blocks
+               {:properties {:user.property/notes {:logseq.property/type :default}}
+                :pages-and-blocks
                 [{:page {:block/title "Page A"}
                   :blocks
                   [{:block/title "Parent block" :block/uuid parent-id :build/keep-uuid? true
+                    :build/properties
+                    {:user.property/notes
+                     {:build/property-value :block
+                      :block/title "Value"
+                      :build/children
+                      [{:block/title "Collapsed value child" :block/collapsed? true
+                        :build/children [{:block/title "Hidden value grandchild"}]}]}}
                     :build/children
                     [{:block/title "Collapsed child" :block/collapsed? true
-                      :build/children [{:block/title "Hidden grandchild"}]}]}
-                   {:block/title (str "{{embed ((" parent-id "))}}")
-                    :block/uuid holder-id :build/keep-uuid? true}]}]})
-          export! (fn [open-only?]
-                    (worker-export/export-blocks-as-format
-                     db holder-id :markdown
-                     {:remove-options [:property] :other-options {:open-blocks-only open-only?}}
-                     {}))]
-      (is (string/includes? (export! true) "Collapsed child"))
-      (is (not (string/includes? (export! true) "Hidden grandchild")))
-      (is (string/includes? (export! false) "Hidden grandchild")))))
+                      :build/children [{:block/title "Hidden grandchild"}]}]}]}
+                 {:page {:block/title "Page B"}
+                  :blocks [{:block/title (str "{{embed ((" parent-id "))}}")
+                            :block/uuid block-holder-id :build/keep-uuid? true}
+                           {:block/title "{{embed [[Page A]]}}"
+                            :block/uuid page-holder-id :build/keep-uuid? true}]}]})]
+      (doseq [holder-id [block-holder-id page-holder-id]
+              open-only? [false true]
+              remove-properties? [false true]]
+        (let [content (worker-export/export-blocks-as-format
+                       db holder-id :markdown
+                       {:remove-options (if remove-properties? #{:property} #{})
+                        :other-options {:open-blocks-only open-only?}}
+                       (export-common/get-content-config))]
+          (is (string/includes? content "Parent block"))
+          (is (string/includes? content "Collapsed child"))
+          (is (= (not open-only?) (string/includes? content "Hidden grandchild")))
+          (is (= (not remove-properties?) (string/includes? content "Collapsed value child")))
+          (is (= (and (not remove-properties?) (not open-only?))
+                 (string/includes? content "Hidden value grandchild"))))))))
 
 (deftest export-page-as-markdown-open-blocks-only
   (async done

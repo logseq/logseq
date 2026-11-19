@@ -330,10 +330,21 @@
      (when shortcut
        [:span.ml-1 (render-keyboard-shortcut shortcut)])]))
 
+(defn- checkbox-root-checked?
+  "Base UI Checkbox uses aria-checked and data-checked. The inputless span
+  also sets data-state. Clicks can land on the inner indicator, so callers
+  must pass the checkbox root (currentTarget)."
+  [^js el]
+  (or (= "true" (.getAttribute el "aria-checked"))
+      (.hasAttribute el "data-checked")
+      (= "checked" (.-state (.-dataset el)))))
+
 (defn checkbox
   [option]
   (let [on-change' (:on-change option)
         on-click' (:on-click option)
+        controlled-checked (when (contains? option :checked)
+                             (true? (:checked option)))
         option (cond-> (dissoc option :on-change :on-click)
                  (and on-click' (nil? on-change'))
                  (assoc :data-inputless true)
@@ -342,9 +353,15 @@
                  (assoc :on-click
                         (fn [^js e]
                           (some-> on-click' (apply [e]))
-                          (let [checked? (= (.-state (.-dataset (.-target e))) "checked")]
-                            (set! (. (.-target e) -checked) (not checked?))
-                            (some-> on-change' (apply [e]))))))]
+                          (when-let [el (.-currentTarget e)]
+                            (let [checked? (if (some? controlled-checked)
+                                             controlled-checked
+                                             (checkbox-root-checked? el))
+                                  next-checked? (not checked?)]
+                              (set! (.-checked el) next-checked?)
+                              (when-let [target (.-target e)]
+                                (set! (.-checked target) next-checked?))
+                              (some-> on-change' (apply [e])))))))]
     (shui/checkbox
      (merge option
             {:disabled (or (:disabled option) config/publishing?)}))))
@@ -467,13 +484,16 @@
            header
            grouped?]
     :as opts}]
-  (let [*current-idx (hooks/use-memo #(atom 0) [])
+  (let [matched (if get-group-name
+                  (let [items-by-group (group-by get-group-name matched)]
+                    (into [] (mapcat items-by-group) (distinct (map get-group-name matched))))
+                  matched)
+        *current-idx (hooks/use-memo #(atom 0) [])
         [current-idx] (hooks/use-atom *current-idx)
         shortcut-state {:matched matched
                         :opts opts
                         ::current-idx *current-idx}
         _ (shortcut/use-shortcut-handler! :shortcut.handler/auto-complete shortcut-state)
-        *groups (atom #{})
         render-f (fn [matched]
                    (for [[idx item] matched]
                      (let [react-key (str idx)
@@ -483,33 +503,34 @@
                                        (if (and (gobj/get e "shiftKey") on-shift-chosen)
                                          (on-shift-chosen item)
                                          (on-chosen item e))))
-                           item-cp
-                           [:div.menu-link-wrap
-                            {:key react-key
-                             ;; mouse-move event to indicate that cursor moved by user
-                             :on-mouse-move  #(reset! *current-idx idx)
-                             :on-click choose!}
-                            (let [chosen? (= current-idx idx)]
-                              (menu-link
-                               {:id (str "ac-" react-key)
-                                :tab-index "0"
-                                :class (when chosen? "chosen")
-                                :on-mouse-down util/stop
-                                :on-click choose!}
-                               (if item-render (item-render item chosen?) item)))]
-                           group-name (and (fn? get-group-name) (get-group-name item))]
-                       (if (and group-name (not (contains? @*groups group-name)))
-                         (do
-                           (swap! *groups conj group-name)
-                           [:div
-                            [:div.ui__ac-group-name group-name]
-                            item-cp])
-                         item-cp))))]
+                           chosen? (= current-idx idx)]
+                       [:div.menu-link-wrap
+                        {:key react-key
+                         ;; mouse-move event to indicate that cursor moved by user
+                         :on-mouse-move #(reset! *current-idx idx)
+                         :on-click choose!}
+                        (menu-link
+                         {:id (str "ac-" react-key)
+                          :tab-index "0"
+                          :class (when chosen? "chosen")
+                          :on-mouse-down util/stop
+                          :on-click choose!}
+                         (if item-render (item-render item chosen?) item))])))]
     [:div#ui__ac {:class class}
      (if (seq matched)
        [:div#ui__ac-inner.hide-scrollbar
         (when header header)
-        (if grouped?
+        (cond
+          get-group-name
+          (for [items (partition-by (comp get-group-name second) (medley/indexed matched))
+                :let [[idx item] (first items)]]
+            [:div {:key idx}
+             (if-let [group-name (get-group-name item)]
+               [:div.ui__ac-group-name group-name]
+               (when (pos? idx) [:hr]))
+             (render-f items)])
+
+          grouped?
           (let [*idx (atom -1)
                 inc-idx #(swap! *idx inc)]
             (for [[group matched] (group-by :group matched)]
@@ -519,6 +540,7 @@
                    [:div.ui__ac-group-name group]
                    (render-f matched')]
                   (render-f matched')))))
+          :else
           (render-f (medley/indexed matched)))]
        (when empty-placeholder
          empty-placeholder))]))

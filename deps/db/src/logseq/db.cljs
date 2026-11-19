@@ -128,11 +128,22 @@
   [tx-meta]
   (not (:fix-db? tx-meta)))
 
+(defn- error->log-str
+  [error]
+  (or (ex-message error)
+      (when (instance? js/Error error)
+        (.-message error))
+      (when (string? error) error)
+      (try (pr-str error)
+           (catch :default _ "[unprintable error]"))))
+
 (defn- transact-failed-log-data
   [tx-meta tx-data error]
-  {:tx-meta tx-meta
-   :tx-count (count tx-data)
-   :error (str error)})
+  (cond-> {:tx-meta tx-meta
+           :tx-count (count tx-data)
+           :error (error->log-str error)}
+    (map? (ex-data error))
+    (assoc :error-data (select-keys (ex-data error) [:code :error :path :entity-id]))))
 
 (defn- invalid-tx-log-data
   [tx-meta tx-data errors tx-report]

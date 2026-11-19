@@ -466,10 +466,21 @@ let pull_entity config repo selector lookup =
     ~selector:(Edn_util.expect_vector_t "add pull selector" selector)
     ~lookup
 
-let apply_outliner_ops config repo ops =
+let apply_outliner_ops ?stress_uuids config repo ops =
+  let options =
+    if Vec.length ops > 1 then
+      Vec.singleton (kw "outliner-op", kw "apply-outliner-ops")
+    else Vec.empty
+  in
+  let options =
+    match stress_uuids with
+    | None -> options
+    | Some uuids ->
+        Vec.push_back options (kw "stress/create-tree-uuids", uuids)
+  in
   Transport.thread_api_apply_outliner_ops config ~repo
     ~ops:(Edn_util.vector_t_vec ops)
-    ~options:(Edn_util.map_t_vec Vec.empty)
+    ~options:(Edn_util.map_t_vec options)
 
 let create_page config repo name uuid =
   let op =
@@ -816,25 +827,73 @@ let resolve_properties invoke_config repo properties =
   if Vec.is_empty properties then Cli_effect.pure (Ok Vec.empty)
   else resolve_property_assignments invoke_config repo properties
 
-let resolve_created_ids config repo blocks =
+let block_uuid_lookup uuid =
+  vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])
+
+let created_id_selector =
+  vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |])
+
+let create_tree_error_context ~target_uuid ~apply_snapshot ~uuids ~failed_uuid
+    lookup_result =
+  let from value key =
+    Edn_util.get value key |> Option.value ~default:Edn_util.nil
+  in
+  Edn_util.map_vec
+    (Vec.singleton
+       ( kw "create-tree-trace",
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                (kw "requested-uuids", uuids);
+                ( kw "target-uuid",
+                  Option.fold ~none:Edn_util.nil ~some:Edn_util.uuid target_uuid );
+                (kw "failed-uuid", Edn_util.uuid failed_uuid);
+                ( kw "apply-returned-result",
+                  from apply_snapshot "stress/returned-result" );
+                (kw "present-after-apply", from apply_snapshot "stress/present");
+                (kw "present-at-lookup", from lookup_result "stress/present");
+                (kw "apply-at-ms", from apply_snapshot "stress/at-ms");
+                (kw "lookup-at-ms", from lookup_result "stress/at-ms");
+              |]) ))
+
+let resolve_created_ids ?stress_trace config repo uuids =
   let open Cli_effect in
-  let uuids = collect_action_block_uuids blocks in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
     | None -> pure (Ok acc)
     | Some (uuid, rest) ->
-        bind
-          (pull_entity config repo
-             (vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-             (vector_vec
-                (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])))
-          (fun entity ->
+        let lookup = block_uuid_lookup uuid in
+        let lookup =
+          match stress_trace with
+          | None -> lookup
+          | Some (requested, _, _) ->
+              Edn_util.map_vec
+                (Vec.of_array
+                   [| (kw "stress/lookup", lookup);
+                      (kw "stress/create-tree-uuids", requested) |])
+        in
+        bind (pull_entity config repo created_id_selector lookup)
+          (fun result ->
+            let entity =
+              match stress_trace with
+              | None -> result
+              | Some _ ->
+                  Edn_util.get result "stress/entity"
+                  |> Option.value ~default:Edn_util.nil
+            in
             match id_of_entity entity with
             | Some id -> loop (Vec.push_back acc id) rest
             | None ->
+                let context =
+                  Option.map
+                    (fun (uuids, target_uuid, apply_snapshot) ->
+                      create_tree_error_context ~target_uuid ~apply_snapshot
+                        ~uuids ~failed_uuid:uuid result)
+                    stress_trace
+                in
                 pure
                   (Error
-                     (Error.make Error.Add_id_resolution_failed
+                     (Error.make ?context Error.Add_id_resolution_failed
                         "unable to resolve created ids")))
   in
   loop Vec.empty uuids
@@ -842,20 +901,17 @@ let resolve_created_ids config repo blocks =
 let target_not_found_error () =
   Error.make Error.Target_not_found "target block not found"
 
-let resolve_created_ids_or_target_error config repo target_uuid blocks =
+let resolve_created_ids_or_target_error ?stress_trace config repo target_uuid uuids =
   let open Cli_effect in
-  bind (resolve_created_ids config repo blocks) (function
-    | Ok ids -> pure (Ok ids)
-    | Error err when err.Error.code = Error.Add_id_resolution_failed ->
-        bind
-          (pull_entity config repo
-             (vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-             (vector_vec
-                (Vec.of_array [| kw "block/uuid"; Edn_util.uuid target_uuid |])))
-          (fun target ->
-            if Option.is_some (id_of_entity target) then pure (Error err)
-            else pure (Error (target_not_found_error ())))
-    | Error err -> pure (Error err))
+  bind (resolve_created_ids ?stress_trace config repo uuids) (fun result ->
+      match (result, target_uuid) with
+      | Error err, Some uuid when err.Error.code = Error.Add_id_resolution_failed ->
+          bind
+            (pull_entity config repo created_id_selector (block_uuid_lookup uuid))
+            (fun target ->
+              if Option.is_some (id_of_entity target) then pure (Error err)
+              else pure (Error (target_not_found_error ())))
+      | _ -> pure result)
 
 let property_key_to_value = function
   | Property.Key_ident ident -> Edn_util.any ident
@@ -924,179 +980,6 @@ let metadata_ops block_uuids status tags properties =
   in
   if Vec.is_empty block_uuids then Vec.empty
   else Vec.append status_ops (Vec.append tag_ops property_ops)
-
-(* Mldoc.get_references on a block title returns the AST-level references:
-   [[page]] links, ((block-uuid)) refs and #tags, without counting text inside
-   code blocks or verbatim markup. *)
-let title_references ~block_refs title =
-  (* Namespaced pages need a create-page op with split-namespace? — the
-     worker's inline page-map resolution rejects "/" titles. A [:block/name]
-     lookup routes them through materialize_name_lookups instead. *)
-  let page_ref_map name =
-    if String.contains name '/' then
-      vector_vec (Vec.of_array [| kw "block/name"; Edn_util.string name |])
-    else
-      Edn_util.map_vec
-        (Vec.of_array
-           [|
-             (kw "block/title", Edn_util.string name);
-             (kw "block/name", Edn_util.string (normalized_lookup_name name));
-             ( kw "block/tags",
-               Edn_util.vector_vec (Vec.singleton (kw "logseq.class/Page")) );
-           |])
-  in
-  let tag_name_of_content content =
-    match Js.Json.decodeArray content with
-    | Some nodes -> (
-        Array.find_map
-          (fun node ->
-            match Js.Json.decodeArray node with
-            | Some parts when Array.length parts >= 2 -> (
-                match Js.Json.decodeString parts.(0) with
-                | Some "Plain" -> Js.Json.decodeString parts.(1)
-                (* `#[[Tag Name]]` — multi-word tags arrive as a Link node
-                   carrying a Page_ref url. *)
-                | Some "Link" -> (
-                    match Js.Json.decodeObject parts.(1) with
-                    | Some link -> (
-                        match
-                          Option.bind
-                            (Js.Dict.get link "url")
-                            Js.Json.decodeArray
-                        with
-                        | Some url_parts
-                          when Array.length url_parts >= 2 -> (
-                            match
-                              ( Js.Json.decodeString url_parts.(0),
-                                Js.Json.decodeString url_parts.(1) )
-                            with
-                            | Some "Page_ref", Some name -> (
-                                (* mldoc has no | alias syntax — [[a|b]]
-                                   is a page literally named a|b. *)
-                                match String.trim name with
-                                | "" -> None
-                                | name -> Some name)
-                            | _ -> None)
-                        | _ -> None)
-                    | None -> None)
-                | _ -> None)
-            | _ -> Js.Json.decodeString node)
-          nodes
-        |> function
-        | Some name when String.trim name <> "" -> Some (String.trim name)
-        | _ -> None)
-    | None -> None
-  in
-  match
-    try Js.Json.decodeArray (Mldoc.references title)
-    with _ -> None
-  with
-  | None -> (Vec.empty, Vec.empty)
-  | Some items ->
-      Array.fold_left
-        (fun (refs, tag_names) item ->
-          match Js.Json.decodeArray item with
-          | Some pair when Array.length pair >= 2 -> (
-              match Js.Json.decodeString pair.(0) with
-              | Some "Tag" -> (
-                  match tag_name_of_content pair.(1) with
-                  | Some name -> (refs, Vec.push_back tag_names name)
-                  | None -> (refs, tag_names))
-              | Some "Link" -> (
-                  match Js.Json.decodeObject pair.(1) with
-                  | Some content -> (
-                      match
-                        Option.bind
-                          (Js.Dict.get content "url")
-                          Js.Json.decodeArray
-                      with
-                      | Some url_parts when Array.length url_parts >= 2 -> (
-                          match
-                            ( Js.Json.decodeString url_parts.(0),
-                              Js.Json.decodeString url_parts.(1) )
-                          with
-                          | Some "Page_ref", Some name -> (
-                              match String.trim name with
-                              | "" -> (refs, tag_names)
-                              | name
-                                when
-                                  block_refs
-                                  && Cli_primitive.is_uuid_string name ->
-                                  (* DB graphs spell every node ref [[uuid]]
-                                     — the uuid names whatever entity carries
-                                     it (block, page, tag). --content keeps
-                                     the literal spelling, no ref. *)
-                                  ( Vec.push_back refs
-                                      (vector_vec
-                                         (Vec.of_array
-                                            [|
-                                              kw "block/uuid";
-                                              Edn_util.uuid name;
-                                            |])),
-                                    tag_names )
-                              | name when Cli_primitive.is_uuid_string name ->
-                                  (refs, tag_names)
-                              | name ->
-                                  ( Vec.push_back refs (page_ref_map name),
-                                    tag_names ))
-                          | Some "Block_ref", Some uuid ->
-                              (* markdown_blocks already rewrote outside-code
-                                 ((uuid)) occurrences to [[uuid]]; a verbatim
-                                 one reaching here is a corner the code
-                                 scanner disagreed with mldoc on. --content
-                                 keeps the literal spelling, no ref. *)
-                              if
-                                block_refs && Cli_primitive.is_uuid_string uuid
-                              then
-                                ( Vec.push_back refs
-                                    (vector_vec
-                                       (Vec.of_array
-                                          [|
-                                            kw "block/uuid";
-                                            Edn_util.uuid uuid;
-                                          |])),
-                                  tag_names )
-                              else (refs, tag_names)
-                          | _ -> (refs, tag_names))
-                      | _ -> (refs, tag_names))
-                  | None -> (refs, tag_names))
-              | _ -> (refs, tag_names))
-          | _ -> (refs, tag_names))
-        (Vec.empty, Vec.empty) items
-
-(* Dry-run preview: page names that do not exist yet; the worker would create
-   them while applying the planned ops. Read-only — pulls, never creates. *)
-let missing_page_names invoke_config repo names =
-  let open Cli_effect in
-  map
-    (fun result ->
-      match result with
-      | Error err -> Error err
-      | Ok presence -> Ok (Vec.filter_map (fun name -> name) presence))
-    (all_results
-       (Vec.map
-          (fun name ->
-            map
-              (fun result ->
-                (* A recycled-only name resolves to an error on the real
-                   path, so the dry-run fails the same way rather than
-                   reporting a clean plan. *)
-                match live_or_all_recycled result with
-                | `Live _ -> Ok None
-                | `All_recycled -> Error (recycled_page_error ())
-                | `Missing -> Ok (Some name))
-              (pull_pages_by_name invoke_config repo name page_selector))
-          names))
-
-let missing_ref_page_names invoke_config repo links =
-  let names =
-    links
-    |> Vec.concat_map (fun (_, refs, _) -> refs)
-    |> Vec.filter_map (fun ref_value ->
-           Edn_util.get_string ref_value "block/title")
-    |> unique
-  in
-  missing_page_names invoke_config repo names
 
 (* 2-element lookup vectors [:block/name "x"] inside the planned ops — the
    target lookup and unresolved date property values under --dry-run — name
@@ -1173,7 +1056,7 @@ let rewrite_name_lookups ~target ids ops =
               ( Edn_util.as_string_like (Vec.nth items 0),
                 Edn_util.as_vector (Vec.nth items 1) )
             with
-            | Some "insert-blocks", Some args when Vec.length args = 3 ->
+            | (Some "insert-blocks" | Some "logseq.outliner/insert-blocks-input"), Some args when Vec.length args = 3 ->
                 Edn_util.vector_vec
                   (Vec.of_array
                      [|
@@ -1452,10 +1335,25 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
     |> Vec.sort (fun (a, _) (b, _) -> compare b a)
     |> Vec.map snd
   in
+  (* Missing lookup pages are created before the content batch. Check the raw
+     input protocol without writing before an old worker can leave any pages. *)
+  let check_input_support =
+    if Vec.is_empty names then pure ()
+    else
+      map (fun _ -> ())
+        (Transport.thread_api_apply_outliner_ops invoke_config ~repo
+           ~ops:(Edn_util.vector_t_vec (Vec.singleton
+             (Edn_util.vector_vec (Vec.of_array
+               [| kw "logseq.outliner/preview-ops";
+                  Edn_util.vector_vec (Vec.singleton (Edn_util.vector_vec Vec.empty)) |]))))
+           ~options:(Edn_util.map_t_vec Vec.empty))
+  in
   (* all-settled: a sibling's failure leaves other resolve_one tasks in
      flight, and their create-page requests can still land — waiting for
      every task keeps !created complete before rollback runs. *)
   bind
+    check_input_support
+    (fun () -> bind
     (all
        (Vec.map
           (fun name ->
@@ -1496,9 +1394,9 @@ let materialize_name_lookups invoke_config repo ~target_lookup ops =
           pure
             (Ok
                ( rewrite_name_lookups ~target:target_lookup ids ops,
-                 created_uuids () )))
+                 created_uuids () ))))
 
-let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
+let execute_add_block_request ~extra_ops ?(dry_run = false) action config mode =
   let open Cli_effect in
   bind (Server_runtime.ensure_server config action.repo ~create_empty_db:false)
     (function
@@ -1508,7 +1406,7 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
         bind (resolve_add_target invoke_config action) (function
           | Error err ->
               pure (Cli_result.error ~command:Command_id.Upsert_block mode err)
-          | Ok (target_lookup, would_create_pages) ->
+          | Ok (target_lookup, _would_create_pages) ->
               bind (resolve_tags invoke_config action.repo action.tags) (function
                 | Error err ->
                     pure
@@ -1524,142 +1422,17 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                mode err)
                       | Ok properties ->
                       let flat_blocks = flatten_blocks action.blocks in
-                      let links =
-                        Vec.filter_map
-                          (fun block ->
-                            match (block.Block.uuid, block.title) with
-                            | Some uuid, Some title ->
-                                let refs, tag_names =
-                                  title_references
-                                    ~block_refs:action.markdown_blocks title
-                                in
-                                (* #tags resolve to block/tags only for
-                                   markdown --blocks input; literal --content
-                                   keeps its plain-text meaning. *)
-                                let tag_names =
-                                  if action.markdown_blocks then tag_names
-                                  else Vec.empty
-                                in
-                                (* App semantics put tags in block/refs too
-                                   so the tag page's linked references list
-                                   the block; a [:block/name] lookup
-                                   resolves to the existing tag entity. *)
-                                let refs =
-                                  Vec.fold_left
-                                    (fun refs name ->
-                                      Vec.push_back refs
-                                        (vector_vec
-                                           (Vec.of_array
-                                              (if
-                                                 Cli_primitive
-                                                   .is_uuid_string name
-                                               then
-                                                 [|
-                                                   kw "block/uuid";
-                                                   Edn_util.uuid name;
-                                                 |]
-                                               else
-                                                 [|
-                                                   kw "block/name";
-                                                   Edn_util.string
-                                                     (normalized_lookup_name
-                                                        name);
-                                                 |]))))
-                                    refs tag_names
-                                in
-                                if
-                                  Vec.is_empty refs && Vec.is_empty tag_names
-                                then None
-                                else Some (uuid, refs, tag_names)
-                            | _ -> None)
-                          flat_blocks
-                      in
-                      let block_tag_names =
-                        links
-                        |> Vec.concat_map (fun (_, _, names) -> names)
-                        |> unique
-                      in
-                      bind
-                        (resolve_tags invoke_config action.repo
-                           (Vec.map
-                              (fun name ->
-                                (* #[[<tag-uuid>]] — a uuid names the tag
-                                   entity directly, same as [[uuid]] refs. *)
-                                if Cli_primitive.is_uuid_string name then
-                                  Selector.Tag_uuid name
-                                else Selector.Tag_name name)
-                              block_tag_names))
-                        (function
-                        | Error err ->
-                            pure
-                              (Cli_result.error
-                                 ~command:Command_id.Upsert_block mode err)
-                        | Ok block_tag_entities ->
-                          let tag_id_of_name name =
-                            Vec.find_map
-                              (fun (n, entity) ->
-                                if n = name then entity.Entity.id else None)
-                              (Vec.combine block_tag_names block_tag_entities)
-                          in
-                          let block_tag_ops =
-                            Vec.concat_map
-                              (fun (uuid, _, names) ->
-                                Vec.filter_map
-                                  (fun name ->
-                                    match tag_id_of_name name with
-                                    | Some tag_id ->
-                                        Some
-                                          (Edn_util.vector_vec
-                                             (Vec.of_array
-                                                [|
-                                                  kw "batch-set-property";
-                                                  Edn_util.vector_vec
-                                                    (Vec.of_array
-                                                       [|
-                                                         Edn_util.vector_vec
-                                                           (Vec.of_array
-                                                              [|
-                                                                Edn_util.uuid
-                                                                  uuid;
-                                                              |]);
-                                                         kw "block/tags";
-                                                         Edn_util.int64 tag_id;
-                                                         Edn_util.map_vec
-                                                           Vec.empty;
-                                                       |]);
-                                                |]))
-                                    | None -> None)
-                                  names)
-                              links
-                          in
                           let block_uuids =
                             collect_action_block_uuids action.blocks
                           in
-                          let refs_by_uuid =
-                            Hashtbl.create (Vec.length links)
-                          in
-                          Vec.iter
-                            (fun (u, refs, _) ->
-                              Hashtbl.replace refs_by_uuid u refs)
-                            links;
                           let block_value_for_insert block =
-                            let value =
-                              Edn_util.any (Block.to_value block)
-                            in
-                            match block.Block.uuid with
-                            | Some uuid -> (
-                                match Hashtbl.find_opt refs_by_uuid uuid with
-                                | Some refs when not (Vec.is_empty refs) ->
-                                    Edn_util.assoc "block/refs"
-                                      (Edn_util.vector_vec refs) value
-                                | _ -> value)
-                            | None -> value
+                            Edn_util.any (Block.to_value block)
                           in
                           let insert_op =
                             Edn_util.vector_vec
                               (Vec.of_array
                                  [|
-                                   kw "insert-blocks";
+                                   kw "logseq.outliner/insert-blocks-input";
                                    Edn_util.vector_vec
                                      (Vec.of_array
                                         [|
@@ -1677,55 +1450,37 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                               (Vec.append
                                  (metadata_ops block_uuids action.status tags
                                     properties)
-                                 (Vec.append block_tag_ops extra_ops))
+                                 extra_ops)
                           in
                           if dry_run then
+                            let preview_op =
+                              Edn_util.vector_vec
+                                (Vec.of_array
+                                   [| kw "logseq.outliner/preview-ops";
+                                      Edn_util.vector_vec
+                                        (Vec.singleton (Edn_util.vector_vec ops)) |])
+                            in
                             bind
-                              (missing_ref_page_names invoke_config action.repo
-                                 links) (function
-                              | Error err ->
-                                  pure
-                                    (Cli_result.error
-                                       ~command:Command_id.Upsert_block mode
-                                       err)
-                              | Ok missing_refs ->
-                                bind
-                                  (missing_page_names invoke_config
-                                     action.repo
-                                     (block_name_lookups_in_ops ops))
-                                  (function
-                                  | Error err ->
-                                      pure
-                                        (Cli_result.error
-                                           ~command:Command_id.Upsert_block
-                                           mode err)
-                                  | Ok missing_lookups ->
-                                    let would_create_pages =
-                                      Vec.append would_create_pages
-                                        (Vec.append missing_refs
-                                           missing_lookups)
-                                      |> unique
-                                    in
-                                    pure
-                                      (Cli_result.ok
-                                         ~command:Command_id.Upsert_block mode
-                                         (Raw
-                                            (Edn_util.map_vec
-                                               (Vec.of_array
-                                                  [|
-                                                    ( kw "dry-run",
-                                                      Edn_util.bool true );
-                                                    ( kw "ops",
-                                                      Edn_util.vector_vec ops
-                                                    );
-                                                    ( kw "would-create-pages",
-                                                      Edn_util.vector_vec
-                                                        (would_create_pages
-                                                        |> Vec.map
-                                                             (fun name ->
-                                                               Edn_util.string
-                                                                 name)) );
-                                                  |]))))))
+                              (Transport.thread_api_apply_outliner_ops invoke_config
+                                 ~repo:action.repo
+                                 ~ops:(Edn_util.vector_t_vec (Vec.singleton preview_op))
+                                 ~options:(Edn_util.map_t_vec
+                                   (if Vec.length ops > 1 then
+                                      Vec.singleton (kw "outliner-op", kw "apply-outliner-ops")
+                                    else Vec.empty)))
+                              (fun preview ->
+                                let names =
+                                  match Option.bind (Edn_util.get preview "result")
+                                          (fun result -> Edn_util.get result "would-create-pages") with
+                                  | Some value -> value
+                                  | None -> invalid_arg "missing CLI preview page names"
+                                in
+                                pure
+                                  (Cli_result.ok ~command:Command_id.Upsert_block mode
+                                     (Raw (Edn_util.map_vec (Vec.of_array
+                                       [| (kw "dry-run", Edn_util.bool true);
+                                          (kw "ops", Edn_util.vector_vec ops);
+                                          (kw "would-create-pages", names) |])))))
                           else
                             bind
                               (materialize_name_lookups invoke_config
@@ -1736,9 +1491,16 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                        ~command:Command_id.Upsert_block mode
                                        err)
                               | Ok ((ops, target_lookup), created_uuids) ->
+                              let uuids = collect_action_block_uuids action.blocks in
+                              let stress_uuids =
+                                if Vec.length uuids = 3
+                                   && Sys.getenv_opt "LOGSEQ_CLI_STRESS_CREATE_TREE_TRACE" = Some "1"
+                                then Some (Edn_util.vector_vec (Vec.map Edn_util.uuid uuids))
+                                else None
+                              in
                               bind
                                 (catch
-                                   (apply_outliner_ops invoke_config
+                                   (apply_outliner_ops ?stress_uuids invoke_config
                                       action.repo ops)
                                    (fun exn ->
                                      bind
@@ -1746,38 +1508,35 @@ let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
                                           (rollback_pages invoke_config
                                              action.repo created_uuids)
                                           (fun _ -> pure ()))
-                                       (fun () -> Cli_effect.error exn))) (fun _apply_result ->
-                                match Edn_util.as_uuid target_lookup with
-                                | Some target_uuid ->
-                                    bind
-                                      (resolve_created_ids_or_target_error
-                                         invoke_config action.repo target_uuid
-                                         action.blocks) (function
-                                      | Error err ->
-                                          pure
-                                            (Cli_result.error
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               err)
-                                      | Ok ids ->
-                                          pure
-                                            (Cli_result.ok
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               (Raw (result_ids ids))))
-                                | None ->
-                                    bind
-                                      (resolve_created_ids invoke_config
-                                         action.repo action.blocks) (function
-                                      | Error err ->
-                                          pure
-                                            (Cli_result.error
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               err)
-                                      | Ok ids ->
-                                          pure
-                                            (Cli_result.ok
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               (Raw (result_ids ids)))))))))))
+                                       (fun () -> Cli_effect.error exn))) (fun apply_result ->
+                                let target_uuid = Edn_util.as_uuid target_lookup in
+                                let stress_trace =
+                                  Option.bind stress_uuids (fun requested ->
+                                      Edn_util.get apply_result "stress/create-tree-apply"
+                                      |> Option.map (fun snapshot ->
+                                          (requested, target_uuid, snapshot)))
+                                in
+                                bind
+                                  (resolve_created_ids_or_target_error
+                                     ?stress_trace invoke_config action.repo
+                                     target_uuid uuids) (function
+                                  | Error err ->
+                                      pure
+                                        (Cli_result.error
+                                           ~command:Command_id.Upsert_block mode
+                                           err)
+                                  | Ok ids ->
+                                      pure
+                                        (Cli_result.ok
+                                           ~command:Command_id.Upsert_block mode
+                                           (Raw (result_ids ids))))))))))
+
+let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
+  Cli_effect.catch
+    (execute_add_block_request ~extra_ops ~dry_run action config mode)
+    (function
+      | Failure message when message = "Block target does not exist" ->
+          Cli_effect.pure
+            (Cli_result.error ~command:Command_id.Upsert_block mode
+               (Error.make Error.Target_not_found message))
+      | exn -> Cli_effect.error exn)

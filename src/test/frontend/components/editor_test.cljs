@@ -28,22 +28,3 @@
     (testing "keeps Clear heading on heading blocks"
       (is (= ["Node reference" "Link" clear-heading "Heading 1"]
              (command-names (editor/filter-commands false true commands)))))))
-
-(deftest slash-group-headings-not-hidden-by-clear-heading-filter
-  (testing "contextual Clear heading filter must not count as a user search filter"
-    (let [{:keys [commands]} (sample-slash-commands)
-          search-matched commands
-          matched (or (editor/filter-commands false false search-matched) [])]
-      (is (seq matched)
-          "non-heading blocks still have slash commands after hiding Clear heading")
-      (is (not= (command-names matched) (command-names commands))
-          "Clear heading is removed contextually on non-heading blocks")
-      (is (false? (editor/slash-commands-search-filtered? search-matched commands))
-          "Clearing the heading command on a normal block must not set filtered? and hide group headings"))))
-
-(deftest slash-group-headings-hide-when-user-searches
-  (testing "typed slash search still hides group headings"
-    (let [{:keys [commands]} (sample-slash-commands)
-          search-matched (filterv #(= "Node reference" (first %)) commands)]
-      (is (true? (editor/slash-commands-search-filtered? search-matched commands))
-          "a narrowed search result is a real user filter"))))

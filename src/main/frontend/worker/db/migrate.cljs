@@ -5,10 +5,12 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de]
             [frontend.worker-common.util :as worker-util]
+            [lambdaisland.glogi :as log]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.common.delete-blocks :as delete-blocks]
+            [logseq.db.common.journal :as db-journal]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property :as db-property]
@@ -121,6 +123,10 @@
              [[:db/retract (:db/id class) :block/order (:block/order class)]]))))
       [:logseq.class/Comments :logseq.class/Comment]))))
 
+(defn- repair-journal-titles-and-names
+  [db]
+  (db-journal/title-format-tx db))
+
 (def schema-version->updates
   "A vec of tuples defining datascript migrations. Each tuple consists of the
    schema version integer and a migration map. A migration map can have keys of :properties, :classes
@@ -167,7 +173,8 @@
    ["65.34" {:fix db-order/missing-internal-page-parent-order-tx}]
    ["65.35" {:delete-properties [:block/scheduled :block/deadline :block/marker
                                  :block/priority :block/properties-text-values
-                                 :block/invalid-properties]}]])
+                                 :block/invalid-properties]}]
+   ["65.36" {:fix repair-journal-titles-and-names}]])
 
 (let [[major minor] (last (sort (map (comp (juxt :major :minor) db-schema/parse-schema-version first)
                                      schema-version->updates)))]
@@ -266,7 +273,8 @@
                             ;; property already exists, this should never happen
                             (remove (fn [[k _]]
                                       (when (d/entity db k)
-                                        (assert (str "DB migration: property already exists " k)))))
+                                        (log/warn :db-migrate/property-already-exists {:property k})
+                                        true)))
                             (into {})
                             sqlite-create-graph/build-properties
                             (map (fn [b] (assoc b :logseq.property/built-in? true))))

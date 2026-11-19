@@ -300,7 +300,7 @@ export const writeClipboard = ({text, html, blocks}, ownerWindow) => {
           ["text/html"]: richBlob
         })]
       }
-      if (blocks) {
+      if (blocks && ClipboardItem.supports?.("web application/logseq")) {
         const blocksBlob = new Blob([blocks], {
           type: "application/logseq"
         })
@@ -396,27 +396,32 @@ export const nodePath = Object.assign({}, path, {
 
 // https://stackoverflow.com/questions/376373/pretty-printing-xml-with-javascript
 export const prettifyXml = (sourceXml) => {
-  const xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml')
-  const xsltDoc = new DOMParser().parseFromString([
-    // describes how we want to modify the XML - indent everything
-    '<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
-    '  <xsl:strip-space elements="*"/>',
-    '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
-    '    <xsl:value-of select="normalize-space(.)"/>',
-    '  </xsl:template>',
-    '  <xsl:template match="node()|@*">',
-    '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
-    '  </xsl:template>',
-    '  <xsl:output indent="yes"/>',
-    '</xsl:stylesheet>',
-  ].join('\n'), 'application/xml')
+  try {
+    const xmlDoc = new DOMParser().parseFromString(sourceXml, 'application/xml')
+    const xsltDoc = new DOMParser().parseFromString([
+      // describes how we want to modify the XML - indent everything
+      '<xsl:stylesheet version="1.0" xmlns:xsl="http://www.w3.org/1999/XSL/Transform">',
+      '  <xsl:strip-space elements="*"/>',
+      '  <xsl:template match="para[content-style][not(text())]">', // change to just text() to strip space in text nodes
+      '    <xsl:value-of select="normalize-space(.)"/>',
+      '  </xsl:template>',
+      '  <xsl:template match="node()|@*">',
+      '    <xsl:copy><xsl:apply-templates select="node()|@*"/></xsl:copy>',
+      '  </xsl:template>',
+      '  <xsl:output indent="yes" omit-xml-declaration="yes"/>',
+      '</xsl:stylesheet>',
+    ].join('\n'), 'application/xml')
 
-  const xsltProcessor = new XSLTProcessor()
-  xsltProcessor.importStylesheet(xsltDoc)
-  const resultDoc = xsltProcessor.transformToDocument(xmlDoc)
-  const resultXml = new XMLSerializer().serializeToString(resultDoc)
-  // if it has parsererror, then return the original text
-  return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml
+    const xsltProcessor = new XSLTProcessor()
+    xsltProcessor.importStylesheet(xsltDoc)
+    const resultDoc = xsltProcessor.transformToDocument(xmlDoc)
+    const resultXml = new XMLSerializer().serializeToString(resultDoc)
+    // if it has parsererror, then return the original text
+    return resultXml.indexOf('<parsererror') === -1 ? resultXml : sourceXml
+  } catch (_e) {
+    // Formatting is optional when XSLT is unavailable or rejects the markup.
+    return sourceXml
+  }
 }
 
 export const elementIsVisibleInViewport = (el, partiallyVisible = false) => {

@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { contextualError, sqliteOperation } = require('./diagnostics.cjs');
 
 function runtimeRoot() {
   const home = os.userInfo().homedir;
@@ -27,12 +28,12 @@ function acquireOwnership(ctx) {
   const { DatabaseSync } = require('node:sqlite');
   const file = ownershipPath(ctx);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  const db = new DatabaseSync(file);
+  const db = sqliteOperation(file, 'ownership-open', () => new DatabaseSync(file));
   try { db.exec('BEGIN IMMEDIATE'); }
   catch (error) {
     db.close();
     if (error.errcode === 5) throw Object.assign(new Error(`Graph ownership is locked: ${ctx.graphDir}`, { cause: error }), { code: 'repo-locked' });
-    throw error;
+    throw contextualError(error, { phase: 'ownership-begin', dbPath: file });
   }
   // Neither the connection nor SQL is exposed to graph data callers.
   let released = false;
@@ -44,7 +45,7 @@ function acquireOwnership(ctx) {
     release() {
       if (released) return;
       released = true;
-      try { if (db.isOpen && db.isTransaction) db.exec('ROLLBACK'); }
+      try { if (db.isOpen && db.isTransaction) sqliteOperation(file, 'ownership-release', () => db.exec('ROLLBACK')); }
       finally { if (db.isOpen) db.close(); }
     },
   });

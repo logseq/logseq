@@ -14,25 +14,25 @@
 (deftest get-graph-registry-normalizes-indexeddb-js-values-test
   (async done
     (let [get-registry-f (some-> (resolve 'frontend.handler.graph/<get-graph-registry) deref)]
-      (p/with-redefs [idb/get-item (fn [_]
-                                     (p/resolved
-                                      #js [#js {"repo" "logseq_db_work"
-                                                "graph-name" "work"
-                                                "graph-id" "remote-uuid"}]))]
-        (-> (get-registry-f)
-            (.then (fn [registry]
-                     (is (= [{:repo "logseq_db_work"
-                              :graph-name "work"
-                              :graph-id "remote-uuid"}]
-                            registry))
-                     (is (= "logseq_db_work"
-                            (:repo (graph-registry/resolve-target
-                                    registry
-                                    {:graph-id "remote-uuid"}))))
-                     (done)))
-            (.catch (fn [e]
-                      (is false (str e))
-                      (done))))))))
+      ;; done after p/with-redefs has put the originals back, not inside it:
+      ;; otherwise the next test starts with the redefs still in place
+      (-> (p/with-redefs [idb/get-item (fn [_]
+                                         (p/resolved
+                                          #js [#js {"repo" "logseq_db_work"
+                                                    "graph-name" "work"
+                                                    "graph-id" "remote-uuid"}]))]
+            (-> (get-registry-f)
+                (.then (fn [registry]
+                         (is (= [{:repo "logseq_db_work"
+                                  :graph-name "work"
+                                  :graph-id "remote-uuid"}]
+                                registry))
+                         (is (= "logseq_db_work"
+                                (:repo (graph-registry/resolve-target
+                                        registry
+                                        {:graph-id "remote-uuid"}))))))))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally (fn [] (done)))))))
 
 (deftest remember-current-graph-id-in-tab-test
   (async done
@@ -46,23 +46,23 @@
                 (is (= :thread-api/get-graph-uuid api))
                 (is (= "logseq_db_work" repo))
                 (p/resolved #uuid "11111111-1111-1111-1111-111111111111")))
-        (p/with-redefs [state/get-current-repo (constantly "logseq_db_work")
-                        frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
-                                                                (reset! stored-graph {:repo repo
-                                                                                      :graph-id graph-id}))]
-          (-> (remember-f)
-              (p/then
-               (fn []
-                 (is (= {:repo "logseq_db_work"
-                         :graph-id "11111111-1111-1111-1111-111111111111"}
-                        @stored-graph))))
-              (p/catch
-               (fn [error]
-                 (is false (str error))))
-              (p/finally
-               (fn []
-                 (set! state/<invoke-db-worker original-invoke-db-worker)
-                 (done)))))))))
+        (-> (p/with-redefs [state/get-current-repo (constantly "logseq_db_work")
+                            frontend.handler.graph/set-tab-graph! (fn [repo graph-id]
+                                                                    (reset! stored-graph {:repo repo
+                                                                                          :graph-id graph-id}))]
+              (-> (remember-f)
+                  (p/then
+                   (fn []
+                     (is (= {:repo "logseq_db_work"
+                             :graph-id "11111111-1111-1111-1111-111111111111"}
+                            @stored-graph))))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally
+             (fn []
+               (set! state/<invoke-db-worker original-invoke-db-worker)
+               (done))))))))
 
 (deftest current-graph-id-uses-tab-memory-test
   (let [current-graph-id-f (some-> (resolve 'frontend.handler.graph/current-graph-id) deref)]
@@ -82,29 +82,27 @@
           local-graph-uuid #uuid "11111111-1111-1111-1111-111111111111"
           registry-entry (atom nil)]
       (is (fn? upsert-current-f) "Current graph registry upsert should exist")
-      (p/with-redefs [state/get-current-repo (constantly "logseq_db_broken")
-                      state/<invoke-db-worker
-                      (fn [api repo]
-                        (is (= "logseq_db_broken" repo))
-                        (case api
-                          :thread-api/ensure-local-graph-uuid (p/resolved local-graph-uuid)
-                          :thread-api/get-graph-uuid (p/resolved local-graph-uuid)
-                          (throw (ex-info "Unexpected worker API" {:api api}))))
-                      frontend.handler.graph/<upsert-graph-registry-entry!
-                      (fn [entry]
-                        (reset! registry-entry entry)
-                        (p/resolved nil))]
-        (-> (upsert-current-f)
-            (.then (fn [_]
-                     (is (= {:repo "logseq_db_broken"
-                             :graph-name "broken"
-                             :local-graph-id (str local-graph-uuid)
-                             :graph-id (str local-graph-uuid)}
-                            @registry-entry))
-                     (done)))
-            (.catch (fn [e]
-                      (is false (str e))
-                      (done))))))))
+      (-> (p/with-redefs [state/get-current-repo (constantly "logseq_db_broken")
+                          state/<invoke-db-worker
+                          (fn [api repo]
+                            (is (= "logseq_db_broken" repo))
+                            (case api
+                              :thread-api/ensure-local-graph-uuid (p/resolved local-graph-uuid)
+                              :thread-api/get-graph-uuid (p/resolved local-graph-uuid)
+                              (throw (ex-info "Unexpected worker API" {:api api}))))
+                          frontend.handler.graph/<upsert-graph-registry-entry!
+                          (fn [entry]
+                            (reset! registry-entry entry)
+                            (p/resolved nil))]
+            (-> (upsert-current-f)
+                (.then (fn [_]
+                         (is (= {:repo "logseq_db_broken"
+                                 :graph-name "broken"
+                                 :local-graph-id (str local-graph-uuid)
+                                 :graph-id (str local-graph-uuid)}
+                                @registry-entry))))))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally (fn [] (done)))))))
 
 (deftest resolve-startup-repo-prefers-tab-repo-before-global-current-test
   (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
@@ -168,13 +166,68 @@
                           {:repo "logseq_db_tab"
                            :graph-id "tab-uuid"}
                           "logseq_db_current"))))
-      (testing "global current graph remains the last fallback"
-        (is (= "logseq_db_current"
+      (testing "global current graph is used only when it is still registered"
+        (is (= "logseq_db_first"
                (resolve-f []
                           [{:url "logseq_db_first"}]
                           {}
                           nil
                           "logseq_db_current")))))))
+
+(deftest resolve-startup-repo-skips-stale-current-repo-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "a current repo that is not in the registry falls back to the first repo"
+        (is (= "logseq_db_first"
+               (resolve-f []
+                          [{:url "logseq_db_first"}
+                           {:url "logseq_db_second"}]
+                          {}
+                          nil
+                          "logseq_db_deleted"))))
+      (testing "a current repo that still exists is kept"
+        (is (= "logseq_db_current"
+               (resolve-f []
+                          [{:url "logseq_db_first"}
+                           {:url "logseq_db_current"}]
+                          {}
+                          nil
+                          "logseq_db_current")))))))
+
+(deftest resolve-startup-repo-skips-missing-tab-repo-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "a tab repo that is not registered falls through to a valid current repo"
+        (is (= "logseq_db_current"
+               (resolve-f []
+                          [{:url "logseq_db_current"}
+                           {:url "logseq_db_first"}]
+                          {}
+                          {:repo "logseq_db_missing"}
+                          "logseq_db_current"))))
+      (testing "a missing tab repo and stale current repo fall through to the first repo"
+        (is (= "logseq_db_first"
+               (resolve-f []
+                          [{:url "logseq_db_first"}]
+                          {}
+                          {:repo "logseq_db_missing"
+                           :graph-id "missing-uuid"}
+                          "logseq_db_deleted")))))))
+
+(deftest resolve-startup-repo-with-no-repos-test
+  (let [resolve-f (some-> (resolve 'frontend.handler.graph/resolve-startup-repo) deref)]
+    (is (fn? resolve-f) "Startup repo resolver should exist")
+    (when resolve-f
+      (testing "no registered graphs yields nil even when localStorage still has a current repo"
+        (is (nil? (resolve-f []
+                             []
+                             {}
+                             nil
+                             "logseq_db_deleted"))))
+      (testing "no registered graphs and no current repo yields nil"
+        (is (nil? (resolve-f [] [] {} nil nil)))))))
 
 (deftest normalize-registry-entry-prefers-remote-graph-id-test
   (let [normalize-f (some-> (resolve 'frontend.handler.graph/normalize-registry-entry) deref)]

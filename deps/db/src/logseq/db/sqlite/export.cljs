@@ -1321,11 +1321,11 @@
           {:error (str "The following imported properties conflict with the current graph: "
                        (pr-str (mapv :property-id @property-conflicts)))})
         (if (#{:graph :graph-human} (::export-type export-map''))
-          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
+          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'') db)
               (assoc :misc-tx (vec (concat (::graph-files export-map'')
                                            (::kv-values export-map'')
                                            (::property-history export-map'')))))
-          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
+          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'') db))))))
 
 (defn import-tx-data
   [{:keys [init-tx block-props-tx misc-tx]}]
