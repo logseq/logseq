@@ -1912,9 +1912,9 @@
 
 (defn- assert-property-value-page-after-rebase!
   [purge-source-page?]
-  (let [page-18-uuid (uuid "00000001-2026-1118-0000-000000000000")
-        page-19-uuid (uuid "00000001-2026-1119-0000-000000000000")
-        parent-uuid (uuid "00000002-2026-1119-0000-000000000000")
+  (let [source-page-uuid (uuid "00000001-0000-0000-0000-000000000001")
+        destination-page-uuid (uuid "00000001-0000-0000-0000-000000000002")
+        parent-uuid (uuid "00000001-0000-0000-0000-000000000003")
         conn-a (db-test/create-conn)
         conn-b (db-test/create-conn)
         ops-a (new-client-ops-db)
@@ -1928,10 +1928,10 @@
         (reset! db-sync/*repo->latest-remote-tx {})
         (client-op/update-local-tx repo-a 0)
         (client-op/update-local-tx repo-b 0)
-        (create-page! conn-a "Nov 18th, 2026" page-18-uuid)
-        (create-page! conn-a "Nov 19th, 2026" page-19-uuid)
+        (create-page! conn-a "Property rebase source" source-page-uuid)
+        (create-page! conn-a "Property rebase destination" destination-page-uuid)
         (create-block! conn-a
-                       (d/entity @conn-a [:block/uuid page-19-uuid])
+                       (d/entity @conn-a [:block/uuid source-page-uuid])
                        "property owner"
                        parent-uuid)
         (let [property (ensure-property! conn-a "Property Rebase Page" sim-default-property-schema)
@@ -1966,19 +1966,21 @@
                                                      (get-in child-before [:block/parent :db/id])))))
             (is (= property-id (:db/ident (d/entity @conn-a
                                                     (get-in child-before [:logseq.property/created-from-property :db/id])))))
-            (is (= page-19-uuid (:block/uuid (d/entity @conn-a
-                                                       (get-in child-before [:block/page :db/id])))))
+            (is (= source-page-uuid (:block/uuid (d/entity @conn-a
+                                                           (get-in child-before [:block/page :db/id])))))
             (apply-ops! conn-b
-                        [[:move-blocks [[parent-uuid] page-18-uuid {:sibling? false}]]]
+                        [[:move-blocks [[parent-uuid] destination-page-uuid {:sibling? false}]]]
                         {})
-            (is (= page-18-uuid
+            (is (= destination-page-uuid
                    (:block/uuid (:block/page (d/entity @conn-b [:block/uuid parent-uuid])))))
             (when purge-source-page?
-              (delete-page! conn-b page-19-uuid)
-              (apply-ops! conn-b [[:recycle-delete-permanently [page-19-uuid]]] {}))
+              (delete-page! conn-b source-page-uuid)
+              (apply-ops! conn-b [[:recycle-delete-permanently [source-page-uuid]]] {}))
+            (is (= (not purge-source-page?)
+                   (some? (d/entity @conn-b [:block/uuid source-page-uuid]))))
             (is (true? (sync-client! server client-b-state)))
             (is (= (not purge-source-page?)
-                   (some? (d/entity @(:conn @server) [:block/uuid page-19-uuid]))))
+                   (some? (d/entity @(:conn @server) [:block/uuid source-page-uuid]))))
             (is (true? (sync-client! server client-a-state)))
             (is (empty? (sync-apply/pending-txs repo-a)))
             (is (= (:t @server) (client-op/get-local-tx repo-a)))
@@ -1988,7 +1990,7 @@
             (let [server-conn (get @server :conn)
                   dbs [@conn-a @conn-b @server-conn]
                   states (mapv replica-state dbs)
-                  expected-parent-pages [page-18-uuid page-18-uuid page-18-uuid]
+                  expected-parent-pages (repeat 3 destination-page-uuid)
                   expected-child-uuids [child-uuid child-uuid child-uuid]
                   expected-child-titles (repeat 3 "value")
                   expected-child-parents [parent-uuid parent-uuid parent-uuid]
