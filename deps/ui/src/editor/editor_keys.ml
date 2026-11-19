@@ -1513,6 +1513,13 @@ let dispatch_command cid =
   | _, "editor/italics" -> update (fun model -> wrap_model model "*")
   | _, "editor/strike-through" -> update (fun model -> wrap_model model "~~")
   | _, "editor/highlight" -> update (fun model -> wrap_model model "==")
+  | Some _, "editor/insert-youtube-timestamp" ->
+      (match !(Runtime.video_timestamp) () with
+       | Runtime.No_video -> ()
+       | Runtime.Player_pending -> Toast.warning (I18n.t "youtube/player-not-ready")
+       | Runtime.Playback_time seconds ->
+           update (fun model -> Edit_model.insert_text model
+             (Printf.sprintf "{{youtube-timestamp %d}} " seconds)))
   | _, "editor/clear-block" -> update clear_block
   | _, "editor/kill-line-before" -> update kill_line_before
   | _, "editor/kill-line-after" -> update kill_line_after

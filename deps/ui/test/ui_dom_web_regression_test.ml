@@ -26,7 +26,59 @@ let clipboard_event : unit -> Js.Json.t = [%mel.raw
 let attach_clipboard_owner : Js.Json.t -> unit = [%mel.raw "e => {e.clipboardData.owner=e}"]
 let clipboard_reads : Js.Json.t -> int = [%mel.raw "e => e.reads"]
 
+let video_fixture : unit -> Js.Json.t = [%mel.raw {|
+  function () {
+    const previous = {YT: window.YT, getFrames: document.getElementsByTagName,
+      active: document.activeElement};
+    const first = {src: 'https://www.youtube.com/embed/first', time: 10,
+      compareDocumentPosition() {return 4}};
+    const second = {src: 'https://www.youtube-nocookie.com/embed/second', time: 125.9,
+      compareDocumentPosition() {return 4}};
+    const following = {src: 'https://www.youtube.com/embed/following', time: 999,
+      compareDocumentPosition() {return 0}};
+    let frames = [first, second, following];
+    document.getElementsByTagName = () => frames;
+    document.activeElement = {};
+    window.YT = {Player: function (frame, options) {
+      frame.ready = () => options.events.onReady({target: {getCurrentTime: () => frame.time}});
+    }};
+    return {first, second, following, phase(name) {
+      if (name === 'ready') frames.forEach(frame => frame.ready());
+      if (name === 'advance') second.time = 241.6;
+      if (name === 'invalid') second.time = NaN;
+      if (name === 'empty') frames = [];
+      if (name === 'restore') {
+        window.YT = previous.YT;
+        document.getElementsByTagName = previous.getFrames;
+        document.activeElement = previous.active;
+      }
+    }};
+  }
+|}]
+external video_phase : Js.Json.t -> string -> unit = "phase" [@@mel.send]
+
+let test_video_player () =
+  let fixture = video_fixture () in
+  Fun.protect ~finally:(fun () -> video_phase fixture "restore") (fun () ->
+    List.iter (fun name -> Render_libs.register_youtube (Stub_dom.get_field fixture name))
+      ["first"; "second"; "following"];
+    check "A YouTube iframe without readiness cannot supply a timestamp"
+      (Render_libs.video_timestamp () = Runtime.Player_pending);
+    video_phase fixture "ready";
+    check "Playback reads the nearest preceding player, not the following iframe"
+      (Render_libs.video_timestamp () = Runtime.Playback_time 125);
+    video_phase fixture "advance";
+    check "Playback timestamp queries current time rather than caching a timestamp"
+      (Render_libs.video_timestamp () = Runtime.Playback_time 241);
+    video_phase fixture "invalid";
+    check "Invalid player time cannot produce a timestamp macro"
+      (Render_libs.video_timestamp () = Runtime.Player_pending);
+    video_phase fixture "empty";
+    check "Without an embedded video timestamp insertion has no target"
+      (Render_libs.video_timestamp () = Runtime.No_video))
+
 let run () =
+  test_video_player ();
   let raw=clipboard_event () in
   attach_clipboard_owner raw;
   let clip=Ui_dom_web.ev_of raw in

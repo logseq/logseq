@@ -51,6 +51,61 @@ let inject_script : string -> unit Js.Promise.t =
 
 let hljs_ready () : bool = [%mel.raw "!!window.hljs"]
 
+let youtube_driver : Js.Json.t = [%mel.raw {|
+  (() => {
+    const players = new WeakMap();
+    let loading = false;
+    const isYoutube = frame => /youtube(?:-nocookie)?\.com\/embed\//.test(frame.src || '');
+    const register = frame => {
+      if (!isYoutube(frame) || players.has(frame)) return;
+      if (window.YT && typeof window.YT.Player === 'function') {
+        players.set(frame, null);
+        new window.YT.Player(frame, {events: {
+          onReady: event => players.set(frame, event.target)
+        }});
+      } else if (!loading) {
+        loading = true;
+        const previous = window.onYouTubeIframeAPIReady;
+        window.onYouTubeIframeAPIReady = () => {
+          if (previous) previous();
+          Array.from(document.getElementsByTagName('iframe')).forEach(register);
+        };
+        const script = document.createElement('script');
+        script.src = 'https://www.youtube.com/iframe_api';
+        script.onerror = error => console.error('YouTube player API failed', error);
+        (document.head || document.documentElement).appendChild(script);
+      }
+    };
+    const read = () => {
+      const target = document.activeElement;
+      if (!target) return undefined;
+      let last = null;
+      for (const frame of document.getElementsByTagName('iframe')) {
+        if (isYoutube(frame) && (frame.compareDocumentPosition(target) & 4)) last = frame;
+      }
+      if (!last) return undefined;
+      const player = players.get(last);
+      if (!player || typeof player.getCurrentTime !== 'function') return null;
+      const seconds = player.getCurrentTime();
+      return Number.isFinite(seconds) && seconds >= 0 ? Math.floor(seconds) : null;
+    };
+    return {register, read};
+  })()
+|}]
+
+external youtube_register_js : Js.Json.t -> D.el -> unit = "register" [@@mel.send]
+external youtube_read_js : Js.Json.t -> int Js.Nullable.t Js.Undefined.t = "read" [@@mel.send]
+
+let register_youtube frame = youtube_register_js youtube_driver frame
+
+let video_timestamp () =
+  match Js.Undefined.toOption (youtube_read_js youtube_driver) with
+  | None -> Runtime.No_video
+  | Some value ->
+      (match Js.Nullable.toOption value with
+       | None -> Runtime.Player_pending
+       | Some seconds -> Runtime.Playback_time seconds)
+
 (* highlightElement with an explicit language: declared data-lang wins
    (unknown languages -> no-highlight per blockLanguage), none -> the
    same highlightAuto path cljs's bare <code data-lang> takes *)
@@ -104,6 +159,7 @@ let rec render_katex_one el =
       | Idle | Loading -> load_katex ())
 
 and render_scan roots =
+  D.for_each_touched roots "iframe" register_youtube;
   List.iter
     (fun sel -> D.for_each_touched roots sel render_katex_one)
     [ ".latex"; ".latex-inline" ];
@@ -156,9 +212,8 @@ and load_katex () =
 
 (* ---------- youtube-timestamp seek ----------
 
-   cljs registers each embed with the iframe_api YT.Player and calls
-   player.seekTo; we skip the api script and postMessage the documented
-   command interface instead (works with ?enablejsapi=1). Target iframe:
+   Seeking uses the documented postMessage command interface
+   (works with ?enablejsapi=1). Target iframe:
    the last youtube embed preceding the link in document order. *)
 let yt_seek : D.el -> unit =
   [%mel.raw
@@ -198,5 +253,6 @@ let installed = State_cell.Once.make ()
 
 let ensure () =
   State_cell.Once.run installed (fun () ->
+      Runtime.video_timestamp := video_timestamp;
       D.register_doc_scan ~sync:true render_scan;
       D.add_document_listener "click" on_doc_click true)
