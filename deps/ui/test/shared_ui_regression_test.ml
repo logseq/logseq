@@ -4794,7 +4794,13 @@ let run_views ~registry ~profile ~finish =
     press (I18n.t "query.builder/between-start-label");
     S.flush sorting;
     check "Between keeps its range form mounted beneath the selected date calendar"
-      (List.length !Views_popup.open_popups=2);
+      (let calendar = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes sorting) in
+       let rec owners node =
+         match node.M.parent with
+         | None -> 0
+         | Some id -> let parent=Hashtbl.find sorting.S.tree.M.nodes id in
+             (if parent.M.kind="popover" then 1 else 0) + owners parent
+       in owners calendar=2);
     pick ();
     check "Picking the start date returns to End date without auto-opening another calendar"
       (!saved=[] && List.length !Views_popup.open_popups=1

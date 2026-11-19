@@ -170,7 +170,8 @@ field opens a child calendar without disposing the form; picking a date returns
 to the same form, not an immediately forced second calendar. Incomplete ranges
 do not save, and a retired query cannot receive a stale date. Shared-host
 regressions exercise the range and nested calendar lifecycle, including the
-reported calendar-unmount timing boundary. Result updates also used to retire
+recording-host result-refresh boundary, not Web focus dismissal (see Table82
+below). Result updates also used to retire
 the builder's reactive scope and its action guard even though the query title
 remained mounted. The guard now belongs to the containing query title and source
 instead; a mounted regression refreshes result data while its calendar is open and then
@@ -196,6 +197,53 @@ experimental tests and the native experimental build pass. Known journal
 diagnostics remain at their baseline 102 invalid-response lines and 52 load
 failures; the native non-fatal properties diagnostic is unchanged.
 
+### Table82 popup ownership, property Configure and column order
+
+Table82 on `61dd9feb` accepts Pages same-tab navigation, fresh and existing
+query grouping, signed-out Sync eligibility, and reserved-name warning geometry.
+The Between form remained broken: the supplied passive DOM trace records its
+calendar mounting about 22ms after Start, disappearing about 47ms after Start,
+and the range form disappearing about 211ms after Start. The prior recording
+test did not exercise the Web focus-dismiss policy.
+
+The calendar was pushed as a sibling entry in `Views_popup`, not retained below
+the range form. Its Previous month button requests autofocus. The Web renderer
+derives layer ownership from retained parents; its nonblocking-layer focus
+handler therefore treats the calendar's focus as outside the range form and
+dismisses that form. Removing Start then invalidates the calendar's anchor.
+A standalone Web-renderer reproduction on an ephemeral loopback port records
+`focus:Previous month`, `range-dismiss`, and `calendar-dismiss`, with no query
+refresh involved. The same focus flow with the calendar retained under the
+range form preserves both layers and permits date selection. This also rules
+out autofocus alone as sufficient to dismiss a correctly owned child.
+
+`views_builder.ml` now retains the selected calendar inside the range form's
+subtree instead of using a second global popup entry. Date selection and child
+dismissal clear only that local calendar state. Start, End, incomplete Submit,
+completed Submit and stale-query guards remain covered. The strengthened
+existing lifecycle regression checks two actual popover ancestors rather than
+merely counting two global popup entries; it fails before this repair.
+
+Property Configure now follows Master's UI-position eligibility: Number, Date,
+Checkbox, Node, and eligible choice/positioned Text properties only, excluding
+the special built-ins and class configuration properties. Plain Text, Datetime,
+URL and Asset omit it. Text and Number default-value items show the existing
+translated Set value description when unset, or their stored value title when
+set. The synthesized Tags column follows configured property columns, restoring
+Name / property / Tags on tagged/property object tables without overriding
+explicit column ordering or duplicating an existing Tags column.
+
+Verification: `pnpm test:ui` reports 6473 checks with zero failures; native
+experimental tests and build pass. The isolated Web comparison reproduces the
+old dismissal and selects a date with nested ownership. These are not rebuilt
+application/browser acceptance: the exact integrated Start/End flow, Configure
+geometry and table geometry remain visually unverified. Evidence and probe:
+`/Users/devin/table82/evidence/`,
+`/Users/devin/attachments/table82-between-probe.mjs`, and
+`/Users/devin/attachments/table82-between-web.log`. No `static/` writes or shared
+`:3010` access were used. Baseline journal diagnostics remain 102/52, with the
+known non-fatal native properties diagnostic.
+
 The Pages path is `nav_items` to `nav_route` to `nav_link` to the typed LUI Link;
 there is no alternate Pages component. The link's TargetValue maps `_self`
 correctly, but the web renderer's UrlValue handler unconditionally wrote `_blank`.
@@ -211,7 +259,7 @@ compiled DOM renderer, not just the abstract Link node. It covers both property
 orders, graph-ID URL changes, empty URL, removals, default `_blank` security
 attributes and rejected invalid targets. It fails against the prior renderer
 with `_blank` instead of `_self` and passes after repair. The rendered Pages
-target repair still requires rebuilt-application browser confirmation.
+target repair is accepted in Table82's rebuilt-application browser comparison.
 
 ## 1. Intentional / out of scope
 

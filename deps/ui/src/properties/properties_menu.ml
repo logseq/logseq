@@ -208,6 +208,15 @@ let position_submenu m ~close =
            [])
        positions)
 
+let supports_position m =
+  List.mem (prop_type m) ["default"; "number"; "date"; "checkbox"; "node"]
+  && not (List.mem (prop_ident m)
+    ["logseq.property.class/extends"; "logseq.property.class/properties";
+     "logseq.property/enable-history?"; "block/title"; "block/tags";
+     "block/created-at"; "block/updated-at"])
+  && not (prop_type m = "default" && closed_values m = []
+    && D.row_position m.row = "properties")
+
 (* delete confirmation as a semantic dialog on the view-overlay stack *)
 let delete_confirm_dialog context m ~close =
   let title = I18n.t "property/delete-from-node" in
@@ -748,7 +757,13 @@ let main_items context m ~set_pane ~close =
              ~on_press:(fun _ -> Runtime.signal_set set_pane MNodeTags) () ]
        else [])
     @ (if supports_default_value m then
-       [ menu_item ~text:(I18n.t "property/default-value")
+       let title = I18n.t "property/default-value" in
+       let desc = if prop_type m = "checkbox" then None else
+         Some (match D.getf (prop_entity m) "logseq.property/default-value" with
+           | Some value -> D.ref_title value
+           | None -> I18n.t "property/set-value") in
+       [ Ui_components.with_props [Ui_components.Prop.accessibility_label title]
+         (menu_item ~icon:(Icons.name_ref "settings-2")
           ~checked:(prop_type m = "checkbox"
             && D.getb (prop_entity m) "logseq.property/scalar-default-value")
           ~on_press:(fun _ ->
@@ -761,7 +776,8 @@ let main_items context m ~set_pane ~close =
                 S.refresh_all ();
                 Js.Promise.resolve ());
               close ()
-            end else Runtime.signal_set set_pane MDefaultValue) [] ]
+            end else Runtime.signal_set set_pane MDefaultValue)
+          [config_trailing ?desc ~chevron:(prop_type m <> "checkbox") title]) ]
        else [])
     @ (if D.row_supports_choices m.row then
       [ config_item ~icon_name:"list"
@@ -778,9 +794,9 @@ let main_items context m ~set_pane ~close =
       [ checkbox_mapping_item m ~close ] else [])
     @ (if D.row_supports_many m.row then
       [ multiple_values_item m ~close ] else [])
-    @ [ sep "position"
-      ; position_submenu m ~close
-      ; toggle_view (I18n.t "property/hide-by-default")
+    @ [ sep "position" ]
+    @ (if supports_position m then [position_submenu m ~close] else [])
+    @ [ toggle_view (I18n.t "property/hide-by-default")
           "logseq.property/hide?"
       ; toggle_view (I18n.t "property/hide-empty-value")
           "logseq.property/hide-empty-value"

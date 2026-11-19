@@ -186,14 +186,12 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
 let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let s = V.get inst in
   let props = List.filter_map column_of_property properties in
-  (* cljs (conj properties tags-column) — conj on a list conses, so
-     Tags lands BEFORE the property columns, not after *)
   let with_tags =
     if List.exists (fun c -> c.V.c_id = "block/tags") props then props
     else
-      { (builtin_column "block/tags" (I.t "property.built-in/tags") "node" ()) with
-        V.c_many = true }
-      :: props
+      props @
+      [{ (builtin_column "block/tags" (I.t "property.built-in/tags") "node" ()) with
+        V.c_many = true }]
   in
   match inst.V.kind with
   | V.KAllPages ->

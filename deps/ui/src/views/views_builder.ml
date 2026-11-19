@@ -513,33 +513,23 @@ let between_picker inst ~tree ~loc ~anchor =
       (fun context parent ->
         let start = Signal.state context.Lui_ui.ui_scheduler None
         and finish = Signal.state context.Lui_ui.ui_scheduler None in
-        let field key label value =
+        let picking = Signal.state context.Lui_ui.ui_scheduler None in
+        let close_calendar () = Signal.set picking None; Runtime.flush () in
+        let field first label value =
+          let key = if first then "start" else "end" in
           let id = inst.key ^ "-between-" ^ key in
           Ui_components.button ~variant:`secondary ~size:`sm
             ~accessibility_identifier:id
             ~text:(reactive (fun date -> Option.value date ~default:label) (Signal.value value))
             ~on_press:(fun _ ->
               if inst.active () then
-                ignore (P.push ~anchor:id
-                  (P.anchored_popover ~key:(id ^ "-calendar") ~id:(id ^ "-calendar")
-                    ~anchor:(P.Target id) ~align_end:false ~cls:"query-builder-picker" ~card:true
-                    ~on_dismiss:(fun _ -> P.close_top ())
-                    [Ui_components.date_picker
-                      ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
-                      ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
-                      ~translate:I.t
-                      ~on_pick:(fun ms ->
-                        P.close_top ();
-                        if inst.active () then begin
-                          Signal.set value (Some (Dates.journal_title_of ms));
-                          Runtime.flush ()
-                        end)]))) []
+                begin Signal.set picking (Some first); Runtime.flush () end) []
         in
         column ~padding:16 ~gap:8
           [row ~cross:`center ~gap:8
-            [field "start" (I.t "query.builder/between-start-label") start;
+            [field true (I.t "query.builder/between-start-label") start;
              text ~value:"~" [];
-             field "end" (I.t "query.builder/between-end-label") finish];
+             field false (I.t "query.builder/between-end-label") finish];
            Ui_components.button ~variant:`primary ~text:(I.t "ui/submit")
              ~on_press:(fun _ ->
                match Signal.get_state start, Signal.get_state finish with
@@ -548,7 +538,23 @@ let between_picker inst ~tree ~loc ~anchor =
                    tree := append_at !tree loc (CItem ("between", [arg start;arg finish]));
                    P.close_all ();
                    commit inst ~tree ()
-               | _ -> ()) []] context parent))
+               | _ -> ()) [];
+           reactive (function
+             | None -> spacer ~height:0 []
+             | Some first ->
+                 let value = if first then start else finish in
+                 let id = inst.key ^ "-between-" ^ (if first then "start" else "end") in
+                 P.anchored_popover ~key:(id ^ "-calendar") ~id:(id ^ "-calendar")
+                   ~anchor:(P.Target id) ~align_end:false ~cls:"query-builder-picker" ~card:true
+                   ~on_dismiss:(fun _ -> close_calendar ())
+                   [Ui_components.date_picker
+                     ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
+                     ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
+                     ~translate:I.t
+                     ~on_pick:(fun ms ->
+                       if inst.active () then
+                         Signal.set value (Some (Dates.journal_title_of ms));
+                       close_calendar ())]) (Signal.value picking)] context parent))
 
 let full_text_picker inst ~tree ~loc ~anchor =
   ignore
