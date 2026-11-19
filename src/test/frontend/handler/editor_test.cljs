@@ -1319,6 +1319,7 @@
     (let [matched-pages (atom nil)
           original-<get-block db-async/<get-block
           original-<get-all-classes db-async/<get-all-classes
+          original-<get-alias-source-page db-async/<get-alias-source-page
           original-<invoke-db-worker state/<invoke-db-worker
           previous-worker @state/*db-worker]
       (set! state/<invoke-db-worker (fn [& _args] (p/resolved nil)))
@@ -1327,7 +1328,13 @@
       (set! db-async/<get-block (fn [_repo _title _opts]
                                   (let [test-db (conn/get-db test-helper/test-db)
                                         alias (ldb/get-page test-db "Alias Only")]
-                                    (p/resolved (assoc alias :block/alias-source-page-class? true)))))
+                                    ;; The real <get-block result carries no alias-source flag
+                                    (p/resolved alias))))
+      (set! db-async/<get-alias-source-page
+            (fn [_repo _alias-id]
+              (p/resolved {:db/id 1000
+                           :block/title "Project Tag"
+                           :block/tags [{:db/ident :logseq.class/Tag}]})))
       (set! db-async/<get-all-classes
             (fn [_repo _opts]
               (let [test-db (conn/get-db test-helper/test-db)
@@ -1349,6 +1356,7 @@
           (p/finally (fn []
                        (set! db-async/<get-block original-<get-block)
                        (set! db-async/<get-all-classes original-<get-all-classes)
+                       (set! db-async/<get-alias-source-page original-<get-alias-source-page)
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
 	                       (reset! state/*db-worker previous-worker)
 	                       (done)))))))
