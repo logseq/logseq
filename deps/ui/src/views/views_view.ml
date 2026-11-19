@@ -675,6 +675,13 @@ let load_view_data ?(fetch_limit = 0) inst =
     ~f:(fun snap -> apply (Db.snapshot_value snap key))
     [ Db.resource_view_data view_uuid ctx ]
 
+let load_query_results inst =
+  if (V.get inst).V.query_rows <> [] then load_view_data inst
+  else begin
+    build_columns inst;
+    V.update inst (fun s -> { s with V.loading = false })
+  end
+
 let refresh inst =
   match inst.V.kind with
   | V.KQuery _ ->
@@ -683,9 +690,7 @@ let refresh inst =
       if (V.get inst).V.query_rows = [] then
         V.update inst (fun s -> { s with V.loading = true });
       Views_query.refresh_block inst (fun () ->
-          Views_query.run inst (fun () ->
-              if (V.get inst).V.query_rows <> [] then load_view_data inst
-              else V.update inst (fun s -> { s with V.loading = false })))
+          Views_query.run inst (fun () -> load_query_results inst))
   | _ ->
       V.update inst (fun s -> { s with V.loading = true });
       (match inst.V.kind with
@@ -1048,8 +1053,7 @@ let install_ops () =
              roundtrip *)
           V.update inst
             (fun s -> { s with V.qsrc = src; loading = false });
-          Views_query.run inst (fun () ->
-              if (V.get inst).V.query_rows <> [] then load_view_data inst))
+          Views_query.run inst (fun () -> load_query_results inst))
     ; o_create_view =
         (fun inst ->
           let uuid = Ui_services.env_random_uuid () in

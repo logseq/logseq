@@ -58,10 +58,25 @@ pair. The linked-reference offset is independent: its evidence page has no
 property row. Its single 28px block plus 28px add row lost Master's 60px body
 minimum in the flat stream. Measured body-only spacing restores that minimum
 without shifting taller or property-bearing pages. These query and geometry
-repairs remain rebuilt-browser-unverified. The UI aggregate passes with 6417
+repairs are accepted in Table80 below. The UI aggregate passes with 6417
 assertions and exit zero; native tests and the native build pass. Native
 measurement behavior is unchanged; the short-page correction uses the web
 projection observer, not new native measurement plumbing.
+
+Table80 on `1b3a4124` accepts plain-text Query Search and Filter after reload,
+the 28px property row, and linked-reference positions on short (310px) and tall
+(502px) pages. Empty query results still omitted Name / Created At / Updated At.
+Master builds query columns even for zero results. LUI's default column builder
+already supplied those columns, but query completion invoked it only through
+the nonempty row-data path, and the result renderer explicitly replaced an
+empty query table with a spacer. That suppression is removed. Query completion
+now builds columns directly when there are no result rows, for both fetched
+source and live source evaluation.
+Mounted regressions reproduce the missing headers on first mount, a fresh
+same-query remount, and blank-to-search evaluation; blank and rejected queries
+still do not display result headers. The UI aggregate passes with 6427 assertions
+and exit zero; native tests and the native build pass. This header repair remains
+rebuilt-browser unverified.
 
 ## 1. Intentional / out of scope
 

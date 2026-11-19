@@ -700,6 +700,11 @@ let plain_text_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
   let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
   and previous_flush = !Runtime.app_flush in
   Runtime.read_model := (fun () -> {Model.initial with repo=Some "plain-text-query"});
+  let query = Views_state.make ~sched:(Signal.scheduler ())
+    ~kind:(Views_state.KQuery {block_uuid="empty-columns"}) ~feature:"query-result" ~owner:W.Nil in
+  check "Empty query column construction already supplies the Master defaults"
+    (List.map (fun column -> column.Views_state.c_id) (Views_table.build_columns query [])
+     = ["select";"block/title";"block/created-at";"block/updated-at"]);
   let rec run = function
     | [] -> Runtime.worker := previous_worker; Runtime.read_model := previous_model;
         Runtime.app_flush := previous_flush; finish ()
@@ -741,10 +746,31 @@ let plain_text_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
              | Some message -> has_text message && not (has_class "query-result")
              | None -> if source="" then not (has_class "query-result")
                  else has_class "query-result");
-          ignore (Lui_app.dispose mounted.S.app);
-          run rest)
+          let has_headers () = List.for_all (fun key ->
+            List.exists (fun node -> M.string_prop node "text"=Some (I18n.t key))
+              (M.all_nodes mounted.S.tree))
+            ["view.table/name-column";"page/created-at";"page/updated-at"] in
+          check "Empty query tables retain Name, Created At and Updated At after a fresh mount"
+            (if source<>"" && error=None then has_headers () else not (has_headers ()));
+          let finish_case () =
+            ignore (Lui_app.dispose mounted.S.app);
+            let key = Runtime.repo (),uuid in
+            Option.iter Views_builder.drop_tree (Hashtbl.find_opt Views_view.query_insts key);
+            Hashtbl.remove Views_view.query_insts key;
+            run rest
+          in
+          if source="" then begin
+            let inst = Hashtbl.find Views_view.query_insts (Runtime.repo (),uuid) in
+            (Views_state.ops ()).o_refresh_src inst "Search seed parity";
+            h.after 40 (fun () ->
+              S.flush mounted;
+              check "Live query source evaluation builds default headers for an empty result"
+                (has_headers ());
+              finish_case ())
+          end else finish_case ())
   in run ["plain-query", "Search seed parity", None; "blank-query", "", None;
-          "failed-plain-query", "Rejected search", Some "search unavailable"]
+          "failed-plain-query", "Rejected search", Some "search unavailable";
+          "plain-query", "Search seed parity", None]
 
 let short_page_spacing ~finish =
   let previous_flush = !Runtime.app_flush in
