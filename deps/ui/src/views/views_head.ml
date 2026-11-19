@@ -228,6 +228,9 @@ let sorting_popup inst anchor =
     V.persist_sorting inst;
     refresh inst
   in
+  let sort_order_id col_id =
+    Printf.sprintf "view-%d-sort-order-%s" inst.V.id col_id
+  in
   let order_select so_s context parent =
     let opened = Signal.state context.Lui_ui.ui_scheduler false in
     let close () = Runtime.signal_set opened false in
@@ -236,6 +239,7 @@ let sorting_popup inst anchor =
        [ Ui_components.with_props
            [Ui_components.Prop.font_size "0.875rem"]
          (select ~style_class:"ls-sort-order"
+           ~accessibility_identifier:(sort_order_id (Signal.sample so_s).V.s_id)
            ~text:(reactive (fun so -> if so.V.s_asc then (I.t "view.table/ascending") else (I.t "view.table/descending")) so_s)
            ~height:32 ~min_height:32 ~padding_horizontal:8
            ~width:107
@@ -274,6 +278,17 @@ let sorting_popup inst anchor =
                  ~label:(I.t "view.table/delete-sort") ~icon:(Icons.name_ref "x")
                  ~on_press:(fun _ -> remove_sort (Signal.get so_s)) []) ] ]
   in
+  (* cljs focuses the first sort row when the popup opens *)
+  (match (V.get inst).V.sorting with
+   | first :: _ ->
+       ignore
+         (Ui_services.timers_timeout
+            (fun () ->
+              match Ui_services.dom_by_id (sort_order_id first.V.s_id) with
+              | Some el -> el.Ui_services.focus ()
+              | None -> ())
+            0)
+   | [] -> ());
   P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
     (Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
        (column ~gap:8 ~padding_vertical:8 ~width:270
