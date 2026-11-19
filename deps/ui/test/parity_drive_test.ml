@@ -699,7 +699,7 @@ let test_editor_paste_link () =
     Editor_actions.update_model "b1" (fun m ->
       Edit_model.select m ~anchor ~focus:caret);
     let ev = key_event "" in
-    Editor_actions.paste_into_editor ~clipboard:([], "")
+    Editor_actions.paste_into_editor ~clipboard:None
       { ev with Ui_services.clipboard_get =
           (function "text/plain" -> pasted | _ -> "") };
     check "Pasted links preserve labels and replace existing link ranges"
@@ -713,14 +713,18 @@ let test_editor_paste_link () =
 
 (* cljs ctrl+p/ctrl+n inside editing move to the previous/next block *)
 let test_selected_clipboard_paste () =
-  let clipboard = !Editor_state.clipboard and copied = !Editor_state.clipboard_text in
+  let clipboard = !Editor_state.clipboard in
   let previous = Editor_state.read () in
   List.iter (fun (internal, text) ->
     stage_main_session [ block "b1" "Plain second block" ];
     clear_editing ();
     Editor_actions.select_single "b1";
-    Editor_state.clipboard := (if internal then [ block "b1" "Plain second block" ] else []);
-    Editor_state.clipboard_text := "Plain second block";
+    Editor_state.clipboard := (if internal then Some
+      {Ui_services.text = "Plain second block"; html = "<ul><li>Plain second block</li></ul>";
+       logseq = Editor_actions.encode_block_clipboard ~repo:(Runtime.repo ()) ~cut:false
+         [Wire.Map [Wire.kw "block/uuid", Wire.Uuid "b1";
+                    Wire.kw "block/title", Wire.String text]]}
+      else None);
     let prevented = ref false in
     Editor_keys.on_paste { (key_event "") with
       Ui_services.clipboard_get = (function "text/plain" -> text | _ -> "");
@@ -731,7 +735,6 @@ let test_selected_clipboard_paste () =
        && List.length (Editor_state.page_blocks ()) = 1))
     [true,"Plain second block";false,"external text";false,""];
   Editor_state.clipboard := clipboard;
-  Editor_state.clipboard_text := copied;
   Editor_state.set (fun _ -> previous)
 
 let test_editor_ctrl_np () =

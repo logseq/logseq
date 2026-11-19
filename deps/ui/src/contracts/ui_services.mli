@@ -93,9 +93,13 @@ type perf = { mark : string -> unit }
 
 type uri = { encode_component : string -> string }
 
+type block_clipboard = { text : string; html : string; logseq : string }
+
 type clipboard = {
   copy : string -> unit;
   write_text : string -> unit Ui_task.t;
+  write_blocks : block_clipboard Ui_task.t -> unit Ui_task.t;
+  read_blocks : (unit -> string option Ui_task.t) option;
   read_text : unit -> string Ui_task.t;
 }
 
@@ -387,6 +391,8 @@ val perf_mark : string -> unit
 val uri_encode_component : string -> string
 val clipboard_copy : string -> unit
 val clipboard_write_text : string -> unit Ui_task.t
+val clipboard_write_blocks : block_clipboard Ui_task.t -> unit Ui_task.t
+val clipboard_read_blocks : unit -> (unit -> string option Ui_task.t) option
 val clipboard_read_text : unit -> string Ui_task.t
 val session_get : string -> string option
 val session_set : string -> string -> unit

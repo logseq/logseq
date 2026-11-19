@@ -215,12 +215,7 @@ let note_input () =
    later input supersedes it before the deferred commit fires *)
 let merge_plan_seq : int option ref = ref None
 
-(* structured block clipboard (titles + hierarchy), set by copy/cut *)
-let clipboard : Model.block list ref = ref []
-
-(* the text/plain payload written alongside `clipboard`; an internal
-   paste is detected by comparing the event's text against it *)
-let clipboard_text : string ref = ref ""
+let clipboard : Ui_services.block_clipboard option ref = ref None
 
 (* cljs has a single editing block: entering block edit dismisses any
    inline secondary editor (e.g. a property value cell) and vice versa.

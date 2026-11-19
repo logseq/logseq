@@ -1263,22 +1263,25 @@ let test_outliner_ops2 () =
      | _ -> false)
 
 let test_outliner_ops3 () =
-  (* paste_block_maps flattens preorder with levels + parent refs *)
-  let child = block "cu" "ctitle" in
-  let parent = block ~children:[ child ] "pu" "ptitle" in
-  let maps = Outliner_ops.paste_block_maps [ parent ] in
-  check "paste maps preorder + level + parent"
-    (List.length maps = 2
-    && Wire.get (List.hd maps) "block/level" = Some (Wire.Int 1)
-    && Wire.get (List.nth maps 1) "block/level" = Some (Wire.Int 2)
-    && (match Wire.get (List.nth maps 1) "block/parent" with
-        | Some (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid "pu" ]) ->
-            true
-        | _ -> false));
-  check "paste_trees op"
+  let parent = "81ddcc75-063a-4faa-8385-4052a285eadd" in
+  let child = "ca417953-3027-4d1f-b563-3aadc9b771e1" in
+  let parent_ref = Wire.Array [Wire.kw "block/uuid"; Wire.Uuid parent] in
+  let block uuid title attrs =
+    Wire.Map ([Wire.kw "block/uuid", Wire.Uuid uuid;
+               Wire.kw "block/title", Wire.String title] @ attrs) in
+  let parent_block = block parent "Parent" [Wire.kw "user.property/priority", Wire.Int 3] in
+  let child_block = block child "Child"
+      [Wire.kw "block/parent", Wire.Map
+        [Wire.kw "db/id", Wire.Int 4; Wire.kw "block/uuid", Wire.Uuid parent]] in
+  let data = Editor_actions.encode_block_clipboard ~repo:"graph" ~cut:true
+      [parent_block; child_block] in
+  let cut, maps = Option.get (Editor_actions.decode_block_clipboard ~repo:"graph" data) in
+  check "Logseq clipboard preserves cut intent, preorder, parent refs and properties"
+    (cut && maps = [parent_block; block child "Child" [Wire.kw "block/parent", parent_ref]]);
+  check "paste_blocks op"
     (match
-       op_name_args (Outliner_ops.paste_trees [ parent ] "tgt"
-                       ~replace_empty:true)
+       op_name_args (Outliner_ops.paste_blocks maps "tgt"
+                       ~cut ~sibling:true ~replace_empty:true)
      with
      | Some ("insert-blocks", [ Wire.Array _; Wire.Uuid "tgt"; Wire.Map _ as m ]) ->
          Wire.get m "outliner-op" = Some (Wire.Keyword "paste")
