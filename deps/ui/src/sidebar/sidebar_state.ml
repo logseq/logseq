@@ -49,7 +49,7 @@ type item_source =
 type t =
   { favorites : Model.page list Signal.state
   ; home_page : Model.page option Signal.state
-  ; favorite_drop : (string * bool) option Signal.state
+  ; favorite_drop : string option Signal.state
   ; recents : Model.page list Signal.state
   ; nav_checked : string list Signal.state
   ; nav_tag_titles : (string * string) list Signal.state
@@ -1103,9 +1103,10 @@ let refresh_items repo st =
 
 (* ---------- favorites ---------- *)
 
-let favorite_order ~source ~target ~before uuids =
-  if source = target || not (List.mem source uuids && List.mem target uuids) then uuids
-  else
+let favorite_order ~source ~target uuids =
+  match List.find_index ((=) source) uuids, List.find_index ((=) target) uuids with
+  | Some source_index, Some target_index when source_index <> target_index ->
+    let before = source_index > target_index in
     let rec insert = function
       | [] -> []
       | uuid :: rest when uuid = target ->
@@ -1113,16 +1114,14 @@ let favorite_order ~source ~target ~before uuids =
       | uuid :: rest -> uuid :: insert rest
     in
     insert (List.filter ((<>) source) uuids)
+  | _ -> uuids
 
 let favorite_drop_at st x y =
   let target =
     Option.bind (Ui_services.dom_element_at x y) (fun hit ->
       Option.bind (hit.Ui_services.closest "#left-sidebar .favorites [data-lp-ref]")
         (fun row ->
-          Option.map (fun uuid ->
-            let _, top, _, height = row.Ui_services.rect () in
-            (uuid, y < top +. height /. 2.))
-            (row.Ui_services.attr "data-lp-ref")))
+          row.Ui_services.attr "data-lp-ref"))
   in
   Runtime.signal_set st.favorite_drop target
 
@@ -1132,10 +1131,10 @@ let finish_favorite_drag st ~repo ~source =
   if Runtime.repo () = repo then
     match target with
     | None -> ()
-    | Some (target, before) ->
+    | Some target ->
         let uuids = List.filter_map (fun (p : Model.page) -> p.page_uuid)
             (Runtime.signal_get st.favorites) in
-        let reordered = favorite_order ~source ~target ~before uuids in
+        let reordered = favorite_order ~source ~target uuids in
         if reordered <> uuids then begin
           incr favorites_gen;
           then_keep

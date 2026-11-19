@@ -646,7 +646,7 @@ let selected_uuids inst = selected_row_uuids (V.get inst)
 let sortable c =
   not
     (List.mem c.V.c_id
-       [ "select"; "id"; "block/page"; "block.temp/refs-count" ])
+       [ "select"; "id"; "block/page" ])
 
 let header_select_cell ?rows inst : t =
   let row_uuids s = Option.value rows ~default:(all_row_uuids s) in

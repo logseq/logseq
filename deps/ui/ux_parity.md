@@ -244,6 +244,29 @@ geometry and table geometry remain visually unverified. Evidence and probe:
 `:3010` access were used. Baseline journal diagnostics remain 102/52, with the
 known non-fatal native properties diagnostic.
 
+#### Table82 follow-up: Backlinks sorting and favorite drop placement
+
+The All pages Backlinks column was explicitly excluded by `sortable`, so its
+header never opened the existing ascending/descending menu. Master treats this
+column as sortable. It now uses the shared sort menu and persistence path;
+the existing sorting regression requires Backlinks eligibility.
+
+Master's favorites use dnd-kit's `arrayMove(oldIndex, targetIndex)`, not the
+pointer's position within the target row. LUI previously chose before/after
+from the row midpoint, producing B,C,A when C was dragged to A's upper edge
+from C,B,A. Favorite ordering now uses the target's original index: downward
+moves land after the target, upward moves before it. Drop state stores only
+the target identity; the obsolete half-row flag and helper argument are removed.
+Existing order regressions cover both directions, adjacent moves, self/missing
+identities and empty input. The persistence RPC and reload-after-success path
+are unchanged.
+
+UI gates pass with 6473 checks and zero failures; native experimental tests and
+build pass. Evidence is under `/Users/devin/table82/evidence/`, including the
+paired favorite-edge JSON and Master Backlinks menu screenshot. The exact
+rebuilt-application menu and drag/reload workflows remain browser/visually
+unverified. No `static/` writes or `:3010` access were used.
+
 The Pages path is `nav_items` to `nav_route` to `nav_link` to the typed LUI Link;
 there is no alternate Pages component. The link's TargetValue maps `_self`
 correctly, but the web renderer's UrlValue handler unconditionally wrote `_blank`.

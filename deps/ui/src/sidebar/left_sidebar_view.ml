@@ -677,7 +677,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             [ row ~cross:`center ~main:`space_between
            ~style_class:"link-item group"
            ~background:(reactive (function
-               | Some (uuid, _) when p.Model.page_uuid = Some uuid ->
+               | Some uuid when p.Model.page_uuid = Some uuid ->
                    "var(--lx-accent-04, var(--ls-tertiary-background-color))"
                | _ -> "transparent") (Signal.value st.Sidebar_state.favorite_drop))
            ~height:32 ~padding_horizontal:8 ~corner_radius:6

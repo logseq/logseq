@@ -2970,9 +2970,8 @@ let test_views_table () =
   check "sortable"
     (Views_table.sortable col_title
     && not (Views_table.sortable { col_title with c_id = "select" })
-    && not
-         (Views_table.sortable
-            { col_title with c_id = "block.temp/refs-count" }))
+    && Views_table.sortable
+         { col_title with c_id = "block.temp/refs-count" })
 
 (* ---- popups_state ---- *)
 
@@ -3540,15 +3539,17 @@ let test_properties_data () =
 
 let test_sidebar_favorite_order () =
   let original = ["a"; "b"; "c"] in
-  check "favorite moves preserve every identity and destination side"
-    (List.for_all (fun (source, target, before, expected) ->
-       Sidebar_state.favorite_order ~source ~target ~before original = expected)
-      [ ("a", "c", false, ["b"; "c"; "a"])
-      ; ("c", "a", true, ["c"; "a"; "b"])
-      ; ("a", "b", true, original)
-      ; ("b", "b", false, original)
-      ; ("gone", "b", false, original)
-      ; ("a", "gone", true, original) ])
+  check "favorite moves preserve every identity at the target's original index"
+    (List.for_all (fun (source, target, expected) ->
+       Sidebar_state.favorite_order ~source ~target original = expected)
+      [ ("a", "c", ["b"; "c"; "a"])
+      ; ("c", "a", ["c"; "a"; "b"])
+      ; ("a", "b", ["b"; "a"; "c"])
+      ; ("b", "a", ["b"; "a"; "c"])
+      ; ("b", "b", original)
+      ; ("gone", "b", original)
+      ; ("a", "gone", original) ]
+     && Sidebar_state.favorite_order ~source:"a" ~target:"b" [] = [])
 
 let test_sidebar_recents () =
   let previous = Ui_services.storage_get "recent-pages" in
