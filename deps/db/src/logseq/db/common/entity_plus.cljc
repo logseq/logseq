@@ -86,7 +86,8 @@
 (defn- get-journal-title
   [db e]
   (date-time-util/int->journal-title (:block/journal-day e)
-                                     (:logseq.property.journal/title-format (entity-memoized db :logseq.class/Journal))))
+                                     (or (:logseq.property.journal/title-format (entity-memoized db :logseq.class/Journal))
+                                         date-time-util/default-journal-title-formatter)))
 
 (defn- get-block-title
   [^Entity e k default-value]

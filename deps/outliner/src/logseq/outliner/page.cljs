@@ -390,13 +390,23 @@
     :or   {properties               nil
            persist-op?              true}
     :as options}]
-  (let [date-formatter (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
+  (let [date-formatter (or (:logseq.property.journal/title-format (entity-plus/entity-memoized db :logseq.class/Journal))
+                           date-time-util/default-journal-title-formatter)
         resolved-tags (resolve-create-page-tags db tags)
         class? (or class? (some (fn [t] (= :logseq.class/Tag (resolved-tag-ident db t))) resolved-tags))
         class-ident-namespace? (and class? class-ident-namespace (string? class-ident-namespace))
         title (if encrypted-title? title* (sanitize-title title*))
         _ (when-not encrypted-title?
             (outliner-validate/validate-page-title-no-hashtag title {:node {:block/title title}}))
+        ;; Today's journal is requested with the editor's date format, which may not be
+        ;; the graph's: a title that parses to no day would make a page without a journal day
+        title (if (and today-journal?
+                       (not encrypted-title?)
+                       (nil? (date-time-util/journal-title->int
+                              title (date-time-util/safe-journal-title-formatters date-formatter))))
+                (date-time-util/int->journal-title (date-time-util/date->int (js/Date.))
+                                                   date-time-util/default-journal-title-formatter)
+                title)
         types (cond class?
                     #{:logseq.class/Tag}
                     (or journal? today-journal?)
@@ -501,7 +511,7 @@
                                  [:create-page [title options]])
                           today-journal?
                           (assoc :create-today-journal? true
-                                 :today-journal-name title))]
+                                 :today-journal-day (:block/journal-day page)))]
             {:tx-meta tx-meta
              :tx-data txs
              :title title
