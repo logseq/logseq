@@ -7,6 +7,10 @@
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]))
 
+(defn stress-uuid-presence
+  [db uuids]
+  (mapv #(boolean (d/entid db [:block/uuid %])) (take 3 uuids)))
+
 (defn- class-extends-summaries
   "Ancestor class identities for renderer card detection (Card + structured children)."
   [entity]
