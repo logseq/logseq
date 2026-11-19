@@ -273,6 +273,7 @@ let members_view ~in_settings : t =
             ~value:(T.t "collaboration/members") [] ])
     @ [ column ~key:"collab-w"
         ~style_class:"panel-wrap" ~margin_bottom:32
+        ?max_width:(if in_settings then Some 592 else None)
         [ column ~key:"collab-m" ~gap:8 ~margin_top:16
             [ column ~key:"collab-users" ~gap:4
                
@@ -294,6 +295,7 @@ let members_view ~in_settings : t =
             ; column ~key:"collab-form" ~gap:16 ~margin_top:16
                 [ box ~key:"collab-inv"
                     [ Ui_components.input ~key:"collab-in" ~style_class:"ui__input"
+                        ?height:(if in_settings then Some 40 else None)
                         ~text_signal:(Signal.value email_st)
                         ~placeholder:(T.t "collaboration/email-address")
                         ~on_input:(fun ev ->

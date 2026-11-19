@@ -1417,7 +1417,7 @@ module Account_settings = struct
    fun ctx parent ->
     let opened = Signal.state ctx.Lui_ui.ui_scheduler false in
     let close () = Runtime.signal_set opened false in
-    column ~key ~grow:1. ~min_width:0 ~gap:4
+    column ~key ~min_width:0 ~gap:4
       [caption label;
        select ~height:36 ~border_width:1 ~border_color:"var(--lx-gray-06)" ~corner_radius:6
          ~label ~text:(reactive (fun id -> Option.value ~default:"" (List.assoc_opt id options)) selected)
@@ -1435,6 +1435,8 @@ module Account_settings = struct
     | ("read" | "write" | "both") as value -> T.t ("sync.personal-access-token.permission/" ^ value)
     | other -> other
 
+  let latest_pat_expiration now = Dates.add_days now 365
+
   let expiry value =
     if String.length value <> 10 then None
     else match Dates.parse_local_datetime value with
@@ -1442,7 +1444,7 @@ module Account_settings = struct
       | Some day ->
           let end_ = Dates.shift_day day 1 -. 1. in
           let now = Ui_services.time_now () in
-          if end_ > now && day <= now +. 365. *. 86_400_000. then Some end_ else None
+          if end_ > now && day <= latest_pat_expiration now then Some end_ else None
 
   let local_date value =
     let date = Dates.fields value in
@@ -1454,9 +1456,11 @@ module Account_settings = struct
     let set = Runtime.signal_set in
     let close () = set opened false in
     let label = pat "expiration" in
+    let trigger = "pat-expiration-trigger" in
     let picker =
       reactive (fun date ->
-        popover ~key:"pat-expiration-calendar" ~anchor:`below ~anchor_alignment:`start
+        popover ~key:"pat-expiration-calendar" ~anchor:`below ~anchor_target:trigger
+          ~anchor_alignment:`start
           ~background:"hsl(var(--popover))" ~corner_radius:8 ~border_width:1
           ~border_color:"hsl(var(--border))" ~on_dismiss:(fun _ -> close ())
           [Ui_components.calendar ?initial:(Dates.parse_local_datetime date)
@@ -1468,11 +1472,14 @@ module Account_settings = struct
                if Option.is_some (expiry date) then (close (); set value date)) ()])
         (Signal.value value)
     in
-    column ~key:"pat-expiration" ~grow:1. ~min_width:0 ~gap:4
+    column ~key:"pat-expiration" ~min_width:0 ~gap:4
       [caption label;
-       box
+       column ~cross:`stretch
          [Ui_components.button ~variant:`outline ~height:36 ~label
+            ~accessibility_identifier:trigger
             ~icon:(`app "calendar") ~icon_placement:`trailing
+            ~data_attrs:(reactive (fun expanded ->
+                ["aria-expanded", string_of_bool expanded]) (Signal.value opened))
             ~text_signal:(Signal.value value)
             ~on_press:(fun _ -> set opened (not (Signal.get (Signal.value opened)))) [];
           if_ ~test:(Signal.value opened) picker]]
@@ -1485,7 +1492,8 @@ module Account_settings = struct
     let graphs = Signal.state owner [] and graph = Signal.state owner ""
     and access = Signal.state owner "both" and pending = Signal.state owner false
     and created = Signal.state owner None in
-    let end_date = Signal.state owner (local_date (Dates.shift_day (Ui_services.time_now ()) 30)) in
+    let end_date = Signal.state owner (local_date (latest_pat_expiration (Ui_services.time_now ()))) in
+    let viewport = Ui_services.viewport_width_signal ~scheduler:owner ~scope:ctx.ui_scope in
     let get s = Signal.get (Signal.value s) and set = Runtime.signal_set in
     let url = Rtc_ops.http_base () ^ "/api/v1/personal-access-tokens" in
     let failed () = set pending false; Toast.error (pat "request-error") in
@@ -1547,23 +1555,25 @@ module Account_settings = struct
          Ui_components.button ~variant:`ghost ~text:(pat "revoke") ~icon:(`app "trash")
            ~disabled_signal:(Signal.value pending) ~on_press:(fun _ -> revoke (get "id")) []]
     in
-    column ~gap:24
+    column ~gap:24 ~max_width:592
       [row ~gap:4 ~cross:`center [caption (pat "description");
          link ~url:"https://api.logseq.io/api-docs" ~target:`blank ~text:(pat "api-docs") []];
        column ~gap:12
          [title (pat "create-title");
-          reactive (function [] -> caption (pat "no-graphs") | options ->
-            row ~gap:12
-              [menu ~key:"pat-graph" (pat "graph") (Signal.value graph) options (set graph);
-               menu ~key:"pat-permission" (pat "permission") (Signal.value access)
-                 (List.map (fun p -> (p, permission p)) ["read"; "write"; "both"]) (set access);
-               expiration_picker end_date])
-            (Signal.value graphs);
+          reactive (fun options width -> match options with
+            | [] -> caption (pat "no-graphs")
+            | options ->
+                grid ~gap:12 ~columns:(if width >= 768. then 3 else 1)
+                  [menu ~key:"pat-graph" (pat "graph") (Signal.value graph) options (set graph);
+                   menu ~key:"pat-permission" (pat "permission") (Signal.value access)
+                     (List.map (fun p -> (p, permission p)) ["read"; "write"; "both"]) (set access);
+                   expiration_picker end_date])
+            (Signal.value graphs) viewport;
           row [Ui_components.button ~variant:`primary ~icon:(`app "key") ~text:(pat "create")
             ~disabled:(reactive (fun id date busy -> id = "" || expiry date = None || busy)
               (Signal.value graph) (Signal.value end_date) (Signal.value pending))
             ~on_press:(fun _ -> create ()) []]];
-       reactive (function None -> spacer [] | Some token ->
+       reactive (function None -> Logseq_el.nothing | Some token ->
          card ~padding:12 ~border_width:1 ~border_color:"var(--lx-gray-06)" ~corner_radius:6
            [column ~gap:8 [title (pat "created-title"); caption (pat "created-warning");
               row ~gap:8 [text ~grow:1. ~min_width:0 ~as_:`Code ~value:token [];
@@ -1676,14 +1686,17 @@ module Account_settings = struct
               end
             in
             let title = key "enter-password-title" in
-            Ui_components.dialog ~key:"reveal-private-key" ~content_sized:true
-              ~text:title ~padding:16 ~gap:32 ~on_dismiss:(fun _ -> close ())
+            Ui_components.dialog ~key:"reveal-private-key" ~width:(fun _ -> 472.)
+              ~data_attrs:["aria-labelledby", "ls-reveal-private-key-title"]
+              ~padding_vertical:40 ~padding_horizontal:32 ~gap:32
+              ~on_dismiss:(fun _ -> close ())
               [column ~gap:32
-                 [text ~font_size:"1.5rem" ~font_weight:500 ~value:title [];
+                 [text ~font_size:"1.5rem" ~font_weight:500 ~line_height:"2rem"
+                    ~accessibility_identifier:"ls-reveal-private-key-title" ~value:title [];
                   column ~gap:16
                     [column ~gap:4
-                       [Ui_requests.pw_input dialog_ctx ~key:"reveal-password"
-                          ~placeholder:(key "enter-password") ~autofocus:true ~value:unlock
+                       [Ui_requests.pw_input ~height:40 ~label:title dialog_ctx ~key:"reveal-password"
+                          ~placeholder:"" ~autofocus:true ~value:unlock
                           ~on_enter:submit;
                         reactive (function
                           | None -> spacer []
@@ -1730,7 +1743,8 @@ module Account_settings = struct
                    reactive (fun mode ->
                      let explanatory =
                        if mode = `Forgot then [caption (key "forgot-password-warning")]
-                       else [caption (key "remember-password-rich"); caption (key "cloud-password-rich")] in
+                       else [caption (T.t "encryption/remember-password");
+                             caption (T.t "encryption/cloud-password")] in
                      column ~gap:12 (explanatory @
                        (match mode with
                         | `Default -> [row [button (key "reset-password") (fun () -> change `Reset)]; status_line]

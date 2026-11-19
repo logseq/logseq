@@ -616,6 +616,7 @@
  :electron/wrong-release-warning-detail "This release runs through Rosetta and can be very slow. Download the Apple Silicon (arm64) release first. If it is unavailable for your version, use the nightly release."
  :electron/wrong-release-warning-title "You are using the Intel (x64) release on Apple Silicon."
 
+ :encryption/cloud-password "If you lose your password, all of your data in the cloud can't be decrypted. You will still be able to access the local version of your graph."
  :encryption/cloud-password-rich (fn [] ["If you lose your password, all of your data in the cloud can't be decrypted. " [:span "You will still be able to access the local version of your graph."]])
  :encryption/copy-key "Copy"
  :encryption/current-password "Current password"
@@ -638,6 +639,7 @@
  :encryption/password-updated-successfully "Password updated successfully!"
  :encryption/private-key "Private key (base64)"
  :encryption/public-key "Public key (base64)"
+ :encryption/remember-password "Please make sure you remember the password you have set, as we are unable to reset or retrieve it if you forget it, and we recommend you keep a secure backup of the password."
  :encryption/remember-password-rich (fn [] [[:span "Please make sure you "] "remember the password you have set, as we are unable to reset or retrieve it if you forget it, " [:span "and we recommend you "] "keep a secure backup of the password."])
  :encryption/reset-password "Reset password"
  :encryption/set-new-password "Set new password"
