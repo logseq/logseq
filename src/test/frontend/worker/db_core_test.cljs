@@ -2078,8 +2078,8 @@
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [result (get-latest-journals! test-repo 1)]
          (is (= [latest-uuid] (mapv :block/uuid result)))
-         (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
-         (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
+         (is (= ["2024-01-02"] (mapv :block/title result)))
+         (is (= ["2024-01-02"] (mapv :block/raw-title result))))))))
 
 (deftest get-latest-journals-bounded-scan
   (restoring-worker-state

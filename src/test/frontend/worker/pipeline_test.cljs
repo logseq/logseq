@@ -774,10 +774,10 @@
                         (d/with @conn tx-data)))]
     (d/transact! conn [[:db/add :logseq.class/Journal
                         :logseq.property.journal/title-format "yyyy-MM-dd"]])
-    (testing "writing the computed journal title must still reject a stored-title change"
+    (testing "writing the formatted journal title without a format change must still reject a stored-title change"
       (let [error (try
                     (run-pipeline [{:db/id (:db/id journal)
-                                    :block/title (:block/title (d/entity @conn (:db/id journal)))}])
+                                    :block/title "2025-02-03"}])
                     nil
                     (catch :default e
                       e))]
@@ -998,6 +998,10 @@
         (is (= ["2024-12-16 monday" "2024-12-17 tuesday"]
                (mapv #(:block/name (d/entity @conn (:db/id %))) [journal other])))
         (is (= "Dec 18th, 2024" (stored-title collision)))
+        (is (= "Dec 18th, 2024" (:block/title (d/entity @conn (:db/id collision)))))
+        (is (= "Dec 18th, 2024" (:block/raw-title (d/entity @conn (:db/id collision)))))
+        (is (= "2024-12-16 Monday" (:block/title (d/entity @conn (:db/id journal)))))
+        (is (= "2024-12-16 Monday" (:block/raw-title (d/entity @conn (:db/id journal)))))
         (is (= "dec 18th, 2024" (:block/name (d/entity @conn (:db/id collision)))))
         (is (= (:db/id owner) (:db/id (ldb/get-page @conn "2024-12-18 Wednesday"))))
         (is (= (:db/id journal) (:db/id (ldb/get-page @conn "Dec 16th, 2024"))))
