@@ -686,6 +686,10 @@ let test_code_editor_enter () =
       prevent_default = (fun () -> prevented := true) };
   check "CodeMirror retains plain Enter instead of the outliner command"
     (not !prevented);
+  check "CodeMirror Enter never creates an outline sibling through the global dispatcher"
+    (match !Runtime.current_page with
+     | Some page -> List.map (fun (b : Model.block) -> b.block_title) page.page_blocks=["1+2"]
+     | None -> false);
   clear_editing ()
 
 let test_editor_paste_link () =

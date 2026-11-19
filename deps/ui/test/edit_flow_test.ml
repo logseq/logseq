@@ -1691,6 +1691,51 @@ let test_code_conversion_focus (h : host) =
   install_worker ~repo:h.repo h;
   Js.Promise.resolve ()
 
+let test_calculator_exit_structure (h : host) =
+  let previous_buffer = !S.code_buffer_of in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (source, fail_save) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [{(Test_check.block "b1" "1+2") with Model.block_display_type=Some "code"}];
+        set_editing ~uuid:"b1" ~buffer:"1+2" ~caret:3 ~base:"1+2";
+        S.code_buffer_of := (fun uuid -> if uuid="b1" then Some source else previous_buffer uuid);
+        install_worker ~repo:h.repo h;
+        if fail_save then Runtime.worker := Some
+          {Worker_client.invoke_fn=(fun name args ->
+             if name="thread-api/apply-outliner-ops" then h.reject_promise "calculator save failed"
+             else Js.Promise.resolve (worker_handler h name args));
+           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        A.sync_buffer "b1" source;
+        Ops.schedule_save "b1" source;
+        if h.native then Code_mirror.on_native_event "b1"
+          ~name:"key" ~value:(Some source) ~key:(Some "Escape")
+        else A.exit_edit ~select:true;
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Calculator newline/empty input and Escape never append an outline root, including save failure"
+          (List.length (current_titles ())=1
+           && not (List.exists (fun op -> op_name op="insert-blocks") !ops)
+           && (if fail_save then S.editing_uuid ()=Some "b1" && A.live_buffer "b1"=source
+               else S.editing ()=None && current_titles ()=[source]));
+        run rest in
+  let* () = run ["1+2\n1+3",false; "",false; "1+2\nbad",true] in
+  reset_editor ();
+  stage_page h [{(Test_check.block "b1" "1+2") with Model.block_display_type=Some "code"}];
+  set_editing ~uuid:"b1" ~buffer:"1+2" ~caret:3 ~base:"1+2";
+  S.code_buffer_of := (fun uuid -> if uuid="b1" then Some "1+2" else previous_buffer uuid);
+  install_worker ~repo:h.repo h;
+  A.insert_sibling_after "b1";
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "The calculator Shift-Enter action explicitly appends exactly one empty sibling"
+    (current_titles ()=["1+2";""] && List.exists (fun op -> op_name op="insert-blocks") !ops);
+  S.code_buffer_of := previous_buffer;
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  Js.Promise.resolve ()
+
 let test_property_command_refresh (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -2510,6 +2555,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let saved = h.snapshot () in
   let* () = test_numbering_preserves_unedited_title h in
   let* () = test_code_conversion_focus h in
+  let* () = test_calculator_exit_structure h in
   let* () = test_template_does_not_save_search_title h in
   let* () = test_authoritative_route_miss h in
   let* () = test_composition h in

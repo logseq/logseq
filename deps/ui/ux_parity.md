@@ -1,7 +1,7 @@
 # LUI UX parity status
 
 The paired-audit baseline is upstream master **`2a0dce92`**; the latest fetch is
-**`77bdb6c7`**. Settings, references and properties/icon child branches are now
+**`a615af70`**. Settings, references and properties/icon child branches are now
 integrated. Their follow-up repairs and local editor/shell repairs still need
 combined-build browser acceptance. New upstream asset/clipboard changes have
 not been fully audited. Source/test completion is not browser acceptance. This
@@ -50,7 +50,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | History UI state | Master also records sidebar open/collapse/items. The current local repair records routes only, not sidebar layout history. |
 | Editor E38 | Video timestamp shortcut insertion, including actual current playback time. |
 | Editor E40 | Cross-page five-step undo: stored `A` versus `AB` after the reported sequence. Do not assume route restoration alone fixes transaction progress. |
-| Calculator extra root | Extra empty root after calculator flows is unexplained; Enter versus Escape has not been isolated. No speculative fix. |
+| Calculator extra root | Global plain-Enter dispatch and newline/empty-input save-and-Escape tests do not append roots, including failed saves. The explicit Shift+Enter action appends one empty sibling. The original full CodeMirror flow remains unverified; this does not establish which event ran there. No speculative fix. |
 | Shell N7 | Right-sidebar item-menu horizontal origin; reported LUI menu is approximately 51.4px too far left. |
 | Reference filters | Equal-count tag chips use alphabetical order instead of Master's worker order. |
 | Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
