@@ -407,7 +407,9 @@
     ;; double `enter` convert the next block to bullet block
     (k/enter)
     (assert/assert-have-count "span.typed-list" 4)
-    (util/wait-timeout 60)
+    (-> (w/-query (str util/editor-q ":focus"))
+        assert/assert-that
+        (.hasValue ""))
     (k/enter)
     (assert/assert-have-count "span.typed-list" 3)
     (is (= ["1." "2." "3."] (w/all-text-contents "span.typed-list")))))
