@@ -309,7 +309,7 @@
       (ldb/transact! conn tx-data {:outliner-op :recycle-delete-permanently})
       true)))
 
-(defn- gc-tx-data
+(defn- expired-recycled-roots
   [db {:keys [now-ms] :or {now-ms (common-util/time-ms)}}]
   (let [cutoff (- now-ms retention-ms)]
     (->>
@@ -320,18 +320,41 @@
             [(<= ?deleted-at ?cutoff)]]
           db cutoff)
      (map #(d/entity db %))
-     (filter recycled?)
-     (mapcat (fn [entity]
-               (if (ldb/page? entity)
-                 (map (fn [id] [:db/retractEntity id]) (page-tree-ids db entity))
-                 (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
-     distinct
-     seq
-     (with-delete-cleanup-tx db))))
+     (filter recycled?))))
+
+(defn- gc-tx-data
+  [db roots]
+  (->> roots
+       (mapcat (fn [entity]
+                 (if (ldb/page? entity)
+                   (map (fn [id] [:db/retractEntity id]) (page-tree-ids db entity))
+                   (map (fn [node] [:db/retractEntity (:db/id node)]) (block-subtree db entity)))))
+       distinct
+       seq
+       (with-delete-cleanup-tx db)))
+
+(defn ^:api gc-root-tx-data
+  "Tx data that permanently deletes the recycled root GC saw, identified by
+  `root-uuid` and its `deleted-at`. Returns nil when the root has since been
+  restored, recycled again or removed."
+  [db root-uuid deleted-at]
+  (let [root (d/entity db [:block/uuid root-uuid])]
+    (when (= deleted-at (:logseq.property/deleted-at root))
+      (permanently-delete-tx-data db root))))
 
 (defn ^:api gc!
+  "Permanently deletes expired recycled roots in one synced transaction and
+  returns its tx report, or nil when nothing expired.
+
+  The `:recycle-gc` outliner op recorded per root lets db-sync replay the GC
+  against the current db on every rebase instead of replaying raw retracts."
   [conn opts]
-  (when-let [tx-data (seq (gc-tx-data @conn opts))]
-    (ldb/transact! conn tx-data {:outliner-op :recycle-gc
-                                 :persist-op? false})
-    true))
+  (let [db @conn
+        roots (expired-recycled-roots db opts)]
+    (when-let [tx-data (seq (gc-tx-data db roots))]
+      (ldb/transact! conn tx-data {:outliner-op :recycle-gc
+                                   :outliner-ops (mapv (fn [root]
+                                                         [:recycle-gc [(:block/uuid root)
+                                                                       (:logseq.property/deleted-at root)]])
+                                                       roots)
+                                   :gen-undo-ops? false}))))

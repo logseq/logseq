@@ -875,7 +875,9 @@
                 (if migrate-result
                   (handle-migrate-result-local-txs! repo migrate-result)
                   (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
-              (transaction-handler/maybe-run-recycle-gc! conn))
+              ;; DB listeners attach below, so queue the GC deletion for sync here.
+              (when-let [gc-tx-report (transaction-handler/maybe-run-recycle-gc! conn)]
+                (db-sync/handle-local-tx! repo gc-tx-report)))
 
             (when initial-tx-report
               (db-sync/handle-local-tx! repo initial-tx-report))
