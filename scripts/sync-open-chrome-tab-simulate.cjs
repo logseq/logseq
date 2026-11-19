@@ -90,6 +90,7 @@ const ALL_OUTLINER_OP_COVERAGE_OPS = Object.freeze([
   'move-blocks',
   'move-blocks-up-down',
   'indent-outdent-blocks',
+  'collapse-expand-blocks',
   'upsert-property',
   'set-block-property',
   'remove-block-property',
@@ -1767,6 +1768,17 @@ function buildRendererProgram(config) {
 
       await runStep('indent-outdent-blocks', async () => {
         await applyRawOutlinerOp('indent-outdent-blocks', [[blockCEid], true, {}]);
+      });
+
+      await runStep('collapse-expand-blocks', async () => {
+        await applyRawOutlinerOp('collapse-expand-blocks', [
+          [{ 'db/id': blockBEid, 'block/collapsed?': true }],
+          {},
+        ]);
+        await applyRawOutlinerOp('collapse-expand-blocks', [
+          [{ 'db/id': blockBEid, 'block/collapsed?': false }],
+          {},
+        ]);
       });
 
       await runStep('delete-blocks', async () => {
