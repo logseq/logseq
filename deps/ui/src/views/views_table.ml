@@ -1379,9 +1379,7 @@ let table_header ?rows inst cols : t =
          | None -> [])
       @ [ dnd_described "1"; dnd_live "1" ]
     in
-    match add_property with
-    | Some _ -> row ~grow:1. items
-    | None -> row items
+    row ~grow:1. items
   in
   Ui_components.with_props
     [ Ui_components.Prop.padding_top 1

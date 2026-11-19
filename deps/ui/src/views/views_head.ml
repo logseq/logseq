@@ -1391,7 +1391,8 @@ let render_head inst : t =
     ~style_class:
       "ls-view-head"
     ~cross:`center ~main:`space_between ~gap:4
-    ~height:28 ~min_width:0 ~grow:1.
+    ~height:(match inst.V.kind with V.KQuery _ -> 24 | _ -> 28)
+    ~min_width:0 ~grow:1.
     [ row ~style_class:"ls-view-head-left" ~cross:`center ~gap:8
         [ (match inst.V.kind with
            | V.KQuery _ ->
