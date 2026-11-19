@@ -3779,7 +3779,7 @@ let run_views ~registry ~profile ~finish =
   eqi "global category toggle collapses a partly collapsed list" 0
     (List.length (keymap_rows ()));
   S.text_changed keymap input.M.id "Undo";
-  eqi "search ignores category collapse" 14 (List.length (keymap_rows ()));
+  eqi "search ignores category collapse" 15 (List.length (keymap_rows ()));
   eqi "query results hide category actions" 0 (List.length (category_tools ()));
   S.text_changed keymap input.M.id "";
   eqi "clearing search retains category collapse" 0
@@ -3805,7 +3805,7 @@ let run_views ~registry ~profile ~finish =
   check "keymap search uses fuzzy command identifiers and descriptions"
     (List.length (keymap_rows ()) > 1);
   check "query results flatten categories" (category_headers () = []);
-  eqi "query results retain matches in their original categories" 14
+  eqi "query results retain matches in their original categories" 15
     (List.length (keymap_rows ()));
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "accessibility-label"
@@ -3818,7 +3818,7 @@ let run_views ~registry ~profile ~finish =
   S.press keymap (pill "Disabled").M.id;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
-  eqi "pressing the active filter restores all query results" 14
+  eqi "pressing the active filter restores all query results" 15
     (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
   (match clear_buttons () with
@@ -4422,6 +4422,7 @@ let run_views ~registry ~profile ~finish =
   in
   let handlers : Cmdk_services.handlers option ref = ref None in
   let shortcut_actions = ref 0 in
+  let shortcut_dialogs = ref [] in
   let routed_commands = ref [] and legacy_selection = ref 0 in
   let services =
     { (Cmdk_host.services ()) with
@@ -4429,6 +4430,8 @@ let run_views ~registry ~profile ~finish =
     ; focus_input_init = (fun _ -> ())
     ; install_listeners = (fun _scope h -> handlers := Some h)
     ; toggle_left_sidebar = (fun () -> incr shortcut_actions)
+    ; dialogs_open = (fun name -> shortcut_dialogs := name :: !shortcut_dialogs)
+    ; dialogs_is_open = (fun _ -> false)
     ; editor_command = (fun cid -> routed_commands := cid :: !routed_commands)
     ; extend_selection = (fun _ -> incr legacy_selection)
     ; move_selection_focus = (fun _ -> incr legacy_selection)
@@ -4729,6 +4732,12 @@ let run_views ~registry ~profile ~finish =
   let stroke key = Editor_keys.on_global_key (key_event key) in
   stroke "t"; stroke "l";
   eqi "default global sequence dispatches once" 1 !shortcut_actions;
+  stroke "t"; stroke "p";
+  check "The Plugins chord dispatches the same named dialog as its command"
+    (!shortcut_dialogs = ["plugins"]);
+  stroke "t"; stroke "s";
+  check "The Settings chord retains its named-dialog dispatch alongside Plugins"
+    (!shortcut_dialogs = ["settings"; "plugins"]);
   let previous_shortcuts = Ui_services.storage_get "ls-shortcuts" in
   Ui_services.storage_set "ls-shortcuts"
     "{:ui/toggle-left-sidebar [\"f8\"]}";

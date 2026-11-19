@@ -299,6 +299,9 @@ let decode_item j =
 let items : item list =
   Array.to_list
     (Array.map decode_item (jarr (Js.Json.parseExn items_json)))
+  @ [ Shortcut {label = "command.ui/goto-plugins";
+        title = ":ui/goto-plugins#global-non-editing-only";
+        unset = false; bindings = []} ]
 
 let cached_items = ref None
 
