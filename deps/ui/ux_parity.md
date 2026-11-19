@@ -23,6 +23,30 @@ contribution link 2.5px high) are now source-repaired without changing the
 fixed list viewport or accepted control dimensions; rebuilt-browser position
 verification remains pending.
 
+Table78 on `7b05cc7a` accepts the E1 console repair and the final Marketplace
+offsets. Its new ordinary-block reference-count and selected-text Query
+differences are source-repaired: canonical ordinary rows
+request the existing reference-count resource and refresh on reference changes;
+Query conversion uses the slash popup's captured editor base instead of the
+replacement slash buffer. Mounted/editor regressions cover positive/empty
+counts, rejected refresh, existing/blank query text, advanced conversion and
+rejected conversion. These repairs remain browser-unverified. A clean detached
+`7b05cc7a58` worktree passes the UI aggregate (6373 assertions). New asynchronous
+reads exposed the views fixture's invalid default map response to config-file
+requests; it now returns EDN text. The repaired UI aggregate passes with 6392
+assertions and exit zero. Native tests and the native build also pass.
+The Marketplace card header glyph group is source-shifted 4px right to match
+the supplied Table78 coordinates, preserving its vertical position and spacing.
+The selection-only embed Tab/Shift-Tab path also armed editor focus without an
+editing session; it now runs the structural operation without waiting for a
+nonexistent editor sink. Mounted coverage includes indent, outdent, empty
+selection and rejection. The reported delayed focus-budget console line still
+needs rebuilt-browser verification; its original payload has no target/session
+state to establish whether this reachable defect caused that particular event.
+Local graph deletion (no removal toast and storage rediscovered after reload)
+remains open. The earlier prepare-pool-before-close repair is still present;
+the available deletion evidence does not identify the worker failure or stall.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

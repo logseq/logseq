@@ -301,7 +301,7 @@ let market_card ~stats ~search_st pkg =
          ; Ui_components.with_props
              [ Ui_components.Prop.position `absolute
              ; Ui_components.Prop.inset_top 4.
-             ; Ui_components.Prop.inset_right 6. ]
+             ; Ui_components.Prop.inset_right 2. ]
              (row ~key:"flag" ~cross:`center ~gap:8
                  ((match Js.Json.decodeBoolean (getf pkg "supportsDB") with
                    | Some supported ->

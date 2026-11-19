@@ -2294,6 +2294,8 @@ let run_views ~registry ~profile ~finish =
     Editor_actions.select_single_in ~scope:page_scope "linked-page";
     Editor_actions.indent_or_outdent ~indent:true;
     observe_structure ();
+    check "Selection-only embedded indent does not wait for a nonexistent editor sink"
+      (Editor_state.editing () = None && !Editor_state.pending_focus = None);
     check "Indenting an embedded root reveals only its target occurrence"
       (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" first) "embed-target"
        && not (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" second) "embed-target"));
@@ -2313,13 +2315,19 @@ let run_views ~registry ~profile ~finish =
         check "Outdenting the relocated embed moves its link back to the host container"
           (!restored && not !moved && Editor_state.is_selected "linked-page");
         check "Embedded-root Shift-Tab completes without a structural failure" (!completed = 2 && !failures = 0);
+        check "Selection-only embedded outdent does not arm editor focus"
+          (!Editor_state.pending_focus = None);
         Editor_state.set (fun st -> {st with selected = Editor_state.String_set.empty; anchor = None});
         let before = !writes in
         Editor_actions.indent_or_outdent ~indent:true;
         check "An empty embedded selection does not move a block" (!writes = before);
+        check "An empty embedded selection does not arm editor focus"
+          (!Editor_state.pending_focus = None);
         Editor_actions.select_single_in ~scope:page_scope "linked-page";
         rejected := true;
         Editor_actions.indent_or_outdent ~indent:true;
+        check "A rejected selection-only move does not arm editor focus"
+          (!Editor_state.pending_focus = None);
         ignore (Js.Global.setTimeout ~f:(fun () ->
           check "Rejected embedded moves retain selection ownership"
             (Editor_state.is_selected "linked-page" && not !moved);
@@ -2346,6 +2354,56 @@ let run_views ~registry ~profile ~finish =
           Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
           Settings_state.st := previous_settings;
           done_ ()) 20)) 20)) 20)) 20)
+  in
+  let ordinary_reference_count_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_flush = !Runtime.app_flush
+    and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+    and previous_settings = !Settings_state.st in
+    Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+    let block = {(Test_check.block "ordinary-reference-target" "Target") with Model.block_db_id=Some 201} in
+    let page = Test_check.page [block] in
+    let model = {Model.initial with repo=Some "ordinary-references";route_page=Some page} in
+    Runtime.read_model := (fun () -> model);
+    let count = ref 2 and failed = ref false in
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+      if name="thread-api/get-render-snapshots" && !failed then
+        Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "reference count rejected") [@u])
+      else Js.Promise.resolve (match name,args with
+        | "thread-api/get-render-snapshots",[_;request] ->
+            let resources=Option.value (Wire.get request "resources") ~default:Wire.Nil in
+            Wire.Map [Wire.kw "slots",Wire.Map (List.map (fun key ->
+              let value=match Wire.elems key with
+                | [Wire.Keyword "block-ref-count";_] -> Wire.Int !count
+                | _ -> Wire.Array [] in
+              Wire.Array [Wire.kw "resource";key],Wire.Map [Wire.kw "value",value]) (Wire.elems resources))]
+        | "thread-api/get-file-content", _ -> Wire.String "{}"
+        | _ -> Wire.Nil));on_message=(fun _ _ -> ());
+      dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let mounted=mount (fun _ context parent ->
+      let ms=Signal.constant context.Lui_ui.ui_scheduler model in
+      let state=Outline_viewport_state.ensure context ms in
+      let section : Outliner_projection.section = {section_key="ordinary";repository=model.repo;
+        scope="main";page;is_last=true} in
+      let source=Signal.constant context.ui_scheduler (Outliner_projection.Block
+        {block;scope="main";section;depth=0;ancestors=[]}) in
+      Flat_outliner.block_row ~state ~library:false ~source context parent) in
+    let visible () = S.flush mounted;
+      List.exists (fun node -> class_has node "block-refs-count") (nodes mounted) in
+    let changed () = Subs_state.run_sync_subs [Wire.Array [Wire.kw "refs";Wire.Uuid "ordinary-reference-target"]] in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "Ordinary rows expose their incoming reference count" (visible ());
+      failed:=true;changed ();
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        check "A rejected reference-count refresh retains the last successful count" (visible ());
+        failed:=false;count:=0;changed ();
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "Removing the final incoming reference hides its count" (not (visible ()));
+          ignore (Lui_app.dispose mounted.S.app);
+          Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+          Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+          Settings_state.st := previous_settings;
+          done_ ()) 0)) 0)) 0)
   in
   let optimistic_reactions_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
@@ -3215,9 +3273,9 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    batch_property_check (fun () -> property_picker_check (fun () -> embedded_indent_check (fun () -> optimistic_reactions_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
+    batch_property_check (fun () -> property_picker_check (fun () -> embedded_indent_check (fun () -> ordinary_reference_count_check (fun () -> optimistic_reactions_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
       (fun () -> property_text_many_check (fun () -> property_value_completion_check
-        (fun () -> next [false,false;false,true;true,false;true,true]))))))))))
+        (fun () -> next [false,false;false,true;true,false;true,true])))))))))))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in

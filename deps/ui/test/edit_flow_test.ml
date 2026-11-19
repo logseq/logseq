@@ -1905,6 +1905,59 @@ let test_calculator_exit_structure (h : host) =
   install_worker ~repo:h.repo h;
   Js.Promise.resolve ()
 
+let test_query_selection_conversion (h : host) =
+  let previous_popup = !Popups_state.active in
+  let popup = Option.get previous_popup in
+  let rec run = function
+    | [] -> Popups_state.active := previous_popup;
+        reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
+    | (title, advanced, rejected) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [Test_check.block "b1" title];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:title;
+        A.update_model "b1" (fun m -> EM.select m ~anchor:0 ~focus:(String.length title));
+        Editor_keys.apply_input "b1" (EI.Insert "/");
+        Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Slash;
+        Editor_keys.apply_input "b1" (EI.Insert "Query");
+        install_worker ~repo:h.repo h;
+        let attempts = ref [] in
+        Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
+          if name="thread-api/apply-outliner-ops" then begin
+            (match args with [_;W.Array batch;_] -> attempts := batch :: !attempts | _ -> ());
+            if rejected then h.reject_promise "query conversion rejected"
+            else Js.Promise.resolve (worker_handler h name args)
+          end else if name="thread-api/get-blocks"
+            && (match args with [_;W.Array [request]] ->
+                  W.get request "id"=Some (W.Uuid "b1") | _ -> false) then
+            Js.Promise.resolve (W.Array [W.Map [W.Keyword "block", W.Map
+              [W.Keyword "block/uuid", W.Uuid "b1";
+               W.Keyword "logseq.property/query", W.Uuid "query-source"]]])
+          else Js.Promise.resolve
+            (if owned_call name then worker_handler h name args else h.base_handler name args));
+          on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced;
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        let batch = List.concat !attempts in
+        let saves uuid source = List.exists (function
+          | W.Array [W.Keyword "save-block";W.Array [block;_]] ->
+              W.get block "block/uuid"=Some (W.Uuid uuid)
+              && W.get block "block/title"=Some (W.String source)
+          | _ -> false) batch in
+        check "Query conversion preserves the pre-command title in its query property"
+          (if rejected then not (saves "query-source" title)
+           else saves "query-source" title && saves "b1" ""
+             && List.mem (Ops.set_block_property "b1" "block/tags"
+                  (W.Keyword "logseq.class/Query")) batch);
+        check "Query conversion does not leave a slash-trigger autosave pending"
+          (!Ops.pending_save=None);
+        check "Rejected query conversion never publishes a query title"
+          (not rejected || current_titles ()=[title]);
+        run rest in
+  run ["Search seed parity",false,false; "",false,false;
+       "Advanced seed",true,false; "Retain on rejection",false,true]
+
 let test_property_command_refresh (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -2789,6 +2842,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_pending_save_order h in
   let* () = test_suggestion_selection_commits_pending_save h in
   let* () = test_node_reference_suggestions h in
+  let* () = test_query_selection_conversion h in
   let* () = test_reference_preview h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in

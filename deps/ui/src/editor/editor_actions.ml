@@ -1949,9 +1949,12 @@ let indent_or_outdent ~indent =
         | Some e when e.S.uuid = focus -> e.S.model.Edit_model.caret
         | _ -> 0
       in
-      with_focus_after ~restore:(S.editing ()) focus caret
-        (apply_indent_outdent ?parent_original
-          (List.map (structural_uuid ~scope:(S.interaction_scope ())) uuids) indent)
+      let restore = S.editing () in
+      let operation = apply_indent_outdent ?parent_original
+        (List.map (structural_uuid ~scope:(S.interaction_scope ())) uuids) indent in
+      match restore with
+      | Some _ -> with_focus_after ~restore focus caret operation
+      | None -> run_structure ~restore operation (fun () -> ())
 
 let move_up_down_tail = ref (Js.Promise.resolve ())
 

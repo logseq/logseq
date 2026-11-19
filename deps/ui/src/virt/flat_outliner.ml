@@ -37,6 +37,34 @@ let block_row ~state ~library ~source : t =
  fun ctx parent ->
   let initial = block_of_row (Signal.get source) in
   let expanded = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let count = Signal.state ctx.ui_scheduler initial.block.Model.block_ref_count in
+  let repo = Runtime.repo () in
+  let alive = ref true and generation = ref 0 in
+  let load () =
+    let block = (block_of_row (Signal.get source)).block in
+    match block.Model.block_uuid, block.block_db_id with
+    | Some uuid, Some _ when !alive && Runtime.repo () = repo ->
+        incr generation;
+        let token = !generation in
+        let key = Views_db.key_ref_count uuid in
+        Views_db.snapshots [key] ~f:(fun snapshot ->
+          if !alive && token = !generation && Runtime.repo () = repo then
+            match Views_db.snapshot_value snapshot key with
+            | Some (Wire.Int value) -> Runtime.signal_set count value
+            | _ -> ())
+    | _ -> () in
+  let subscription = Runtime.on_sync
+    ~watch:{Subs_state.w_all=false; w_tags=[];
+      w_keys=(match initial.block.block_uuid with
+        | Some uuid -> [Subs_state.watch_key_uuid "refs" uuid] | None -> [])}
+    (fun _ -> load ()) in
+  ignore (Signal.own ctx.ui_scope
+    (Signal.subscribe ~emit_initial:false source (fun row ->
+      let block = (block_of_row row).block in
+      Runtime.signal_set count block.Model.block_ref_count;
+      load ())));
+  Signal.on_dispose ctx.ui_scope (fun () -> alive := false; Runtime.off_sync subscription);
+  if initial.block.block_ref_count = 0 then load ();
   let extras : Tree.row_extras =
     { right_of_block = (fun block ->
         if block.Model.block_ref_count <= 0 then None else
@@ -103,7 +131,9 @@ let block_row ~state ~library ~source : t =
                           ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" [])) ]))))
       ; Tree.projected_block_row ~extras ~scope:initial.scope ~library
                 ~depth:(reactive (fun row -> (block_of_row row).depth) source)
-                ~source:(reactive (fun row -> (block_of_row row).block) source) ])))
+                ~source:(reactive (fun row count ->
+                  {(block_of_row row).block with Model.block_ref_count=count})
+                  source (Signal.value count)) ])))
     ctx parent
 
 let view ~state ~library ~header ~footer ?section_minimum_height

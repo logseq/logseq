@@ -1834,13 +1834,14 @@ let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      emit ac.auuid ac.tpos "";
+      let title = (Option.get ac.editor).Editor_state.base in
+      Outliner_ops.cancel_pending_save ();
+      Editor_actions.sync_buffer buuid title;
       close_ac t;
-      let title = Editor_actions.live_buffer buuid in
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (let* sop = Outliner_ops.save_block_parsed buuid title in
+        ((let* sop = Outliner_ops.save_block_parsed buuid title in
         let* _ =
            Outliner_ops.apply
              [ sop
@@ -1899,6 +1900,7 @@ let run_query t ac ~advanced =
           in
           Outliner_ops.apply_parsed ~rest
             [ (quuid, title); (buuid, "") ])
+        |> Views_db.catch_quiet)
 
 exception Unsupported_configured_input
 
