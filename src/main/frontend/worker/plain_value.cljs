@@ -205,7 +205,9 @@
                                    (map :a)
                                    distinct
                                    (filter db-property/property?)
-                                   vec))]
+                                   vec))
+          alias-source (when include-derived?
+                         (first (:block/_alias entity)))]
       (cond-> result
         include-derived?
         (assoc :block.temp/property-keys own-property-keys)
@@ -216,7 +218,12 @@
 
         (and include-derived? list-type)
         (assoc :block.temp/order-list-index
-               (order-list-index entity list-type))))))
+               (order-list-index entity list-type))
+
+        alias-source
+        (assoc :block/alias-source-page-id (:db/id alias-source)
+               :block/alias-source-page-uuid (:block/uuid alias-source)
+               :block/alias-source-page-class? (boolean (ldb/class? alias-source)))))))
 
 (defn- ref-db-id
   [value]

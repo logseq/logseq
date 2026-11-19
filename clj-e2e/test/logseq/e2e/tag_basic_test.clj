@@ -1,5 +1,7 @@
 (ns logseq.e2e.tag-basic-test
-  (:require [clojure.test :refer [deftest is use-fixtures]]
+  (:require [clojure.string :as string]
+            [clojure.test :refer [deftest is use-fixtures]]
+            [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
             [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
@@ -80,3 +82,47 @@
     (assert/assert-have-count
      (format ".block-tag :text('%s')" tag-name)
      0)))
+
+(deftest tag-alias-hashtag-completes-to-source-tag-test
+  (let [container-page (page/get-page-name)
+        tag-name (str "ExampleTag" (subs (str (random-uuid)) 0 8))
+        alias-name (str "ET" (subs (str (random-uuid)) 0 8))
+        block-text (str "tagged-via-alias-" (subs (str (random-uuid)) 0 8))]
+    (ls-api-call! :editor.createTag tag-name)
+    (ls-api-call! :editor.createPage alias-name)
+    (let [tag (ls-api-call! :editor.getPage tag-name)
+          alias-page (ls-api-call! :editor.getPage alias-name)]
+      (ls-api-call! :editor.upsertBlockProperty
+                    (get tag "uuid")
+                    ":block/alias"
+                    [(get alias-page "id")]))
+    (page/goto-page container-page)
+    (b/open-last-block)
+    (util/press-seq (str block-text " #") {:delay 20})
+    (util/press-seq alias-name {:delay 20})
+    (w/wait-for (format "a.menu-link:has-text('%s')" alias-name))
+    (assert/assert-have-count
+     (loc/filter ".ui__popover-content a.menu-link" :has-text "Convert")
+     0)
+    (assert/assert-have-count
+     (loc/filter ".ui__popover-content a.menu-link" :has-text "New tag")
+     0)
+    (assert/assert-is-visible
+     (loc/filter ".ui__popover-content a.menu-link" :has-text tag-name))
+    (w/click (first (w/query (format "a.menu-link:has-text('%s')" tag-name))))
+    (assert/assert-is-visible
+     (-> ".ls-block:not(.block-add-button)"
+         (loc/filter :has ".editor-wrapper textarea")
+         (loc/filter :has (format ".block-tag :text('%s')" tag-name))))
+    (util/exit-edit)
+    (let [alias-page (ls-api-call! :editor.getPage alias-name)
+          tag (ls-api-call! :editor.getPage tag-name)
+          blocks (ls-api-call! :editor.getPageBlocksTree container-page)
+          block-tags (get (first blocks) "tags")]
+      (is (not (string/starts-with? (str (get alias-page "ident")) ":user.class/"))
+          "The alias page must stay a non-class page")
+      (is (some #(= (get tag "id") (or (get % "id") %)) block-tags)
+          "The block is tagged with the source tag, not the alias"))
+    (page/goto-page tag-name)
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body" :has-text block-text))))

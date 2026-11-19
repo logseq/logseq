@@ -1250,9 +1250,15 @@
                      :block/title "Project Tag"}]
                    (map #(select-keys % [:db/id :db/ident :block/uuid :block/title]) title-matches))
                 "Existing class choices keep their identity so they are not recreated")
-            (is (= ["Alias Only"]
-                   (map :block/title alias-matches))
-                "Tag aliases stay available as tag completion choices"))
+            (is (= [{:db/id 1
+                     :db/ident :user.class/project-tag
+                     :block/uuid class-uuid
+                     :block/title "Project Tag"
+                     :alias {:db/id 2
+                             :block/uuid alias-uuid
+                             :block/title "Alias Only"}}]
+                   (map #(select-keys % [:db/id :db/ident :block/uuid :block/title :alias]) alias-matches))
+                "Matching a tag alias chooses the source tag, not the alias page"))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally (fn []
@@ -1339,8 +1345,12 @@
       (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) (fn [_]))
           (p/then
            (fn []
-             (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
+             (is (some #(or (= "Alias Only" (:block/title %))
+                            (= "Alias Only" (get-in % [:alias :block/title])))
+                       @matched-pages)
                  "The alias is still selectable from tag completion")
+             (is (some #(= "Project Tag" (:block/title %)) @matched-pages)
+                 "Choosing the alias completes to the source tag")
              (is (not-any? :convert-page-to-tag? @matched-pages)
                  "A class alias must not show a redundant Convert action")))
           (p/catch
@@ -1352,6 +1362,57 @@
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
 	                       (reset! state/*db-worker previous-worker)
 	                       (done)))))))
+
+(deftest get-matched-classes-deduplicates-before-limit
+  (async done
+    (let [classes [{:db/id 1
+                    :block/title "A"
+                    :block/alias (mapv (fn [i]
+                                       {:db/id (+ 100 i)
+                                        :block/title (str "ZZ " i)})
+                                      (range 25))}
+                   {:db/id 2
+                    :block/title "Boring ZZZZZZZZZZZZZZZZ"}]
+          original-<get-all-classes db-async/<get-all-classes]
+      (set! db-async/<get-all-classes (fn [& _args] (p/resolved classes)))
+      (-> (editor/get-matched-classes "ZZ")
+          (p/then
+           (fn [matches]
+             (is (= [1 2] (map :db/id matches))
+                 "One tag's aliases must not crowd another matching tag out of the results")))
+          (p/finally
+           (fn []
+             (set! db-async/<get-all-classes original-<get-all-classes)
+             (done)))))))
+
+(deftest get-matched-classes-ignores-untitled-aliases
+  (async done
+    (let [class-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          alias-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          untitled-alias {:db/id 2}
+          titled-class {:db/id 2
+                        :block/uuid alias-uuid
+                        :block/title "ET"
+                        :db/ident :user.class/ET}
+          source-class {:db/id 1
+                        :block/uuid class-uuid
+                        :block/title "Example Tag"
+                        :db/ident :user.class/ExampleTag
+                        :block/alias [untitled-alias]}
+          original-<get-all-classes db-async/<get-all-classes]
+      (set! db-async/<get-all-classes
+            (fn [_repo _opts]
+              (p/resolved [source-class titled-class])))
+      (-> (p/let [alias-matches (editor/get-matched-classes "ET")]
+            (is (some #(= {:db/id 2 :block/title "ET"}
+                          (select-keys % [:db/id :block/title]))
+                      alias-matches)
+                "Untitled nested aliases must not hide a titled class with the same id"))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (done)))))))
 
 (deftest tag-search-does-not-prepend-new-tag-for-matched-page-class
   (async done
