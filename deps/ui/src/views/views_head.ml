@@ -737,7 +737,7 @@ let search_items inst : t list =
               target.Ui_services.closest ("#" ^ input_id) <> None) ev.target then begin
            ev.prevent_default ();
            ev.stop_immediate ();
-           V.update inst (fun s -> {s with V.input = ""; search_open = false});
+           V.update inst (fun s -> {s with V.input = ""; search_open = false; fetch_limit = 0});
            refresh inst
          end);
      if_ ~test:(open_cond ctx)
@@ -750,13 +750,13 @@ let search_items inst : t list =
           (Ui_components.input ~accessibility_identifier:input_id
              ~placeholder:(I.t "view.filter/type-to-search")
              ~text:(reactive (fun (s : V.vstate) -> s.V.input) (sig_of inst))
-             ~width:183 ~height:28 ~autofocus:true ~border_width:0
+             ~width:190 ~height:28 ~autofocus:true ~border_width:0
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
              ~on_input:(fun ev ->
                match ev with
                | L.TextChanged (_, v) ->
                    let view_uuid = (V.get inst).V.view_uuid in
-                   V.update inst (fun s -> { s with V.input = v });
+                   V.update inst (fun s -> { s with V.input = v; fetch_limit = 0 });
                    deb (fun () ->
                        let s = V.get inst in
                        if not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)
@@ -774,7 +774,7 @@ let search_items inst : t list =
      if_ ~test:(open_cond ctx)
        (ghost_btn "x" ~title_:(I.t "ui/close") ~on_click:(fun () ->
           V.update inst (fun s ->
-              { s with V.input = ""; search_open = false });
+              { s with V.input = ""; search_open = false; fetch_limit = 0 });
           refresh inst))
        ctx parent)
   ]
