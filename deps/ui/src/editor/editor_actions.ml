@@ -2010,11 +2010,25 @@ let delete_selection () =
 
 (* ---- drag & drop ---- *)
 
-let rec has_drag_source_parent sources uuid =
-  match S.find_parent uuid with
+let find_outliner_block ~scope uuid =
+  Option.bind (S.outliner_blocks_in_scope scope) (fun blocks -> S.find_in blocks uuid)
+
+type block_drag = {
+  source : string;
+  scope : string;
+  context : Model.t;
+  selected : S.String_set.t;
+  roots : string list;
+}
+
+let block_drag : block_drag option ref = ref None
+
+let rec has_drag_source_parent ?scope sources uuid =
+  match (match scope with None -> S.find_parent uuid
+    | Some scope -> S.find_parent_in_scope ~scope uuid) with
   | Some (Some p, _) -> (
       match p.Model.block_uuid with
-      | Some parent -> S.String_set.mem parent sources || has_drag_source_parent sources parent
+      | Some parent -> S.String_set.mem parent sources || has_drag_source_parent ?scope sources parent
       | None -> false)
   | _ -> false
 
@@ -2022,11 +2036,30 @@ let is_descendant uuid ancestor =
   has_drag_source_parent (S.String_set.singleton ancestor) uuid
 
 let begin_block_drag ~scope src =
-  if scope <> S.selection_scope () || not (S.String_set.mem src (S.selected ()))
-  then select_single_in ~scope src
+  let selected, roots =
+    if scope = S.selection_scope () && S.String_set.mem src (S.selected ()) then
+      let snapshot = selected_snapshot () in
+      snapshot.selection,
+      (if S.String_set.is_empty snapshot.unresolved then
+         List.filter_map (fun (b : Model.block) -> b.block_uuid) snapshot.roots
+       else [])
+    else
+      S.String_set.singleton src,
+      (if find_outliner_block ~scope src <> None then [src] else [])
+  in
+  block_drag := Some { source = src; scope; context = Runtime.model (); selected; roots };
+  flush_edit ();
+  clear_selection ()
+
+let end_block_drag () = block_drag := None
 
 let dragged_block_uuids src =
-  if S.String_set.mem src (S.selected ()) then
+  match !block_drag with
+  | Some drag when drag.source = src ->
+      if Ops.context_current drag.context
+         && Option.is_some (S.outliner_blocks_in_scope drag.scope)
+      then drag.roots else []
+  | _ -> if S.String_set.mem src (S.selected ()) then
     let snapshot = selected_snapshot () in
     if S.String_set.is_empty snapshot.unresolved then
       List.filter_map (fun (b : Model.block) -> b.block_uuid) snapshot.roots
@@ -2036,10 +2069,15 @@ let dragged_block_uuids src =
 let can_drop_dragged_block src tgt =
   let selected = S.selected () in
   let sources =
-    if S.String_set.mem src selected then selected else S.String_set.singleton src
+    match !block_drag with
+    | Some drag when drag.source = src -> drag.selected
+    | _ -> if S.String_set.mem src selected then selected else S.String_set.singleton src
   in
+  let scope = Option.map (fun drag -> drag.scope) !block_drag in
+  dragged_block_uuids src <> []
+  &&
   S.find src <> None && S.find tgt <> None
-  && not (S.String_set.mem tgt sources || has_drag_source_parent sources tgt)
+  && not (S.String_set.mem tgt sources || has_drag_source_parent ?scope sources tgt)
 
 let insert_dragged_reference ~scope src tgt move_to =
   match Runtime.capture_reload_origin () with
@@ -2115,7 +2153,9 @@ let drop_dragged_block ~alt ~scope src tgt move_to =
   if not (can_drop_dragged_block src tgt) then ()
   else
     let selected = S.selected () in
-    let count = if S.String_set.mem src selected then S.String_set.cardinal selected else 1 in
+    let count = match !block_drag with
+      | Some drag when drag.source = src -> S.String_set.cardinal drag.selected
+      | _ -> if S.String_set.mem src selected then S.String_set.cardinal selected else 1 in
     (* Count original blocks before pruning selected descendants. *)
     if alt && count = 1 then insert_dragged_reference ~scope src tgt move_to
     else
@@ -2712,9 +2752,6 @@ let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
             ~html:(ev.Ui_services.clipboard_get "text/html"))
 
 (* ---- misc ---- *)
-
-let find_outliner_block ~scope uuid =
-  Option.bind (S.outliner_blocks_in_scope scope) (fun blocks -> S.find_in blocks uuid)
 
 let toggle_collapse_block ~scope ~persist (b : Model.block) =
   match b.Model.block_uuid with

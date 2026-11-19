@@ -1706,7 +1706,10 @@ let test_scoped_collapse_commands (h : host) =
             (S.mk_editing ~uuid ~buffer:uuid ~base:uuid ~scope ()) })
         else
           S.set (fun st -> { st with S.selected = S.String_set.of_list [ uuid; other ] });
-        Editor_keys.dispatch_command command;
+        (if command = "Meta+;" then
+           Editor_keys.apply_input uuid
+             (EI.Key ({ (EM.key_ev ";") with meta = true }, false))
+         else Editor_keys.dispatch_command command);
         let* () = match db_before with
           | None -> Js.Promise.resolve ()
           | Some _ ->
@@ -1730,6 +1733,7 @@ let test_scoped_collapse_commands (h : host) =
   in
   run [ "selected toggle", "editor/toggle-block-children", false, false, false, Some true;
         "editing toggle", "editor/toggle-block-children", true, true, true, Some false;
+        "editing Meta+;", "Meta+;", true, false, true, Some false;
         "selected collapse", "editor/collapse-block-children", false, false, true, None;
         "selected expand", "editor/expand-block-children", false, true, false, None ]
 
@@ -2085,6 +2089,34 @@ let test_native_drag_scoped_drop (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_drag_selection_state (h : host) =
+  let saved = h.snapshot () in
+  reset_editor ();
+  stage_page h
+    [Test_check.block ~children:[Test_check.block "drag-child" "child"] "drag-parent" "parent";
+     Test_check.block "drag-other" "other"; Test_check.block "drag-target" "target"];
+  A.select_single_in ~scope:"main" "drag-parent";
+  S.set (fun st -> {st with S.selected = S.String_set.of_list
+    ["drag-parent";"drag-child";"drag-other"]});
+  A.begin_block_drag ~scope:"main" "drag-parent";
+  check "Dragging captures selected roots without keeping a selection toolbar"
+    (A.dragged_block_uuids "drag-parent" = ["drag-parent";"drag-other"]
+     && S.String_set.is_empty (S.selected ()));
+  check "Captured drag selection still rejects members and their descendants"
+    (not (A.can_drop_dragged_block "drag-parent" "drag-other")
+     && not (A.can_drop_dragged_block "drag-parent" "drag-child")
+     && A.can_drop_dragged_block "drag-parent" "drag-target");
+  A.end_block_drag ();
+  A.begin_block_drag ~scope:"main" "missing-drag-source";
+  check "A missing drag source cannot fabricate a move or selection"
+    (A.dragged_block_uuids "missing-drag-source" = []
+     && not (A.can_drop_dragged_block "missing-drag-source" "drag-target")
+     && S.String_set.is_empty (S.selected ()));
+  A.end_block_drag ();
+  reset_editor ();
+  h.restore saved;
+  Js.Promise.resolve ()
+
 let test_drop_top_owner (h : host) =
   let saved = h.snapshot () in
   let rec run = function
@@ -2098,6 +2130,9 @@ let test_drop_top_owner (h : host) =
               Test_check.block "drop-target" "target" ] in
         let unregister = S.register_block_source ~scope ~kind:S.Outliner (fun () -> blocks) in
         A.begin_block_drag ~scope "drop-source";
+        check ("Drag ownership does not create a block selection: " ^ name)
+          (S.String_set.is_empty (S.selected ())
+           && A.dragged_block_uuids "drop-source" = ["drop-source"]);
         install_worker ~repo:h.repo h;
         let release = ref (fun () -> ()) in
         let parent = Js.Promise.make (fun ~resolve ~reject:_ ->
@@ -2118,6 +2153,9 @@ let test_drop_top_owner (h : host) =
         check ("top drop preserves target owner and origin: " ^ name)
           (!ops = (if accept then
               [ Ops.move_blocks_top [ "drop-source" ] "sidebar-owner" ] else []));
+        A.end_block_drag ();
+        check ("Completed or canceled drops leave no source selection: " ^ name)
+          (S.String_set.is_empty (S.selected ()));
         unregister ();
         reset_editor ();
         h.restore saved;
@@ -2342,6 +2380,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_zoom_structure_boundary h in
   let* () = test_native_drag_rect_reply h in
   let* () = test_native_drag_scoped_drop h in
+  let* () = test_drag_selection_state h in
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in

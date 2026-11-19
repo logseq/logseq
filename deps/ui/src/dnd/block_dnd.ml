@@ -104,13 +104,13 @@ let show_indicator tgt_el move_to =
   let off = if move_to = "nested" then 48.0 else 20.0 in
   let y =
     if move_to = "top" then Web_dom.rect_top r
-    else Web_dom.rect_bottom r -. 3.0
+    else Web_dom.rect_bottom r
   in
   Web_dom.el_style_set_property el "left"
     (Printf.sprintf "%gpx" (Web_dom.rect_left r +. off));
   Web_dom.el_style_set_property el "top" (Printf.sprintf "%gpx" y);
   Web_dom.el_style_set_property el "width"
-    (Printf.sprintf "%gpx" (Float.max 0.0 (Web_dom.rect_width r -. off)));
+    (Printf.sprintf "%gpx" (Web_dom.rect_width r));
   Web_dom.el_style_set_property el "display" "block"
 
 let hide_indicator () =
@@ -129,6 +129,7 @@ let clear_drop_target () =
 
 let on_drag_start ev _m =
   dragging_uuid := None;
+  A.end_block_drag ();
   (match K.op_source (K.ev_operation ev) with
    | Some d ->
        Option.iter
@@ -204,6 +205,7 @@ let on_drag_end ev _m =
      | _ -> ()
    end);
   dragging_uuid := None;
+  A.end_block_drag ();
   clear_drop_target ()
 
 (* ---------- install ---------- *)
