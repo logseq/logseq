@@ -1105,6 +1105,26 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let login = mount Login_view.body in
+  let login_links () = List.filter (fun node -> class_has node "ls-auth-link") (nodes login) in
+  check "Login links use the same accent-first color as Master anchors"
+    (List.length (login_links ()) = 2 && List.for_all (fun node ->
+       M.string_prop node "foreground" = Some "var(--lx-accent-11, var(--ls-link-text-color))")
+       (login_links ()));
+  let footer = List.find (fun node -> class_has node "ls-auth-foot") (nodes login) in
+  check "Login footer retains the paragraph margins and padding"
+    (Hashtbl.find_opt footer.M.props "margin-vertical" = Some (P.IntValue 8)
+     && Hashtbl.find_opt footer.M.props "padding-top" = Some (P.IntValue 16));
+  let _, login_width, _ = Dialogs_view.dialog_spec "login" in
+  check "Login width includes padding and both border pixels at desktop and mobile sizes"
+    (login_width 1600. = 490. && login_width 400. = 330.);
+  let signup = List.find (fun node -> button_label node = Some (I18n.t "account/sign-up"))
+    (login_links ()) in
+  S.press login signup.M.id;
+  check "The Login signup link still switches panels"
+    (List.exists (fun node -> M.string_prop node "accessibility-identifier" = Some "auth-username")
+       (nodes login));
+  ignore (Lui_app.dispose login.S.app);
   let market_state = ref None in
   let marketplace = mount (fun _ -> fun ctx parent ->
     let filter = Signal.state ctx.Lui_ui.ui_scheduler Plugins_view.All

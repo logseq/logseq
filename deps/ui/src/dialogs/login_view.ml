@@ -465,7 +465,7 @@ let action_link fields ~key ctx text_ tab =
     ; Ui_components.Prop.text_decoration "underline" ]
     (button ~key ~style_class:"ls-auth-link" ~text:text_ ~label:text_
        ~variant:`ghost ~height:20 ~min_height:20 ~padding:0
-       ~foreground:"var(--ls-link-text-color, var(--lx-accent-11))"
+       ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
        ~background:"transparent" ~border_width:0
        ~disabled_signal:(Signal.value fields.pending)
        ~on_press:(fun _ -> set_tab ctx fields tab)
@@ -483,11 +483,12 @@ let login_panel ctx fields =
         ~autofocus:true ~secure:false ~value:fields.email ~on_submit
     ; input_row fields ~key:"r-pw" ~id:"password" ~caption:(I18n.t "account/password")
         ~secure:true ~value:fields.password ~on_submit
-    ; submit_btn fields ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
-    ; Ui_components.with_props [ Ui_components.Prop.padding_top 8 ]
-      (column ~key:"lg-foot" ~cross:`center ~gap:0
+    ; column ~key:"lg-submit" ~cross:`stretch ~gap:0
+      [ submit_btn fields ~key:"lg-btn" (I18n.t "account/sign-in") on_submit
+      ; Ui_components.with_props [ Ui_components.Prop.padding_top 16 ]
+      (column ~key:"lg-foot" ~cross:`center ~gap:0 ~margin_vertical:8
         ~style_class:"ls-auth-foot"
-        [ row ~key:"f1" ~gap:4 ~cross:`center
+        [ row ~key:"f1" ~gap:4 ~cross:`center ~min_height:24
             [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
               (text ~key:"f1a" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
@@ -496,7 +497,7 @@ let login_panel ctx fields =
                 [])
             ; action_link fields ~key:"f1b" ctx (I18n.t "account/sign-up")
                 Signup ]
-        ; row ~key:"f2" ~gap:4 ~cross:`center
+        ; row ~key:"f2" ~gap:4 ~cross:`center ~min_height:24
             [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
               (text ~key:"f1d" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
@@ -504,6 +505,7 @@ let login_panel ctx fields =
             ; action_link fields ~key:"f2a" ctx
                 (I18n.t "encryption/forgot-password-question") Reset_pw ]
         ])
+      ]
     ]
 
 let signup_panel ctx fields =
