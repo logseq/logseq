@@ -1096,7 +1096,8 @@ let test_decode6 () =
 
 let test_editor_state () =
   let module P = Outliner_projection in
-  let linked = block ~children:[block "embed-child" "child"] "linked" "Linked" in
+  let linked = {(block ~children:[block "embed-child" "child"] "linked" "Linked") with
+    Model.block_ref_count = 1} in
   let linking = {(block "linking" "") with Model.block_link = Some 9;
     block_embed_children = [linked]} in
   let project blocks = P.create ~expanded:(fun ~scope:_ _ -> true)
@@ -1106,6 +1107,8 @@ let test_editor_state () =
   let rows projection = List.filter_map (function P.Block row -> Some row | _ -> None)
       projection.P.rows in
   let projected = rows (project [linking]) in
+  check "Embed projection retains linked reference count"
+    ((List.hd projected).P.block.Model.block_ref_count = 1);
   check "Embed projection replaces the linking row at the same depth"
     (List.map (fun (row : P.block_row) -> row.block.block_uuid, row.depth) projected
      = [Some "linked", 0; Some "embed-child", 1]);

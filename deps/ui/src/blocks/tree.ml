@@ -1005,13 +1005,18 @@ and row_sig ?extras ?depth_signal ?(flat = false) ~depth ~editable ~library ~vir
           (Logseq_el.own ctx
              (Signal.map
                 (fun (b : Model.block) ->
-                  Render.is_query_block b || Render.is_cards_block b)
+                  Render.is_query_block b || Render.is_cards_block b
+                  || (match extras with
+                      | Some extras -> Option.is_some (extras.below_block b)
+                      | None -> false))
                 bs))
-        (Render.query_below_el
-           (Option.value b0.Model.block_uuid ~default:""))
-    ] @ (match extras with None -> []
-         | Some extras -> [reactive
-             (fun b -> Option.value (extras.below_block b) ~default:Logseq_el.nothing) bs])
+        (reactive (fun (b : Model.block) ->
+           column
+             ((if Render.is_query_block b || Render.is_cards_block b then
+                 [Render.query_below_el (Option.get b.block_uuid)] else [])
+              @ (match extras with None -> []
+                 | Some extras -> Option.to_list (extras.below_block b)))) bs)
+    ]
       @ [ (if flat then Logseq_el.nothing
            else row_children ?extras ~depth ~editable ~library ~virtualize scope bs) ]
       @ row_drop_indicators ~scope
@@ -1247,5 +1252,5 @@ let () =
 
 (* Named signal arguments let a projected row borrow its live block and
    depth through the reactive prop form without remounting its editor. *)
-let projected_block_row ~scope ~library ~depth_signal ~source =
-  block_row_sig ~scope ~library ~flat:true ~depth_signal source
+let projected_block_row ?extras ~scope ~library ~depth_signal ~source =
+  block_row_sig ?extras ~scope ~library ~flat:true ~depth_signal source

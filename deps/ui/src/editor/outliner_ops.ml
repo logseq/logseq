@@ -501,6 +501,28 @@ let check_loader_result value =
    fetched trees; [ancestors] is the chain of linked db ids guarding
    self-embed loops, [collapsed] accumulates :block/collapsed? flags from
    the embed wires (Decode drops the flag). *)
+let resolve_embed_ref_counts repo blocks =
+  let rec collect acc blocks = List.fold_left (fun acc (b : Model.block) ->
+    collect (match b.block_uuid with Some uuid -> uuid :: acc | None -> acc)
+      b.block_children) acc blocks in
+  let uuids = List.sort_uniq String.compare (collect [] blocks) in
+  let keys = List.map (fun uuid -> Wire.Array [Wire.kw "block-ref-count"; Wire.Uuid uuid]) uuids in
+  let* snapshot = Runtime.invoke2 "thread-api/get-render-snapshots" (Wire.String repo)
+      (Wire.Map [Wire.kw "blocks", Wire.Array []; Wire.kw "children", Wire.Array [];
+        Wire.kw "resources", Wire.Array keys]) in
+  check_loader_result snapshot;
+  let counts = Hashtbl.create (List.length uuids) in
+  List.iter2 (fun uuid key ->
+    match Views_wire.snapshot_slot_value snapshot key with
+    | Some (Wire.Int count) when count >= 0 -> Hashtbl.add counts uuid count
+    | Some value -> check_loader_result value; failwith "Invalid block reference count"
+    | None -> failwith "Missing block reference count") uuids keys;
+  let rec apply blocks = List.map (fun (b : Model.block) ->
+    {b with Model.block_ref_count = (match b.block_uuid with
+       | Some uuid -> Hashtbl.find counts uuid | None -> b.block_ref_count);
+      block_children = apply b.block_children}) blocks in
+  Js.Promise.resolve (apply blocks)
+
 let rec fill_embed_children repo ancestors collapsed
     (blocks : Model.block list) : Model.block list Js.Promise.t =
   (* siblings fetch their children/embed trees in parallel —
@@ -543,6 +565,7 @@ let rec fill_embed_children repo ancestors collapsed
                 Js.Promise.resolve [{root with Model.block_children = blocks;
                   block_default_collapsed = false}]
           in
+          let* roots = resolve_embed_ref_counts repo roots in
           fill_embed_children repo (link_id :: ancestors) collapsed roots
       | _ -> Js.Promise.resolve []
     in

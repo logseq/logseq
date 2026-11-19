@@ -36,6 +36,7 @@ let block ?(children = []) uuid title : Model.block =
   ; block_is_query = false
   ; block_db_id = None
   ; block_title = title
+  ; block_ref_count = 0
   ; block_level = 1
   ; block_tag_ids = []
   ; block_tags = []
