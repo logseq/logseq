@@ -1274,6 +1274,23 @@
       (is (nil? (page-block-by-title "source" "Child")))
       (is (nil? (page-block-by-title "source" "Grandchild"))))))
 
+(deftest-async cut-block-keeps-the-block-when-the-clipboard-refuses-the-copy
+  (let [{:keys [parent]} (load-collapsed-clipboard-fixture!)]
+    (p/with-redefs [state/<invoke-db-worker <complete-tree-worker
+                    editor/compose-copied-blocks-contents
+                    (fn [_repo ids & _]
+                      (p/resolved [ids (:block/title parent) [parent]]))
+                    export-html/export-blocks-as-html (fn [& _] (p/resolved ""))
+                    common-handler/copy-to-clipboard-without-id-property!
+                    (fn [& _] (p/rejected (js/Error. "NotAllowedError")))
+                    db-transact/apply-outliner-ops apply-test-outliner-ops!]
+      (p/let [result (editor/cut-block! (:block/uuid parent))]
+        (is (nil? result)
+            "A refused copy ends the cut without leaving a rejected promise.")
+        (is (some? (page-block-by-title "source" "Parent"))
+            "The block must stay when the clipboard did not receive it.")
+        (is (some? (page-block-by-title "source" "Child")))))))
+
 (deftest-async paste-after-copy-of-collapsed-parent-restores-full-tree
   (let [{:keys [parent target expected-titles]} (load-collapsed-clipboard-fixture!)]
     (p/with-redefs [state/<invoke-db-worker <complete-tree-worker

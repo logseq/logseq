@@ -107,20 +107,28 @@
 
 ;; See https://developer.chrome.com/blog/web-custom-formats-for-the-async-clipboard-api/
 ;; for a similar example
-(defn get-copied-blocks []
+(defn get-copied-blocks
+  "Resolves to the blocks copied inside Logseq, or nil when the clipboard holds
+  none or cannot be read. Firefox rejects `navigator.clipboard.read()` with
+  NotAllowedError, and the paste must then go on with the plain text."
+  []
   ;; NOTE: Avoid using navigator clipboard API on Android, it will report a permission error
-  (p/let [clipboard-items (when (and (not (mobile-util/native-android?))
-                                     js/window (gobj/get js/window "navigator") js/navigator.clipboard)
-                            (js/navigator.clipboard.read))
-          blocks-blob ^js (when clipboard-items
-                            (let [types (.-types ^js (first clipboard-items))]
-                              (when (contains? (set types) "web application/logseq")
-                                (.getType ^js (first clipboard-items)
-                                          "web application/logseq"))))
-          blocks-str (when (and blocks-blob (pos? (.-size blocks-blob)))
-                       (.text blocks-blob))]
-    (when blocks-str
-      (common-util/safe-read-map-string blocks-str))))
+  (-> (p/let [clipboard-items (when (and (not (mobile-util/native-android?))
+                                         js/window (gobj/get js/window "navigator") js/navigator.clipboard)
+                                (js/navigator.clipboard.read))
+              blocks-blob ^js (when clipboard-items
+                                (let [types (.-types ^js (first clipboard-items))]
+                                  (when (contains? (set types) "web application/logseq")
+                                    (.getType ^js (first clipboard-items)
+                                              "web application/logseq"))))
+              blocks-str (when (and blocks-blob (pos? (.-size blocks-blob)))
+                           (.text blocks-blob))]
+        (when blocks-str
+          (common-util/safe-read-map-string blocks-str)))
+      (p/catch (fn [error]
+                 (log/warn :msg "Reading copied blocks from the clipboard failed, pasting as text"
+                           :exception error)
+                 nil))))
 
 (defn- get-copied-blocks-from-memory
   [text]
