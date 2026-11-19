@@ -1182,6 +1182,7 @@ let test_page_menu () =
       Editor_keys.on_global_key (key_event "ArrowDown");
       check "The next page-menu Down advances past the focused action"
         (Stub_dom.get_field document "activeElement" == second);
+      open_menu := Some (101., 10., 100., true, None);
       let token = Ui_services.storage_get "id-token" in
       Ui_services.storage_remove "id-token";
       let toolbar = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
@@ -1203,12 +1204,23 @@ let test_page_menu () =
           M.string_prop node "text" = Some (I18n.t "ui/login")) rows |> snd in
         let popup = List.find (fun node -> has_tok node "ls-dots-menu") (nodes toolbar) in
         Stub_dom.set_field document "activeElement" root;
+        Stub_dom.set_field document "activeElement" (!entries).(0);
         S.appear toolbar popup.M.id;
         Editor_keys.on_global_key (key_event "ArrowDown");
         check "The mounted toolbar's first Down focuses Login"
           (Stub_dom.get_field document "activeElement" == login);
         Editor_keys.on_global_key (key_event "ArrowDown");
         check "The toolbar's next Down wraps to its first action"
+          (Stub_dom.get_field document "activeElement" == (!entries).(0));
+        Stub_dom.set_field document "activeElement" root;
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Rapid toolbar entry focuses Login before appearance is delivered"
+          (Stub_dom.get_field document "activeElement" == login);
+        S.appear toolbar popup.M.id;
+        check "Deferred appearance preserves the user's rapid menu navigation"
+          (Stub_dom.get_field document "activeElement" == login);
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Rapid toolbar entry then wraps to its first action"
           (Stub_dom.get_field document "activeElement" == (!entries).(0));
         entries := [||]; initial_entries := [||];
         Stub_dom.set_field document "activeElement" root;

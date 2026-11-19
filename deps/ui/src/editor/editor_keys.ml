@@ -775,6 +775,13 @@ let palette_open () =
   | Some st -> (Cmdk_state.get st).Cmdk_state.open_
   | None -> false
 
+let navigated_page_menu = ref None
+
+let page_menu_navigated () =
+  match !navigated_page_menu, (Runtime.model ()).Model.page_menu with
+  | Some previous, Some current -> previous == current
+  | _ -> false
+
 let page_menu_key ev =
   match (Runtime.model ()).Model.page_menu, ev_key ev with
   | Some (_, _, _, app, _), ("ArrowDown" | "ArrowUp" | "Home" | "End" as key)
@@ -786,15 +793,24 @@ let page_menu_key ev =
       let count = List.length items in
       if count = 0 then false else begin
         let active = Ui_services.dom_active_element () in
-        let current = List.mapi (fun index item -> index, item) items
+        let index_of active = List.mapi (fun index item -> index, item) items
           |> List.find_opt (fun (_, item) ->
             Option.fold ~none:false ~some:item.Ui_services.contains active)
-          |> Option.map fst |> Option.value ~default:(-1) in
+          |> Option.map fst in
+        let current = match index_of active with
+          | Some index -> index
+          | None when app ->
+              (match List.rev (Ui_services.dom_query_all
+                (selector ^ " [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])")) with
+               | last :: _ -> Option.value (index_of (Some last)) ~default:(-1)
+               | [] -> -1)
+          | None -> -1 in
         let index = match key with
           | "Home" -> 0 | "End" -> count - 1
           | "ArrowDown" -> (current + 1) mod count
           | _ -> if current < 0 then count - 1 else (current + count - 1) mod count in
         (List.nth items index).Ui_services.focus ();
+        navigated_page_menu := (Runtime.model ()).Model.page_menu;
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ();
         true
