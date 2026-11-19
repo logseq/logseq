@@ -868,7 +868,14 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
   let id = Keymap_data.command_id r.title in
   let draft = Signal.state ctx.Lui_ui.ui_scheduler ([], false) in
   let saved = Signal.state ctx.ui_scheduler (Keymap_data.revision (), None, "") in
+  let timer = ref None in
+  let cancel () =
+    Option.iter Ui_services.timers_clear_timeout !timer;
+    timer := None
+  in
+  Signal.on_dispose ctx.ui_scope cancel;
   let close () =
+    cancel ();
     Runtime.signal_set editing None;
     Runtime.signal_set st { (Runtime.signal_get st) with
       km_revision = Keymap_data.revision () }
@@ -878,6 +885,7 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
       (Keymap_data.effective_shortcut id)
   in
   let persist message f =
+    cancel ();
     match f () with
     | snapshot ->
         Runtime.signal_set draft ([], false);
@@ -895,24 +903,38 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
       persist message (fun () -> Keymap_data.reassign_binding id value)
   in
   let record ev =
-    let strokes, committed = Runtime.signal_get draft in
-    let change =
-      if ev.Ui_services.composing then Keymap_record.Ignore
-      else if ev.key = Some "Enter" && (ev.meta || ev.ctrl) && strokes <> [] then
-        (accept (); Keymap_record.Ignore)
-      else if ev.key = Some "Backspace" && strokes <> [] &&
-        (Keymap_data.already_bound id (String.concat " " strokes)
-         || (Keymap_data.binding_conflicts id (String.concat " " strokes)).exact <> [])
-      then Keymap_record.Set ([], false)
-      else if ev.key = Some "Backspace" then
-        match Keymap_record.key ev with
-        | None -> Keymap_record.Ignore
-        | Some key -> Keymap_record.Set ([key], true)
-      else Keymap_record.update ~strokes ~committed ev in
-    match change with
-    | Ignore -> ()
-    | Close -> close ()
-    | Set (keys, committed) -> Runtime.signal_set draft (keys, committed)
+    let strokes, evaluated = Runtime.signal_get draft in
+    let conflicts = Keymap_data.binding_conflicts id (String.concat " " strokes) in
+    let clear () = cancel (); Runtime.signal_set draft ([], false) in
+    if ev.Ui_services.composing then ()
+    else if ev.key = Some "Escape" then
+      if strokes <> [] && not evaluated then clear () else close ()
+    else if ev.key = Some "Enter" && (ev.meta || ev.ctrl)
+        && evaluated && conflicts.exact <> [] then accept ()
+    else if ev.key = Some "Backspace" && evaluated && strokes <> [] then clear ()
+    else if ev.key = Some "Backspace" && strokes = [] then
+      (match List.rev (Keymap_data.bindings id) with
+       | [] -> ()
+       | _ :: rest -> persist (T.t "keymap/shortcut-removed") (fun () ->
+           Keymap_data.apply_binding_changes
+             [id, Keymap_data.binding_value (List.rev rest)]))
+    else if evaluated && conflicts.exact <> [] then ()
+    else match Keymap_record.key ev with
+      | None -> ()
+      | Some key ->
+          let keys = if evaluated then [key] else strokes @ [key] in
+          if List.length keys <= 5 then begin
+            cancel ();
+            Runtime.signal_set draft (keys, false);
+            timer := Some (Ui_services.timers_timeout (fun () ->
+              timer := None;
+              if Ui_effect.alive ctx.ui_scope then begin
+                Runtime.signal_set draft (keys, true);
+                if not (Keymap_data.already_bound id (String.concat " " keys))
+                   && (Keymap_data.binding_conflicts id (String.concat " " keys)).exact = []
+                then accept ()
+              end) 400)
+          end
   in
   Keyboard_capture.acquire ~scope:ctx.ui_scope record;
   popover ~key:"shortcut-customize" ~anchor:`below ~anchor_alignment:`end_
@@ -960,27 +982,42 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
                | Some snapshot ->
                    [Ui_components.button ~variant:`ghost ~size:`sm
                      ~text:(T.t "keymap/undo") ~on_press:(fun _ ->
+                       cancel ();
                        match Keymap_data.save_shortcuts snapshot with
                        | () -> Runtime.signal_set draft ([], false);
                            Runtime.signal_set saved (Keymap_data.revision (), None, "")
                        | exception _ -> Toast.error (T.t "ui/save-changes-error")) []]))
             (Signal.value saved)
-        ; row ~gap:8 ~min_width:0 ~flex_wrap:`wrap
-            [ Ui_components.button ~variant:`primary ~size:`sm
-                ~text:(reactive (fun (keys, _) ->
-                  if (Keymap_data.binding_conflicts id (String.concat " " keys)).exact = []
-                  then T.t "ui/save" else T.t "keymap/reassign") (Signal.value draft))
-                ~disabled:(reactive (fun (keys, _) -> keys = [] ||
-                    Keymap_data.already_bound id (String.concat " " keys))
-                    (Signal.value draft))
-                ~on_press:(fun _ -> accept ()) []
-            ; Ui_components.button ~variant:`outline ~size:`sm
-                ~text:(T.t "keymap/reset-to-default")
-                ~disabled:(reactive (fun _ -> not (Keymap_data.custom r)) (Signal.value saved))
-                ~on_press:(fun _ -> persist (T.t "keymap/reset") (fun () -> Keymap_data.reset_binding id)) []
-            ; Ui_components.button ~variant:`ghost ~size:`sm ~text:(T.t "ui/cancel")
-                ~on_press:(fun _ -> close ()) []
-            ]
+        ; divider ~height:1 ~background:"hsl(var(--border))" []
+        ; reactive (fun (keys, evaluated) _ ->
+            let hint label keys = row ~gap:4 ~cross:`center
+              [text ~font_size:"12px" ~foreground:"var(--lx-gray-11)"
+                ~value:(T.t label) []; keymap_recorded_keys keys] in
+            let conflict = (Keymap_data.binding_conflicts id (String.concat " " keys)).exact <> [] in
+            row ~gap:8 ~min_width:0 ~main:`space_between ~cross:`center
+              [ row ~gap:4
+                  (if (keys = [] || evaluated) && Keymap_data.custom (current ()) then
+                    [ Ui_components.button ~variant:`ghost ~size:`sm
+                        ~text:(T.t "keymap/reset")
+                        ~on_press:(fun _ ->
+                          let revision = Keymap_data.revision () in
+                          persist (T.t "keymap/reset-to-default")
+                            (fun () -> Keymap_data.reset_binding id);
+                          if Keymap_data.revision () <> revision then
+                            timer := Some (Ui_services.timers_timeout (fun () ->
+                              timer := None;
+                              if Ui_effect.alive ctx.ui_scope then close ()) 300)) [] ]
+                   else [])
+              ; row ~gap:8 ~cross:`center
+                  ((if evaluated && conflict then
+                      [hint "keymap/hint-reassign"
+                        [if Ui_services.env_is_mac () then "meta+enter" else "ctrl+enter"]]
+                    else [])
+                   @ (if (keys = [] || evaluated) && (Keymap_data.bindings id <> [] || conflict)
+                      then [hint "keymap/hint-remove" ["backspace"]] else [])
+                   @ [hint (if keys <> [] && not evaluated then "keymap/hint-cancel"
+                       else "keymap/hint-close") ["escape"]]) ])
+            (Signal.value draft) (Signal.value saved)
         ]
     ] ctx parent
 

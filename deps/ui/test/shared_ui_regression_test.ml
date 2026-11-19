@@ -882,12 +882,86 @@ let preview_reference_disclosure ~registry ~profile =
       check "Shift-clicking a preview count opens that block's sidebar references without expanding inline"
         (!opened=[child_id] && not (references_visible ()))))
 
+let keymap_recording_workflow ~registry ~profile ~finish =
+  let previous_flush = !Runtime.app_flush in
+  let previous_send = !Runtime.app_send in
+  let errors = ref 0 in
+  Runtime.app_send := (function
+    | Action.Toast_push { Model.toast_kind = "error"; _ } -> incr errors; true
+    | _ -> false);
+  let previous = Ui_services.storage_get "ls-shortcuts" in
+  Ui_services.storage_remove "ls-shortcuts";
+  Keymap_data.reload_shortcuts ();
+  let id = "ui/toggle-left-sidebar" in
+  let row = List.find (fun (r : Keymap_data.row) ->
+    Keymap_data.command_id r.title = id)
+    (Keymap_data.unique_rows (Keymap_data.current_items ())) in
+  let view ctx _ _ =
+    let st = Signal.state ctx.Lui_ui.ui_scheduler (Settings_page.initial_keymap ()) in
+    let editing = Signal.state ctx.ui_scheduler (Some id) in
+    Settings_page.keymap_row st editing ~key:"recorder-fixture" row in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+    ~reducer:(fun m () -> m) ~view () in
+  Runtime.app_flush := (fun () -> S.flush session);
+  let key key =
+    Keyboard_capture.dispatch
+      { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
+        alt = false; composing = false; key = Some key; key_char = None;
+        buttons = 0; button = 0; repeat = false; movement_x = 0.; movement_y = 0.;
+        default_prevented = false; target = None; touches = [];
+        detail = (fun _ -> None); detail_json = (fun _ -> None);
+        clipboard_get = (fun _ -> "");
+        clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot);
+        clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+        files = []; has_files = false; prevent_default = (fun () -> ());
+        stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) };
+    S.flush session in
+  let later f = ignore (Ui_services.timers_timeout f 450) in
+  let original = Keymap_data.bindings id in
+  key "F8";
+  later (fun () ->
+    check "shortcut recording auto-saves without an explicit Save action"
+      (Keymap_data.bindings id = original @ ["f8"]);
+    key "g";
+    key "Escape";
+    check "Escape cancels pending shortcut input without closing its recorder"
+      (Keyboard_capture.active ());
+    later (fun () ->
+      check "cancelled shortcut input cannot commit after its debounce"
+        (Keymap_data.bindings id = original @ ["f8"]);
+      key "Backspace";
+      check "idle Backspace removes the last committed shortcut"
+        (Keymap_data.bindings id = original);
+      let storage : Js.Json.t = Stub_dom.get_field Stub_dom.global "localStorage" in
+      let set_item : string -> string -> unit = Stub_dom.get_field storage "setItem" in
+      Stub_dom.set_field storage "setItem" (fun name value ->
+        if name = "ls-shortcuts" then failwith "shortcut storage fixture"
+        else set_item name value);
+      key "F9";
+      later (fun () ->
+        Stub_dom.set_field storage "setItem" set_item;
+        check "a rejected shortcut write preserves the saved bindings"
+          (Keymap_data.bindings id = original);
+        eqi "a rejected shortcut write reports its failure once" 1 !errors;
+        key "Escape";
+        ignore (Lui_app.dispose session.S.app);
+        check "recorder disposal releases its exclusive keyboard ownership"
+          (not (Keyboard_capture.active ()));
+        (match previous with
+         | Some value -> Ui_services.storage_set "ls-shortcuts" value
+         | None -> Ui_services.storage_remove "ls-shortcuts");
+        Keymap_data.reload_shortcuts ();
+        Runtime.app_send := previous_send;
+        Runtime.app_flush := previous_flush;
+        finish ())))
+
 let run_views ~registry ~profile ~finish =
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;
   preview_reference_disclosure ~registry ~profile;
   show_brackets_rendering ~registry ~profile;
-  let finish () = configured_continuations finish in
+  let finish () = keymap_recording_workflow ~registry ~profile
+    ~finish:(fun () -> configured_continuations finish) in
   configured_popup_ownership ();
   table_resize_transaction ();
   table_range_selection ();

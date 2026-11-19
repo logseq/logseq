@@ -1,7 +1,7 @@
 # LUI UX parity status
 
 The paired-audit baseline is upstream master **`2a0dce92`**; the latest fetch is
-**`a615af70`**. Settings, references and properties/icon child branches are now
+**`d85d8f6a`**. Settings, references and properties/icon child branches are now
 integrated. Their follow-up repairs and local editor/shell repairs still need
 combined-build browser acceptance. New upstream asset/clipboard changes have
 not been fully audited. Source/test completion is not browser acceptance. This
@@ -44,7 +44,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Area / finding | Remaining work |
 |---|---|
 | Table72 persisted seed duplicates | Previously written incorrect value entities are not automatically removed by the canonical UUID repair. No live graph cleanup has been performed. |
-| Table72 settings / marketplace | Keymap recorder Remove/Close footer; marketplace artwork, wrapping, layout and empty-filter state. |
+| Table72 marketplace | Artwork, wrapping, layout and empty-filter state. |
 | Table72 property popups | Set View Type and Property Configure sizing; tags selector maximum height. |
 | Table72 shell follow-up | N20 Escape-to-body, N3 menu origin, N6 tooltip dimensions, N7 origin/actions, N9 highlighted Create foreground, and N19 initial keyboard index still fail on the served build. |
 | Table72 built-in writes | The restoration delta's triggering path remains unknown. A native Master-fixture probe with the real pipeline changes neither refs nor raw-title during ensure or a rejected built-in Tag-to-Page rename. The SDK dispatches that rename through the guarded, temporary-connection outliner path. Actual transaction metadata/physical-datom evidence is still needed; do not attribute these changes to rename or the seed repair yet. |
@@ -75,6 +75,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Editor E14 | Containing-page preview headings retain the original block insertion root. Nested reference counts support inline disclosure and Shift-click sidebar references; restored reference panes do not register invisible editing roots. UI/native gates pass. Typed preview dimensions/spacing and combined-build acceptance remain visually unverified. |
 | Editor E22 | Indent, type `abc`, then undo twice now passes the shared cursor round-trip workflow at offset 0. The test records real transaction cursor options and restores mocked worker history; full DB/browser acceptance remains pending. No speculative caret change was made. |
 | Editor E23 | User dismissal clears a live context menu's selection/action bar. Late dismissal after command close preserves asynchronous ownership and newer selections. UI/native gates pass; integrated runtime acceptance remains pending. |
+| Table72 Keymap recorder | The binding editor now auto-evaluates after 400ms, accepts nonconflicting bindings, retains explicit conflict reassignment, and distinguishes pending Escape cancellation from idle Close. Backspace removes the last binding. Footer hints and conditional Reset follow Master; successful Reset closes after feedback. Shared workflows cover persistence, cancellation, removal and storage failure. Browser acceptance remains pending. |
 | Editor E20 / E36 | Footnote reading/anchor navigation and calculator precision/large integers are locally repaired with tests, not browser-accepted. Broader calculator grammar is not fully audited. |
 | Meta+Enter | Repeated authoritative task-status cycling passes shared tests; actual browser interaction remains unverified. |
 | Editor E31 | Route-only cross-page undo/redo is source-repaired and shared/native-tested, with save-before-navigation ordering and suppression of restored navigation entries. Integrated browser acceptance is pending. |
