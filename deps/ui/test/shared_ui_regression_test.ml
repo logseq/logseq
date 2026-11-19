@@ -2202,6 +2202,119 @@ let run_views ~registry ~profile ~finish =
               next rest) 0)) 0)
     in next [true;false]
   in
+  let embedded_indent_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_send = !Runtime.app_send and previous_flush = !Runtime.app_flush
+    and previous_page = !Runtime.current_page
+    and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+    and previous_settings = !Settings_state.st in
+    Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+    let entity id uuid title children =
+      {(Test_check.block ~children uuid title) with Model.block_db_id = Some id} in
+    let child = entity 214 "embed-child" "Child" [] in
+    let root = entity 213 "embed-target" "Target" [child] in
+    let link id uuid target = {(entity id uuid "" []) with Model.block_link = Some target} in
+    let first = link 210 "first-link" 213 and second = link 211 "second-link" 213
+    and page_link = link 212 "page-link" 207 in
+    let between = entity 215 "between" "Between" [] in
+    let page_root = {(entity 207 "linked-page" "Source" [root]) with Model.block_is_page = true} in
+    let host = {(Test_check.page
+      [{first with Model.block_embed_children = [root]}; between;
+       {second with Model.block_embed_children = [root]};
+       {page_link with Model.block_embed_children = [page_root]}]) with
+        Model.page_uuid = Some "host-page"; page_db_id = Some 208} in
+    let model = ref {Model.initial with repo = Some "embed-indent";
+      route = Model.Page "host-page"; route_page = Some host} in
+    let state = ref None and viewport = ref None in
+    Runtime.read_model := (fun () -> !model);
+    Runtime.current_page := Some host;
+    let moved = ref false and restored = ref false and writes = ref 0 and rejected = ref false in
+    let rec wire (block : Model.block) = Wire.Map
+      ([Wire.kw "db/id", Wire.Int (Option.get block.block_db_id);
+        Wire.kw "block/uuid", Wire.Uuid (Option.get block.block_uuid);
+        Wire.kw "block/title", Wire.String block.block_title;
+        Wire.kw "block/children", Wire.List (List.map wire block.block_children)]
+       @ (if block.block_is_page then [Wire.kw "block/name", Wire.String "source"] else [])
+       @ (match block.block_link with None -> [] | Some id ->
+         [Wire.kw "block/link", Wire.Map [Wire.kw "db/id",Wire.Int id]])) in
+    Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
+      if name = "thread-api/apply-outliner-ops" && !rejected then
+        Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "indent rejected") [@u])
+      else Js.Promise.resolve (match name,args with
+      | "thread-api/apply-outliner-ops", [_;Wire.Array operations;_] ->
+          List.iter (function
+            | Wire.Array [Wire.Keyword "indent-outdent-blocks";
+                Wire.Array [Wire.List [Wire.Uuid owner]; Wire.Bool indent; opts]] ->
+                incr writes;
+                if owner = "page-link" && indent then moved := true
+                else if owner = "page-link" && not indent
+                  && Option.bind (Wire.get opts "parent-original")
+                      (fun value -> Wire.map_get_uuid value "block/uuid") = Some "second-link" then begin
+                  moved := false; restored := true
+                end
+            | _ -> ()) operations;
+          Wire.Map [Wire.kw "result",Wire.Nil]
+      | "thread-api/get-page-blocks-tree", _ ->
+          let root = if !moved then {root with Model.block_children = page_link :: root.block_children} else root in
+          let blocks = match List.nth_opt args 1 with
+            | Some (Wire.Int 213) -> [root]
+            | Some (Wire.Int 207) -> [{page_root with Model.block_children = [root]}]
+            | _ -> [first;between;second] @ if !moved then [] else [page_link] in
+          Wire.List (List.map wire blocks)
+      | "thread-api/get-render-snapshots", [_;request] ->
+          Wire.Map [Wire.kw "slots", Wire.Map (List.map (fun key ->
+            Wire.Array [Wire.kw "resource";key], Wire.Map [Wire.kw "value",Wire.Int 2])
+            (Wire.elems (Option.value (Wire.get request "resources") ~default:Wire.Nil)))]
+      | "thread-api/get-file-content", _ -> Wire.String "{}"
+      | _ -> Wire.Nil));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let mounted = mount (fun _ context parent ->
+      let source = Signal.state context.Lui_ui.ui_scheduler !model in
+      state := Some source;
+      viewport := Some (Outline_viewport_state.create context (Signal.value source));
+      Lui_elements.column [] context parent) in
+    Runtime.app_send := (fun action ->
+      model := Update.update !model action;
+      Option.iter (fun source -> Runtime.signal_set source !model) !state;
+      true);
+    let page_scope = Outliner_projection.embedded_scope ~scope:"main" page_link in
+    Editor_state.set_collapsed "embed-target" true;
+    Editor_actions.select_single_in ~scope:page_scope "linked-page";
+    Editor_actions.indent_or_outdent ~indent:true;
+    check "Indenting an embedded root reveals only its target occurrence"
+      (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" first) "embed-target"
+       && not (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" second) "embed-target"));
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      S.flush mounted;
+      let rows = Signal.get (Option.get !viewport).Outline_viewport_state.rows in
+      check "Canonical embed relocation retains a visible selected root and live source scope"
+        (!moved && Editor_state.is_selected "linked-page"
+         && List.exists (function Outliner_projection.Block row ->
+              row.block.Model.block_uuid = Some "linked-page"
+              && row.scope = Editor_state.selection_scope () | _ -> false) rows);
+      Editor_actions.indent_or_outdent ~indent:false;
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        S.flush mounted;
+        check "Outdenting the relocated embed moves its link back to the host container"
+          (!restored && not !moved && Editor_state.is_selected "linked-page");
+        Editor_state.set (fun st -> {st with selected = Editor_state.String_set.empty; anchor = None});
+        let before = !writes in
+        Editor_actions.indent_or_outdent ~indent:true;
+        check "An empty embedded selection does not move a block" (!writes = before);
+        Editor_actions.select_single_in ~scope:page_scope "linked-page";
+        rejected := true;
+        Editor_actions.indent_or_outdent ~indent:true;
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "Rejected embedded moves retain selection ownership"
+            (Editor_state.is_selected "linked-page" && not !moved);
+          ignore (Lui_app.dispose mounted.S.app);
+          Runtime.worker := previous_worker; Runtime.read_model := previous_model;
+          Runtime.app_send := previous_send; Runtime.app_flush := previous_flush;
+          Runtime.current_page := previous_page;
+          Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+          Settings_state.st := previous_settings;
+          done_ ()) 20)) 20)) 20)
+  in
   let optimistic_reactions_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_flush = !Runtime.app_flush
@@ -3070,9 +3183,9 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    batch_property_check (fun () -> property_picker_check (fun () -> optimistic_reactions_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
+    batch_property_check (fun () -> property_picker_check (fun () -> embedded_indent_check (fun () -> optimistic_reactions_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
       (fun () -> property_text_many_check (fun () -> property_value_completion_check
-        (fun () -> next [false,false;false,true;true,false;true,true])))))))))
+        (fun () -> next [false,false;false,true;true,false;true,true]))))))))))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in

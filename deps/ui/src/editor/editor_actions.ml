@@ -1679,7 +1679,7 @@ let next_after_subtree ~scope uuid =
   | Some (b :: _) -> Some b
   | Some [] | None -> None
 
-let selection_neighbor ~scope uuid up =
+let selection_neighbor ~scope ~selected uuid up =
   match selection_projection ~scope with
   | None -> (if up then S.prev_visible ~scope uuid else next_after_subtree ~scope uuid)
   | Some rows ->
@@ -1689,13 +1689,17 @@ let selection_neighbor ~scope uuid up =
       match target with
       | None -> None
       | Some target ->
+          let unselected row = match row.Outliner_projection.block.Model.block_uuid with
+            | Some uuid -> not (S.String_set.mem uuid selected)
+            | None -> false in
           let rec scan previous = function
             | [] -> None
             | row :: rest when row == target ->
                 if up then Option.map (fun row -> row.Outliner_projection.block) previous
                 else List.find_map (fun row ->
-                  if row.Outliner_projection.depth <= target.depth then Some row.block else None) rest
-            | row :: rest -> scan (Some row) rest in
+                  if row.Outliner_projection.depth <= target.depth && unselected row
+                  then Some row.block else None) rest
+            | row :: rest -> scan (if unselected row then Some row else previous) rest in
           scan None rows
 
 (* Grow by explicit endpoints; reversing direction removes the active one. *)
@@ -1748,7 +1752,7 @@ let extend_selection up =
           S.set (fun st ->
               { st with S.selected = S.String_set.remove h sel; action_bar = true })
       | Some h -> (
-          let nbr = selection_neighbor ~scope:(S.selection_scope ()) h up in
+          let nbr = selection_neighbor ~scope:(S.selection_scope ()) ~selected:sel h up in
           match nbr with
           | None ->
               if not up then
@@ -1904,12 +1908,20 @@ let indent_or_outdent ~indent =
       if indent then
         List.iter
           (fun u ->
-            match S.prev_sibling u with
+            let original, scope = S.original_owner_in_scope ~scope:(S.interaction_scope ()) u in
+            match S.prev_sibling ~scope original with
             | Some s -> (
+                let target_scope = match s.Model.block_link with
+                  | Some _ -> Some (Outliner_projection.embedded_scope ~scope s)
+                  | None -> None in
+                let s = S.rendered_block ~scope s in
                 match s.Model.block_uuid with
                 | Some su ->
                     S.set_silent (fun st ->
-                        S.collapsed_ui_transform ~scope:(S.interaction_scope ()) su
+                      match target_scope with
+                      | Some scope -> S.expand_occurrence_transform ~scope su st
+                      | None ->
+                        S.collapsed_ui_transform ~scope su
                           false
                           { st with
                             S.collapsed =
@@ -1923,7 +1935,8 @@ let indent_or_outdent ~indent =
          get-first-block-original reads data-originalblockid off the ancestor
          .ls-block; the model parent is the embed block *)
       let parent_original =
-        match S.find_parent focus with
+        let original, scope = S.original_owner_in_scope ~scope:(S.interaction_scope ()) focus in
+        match S.find_parent_in_scope ~scope original with
         | Some (Some {Model.block_original = Some (original, _); _}, _) -> Some original
         | Some (Some p, _) when p.Model.block_link <> None ->
             p.Model.block_uuid

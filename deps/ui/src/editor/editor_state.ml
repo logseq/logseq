@@ -428,12 +428,20 @@ let rec selection_owner_scope scope =
    (the same block can render collapsed in the page but expanded as a
    sidebar/zoom root); "scope\x00uuid" keys the override sets *)
 let collapse_key scope uuid = selection_owner_scope scope ^ "\x00" ^ uuid
+let occurrence_collapse_key scope uuid = "occurrence:" ^ scope ^ "\x00" ^ uuid
+
+let occurrence_collapse_keys scope uuid =
+  let owner = selection_owner_scope scope in
+  List.filter_map (fun source ->
+    if selection_owner_scope source.source_scope = owner
+    then Some (occurrence_collapse_key source.source_scope uuid) else None) !extra_sources
 
 (* cljs get-block-collapsed: the per-scope UI override wins, then the
    global expanded override, then the persisted :block/collapsed? datom *)
 let collapsed_in ~scope (st : t) uuid =
   let k = collapse_key scope uuid in
-  if String_set.mem k st.expanded_ui then false
+  if String_set.mem (occurrence_collapse_key scope uuid) st.expanded_ui
+     || String_set.mem k st.expanded_ui then false
   else if String_set.mem k st.collapsed_ui then true
   else if String_set.mem uuid st.expanded then false
   else String_set.mem uuid st.collapsed
@@ -441,7 +449,8 @@ let collapsed_in ~scope (st : t) uuid =
 (* same check on the projected [collapse_view] carried by [collapse_sig] *)
 let collapsed_in_view ~scope (v : collapse_view) uuid =
   let k = collapse_key scope uuid in
-  if String_set.mem k v.cv_expanded_ui then false
+  if String_set.mem (occurrence_collapse_key scope uuid) v.cv_expanded_ui
+     || String_set.mem k v.cv_expanded_ui then false
   else if String_set.mem k v.cv_collapsed_ui then true
   else if String_set.mem uuid v.cv_expanded then false
   else String_set.mem uuid v.cv_collapsed
@@ -450,24 +459,30 @@ let is_collapsed_in ?(scope = "main") uuid = collapsed_in ~scope (read ()) uuid
 
 let collapsed_ui_transform ~scope uuid v (st : t) =
   let k = collapse_key scope uuid in
+  let expanded_ui = List.fold_left (fun expanded key -> String_set.remove key expanded)
+      st.expanded_ui (occurrence_collapse_keys scope uuid) in
   { st with
     collapsed_ui =
       (if v then String_set.add k st.collapsed_ui
        else String_set.remove k st.collapsed_ui)
   ; expanded_ui =
-      (if v then String_set.remove k st.expanded_ui
-       else String_set.add k st.expanded_ui)
+      (if v then String_set.remove k expanded_ui
+       else String_set.add k expanded_ui)
   }
+
+let expand_occurrence_transform ~scope uuid (st : t) =
+  {st with expanded_ui = String_set.add (occurrence_collapse_key scope uuid) st.expanded_ui}
 
 let set_collapsed ?(scope = "main") uuid v =
   if ready () then set (collapsed_ui_transform ~scope uuid v)
   else defer_init (collapsed_ui_transform ~scope uuid v)
 
 let clear_collapse_scope ~scope =
-  let prefix = collapse_key scope "" in
+  let prefixes = collapse_key scope "" :: occurrence_collapse_keys scope "" in
   let has_prefix s =
+    List.exists (fun prefix ->
     String.length s >= String.length prefix
-    && String.sub s 0 (String.length prefix) = prefix
+    && String.sub s 0 (String.length prefix) = prefix) prefixes
   in
   if ready () && selection_owner_scope scope = scope then
     set_silent (fun st ->
@@ -486,12 +501,14 @@ let expand_root ~scope uuid = set_collapsed ~scope uuid false
 let effective_collapsed_in ~scope uuid default (st : t) =
   if String_set.mem uuid st.expanded
      || String_set.mem (collapse_key scope uuid) st.expanded_ui
+     || String_set.mem (occurrence_collapse_key scope uuid) st.expanded_ui
   then false
   else collapsed_in ~scope st uuid || default
 
 let effective_collapsed_in_view ~scope uuid default (v : collapse_view) =
   if String_set.mem uuid v.cv_expanded
      || String_set.mem (collapse_key scope uuid) v.cv_expanded_ui
+     || String_set.mem (occurrence_collapse_key scope uuid) v.cv_expanded_ui
   then false
   else collapsed_in_view ~scope v uuid || default
 
@@ -572,14 +589,22 @@ let rec find_in blocks uuid =
 
 (* Field sources support editing lookup but do not own an outliner
    presentation. The distinction is explicit at each registration. *)
+let clear_occurrence_expansion ~scope =
+  let prefix = occurrence_collapse_key scope "" in
+  if ready () then set_silent (fun st -> {st with expanded_ui = String_set.filter (fun key ->
+    String.length key < String.length prefix
+    || String.sub key 0 (String.length prefix) <> prefix) st.expanded_ui})
+
 let remove_block_source ~scope =
-  extra_sources := List.filter (fun source -> source.source_scope <> scope) !extra_sources
+  extra_sources := List.filter (fun source -> source.source_scope <> scope) !extra_sources;
+  clear_occurrence_expansion ~scope
 
 let register_block_source ~scope ~kind source =
   add_block_source ~scope ~kind source;
   fun () ->
     extra_sources := List.filter (fun entry ->
-      entry.source_scope <> scope || entry.source_blocks != source) !extra_sources
+      entry.source_scope <> scope || entry.source_blocks != source) !extra_sources;
+    if Option.is_none (block_source scope) then clear_occurrence_expansion ~scope
 
 let builtin_blocks_in_scope scope =
   let page_scope =
@@ -760,13 +785,14 @@ let neighbor_of ?(scope = "main") uuid dir =
 let prev_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Prev
 let next_visible ?(scope = "main") uuid = neighbor_of ~scope uuid `Next
 
-let prev_sibling uuid =
-  match find_parent uuid with
+let prev_sibling ?scope uuid =
+  let scope = Option.value scope ~default:(interaction_scope ()) in
+  match find_parent_in_scope ~scope uuid with
   | Some (parent_opt, idx) when idx > 0 ->
       let siblings =
         match parent_opt with
         | Some p -> children_of p
-        | None -> blocks_in_scope (interaction_scope ())
+        | None -> blocks_in_scope scope
       in
       List.nth_opt siblings (idx - 1)
   | _ -> None

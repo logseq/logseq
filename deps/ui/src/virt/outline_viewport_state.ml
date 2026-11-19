@@ -173,6 +173,22 @@ let create ctx (model : Model.t Signal.signal) =
           let blocks = ref source.source_blocks in
           let remove = S.register_block_source ~scope ~kind:S.Outliner (fun () -> !blocks) in
           Hashtbl.add sources scope (blocks, remove)) projection.Outliner_projection.embedded_sources;
+    let selected_scope = S.selection_scope () in
+    (match Hashtbl.find_opt sources selected_scope with
+     | Some (blocks, _) when not (Hashtbl.mem next selected_scope) ->
+         let selected = S.selected () in
+         let selected_root = List.find_opt (fun (block : Model.block) ->
+           Option.fold ~none:false ~some:(fun uuid -> S.String_set.mem uuid selected)
+             block.block_uuid) !blocks in
+         Option.iter (fun (root : Model.block) ->
+           let original block = Option.map fst block.Model.block_original in
+           Option.iter (fun source ->
+             S.set_silent (fun st -> {st with S.selection_scope = source.Outliner_projection.source_scope}))
+             (List.find_opt (fun source -> List.exists (fun (block : Model.block) ->
+               block.block_uuid = root.block_uuid && original block = original root)
+               source.Outliner_projection.source_blocks)
+               projection.Outliner_projection.embedded_sources)) selected_root
+     | Some _ | None -> ());
     let retired = Hashtbl.fold (fun scope (_, remove) retired ->
       if Hashtbl.mem next scope then retired else (scope, remove) :: retired) sources [] in
     List.iter (fun (scope, remove) -> remove (); Hashtbl.remove sources scope) retired in

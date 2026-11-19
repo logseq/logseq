@@ -4005,7 +4005,17 @@ let test_scoped_keyboard_selection () =
       let expanded = S.collapsed_ui_transform ~scope:"second-embed" "linked" false collapsed in
       check "Expanding another occurrence synchronizes without a worker refresh"
         (List.for_all (fun scope -> not (S.collapsed_in ~scope expanded "linked"))
-          ["main"; "first-embed"; "second-embed"; "nested-embed"]))
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]);
+      let duplicate = {linking with Model.block_uuid = Some "duplicate-link"} in
+      model_stub := {Model.initial with route_page = Some
+        (page [linking; block "between" "Between"; duplicate; page_link; block "tail" "Tail"])};
+      S.extra_sources := [];
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "linked"; anchor = Some "linked"});
+      List.iter (fun expected -> A.extend_selection false;
+        check "Shift-Down skips duplicate selected occurrences and includes the next embed root"
+          (A.selected_uuids () = expected))
+        [["linked"; "between"]; ["linked"; "between"; "target"]])
 
 (* ---- Update.update: remaining arm ---- *)
 
