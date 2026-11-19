@@ -44,7 +44,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 
 | Area / finding | Remaining work |
 |---|---|
-| Table72 persisted seed duplicates | Previously written incorrect value entities are not automatically removed by the canonical UUID repair. No live graph cleanup has been performed. |
+| Table72 persisted seed duplicates | The canonical UUID repair prevents new duplicates but does not remove incorrectly persisted entities. Master `d85d8f6a` has no repair migration for these values: `frontend/worker/db/migrate.cljs` ends at schema 65.36 (journal repair), and `ensure-built-in-data-exists!` merges canonical entities without retracting legacy duplicates. Follow Master: do not add a cleanup migration. No live graph cleanup has been performed. |
 | Table72 built-in writes | The restoration delta's triggering path remains unknown. A native Master-fixture probe with the real pipeline changes neither refs nor raw-title during ensure or a rejected built-in Tag-to-Page rename. The SDK dispatches that rename through the guarded, temporary-connection outliner path. Actual transaction metadata/physical-datom evidence is still needed; do not attribute these changes to rename or the seed repair yet. |
 | Editor E1 / E12 | Embedded page/block root identity, title/structure and selection count; preserve source-block ownership while including embedded roots. |
 | Editor E10 | Rich/structured clipboard formats and cut/delete focus restoration, including the previous page-title editing position. Plain-text copy alone is insufficient. |
