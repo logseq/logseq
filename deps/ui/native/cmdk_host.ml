@@ -197,6 +197,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
                 h.click
                   { search_button =
                       el.Ui_services.closest "#search-button" <> None
+                  ; shift = ev.Ui_services.shift
                   ; inside_modal =
                       el.Ui_services.closest root <> None
                   ; item_key =

@@ -582,15 +582,15 @@ let title_actions ~(hover : bool Signal.state) ?(slots : t list = [])
       (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start
          ~style_class:"as-ghost" ~height:24 ~padding_horizontal:8
          ~padding_vertical:0
-         ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
+         ~foreground:"hsl(var(--muted-foreground))"
          ?accessibility_identifier:a11y ~label:text ~text ~on_press [])
   in
   let node =
     (Ui_components.with_props
        [ Ui_components.Prop.position `absolute
-       ; Ui_components.Prop.inset_top (-22.) ]
+       ; Ui_components.Prop.inset_top (-20.) ]
        (row ~key:"pta" ~accessibility_identifier:anchor_id
-       ~cross:`center ~gap:0
+       ~cross:`center ~gap:8
        ~style_class:"ls-page-title-actions"
        ~opacity:(reactive (fun h -> if h then 1. else 0.) (Signal.value hover))
        ~on_pointer_enter:(fun _ ->

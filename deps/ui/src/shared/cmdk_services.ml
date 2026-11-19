@@ -31,6 +31,7 @@ let url_pattern = {|[^\s\(\[]+://[^\s\)\]]+|}
    host adapter runs the closest()/attr lookups *)
 type click_ev =
   { search_button : bool (* target inside #search-button *)
+  ; shift : bool
   ; inside_modal : bool (* target inside .cp__cmdk__modal *)
   ; item_key : string option (* closest [data-item-key] value *)
   }

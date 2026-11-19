@@ -6,7 +6,7 @@
    The LUI `tooltip` kind can't serve this: it anchors to its own
    parent trigger child, while this service tooltips arbitrary
    foreign elements found by delegated document listeners. So the
-   bubble mounts as a singleton `popover` node emitted from
+   bubble mounts as a singleton fixed column emitted from
    popups_view's fragment, driven by the state signal below; placement
    is the old arithmetic — mount under the trigger, measure the
    rendered bubble, then clamp to the viewport and flip above when

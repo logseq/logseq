@@ -895,6 +895,15 @@ let handle_keydown st (ev : Svs.key_ev) : Svs.key_answer =
           if not (S.get st).S.open_ then focus_body_after_close st;
           { Svs.prevent = true; stop = true })
         else no
+    | "Tab" when not (ev.Svs.shift || ev.Svs.meta || ev.Svs.ctrl || ev.Svs.alt)
+        && Option.fold ~none:false
+             ~some:(fun el -> el.Ui_services.closest ".cp__cmdk-search-input" <> None)
+             (Ui_services.dom_active_element ()) ->
+        (match Ui_services.dom_query ".cp__cmdk__modal .cp__cmdk-hint" with
+         | Some action ->
+             action.Ui_services.focus ();
+             { Svs.prevent = true; stop = true }
+         | None -> no)
     | "ArrowDown" ->
         if mod_key then
           Option.iter (fun gid -> S.toggle_expand st gid true) (S.hl_group st)
@@ -944,7 +953,11 @@ let handle_click st (ev : Svs.click_ev) =
              (fun (it : S.item) -> it.S.ikey = key)
              (Array.to_list (S.flat_items v))
          with
-         | Some it -> S.run_item st it
+         | Some it ->
+             if ev.Svs.shift then begin
+               S.set_hl st it.S.idx true;
+               S.run_highlighted_sidebar st
+             end else S.run_item st it
          | None -> ())
     | None -> ())
 

@@ -578,21 +578,17 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
              contributes no flow width *)
           stack ~key:("hx-" ^ key)
             ~on_pointer_enter:enter ~on_pointer_leave:leave
-            [ (* the link kind renders a real <a> so a.hash-symbol css
-                 keeps matching; href="#" is the cljs decorative-anchor
-                 convention *)
-              Ui_parts.float_prop Lui_protocol.Opacity
+            [ Ui_parts.float_prop Lui_protocol.Opacity
                 ~value:(reactive (fun h -> if h then 0. else 0.7) (Signal.value hov))
                 (Ui_components.with_props
                    [ Ui_components.Prop.font_size "0.875rem"
                    ; Ui_components.Prop.font_weight 400
                    ; Ui_components.Prop.user_select `none ]
-                   (link ~key:("th-" ^ key)
-                      ~url:"#" ~target:`self_
+                   (text ~key:("th-" ^ key)
                       ~style_class:"hash-symbol"
                       ~foreground:
                         "var(--lx-accent-11, var(--ls-tag-text-color))"
-                      ~text:"#"
+                      ~value:"#"
                       ~on_pointer_enter:enter ~on_pointer_leave:leave
                       []))
             ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing

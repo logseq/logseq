@@ -519,7 +519,7 @@ let nav_group ms st =
                             text ~font_size:"0.75rem"
                               ~line_height:"1rem"
                               ~value:(t "sidebar.left/navigations") [] ]) ]
-               ; box ~key:"nav-more" ~style_class:"b"
+               ; row ~key:"nav-more" ~style_class:"b" ~cross:`center
                    ~width:28 ~height:32 ~main:`center
                    ~opacity_signal:
                      (Signal.map
@@ -533,7 +533,7 @@ let nav_group ms st =
                           [ Ui_components.Prop.position `relative
                           ; Ui_components.Prop.inset_top (-2.)
                           ; Ui_components.Prop.opacity 0.8 ]
-                          (row ~style_class:"as-edit" ~accessibility_identifier:"nav-edit-trigger"
+                          (row ~grow:1. ~style_class:"as-edit" ~accessibility_identifier:"nav-edit-trigger"
                              [ Ui_components.with_props
                                  [ Ui_components.Prop.margin_left 7 ]
                                  (icon_ ~size:14 "filter-edit") ])) ] ])

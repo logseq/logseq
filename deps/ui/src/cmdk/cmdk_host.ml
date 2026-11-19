@@ -200,6 +200,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
             | Some el ->
                 h.click
                   { search_button = D.el_closest el "#search-button" <> None
+                  ; shift = D.ev_shift ev
                   ; inside_modal =
                       D.el_closest el root <> None
                   ; item_key =

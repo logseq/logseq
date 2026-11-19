@@ -697,9 +697,7 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
     (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28
        ~padding_vertical:4 ~padding_horizontal:12
        ~style_class:"cp__cmdk-hint"
-       ~foreground:
-         "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          hsl(var(--muted-foreground))))"
+       ~foreground:"hsl(var(--foreground))"
        [ row ~key:"inner" ~cross:`center ~gap:4 children ])
 
 (* -- cmdk misc -------------------------------------------------------- *)
@@ -748,12 +746,17 @@ let tooltip_content ~key ~at ~arrow_x ~side children : t =
       int_of_float (Float.max 0. (Float.min 320. (viewport -. 10.)))) viewport)
     (with_props
     [ Prop.z_index 50
+    ; Prop.position `fixed
+    ; Prop.inset_left (fst at)
+    ; Prop.inset_top (snd at)
+    ; Prop.font_size "0.75rem"
+    ; Prop.line_height "16px"
     ; Prop.pointer_enabled false
     ; ( Prop.shadow
           "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ]
-    (popover ~transition:popover_transition ~key ~accessibility_identifier:"lui-tooltip" ~at
+    (column ~key ~accessibility_identifier:"lui-tooltip"
        ~style_class:"ui__tooltip-content" ~gap:6
        ~data_attrs:[ "role", "tooltip" ]
        ~padding_horizontal:12 ~padding_vertical:6

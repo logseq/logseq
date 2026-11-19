@@ -4164,6 +4164,55 @@ let run_views ~registry ~profile ~finish =
     ((Cmdk_state.get footer_st).filter = Some G_commands
      && (Cmdk_state.get footer_st).open_);
   let pages = [item 0 (Open_page "first-page"); item 1 (Open_page "second-page")] in
+  let previous_active : Js.Json.t = Stub_dom.get_field document "activeElement" in
+  let previous_query : string -> Js.Json.t = Stub_dom.get_field document "querySelector" in
+  let search_input = Stub_dom.make_element "input"
+  and footer_action = Stub_dom.make_element "button" in
+  Stub_dom.set_field search_input "closest" (fun selector ->
+    if selector=".cp__cmdk-search-input" then search_input else Js.Json.null);
+  Stub_dom.set_field footer_action "focus" (fun () ->
+    Stub_dom.set_field document "activeElement" footer_action);
+  let has_footer = ref true in
+  Stub_dom.set_field document "querySelector" (fun selector ->
+    if selector=".cp__cmdk__modal .cp__cmdk-hint" then
+      (if !has_footer then footer_action else Js.Json.null)
+    else previous_query selector);
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field document "activeElement" previous_active;
+    Stub_dom.set_field document "querySelector" previous_query) (fun () ->
+    select pages 0;
+    Stub_dom.set_field document "activeElement" search_input;
+    let tab shift = Cmdk_view.handle_keydown footer_st
+      {key="Tab";meta=false;ctrl=false;shift;alt=false;composing=false} in
+    let answer = tab false in
+    check "Tab from palette search transfers focus to the footer action"
+      (answer.prevent && answer.stop
+       && Stub_dom.get_field document "activeElement" == footer_action);
+    Stub_dom.set_field document "activeElement" search_input;
+    check "Reverse Tab retains default focus traversal" (not (tab true).prevent);
+    has_footer:=false;
+    select [] (-1);
+    check "An empty palette without footer actions does not swallow Tab"
+      (not (tab false).prevent));
+  List.iter (fun (action, shift, expected) ->
+    select [item 0 action] 0;
+    Cmdk_view.handle_click footer_st
+      {search_button=false; inside_modal=true; item_key=Some "0"; shift};
+    check "Document capture preserves pointer navigation modifiers"
+      (!footer_effects = [expected] && not (Cmdk_state.get footer_st).open_))
+    [Open_page "first-page", true, "sidebar:first-page";
+     Open_block "first-block", true, "sidebar:first-block";
+     Open_page "first-page", false, "#/page/first-page"];
+  select [] (-1);
+  Cmdk_view.handle_click footer_st
+    {search_button=false; inside_modal=true; item_key=Some "0"; shift=true};
+  check "An empty palette cannot dispatch a stale pointer result"
+    (!footer_effects=[] && (Cmdk_state.get footer_st).open_);
+  select pages 0;
+  Cmdk_view.handle_click footer_st
+    {search_button=false; inside_modal=true; item_key=Some "absent"; shift=true};
+  check "Unknown document result keys do not navigate"
+    (!footer_effects=[] && (Cmdk_state.get footer_st).open_);
   List.iter (fun (action, modifiers, expected) ->
     select [item 0 action] 0;
     let pointer = mount (fun _ context parent ->
