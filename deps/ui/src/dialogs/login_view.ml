@@ -458,7 +458,7 @@ let action_link fields ~key ctx text_ tab =
   Ui_components.with_props
     [ Ui_components.Prop.cursor `pointer
     ; Ui_components.Prop.hover_opacity 0.8
-    ; Ui_components.Prop.opacity 0.6
+    ; Ui_components.Prop.opacity 0.8
     ; Ui_components.Prop.font_size "0.875rem"
     ; Ui_components.Prop.font_weight 400
     ; Ui_components.Prop.line_height "1.25rem"
@@ -488,7 +488,7 @@ let login_panel ctx fields =
       (column ~key:"lg-foot" ~cross:`center ~gap:0
         ~style_class:"ls-auth-foot"
         [ row ~key:"f1" ~gap:4 ~cross:`center
-            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.5 ]
+            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
               (text ~key:"f1a" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
                 ~line_height:"1.25rem"
@@ -497,7 +497,7 @@ let login_panel ctx fields =
             ; action_link fields ~key:"f1b" ctx (I18n.t "account/sign-up")
                 Signup ]
         ; row ~key:"f2" ~gap:4 ~cross:`center
-            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.5 ]
+            [ Ui_components.with_props [ Ui_components.Prop.opacity 0.8 ]
               (text ~key:"f1d" ~style_class:"ls-auth-muted"
                 ~font_size:"0.875rem"
                 ~line_height:"1.25rem" ~value:(I18n.t "account/or") [])

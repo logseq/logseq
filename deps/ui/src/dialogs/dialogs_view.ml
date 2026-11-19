@@ -50,7 +50,9 @@ let dialog_spec name =
   | "plugin-readme" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.86]
   | "export-page" -> 24, Ui_components.dialog_width, [Ui_components.Prop.max_height_viewport 0.8]
   | "new-graph" | "add-graph" -> 24, (fun _ -> 500.), []
-  | "login" -> 24, (fun _ -> 488.), [Ui_components.Prop.padding_top 0]
+  | "login" -> 24, (fun viewport ->
+      if viewport >= 640. then 488. else viewport *. 0.7 +. 48.),
+      [Ui_components.Prop.padding_top 0]
   | _ -> 24, Ui_components.dialog_width, []
 
 (* cljs shui/dialog-open! :title — h2.ui__dialog-title (omitted when none) *)

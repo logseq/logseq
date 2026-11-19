@@ -60,7 +60,7 @@ add raw DOM, CSS-layout, or untyped widget escape hatches.
 | Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
 | Marketplace cards | Residual title truncation, icon artwork and description wrapping. |
 | Marketplace controls | Source repaired: statistics span the card's full footer instead of starting after the thumbnail. Search margins/focus opacity, 30px toolbar actions, applied filter/sort dots and the responsive muted contribution link now follow Master's source. Filter/search workflows pass on both recording hosts. Master's empty-filter search is muted (0.7 opacity), not disabled: its input has no disabled binding and remains editable. Exact spacing and combined-build appearance remain visually unverified. |
-| Login | Residual modal sizing and tone. |
+| Login | Source repaired: below sm the modal follows Master's 70vw form plus 48px horizontal padding; desktop retains the 488px shell. Footer prompts and navigation links use the login stylesheet's effective 0.8 opacity, not the overridden 0.5/0.6 utility values. Existing authentication view workflows cover submission/error/empty behavior. Geometry and tone remain visually unverified. |
 | Signup validation | Native email-validity and required-field validation behavior is not aligned. Entry-screen appearance does not establish submission parity. |
 
 ### Source-repaired or reviewed, still awaiting integrated acceptance
