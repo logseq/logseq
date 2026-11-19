@@ -2444,7 +2444,7 @@
                         (let [files (array-seq files)]
                           (when (seq files)
                             (set-saving! true)
-                            (-> (editor-assets/db-based-save-assets! repo files)
+                            (-> (editor-assets/db-based-save-assets! repo files :save-only? true)
                                 (p/then
                                  (fn [saved-assets]
                                    (let [saved-assets (vec (remove nil? saved-assets))]

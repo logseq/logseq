@@ -10,6 +10,7 @@ on:
       - 'cli/**'
       - 'cli-e2e/**'
       - 'deps/db-sync/**'
+      - 'deps/graph-lifecycle/**'
       - 'src/main/frontend/worker/**'
       - 'src/test/frontend/worker/**'
       - '.github/workflows/cli-sync-stress.yml'
@@ -23,6 +24,7 @@ on:
       - 'cli/**'
       - 'cli-e2e/**'
       - 'deps/db-sync/**'
+      - 'deps/graph-lifecycle/**'
       - 'src/main/frontend/worker/**'
       - 'src/test/frontend/worker/**'
       - '.github/workflows/cli-sync-stress.yml'
@@ -72,6 +74,12 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-cli-sync-stress-maven-v1-${{ github.job }}-java-${{ env.JAVA_VERSION }}-clojure-${{ env.CLOJURE_VERSION }}-babashka-${{ env.BABASHKA_VERSION }}-${{ hashFiles('**/deps.edn', '**/nbb.edn', '**/bb.edn') }}
 
       - name: Set up OCaml
         uses: ocaml/setup-ocaml@v3

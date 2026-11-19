@@ -130,12 +130,21 @@
                         (case (first args)
                           :thread-api/get-page-route-info
                           (p/resolved
-                           (when (= "Alias" (last args))
+                           (condp = (last args)
+                             "Alias"
                              {:page-id 42
                               :page-uuid #uuid "22222222-2222-2222-2222-222222222222"
                               :page-title "Alias"
                               :alias-source-id 43
-                              :alias-source-uuid source-uuid}))
+                              :alias-source-uuid source-uuid}
+
+                             source-uuid
+                             {:page-id 43
+                              :page-uuid source-uuid
+                              :page-title "Source"
+                              :route/eligible-for-recent? true}
+
+                             nil))
 
                           :thread-api/get-journal-page-by-day
                           (p/resolved {:db/id 99})

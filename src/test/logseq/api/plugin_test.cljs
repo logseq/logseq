@@ -96,7 +96,14 @@
          #"write file denied"
          (#'api-plugin/assert-storage-path! root "/etc/passwd" "write")))
     (is (= (str root "/notes.txt")
-           (#'api-plugin/storage-file-path root "notes.txt" "write")))))
+           (#'api-plugin/storage-file-path root "notes.txt" "write")))
+    (is (= (str root "/storages/demo")
+           (#'api-plugin/storage-dir root "storages/demo")))
+    (doseq [sub-root [".." "../outside" "storages/../../outside"]]
+      (is (thrown-with-msg?
+           js/Error
+           #"access file denied"
+           (#'api-plugin/storage-dir root sub-root))))))
 
 (deftest binary-content-detection-and-storage-root
   (is (true? (#'api-plugin/binary-content? (js/ArrayBuffer. 8))))

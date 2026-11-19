@@ -10,6 +10,7 @@
             [electron.configs :as cfgs]
             [electron.logger :as logger]
             [electron.mcp-server :as desktop-mcp-server]
+            [electron.server-auth :as server-auth]
             [electron.utils :as utils]
             [electron.window :as window]
             [promesa.core :as p]))
@@ -82,12 +83,7 @@
 
 (defn- validate-auth-token
   [token]
-  (let [token (string/replace token "Bearer " "")]
-    (when-let [valid-tokens (cfgs/get-item :server/tokens)]
-      (when (or (string/blank? token)
-                (not (some #(or (= % token)
-                                (= (:value %) token)) valid-tokens)))
-        (throw (js/Error. "Access Denied!"))))))
+  (server-auth/validate-auth-token token (cfgs/get-item :server/tokens)))
 
 (defn- api-pre-handler!
   [^js req ^js rep callback]

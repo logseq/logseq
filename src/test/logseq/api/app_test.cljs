@@ -90,9 +90,12 @@
         (api-app/relaunch)
         (api-app/quit)
         (api-app/open_external_link "https://logseq.com")
+        (api-app/open_external_link "http://localhost:3001")
         (api-app/open_external_link "javascript:alert(1)")
+        (api-app/open_external_link "file:///tmp/inert-test.txt?ref=https://logseq.com")
+        (api-app/open_external_link "javascript:void(0)//https://logseq.com")
         (is (= [["relaunchApp"] ["quitApp"]] @ipc-calls))
-        (is (= ["https://logseq.com"] @opened)))
+        (is (= ["https://logseq.com" "http://localhost:3001"] @opened)))
       (finally
         (set! (.-apis js/globalThis) previous-apis)))))
 

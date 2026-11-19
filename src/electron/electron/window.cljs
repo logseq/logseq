@@ -32,7 +32,7 @@
   ([url {:keys [graph] :as opts}]
    (let [win-state (windowStateKeeper (clj->js {:defaultWidth 980 :defaultHeight 700}))
          native-titlebar? (cfgs/get-item :window/native-titlebar?)
-         url (if graph (str url "#/?graph=" graph) url)
+         url (if graph (str url "#/?graph=" (js/encodeURIComponent graph)) url)
          spell-check-cfg (cfgs/get-item :spell-check)
          spell-check-enabled? (spell-check/session-spellcheck-enabled? spell-check-cfg)
          [initial-spell-check-enabled? ready-spell-check-enabled?]

@@ -7,6 +7,7 @@
   (assert db-id (number? db-id))
   (when-not (:db/restoring? (state/get-state))
     (let [pages (state/get-recent-pages)]
+      ;; Keep existing positions so revisits do not reshuffle sidebar shortcuts.
       (when-not ((set pages) db-id)
         (let [new-pages (vec (take 15 (distinct (cons db-id pages))))]
           (state/set-recent-pages! new-pages))))))

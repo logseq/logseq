@@ -12,9 +12,10 @@
    [frontend.worker.undo-redo :as worker-undo-redo]
    [lambdaisland.glogi :as log]
    [logseq.common.util :as common-util]
+   [logseq.common.util.date-time :as date-time-util]
    [logseq.db :as ldb]
    [logseq.db.common.order :as db-order]
-   [logseq.outliner.op :as outliner-op]
+   [logseq.outliner.input :as outliner-input]
    [logseq.outliner.recycle :as outliner-recycle]))
 
 (def ^:private recycle-gc-kv :logseq.kv/recycle-last-gc-at)
@@ -106,16 +107,28 @@
       (let [started-at (perf-time-ms)
             perf-id (:ui/perf-id opts)
             editor-row-uuids (:editor-row-uuids opts)
+            stress-uuids (:stress/create-tree-uuids opts)
             operation-opts (dissoc opts
                                    :affected-block-uuids
                                    :editor-row-uuids
                                    :pending-editor-info
-                                   :return-updated-blocks?)
+                                   :return-updated-blocks?
+                                   :stress/create-tree-uuids)
             apply-started-at (perf-time-ms)
             operation-result (worker-util/profile
                               "apply outliner ops"
-                              (outliner-op/apply-ops! conn ops operation-opts))
+                              (outliner-input/apply-ops!
+                               conn ops (assoc operation-opts :logseq.outliner.input/parse-options
+                                               {:repo repo
+                                                :user-config (get-in @worker-state/*state [:config repo])
+                                                :date-formatter (or (:logseq.property.journal/title-format
+                                                                     (d/entity @conn :logseq.class/Journal))
+                                                                    date-time-util/default-journal-title-formatter)})))
             applied-at (perf-time-ms)
+            stress-snapshot (when stress-uuids
+                              {:stress/returned-result (some? operation-result)
+                               :stress/present (worker-plain/stress-uuid-presence @conn stress-uuids)
+                               :stress/at-ms (js/Date.now)})
             delta (db-listener/take-outliner-op-delta! perf-id)
             listener-perf (db-listener/take-outliner-op-perf! perf-id)
             listener-at (perf-time-ms)
@@ -126,6 +139,7 @@
                            editor-row-uuids))
             response (cond-> {:result (worker-plain/worker-plain-value
                                        @conn operation-result)}
+                       stress-snapshot (assoc :stress/create-tree-apply stress-snapshot)
                        delta (assoc :delta delta)
                        (seq editor-row-uuids)
                        (assoc :editor-row-uuids editor-row-uuids

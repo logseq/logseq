@@ -13,6 +13,7 @@
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
             [logseq.db.common.entity-plus :as entity-plus]
+            [logseq.db.common.journal :as db-journal]
             [logseq.db.common.order :as db-order]
             [logseq.db.frontend.class :as db-class]
             [logseq.db.frontend.property.build :as db-property-build]
@@ -278,14 +279,15 @@
            (when (or page-tag-update? move-to-library? move-under-page?)
              (let [block-before (d/entity db-before id)
                    block-after (d/entity db-after id)
-                   ;; When a block becomes a page its descendant blocks still point
-                   ;; :block/page at the old page; re-point them at the new page.
-                   children-page-tx (fn []
+                   ;; Re-point descendant :block/page at the surviving page.
+                   ;; block->page / move-to-library: descendants still point at the
+                   ;; old page. page->block: they still point at the demoted page.
+                   children-page-tx (fn [page-id]
                                       (keep (fn [child-id]
                                               (let [child (d/entity db-after child-id)]
                                                 (when (and child (not (ldb/page? child)))
                                                   {:db/id child-id
-                                                   :block/page id})))
+                                                   :block/page page-id})))
                                             (ldb/get-block-full-children-ids db-after id)))]
                (when block-after
                  (cond
@@ -296,7 +298,7 @@
                       :block/name (common-util/page-name-sanity-lc (:block/title block-after))
                       :block/tags :logseq.class/Page}
                      [:db/retract id :block/page]]
-                    (children-page-tx))
+                    (children-page-tx id))
 
                    ;; page moved under another page
                    (and move-under-page? (ldb/internal-page? block-after))
@@ -318,7 +320,7 @@
                                     (when (or (ldb/class? block-parent) (ldb/property? block-parent))
                                       [[:db/retract id :block/parent]
                                        [:db/retract id :block/order]]))]
-                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx)))
+                     (concat ->page-tx (move-parent-to-library-tx block-parent) (children-page-tx id)))
 
                    ;; page->block
                    (and block-before (not (:added datom)) (ldb/internal-page? block-before))
@@ -329,8 +331,10 @@
                                            parent
                                            (recur (:block/parent parent)))))]
                      (when parent-page
-                       [[:db/retract id :block/name]
-                        [:db/add id :block/page (:db/id parent-page)]]))))))))
+                       (concat
+                        [[:db/retract id :block/name]
+                         [:db/add id :block/page (:db/id parent-page)]]
+                        (children-page-tx (:db/id parent-page)))))))))))
        tx-data))))
 
 (defn- add-missing-properties-to-typed-display-blocks
@@ -574,24 +578,42 @@
 (def ^:private journal-protected-update-attrs
   #{:block/title :block/name})
 
+(defn- stored-attr-value
+  [db eid attr]
+  (:v (first (d/datoms db :eavt eid attr))))
+
+(defn- journal-title-format-changed?
+  [{:keys [db-before db-after]}]
+  (not= (:logseq.property.journal/title-format (d/entity db-before :logseq.class/Journal))
+        (:logseq.property.journal/title-format (d/entity db-after :logseq.class/Journal))))
+
+(defn- journal-title-format-tx
+  [{:keys [db-after] :as tx-report}]
+  (when (journal-title-format-changed? tx-report)
+    (db-journal/title-format-tx db-after)))
+
 (defn- ensure-journal-page-protected-attrs-not-updated!
-  [{:keys [db-before tx-data]}]
-  (when-let [violation
+  [{:keys [db-before db-after tx-data] :as tx-report}]
+  (let [formatted-values (when (journal-title-format-changed? tx-report)
+                           (db-journal/title-format-values db-after))]
+    (when-let [violation
              (some (fn [{:keys [e a v added]}]
                      (when (and added
                                 (contains? journal-protected-update-attrs a))
-                       (let [before-ent (d/entity db-before e)]
+                       (let [before-ent (d/entity db-before e)
+                             before-v (stored-attr-value db-before e a)]
                          (when (and before-ent
                                     (ldb/journal? before-ent)
-                                    (not= (get before-ent a) v))
+                                    (not= before-v v)
+                                    (not= v (get-in formatted-values [e a])))
                            {:type :journal-page-protected-attr-updated
                             :entity-id e
                             :attr a
-                            :before (get before-ent a)
+                            :before before-v
                             :after v
                             :journal-day (:block/journal-day before-ent)}))))
                    tx-data)]
-    (throw (ex-info "journal page protected attr updated" violation))))
+      (throw (ex-info "journal page protected attr updated" violation)))))
 
 (defn- projected-reference-content-datom?
   [datom]
@@ -691,7 +713,10 @@
                      (not (rtc-tx-or-download-graph? tx-meta)))
             (ensure-journal-page-protected-attrs-not-updated! tx-report))
         extra-tx-data (when derive-extra-data?
-                        (compute-extra-tx-data tx-report))
+                        (concat
+                         (compute-extra-tx-data tx-report)
+                         (when-not (rtc-tx-or-download-graph? tx-meta)
+                           (journal-title-format-tx tx-report))))
         tx-report* (if (seq extra-tx-data)
                      (let [result (d/with db-after extra-tx-data)]
                        (assoc tx-report
@@ -729,7 +754,9 @@
                              (:tx-data replace-tx-report))]
     (assoc tx-report'
            :tx-data full-tx-data
-           :tx-meta tx-meta
+           :tx-meta (cond-> tx-meta
+                      (journal-title-format-changed? tx-report)
+                      (assoc :gen-undo-ops? false))
            :db-before (:db-before tx-report)
            :db-after (or (:db-after tx-report')
                          (:db-after tx-report)))))
