@@ -677,7 +677,7 @@ let display_type_el inst : t =
           in
           ignore
             (P.show_select ~anchor
-               ~placeholder:(I.t "property.built-in/view-type")
+               ~placeholder:(I.tf "property/set-placeholder" [ I.t "property.built-in/view-type" ])
                ~show_check:true ~selected_values:[(V.get inst).V.display_type]
                ~item_icon:(fun item -> Some (Icons.name_ref (match item.P.si_value with
                  | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table")))
