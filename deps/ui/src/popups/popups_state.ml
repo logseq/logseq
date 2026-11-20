@@ -834,14 +834,19 @@ let page_items_for t kind q =
           (List.map wrap
              (List.filter (fun ti -> I18n.contains_ci ti q) !(t.titles)))
   in
+  (* cljs <get-block by name is case-insensitive; suppress New page/tag
+     when an exact parentless page/journal (or class/alias) exists. *)
+  let title_eq a b =
+    S.equal (S.lowercase_ascii a) (S.lowercase_ascii b)
+  in
   let exact =
     match kind with
     | Tag_search ->
         (* cljs search-pages db-tag?: the "New tag" row is suppressed when
            the query exactly names an existing class (internal ones like
            Page count) or a class alias *)
-        List.exists (fun ti -> S.equal ti q) !(t.tag_exact_titles)
-    | _ -> List.exists (fun ti -> S.equal ti q) !(t.page_exact_titles)
+        List.exists (fun ti -> title_eq ti q) !(t.tag_exact_titles)
+    | _ -> List.exists (fun ti -> title_eq ti q) !(t.page_exact_titles)
   in
   (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
      leading starts-with match, else first *)
@@ -1112,11 +1117,7 @@ let load_titles t =
        Runtime.invoke1 "thread-api/get-all-page-titles"
          (Wire.String graph)
      in
-     let rows =
-       match w with
-       | Wire.Array xs | Wire.List xs -> xs
-       | _ -> []
-     in
+     let rows = Wire.elems w in
      let titles =
        List.filter_map
          (fun row ->
@@ -1127,7 +1128,8 @@ let load_titles t =
      in
      (* get-all-page-titles intentionally returns strings, so resolve the
         suppression set separately: ordinary names need an internal page
-        or journal with no parent. Tags retain their class/alias check. *)
+        or journal with no parent. Tags retain their class/alias check.
+        thread-api/q relations decode as Set — use Wire.elems. *)
      let* exact =
        Runtime.invoke2 "thread-api/q" (Wire.String graph)
          (Wire.Array
@@ -1137,14 +1139,12 @@ let load_titles t =
      if session = !(t.session) && graph = repo () then (
      t.titles := titles;
      t.page_exact_titles :=
-       (match exact with
-        | Wire.Array xs | Wire.List xs ->
-            List.filter_map
-              (function
-                | Wire.Array [ Wire.String title ] | Wire.List [ Wire.String title ] -> Some title
-                | _ -> None)
-              xs
-        | _ -> []);
+       List.filter_map
+         (fun row ->
+           match Wire.elems row with
+           | [ Wire.String title ] -> Some title
+           | _ -> None)
+         (Wire.elems exact);
      (match (get t).ac with
       | Some ({ kind = Page_ref; query; _ } as ac) when String.trim query <> "" ->
           run_node_search t ac
