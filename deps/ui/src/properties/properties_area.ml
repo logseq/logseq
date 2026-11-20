@@ -328,12 +328,13 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
    refresh that republishes identical rows would otherwise no-op. *)
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
  fun context parent ->
+  (* show_hidden_signal already returns a Signal.signal *)
   let hidden_sig = S.show_hidden_signal context in
   (reactive
      (fun _show ->
        column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
          (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d))
-     (Signal.value hidden_sig))
+     hidden_sig)
     context parent
 
 (* ---------- pills (block-below) ---------- *)
