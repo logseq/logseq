@@ -67,6 +67,12 @@ let modifier_select ev uuid =
   let meta = ev.Ui_services.meta || ev.Ui_services.ctrl in
   if not (shift || meta) then false
   else (
+    (* cljs block-content-on-pointer-down saves the other editing block,
+       then highlight-selection-area! exits edit into the range. Staying
+       in edit lets a later enter/clear wipe the selection. *)
+    (match S.editing () with
+     | Some _ -> Editor_actions.exit_edit ~select:false
+     | None -> ());
     S.set (fun st -> {st with S.selected_footer = None});
     suppress_click := true;
     ev.Ui_services.prevent_default ();

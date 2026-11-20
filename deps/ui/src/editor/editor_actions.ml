@@ -774,8 +774,12 @@ let rec exit_edit ~select =
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
                   ; anchor = (if select then Some e.uuid else st.anchor)
-                    (* Escape selects the block without raising the action bar. *)
-                  ; action_bar = false
+                    (* Escape / shift+arrow-from-edit select without the
+                       action bar (master show-action-bar! checks selection
+                       before exit lands). Non-select exits preserve any
+                       bar the caller already set (shift-click range). *)
+                  ; action_bar =
+                      (if select then false else st.action_bar)
                   });
               S.notify_edit_exit e.uuid
           | _ -> ()
