@@ -2658,6 +2658,10 @@ let apply_item t ac ~meta it =
            (* cljs :editor/show-date-picker keeps the typed trigger
               text — the calendar's commit replaces it *)
            ac.tpos
+       | "upload" ->
+           (* cljs upload-asset steps are only click-hidden-file-input —
+              restore-slash? keeps "/Upload an asset" until a file is chosen *)
+           ac.tpos
        | "link" | "image-link" ->
            (* cljs [:editor/input "/link"] — the buffer holds the literal
               command text while the form is open *)

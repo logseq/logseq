@@ -1551,6 +1551,11 @@ let run_editor_cmd uuid command from to_ =
   | "date-picker" -> open_cal (Cal_insert "") uuid from
   | "link" -> open_link_form false uuid from
   | "image-link" -> open_link_form true uuid from
+  | "upload" ->
+      (* cljs keeps "/Upload an asset" until a file is chosen *)
+      ignore
+        (Editor_cmds.run ~scope:(S.interaction_scope ()) ~command
+           ~block:(Some uuid) ~value:None)
   | _ ->
   let caret = clear_range uuid from to_ in
   Ops.schedule_save uuid (A.live_buffer uuid);
