@@ -61,3 +61,12 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | recycle-block-delete | 39 recycle | Bullet Delete clears selection; neighbor not editing | Neighbor entered edit mode | right-click bullet → Delete | low | fixed `8cbb6ba824` |
 | recycle-open | 39 recycle | Avatar + page icon + strikethrough title | Plain title row only | header More → Recycle | low | fixed `f1d831bf51` |
 | ref-header-controls | 39 linked refs | Fold caret; count; 5 toolbar icons | No fold caret; 6 icons (View Type) | hover Linked references header | low | fixed `cae8cf95bc` |
+| asset-table-blank | 22 Asset class | Table shows headers + file rows | Headers gone; blank rows; count 2; patch Invalid_argument | Ctrl+K Asset; open with assets present | high | fixed `58e051ab56` |
+| asset-new-upload | 22 Asset class | `+ New` opens file picker; file becomes row | Empty untitled Asset + sidebar + error | Asset class Objects → `+ New` | med | fixed `4c45451017` |
+| asset-class-tag-label | 22 Asset class | Type chip `# Tag` | `# Property` (title collision with `logseq.property/asset`) | open Asset class page | med | fixed `1e3fb00d33` (Tags-after-File-Size ≈ master) |
+| asset-cmdk-noise | 22 cmdk | Search Asset → Asset class (+ exact hits) | Also listed Page Tags / Extends / Scheduled / … | Ctrl+K `Asset` | low | fixed `d223083109` |
+| login-user-menu | 31 login | Bold username; logout icon same row | Username not bold; logout always-visible separate row | login → header user menu | low | fixed `4c3d8d661c` |
+| rtc-create-pending | 36 sync/RTC | Create graph with Sync → uploads; peer sees page | Stuck `2 pending`; `flush-pending-failed` / `option is None` | create `parity-rtc-*` with Sync; wait >30s | high | fixed `2c3e1a52fc` |
+| header-cloud-upload | 36 sync/RTC | Cloud icon after login to upload local graph | No cloud entry until remount | login on local-only graph | med | fixed `25be173beb` |
+| members-mask-email | 36 members | Emails masked when `ui/mask-email?` | Full member emails shown | Members dialog | med | fixed `682d170f7e` |
+| remote-graphs-chrome | 36 remote graphs | Last opened + Open in another tab | Missing both | Graphs → remote row that is also local | low | fixed `922d42a814` |
