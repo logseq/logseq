@@ -41,5 +41,8 @@ Shared dictionaries: `resources/dicts/*.edn` (25 locales). LUI loads EN embedded
 | builtin-display-title | properties / views | `built-in-display-title` via `built-in-ident->i18n-key` | Raw `block/title` for built-in props/choices/columns | Property UI, table headers, status chips | high | fixed (OCaml port of master's mapper) |
 | icon-a11y-label | properties | `:property.built-in/icon` | Hardcoded `~label:"Icon"` | Icon property control | low | fixed |
 | hardcoded-prop-lint | CI | CLJS `.i18n-lint.toml` hardcoded scan | No LUI prop-literal check | CI | med | fixed (`scripts/test-lui-i18n-keys.mjs` + allowlist) |
+| rs-contents-header | right sidebar | `(t :page/contents)` panel header | Used DB English `"Contents"` page title | Right sidebar → Contents | med | fixed |
+| rs-block-ref-header | right sidebar | `(t :reference/blocks)` panel header | Used referenced block title | Right sidebar → block references | med | fixed |
 | worker-validate-english | db-worker | Hardcoded English validate notifications | Same hardcoded English in OCaml worker | (Dev) Validate | low | needs-decision — matches master worker hardcoding; dict keys exist (`graph.validation/valid`) but neither side uses them for the broadcast body |
 | a11y-english-labels | various | Mixed a11y identifiers | A few English `~label` / DnD a11y sentences remain (allowlisted) | Screen reader / DnD | low | needs-decision — not shipped visible chrome; no matching master keys for most |
+| graph-view-nav | left/right nav | `:nav/graph-view` / `:graph.page/title` | Surfaces absent from LUI nav/topbar | Graph view entry points | low | needs-decision — missing UI surface, not a hardcoded string |
