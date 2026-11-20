@@ -671,7 +671,7 @@ let write_pretty_edn path data =
     Cli_unix.write_text_file path
       Ustring.(of_string (Pretty_print.pprint_edn data) |> to_string);
     Cli_effect.pure (Ok ())
-  with exn -> Cli_effect.pure (Error (Error.exception_error exn))
+  with exn -> Cli_effect.pure (Error (File_error.of_exn ~path exn))
 
 let graph_export_message mode _config path =
   Cli_result.ok ~command:Command_id.Graph_export mode
@@ -1143,6 +1143,15 @@ let execute_graph_import mode graph repo opts config =
     (function
       | Error err ->
           pure (Cli_result.error ~command:Command_id.Graph_import mode err)
+      | Ok input_data
+        when opts.import_type = Import_edn
+             && Option.is_none (Edn_util.as_map input_data) ->
+          pure
+            (Cli_result.error ~command:Command_id.Graph_import mode
+               (Error.invalid_options
+                  (opts.input
+                 ^ ": an EDN import must be an EDN map, as written by graph \
+                    export")))
       | Ok input_data ->
           let import_after_stop () =
             bind (Server_runtime.create_graph config repo) (function

@@ -3667,6 +3667,107 @@ let () =
           then Js.Promise.resolve pass
           else fail_promise ("expected empty list result\n" ^ output.stdout)));
 
+  let run_worker_http_error_case name args ~code ~message =
+    test_promise name (fun () ->
+        let server =
+          create_server (fun[@u] req res ->
+              let body = ref "" in
+              req_set_encoding req "utf8";
+              req_on_data req "data" (fun[@u] chunk -> body := !body ^ chunk);
+              req_on_end req "end" (fun[@u] () ->
+                  write_json res 400 (error_response message)))
+        in
+        with_server server (fun base_url ->
+            let* output =
+              run_cli_p
+                ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                (Array.append [| "--graph"; "alpha"; "--output"; "json" |] args)
+            in
+            if output.code <> 1 then
+              fail_promise
+                (Printf.sprintf "expected exit 1, got %d\nstdout:\n%s\nstderr:\n%s"
+                   output.code output.stdout output.stderr)
+            else (
+              ignore (expect_valid_json "worker error output" output.stdout);
+              ignore
+                (expect_named_contains "error status" output.stdout
+                   "\"status\":\"error\"");
+              ignore
+                (expect_named_contains "error code" output.stdout
+                   ("\"code\":\"" ^ code ^ "\""));
+              ignore
+                (expect_named_contains "worker message" output.stdout message);
+              ignore
+                (expect_named_not_contains "no exception name" output.stdout
+                   "Failure");
+              ignore
+                (expect_named_not_contains "no exception name on stderr"
+                   output.stderr "Failure");
+              Js.Promise.resolve pass)))
+  in
+  run_worker_http_error_case
+    "query reports a query the worker rejects as invalid-query"
+    [| "query"; "--query"; "[:find ?x :where [?y :block/title]]" |]
+    ~code:"invalid-query" ~message:"Query for unknown vars: [?x]";
+  run_worker_http_error_case
+    "a failed worker request is a json error, not a bare exception"
+    [| "list"; "page" |] ~code:"exception"
+    ~message:"DB write failed with invalid data";
+
+  let run_remote_graphs_js_error_case name remote_graphs_transit =
+    test_promise name (fun () ->
+        let root = temp_dir "logseq-cli-sync-remote-graphs-error-" in
+        write_file
+          (Node.Path.join [| root; "cli.edn" |])
+          "{:id-token \"id\" :access-token \"access\" :refresh-token \"refresh\"}";
+        let server =
+          invoke_server (fun body ->
+              if
+                Js.String.includes
+                  ~search:"thread-api/db-sync-list-remote-graphs" body
+              then remote_graphs_transit
+              else "true")
+        in
+        with_server server (fun base_url ->
+            let* output =
+              run_cli_p
+                ~env:[| ("LOGSEQ_CLI_BASE_URL", base_url) |]
+                [|
+                  "--root-dir";
+                  root;
+                  "--output";
+                  "json";
+                  "sync";
+                  "remote-graphs";
+                |]
+            in
+            remove_tree root;
+            if output.code = 0 then
+              fail_promise
+                ("expected a non-zero exit\nstdout:\n" ^ output.stdout)
+            else (
+              ignore
+                (expect_named_contains "error status" output.stdout
+                   "\"status\":\"error\"");
+              ignore
+                (expect_named_contains "error code" output.stdout
+                   "sync-remote-graphs-failed");
+              ignore
+                (expect_named_contains "root cause" output.stdout
+                   "fetch failed");
+              ignore
+                (expect_named_not_contains "no js/Error graph" output.stdout
+                   "js/Error");
+              Js.Promise.resolve pass)))
+  in
+  run_remote_graphs_js_error_case
+    "sync remote-graphs fails when the worker returns a js/Error"
+    "[\"~#js/Error\",[\"^ \",\"~:message\",\"fetch failed\"]]";
+  run_remote_graphs_js_error_case
+    "sync remote-graphs fails when the worker returns a js/Error in the graph \
+     list"
+    "[[\"~#js/Error\",[\"^ \",\"~:message\",\"fetch failed\"]]]";
+
   let run_sync_progress_case name root_prefix handle_events
       ?(delay_download_response = false) ?(delay_events_response = false)
       assert_progress =
