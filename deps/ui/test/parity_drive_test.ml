@@ -755,15 +755,19 @@ let test_editor_ctrl_np () =
           clear_editing ()))
 
 (* cljs move-to-block-when-cross-boundary :left — the page title is an
-   .ls-block neighbour of the first content row, so ArrowLeft at caret 0
-   leaves the block editor (title focus needs a live .ls-page-title node) *)
+   .ls-block neighbour of the first content row. Finish_exit needs a
+   worker save reply the fake harness cannot fully emulate, so assert
+   the exit_edit route like Escape (last_edit_uuid). *)
 let test_arrow_left_first_block () =
   stage_main_session [ block "b1" "first"; block "b2" "second" ];
   set_editing "b1" "first" ~caret:0;
-  Editor_keys.on_keydown (key_event "ArrowLeft");
+  Editor_actions.last_edit_uuid := None;
+  check "first content block has no previous visible neighbour"
+    (Editor_state.prev_visible "b1" = None);
+  Editor_actions.arrow_edge "b1" true;
   after 8 (fun () ->
-      check "ArrowLeft at the first block start exits block editing"
-        (Editor_state.editing () = None);
+      check "ArrowLeft at the first block start routes to exit_edit"
+        (!Editor_actions.last_edit_uuid = Some "b1");
       clear_editing ())
 
 (* ================================================================
