@@ -1090,7 +1090,42 @@ let test_decode6 () =
     (Decode.toast_of_wire (Wire.Array [ Wire.String "m" ]) = None);
   check "toast non-string msg -> None"
     (Decode.toast_of_wire (Wire.Array [ Wire.Int 1; Wire.String "x" ])
-     = None)
+     = None);
+  (* cljs frontend.handler.worker prefers :i18n-key over a Nil message *)
+  check "toast i18n-key resolves via translate"
+    ((Option.get
+        (Decode.toast_of_wire
+           ~translate:(fun key args ->
+             key ^ ":" ^ String.concat "," args)
+           (Wire.Array
+              [ Wire.Nil
+              ; Wire.Keyword "error"
+              ; Wire.Nil
+              ; Wire.Nil
+              ; Wire.Nil
+              ; Wire.Map
+                  [ ( Wire.Keyword "i18n-key"
+                    , Wire.Keyword "export/error-unexpected" )
+                  ; ( Wire.Keyword "i18n-args"
+                    , Wire.Array [ Wire.String "a"; Wire.String "b" ] )
+                  ] ])))
+       .Model.toast_text
+     = "export/error-unexpected:a,b");
+  check "toast i18n-key wins over literal message"
+    ((Option.get
+        (Decode.toast_of_wire
+           ~translate:(fun key _ -> "translated:" ^ key)
+           (Wire.Array
+              [ Wire.String "literal"
+              ; Wire.Keyword "success"
+              ; Wire.Bool true
+              ; Wire.Nil
+              ; Wire.Int 1000
+              ; Wire.Map
+                  [ ( Wire.Keyword "i18n-key"
+                    , Wire.Keyword "graph.validation/valid" ) ] ])))
+       .Model.toast_text
+     = "translated:graph.validation/valid")
 
 (* ---- Editor_state pure helpers ---- *)
 
