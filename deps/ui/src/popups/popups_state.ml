@@ -262,10 +262,10 @@ let popup_signal () =
            (Signal.value (t.vs)))
   | None -> None
 
-(* signal of whether a popover layer other than the context menu is open —
-   cljs keeps the selection action-bar rendered while the block context
-   menu that spawned from it is open, so the bar only hides under the
-   other layers *)
+(* signal of whether a popover layer other than the context menu is open.
+   The dots menu path hides the action bar via open_cm (matching cljs
+   shui/popup-hide! before the dropdown); other layers still drive the
+   bar's reactive hide through this signal. *)
 let non_cm_popup_signal () =
   match !active with
   | Some t ->
@@ -2962,6 +2962,9 @@ let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
         available
   in
   close_ac t;
+  (* cljs selection dots: shui/popup-hide! before popup-show! dismisses
+     the :selection-action-bar popup while the context menu is open *)
+  Editor_actions.hide_action_bar ();
   let flip = anchor_above atop abot in
   let cm =
     { epoch = next_cm_epoch t
