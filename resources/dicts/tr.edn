@@ -58,7 +58,7 @@
  :account/sign-in "Giriş Yap"
  :account/sign-out "Çıkış Yap"
  :account/sign-up "Kaydol"
- :account/sync-assets-limit "Dosya başına 100MB'a kadar dosya senkronizasyonu"
+ :account/sync-assets-limit "Dosya başına 200MB'a kadar dosya senkronizasyonu"
  :account/synced-status "Senkronize edildi"
  :account/unlimited-unsynced-graphs "Sınırsız senkronize edilmemiş grafik"
  :account/upcoming-cloud-features "Logseq Publish dahil yakında gelecek bulut tabanlı özellikler"
@@ -910,7 +910,7 @@
  :icon/tab-icons "Simgeler"
 
  :import/all-tags "Tüm etiketleri içe aktar"
- :import/asset-too-large-warning "Varlık {1} kopyalanmadı çünkü 100 MB sınırını aşıyor."
+ :import/asset-too-large-warning "Varlık {1} kopyalanmadı çünkü 200 MB sınırını aşıyor."
  :import/assets-import-partial "{1}/{2} dosya içe aktarıldı. Ayrıntılar konsolda."
  :import/assets-imported "{1} dosya içe aktarıldı."
  :import/assets-skipped "{1} dosya atlandı. Ayrıntılar konsolda."

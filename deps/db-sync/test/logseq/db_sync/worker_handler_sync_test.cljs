@@ -1319,7 +1319,7 @@
                                                self (upload-request "broken.pdf" "Broken" 4
                                                                     (apply str (repeat 64 "b")))))
                             oversized-response (sync-handler/handle-http
-                                                self (upload-request "huge.zip" "Huge" 104857601
+                                                self (upload-request "huge.zip" "Huge" 209715201
                                                                      (apply str (repeat 64 "c"))))]
                      (is (= 201 (.-status create-response)))
                      (is (= "Photo" (:title create-body)))

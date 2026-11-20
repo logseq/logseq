@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Token vernieuwen: uitzonderlijke status"
  :account/reset-password "Wachtwoord opnieuw instellen"
  :account/sign-up "Registreren"
- :account/sync-assets-limit "Synchroniseer bijlagen tot 100MB per bestand"
+ :account/sync-assets-limit "Synchroniseer bijlagen tot 200MB per bestand"
  :account/synced-status "Gesynchroniseerd"
  :account/unlimited-unsynced-graphs "Onbeperkt aantal niet-gesynchroniseerde grafieken"
  :account/upcoming-cloud-features "Aankomende cloudgebaseerde functies, waaronder Logseq Publish"
@@ -814,7 +814,7 @@
  :icon/tab-icons "Iconen"
 
  :import/all-tags "Alle tags importeren"
- :import/asset-too-large-warning "Het kopiëren van asset {1} is overgeslagen omdat deze de limiet van 100 MB overschrijdt."
+ :import/asset-too-large-warning "Het kopiëren van asset {1} is overgeslagen omdat deze de limiet van 200 MB overschrijdt."
  :import/assets-import-partial "{1}/{2} bestanden geïmporteerd. Details in console."
  :import/assets-imported "{1} bestanden geïmporteerd."
  :import/assets-skipped "{1} bestanden overgeslagen. Details in console."

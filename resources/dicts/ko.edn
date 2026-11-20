@@ -26,7 +26,7 @@
  :account/refresh-token-warning "토큰 갱신: 비정상 상태"
  :account/reset-password "비밀번호 재설정"
  :account/sign-up "가입"
- :account/sync-assets-limit "파일당 최대 100MB 자산 동기화"
+ :account/sync-assets-limit "파일당 최대 200MB 자산 동기화"
  :account/synced-status "동기화됨"
  :account/unlimited-unsynced-graphs "비동기화 그래프 무제한"
  :account/upcoming-cloud-features "Logseq Publish를 포함한 클라우드 기반 기능 출시 예정"
@@ -814,7 +814,7 @@
  :icon/tab-icons "아이콘"
 
  :import/all-tags "모든 태그 가져오기"
- :import/asset-too-large-warning "에셋 {1} 복사는 100 MB 제한을 초과하여 건너뛰었습니다."
+ :import/asset-too-large-warning "에셋 {1} 복사는 200 MB 제한을 초과하여 건너뛰었습니다."
  :import/assets-import-partial "{1}/{2}개 에셋을 가져왔습니다. 자세한 내용은 콘솔을 확인하세요."
  :import/assets-imported "{1}개 에셋을 가져왔습니다."
  :import/assets-skipped "{1}개 에셋을 건너뛰었습니다. 자세한 내용은 콘솔을 확인하세요."

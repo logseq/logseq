@@ -4,7 +4,7 @@
 open Datascript
 open Db_worker_effect.Infix
 
-let max_asset_size = 100 * 1024 * 1024
+let max_asset_size = 200 * 1024 * 1024
 let remote_asset_download_parallelism = 10
 
 let repo_missing_asset_upload_files : (string, Wire.t list) Hashtbl.t =

@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Actualització del token: estat excepcional"
  :account/reset-password "Restablir la contrasenya"
  :account/sign-up "Registrar-se"
- :account/sync-assets-limit "Sincronitzar recursos fins a 100 MB per fitxer"
+ :account/sync-assets-limit "Sincronitzar recursos fins a 200 MB per fitxer"
  :account/synced-status "Sincronitzat"
  :account/unlimited-unsynced-graphs "Grafs no sincronitzats il·limitats"
  :account/upcoming-cloud-features "Properes funcions al núvol, incloent Logseq Publish"
@@ -814,7 +814,7 @@
  :icon/tab-icons "Icones"
 
  :import/all-tags "Importar totes les etiquetes"
- :import/asset-too-large-warning "S'ha omès copiar el recurs {1} perquè supera el límit de 100 MB."
+ :import/asset-too-large-warning "S'ha omès copiar el recurs {1} perquè supera el límit de 200 MB."
  :import/assets-import-partial "{1}/{2} recursos importats. Detalls a la consola."
  :import/assets-imported "{1} recursos importats."
  :import/assets-skipped "{1} recursos omesos. Detalls a la consola."

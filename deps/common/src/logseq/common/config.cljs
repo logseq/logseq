@@ -59,6 +59,7 @@
 
 (defonce default-graphs-dir "~/logseq/graphs")
 (defonce local-assets-dir "assets")
+(def max-asset-size (* 200 1024 1024))
 (defonce unlinked-graphs-dir "Unlinked graphs")
 
 (defonce favorites-page-name "$$$favorites")

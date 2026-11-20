@@ -26,7 +26,7 @@
  :account/refresh-token-warning "تحديث الرمز: حالة غير عادية"
  :account/reset-password "إعادة تعيين كلمة المرور"
  :account/sign-up "إنشاء حساب"
- :account/sync-assets-limit "مزامنة الأصول حتى 100 ميجابايت لكل ملف"
+ :account/sync-assets-limit "مزامنة الأصول حتى 200 ميجابايت لكل ملف"
  :account/synced-status "متزامن"
  :account/unlimited-unsynced-graphs "رسوم بيانية غير متزامنة غير محدودة"
  :account/upcoming-cloud-features "ميزات سحابية قادمة، بما في ذلك Logseq Publish"
@@ -814,7 +814,7 @@
  :icon/tab-icons "الأيقونات"
 
  :import/all-tags "استيراد كل الوسوم"
- :import/asset-too-large-warning "تم تخطي نسخ الأصل {1} لأنه يتجاوز حد 100 ميجابايت."
+ :import/asset-too-large-warning "تم تخطي نسخ الأصل {1} لأنه يتجاوز حد 200 ميجابايت."
  :import/assets-import-partial "{1}/{2} ملف تم استيرادها. التفاصيل في وحدة التحكم."
  :import/assets-imported "{1} ملف تم استيرادها."
  :import/assets-skipped "{1} ملف تم تخطيها. التفاصيل في وحدة التحكم."

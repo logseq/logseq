@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Обновление токена: исключительный статус"
  :account/reset-password "Сбросить пароль"
  :account/sign-up "Регистрация"
- :account/sync-assets-limit "Синхронизация файлов до 100 МБ каждый"
+ :account/sync-assets-limit "Синхронизация файлов до 200 МБ каждый"
  :account/synced-status "Синхронизировано"
  :account/unlimited-unsynced-graphs "Неограниченное количество несинхронизируемых графов"
  :account/upcoming-cloud-features "Будущие облачные функции, включая Logseq Publish"
@@ -814,7 +814,7 @@
  :icon/tab-icons "Иконки"
 
  :import/all-tags "Импортировать все теги"
- :import/asset-too-large-warning "Копирование ресурса {1} пропущено, потому что он превышает лимит 100 MB."
+ :import/asset-too-large-warning "Копирование ресурса {1} пропущено, потому что он превышает лимит 200 MB."
  :import/assets-import-partial "{1}/{2} ресурсов импортировано. Подробности в консоли."
  :import/assets-imported "{1} ресурсов импортировано."
  :import/assets-skipped "{1} ресурсов пропущено. Подробности в консоли."

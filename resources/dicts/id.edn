@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Pembaruan token: status tidak biasa"
  :account/reset-password "Atur ulang kata sandi"
  :account/sign-up "Daftar"
- :account/sync-assets-limit "Sinkronisasi aset hingga 100MB per file"
+ :account/sync-assets-limit "Sinkronisasi aset hingga 200MB per file"
  :account/synced-status "Tersinkronisasi"
  :account/unlimited-unsynced-graphs "Graf tidak tersinkronisasi tanpa batas"
  :account/upcoming-cloud-features "Fitur berbasis cloud yang akan datang, termasuk Logseq Publish"
@@ -814,7 +814,7 @@
  :icon/tab-icons "Ikon"
 
  :import/all-tags "Impor semua tag"
- :import/asset-too-large-warning "Penyalinan aset {1} dilewati karena melebihi batas 100 MB."
+ :import/asset-too-large-warning "Penyalinan aset {1} dilewati karena melebihi batas 200 MB."
  :import/assets-import-partial "{1}/{2} berkas diimpor. Detail di konsol."
  :import/assets-imported "{1} berkas diimpor."
  :import/assets-skipped "{1} berkas dilewati. Detail di konsol."
