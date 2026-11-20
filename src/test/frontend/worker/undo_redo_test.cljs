@@ -42,6 +42,13 @@
          :local-tx? true
          :db-sync/tx-id (or (:db-sync/tx-id m) (random-uuid))))
 
+(defn- mark-graph-synced!
+  "Sets :logseq.kv/graph-remote?, as upload and download do: undo and redo
+  then replay the semantic ops. On a local graph they replay the change's
+  datoms."
+  [conn]
+  (d/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)] {:persist-op? false}))
+
 (defn- with-worker-conns
   [f]
   (let [datascript-prev @worker-state/*datascript-conns
@@ -323,6 +330,8 @@
           {:keys [child-uuid]} (seed-page-parent-child!)
           tx-id-1 (random-uuid)
           tx-id-2 (random-uuid)]
+      ;; History rows and inline ops serve the semantic path.
+      (mark-graph-synced! conn)
       (save-block-title! conn child-uuid "v1" tx-id-1)
       (save-block-title! conn child-uuid "v2" tx-id-2)
       (is (= "v2" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
@@ -362,6 +371,8 @@
           tx-id-2 (random-uuid)
           prev-apply-action @worker-undo-redo/*apply-history-action!]
       (try
+        ;; The worker result below comes from the semantic path.
+        (mark-graph-synced! conn)
         (save-block-title! conn child-uuid "v1" tx-id-1)
         (save-block-title! conn child-uuid "v2" tx-id-2)
         (is (not= ::worker-undo-redo/empty-undo-stack
@@ -388,6 +399,8 @@
           tx-id-2 (random-uuid)
           prev-apply-action @worker-undo-redo/*apply-history-action!]
       (try
+        ;; The worker error below comes from the semantic path.
+        (mark-graph-synced! conn)
         (save-block-title! conn child-uuid "v1" tx-id-1)
         (save-block-title! conn child-uuid "v2" tx-id-2)
         (reset! worker-undo-redo/*apply-history-action!
@@ -407,6 +420,8 @@
           client-ops-conn (get @worker-state/*client-ops-conns test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
           tx-id (random-uuid)]
+      ;; History rows serve the semantic path.
+      (mark-graph-synced! conn)
       (save-block-title! conn child-uuid "new-title" tx-id)
       (swap! worker-undo-redo/*undo-ops
              update test-repo
@@ -428,6 +443,7 @@
 (deftest undo-redo-rebinds-stack-to-latest-history-tx-id-test
   (testing "undo/redo pushes stack op with latest persisted history tx id"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           client-ops-conn (get @worker-state/*client-ops-conns test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
@@ -465,6 +481,7 @@
 (deftest undo-history-records-semantic-action-metadata-test
   (testing "worker undo history stores a logical action id and semantic forward/inverse ops"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
       (d/transact! conn
@@ -506,6 +523,7 @@
 (deftest undo-history-canonicalizes-insert-block-uuids-test
   (testing "worker undo history uses the created block uuid for insert semantic ops"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -829,6 +847,7 @@
 (deftest undo-history-canonicalizes-template-replace-empty-target-to-apply-template-test
   (testing "template replace-empty-target history keeps semantic forward op and restores empty target"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -900,6 +919,7 @@
 (deftest undo-history-replace-empty-target-insert-restores-empty-target-with-insert-op-test
   (testing "replace-empty-target insert inverse should delete inserted blocks and reinsert original empty target"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -951,6 +971,7 @@
 (deftest apply-template-op-replays-via-undo-redo-test
   (testing ":apply-template op can be applied and replayed via undo/redo"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [page-uuid]} (seed-page-parent-child!)
           page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
@@ -1027,6 +1048,9 @@
           template-a-uuid (random-uuid)
           template-b-uuid (random-uuid)
           empty-target-uuid (random-uuid)]
+      ;; The semantic redo of apply-template inserts new blocks. On a local
+      ;; graph redo brings back the same blocks.
+      (mark-graph-synced! conn)
       (apply-ops!
        conn
        [[:insert-blocks [[{:block/uuid template-root-uuid
@@ -1208,6 +1232,7 @@
 (deftest undo-history-records-forward-ops-for-save-block-test
   (testing "worker save-block history keeps semantic forward ops for redo replay"
     (worker-undo-redo/clear-history! test-repo)
+    (mark-graph-synced! (worker-state/get-datascript-conn test-repo))
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)]
       (apply-ops! conn
@@ -1612,6 +1637,9 @@
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
           property-id :user.property/undo-note]
+      ;; the inverse op is what this test checks; on a local graph undo
+      ;; replays the change's datoms instead
+      (mark-graph-synced! conn)
       (apply-ops! conn
                   [[:upsert-property [property-id
                                       {:logseq.property/type :default
@@ -1650,6 +1678,9 @@
     (let [conn (worker-state/get-datascript-conn test-repo)
           {:keys [child-uuid]} (seed-page-parent-child!)
           property-id :user.property/undo-status]
+      ;; the inverse op is what this test checks; on a local graph undo
+      ;; replays the change's datoms instead
+      (mark-graph-synced! conn)
       (apply-ops! conn
                   [[:upsert-property [property-id
                                       {:logseq.property/type :default
@@ -1683,10 +1714,12 @@
 (defn- seed-inner-ref-graph!
   "Adds the node property \"related\" (cardinality many), page \"refs 1\" with
   blocks a, b (children b1, b2), c, page \"refs 2\" with blocks d and tmpl
-  (tagged Template, child \"tmpl child\"), and a journal with block e. Clears
-  history and returns a fn from a block title to its uuid."
+  (tagged Template, child \"tmpl child\"), and a journal with block e. Marks
+  the graph synced, so undo replays the semantic ops these tests are about,
+  clears history and returns a fn from a block title to its uuid."
   []
   (let [conn (worker-state/get-datascript-conn test-repo)]
+    (mark-graph-synced! conn)
     (sqlite-build/create-blocks
      conn
      {:properties {:related {:logseq.property/type :node

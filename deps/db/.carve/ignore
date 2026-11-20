@@ -24,6 +24,8 @@ logseq.db.frontend.class/logseq-class?
 logseq.db.frontend.class/disallowed-inline-tags
 ;; Used outside deps/db by frontend worker flashcard and query-dsl handlers.
 logseq.db.frontend.class/card-class-ids
+;; Used outside deps/db by the outliner's recycle and the worker's tag-to-page conversion.
+logseq.db.frontend.class/detach-child-classes-tx
 ;; API
 logseq.db.frontend.db-ident/ensure-unique-db-ident
 ;; API

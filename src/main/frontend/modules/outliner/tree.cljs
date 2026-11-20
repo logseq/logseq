@@ -13,15 +13,6 @@
     (uuid? root-id)
     (= (:block/uuid block) root-id)
 
-    (number? root-id)
-    (= (:db/id block) root-id)
-
-    (string? root-id)
-    (if-let [id (parse-uuid root-id)]
-      (= (:block/uuid block) id)
-      (or (= (:block/name block) root-id)
-          (= (:block/title block) root-id)))
-
     :else
     (= (:db/id block) (:db/id root-id))))
 
@@ -30,9 +21,7 @@
   (or (some #(when (same-root? % root-id) %) blocks)
       (when-let [page (some block-page blocks)]
         (assoc page :block/uuid (or (:block/uuid page)
-                                    (when (uuid? root-id) root-id)
-                                    (when (and (string? root-id) (parse-uuid root-id))
-                                      (parse-uuid root-id)))))))
+                                    (when (uuid? root-id) root-id))))))
 
 (defn blocks->vec-tree
   "`blocks` need to be in the same page."
