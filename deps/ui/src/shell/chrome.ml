@@ -679,18 +679,34 @@ let right_toggle_button ms =
       Sidebar_state.ensure_contents (Sidebar_state.ensure ms))
     ())
 
+let recent_controls_visible (model : Model.t) =
+  Rtc_flows.logged_in () && Rtc_flows.rtc_group ()
+  && (match List.find_opt (fun (name, _, _, _) ->
+       model.repo = Some (Graph.full_graph_name name)) !Graphs_ops.remote_graphs with
+    | None -> false
+    | Some (_, remote_uuid, _, _) ->
+        !Rtc_flows.db_rtc_uuid <> None
+        || (match model.rtc with
+            | Some rtc -> rtc.rtc_graph_uuid = Some remote_uuid
+                && remote_uuid <> ""
+            | None -> false))
+
 let recent_slider (ms : Model.t Signal.signal) : t = fun ctx parent ->
   Settings_state.ensure ctx;
   let preferences = Signal.value (Settings_state.state ()) in
   let refresh () = Settings_state.refresh_recent (Lazy_children.all_mounted_uuids ctx) in
-  (if_ ~test:(reactive (fun state -> state.Settings_state.highlight_recent) preferences)
-    (keyed ~source:(reactive (fun model -> [model.Model.route]) ms)
+  (if_ ~test:(reactive (fun state model ->
+      Rtc_flows.refresh_db_rtc_uuid model.Model.repo;
+      state.Settings_state.highlight_recent && recent_controls_visible model) preferences ms)
+    (fun context parent ->
+     Signal.on_dispose context.Lui_ui.ui_scope Settings_state.clear_recent;
+     (keyed ~source:(reactive (fun model -> [model.Model.route]) ms)
       ~key:Fun.id ~cmp:Stdlib.compare ~mount:(fun _ ->
     row ~key:"recent-slider" ~gap:4 ~cross:`center ~width:280
       ~on_appear:(fun _ ->
         let route = (Runtime.model ()).Model.route in
-        Ui_services.timers_later ~ms:0 (fun () ->
-          if (Runtime.model ()).Model.route = route then refresh ()))
+        ignore (Ui_effect.timeout ~scope:context.ui_scope 0 (fun () ->
+          if (Runtime.model ()).Model.route = route then refresh ())))
       [ Ui_parts.string_prop Lui_protocol.AccessibilityLabel
           ~value:(reactive (fun state ->
               if state.Settings_state.recent_days = 0 then I18n.t "header/highlight-recent-blocks"
@@ -707,7 +723,7 @@ let recent_slider (ms : Model.t Signal.signal) : t = fun ctx parent ->
             | _ -> ()) [])
       ; Ui_components.button ~key:"recent-close" ~variant:`ghost ~size:`icon
           ~icon:(`app "x") ~label:(I18n.t "header/quit-highlight-recent-blocks")
-          ~on_press:(fun _ -> Settings_state.toggle_recent ()) [] ]))) ctx parent
+          ~on_press:(fun _ -> Settings_state.toggle_recent ()) [] ])) context parent)) ctx parent
 
 let document_mode_button : t = fun ctx parent ->
   Settings_state.ensure ctx;

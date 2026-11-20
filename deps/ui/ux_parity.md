@@ -1,7 +1,7 @@
 # LUI UX parity status
 
 The paired-audit baseline is upstream master **`2a0dce92`**; the latest fetch is
-**`d85d8f6a`**. Settings, references and properties/icon child branches are now
+**`0ba402070c`**. Settings, references and properties/icon child branches are now
 integrated. Their follow-up repairs and local editor/shell repairs still need
 combined-build browser acceptance. New upstream asset/clipboard changes have
 not been fully audited. Source/test completion is not browser acceptance. This
@@ -474,6 +474,58 @@ assertion and warning with the same mirror and installed Node dependencies;
 this is not counted as a passing gate or changed as part of the file-link
 port. No repository Maven configuration is modified.
 
+## Table85: reference order, Marketplace cards and recent highlighting
+
+Table85 compared the served `5baaceaec1` build with Master; evidence is under
+`/Users/devin/table85/evidence/`. These repairs follow Master's source, not an
+assumed alphabetical or universally unstable reference order.
+
+Master's `db/common/reference.cljs/get-ref-pages-count` counts path references
+before direct references and sorts descending by frequency. Equal counts retain
+the frequency map's iteration order. ClojureScript's small array map retains
+first-encounter order (up to eight distinct keys); larger hash maps do not promise
+that order. `components/reference_filters.cljs` preserves the supplied sequence
+for an empty search; fuzzy search is limited to 100, then stably sorted by count,
+before selected chips are removed. There is no alphabetical tie-break. The UI
+now preserves worker order, and both worker count implementations preserve
+first-encounter ties, reproducing Page/tags/Ref A/Ref B/Zebra/Alpha for the
+reported small group. This is not a claim that Master universally orders large
+equal-frequency groups by first reference. Native regressions cover both count
+APIs and empty references; shared regressions cover ordering, selection, search
+limits and malformed count responses.
+
+Marketplace descriptions now separate the 60px spacing wrapper from its
+two-line-clamped, unpadded text child, matching Master's `.desc > p`. Applying
+height and padding to the clamped text exposed extra lines despite the clamp.
+An isolated Chrome rendering with the existing LUI stylesheet reproduces the
+old overflow and verifies a 32px/two-line child with ellipsis after the repair:
+`/Users/devin/attachments/table85-clamp-isolated.png`. Repository links use
+Master's filled GitHub SVG path, not the outlined Tabler brand glyph. Mounted
+regressions inspect the actual description props and repository icon.
+
+Master's `state.cljs/toggle-highlight-recent-blocks!` only toggles the mode;
+there is no empty-results or recent-edits eligibility check. In `header.cljs`,
+the slider and Quit control are inside `rtc-indicator-visible?`: a logged-in,
+RTC-eligible user, a current registered remote graph, and either its DB RTC UUID
+or a matching nonempty RTC-state graph UUID are required. The LUI header now
+uses that gate. Its RTC projection retains the existing broadcast's graph UUID
+instead of treating any RTC state as sufficient. Signed-out/local/plain pages
+therefore mount no slider and request no recent-block highlights. Eligible
+pages retain the existing mounted-block selection by `block/updated-at`, strictly
+newer than now minus the selected number of days (default three), with the
+secondary background. Leaving the controls clears that selection and cancels
+the scoped deferred refresh. Tests cover signed-out/local/no graph, missing or
+mismatched RTC UUIDs, matching state, eligible mounted controls and Quit cleanup.
+
+Verification: UI aggregate passes 6550 checks; native experimental tests and
+build pass. Worker view tests pass 58 cases, including the new frequency-order
+regression; worker Melange groups pass 100 and 154 tests. The aggregate retains
+the same three platform failures as the upstream-refresh log: 994 native tests,
+`Native secrets require the OS keychain host`. Diff whitespace checks pass.
+No web bundle build, `static/` writes or `:3010` access. The isolated CSS rendering
+is not rebuilt-application acceptance: filter order, the card and RTC highlighting
+remain pending paired browser verification.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -534,9 +586,9 @@ neither category claims the underlying operating system can never support them.
 | Calculator extra root | Global plain-Enter dispatch and newline/empty-input save-and-Escape tests do not append roots, including failed saves. The explicit Shift+Enter action appends one empty sibling. The original full CodeMirror flow remains unverified; this does not establish which event ran there. No speculative fix. |
 | Table74 calculator long output | Source repaired in both output paths: retained lines use typed nowrap/1.45rem line-height props with an empty-line minimum; live CodeMirror lines preserve whitespace without wrapping and use Master's 1.45rem height/line-height. Normal, long, empty and error results are covered, including repeated live replacement. Browser long-output height acceptance remains pending. |
 | Shell N7 | Sidebar-menu action comparison needs equivalent target classification: Master conditionally includes Open as page for page/contents or a resolved page entity. The retained pair shows different sidebar contents and LUI explicitly has a page item; unconditional removal would diverge from Master. The horizontal-origin source repair is recorded below. |
-| Reference filters | Equal-count tag chips use alphabetical order instead of Master's worker order. |
+| Reference filters | Table85 source-repaired: empty search preserves worker order without an alphabetical tie-break; small-group count ties retain first encounter. Rebuilt-browser acceptance pending. See the source-order caveat above for larger Master frequency maps. |
 | Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
-| Marketplace cards | Residual title truncation, icon artwork and description wrapping. |
+| Marketplace cards | Residual title truncation and other icon artwork. Table85 source-repairs two-line description clamping and the repository mark; rebuilt-browser acceptance pending. |
 | Marketplace controls | Table77 accepts the control dimensions: an 81px statistics block at Master's x position, 7px footer inset, 181x15 contribution hitbox and normal-weight Install control. Statistics retain an 18px start inset, 16px icons and 12px item padding; Install uses 13px unit line-height and 4px padding. Width remains content-sized, not fixed to an English label. The last vertical offsets are source-repaired: a 3px inset inside the Marketplace's fixed-height list viewport moves the grid without resizing the dialog or changing Installed; the absolute contribution wrapper moves down 2.5px without changing its hitbox or horizontal alignment. These position adjustments await rebuilt-browser verification. Empty filter (unmatched search) matches Master: dialog, tabs and toolbar remain, the content area is empty and the search stays editable. Search margins, toolbar actions and filter/sort dots follow Master's source. |
 | Login | Table74 measured LUI 488×390 versus Master 490×405.97; link RGB(16,107,163) versus RGB(27,104,152). Source now includes the dialog's two border pixels in its responsive width, uses Master's accent-first link token, and models the footer paragraph's 8px vertical margins, 16px top padding and 24px line boxes without a form gap before it. Authentication logic is unchanged. Exact geometry/tone and shared dialog opening still need browser acceptance. |
 | Signup validation | Native email-validity and required-field validation behavior is not aligned. Entry-screen appearance does not establish submission parity. |

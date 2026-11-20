@@ -1102,6 +1102,13 @@ let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
                   refresh inst end)
           | None -> ())
 
+let reference_filter_options ~query ~selected counts =
+  let refs = if query = "" then counts
+    else Fuzzy.fuzzy_search ~extract:fst ~limit:100 counts query
+      |> List.stable_sort (fun (_, a) (_, b) -> compare b a) in
+  List.filter (fun (title, _) ->
+    not (List.mem (String.lowercase_ascii (Str_util.trim title)) selected)) refs
+
 let ref_filter_dialog ~owner_scope inst anchor =
   let input_id = "vrfsearch-" ^ string_of_int inst.V.id in
   let lc s = String.lowercase_ascii (Str_util.trim s) in
@@ -1238,20 +1245,9 @@ let ref_filter_dialog ~owner_scope inst anchor =
             | Ui_effect.Failed _ ->
                 text ~value:(I.t "view/error") ~padding:8 []
             | Ui_effect.Ready counts ->
-            let in_filters n =
-              List.exists
-                (fun (x, _) -> x = lc n)
-                (s.V.ref_includes @ s.V.ref_excludes)
-            in
             let refs =
-              counts
-              |> List.filter (fun (t, _) -> not (in_filters t))
-              |> fun xs ->
-              if q = "" then List.stable_sort (fun (a, n) (b, m) ->
-                let order = compare m n in if order = 0 then compare a b else order) xs
-              else
-                Fuzzy.fuzzy_search ~extract:fst ~limit:100 xs q
-                |> List.stable_sort (fun (_, a) (_, b) -> compare b a)
+              reference_filter_options ~query:q
+                ~selected:(List.map fst (s.V.ref_includes @ s.V.ref_excludes)) counts
             in
             if refs = [] then D.nothing
             else

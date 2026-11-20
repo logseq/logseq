@@ -3378,7 +3378,7 @@ let test_update2 () =
   check "right sidebar toggle"
     (m1.Model.right_sidebar_open = not m0.Model.right_sidebar_open);
   let rtc =
-    { Model.rtc_lock = true; rtc_ws_state = "on"
+    { Model.rtc_lock = true; rtc_ws_state = "on"; rtc_graph_uuid = None
     ; rtc_local_tx = Some 3; rtc_remote_tx = Some 4
     ; rtc_pending_local = 1; rtc_pending_asset = 2; rtc_pending_server = 3
     ; rtc_online_users = []; rtc_missing_files = [] }
@@ -3399,6 +3399,7 @@ let test_decode_rtc () =
   let w =
     wmap
       [ "rtc-state", wmap [ "ws-state", Wire.Keyword "open" ]
+      ; "graph-uuid", Wire.Uuid "00000000-0000-4000-8000-000000000085"
       ; "rtc-lock", Wire.Bool true
       ; "local-tx", Wire.Int 7
       ; "remote-tx", Wire.Int64 8L
@@ -3409,12 +3410,14 @@ let test_decode_rtc () =
   let r = Decode.rtc_of_wire w in
   check "rtc decode"
     (r.Model.rtc_ws_state = "open" && r.rtc_lock = true
+    && r.rtc_graph_uuid = Some "00000000-0000-4000-8000-000000000085"
     && r.rtc_local_tx = Some 7 && r.rtc_remote_tx = Some 8
     && r.rtc_pending_local = 1 && r.rtc_pending_asset = 2
     && r.rtc_pending_server = 3);
   let r2 = Decode.rtc_of_wire (Wire.Map []) in
   check "rtc decode defaults"
     (r2.Model.rtc_ws_state = "" && r2.rtc_lock = false
+    && r2.rtc_graph_uuid = None
     && r2.rtc_local_tx = None && r2.rtc_pending_local = 0)
 
 (* ---- properties_data ---- *)

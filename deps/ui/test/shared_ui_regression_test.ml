@@ -1219,6 +1219,109 @@ let run_views ~registry ~profile ~finish =
          && P.property_value_supported_for_kind kind property value) props)
        (nodes contribution));
   ignore (Lui_app.dispose contribution.S.app);
+  let counts = ["Page",2; "tags",2; "Ref A",1; "Ref B",1; "Zebra",1; "Alpha",1] in
+  check "Reference filter preserves the worker frequency order including tied pages"
+    (Views_head.reference_filter_options ~query:"" ~selected:[] counts = counts);
+  check "Selected reference chips do not reorder the remaining pages"
+    (Views_head.reference_filter_options ~query:"" ~selected:["zebra"] counts
+      = List.filter (fun (title, _) -> title <> "Zebra") counts);
+  check "Reference search retains descending frequencies"
+    (Views_head.reference_filter_options ~query:"a" ~selected:[] counts
+      = List.stable_sort (fun (_, a) (_, b) -> compare b a)
+        (Fuzzy.fuzzy_search ~extract:fst ~limit:100 counts "a"));
+  check "Empty reference filters have no options"
+    (Views_head.reference_filter_options ~query:"" ~selected:[] [] = []);
+  let many = List.init 110 (fun i -> Printf.sprintf "Page %03d" i, 1) in
+  let first = fst (List.hd (Fuzzy.fuzzy_search ~extract:fst ~limit:100 many "Page")) in
+  check "Reference search limits before removing selected chips like Master"
+    (List.length (Views_head.reference_filter_options ~query:"Page"
+      ~selected:[String.lowercase_ascii first] many) = 99);
+  check "Malformed reference counts are rejected"
+    (try ignore (Views_wire.decode_ref_counts_resource
+      (Wire.Map [Wire.kw "ref-pages-count", Wire.Array [Wire.Array [Wire.String "Page"; Wire.Int (-1)]]]));
+      false with Invalid_argument _ -> true);
+  let description = "Anki Sync keeps your Logseq flashcards synchronized with Anki across all of your decks and notes." in
+  let card = mount (fun _ -> fun context parent ->
+    let search = Signal.state context.Lui_ui.ui_scheduler "" in
+    Plugins_view.market_card ~stats:Js.Json.null ~search_st:search
+      (Js.Json.object_ (Js.Dict.fromList
+        ["id", Js.Json.string "anki"; "repo", Js.Json.string "owner/anki";
+         "title", Js.Json.string "Anki Sync"; "description", Js.Json.string description]))
+      context parent) in
+  let paragraph = List.find (fun node -> M.string_prop node "text" = Some description) (nodes card) in
+  check "Marketplace descriptions clamp an unpadded paragraph inside the card's spacing box"
+    (Hashtbl.find_opt paragraph.M.props "line-clamp" = Some (P.IntValue 2)
+      && not (Hashtbl.mem paragraph.M.props "height")
+      && not (Hashtbl.mem paragraph.M.props "padding-vertical")
+      && M.string_prop paragraph "text-overflow" = Some "ellipsis");
+  check "Marketplace repository links use Master's filled GitHub mark"
+    (List.exists (fun node -> M.string_prop node "icon" = Some "app:github-mark") (nodes card)
+     && String.starts_with ~prefix:"<svg" (List.assoc "github-mark" Icons.custom_icons));
+  ignore (Lui_app.dispose card.S.app);
+  let token = Ui_services.storage_get "id-token"
+  and server = Ui_services.storage_get "sync-server-url"
+  and remotes = !Graphs_ops.remote_graphs
+  and rtc_uuid = !Rtc_flows.db_rtc_uuid
+  and rtc_repo = !Rtc_flows.db_rtc_repo
+  and settings = !Settings_state.st in
+  Fun.protect ~finally:(fun () ->
+    restore_storage "id-token" token; restore_storage "sync-server-url" server;
+    Graphs_ops.remote_graphs := remotes; Rtc_flows.db_rtc_uuid := rtc_uuid;
+    Rtc_flows.db_rtc_repo := rtc_repo;
+    Settings_state.st := settings) (fun () ->
+    let model = {Model.initial with repo = Some (Graph.full_graph_name "Recent")} in
+    Ui_services.storage_remove "id-token";
+    Ui_services.storage_set "sync-server-url" "https://sync.invalid";
+    Graphs_ops.remote_graphs := ["Recent", "remote-uuid", false, "manager"];
+    Rtc_flows.db_rtc_uuid := Some "remote-uuid";
+    check "Signed-out recent highlights do not mount their controls"
+      (not (Chrome.recent_controls_visible model));
+    Settings_state.st := None;
+    let recent = mount (fun _ -> fun context parent ->
+      Settings_state.ensure context;
+      Settings_state.toggle_recent ();
+      let source = Signal.state context.Lui_ui.ui_scheduler model in
+      Chrome.recent_slider (Signal.value source) context parent) in
+    check "Plain local-page shortcut mode has no Quit highlight button or slider"
+      (not (List.exists (fun node -> node.M.kind = "slider"
+        || button_label node = Some (I18n.t "header/quit-highlight-recent-blocks")) (nodes recent))
+       && Settings_state.Recent_blocks.is_empty (Settings_state.value ()).recent_blocks);
+    ignore (Lui_app.dispose recent.S.app);
+    Ui_services.storage_set "id-token" "test-token";
+    check "Eligible remote graphs can show recent controls"
+      (Chrome.recent_controls_visible model);
+    Rtc_flows.db_rtc_repo := model.repo;
+    Settings_state.st := None;
+    let remote = mount (fun _ -> fun context parent ->
+      Settings_state.ensure context;
+      Settings_state.toggle_recent ();
+      let source = Signal.state context.Lui_ui.ui_scheduler model in
+      Chrome.recent_slider (Signal.value source) context parent) in
+    check "Eligible remote highlight mode mounts its slider"
+      (List.exists (fun node -> node.M.kind = "slider") (nodes remote));
+    let quit = List.find (fun node -> button_label node =
+      Some (I18n.t "header/quit-highlight-recent-blocks")) (nodes remote) in
+    S.press remote quit.M.id;
+    check "Quit highlight unmounts the controls and clears recent rows"
+      (not (List.exists (fun node -> node.M.kind = "slider") (nodes remote))
+       && not (Settings_state.value ()).highlight_recent
+       && Settings_state.Recent_blocks.is_empty (Settings_state.value ()).recent_blocks);
+    ignore (Lui_app.dispose remote.S.app);
+    check "No open graph has no recent controls"
+      (not (Chrome.recent_controls_visible Model.initial));
+    Rtc_flows.db_rtc_uuid := None;
+    let rtc = Decode.rtc_of_wire (Wire.Map []) in
+    check "An RTC state without a graph UUID cannot show recent controls"
+      (not (Chrome.recent_controls_visible {model with rtc = Some rtc}));
+    check "Another remote graph's RTC state cannot show recent controls"
+      (not (Chrome.recent_controls_visible
+        {model with rtc = Some {rtc with rtc_graph_uuid = Some "another-uuid"}}));
+    check "Matching RTC state enables controls before the DB UUID resolves"
+      (Chrome.recent_controls_visible
+        {model with rtc = Some {rtc with rtc_graph_uuid = Some "remote-uuid"}});
+    Graphs_ops.remote_graphs := [];
+    check "Signed-in local graphs still do not show recent controls"
+      (not (Chrome.recent_controls_visible model)));
   let market_state = ref None in
   let marketplace = mount (fun _ -> fun ctx parent ->
     let filter = Signal.state ctx.Lui_ui.ui_scheduler Plugins_view.All

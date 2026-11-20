@@ -299,7 +299,9 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
         (let children = List.filter_map (Ldb.ent_of_id db) children_ids in
       let hidden_ref = hidden_ref_pred db id in
       let counts : (entity_id, int) Hashtbl.t = Hashtbl.create 31 in
+      let order = ref [] in
       let bump (e : entity) =
+        if not (Hashtbl.mem counts e.id) then order := e.id :: !order;
         Hashtbl.replace counts e.id
           (1 + Option.value (Hashtbl.find_opt counts e.id) ~default:0)
       in
@@ -307,8 +309,9 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
       List.iter
         (fun (b : entity) -> List.iter bump (Ldb.ref_ents b "block/refs"))
         (ref_blocks @ children);
-      Hashtbl.fold
-        (fun eid size acc ->
+      List.rev !order |> List.filter_map
+        (fun eid ->
+           let size = Hashtbl.find counts eid in
            match Ldb.ent_of_id db eid with
            | Some ref_e ->
                if
@@ -316,11 +319,10 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
                  && ref_e.id <> id
                  && Ldb.ident_of ref_e <> Some "block/tags"
                  && not (hidden_ref ref_e)
-               then (Ldb.string_value ref_e "block/title", size) :: acc
-               else acc
-           | None -> acc)
-        counts []
-        |> List.sort (fun (_, a) (_, b) -> compare b a))
+               then Some (Ldb.string_value ref_e "block/title", size)
+               else None
+           | None -> None)
+        |> List.stable_sort (fun (_, a) (_, b) -> compare b a))
 
 (* reference/get-filters *)
 let get_filters (page : entity) : (entity list * entity list) option =

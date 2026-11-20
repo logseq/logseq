@@ -714,6 +714,7 @@ let rtc_of_wire (w : Wire.t) : Model.rtc =
       Option.value (Option.bind (Wire.get w "rtc-lock") Wire.as_bool)
         ~default:false
   ; rtc_ws_state = ws_state
+  ; rtc_graph_uuid = Wire.map_get_uuid w "graph-uuid"
   ; rtc_local_tx = Wire.map_get_int w "local-tx"
   ; rtc_remote_tx = Wire.map_get_int w "remote-tx"
   ; rtc_pending_local = int "unpushed-block-update-count"

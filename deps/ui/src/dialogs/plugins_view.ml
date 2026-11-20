@@ -314,14 +314,14 @@ let market_card ~stats ~search_st pkg =
                   (if repo = "" then []
                    else
                      [ link ~key:"gh-a" ~url:(gh_repo_url repo)
-                         ~target:`blank ~icon:(`app "brand-github")
+                         ~target:`blank ~icon:(`app "github-mark")
                          ~foreground:"var(--lx-gray-11)" ~label:"GitHub" [] ])))
          ; Ui_components.with_props
              [ Ui_components.Prop.opacity 0.7 ]
-             (text ~key:"desc" ~height:60 ~padding_vertical:4
-                ~line_clamp:2 ~overflow:"hidden"
+             (box ~key:"desc" ~height:60 ~padding_vertical:4
+               [ text ~line_clamp:2 ~overflow:"hidden" ~text_overflow:"ellipsis"
                 ~font_size:"0.75rem" ~line_height:"16px"
-                ~value:(jstr pkg "description") [])
+                ~value:(jstr pkg "description") [] ])
          ; Ui_components.with_props
              [ Ui_components.Prop.position `absolute
              ; Ui_components.Prop.inset_bottom 16.

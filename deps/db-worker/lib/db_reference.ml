@@ -283,24 +283,26 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
         (ref_blocks @ children)
     in
     let freq = Hashtbl.create 32 in
+    let order = ref [] in
     List.iter
       (fun (e : entity) ->
+        if not (Hashtbl.mem freq e.id) then order := e.id :: !order;
         Hashtbl.replace freq e.id
           (1 + Option.value (Hashtbl.find_opt freq e.id) ~default:0))
       (path_refs @ direct_refs);
-    Hashtbl.fold
-      (fun eid count acc ->
+    List.rev !order |> List.filter_map
+      (fun eid ->
+        let count = Hashtbl.find freq eid in
         match Ldb.ent_of_id db eid with
         | Some ref_
           when Ldb.is_page ref_ && eid <> id
                && Ldb.ident_of ref_ <> Some "block/tags"
                && not (hidden_ref ref_) ->
             (match Ldb.string_value ref_ "block/title" with
-             | Some t -> (t, count) :: acc
-             | None -> acc)
-        | _ -> acc)
-      freq []
-    |> List.sort (fun (_, a) (_, b) -> compare b a)
+             | Some t -> Some (t, count)
+             | None -> None)
+        | _ -> None)
+    |> List.stable_sort (fun (_, a) (_, b) -> compare b a)
   end
 
 (* hidden-eid-pred — memoized ancestor walk; one eavt slice answers

@@ -200,6 +200,7 @@ type rtc_user =
 
 type rtc =
   { rtc_lock : bool (* ws open *)
+  ; rtc_graph_uuid : string option
   ; rtc_ws_state : string
   ; rtc_local_tx : int option
   ; rtc_remote_tx : int option
