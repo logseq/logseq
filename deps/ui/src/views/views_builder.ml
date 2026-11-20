@@ -706,8 +706,8 @@ let add_id inst loc = "qba-" ^ inst.key ^ "-" ^ loc_key loc
 let rec clause_el inst ~tree ~loc (c : clause) : t =
   match c with
   | COp (op, xs) ->
-      box ~key:("qc-" ^ loc_key loc)
-        [ row ~key:"oc" ~cross:`center
+      box ~key:("qc-" ^ loc_key loc) ~min_width:0
+        [ row ~key:"oc" ~cross:`center ~min_width:0
             [ text ~key:"bl" ~value:"(" []
             ; clauses_group inst ~tree ~loc:(loc @ [ 0 ]) ~kind:op ~clauses:xs
             ; text ~key:"br" ~value:")" []
@@ -715,12 +715,15 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
         ]
   | _ ->
       let id = clause_id inst loc in
-      box ~key:("qc-" ^ loc_key loc)
-        [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center
+      box ~key:("qc-" ^ loc_key loc) ~min_width:0
+        [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center ~min_width:0
             ~border_width:1 ~border_color:"var(--ls-border-color)"
-            ~corner_radius:4 ~height:22
+            ~corner_radius:4 ~min_height:22
             [ Ui_components.with_props
-                [ Ui_components.Prop.hover_background "transparent" ] @@
+                [ Ui_components.Prop.hover_background "transparent"
+                ; Ui_components.Prop.font_weight 400
+                ; Ui_components.Prop.white_space `normal
+                ; Ui_components.Prop.height_auto ] @@
               Ui_components.button ~variant:`ghost ~size:`sm ~height:20
                 ~padding_horizontal:0 ~padding_vertical:0 ~corner_radius:0
                 ~key:"a" ~accessibility_identifier:id ~disabled:inst.disabled
@@ -737,7 +740,8 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
 
 and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
-  Ui_components.button ~variant:`ghost ~size:`sm ~height:24
+  Ui_components.with_props [Ui_components.Prop.font_weight 400]
+  (Ui_components.button ~variant:`ghost ~size:`sm ~height:24
     ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id ~disabled:inst.disabled
     ~style_class:"query-clause"
     ~text:(String.uppercase_ascii kind) ~label:(String.uppercase_ascii kind)
@@ -745,7 +749,7 @@ and op_label_el inst ~tree ~loc kind : t =
       match Ui_services.dom_by_id id with
       | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
       | None -> ())
-    []
+    [])
 
 and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
@@ -766,7 +770,7 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in
   Ui_components.with_props [ Ui_components.Prop.flex_wrap `wrap ]
-  (row ~key:("qg-" ^ loc_key loc) ~gap:4 ~cross:`center
+  (row ~key:("qg-" ^ loc_key loc) ~gap:4 ~cross:`center ~min_width:0
     ( (if parens then
          [ text ~key:"pl" ~value:"(" [] ]
        else [])

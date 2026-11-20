@@ -1023,6 +1023,61 @@ renderer and application handlers with a scripted worker, not the rebuilt app.
 Integrated journal positions and native visuals remain unverified. No `static/`
 build/write or `:3010` access. Logs: `/Users/devin/attachments/table91-*.log`.
 
+### Table92: query clause typography, remaining width and empty results
+
+Table92 accepts the rendered bottom Node picker, collapsed ellipsis,
+Expand/Collapse widths, and journal query positions at y=310/334.
+Master's query-builder anchors inherit weight **400** and its clause groups
+wrap. LUI's shared buttons instead supplied weight **500** and `nowrap`.
+Clause/operator buttons now explicitly use 400; clause buttons allow normal
+whitespace and automatic height, with shrinkable containers and wrapping
+groups. Human-readable date arguments are retained rather than lengthening
+them to Master's raw UUIDs; identical line breaks are therefore not expected
+at every width.
+
+The final visible unpinned table column now consumes remaining width, keeping
+its stored/default width as a reactive minimum. Earlier columns retain their
+fixed widths; an add-property column retains priority for remaining space.
+Header and body use the same selection and typed flex growth. Master's
+`get-column-size` supplies the ordinary width bases; its explicit
+`-webkit-fill-available` declaration belongs to the add-property column.
+The last ordinary column's growth implements the requested visual outcome,
+not a literal port of that add-property-only declaration.
+
+Master `query.cljs/custom-query-inner` enters the view/table path only when
+the raw result is a nonempty sequence of UUIDs. With no raw result, a nonblank
+query other than `(and)` renders `search/no-result`. It does **not** explicitly
+branch on full-text versus Between syntax there. LUI now renders that message
+for settled empty structured DSL/datalog queries, while retaining the
+explicitly requested Table80 plain-text empty-header behavior. A nonempty raw
+UUID result with an empty filtered view also retains its headers. The reason
+Table80's browser full-text case entered Master's table branch has not been
+traced; no raw-result capture proves a self-match. Tests cover the new empty
+message, filtered-empty block results, loading, blank source and errors. The
+existing full-text empty/error/remount tests remain unchanged. The filter
+scope fixture now supplies a raw result UUID so it tests an empty *filtered
+view*, not the newly hidden raw-empty query branch; all its assertions remain.
+
+The additional All pages one-pixel row report remains unresolved. In the
+supplied `master-/lui-residual-pages.png`, horizontal table borders coincide
+at y=112/145/178/211/244; first-row name/backlink ink coincides at y=157–166,
+and date ink at y=156–166. Both sources use a 34px header advance and 33px
+rows. No negative offset was added: a precise mismatched DOM selector or a
+different evidence pair is needed to distinguish a line-box measurement
+from a visible row displacement.
+
+Gates: **6669 UI checks, zero failures**; native experimental tests/build and
+`git diff --check` pass. Isolated real-SDK Chrome rendering
+verifies 400-weight query tokens, wrapping at 360px, and matching header/body
+last-column growth at 940px (388px final column, 160px minimum). Screenshots:
+`/Users/devin/attachments/table92-{wide,narrow}.png`. These are application
+view factories with a scripted worker, not rebuilt-app acceptance; empty
+query browser behavior and native visuals remain unverified. Worker retains
+Table91's platform cases **[1,7,8]**, including
+`Native secrets require the OS keychain host`: 3 failures / 994 tests.
+No `static/` build/write or `:3010` access. Logs:
+`/Users/devin/attachments/table92-*.log`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -1033,6 +1088,7 @@ build/write or `:3010` access. Logs: `/Users/devin/attachments/table91-*.log`.
 | Rich-editor editing state | Reference/title/color presentation differs by design; read-mode defects are not exempt. |
 | Command palette stacking | Opening cmdk closes the existing `…` menu in LUI. |
 | Native node picker | Checkbox keyboard focus and Space activation differ from Master. |
+| Query-builder date arguments | Retain human-readable date titles instead of Master's raw UUIDs; accepted as preferable. |
 
 ## 2. SDK / platform-limited (unsupported)
 

@@ -217,12 +217,16 @@ let query_content_key (s : V.vstate) =
   match Views_query.parse_src_result s.V.qsrc with
   | Error message -> `Error message
   | Ok Views_query.QBlank -> `Blank
-  | Ok _ ->
+  | Ok source ->
+      let plain_text = match source with
+        | Views_query.QDsl dsl -> String.length dsl > 0 && dsl.[0] = '"'
+        | _ -> false in
       if s.V.query_error <> None then `Error (Option.get s.V.query_error)
       else if s.V.query_view <> W.Nil then `Custom s.V.query_view
       else if s.V.query_scalar_rows <> [] then `Scalar s.V.query_scalar_rows
-      else if s.V.query_rows <> [] || s.V.data <> Wr.VEmpty || not s.V.loading then `Table
-      else `Loading
+      else if plain_text || s.V.query_rows <> [] || (s.V.loading && s.V.data <> Wr.VEmpty) then `Table
+      else if s.V.loading then `Loading
+      else `Empty
 
 let query_content inst (s : V.vstate) : t =
   match query_content_key s with
@@ -244,13 +248,14 @@ let query_content inst (s : V.vstate) : t =
            list_item ~text:v [])
          rows)
   | `Table ->
-    (* block results → the query-result view. cljs renders the foldable
-       live-query shell ("Live query (n)" head + view-actions + table)
-       even when the result is empty. Keep this shell during a refresh. *)
+    (* Raw block results can produce an empty filtered view. *)
     column ~style_class:"query-result" ~gap:0 ~grow:1. ~min_width:0 ~min_height:0
       [ Views_table.foldable inst ~key:"qr"
           ~title:(Views_head.render_head inst)
           ~body:(body_el inst) ]
+  | `Empty ->
+    Ui_components.with_props [Ui_components.Prop.opacity 0.9]
+      (text ~font_size:"0.875rem" ~margin_top:8 ~value:(I.t "search/no-result") [])
   | `Loading -> spacer ~key:"query-loading" []
 
 let query_setting_el inst : t =

@@ -2641,7 +2641,7 @@ let run_views ~registry ~profile ~finish =
           ~kind:(if query then Views_state.KQuery {block_uuid="scope-query"} else Views_state.KAllPages)
           ~feature:"filter-scope-fixture" ~owner:Wire.Nil in
         instance:=Some inst;
-        Views_state.update inst (fun state -> {state with qsrc="(task TODO)";loading=false;
+        Views_state.update inst (fun state -> {state with qsrc="(task TODO)";loading=false;query_rows=["scope-result"];
           data=Views_wire.VFlat {rows=[];count=0;previews=Hashtbl.create 0;qprops=[]};
           filters=[{Views_state.c_prop="fixture/value";c_op=operator;c_val=None}]});
         Lui_elements.column [if query then Views_view.query_view_el inst else Views_view.view_el inst] context parent) in
@@ -5134,9 +5134,40 @@ let run_views ~registry ~profile ~finish =
            ~title:(Views_head.render_head inst)
            ~body:(Lui_elements.spacer []);
          Page.fold_arrow ~on_click:(fun () -> incr fold_presses) "page-fold-fixture";
+         Views_table.with_column_width ~stretch:true inst (Views_table.created_column ())
+           (Lui_elements.column ~accessibility_identifier:"table-stretch-fixture" []);
+         Views_builder.clause_el (Views_builder.editor_of_inst inst ~active:(fun () -> true))
+           ~tree:(ref (Views_builder.COp ("and",[]))) ~loc:[99]
+           (Views_builder.CText "Wrapping clause fixture");
+         Views_view.query_content inst {initial with loading=false;qsrc="(between [[Nov 18th, 2026]] [[Nov 20th, 2026]])"};
          popup_layer]
         context parent) in
   let inst = Option.get !sorting_inst in
+  let empty_query = {(Views_state.empty_vstate ()) with loading=false;qsrc="(between [[Nov 18th, 2026]] [[Nov 20th, 2026]])"} in
+  check "Empty raw DSL results display Master's no-result message without a table"
+    (Views_view.query_content_key empty_query=`Empty
+     && List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "search/no-result")) (nodes sorting)
+     && not (List.exists (fun n -> class_has n "query-result") (nodes sorting)));
+  check "Raw block results retain the query view even when its filtered rows are empty"
+    (Views_view.query_content_key {empty_query with qsrc="Search seed parity";query_rows=["self-match"]}=`Table);
+  check "Loading, blank and failed queries do not display the settled empty state"
+    (Views_view.query_content_key {empty_query with loading=true}=`Loading
+     && Views_view.query_content_key {empty_query with qsrc=""}=`Blank
+     && Views_view.query_content_key {empty_query with query_error=Some "query unavailable"}=`Error "query unavailable");
+  let stretch = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "table-stretch-fixture") (nodes sorting) in
+  check "The final table column retains its minimum without a fixed width"
+    (Hashtbl.find_opt stretch.M.props "min-width"=Some (P.IntValue 160)
+     && not (Hashtbl.mem stretch.M.props "width"));
+  check "Only the final unpinned visible table column stretches"
+    (Views_table.stretch_column inst (Views_state.get inst).columns=Some "block/created-at"
+     && Views_table.stretch_column inst []=None
+     && Views_table.stretch_column inst [Views_table.select_column ()]=None);
+  let clause = List.find (fun n -> Option.fold ~none:false ~some:(fun text ->
+    Str_util.contains text "Wrapping clause fixture") (M.string_prop n "text")) (nodes sorting) in
+  check "Query clause text uses normal weight and wraps without a fixed line height"
+    (Hashtbl.find_opt clause.M.props "font-weight"=Some (P.IntValue 400)
+     && M.string_prop clause "white-space"=Some "normal"
+     && M.string_prop clause "height"=Some "auto");
   let tab = List.find (fun n -> class_has n "ls-view-tab") (nodes sorting) in
   check "Pages preserves the default All view title"
     (M.string_prop tab "accessibility-label" = Some (I18n.t "view/all"));
