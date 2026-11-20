@@ -711,6 +711,34 @@ let test_editor_paste_link () =
      "https://old.example", 0, 19, "https://example.com", "https://example.com";
      "[label](url)", 0, 7, "https://example.com", "https://example.com(url)"]
 
+(* G2 paste-ext-url-over-selection: Shift+Home materializes a DOM Range
+   on .ed-r runs, so the paste event targets .block-editor — not .ed-input. *)
+let test_editor_paste_url_over_visual_selection () =
+  stage_main_session [ block "b1" "label text" ];
+  set_editing "b1" "label text" ~caret:10;
+  Editor_actions.update_model "b1" (fun m ->
+    Edit_model.select m ~anchor:0 ~focus:10);
+  let base = Ui_services.dom_body () in
+  let target =
+    { base with
+      Ui_services.closest =
+        (fun selector ->
+          if Str_util.contains selector ".block-editor" then Some base
+          else if Str_util.contains selector ".ed-input" then None
+          else base.Ui_services.closest selector) }
+  in
+  let prevented = ref false in
+  Editor_keys.on_paste
+    { (key_event "") with
+      Ui_services.target = Some target
+    ; clipboard_get = (function "text/plain" -> "https://example.com" | _ -> "")
+    ; prevent_default = (fun () -> prevented := true)
+    ; stop_immediate = (fun () -> prevented := true) };
+  check "URL paste over a visual .ed-r selection becomes a markdown link"
+    (!prevented
+     && Editor_actions.live_buffer "b1" = "[label text](https://example.com)");
+  clear_editing ()
+
 (* cljs ctrl+p/ctrl+n inside editing move to the previous/next block *)
 let test_selected_clipboard_paste () =
   let clipboard = !Editor_state.clipboard in
@@ -1763,6 +1791,7 @@ let run ~finish =
   test_editor_unbound_enter ();
   test_code_editor_enter ();
   test_editor_paste_link ();
+  test_editor_paste_url_over_visual_selection ();
   test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
   test_editor_tab ();
