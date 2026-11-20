@@ -26,7 +26,9 @@ jobs:
       - name: Install LUI system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pkg-config libpango1.0-dev libx11-dev libxext-dev
+          sudo apt-get install -y pkg-config libpango1.0-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxfixes-dev libxss-dev libxtst-dev
 
       - name: Install pinned SDL3
         run: |
