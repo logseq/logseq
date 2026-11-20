@@ -1815,15 +1815,37 @@ let apply_template t ac uuid =
   | Some buuid ->
       erase_trigger_text ac;
       let buf = Editor_actions.live_buffer buuid in
+      let editor = Editor_state.editing () in
+      let input_seq = !Editor_state.edit_input_seq in
+      let session_current = Editor_actions.paste_session_current () in
+      let context = Runtime.repo (), Runtime.route () in
+      let current () = context = (Runtime.repo (), Runtime.route ())
+        && session_current () && input_seq = !Editor_state.edit_input_seq in
       let focus = Editor_actions.paste_focus () in
       close_ac t;
       ignore
-        (let* sop = Outliner_ops.save_block_parsed buuid buf in
+        ((let* sop = Outliner_ops.save_block_parsed buuid buf in
          let* result = Outliner_ops.apply_and_refresh_result
            ~opts:(Outliner_ops.op_opts "apply-template")
            [ sop; Outliner_ops.apply_template uuid buuid ] in
-         focus result;
+         let unchanged () = current ()
+           && match editor, Editor_state.editing () with
+              | Some before, Some live -> before.epoch == live.epoch
+                  && before.model.version = live.model.version
+                  && live.buffer = buf
+              | _ -> false in
+         let* () =
+           if unchanged () && Option.is_some (Outliner_ops.last_inserted_uuid result) then begin
+             Editor_state.set_silent (fun st ->
+               match st.Editor_state.editing with
+               | Some e -> {st with Editor_state.editing = Some {e with base = buf}}
+               | None -> st);
+             let* () = Outliner_ops.resync_open_editor () in
+             if current () then focus result;
+             Js.Promise.resolve ()
+           end else Js.Promise.resolve () in
          Js.Promise.resolve ())
+         |> Views_db.catch_quiet)
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it

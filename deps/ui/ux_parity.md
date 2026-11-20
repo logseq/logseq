@@ -318,6 +318,47 @@ host`); its query-DSL group passes. Full rebuilt-application filtering and reloa
 remain browser/visually unverified. No `static/` writes or `:3010` access were
 used. UI journal diagnostics retain their 102/52 baseline.
 
+### Table83 tagged-template application
+
+Table83 accepts the Property Configure menus, property-tagged column order,
+Backlinks sort menu and Favorites drag placement. Its next failure applies
+`T83 Useful Template` through `/Template`: the target remains blank with
+`used-template`, while Master displays `T83 Template inserted child`. Evidence
+is `/Users/devin/table83/evidence/lui-template-retry-after-reload.png`,
+`master-content-template.png` and `lui-template-source-validation.json`.
+
+The native worker's save-plus-apply batch already copies the tagged template's
+single child into the blank target, preserves the source tree and records
+`used-template`. No worker implementation or serialization change is needed.
+The reproducible shared editor failure is after that copy: the blank target's
+UUID is reused, but `edit_last_inserted` calls `enter_edit`, which returns early
+for the already-open UUID. Its old buffer remains blank. If the slash trigger
+was previously saved, a subsequent editor commit writes the blank buffer over
+the copied title. Master explicitly reopens the inserted block without saving
+the stale buffer in `edit-last-block-after-inserted!`.
+
+`popups_state.ml` now acknowledges the successful preparatory save and resyncs
+the unchanged originating editor before focusing the inserted block. Editor
+epoch, model version, input sequence and graph/route guards preserve newer
+input and reject stale completions. Empty results do not resync the editor;
+rejections retain the existing write-error notification and are consumed at
+the popup action boundary instead of escaping as an unhandled rejection.
+
+The retained shared editing regression fails before the repair on the stale
+buffer and post-insertion commit. It exercises the real popup/save/refresh/
+focus/commit path with a simulated worker copy response, for both pristine and
+previously-saved slash buffers, newer input, empty results and rejected writes.
+A separate real-worker regression covers the save/apply batch, copied child,
+source preservation, source reference and missing-template no-op after save.
+
+Verification: the focused native outliner-op group passes 31 tests; the UI
+aggregate passes 6480 checks with zero failures, and native experimental tests
+and build pass. The worker aggregate runs 994 tests and retains the same three
+platform failures as the prior Table83 log, including `Native secrets require
+the OS keychain host`. The reported browser's exact post-insertion write has
+not been traced; rebuilt-application picker, display and reload acceptance
+remain browser/visually unverified. No `static/` writes or `:3010` access.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

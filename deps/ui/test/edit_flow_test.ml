@@ -2820,7 +2820,54 @@ let test_template_does_not_save_search_title (h : host) =
     (Option.bind !Runtime.current_page (fun page ->
        Option.map (fun (b : Model.block) -> b.Model.block_title)
          (S.find_in page.Model.page_blocks "b1")) = Some "");
-  Js.Promise.resolve ()
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (base, outcome) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [Test_check.block "b1" base];
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        set_editing ~uuid:"b1" ~buffer:"/" ~caret:1 ~base;
+        let worker = Option.get !Runtime.worker in
+        Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+          let template_op = name="thread-api/apply-outliner-ops" &&
+            match args with _ :: W.Array os :: _ ->
+              List.exists (fun op -> op_name op="apply-template") os | _ -> false in
+          if template_op && outcome="rejected" then h.reject_promise "template rejected"
+          else
+            let* response = worker.invoke_fn name args in
+            if template_op && (outcome="inserted" || outcome="typed") then begin
+              Runtime.current_page := Option.map (fun p -> {p with Model.page_blocks =
+                [Test_check.block "b1" "T83 Template inserted child"]}) !Runtime.current_page;
+              h.sync_page ();
+              if outcome="typed" then A.sync_buffer "b1" "new input";
+              Js.Promise.resolve (W.Map [W.Keyword "result", W.Map
+                [W.Keyword "blocks", W.Array [W.Map [W.Keyword "block/uuid",W.Uuid "b1"]]]])
+            end else Js.Promise.resolve response) };
+        let ac = {ac with tlen=1; query=""} in
+        Popups_state.apply_template (Option.get !Popups_state.active) ac "template";
+        let* () = h.wait_ms 30 in
+        if outcome="inserted" then begin
+          check "Template replacement refreshes the reused target editor"
+            (A.live_buffer "b1"="T83 Template inserted child"
+             && (editing_now ()).S.base="T83 Template inserted child");
+          A.save_if_dirty "b1"
+        end else if outcome="typed" then
+          check "Template completion preserves newer editor input"
+            (A.live_buffer "b1"="new input")
+        else
+          check "Empty and rejected templates do not replace the live editor"
+            (A.live_buffer "b1"="");
+        let* () = h.wait_ms 430 in
+        if outcome="inserted" then
+          check "Template content survives a later editor commit"
+            (Option.bind !Runtime.current_page (fun page ->
+              Option.map (fun (b : Model.block) -> b.Model.block_title)
+                (S.find_in page.Model.page_blocks "b1"))=Some "T83 Template inserted child");
+        Runtime.worker := Some worker;
+        run rest
+  in
+  run ["","inserted"; "/","inserted"; "/","typed"; "/","empty"; "/","rejected"]
 
 let test_slash_cancellation_titles (h : host) =
   let rec next = function
