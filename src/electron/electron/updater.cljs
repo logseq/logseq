@@ -4,8 +4,11 @@
             [electron.logger :as logger]
             [electron.utils :refer [*win prod?]]
             [frontend.version :refer [version]]
-            ["electron" :refer [ipcMain]]
-            ["electron-updater" :refer [autoUpdater]]))
+            ["electron" :refer [ipcMain]]))
+
+;; electron-updater is loaded when the updater is set up, after the window
+;; is created: at main process start it took about 115 ms of every open
+(defn- auto-updater ^js [] (.-autoUpdater (js/require "electron-updater")))
 
 (def *update-pending (atom nil))
 (def *downloaded-update (atom nil))
@@ -51,14 +54,14 @@
   []
   (let [channel (updater-channel)]
     (when channel
-      (set! (.-channel autoUpdater) channel)
+      (set! (.-channel (auto-updater)) channel)
       ;; Keep the original downgrade policy even though setting channel flips it on.
-      (set! (.-allowDowngrade autoUpdater) false))
+      (set! (.-allowDowngrade (auto-updater)) false))
     (debug "configure-auto-updater" {:platform (.-platform js/process)
                                      :arch (.-arch js/process)
                                      :channel channel}))
-  (set! (.-autoInstallOnAppQuit autoUpdater) false)
-  (set! (.-autoDownload autoUpdater) false))
+  (set! (.-autoInstallOnAppQuit (auto-updater)) false)
+  (set! (.-autoDownload (auto-updater)) false))
 
 (defn- register-auto-updater-listeners!
   [^js win]
@@ -93,25 +96,26 @@
           (logger/warn "[updater/error]" error)
           (emit-update! win "error" (normalize-error error))
           (emit-completed! win))]
-    (.on autoUpdater "checking-for-update" checking-handler)
-    (.on autoUpdater "update-available" available-handler)
-    (.on autoUpdater "update-not-available" not-available-handler)
-    (.on autoUpdater "download-progress" progress-handler)
-    (.on autoUpdater "update-downloaded" downloaded-handler)
-    (.on autoUpdater "error" error-handler)
-    #(do
-       (.off autoUpdater "checking-for-update" checking-handler)
-       (.off autoUpdater "update-available" available-handler)
-       (.off autoUpdater "update-not-available" not-available-handler)
-       (.off autoUpdater "download-progress" progress-handler)
-       (.off autoUpdater "update-downloaded" downloaded-handler)
-       (.off autoUpdater "error" error-handler))))
+    (doto (auto-updater)
+      (.on "checking-for-update" checking-handler)
+      (.on "update-available" available-handler)
+      (.on "update-not-available" not-available-handler)
+      (.on "download-progress" progress-handler)
+      (.on "update-downloaded" downloaded-handler)
+      (.on "error" error-handler))
+    #(doto (auto-updater)
+       (.off "checking-for-update" checking-handler)
+       (.off "update-available" available-handler)
+       (.off "update-not-available" not-available-handler)
+       (.off "download-progress" progress-handler)
+       (.off "update-downloaded" downloaded-handler)
+       (.off "error" error-handler))))
 
 (defn- <check-for-updates!
   [^js win auto-download?]
   (debug "check-for-updates" {:auto-download? auto-download?})
-  (set! (.-autoDownload autoUpdater) auto-download?)
-  (-> (.checkForUpdates autoUpdater)
+  (set! (.-autoDownload (auto-updater)) auto-download?)
+  (-> (.checkForUpdates (auto-updater))
       (.then
        (fn [_]
          ;; Manual checks without auto download need an explicit terminal event.
@@ -127,8 +131,8 @@
   [^js win]
   (when (and prod? (not= false (cfgs/get-item :auto-update)))
     (debug "init-auto-updater")
-    (set! (.-autoDownload autoUpdater) true)
-    (-> (.checkForUpdates autoUpdater)
+    (set! (.-autoDownload (auto-updater)) true)
+    (-> (.checkForUpdates (auto-updater))
         (.catch (fn [error]
                   (logger/warn "[updater/auto-check]" error)
                   (emit-update! win "error" (normalize-error error))
@@ -148,7 +152,7 @@
                              (-> (<check-for-updates! win auto-download?)
                                  (.finally #(reset! *update-pending nil))))))
         install-listener (fn [_e _quit-app?]
-                           (.quitAndInstall autoUpdater false true))
+                           (.quitAndInstall (auto-updater) false true))
         get-downloaded-listener (fn [_e]
                                   (some-> @*downloaded-update bean/->js))]
     (init-auto-updater! win)

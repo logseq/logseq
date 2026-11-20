@@ -17,7 +17,7 @@
             [frontend.components.right-sidebar :as sidebar]
             [frontend.components.rtc.indicator :as rtc-indicator]
             [frontend.components.server :as server]
-            [frontend.components.settings :as settings]
+            [frontend.components.lazy-settings :as settings]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
             [frontend.context.i18n :as i18n :refer [t]]
