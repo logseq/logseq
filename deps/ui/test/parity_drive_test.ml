@@ -240,18 +240,25 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
      them — a consumed key sets prevent_default *)
   check "popup keys are consumed" (keydown st "ArrowDown");
   ignore (keydown st "ArrowUp");
-  (* filtering hides the group banners (cljs get-matched-commands) *)
-  P.ac_update st ac "zzzzzz";
+  (* cljs: short no-match shows "No matched commands"; >2 chars past
+     the last match closes the popup. Group headers stay while filtering. *)
+  P.ac_update st ac "zz";
   (match ac_of st with
    | Some ac ->
        check "unmatched slash query falls back to 'No matched commands'"
          (List.length ac.P.items = 1
-          && (List.hd ac.P.items).P.ai_act = P.Noop);
-       check "filtered slash drops group headers"
-         (List.for_all (fun it -> it.P.ai_hdr = None) ac.P.items);
+          && (List.hd ac.P.items).P.ai_act = P.Noop
+          && (List.hd ac.P.items).P.ai_label = "No matched commands");
        ignore (keydown st "Enter");
        check "the no-match row closes the popup" (ac_of st = None)
    | None -> check "slash popup still open" false);
+  P.open_ac st P.Slash;
+  S.flush s;
+  (match ac_of st with
+   | Some ac ->
+       P.ac_update st ac "zzzzzz";
+       check "long unmatched slash query closes the popup" (ac_of st = None)
+   | None -> check "slash popup reopens" false);
   P.open_ac st P.Slash;
   S.flush s;
   (match ac_of st with
@@ -262,7 +269,9 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
             check "slash fuzzy match keeps Heading 1"
               (List.exists
                  (fun it -> it.P.ai_act = P.Editor_cmd "heading:1")
-                 ac.P.items)
+                 ac.P.items);
+            check "filtered slash keeps group headers"
+              (List.exists (fun it -> it.P.ai_hdr <> None) ac.P.items)
         | None -> check "slash popup still open" false)
    | None -> check "slash popup reopens" false);
   ignore (keydown st "Escape");
