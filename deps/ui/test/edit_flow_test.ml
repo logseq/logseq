@@ -706,7 +706,7 @@ let test_node_reference_suggestions (h : host) =
           (A.live_buffer "b1"=prefix ^ "[[]]"
            && match (Popups_state.get popup).Popups_state.ac with
               | Some ac -> ac.tpos=String.length prefix && ac.tlen=2 && ac.query=""
-                  && List.length ac.items=33
+                  && List.length ac.items=10
               | None -> false);
         Editor_keys.apply_input "b1" (EI.Insert "Tar");
         let* () = h.wait_ms 25 in
@@ -740,10 +740,12 @@ let test_node_reference_suggestions (h : host) =
   let before = !searches in
   open_query "[[ ]]" 3 " ";
   let* () = h.wait_ms 25 in
-  check "empty node-reference query offers all 33 NLP dates without a graph search"
+  check "empty node-reference query offers the first 10 NLP dates without a graph search"
     (match (Popups_state.get popup).Popups_state.ac with
-     | Some ac -> !searches = before && List.length ac.items = 33
+     | Some ac -> !searches = before && List.length ac.items = 10
          && List.for_all (fun item -> Str_util.starts_with_ci item.Popups_state.ai_key "nlp:") ac.items
+         && List.exists (fun item -> item.Popups_state.ai_key = "nlp:Today") ac.items
+         && not (List.exists (fun item -> item.Popups_state.ai_key = "nlp:Last year") ac.items)
      | None -> false);
   Popups_state.close_ac popup;
   Popups_state.active := previous_popup;
