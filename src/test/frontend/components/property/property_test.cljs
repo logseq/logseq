@@ -311,3 +311,19 @@
       "Tag dialog can add properties")
   (is (false? (#'property-component/page-title-property-surface? {:in-block-container? true}))
       "A page nested in the outliner cannot add properties"))
+
+(deftest class-property-rows-follow-block-order-test
+  (let [rows (#'property-component/class-property-rows
+              {:logseq.property.class/properties
+               #{{:block/uuid #uuid "00000000-0000-0000-0000-000000000001"
+                  :db/ident :user.property/third
+                  :block/order "a2"}
+                 {:block/uuid #uuid "00000000-0000-0000-0000-000000000002"
+                  :db/ident :user.property/first
+                  :block/order "a0"}
+                 {:block/uuid #uuid "00000000-0000-0000-0000-000000000003"
+                  :db/ident :user.property/second
+                  :block/order "a1"}}})]
+    (is (= [:user.property/first :user.property/second :user.property/third]
+           (map :property-ident rows))
+        "A tag page lists its properties in their configured order")))

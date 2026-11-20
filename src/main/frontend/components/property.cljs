@@ -987,6 +987,15 @@
         (not show-hidden-properties?)
         (not show-hidden-properties-toggle-button?))))
 
+(defn- class-property-rows
+  "Rows for the properties configured on a class, in their :block/order."
+  [class-block]
+  (->> (db-property/sort-properties (:logseq.property.class/properties class-block))
+       (map (fn [property]
+              {:property-uuid (:block/uuid property)
+               :property-ident (:db/ident property)
+               :value nil}))))
+
 (hsx/defc ^:large-vars/cleanup-todo properties-area
   [target-block {:keys [sidebar-properties? tag-dialog? skip-bidirectional-properties?] :as opts}]
   (let [id (hooks/use-memo #(str (random-uuid)) [])
@@ -1118,11 +1127,7 @@
                       append-renderers)
 
                 (when class?
-                  (let [properties (->> (:logseq.property.class/properties block)
-                                        (map (fn [property]
-                                               {:property-uuid (:block/uuid property)
-                                                :property-ident (:db/ident property)
-                                                :value nil})))
+                  (let [properties (class-property-rows block)
                         opts' (assoc opts
                                      :class-schema? true
                                      :description-property-uuid description-property-uuid)]
