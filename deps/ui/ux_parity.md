@@ -1283,6 +1283,18 @@ Screenshots: `/Users/devin/attachments/table96-{light,dark}.png`; logs:
 factories using the real SDK, not rebuilt-app acceptance or native visuals.
 No `static/` writes/build or `:3010` access.
 
+### Table97: accepted sweep and grouped Select-all reference defect
+
+Table97, served at `431d4268`, passes with no LUI-only actionable
+difference. The acceptance sweep reports a Master reference defect in
+grouped query tables: header Select-all remains unchecked after selection,
+the selection toolbar does not appear, and a second click does not clear
+the selection. LUI correctly reflects the selected state, shows the
+toolbar and clears the selection on the second click. Keep that behavior;
+do not reproduce the reference defect. This is an intentional difference,
+not an outstanding parity repair. This entry records the supplied runtime
+acceptance; no application code changes or additional visual check.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -1294,6 +1306,7 @@ No `static/` writes/build or `:3010` access.
 | Command palette stacking | Opening cmdk closes the existing `…` menu in LUI. |
 | Native node picker | Checkbox keyboard focus and Space activation differ from Master. |
 | Query-builder date arguments | Retain human-readable date titles instead of Master's raw UUIDs; accepted as preferable. |
+| Grouped query Select-all | Table97 Master reference defect: unchecked header, missing selection toolbar and second click not clearing. Retain LUI's correct checked state, toolbar and toggle-to-clear behavior. |
 
 ## 2. SDK / platform-limited (unsupported)
 
