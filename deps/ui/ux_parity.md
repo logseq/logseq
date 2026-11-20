@@ -1246,6 +1246,43 @@ application acceptance and native visuals remain unverified; no `static/`
 writes/build or `:3010` access. Logs:
 `/Users/devin/attachments/table95-color-*.log`.
 
+### Table96: operator hover fill and centered Select indicators
+
+Table96 accepts Table95's token origin/ink/colors and Select scrolling in
+flat query, grouped query and Pages tables. Master's bare operator anchor
+has no hover background; LUI's ghost-button recipe supplied the generic
+secondary fill. The operator now explicitly requests a transparent hover
+background, retaining the accepted secondary-text color on hover.
+
+Master's header/row checkbox labels are 32px flex targets with centered
+16px indicators (`views.cljs` `header-checkbox` / `row-checkbox`). LUI's
+SDK checkbox always creates an indicator and a label span, including when
+the visible label is empty. Its default 8px gap occupied space beside that
+empty span, shifting the indicator four pixels left inside its centered
+32px target. The table-only `checkbox_el` helper now sets typed gap zero:
+all its header/body uses intentionally have no visible text. Accessibility
+labels, hit targets, mixed/checked states and toggle handlers are unchanged;
+labelled checkboxes elsewhere and the SDK itself are untouched.
+
+A temporary real-SDK browser probe reproduced six indicators (header/body
+for flat query, grouped query and Pages) at 4px offsets with an 8px gap
+before repair. After repair, all six measure **16px inside 32px, offset
+8px**, corresponding to **x316..332** at the supplied x308 cell origin.
+Light/dark AND hover backgrounds are transparent and the accepted hover
+text colors remain intact. The probe also retains Table95 token geometry,
+713px scroll extent / 145px maximum, flat body Select scrolling and grouped
+body pinning. No retained test is added for these literal styling props;
+the temporary visual probe is removed after verification.
+
+Gates: **6679 UI checks, zero failures**; native experimental tests/build
+pass. Worker retains Table95's **[1,7,8]** platform cases: 3 failures / 994
+tests (`Native secrets require the OS keychain host`), not a passing gate.
+
+Screenshots: `/Users/devin/attachments/table96-{light,dark}.png`; logs:
+`/Users/devin/attachments/table96-*.log`. These are isolated application
+factories using the real SDK, not rebuilt-app acceptance or native visuals.
+No `static/` writes/build or `:3010` access.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

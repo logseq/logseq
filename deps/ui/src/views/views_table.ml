@@ -322,7 +322,7 @@ let checkbox_el ?(mixed = fun _ -> false) inst ~jtrigger ~id ~aria_label ~shown 
        ;Ui_components.Prop.indicator_border_color "var(--lx-checkbox-border)"
        ;Ui_components.Prop.checked_indicator_border_color "hsl(var(--border))"]
       (Lui_elements.checkbox ~accessibility_identifier:id ~label:aria_label
-        ~width:32 ~height:32 ~main:`center ~cross:`center
+        ~width:32 ~height:32 ~gap:0 ~main:`center ~cross:`center
         ~border_color:"hsl(var(--primary))"
         ~transition:"opacity 150ms"
         ~style_class:(if jtrigger then "jtrigger" else "")

@@ -749,6 +749,7 @@ and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
   Ui_components.with_props
     [ Ui_components.Prop.font_weight 400
+    ; Ui_components.Prop.hover_background "transparent"
     ; Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color)"
     ; Ui_components.Prop.height_auto ]
   (Ui_components.button ~variant:`ghost ~size:`sm
