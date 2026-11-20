@@ -1623,7 +1623,7 @@ let foldable inst ~key ~title ~(body : t) : t =
                                               (if c then "rotating-arrow"
                                                else "rotating-arrow-down"))
                                           collapsed_sig)
-                                     [] ]) ])))
+                                     [] ]) ]))
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig
