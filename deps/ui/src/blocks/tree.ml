@@ -403,6 +403,34 @@ let control_wrap ?on_toggle ?siblings ~scope ~collapse_scope ~library uuid
                            label ~key:("ol-" ^ uuid) ~margin_left:3
                              ~value:(string_of_int idx ^ ".") []
                        | None -> box [])
+                  | None
+                    when b.Model.block_ls_type = Some "annotation"
+                         || List.mem "logseq.class/Pdf-annotation"
+                              b.block_tag_idents ->
+                      (* cljs annotation bullet is a colored pin, not a
+                         filled dot *)
+                      let color =
+                        match b.Model.block_hl_color with
+                        | Some "yellow" ->
+                            "var(--ls-highlight-color-yellow, #fef2a4)"
+                        | Some "red" ->
+                            "var(--ls-highlight-color-red, #fdd8d8)"
+                        | Some "pink" ->
+                            "var(--ls-highlight-color-pink, #f9d8ec)"
+                        | Some "green" ->
+                            "var(--ls-highlight-color-green, #ccebd7)"
+                        | Some "blue" ->
+                            "var(--ls-highlight-color-blue, #cee7fe)"
+                        | Some "purple" ->
+                            "var(--ls-highlight-color-purple, #eddbf9)"
+                        | Some "gray" ->
+                            "var(--ls-highlight-color-gray, #e8e8e8)"
+                        | Some c -> c
+                        | None -> Ui_components.block_bullet_color
+                      in
+                      icon ~key:("pin-" ^ uuid) ~name:(`app "pin")
+                        ~size:14. ~foreground:color
+                        ~data_attrs:[ ("data-blockid", uuid) ] []
                   | None ->
                       Ui_parts.string_prop Lui_protocol.StyleClass
                         ~value:(reactive (fun selection ->

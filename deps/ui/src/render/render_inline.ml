@@ -159,6 +159,7 @@ type ref_meta =
   ; is_page : bool
   ; is_math : bool
   ; asset : Model.block option
+  ; hl_page : int option (* Pdf-annotation → "P1" prefix on page-refs *)
   }
 
 let ref_meta_fields =
@@ -166,7 +167,8 @@ let ref_meta_fields =
   ; "logseq.property.node/display-type"
   ; "logseq.property.asset/type"; "logseq.property.asset/external-url"
   ; "logseq.property.asset/width"; "logseq.property.asset/height"
-  ; "logseq.property.asset/resize-metadata"; "logseq.property.asset/align" ]
+  ; "logseq.property.asset/resize-metadata"; "logseq.property.asset/align"
+  ; "logseq.property/ls-type"; "logseq.property.pdf/hl-page" ]
 
 let ref_meta_properties = List.map (fun k -> Wire.Keyword k) ref_meta_fields
 
@@ -175,7 +177,7 @@ let ref_meta_pattern =
     ("[" ^ String.concat " " (List.map (fun k -> ":" ^ k) ref_meta_fields) ^ "]")
 
 let plain_ref_meta title is_page is_math =
-  { title; is_page; is_math; asset = None }
+  { title; is_page; is_math; asset = None; hl_page = None }
 
 let ref_meta_of_wire w =
   Option.map
@@ -190,6 +192,14 @@ let ref_meta_of_wire w =
       ; asset =
           Option.map (fun _ -> Decode.block_of_wire w)
             (Wire.map_get_string w "logseq.property.asset/type")
+      ; hl_page =
+          (match Decode.prop_label w "logseq.property/ls-type" with
+           | Some "annotation" -> (
+               match Wire.get w "logseq.property.pdf/hl-page" with
+               | Some (Wire.Int n) -> Some n
+               | Some (Wire.Int64 n) -> Some (Int64.to_int n)
+               | _ -> None)
+           | _ -> None)
       })
     (Wire.map_get_string w "block/title")
 
@@ -1609,7 +1619,7 @@ and resolved_ref ?label ~refs ~self uuid : t =
     self :: (match refs with [] -> [] | _ -> uuid :: refs)
   in
   (reactive
-    (fun { title; is_page; is_math; asset } ->
+    (fun { title; is_page; is_math; asset; hl_page } ->
       match asset with
       | Some b
         when Option.fold ~none:false ~some:is_inline_media b.Model.block_asset_type ->
@@ -1637,6 +1647,14 @@ and resolved_ref ?label ~refs ~self uuid : t =
       else
         (* .page-reference:hover in lui-core.css carries the hover bg;
            a typed HoverBackground prop cannot reach a dom node *)
+        let hl_prefix =
+          match hl_page with
+          | Some p ->
+              [ text ~key:"hlp" ~style_class:"hl-page"
+                  [ text ~key:"hlps" ~as_:`Strong
+                      ~value:("P" ^ string_of_int p ^ " ") [] ] ]
+          | None -> []
+        in
         let reference_link =
           preview_link
             (Ui_components.with_props
@@ -1651,7 +1669,9 @@ and resolved_ref ?label ~refs ~self uuid : t =
                   ~data_attrs:[ ("data-uuid", uuid); ("tabindex", "0")
                               ; ("draggable", "true")
                               ; ("data-ref", data_ref) ]
-                  (match alias_label with
+                  (hl_prefix
+                   @
+                   match alias_label with
                    | Some label -> [ text ~value:label [] ]
                    | None when is_page -> [ text ~value:title [] ]
                    | None ->
