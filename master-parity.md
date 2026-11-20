@@ -22,7 +22,8 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 
 ## G5 — slash commands
 
-Module 12 (Block editor — slash commands). Base: `refactor/lui-parity` (rebased).
+Module 12 (Block editor — slash commands). Base: `refactor/lui-parity` @ `9c3497f356` (rebased).
+Branch: `logseq/g5-slash-commands-7f98`.
 
 | check | module | master | LUI (before) | severity | status |
 |-------|--------|--------|--------------|----------|--------|
@@ -33,8 +34,8 @@ Module 12 (Block editor — slash commands). Base: `refactor/lui-parity` (rebase
 | cmd-scheduled | 12 | Year control; Next date Empty | Same LUI gap as deadline | low | fixed `6b1ed13723` (shared calendar/repeat) |
 | cmd-date-picker | 12 | Year control in caption | Month only | low | fixed `6b1ed13723` (shared year input) |
 | cmd-add-comment | 12 | Caret moves into new empty comment | Thread created; caret stays on host | med | fixed `19550bd15a` |
-| cmd-query | 12 | Host text moves into query child; host cleared | Query set without child / wrong path | low | fixed `fb64b17721` |
-| cmd-advanced-query | 12 | Keep host title; empty clojure code query child; no live all-nodes table | Title discarded; Untitled; live 28-row table | high | fixed `ab5bc208af` |
+| cmd-query | 12 | Clear slash; move host title into query child; empty host; tag Query | Wrong child path / lost title | low | fixed `fb64b17721` + `0dcde1ea17` |
+| cmd-advanced-query | 12 | Keep host title; empty clojure code query child; no live all-nodes table | Title discarded; Untitled; live 28-row table | high | fixed `ab5bc208af` + `0dcde1ea17` |
 | cmd-query-function | 12 | Renders `{{function null}}` | Inline `host {{function}}` | low | fixed `9ff24731b1` |
 | cmd-upload-an-asset | 12 | Keeps `/Upload an asset` until file chosen | Cleared slash text immediately | low | fixed `0a6a0a58e0` |
 | cmd-template | 12 | Placeholder "Search for a template" | "Search for a block" | low | fixed `38365a44b3` |
@@ -46,7 +47,7 @@ Module 12 (Block editor — slash commands). Base: `refactor/lui-parity` (rebase
 | check | master | LUI (before) | status |
 |-------|--------|--------------|--------|
 | slash-filter `/head` | Group name searchable; Heading group title kept | Group headers dropped when filtered | fixed `14bf252330` |
-| slash-filter no-match | Close after >2 chars past last match; else "No matched commands" | Untranslated key; popup stayed open | fixed `14bf252330` |
+| slash-filter no-match | Close after >2 chars past last match; else "No matched commands" | Untranslated key; popup stayed open | fixed `14bf252330` + tests `5b1b0c5e06` |
 | slash-filter `/ ` | Slash+space closes popup | Full list stayed open | fixed `14bf252330` |
 
 ### Notes
