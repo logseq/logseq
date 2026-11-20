@@ -2615,11 +2615,15 @@ let apply_item t ac ~meta it =
            Editor_sink.focus_input ac.auuid
            with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
-      invalidate_ac t;
+      (* cljs embed-block/page-ref clear the slash trigger before the
+         follow-up search opens — mutate the buffer before invalidating
+         so insert_text's ac_current check still passes *)
       (match kind with
        | Template_search -> insert_text ac "/" 0
        | Page_ref -> insert_text ac "[[]]" 2
+       | Embed_ref -> insert_text ac "" 0
        | _ -> erase_trigger_text ac);
+      invalidate_ac t;
       (match kind with
        | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
