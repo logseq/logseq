@@ -1910,6 +1910,106 @@
                 (d/unlisten! conn-a listener-a)
                 (d/unlisten! conn-b listener-b)))))))))
 
+(defn- assert-property-value-page-after-rebase!
+  [purge-source-page?]
+  (let [source-page-uuid (uuid "00000001-0000-0000-0000-000000000001")
+        destination-page-uuid (uuid "00000001-0000-0000-0000-000000000002")
+        parent-uuid (uuid "00000001-0000-0000-0000-000000000003")
+        conn-a (db-test/create-conn)
+        conn-b (db-test/create-conn)
+        ops-a (new-client-ops-db)
+        ops-b (new-client-ops-db)
+        client-a (make-client repo-a)
+        client-b (make-client repo-b)
+        server (make-server)]
+    (with-test-repos {repo-a {:conn conn-a :ops-conn ops-a}
+                      repo-b {:conn conn-b :ops-conn ops-b}}
+      (fn []
+        (reset! db-sync/*repo->latest-remote-tx {})
+        (client-op/update-local-tx repo-a 0)
+        (client-op/update-local-tx repo-b 0)
+        (create-page! conn-a "Property rebase source" source-page-uuid)
+        (create-page! conn-a "Property rebase destination" destination-page-uuid)
+        (create-block! conn-a
+                       (d/entity @conn-a [:block/uuid source-page-uuid])
+                       "property owner"
+                       parent-uuid)
+        (let [property (ensure-property! conn-a "Property Rebase Page" sim-default-property-schema)
+              property-id (:db/ident property)
+              client-a-state {:repo repo-a :conn conn-a :client client-a :online? true}
+              client-b-state {:repo repo-b :conn conn-b :client client-b :online? true}
+              replica-state (fn [db]
+                              (let [parent (d/entity db [:block/uuid parent-uuid])
+                                    child (get (:block/properties parent) property-id)]
+                                {:parent-page (:block/uuid (:block/page parent))
+                                 :child-uuid (:block/uuid child)
+                                 :child-title (:block/title child)
+                                 :child-page (when-let [page-id (get-in child [:block/page :db/id])]
+                                               (:block/uuid (d/entity db page-id)))
+                                 :child-parent (when-let [parent-id (get-in child [:block/parent :db/id])]
+                                                 (:block/uuid (d/entity db parent-id)))
+                                 :child-created-from (when-let [created-from-id (get-in child [:logseq.property/created-from-property :db/id])]
+                                                       (:db/ident (d/entity db created-from-id)))}))]
+          (is (true? (sync-client! server client-a-state)))
+          (is (true? (sync-client! server client-b-state)))
+          (is (empty? (sync-apply/pending-txs repo-a)))
+          (is (empty? (sync-apply/pending-txs repo-b)))
+          (apply-ops! conn-a [[:set-block-property [parent-uuid property-id "value"]]] {})
+          (let [pending (sync-apply/pending-txs repo-a)
+                pending-tx (first pending)
+                parent (d/entity @conn-a [:block/uuid parent-uuid])
+                child-before (get (:block/properties parent) property-id)
+                child-uuid (:block/uuid child-before)]
+            (is (= 1 (count pending)))
+            (is (empty? (:forward-outliner-ops pending-tx)))
+            (is (= parent-uuid (:block/uuid (d/entity @conn-a
+                                                     (get-in child-before [:block/parent :db/id])))))
+            (is (= property-id (:db/ident (d/entity @conn-a
+                                                    (get-in child-before [:logseq.property/created-from-property :db/id])))))
+            (is (= source-page-uuid (:block/uuid (d/entity @conn-a
+                                                           (get-in child-before [:block/page :db/id])))))
+            (apply-ops! conn-b
+                        [[:move-blocks [[parent-uuid] destination-page-uuid {:sibling? false}]]]
+                        {})
+            (is (= destination-page-uuid
+                   (:block/uuid (:block/page (d/entity @conn-b [:block/uuid parent-uuid])))))
+            (when purge-source-page?
+              (delete-page! conn-b source-page-uuid)
+              (apply-ops! conn-b [[:recycle-delete-permanently [source-page-uuid]]] {}))
+            (is (= (not purge-source-page?)
+                   (some? (d/entity @conn-b [:block/uuid source-page-uuid]))))
+            (is (true? (sync-client! server client-b-state)))
+            (is (= (not purge-source-page?)
+                   (some? (d/entity @(:conn @server) [:block/uuid source-page-uuid]))))
+            (is (true? (sync-client! server client-a-state)))
+            (is (empty? (sync-apply/pending-txs repo-a)))
+            (is (= (:t @server) (client-op/get-local-tx repo-a)))
+            (is (true? (sync-client! server client-b-state)))
+            (is (empty? (sync-apply/pending-txs repo-b)))
+            (is (= (:t @server) (client-op/get-local-tx repo-b)))
+            (let [server-conn (get @server :conn)
+                  dbs [@conn-a @conn-b @server-conn]
+                  states (mapv replica-state dbs)
+                  expected-parent-pages (repeat 3 destination-page-uuid)
+                  expected-child-uuids [child-uuid child-uuid child-uuid]
+                  expected-child-titles (repeat 3 "value")
+                  expected-child-parents [parent-uuid parent-uuid parent-uuid]
+                  expected-created-from (repeat 3 property-id)]
+              (is (= expected-parent-pages (mapv :parent-page states)) (pr-str states))
+              (is (= expected-parent-pages (mapv :child-page states)) (pr-str states))
+              (is (= expected-child-uuids (mapv :child-uuid states)) (pr-str states))
+              (is (= expected-child-titles (map :child-title states)) (pr-str states))
+              (is (= expected-child-parents (mapv :child-parent states)) (pr-str states))
+              (is (= expected-created-from (map :child-created-from states)) (pr-str states))
+              (is (every? empty? (map db-issues dbs))
+                  (pr-str (mapv db-issues dbs))))))))))
+
+(deftest two-clients-rebase-property-value-stays-on-parent-page-test
+  (testing "with the source page retained"
+    (assert-property-value-page-after-rebase! false))
+  (testing "with the source page purged"
+    (assert-property-value-page-after-rebase! true)))
+
 (deftest ^:long undo-redo-indent-sequence-does-not-produce-invalid-entity-test
   (testing "undo/redo of add-1 add-2 indent-2 should remain valid after another undo"
     (let [seed 20260321
