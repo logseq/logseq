@@ -780,6 +780,8 @@ let test_cm_dismissal st =
     ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false in
   select "b1";
   open_menu ();
+  check "Opening the context menu hides the selection action bar"
+    (not (Editor_state.read ()).Editor_state.action_bar && cm_of st <> None);
   Popups_view.close_cm st;
   check "Dismissing a live context menu clears its block selection and action bar"
     (cm_of st=None && Editor_state.String_set.is_empty (Editor_state.selected ())
