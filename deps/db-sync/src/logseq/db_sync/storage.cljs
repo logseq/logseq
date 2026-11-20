@@ -157,6 +157,17 @@
         (assoc data :addresses addresses)
         data))))
 
+(defn- raise-address-high-water!
+  "DataScript hands out node addresses from a counter that a restore sets from the
+  root's :max-addr. A store interrupted after some node rows were written but
+  before the root was, leaves rows above that :max-addr; a fresh process would
+  then give new nodes those addresses and overwrite rows the restored indexes
+  may read (logseq/db-test#1525). Start the counter above every stored row."
+  [sql]
+  (when-let [max-stored (some-> (select-one sql "select max(addr) as m from kvs") (aget "m"))]
+    (when (number? max-stored)
+      (vswap! @#'datascript.storage/*max-addr max max-stored))))
+
 (defn new-sqlite-storage [sql]
   (reify IStorage
     (-store [_ addr+data-seq _delete-addrs]
@@ -170,7 +181,8 @@
                            "content" (common/write-transit data')
                            "addresses" addresses}))
                   addr+data-seq)]
-        (upsert-addr-content! sql data)))
+        ;; one transaction: an interrupted store leaves no part of itself on disk
+        (with-sql-transaction! sql #(upsert-addr-content! sql data))))
     (-restore [_ addr]
       (restore-data-from-addr sql addr))))
 
@@ -205,6 +217,7 @@
 (defn open-conn
   [sql]
   (init-schema! sql)
+  (raise-address-high-water! sql)
   (let [storage (new-sqlite-storage sql)
         schema db-schema/schema
         conn (common-sqlite/get-storage-conn storage schema)]
