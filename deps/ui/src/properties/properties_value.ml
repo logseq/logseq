@@ -774,6 +774,14 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
     | None -> ()
   in
   let pending = take_pending_edit ~block_uuid:ctx.block_uuid ~ident ~value_uuid:uuid in
+  (* Appear can land after the next keystroke (draft surfaces mount
+     before Appear). Schedule activate immediately when the dialog
+     handed us a pending edit so the caret reaches the value cell
+     before the user types — on_appear remains as a fallback. *)
+  (if pending then
+     ignore
+       (Ui_services.timers_timeout
+          (fun () -> if alive () then activate ()) 0));
   (column ~gap:0 ~grow:1. ~min_width:0
      ~on_appear:(fun _ -> if pending then activate ())
      [ reactive (fun target ->

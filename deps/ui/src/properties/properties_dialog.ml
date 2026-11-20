@@ -146,9 +146,10 @@ let is_many prop =
   || ident_of prop = "block/tags"
 
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
-   block and lands the caret in it — refresh as soon as the write lands
-   so the pending editor mounts before the user's next click; entering
-   that editor exits the outliner edit (single editing surface) *)
+   block and lands the caret in it — await the area refresh so the
+   pending editor mounts (and steals focus) before the next keystroke;
+   fire-and-forget refresh left focus on the block body and the value
+   row stuck on "Empty" after the typed title was already persisted *)
 let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
@@ -161,8 +162,11 @@ let add_empty_text_block d prop =
     D.create_property_text_block ~block_uuid ~ident
       ~title ~new_block_id:(if block_uuid=owner then value_uuid else Ui_services.env_random_uuid ()) ())
   in
-  S.refresh_now ();
+  (* dismiss first so dialog focus-restore cannot race the pending
+     editor; then await refresh_all_now so on_appear → enter_edit runs
+     against the new value row before the user types *)
   close_current d;
+  let* _ = S.refresh_all_now () in
   Js.Promise.resolve ())
   |> ignore
 
