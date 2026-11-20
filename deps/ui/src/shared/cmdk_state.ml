@@ -746,8 +746,14 @@ let theme_items (svs : Svs.t) q =
     "mode", Wire.String mode; "url", Wire.Nil] in
   List.map (fun theme ->
     let field key = Option.value (Wire.map_get_string theme key) ~default:"" in
+    (* cljs load-results :themes — info is "mode #pid" *)
+    let info =
+      let mode = field "mode" and pid = field "pid" in
+      if mode = "" && pid = "" then None
+      else Some (String.concat " #" [ mode; pid ])
+    in
     { ikey = String.concat "\000" ["theme"; field "pid"; field "url"; name theme; field "mode"]
-    ; idx = -1; gid = G_themes; ititle = name theme; info = None; header = None
+    ; idx = -1; gid = G_themes; ititle = name theme; info; header = None
     ; iicon = Some (Node_icon.tabler
         (if Wire.map_get_string theme "url" = svs.Svs.selected_theme_url () then "check" else "palette"))
     ; inline_icon = None; isc = ""; ibadge = No_badge; act = Select_theme theme
