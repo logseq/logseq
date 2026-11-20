@@ -63,6 +63,53 @@
                           (is false (str error))
                           (done)))))))
 
+(deftest direct-upload-signs-the-wire-length-and-confirms-the-stored-object
+  (async done
+         (let [limit (* 200 1024 1024)
+               checksum (apply str (repeat 64 "a"))
+               stored (atom nil)
+               signed (atom nil)
+               env #js {:DB #js {}
+                        :R2_ASSET_UPLOAD_BUCKET "assets"
+                        :SIGN_R2_ASSET_UPLOAD (fn [key size _headers]
+                                                (reset! signed [key size])
+                                                (p/resolved "https://r2.example.test/signed"))
+                        :LOGSEQ_SYNC_ASSETS #js {:head (fn [_key] (p/resolved @stored))}}
+               control (fn [action size]
+                         (assets/handle
+                          (js/Request. "http://localhost/assets/graph-1/asset-1.bin"
+                                       #js {:method "POST" :body (js/JSON.stringify #js {:action action :size size :checksum checksum})})
+                          env))]
+           (-> (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved true))]
+                 (p/let [small (control "prepare" 1024)
+                         small-plan (.json small)
+                         over (control "prepare" (inc limit))
+                         missing (control "complete" limit)
+                         prepared (control "prepare" limit)
+                         plan (.json prepared)
+                         headers (aget plan "headers")]
+                   (is (= "proxy" (aget small-plan "mode")))
+                   (is (= 413 (.-status over)))
+                   (is (= 409 (.-status missing)))
+                   (is (= "direct" (aget plan "mode")))
+                   (is (= "https://r2.example.test/signed" (aget plan "url")))
+                   (is (= ["graph-1/asset-1.bin" 279620315] @signed))
+                   (is (= "*" (aget headers "if-none-match")))
+                   (is (= "text/plain" (aget headers "content-type")))
+                   (reset! stored #js {:size 279620315
+                                       :customMetadata #js {:checksum checksum :size (str limit) :type "bin"}})
+                   (p/let [confirmed (control "complete" limit)
+                           wrong-size (control "complete" (dec limit))
+                           retried (control "prepare" limit)
+                           retry-plan (.json retried)]
+                     (is (= 200 (.-status confirmed)))
+                     (is (= 409 (.-status wrong-size)))
+                     (is (= "present" (aget retry-plan "mode"))))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest assets-get-includes-content-length-header-test
   (async done
          (let [payload (js/Uint8Array. #js [1 2 3 4])

@@ -27,12 +27,74 @@
    "svg" "image/svg+xml"
    "ico" "image/x-icon"
    "jxl" "image/jxl"
+   "m4a" "audio/mp4"
+   "mp3" "audio/mpeg"
+   "mp4" "video/mp4"
+   "wav" "audio/wav"
+   "webm" "video/webm"
    "pdf" "application/pdf"})
 
 (defn- response-content-type [stored-content-type asset-type]
   (or (get asset-type->content-type (string/lower-case asset-type))
       stored-content-type
       "application/octet-stream"))
+
+(defn- stored-upload? [^js stored upload-size size checksum asset-type]
+  (and stored
+       (= upload-size (.-size stored))
+       (= (str size) (some-> (.-customMetadata stored) (aget "size")))
+       (= checksum (some-> (.-customMetadata stored) (aget "checksum")))
+       (= asset-type (some-> (.-customMetadata stored) (aget "type")))))
+
+(defn- <prepare-direct-upload [^js env key upload-size size checksum asset-type e2ee? ^js stored]
+  (if (stored-upload? stored upload-size size checksum asset-type)
+    (http/json-response nil {:mode "present"})
+    (if-let [sign-upload (.-SIGN_R2_ASSET_UPLOAD env)]
+      (let [headers (merge {"content-type" (if e2ee? "text/plain" (response-content-type nil asset-type))
+                              "x-amz-meta-checksum" checksum
+                              "x-amz-meta-size" (str size)
+                              "x-amz-meta-type" asset-type}
+                             (if stored
+                               {"if-match" (.-httpEtag stored)}
+                               {"if-none-match" "*"}))]
+        (p/let [url (sign-upload key upload-size (clj->js headers))]
+          (http/json-response nil {:mode "direct" :url url :headers headers})))
+      (http/error-response "direct asset upload is not configured" 503))))
+
+(defn- <handle-upload-control [^js request ^js env ^js bucket {:keys [graph-id key asset-type]}]
+  (p/let [^js input (p/catch (.json request) (constantly nil))
+            action (some-> input (aget "action"))
+            size (some-> input (aget "size"))
+            checksum (some-> input (aget "checksum"))]
+      (cond
+        (not (contains? #{"prepare" "complete"} action))
+        (http/bad-request "invalid asset upload action")
+
+        (not (and (js/Number.isSafeInteger size) (<= 0 size)))
+        (http/bad-request "invalid asset size")
+
+        (> size max-asset-size)
+        (http/error-response "asset too large" 413)
+
+        (not (and (string? checksum) (re-matches #"[0-9a-f]{64}" checksum)))
+        (http/bad-request "invalid asset checksum")
+
+        (not (seq (.-R2_ASSET_UPLOAD_BUCKET env)))
+        (if (= action "prepare")
+          (http/json-response nil {:mode "proxy"})
+          (http/bad-request "direct asset upload is unavailable"))
+
+        :else
+        (p/let [e2ee? (index/<graph-e2ee? (.-DB env) graph-id)
+                upload-size (if e2ee? (encrypted-asset-size size) size)]
+          (if (and (= action "prepare") (<= upload-size (* 100 1024 1024)))
+            (http/json-response nil {:mode "proxy"})
+            (p/let [stored (.head bucket key)]
+              (case action
+                "prepare" (<prepare-direct-upload env key upload-size size checksum asset-type e2ee? stored)
+                "complete" (if (stored-upload? stored upload-size size checksum asset-type)
+                             (http/json-response :assets/put {:ok true})
+                             (http/error-response "asset upload is incomplete or no longer matches" 409)))))))))
 
 (defn- parse-size
   [size]
@@ -328,13 +390,16 @@
       (js/Response. nil #js {:status 204 :headers (cors-headers)})
 
       :else
-      (if-let [{:keys [graph-id key asset-type]} (parse-asset-path path)]
+      (if-let [{:keys [graph-id key asset-type] :as asset} (parse-asset-path path)]
         (let [^js bucket (.-LOGSEQ_SYNC_ASSETS env)]
           (if-not bucket
             (http/error-response "missing assets bucket" 500)
             (case method
               "GET"
               (handle-get-asset bucket key asset-type)
+
+              "POST"
+              (<handle-upload-control request env bucket asset)
 
               "PUT"
               (p/let [e2ee? (index/<graph-e2ee? (.-DB env) graph-id)]

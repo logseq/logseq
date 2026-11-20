@@ -16,6 +16,7 @@ import { logseqIconResponse, setLogseqMcpServerInfoIcons } from "./logseq_icon.m
 import { ensureMcpAcceptHeader } from "./mcp_request.mjs";
 import { openAiAppsChallengeResponse } from "./openai_app_challenge.mjs";
 import { registerSemanticApiTools } from "./semantic_api_tools.mjs";
+import { r2AssetUploadSigner } from "./r2_asset_upload.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
 import worker, { SyncDO } from "./dist/worker/main.js";
@@ -207,6 +208,9 @@ export default {
         return new Response("Method Not Allowed", { status: 405, headers: { Allow: "POST" } });
       }
       return handleMcp(ensureMcpAcceptHeader(request), env, ctx);
+    }
+    if (request.method === "POST" && path.startsWith("/assets/")) {
+      return worker.fetch(request, { ...env, SIGN_R2_ASSET_UPLOAD: r2AssetUploadSigner(env) }, ctx);
     }
     return worker.fetch(request, env, ctx);
   },

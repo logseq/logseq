@@ -23,6 +23,9 @@ importers:
       '@sentry/node':
         specifier: ^10.45.0
         version: 10.45.0
+      aws4fetch:
+        specifier: 1.0.20
+        version: 1.0.20
       better-sqlite3:
         specifier: ^12.8.0
         version: 12.8.0
@@ -874,6 +877,9 @@ packages:
   balanced-match@4.0.4:
     resolution: {integrity: sha512-BLrgEcRTwX2o6gGxGOCNyMvGSp35YofuYzw9h1IMTRmKqttAZZVU67bdb9Pr2vUHA8+j3i2tJfjO6C6+4myGTA==}
     engines: {node: 18 || 20 || >=22}
+
+  aws4fetch@1.0.20:
+    resolution: {integrity: sha512-/djoAN709iY65ETD6LKCtyyEI04XIBP5xVvfmNxsEP0uJB5tyaGBztSryRr4HqMStr9R06PisQE7m9zDTXKu6g==}
 
   base64-js@1.5.1:
     resolution: {integrity: sha512-AKpaYlHn8t4SVbOHCy+b5+KKgvR4vrsD8vbvrbiQJps7fKDTkjkDry6ji0rUJjC0kzbNePLwzxq8iypo41qeWA==}
@@ -2479,6 +2485,8 @@ snapshots:
   ansi-regex@3.0.1: {}
 
   balanced-match@4.0.4: {}
+
+  aws4fetch@1.0.20: {}
 
   base64-js@1.5.1: {}
 

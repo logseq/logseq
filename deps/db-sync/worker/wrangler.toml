@@ -36,6 +36,7 @@ tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
 
 [vars]
+R2_ASSET_UPLOAD_BUCKET = "logseq-sync-assets-prod"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
@@ -63,6 +64,7 @@ name = "logseq-sync-staging"
 cpu_ms = 300000
 
 [env.staging.vars]
+R2_ASSET_UPLOAD_BUCKET = "logseq-sync-assets-dev"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"
@@ -114,6 +116,7 @@ period = 60
 name = "logseq-sync-prod"
 
 [env.prod.vars]
+R2_ASSET_UPLOAD_BUCKET = "logseq-sync-assets-prod"
 COGNITO_JWKS_URL = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8/.well-known/jwks.json"
 COGNITO_ISSUER = "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8"
 COGNITO_CLIENT_ID = "69cs1lgme7p8kbgld8n5kseii6"

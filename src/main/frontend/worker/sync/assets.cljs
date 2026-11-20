@@ -140,6 +140,38 @@
     (mark-asset-write-finish! repo asset-id)
     nil))
 
+(defn- checked-upload!
+  [^js response allowed-status]
+  (when-not (or (.-ok response) (= allowed-status (.-status response)))
+    (throw (ex-info "upload-asset failed"
+                    {:type :rtc.exception/upload-asset-failed
+                     :data {:status (.-status response)}})))
+  response)
+
+(defn- <upload-asset-payload!
+  [url auth-headers asset-type checksum size payload]
+  (letfn [(put! [target headers]
+            (js/fetch target (clj->js {:method "PUT" :headers headers :body payload})))
+          (proxy! []
+            (p/let [resp (put! url (merge auth-headers {"x-amz-meta-checksum" checksum
+                                                       "x-amz-meta-type" asset-type}))]
+              (checked-upload! resp nil)))
+          (control! [action]
+            (p/let [resp (js/fetch url
+                                      (clj->js {:method "POST"
+                                                :headers (assoc auth-headers "content-type" "application/json")
+                                                :body (js/JSON.stringify #js {:action action :size size :checksum checksum})}))]
+              (checked-upload! resp nil)))]
+    (p/let [^js resp (control! "prepare")
+            ^js plan (.json resp)]
+      (case (.-mode plan)
+        "proxy" (proxy!)
+        "present" (control! "complete")
+        "direct" (p/let [uploaded (put! (.-url plan) (.-headers plan))]
+                   (checked-upload! uploaded 412)
+                   (control! "complete"))
+        (throw (js/Error. "invalid asset upload plan"))))))
+
 (defn upload-remote-asset!
   [repo graph-id asset-uuid asset-type checksum]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
@@ -159,6 +191,7 @@
                                                           {:type :rtc.exception/read-asset-failed}
                                                           e)))))
                   _ (clear-missing-asset-upload-file! repo asset-id)
+                  size (payload-size asset-bytes)
                   asset-bytes (if aes-key (->uint8 asset-bytes) asset-bytes)
                   payload (if (not aes-key)
                             asset-bytes
@@ -166,19 +199,9 @@
                               (ldb/write-transit-str encrypted-bytes)))
                   total (payload-size payload)
                   _ (notify-asset-progress! repo asset-id :upload 0 total)
-                  headers (merge (sync-auth/auth-headers (worker-state/get-id-token))
-                                 {"x-amz-meta-checksum" checksum
-                                  "x-amz-meta-type" asset-type})
-                  ^js resp (js/fetch put-url
-                                     (clj->js {:method "PUT"
-                                               :headers headers
-                                               :body payload}))
-                  status (.-status resp)
+                  headers (sync-auth/auth-headers (worker-state/get-id-token))
+                  _ (<upload-asset-payload! put-url headers asset-type checksum size payload)
                   _ (notify-asset-progress! repo asset-id :upload total total)]
-            (when-not (.-ok resp)
-              (throw (ex-info "upload-asset failed"
-                              {:type :rtc.exception/upload-asset-failed
-                               :data {:status status}})))
             nil)
           (p/catch
            (fn [e]

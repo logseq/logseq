@@ -284,11 +284,11 @@
                    {:http-base "https://sync.example.test"})
            (set! js/fetch
                  (fn [url opts]
-                   (reset! fetch-call*
-                           {:url url
-                            :body (.-body opts)})
-                   (p/resolved #js {:ok true
-                                     :status 200})))
+                   (if (= "POST" (.-method opts))
+                     (p/resolved (js/Response. "{\"mode\":\"proxy\"}"))
+                     (do
+                       (reset! fetch-call* {:url url :body (.-body opts)})
+                       (p/resolved (js/Response. nil))))))
            (-> (p/with-redefs [sync-assets/graph-aes-key
                                (fn [_repo _graph-id _fail-fast-f]
                                  (p/resolved "aes-key"))
