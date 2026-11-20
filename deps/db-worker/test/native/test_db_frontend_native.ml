@@ -764,9 +764,9 @@ let test_has_property_rule () =
           "[:find (pull ?b [:block/title]) :where (has-property ?b :user.property/foo2)]")
      = []);
   check "has-property can bind to property arg"
-    (result_keyword_values
+    (List.sort String.compare (result_keyword_values
        (q_with_rules db
-          "[:find [?p ...] :where (has-property ?b ?p) [?b :block/title \"Page1\"]]")
+          "[:find [?p ...] :where (has-property ?b ?p) [?b :block/title \"Page1\"]]"))
      = [ "block/tags"; "user.property/foo" ])
 
 (* shared assertions for (ref-property ...) and (property ...) — cljs

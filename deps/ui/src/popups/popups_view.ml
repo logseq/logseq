@@ -416,18 +416,16 @@ let ac_popover (st : S.t) : t =
   (Ui_components.with_props [ Ui_components.card_shadow ]
    (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
      ~background:"transparent" ~border_width:0 ~padding:0 ~corner_radius:6
-     ~at_signal:
-       (Logseq_el.own context
-          (Signal.map
+     ~target:(reactive
              (fun (v : S.view) ->
                match v.S.ac with
                | Some a ->
-                   ( Option.value a.S.flipx ~default:a.S.x
+                   At ( Option.value a.S.flipx ~default:a.S.x
                    , (match a.S.flip with
                       | Some (top', _) -> top'
                       | None -> a.S.y +. popup_anchor_dy) )
-               | None -> (0., 0.))
-             vs))
+               | None -> At (0., 0.))
+             vs)
      ~available_height:(reactive
        (fun (v : S.view) height ->
          match v.S.ac with
@@ -632,7 +630,7 @@ let cm_color_row (st : S.t) : t =
 let cm_heading_btn (st : S.t) key title value icn : t =
   Ui_components.with_props
     [ Ui_components.Prop.cursor `pointer ]
-    (Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:30 ~height:30
+    (Ui_components.button ~text:"" ~key ~variant:`ghost ~padding_horizontal:4 ~width:30 ~height:30
        ~style_class:"ls-cm-heading-btn"
        ~label:title
        ~on_press:(fun _ -> run_cm_heading st value)
@@ -738,15 +736,14 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
               ; ("data-cm-item", string_of_int idx) ]) vs)
             ~on_press_detail:(fun ev ->
               match ev with
-              | Lui_protocol.PressDetail (_, d) -> (
+              | d -> (
                   match
                     Option.bind (Ui_services.dom_element_at d.x d.y)
                       (fun hit ->
                         hit.Ui_services.closest "[data-cm-sub]")
                   with
                   | Some trg -> !cm_press_open_ref st trg
-                  | None -> ())
-              | _ -> ())
+                  | None -> ()))
             [ Menu_item.submenu_content ~label ]))
       | S.Ci_item (label, scut, cmd) ->
           cm_item_chrome (menu_item ~key:"item" ~style_class:cm_item_cls
@@ -789,7 +786,7 @@ let cm_sub_el (st : S.t) (idx : int) (x : float) (y : float)
   | S.Sub_menu items ->
       Ui_components.menu_surface
         (popover ~transition:Ui_components.popover_transition ~key:"cm-sub"
-           ~at:(x, y) ~role:`menu ~min_width:128 ~min_height:0
+           ~target:(let x, y = (x, y) in At (x, y)) ~role:`menu ~min_width:128 ~min_height:0
            ~accessibility_identifier:"block-context-submenu"
            ~available_height:(Ui_services.dom_viewport_height () -. y -. 5.)
            ~style_class:"ui__dropdown-menu-sub-content"
@@ -815,9 +812,8 @@ let cm_sub_el (st : S.t) (idx : int) (x : float) (y : float)
       Ui_components.with_props [ Ui_components.card_shadow ]
         (popover ~transition:Ui_components.popover_transition
            ~key:"cm-sub-picker" ~role:`dialog ~padding:0
-           ~anchor_target:("cm-sub-" ^ string_of_int idx) ~anchor:`right
-           ~anchor_alignment:`start ~anchor_offset:(-4.)
-           ~anchor_alignment_offset:(-4.)
+           ~target:(Anchor { side = `right; source = Target ("cm-sub-" ^ string_of_int idx);
+             align = `start; offset = (-4.); align_offset = (-4.) })
            ~background:"hsl(var(--popover))"
            ~foreground:"hsl(var(--popover-foreground))"
            ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
@@ -863,49 +859,49 @@ let cm_component_menu (st : S.t) : t =
              (if picker = S.Picker_emoji then "emoji" else "icon") ])
   in
   let submenu key label children =
-    menu_trigger ~key ~text:label
-      [ dropdown_menu ~key:"submenu" children ]
+    dropdown_menu_trigger ~key ~text:label
+      (dropdown_menu ~key:"submenu" children)
   in
   let rec entries items =
     List.mapi (fun i entry ->
       let key = "entry-" ^ string_of_int i in
       match entry with
-      | S.Ci_sep -> divider ~key []
+      | S.Ci_sep -> dropdown_menu_divider ~key []
       | S.Ci_item (label, shortcut, command) ->
           let icon = S.icon_of_cmd command in
-          menu_item ~key ~text:label
+          dropdown_menu_item ~key ~text:label
             ?icon:(if icon = "" then None else Some (Icons.name_ref icon))
             ?shortcut_hint:(Option.map (fun (_, caps) -> String.concat " " caps) shortcut)
             ~on_press:(fun _ -> run_cm_item st command) []
       | S.Ci_sub (label, S.Sub_menu children) ->
           submenu key label (entries children)
       | S.Ci_sub (label, S.Sub_picker picker) ->
-          menu_item ~key ~text:label
+          dropdown_menu_item ~key ~text:label
             ~icon:(Icons.name_ref (if picker = S.Picker_emoji then "mood-smile" else "palette"))
             ~on_press:(fun _ -> choose_picker picker) []
       | S.Ci_colors ->
           submenu key (U.t "property.built-in/background-color")
             (List.map (fun color ->
-               menu_item ~key:color ~text:(U.t ("color/" ^ color))
+               dropdown_menu_item ~key:color ~text:(U.t ("color/" ^ color))
                  ~on_press:(fun _ -> run_cm_color st color) []) S.colors
-             @ [ menu_item ~key:"remove" ~text:(U.t "ui/remove-background")
+             @ [ dropdown_menu_item ~key:"remove" ~text:(U.t "ui/remove-background")
                    ~on_press:(fun _ -> run_cm_color st "") [] ])
       | S.Ci_headings ->
           submenu key (U.t "property.built-in/heading")
             (List.init 6 (fun i ->
                let heading = string_of_int (i + 1) in
-               menu_item ~key:heading ~text:(U.tf "editor/heading" [heading])
+               dropdown_menu_item ~key:heading ~text:(U.tf "editor/heading" [heading])
                  ~on_press:(fun _ -> run_cm_heading st heading) [])
-             @ [ menu_item ~key:"auto" ~text:(U.t "editor/auto-heading")
+             @ [ dropdown_menu_item ~key:"auto" ~text:(U.t "editor/auto-heading")
                    ~on_press:(fun _ -> run_cm_heading st "auto") []
-               ; menu_item ~key:"remove" ~text:(U.t "editor/remove-heading")
+               ; dropdown_menu_item ~key:"remove" ~text:(U.t "editor/remove-heading")
                    ~on_press:(fun _ -> run_cm_heading st "none") [] ]))
       items
   in
-  dropdown_menu ~key:"cm" ~at:(cm.S.cx, cm.S.cy)
+  dropdown_menu_view (dropdown_menu ~key:"cm" ~at:(cm.S.cx, cm.S.cy)
     ~anchor:(if cm.S.flip then `above else `below)
     ~min_width:240 ~accessibility_identifier:"block-context-menu"
-    ~on_dismiss:(fun _ -> close_cm st) (entries cm.S.entries)
+    ~on_dismiss:(fun _ -> close_cm st) (entries cm.S.entries))
     context parent
 ;;
 
@@ -948,9 +944,7 @@ let cm_popover (st : S.t) : t =
                       (fun menu -> menu.Ui_services.focus ())
                       (Ui_services.dom_query ".ls-context-menu-content")
                 | _ -> ())
-              ~at_signal:
-          (Logseq_el.own context
-             (Signal.map
+              ~target:(reactive
                 (fun (v : S.view) ->
                   match v.S.cm with
                   | Some m ->
@@ -958,13 +952,13 @@ let cm_popover (st : S.t) : t =
                          (ls-anchor-cx): clamp the anchor center so the
                          menu stays inside the viewport *)
                       let w = if m.S.tag <> None then 240. else 280. in
-                      ( Float.max ((w /. 2.) +. 5.)
+                      At ( Float.max ((w /. 2.) +. 5.)
                           (Float.min m.S.cx
                              (Ui_services.dom_viewport_width ()
                               -. (w /. 2.) -. 5.))
                       , m.S.cy )
-                  | None -> (0., 0.))
-                vs))
+                  | None -> At (0., 0.))
+                vs)
         ~available_height_signal:
           (Logseq_el.own context
              (Signal.map
@@ -1054,23 +1048,21 @@ let preview_row_extras ~open_in_sidebar ~render_references context counts : Tree
   let rows = List.fold_left (fun rows (uuid,count) ->
     if count <= 0 then rows else
     let expanded = Signal.state context.Lui_ui.ui_scheduler false in
-    let activate event =
-      let shift = match event with
-        | P.PressDetail (_,detail) -> detail.P.modifiers land 2 <> 0
-        | P.PressModifiers (_,modifiers) -> modifiers land 2 <> 0
-        | _ -> false in
+    let activate shift =
       if shift then open_in_sidebar uuid
       else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ())
     in
     let right =
-      Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
-        (button ~key:("preview-count-" ^ uuid) ~variant:`ghost ~size:`sm
+      Ui_parts.pressable_with_modifiers
+        ~on_press:(fun modifiers -> activate (modifiers land 2 <> 0))
+        (Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
+        (button ~text:"" ~key:("preview-count-" ^ uuid) ~variant:`ghost ~size:`sm
           ~accessibility_identifier:("preview-reference-count-" ^ uuid)
           ~label:(U.t "block/open-block-references")
           ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
           ~tooltip:(U.t "block/open-block-references")
-          ~on_press:activate ~on_press_detail:activate
-          [text ~font_size:"14px" ~value:(string_of_int count) []]) in
+          ~on_press_detail:(fun detail -> activate (detail.P.modifiers land 2 <> 0))
+          [text ~font_size:"14px" ~value:(string_of_int count) []])) in
     let below =
       if_ ~test:(Signal.value expanded)
         (column ~key:("preview-references-" ^ uuid)
@@ -1174,7 +1166,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
   (Ui_components.with_props [ Ui_components.card_shadow; Ui_components.Prop.padding_left 24 ]
-     (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
+     (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~target:(let x, y = (p.S.pv_x, p.S.pv_y) in At (x, y)) ~min_width:128
         ~padding:4
         ~border_color:"hsl(var(--border))" ~border_width:1
         ~corner_radius:6

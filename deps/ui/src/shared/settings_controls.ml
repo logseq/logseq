@@ -11,7 +11,7 @@ let class_signal = Ui_parts.class_signal
 
 let info_icon ~key ~title =
   box ~key ~opacity:0.56
-    [ Ui_components.button ~key:(key ^ "-button") ~variant:`ghost ~size:`icon
+    [ Ui_components.icon_button ~key:(key ^ "-button") ~variant:`ghost ~size:`icon
         ~style_class:"ls-info-icon" ~width:32 ~height:16 ~min_height:16
         ~padding_horizontal:8 ~padding_vertical:0 ~background:"transparent"
         ~icon:(`app "info-circle-filled") ~label:title ~tooltip:title [] ]
@@ -84,17 +84,13 @@ let btn_size = function
 
 (* ui/toggle -> shui Switch size sm. The cljs hidden input mirroring the
    switch state is gone: the switch kind embeds a real checkbox input on
-   web, so no mirror is needed. ToggleChanged is decoded once here —
-   callers get the new checked state, not the raw event. *)
+   web, so no mirror is needed. Callers get the typed checked state. *)
 let switch_el ~key ~on ~on_checked =
   switch_ ~key ~style_class:"ui__switch" ~width:32 ~height:18
     ~padding:3 ~border_width:0 ~corner_radius:9
     ~background:(if on then "hsl(var(--primary))" else "hsl(var(--input))")
     ~foreground:"hsl(var(--background))" ~checked:on
-    ~on_toggle:(fun ev ->
-      match ev with
-      | Lui_protocol.ToggleChanged (_, checked) -> on_checked checked
-      | _ -> ())
+    ~on_toggle:on_checked
     []
 
 (* switch (+ optional detail children) — the switch-wrap cell contents

@@ -517,7 +517,7 @@ let repeat_select ps ~sel ~label ~label_of ~options_of ~on_pick : t =
     ; Ui_components.Prop.overflow `hidden
     ; Ui_components.Prop.text_overflow `ellipsis
     ; ( Ui_components.Prop.hover_background "var(--lx-gray-03, var(--ls-menu-hover-color, #f2f2f2))" ) ]
-    (Ui_components.button ~variant:`ghost ~cross:`center ~main:`space_between
+    (Ui_components.button ~text:"" ~variant:`ghost ~cross:`center ~main:`space_between
        ~grow:1. ~min_width:0 ~height:32 ~padding_horizontal:8
        ~border_width:1
        ~border_color:
@@ -716,7 +716,7 @@ let repeat_panel ps : t =
                (* no [role="checkbox"]: the web focus layer strips [role]
                   from non-tab buttons; [aria-checked] + [data-checked]
                   carry the state *)
-               (Ui_components.button ~key:"cb" ~variant:`ghost
+               (Ui_components.button ~text:"" ~key:"cb" ~variant:`ghost
                   ~width:16 ~min_width:16 ~height:16 ~padding:0
                   ~corner_radius:3 ~border_width:1
                   ~background:
@@ -940,15 +940,14 @@ let cal_body ps (p : popup) : t =
                        | Some { kind = Cal_prop (_, text); _ } -> text
                        | _ -> "") ps)
                    ~on_input:(function
-                     | P.TextChanged (_, text) ->
+                     | text ->
                          update_p (fun p ->
                            let kind = match p.kind with
                              | Cal_insert _ -> Cal_insert text
                              | Cal_prop (ident, _) -> Cal_prop (ident, text)
                              | Link_form _ -> invalid_arg "NLP input: not a calendar popup"
                            in
-                           { p with kind })
-                     | _ -> ())
+                           { p with kind }))
                    ~on_submit:(fun _ -> with_p nlp_commit)
                    [] ]
            ; if_ ~test:(reactive rpt_open ps) (repeat_panel ps) ]
@@ -986,22 +985,20 @@ let link_form_body ps : t =
         ~text:(reactive
           (function Some { kind = Link_form draft; _ } -> draft.url | _ -> "") ps)
         ~on_input:(function
-          | P.TextChanged (_, url) ->
+          | url ->
               update_p (fun p -> match p.kind with
                 | Link_form draft -> { p with kind = Link_form { draft with url } }
-                | _ -> invalid_arg "URL input: not a link popup")
-          | _ -> ())
+                | _ -> invalid_arg "URL input: not a link popup"))
         ~on_submit:(fun _ -> with_p submit_link)
         []
     ; Ui_components.input ~key:"label" ~placeholder:(I18n.t "ui/label")
         ~text:(reactive
           (function Some { kind = Link_form draft; _ } -> draft.label | _ -> "") ps)
         ~on_input:(function
-          | P.TextChanged (_, label) ->
+          | label ->
               update_p (fun p -> match p.kind with
                 | Link_form draft -> { p with kind = Link_form { draft with label } }
-                | _ -> invalid_arg "Label input: not a link popup")
-          | _ -> ())
+                | _ -> invalid_arg "Label input: not a link popup"))
         ~on_submit:(fun _ -> with_p submit_link) []
     ; Ui_components.button ~key:"submit" ~variant:`primary ~size:`sm ~width:258
         ~height:28 ~min_height:28 ~text:(I18n.t "ui/submit")
@@ -1012,13 +1009,10 @@ let popup_body ps (p : popup) : t =
   | Link_form _ -> link_form_body ps
   | Cal_insert _ | Cal_prop _ -> cal_body ps p
 
-let popup_popover context ps : t =
+let popup_popover ps : t =
   popover ~transition:Ui_components.popover_transition ~key:"editor-popup"
-    ~at_signal:
-      (Logseq_el.own context
-         (Signal.map
-            (fun po -> match po with Some p -> (p.x, p.y) | None -> (0., 0.))
-            ps))
+    ~target:(reactive
+      (fun po -> match po with Some p -> At (p.x, p.y) | None -> At (0., 0.)) ps)
     ~on_dismiss:(fun _ -> with_p (fun p -> close_popup p))
     [ reactive ~equal:kind_eq
         (fun po ->
@@ -1035,7 +1029,7 @@ let popup_view context parent =
   let open_s =
     Logseq_el.own context (Signal.map (fun po -> po <> None) ps)
   in
-  (if_ ~test:open_s (popup_popover context ps)) context parent
+  (if_ ~test:open_s (popup_popover ps)) context parent
 
 (* ---------- repeat panel data ---------- *)
 

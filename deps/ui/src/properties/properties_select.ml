@@ -225,7 +225,7 @@ let view ~placeholder ?(compact = false) ?(presentation = Standard)
                                    [ Ui_components.with_props [Ui_components.Prop.margin_right 4]
                                        (Icons.icon ~size:(if property_name then 15. else if it.it_icon = "x" then 14. else 18.) it.it_icon) ])
                                 @ [ text ~value:title ~grow:1.0 ~min_width:0
-                                      ~white_space:(if property_name then "nowrap" else "normal") [] ]
+                                      ~white_space:(if property_name then `nowrap else `normal) [] ]
                                 @ selected_marker) ]
                          else selected_marker
                        in
@@ -329,7 +329,7 @@ let view ~placeholder ?(compact = false) ?(presentation = Standard)
          ?style_class:(if compact then Some "ls-property-select-input" else None)
          ~on_input:(fun ev ->
            match ev with
-           | Lui_protocol.TextChanged (_, q) ->
+           | q ->
                let ticket = Ui_effect.issue request in
                let state = Runtime.signal_get st in
                Runtime.signal_set st { state with q; searched = None; active = 0 };
@@ -342,11 +342,10 @@ let view ~placeholder ?(compact = false) ?(presentation = Standard)
                          Runtime.signal_set st
                            { (Runtime.signal_get st) with searched = Some found; active = 0 };
                        Js.Promise.resolve ())
-                | None -> ())
-           | _ -> ())
+                | None -> ()))
          ~on_navigate:(function
-           | Lui_protocol.NavigatePrevious _ -> navigate (-1)
-           | Lui_protocol.NavigateNext _ -> navigate 1
+           | Previous -> navigate (-1)
+           | Next -> navigate 1
            | _ -> ())
          ~on_submit:(fun _ -> pick ())
          [])

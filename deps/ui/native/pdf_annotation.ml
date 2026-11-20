@@ -69,7 +69,7 @@ let area_display (b : Model.block) context : Lui_elements.t =
                       ) ]
                   [ D.el ~key:"hl-ab" ~tag:"span"
                       ~style_class:"asset-action-bar"
-                      [ Lui_elements.button ~key:"hl-ref"
+                      [ Lui_elements.icon_button ~key:"hl-ref"
                           ~label:"ref-block"
                           ~data_attrs:[ ("tabindex", "-1") ]
                           ~icon:(`app "file-symlink")
@@ -101,16 +101,13 @@ let prefix_el (b : Model.block) : Lui_elements.t =
   in
   (* pointerdown reads the event target's class via pointer_detail *)
   (Lui_elements.text ~key:"pf" 
-     ~on_pointer_down:(fun ev ->
-       match ev with
-       | Lui_protocol.PointerDown (_, d) ->
+     ~on_pointer_down:(fun d ->
            let blank =
              d.Lui_protocol.target_class
              |> String.split_on_char ' '
              |> List.mem "blank"
            in
-           if not (area && blank) then Pdf_assets.open_block_ref b
-       | _ -> ())
+           if not (area && blank) then Pdf_assets.open_block_ref b)
      ([ Lui_elements.text ~key:"pfp" 
           [ Lui_elements.text ~key:"pfs" ~as_:`Strong
                ~value:page [] ]

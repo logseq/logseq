@@ -261,7 +261,7 @@ let query_content inst (s : V.vstate) : t =
 let query_setting_el inst : t =
   let current = V.current_view inst in
   let label = I.t "block/set-query" in
-  Ui_components.button ~key:"qs" ~variant:`ghost ~size:`icon
+  Ui_components.icon_button ~key:"qs" ~variant:`ghost ~size:`icon
     ~width:24 ~height:24 ~style_class:"ls-query-setting"
     ~transition:"opacity .3s ease-in"
     ~foreground:"var(--ls-secondary-text-color, var(--lx-gray-11))"
@@ -932,8 +932,7 @@ let rename_editor_box inst (v : Wr.view_ent) : Lui_elements.t =
            ~background:"transparent" ~border_width:0
            ~foreground:"var(--ls-secondary-text-color)"
            ~on_input:(function
-             | Lui_protocol.TextChanged (_, s) -> Signal.set value s
-             | _ -> ())
+             | s -> Signal.set value s)
            ~on_submit:(fun _ -> commit ()) []) ] context parent
 
 let export_edn inst =

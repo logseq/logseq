@@ -66,8 +66,8 @@ let rec show ~anchor ~column_width (block : Model.block) =
         Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> close session);
         Ui_components.with_props [Ui_components.card_shadow;Ui_components.Prop.padding_right 10]
           (popover ~accessibility_identifier:"ls-table-block-editor"
-            ~anchor:`below ~anchor_target:anchor ~anchor_alignment:`center
-            ~anchor_offset:(-.float_of_int (32 + card_inset))
+            ~target:(Anchor { side = `below; source = Target anchor;
+              align = `center; offset = (-.float_of_int (32 + card_inset)); align_offset = 0. })
             ~width:(width + 16) ~max_width:(width + 16) ~padding:4
             ~background:"hsl(var(--popover))"
             ~foreground:"hsl(var(--popover-foreground))" ~border_width:1

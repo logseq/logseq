@@ -1078,13 +1078,14 @@ let () =
   in
   let set_ime_rect (r : Lui_scene.rect) =
     let s = !scale_cell in
-    Sdl.set_text_input_rect !win
+    Sdl.set_text_input_area !win
       (Some
          (Sdl.Rect.create
             ~x:(int_of_float (r.Lui_scene.x /. s))
             ~y:(int_of_float (r.Lui_scene.y /. s))
             ~w:(max 1 (int_of_float (r.Lui_scene.w /. s)))
             ~h:(max 1 (int_of_float (r.Lui_scene.h /. s)))))
+      ~cursor:0
   in
   let caret_rect () =
     let id = Ui.focused ui in

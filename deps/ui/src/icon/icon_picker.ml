@@ -224,7 +224,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          @ (match font_size with
             | Some fz -> [ Ui_components.Prop.font_size fz ]
             | None -> []))
-        (Ui_components.button ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
+        (Ui_components.button ~text:"" ~key ~style_class:cls ~variant:`ghost ~width:36 ~height:36
            ~padding:0 ~corner_radius:9999 ~label ~tooltip ~on_press
            ~transition:"opacity 150ms"
            [ child ])
@@ -408,7 +408,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
          ; Ui_components.Prop.hover_foreground
              "var(--lx-accent-12, var(--ls-link-text-hover-color, hsl(var(--primary))))"
          ; Ui_components.Prop.cursor `pointer ]
-         (button ~key:"clear" ~variant:`ghost ~height:32 ~min_width:0 ~min_height:0
+         (button ~text:"" ~key:"clear" ~variant:`ghost ~height:32 ~min_width:0 ~min_height:0
             ~padding_horizontal:8 ~padding_vertical:0 ~cross:`center ~border_width:0
             ~background:"transparent"
             ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
@@ -470,7 +470,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  [ Ui_components.with_props
                      [ Ui_components.Prop.position `relative
                      ; Ui_components.Prop.overflow `hidden ]
-                     (Ui_components.button ~variant:`outline ~style_class:(btn_outline_sm ^ " color-picker")
+                     (Ui_components.icon_button ~variant:`outline ~style_class:(btn_outline_sm ^ " color-picker")
                         ~height:24 ~width:24 ~min_width:0 ~min_height:0
                         ~padding:0 ~main:`center ~cross:`center ~corner_radius:6
                         ~label:(I.t "icon/select-color") ~icon:(`app "palette")
@@ -480,8 +480,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                           update (fun s -> { s with pal_open = not s.pal_open }))
                         [])
                  ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
-                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~anchor:`below
-                        ~anchor_alignment:`start ~anchor_offset:4.
+                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~target:(Anchor { side = `below; source = Parent;
+                                                                                            align = `start; offset = 4.; align_offset = 0. })
                         ~on_dismiss:(fun _ ->
                           update (fun s -> { s with pal_open = false }))
                         [ row ~style_class:"color-picker-presets" ~gap:2
@@ -489,7 +489,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                  ]) ]
           @
           (if del then
-             [ Ui_components.button ~variant:`outline ~key:"del" ~style_class:btn_outline_sm ~height:28
+             [ Ui_components.button ~text:"" ~variant:`outline ~key:"del" ~style_class:btn_outline_sm ~height:28
                  ~padding_vertical:4 ~padding_horizontal:12 ~corner_radius:4
                  ~data_attrs:[ ("data-action", "del") ]
                  ~tooltip:(I.t "ui/delete")

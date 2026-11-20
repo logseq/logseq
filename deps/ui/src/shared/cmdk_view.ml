@@ -25,11 +25,12 @@ module Find_in_page = struct
   include Cmdk_state.Find_in_page
 
   let navigation_button ~key ~icon ~label ~state ~dispatch action =
-    Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:28 ~height:28
+    Ui_components.icon_button ~key ~variant:`ghost ~size:`icon ~width:28 ~height:28
+      ~icon:(Icons.name_ref icon)
       ~label ~accessibility_identifier:("find-in-page-" ^ key)
       ~disabled:(reactive (fun s -> s.total = 0 || s.composing) state)
       ~on_press:(fun _ -> dispatch action)
-      [ Icons.icon ~size:16. icon ]
+      []
 
   (* The shell owns visibility, composition events and focus restoration;
      the page/ref/search owner supplies and reveals stable entity matches. *)
@@ -42,11 +43,9 @@ module Find_in_page = struct
           ~label:(i18n "search.find-in-page/input-placeholder")
           ~placeholder:(i18n "search.find-in-page/input-placeholder")
           ~text:(reactive (fun s -> s.query) state)
-          ~submit_on_enter:true
           ~on_input:(function
-            | Lui_protocol.TextChanged (_, "") -> dispatch Clear
-            | Lui_protocol.TextChanged (_, query) -> dispatch (Query query)
-            | _ -> ())
+            | "" -> dispatch Clear
+            | query -> dispatch (Query query))
           ~on_submit:(fun _ -> dispatch Next) []
       ; text ~key:"count" ~accessibility_identifier:"find-in-page-count"
           ~value:(reactive (fun s -> Printf.sprintf "%d/%d" s.current s.total) state) []
@@ -55,16 +54,15 @@ module Find_in_page = struct
           ~label:(i18n "search.find-in-page/match-case")
           ~checked:(reactive (fun s -> s.match_case) state)
           ~on_toggle:(function
-            | Lui_protocol.ToggleChanged (_, value) -> dispatch (Match_case value)
-            | _ -> ()) []
+            | value -> dispatch (Match_case value)) []
       ; navigation_button ~key:"previous" ~icon:"chevron-up"
           ~label:(i18n "search.find-in-page/previous-result") ~state ~dispatch Previous
       ; navigation_button ~key:"next" ~icon:"chevron-down"
           ~label:(i18n "search.find-in-page/next-result") ~state ~dispatch Next
-      ; Ui_components.button ~key:"close" ~variant:`ghost ~size:`icon
+      ; Ui_components.icon_button ~key:"close" ~variant:`ghost ~size:`icon ~icon:(`app "x")
           ~label:(i18n "ui/close") ~width:28 ~height:28
           ~accessibility_identifier:"find-in-page-close"
-          ~on_press:(fun _ -> dispatch Close) [ Icons.icon ~size:16. "x" ]
+          ~on_press:(fun _ -> dispatch Close) []
       ]
 end
 module Svs = Cmdk_services
@@ -352,13 +350,13 @@ let hl_span ?(single_line = false) key (item_sig : S.item Signal.signal)
         ~cmp:Stdlib.compare
         ~mount:(fun seg ->
           reactive
-            (fun (_, hl, value) ->
+            (fun (index, hl, value) ->
               let value = if single_line then display_spaces value else value in
-              text ~key:"run" ~as_:(if hl then `Mark else `Span)
+              text ~key:(string_of_int index) ~as_:(if hl then `Mark else `Span)
                 ~padding:0 ~corner_radius:0
                 ?background:(if hl then Some "var(--ls-page-mark-bg-color, #fef3ac)" else None)
                 ?foreground:(if hl then Some "var(--ls-page-mark-color, #262626)" else None)
-                ?white_space:(if single_line then Some "nowrap" else None)
+                ?white_space:(if single_line then Some `nowrap else None)
                 ~value [])
             seg)
     ] in
@@ -423,8 +421,8 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
         Some
           (Ui_components.cmdk_item_header ~key:"hdr"
              [ text ~key:"hdr-text" ~font_weight:300 ~font_size:"12px" ~line_height:"16px"
-                 ~grow:1. ~min_width:0 ~white_space:"nowrap" ~text_overflow:"ellipsis"
-                 ~overflow:"hidden"
+                 ~grow:1. ~min_width:0 ~white_space:`nowrap ~text_overflow:`ellipsis
+                 ~overflow:`hidden
                  ~value:(reactive (fun it -> Option.value ~default:"" it.S.header) item_sig) []
              ; if_
                  ~test:
@@ -448,7 +446,7 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
             tokens) *)
          Ui_components.cmdk_item_row ~key:"item"
            ~on_press_detail:(function
-             | Lui_protocol.PressDetail (_, detail) when (S.get st).open_ ->
+             | detail when (S.get st).open_ ->
                  let item = Signal.get item_sig in
                  if detail.modifiers land 2 <> 0 then begin
                    S.set_hl st item.S.idx true;
@@ -586,7 +584,7 @@ let group_header svs (st : S.t) (g : S.group) : t =
           && not (S.get st).S.sidebar
        then
          Ui_components.cmdk_group_more ~key:"gmore" ~on_press:toggle
-           [ text ~key:"lbl" ~white_space:"nowrap"
+           [ text ~key:"lbl" ~white_space:`nowrap
                ~value:
                  (if g.S.gexpanded then svs.Svs.i18n "ui/show-less"
                   else svs.Svs.i18n "ui/show-more")

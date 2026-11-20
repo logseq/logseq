@@ -915,6 +915,16 @@ let preview_reference_disclosure ~registry ~profile =
         {x=0.;y=0.;modifiers=2;button=0;target_class=""}));
       S.flush session;
       check "Shift-clicking a preview count opens that block's sidebar references without expanding inline"
+        (!opened=[child_id] && not (references_visible ()));
+      opened := [];
+      List.iter (fun modifiers ->
+        S.dispatch session (P.PressModifiers (child_counter.M.id, modifiers));
+        S.flush session;
+        check "Unshifted modifier presses toggle inline references without opening the sidebar"
+          (!opened=[] && references_visible ()=(modifiers=0))) [0;1];
+      S.dispatch session (P.PressModifiers (child_counter.M.id, 2));
+      S.flush session;
+      check "Shift-modified preview activation opens sidebar references without expanding inline"
         (!opened=[child_id] && not (references_visible ()))))
 
 let keymap_recording_workflow ~registry ~profile ~finish =
@@ -4521,7 +4531,8 @@ let run_views ~registry ~profile ~finish =
     Properties_state.remove_view_overlay "escape-owner" in
   ignore (Properties_state.push_view_overlay_ctxfree ~key:"escape-owner"
     ~on_escape:close_escape_owner
-    ~view:(Lui_elements.popover ~role:`dialog ~anchor:`below
+    ~view:(Lui_elements.popover ~role:`dialog
+      ~target:(Anchor {side=`below; source=Parent; align=`start; offset=0.; align_offset=0.})
       ~on_dismiss:(fun _ -> close_escape_owner ())
       [Lui_elements.text ~value:"Outer property surface" []]));
   S.flush escape_owner;
@@ -4574,9 +4585,9 @@ let run_views ~registry ~profile ~finish =
     Tooltip.armed_on:=None;Tooltip.timer:= -1;
     let open Lui_elements in
     column [Tooltip.el;
-      if_ ~test:(Signal.value (List.nth layers 0)) (popover ~role:`menu ~at:(10.,10.) []);
+      if_ ~test:(Signal.value (List.nth layers 0)) (popover ~role:`menu ~target:(At (10.,10.)) []);
       if_ ~test:(Signal.value (List.nth layers 1)) (dialog ~text:"Tooltip dialog fixture" []);
-      if_ ~test:(Signal.value (List.nth layers 2)) (popover ~role:`dialog ~at:(10.,10.) [])]) in
+      if_ ~test:(Signal.value (List.nth layers 2)) (popover ~role:`dialog ~target:(At (10.,10.)) [])]) in
   let set_tip_layer kind =
     List.iteri (fun index state -> Signal.set state (index + 1 = kind)) (Option.get !tip_layer);
     S.flush tooltip in

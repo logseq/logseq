@@ -211,11 +211,8 @@ let toggle_pw ctx =
   let st_sig = (Signal.value (st ctx)) in
   let pw_input ~key ~visible =
     let value_sig = Signal.map (fun (s : pst) -> s.password) st_sig in
-    let on_input ev =
-      match ev with
-      | Lui_protocol.TextChanged (_, v) ->
-          Signal.update (st ctx) (fun s -> { s with password = v })
-      | _ -> ()
+    let on_input password =
+      Signal.update (st ctx) (fun s -> { s with password })
     in
     let placeholder = I18n.t "publish/password-optional-placeholder" in
     if visible then
@@ -240,7 +237,8 @@ let toggle_pw ctx =
            (fun v ->
              I18n.t
                (if v then "publish/hide-password" else "publish/show-password"))
-           (Ui_components.button ~key:"pub-eye" ~variant:`ghost ~size:`sm
+           (Ui_components.icon_button ~key:"pub-eye" ~variant:`ghost ~size:`sm
+              ~label:(I18n.t "publish/show-password")
               ~style_class:"ui__button as-ghost"
               ~icon:(reactive
                    (fun (s : pst) ->

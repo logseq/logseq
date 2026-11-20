@@ -208,7 +208,7 @@ let body (_ms : Model.t Signal.signal) : t =
                 ~padding:16 ~corner_radius:6
                 ~background:"var(--lx-gray-03, hsl(var(--muted)))"
                 [ link ~key:"rd-repo-a" ~url:t.repository
-                    ~style_class:"ls-readme-repo-link" ~gap:4 ~cross:`center
+                    ~style_class:"ls-readme-repo-link"
                     ~icon:(`app "brand-github")
                     ~text:t.repository [] ])
          ; box ~key:"rd-body"

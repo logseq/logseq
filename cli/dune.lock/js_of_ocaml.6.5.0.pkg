@@ -1,0 +1,16 @@
+(version 6.5.0)
+
+(build
+ (all_platforms
+  ((action (run dune build -p %{pkg-self:name} -j %{jobs} @install)))))
+
+(depends
+ (all_platforms
+  (dune ocaml js_of_ocaml-compiler ppxlib)))
+
+(source
+ (fetch
+  (url
+   https://github.com/ocsigen/js_of_ocaml/releases/download/6.5.0/js_of_ocaml-6.5.0.tbz)
+  (checksum
+   sha512=ce476986cb2c78990f29b1d7a01bb173a0d30ad0e0a80ba7bde9aa8365952ed01eda4935d92a323b982b0c1c897b20ef01eabe75fe80e4da858f73f6a2d25232)))

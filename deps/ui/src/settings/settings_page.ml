@@ -111,7 +111,7 @@ let theme_row ?(density = `regular) ctx =
     ()
 
 let font_button ~key ~label ~font_family ~active ~on_click =
-  Ui_components.button ~key ~variant:`secondary ~selected:active
+  Ui_components.button ~text:"" ~key ~variant:`secondary ~selected:active
     ~accessibility_identifier:("editor-" ^ key) ~label
     ~height:40 ~padding_horizontal:16 ~padding_vertical:0
     ~border_width:(if active then 2 else 0)
@@ -150,8 +150,7 @@ let editor_font_row ?(density = `regular) () =
           ~text:(T.t "settings.general/editor-font-set-global") ~label:(T.t "settings.general/editor-font-set-global")
           ~checked:font.S.fglobal
           ~on_toggle:(function
-            | Lui_protocol.ToggleChanged (_,checked) -> S.set_editor_font_global checked
-            | _ -> ()) [])
+            | checked -> S.set_editor_font_global checked) [])
     ]
 
 let color_names =
@@ -192,7 +191,7 @@ let accent_swatch ~key ~current color =
             (outline ^ ", 0 0 0 2px hsl(var(--background)), 0 0 0 4px hsl(var(--ring))")
         ; Ui_components.Prop.hover_background ("var(--rx-" ^ color ^ "-09)")
         ; Ui_components.Prop.pressed_opacity 1. ]
-      (Ui_components.button ~key:(key ^ "-b") ~variant:`ghost
+      (Ui_components.button ~text:"" ~key:(key ^ "-b") ~variant:`ghost
         ~style_class:(C.btn_cls ~variant:`Text ())
         ~label:(color_label color)
         ~background:("var(--rx-" ^ color ^ "-09)")
@@ -296,7 +295,7 @@ let dfmt_menu ~scope ~key mst options current =
     ~on_dismiss:(fun _ -> V.lang_menu_close mst)
     (List.mapi
        (fun i fmt ->
-         menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
+         dropdown_menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
            ~text:fmt
            ~selected:(fmt = current)
            ~on_press:(fun _ ->
@@ -496,7 +495,7 @@ let keymap_pill st ~key ~title filter =
            ~value:(reactive
              (fun model -> title ^ {js| · |js} ^ count model)
              (Signal.value st))
-        (Ui_components.button ~key ~variant:`ghost
+        (Ui_components.button ~key ~variant:`ghost ~text:""
            ~foreground:
              (if checked then "var(--lx-gray-12, var(--rx-gray-12))"
               else "var(--lx-gray-09, var(--rx-gray-09))")
@@ -598,7 +597,8 @@ let keymap_recorder st : t =
   in
   Keyboard_capture.acquire ~scope:ctx.ui_scope record;
   popover ~key:"key-recorder" ~style_class:"shortcut-filter-popover"
-    ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4. ~width:288
+    ~target:(Anchor { side = `below; source = Parent;
+      align = `end_; offset = 4.; align_offset = 0. }) ~width:288
     ~min_width:0 ~padding:0 ~corner_radius:8 ~border_width:1
     ~border_color:"hsl(var(--border))" ~background:"hsl(var(--background))"
     ~transition:Ui_components.popover_transition
@@ -627,7 +627,7 @@ let keymap_recorder st : t =
                       ~pending:(not model.km_committed)
                       ~trailing:
                         [
-                          Ui_components.button ~key:"remove-key-filter" ~variant:`ghost
+                          Ui_components.icon_button ~key:"remove-key-filter" ~variant:`ghost
                             ~width:16 ~height:16 ~min_width:16 ~min_height:16
                             ~padding:0 ~icon:(`app "x")
                             ~label:(I18n.t "keymap/remove-filter")
@@ -650,7 +650,7 @@ let keymap_recorder st : t =
                       (reactive
                          (fun model -> model.km_keys <> [])
                          (Signal.value st))
-                    (Ui_components.button ~variant:`ghost ~min_height:0 ~height:16 ~padding:0
+                    (Ui_components.button ~text:"" ~variant:`ghost ~min_height:0 ~height:16 ~padding:0
                        ~label:(I18n.t "keymap/clear")
                        ~on_press:(fun _ -> clear ())
                        [
@@ -707,9 +707,7 @@ let keymap_key_control ?editing st =
                 ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
                 ~background:"var(--lx-gray-02, hsl(var(--muted)))"
                 ~label:(T.t "keymap/search-by-keys") ~icon:(`app "keyboard")
-                ?text:
-                  (if model.km_keys = [] then Some (T.t "keymap/search-by-keys")
-                   else None)
+                ~text:(if model.km_keys = [] then T.t "keymap/search-by-keys" else "")
                 ~on_press:open_
                 (if model.km_keys = [] then []
                  else [ keymap_recorded_keys model.km_keys ]))
@@ -717,7 +715,7 @@ let keymap_key_control ?editing st =
           if_
             ~test:
               (reactive (fun model -> model.km_keys <> []) (Signal.value st))
-            (Ui_components.button ~variant:`ghost ~width:20 ~height:20 ~min_width:0
+            (Ui_components.icon_button ~variant:`ghost ~width:20 ~height:20 ~min_width:0
                ~min_height:0 ~padding:4 ~icon:(`app "x")
                ~label:(I18n.t "keymap/clear-keystroke-filter")
                ~on_press:(fun _ ->
@@ -804,7 +802,7 @@ let keymap_controls ?editing ?identifier ?on_appear ?search_identifier st =
             (row ~key:"km-sec" ~style_class:"ls-toolbar-gap" ~cross:`center
                ~height:22 ~gap:8
                [
-                 Ui_components.button ~variant:`ghost ~key:"km-fold" ~style_class:"icon-link" ~width:18
+                 Ui_components.icon_button ~variant:`ghost ~key:"km-fold" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                    ~label:(T.t "keymap/toggle-categories-pane") ~icon:(`app "fold")
                    ~on_press:(fun _ ->
@@ -821,7 +819,7 @@ let keymap_controls ?editing ?identifier ?on_appear ?search_identifier st =
                      Runtime.signal_set st
                        { model with km_collapsed = collapsed })
                    [];
-                 Ui_components.button ~variant:`ghost ~key:"km-rf" ~style_class:"icon-link" ~width:18
+                 Ui_components.icon_button ~variant:`ghost ~key:"km-rf" ~style_class:"icon-link" ~width:18
                    ~height:18 ~min_width:0 ~min_height:0 ~padding:0
                    ~label:(T.t "keymap/refresh-all") ~icon:(`app "refresh")
                    ~on_press:(fun _ ->
@@ -937,7 +935,8 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
           end
   in
   Keyboard_capture.acquire ~scope:ctx.ui_scope record;
-  popover ~key:"shortcut-customize" ~anchor:`below ~anchor_alignment:`end_
+  popover ~key:"shortcut-customize" ~target:(Anchor { side = `below; source = Parent;
+                                      align = `end_; offset = 0.; align_offset = 0. })
     ~width:288 ~min_width:0 ~padding:12 ~corner_radius:8
     ~background:"hsl(var(--background))" ~border_width:1
     ~border_color:"hsl(var(--border))"
@@ -949,7 +948,7 @@ let keymap_editor st editing (r : Keymap_data.row) : t =
               row ~key:("binding-" ^ string_of_int i) ~gap:8 ~cross:`center
                 ~min_width:0 ~flex_wrap:`wrap
                 [ keymap_binding ~key:("bound-" ^ string_of_int i) binding
-                ; Ui_components.button ~variant:`ghost ~size:`icon
+                ; Ui_components.icon_button ~variant:`ghost ~size:`icon
                     ~icon:(`app "x") ~label:(T.t "keymap/remove-binding")
                     ~on_press:(fun _ -> persist (T.t "keymap/shortcut-removed") (fun () ->
                         let bindings = Keymap_data.bindings id
@@ -1267,9 +1266,8 @@ let home_page_row ctx =
             ~disabled:(reactive (fun value -> value) (Signal.value saving))
             ~on_input:(fun ev ->
               match ev with
-              | Lui_protocol.TextChanged (_, q) ->
-                  Runtime.signal_set home_text q
-              | _ -> ())
+              | q ->
+                  Runtime.signal_set home_text q)
             ~on_submit:(fun _ ->
               let value = Runtime.signal_get home_text in
               if value <> !saved && not (Runtime.signal_get saving) then begin
@@ -1323,7 +1321,7 @@ module Account_settings = struct
   let enabled = false
 
   let caption value = text ~font_size:"0.875rem" ~value []
-  let title value = heading ~level:2 ~font_size:"1rem" ~font_weight:600 ~value []
+  let title value = heading ~level:`h2 ~font_size:"1rem" ~font_weight:600 ~value []
   let button ?(variant = `outline) value action =
     Ui_components.button ~variant ~text:value ~on_press:(fun _ -> action ()) []
 
@@ -1464,7 +1462,7 @@ module Account_settings = struct
        if_ ~test:(Signal.value opened)
           (Ui_components.menu_card ~key:(key ^ "-menu") ~anchor:`below ~anchor_alignment:`start
              ~on_dismiss:(fun _ -> close ())
-             (List.map (fun (id, name) -> menu_item ~key:id ~text:name
+             (List.map (fun (id, name) -> dropdown_menu_item ~key:id ~text:name
                 ~selected:(reactive ((=) id) selected)
                 ~on_press:(fun _ -> close (); on_select id) []) options))]
       ctx parent
@@ -1498,8 +1496,8 @@ module Account_settings = struct
     let trigger = "pat-expiration-trigger" in
     let picker =
       reactive (fun date ->
-        popover ~key:"pat-expiration-calendar" ~anchor:`below ~anchor_target:trigger
-          ~anchor_alignment:`start
+        popover ~key:"pat-expiration-calendar" ~target:(Anchor { side = `below; source = Target trigger;
+                                                 align = `start; offset = 0.; align_offset = 0. })
           ~background:"hsl(var(--popover))" ~corner_radius:8 ~border_width:1
           ~border_color:"hsl(var(--border))" ~on_dismiss:(fun _ -> close ())
           [Ui_components.calendar ?initial:(Dates.parse_local_datetime date)
@@ -1519,7 +1517,7 @@ module Account_settings = struct
             ~icon:(`app "calendar") ~icon_placement:`trailing
             ~data_attrs:(reactive (fun expanded ->
                 ["aria-expanded", string_of_bool expanded]) (Signal.value opened))
-            ~text_signal:(Signal.value value)
+            ~text:(reactive Fun.id (Signal.value value))
             ~on_press:(fun _ -> set opened (not (Signal.get (Signal.value opened)))) [];
           if_ ~test:(Signal.value opened) picker]]
       ctx parent
@@ -1654,7 +1652,7 @@ module Account_settings = struct
     let secret label state =
       column ~gap:6 [caption label;
         Ui_components.secure_field ~height:36 ~label ~text_signal:(Signal.value state)
-          ~on_input:(function Lui_protocol.TextChanged (_, value) -> set state value | _ -> ()) []]
+          ~on_input:(function value -> set state value) []]
     in
     let view =
       match Ui_services.storage_get "id-token", Rtc_flows.user_uuid () with
@@ -1883,7 +1881,7 @@ let article ~modal ~keymap ms ctx =
           ~cross:`center ~main:`start ~gap:8
           ?height:(if is_keymap then None else Some 40)
           ~padding_horizontal:(if is_keymap then 16 else 0)
-          [ heading ~key:"art-ht" ~level:1
+          [ heading ~key:"art-ht" ~level:`h1
               ~style_class:"cp__settings-category-title"
               ~font_size:"1.25rem" ~font_weight:400 ~line_height:"1.75rem"
               ~value:
@@ -1957,7 +1955,7 @@ let inner ~modal ms : t =
                      ~style_class:"cp__settings-header"
                      ~cross:`center ~main:`start ~gap:8 ~height:40 ~min_height:40
                      ~padding:8
-                     [ heading ~key:"aside-ht" ~level:1
+                     [ heading ~key:"aside-ht" ~level:`h1
                          ~style_class:"cp__settings-modal-title"
                          ~font_size:"1.5rem" ~font_weight:600 ~line_height:"2rem"
                          ~data_attrs:
@@ -2013,11 +2011,10 @@ let appearance_body ms : t =
   let node =
     Ui_components.menu_surface
       (popover ~transition:Ui_components.popover_transition ~key:"appearance-wrap"
-          ~anchor:`below ~anchor_target:"toolbar-dots-btn" ~anchor_alignment:`end_
+          ~target:(Anchor { side = `below; source = Target "toolbar-dots-btn";
+            align = `end_; offset = 0.; align_offset = (-5.5) })
           (* The reference point anchor's one-pixel width and five-pixel
-             arrow inset put its end edge 5.5 points beyond the trigger. *)
-          ~anchor_alignment_offset:(-5.5)
-          ~anchor_offset:0. ~width:622 ~role:`dialog
+             arrow inset put its end edge 5.5 points beyond the trigger. *) ~width:622 ~role:`dialog
           ~on_dismiss:(fun _ ->
             Runtime.dismiss_appearance ())
           ~style_class:"ui__dropdown-menu-content appearance-popup"

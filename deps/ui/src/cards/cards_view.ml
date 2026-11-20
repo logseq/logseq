@@ -6,7 +6,7 @@ open Lui_elements
 let t_ = I18n.t
 
 let opt_row st i label =
-  menu_item ~key:("opt-" ^ string_of_int i) ~text:label
+  dropdown_menu_item ~key:("opt-" ^ string_of_int i) ~text:label
     ~on_press:(fun _ -> Cards_state.select_deck st i)
     []
 
@@ -24,9 +24,9 @@ let opts_box st =
                (fun i d -> opt_row st i d.Cards_state.deck_label)
                decks
         in
-        dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
+        dropdown_menu_view (dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
           ~on_dismiss:(fun _ -> Cards_state.close_opts st)
-          options)
+          options))
     (Logseq_el.own ctx
        (Signal.map2 (fun a b -> (a, b))
           (Signal.value st.Cards_state.opts_open)
@@ -61,7 +61,7 @@ let selector_row st =
         ; opts_box st ])
     ; Ui_components.with_props
         [ Ui_components.Prop.cursor `pointer ]
-        (Ui_components.button ~key:"add" ~accessibility_identifier:"ls-cards-add"
+        (Ui_components.icon_button ~key:"add" ~accessibility_identifier:"ls-cards-add"
            ~variant:`ghost ~size:`icon ~style_class:"ls-icon-btn"
            ~padding_horizontal:4
            ~foreground:
@@ -71,7 +71,7 @@ let selector_row st =
            ~on_press:(fun _ -> Cards_state.add_cards_block st)
            [])
     ; text ~key:"prog" ~style_class:"ls-desc ls-nowrap"
-        ~white_space:"nowrap"
+        ~white_space:`nowrap
         ~value:(reactive
                   (fun (pos : int) (cards : int list) ->
                     let n = List.length cards in
@@ -101,7 +101,7 @@ let ratings =
 let rating_btn st i (r, label_key, sc, style, hex) =
   let id = "card-" ^ r in
   row ~key:id ~style_class:"ls-row ls-gap" ~cross:`center
-    [ Ui_components.button ~key:"b" ~accessibility_identifier:id
+    [ Ui_components.button ~text:"" ~key:"b" ~accessibility_identifier:id
         ~padding_horizontal:8 ~padding_vertical:4
         ~background:(hex ^ "0d")
         ~border_color:"rgb(235,234,235)" ~border_width:1
@@ -128,7 +128,7 @@ let rating_btn st i (r, label_key, sc, style, hex) =
 let info_btn st =
   fun ctx parent ->
   (box ~key:"info-wrap"
-     [ Ui_components.button ~key:"info" ~variant:`ghost ~size:`sm
+     [ Ui_components.icon_button ~key:"info" ~variant:`ghost ~size:`sm
          ~padding_horizontal:0 ~height:16
          ~foreground:"var(--ls-secondary-text-color, hsl(var(--muted-foreground)))"
          ~icon:(`app "info-circle") ~label:"rating info"
@@ -213,7 +213,7 @@ let rec card_view st b phase =
         [ (if np = "show-cloze" || np = "show-answer" then
              (* cljs card-answers is a compact secondary sm button with
                 a kbd shortcut hint — no accent fill/border *)
-             Ui_components.button ~key:"answers" ~accessibility_identifier:"card-answers"
+             Ui_components.button ~text:"" ~key:"answers" ~accessibility_identifier:"card-answers"
                ~padding_horizontal:8 ~padding_vertical:4
                ~style_class:"card-answers"
                ~variant:`secondary ~size:`sm
@@ -284,7 +284,7 @@ let cards_body st =
             column ~key:"empty" ~style_class:"ls-card content ls-ml"
               ~margin_left:8
               ~min_height:(int_of_float (0.6 *. Ui_services.dom_viewport_height ()))
-              [ heading ~key:"h" ~level:2
+              [ heading ~key:"h" ~level:`h2
                   ~value:(t_ "flashcard.empty/title") []
               ; paragraph ~key:"d"
                   ~value:(I18n.t1 "flashcard.empty/desc" "#Card")
@@ -293,7 +293,7 @@ let cards_body st =
             column ~key:"nodue" ~style_class:"ls-card content ls-ml"
               ~margin_left:8
               ~min_height:(int_of_float (0.6 *. Ui_services.dom_viewport_height ()))
-              [ heading ~key:"h" ~level:2
+              [ heading ~key:"h" ~level:`h2
                   ~value:(t_ "flashcard.empty/no-due-title") []
               ; paragraph ~key:"d"
                   ~value:(t_ "flashcard.empty/no-due-desc") []

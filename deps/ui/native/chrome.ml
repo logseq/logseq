@@ -34,13 +34,14 @@ open Lui_elements
 let icon_btn ~key ?(acc = "") ~icon_name ~label ?shortcut_id ?disabled_signal
     ?foreground_signal ?style_class on_press =
   Ui_components.chrome_button
-  (Ui_components.button ~key ~label ~variant:`ghost ~size:`icon ~width:32 ~height:32
+  (Ui_components.icon_button ~key ~label ~icon:(Icons.name_ref icon_name)
+    ~variant:`ghost ~size:`icon ~width:32 ~height:32
     ~main:`center ~cross:`center
     ~accessibility_identifier:(if acc = "" then key else acc)
     ?disabled_signal ?foreground_signal ?style_class
     ~data_attrs:(match shortcut_id with Some id -> Keymap_data.tooltip_attrs id | None -> [])
     ~on_press:(fun _ -> on_press ())
-    [ Icons.icon ~size:20. icon_name ])
+    [])
 
 (* The sidebar toggle belongs beside search in the leading toolbar. *)
 let left_menu_btn ?(key = "left-menu-btn") () =
@@ -252,7 +253,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
                     ~value:(rtc_tx_text r) [] ]
             ; row ~key:"rtc-ind" ~cross:`center ~gap:4
                 ~style_class:"cp__rtc-sync-indicator"
-                [ Ui_components.button ~key:"rtc-btn" ~variant:`ghost
+                [ Ui_components.icon_button ~key:"rtc-btn" ~variant:`ghost
                     ~size:`icon ~style_class:cls ~label:"rtc sync"
                     ~icon:(`app "cloud") [] ]
             ])
@@ -328,10 +329,10 @@ let left_sidebar (ms : Model.t Signal.signal) : t =
             [split ~key:"sidebar-reveal"
                ~container_relative_frame:`both
                ~resize_handle_width:0 ~gap:0
-               ~first_width:(reactive (fun (m : Model.t) width window ->
-                 if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width)
+               ~sizing:(reactive (fun (m : Model.t) width window ->
+                 First_width (if window<640. then (if m.left_sidebar_open then window*.0.74 else 0.) else width))
                  ms (Signal.value st.Sidebar_state.left_width) viewport)
-               ~resize_duration:300 ~resize_easing:`standard panel shade])))))) context parent
+               ~motion:{duration_ms=300; easing=`standard; origin=None} panel shade])))))) context parent
 
 (* The host advances transitions; shared state owns the pane widths. *)
 let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
@@ -339,12 +340,12 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
  fun context parent ->
   split ~key:"left-split" ~grow:1.
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
-    ~first_width:
+    ~sizing:
       (reactive
          (fun (m : Model.t) width viewport ->
-           if Sidebar_state.left_docked m.Model.left_sidebar_open viewport then width else 0.)
+           First_width (if Sidebar_state.left_docked m.Model.left_sidebar_open viewport then width else 0.))
          ms (Signal.value st.Sidebar_state.left_width) (Signal.value st.Sidebar_state.viewport_w))
-    ~resize_duration:300 ~resize_easing:`standard
+    ~motion:{duration_ms=300; easing=`standard; origin=None}
     ~on_resize:(Sidebar_state.on_left_split_resize st)
     (left_sidebar ms) content context parent
 
@@ -352,12 +353,12 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     (first : t) (second : t) : t =
   split ~key:"right-split" ~grow:1.
     ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
-    ~value:
+    ~sizing:
       (reactive
          (fun (m : Model.t) fraction viewport ->
-           if m.Model.right_sidebar_open && viewport>=640. then 1. -. fraction else 1.)
+           Fraction (if m.Model.right_sidebar_open && viewport>=640. then 1. -. fraction else 1.))
          ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
-    ~resize_duration:300 ~resize_easing:`standard
+    ~motion:{duration_ms=300; easing=`standard; origin=None}
     ~on_resize:(Sidebar_state.on_right_split_resize st)
     first second
 
@@ -495,9 +496,9 @@ let not_found_page : t =
      fixed-overlay positioning the inline style used to *)
   column ~key:"nf-full" ~main:`center ~cross:`center
     ~style_class:"cp__not-found"
-    [ heading ~key:"nf-h1" ~level:1 ~font_size:"3.75rem" ~font_weight:700
+    [ heading ~key:"nf-h1" ~level:`h1 ~font_size:"3.75rem" ~font_weight:700
         ~value:"404" []
-    ; heading ~key:"nf-h2" ~level:2 ~font_size:"1.5rem" ~font_weight:600
+    ; heading ~key:"nf-h2" ~level:`h2 ~font_size:"1.5rem" ~font_weight:600
         ~value:(I18n.t "page/not-found-title") []
     ; paragraph ~key:"nf-p"
         ~value:(I18n.t "page/not-found-desc") []

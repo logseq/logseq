@@ -126,7 +126,7 @@ let open_hl_lightbox ?clicked_id () =
 (* cljs asset-action-bar button inside .hl-area — ~label: carries the
    tip (aria-label feeds the app tooltip like the cljs title attr did) *)
 let area_btn ~key ~title ~icon ~onclick : t =
-  Ui_components.button ~variant:`ghost ~key
+  Ui_components.icon_button ~variant:`ghost ~key
     ~label:title
     ~data_attrs:[ ("tabindex", "-1") ]
     ~icon:(`app icon)
@@ -198,14 +198,13 @@ let prefix_el (b : Model.block) : t =
   (text ~key:"pf" ~style_class:"prefix-link"
      ~on_pointer_down:(fun ev ->
        match ev with
-       | Lui_protocol.PointerDown (_, d) ->
+       | d ->
            let blank =
              d.Lui_protocol.target_class
              |> String.split_on_char ' '
              |> List.mem "blank"
            in
-           if not (area && blank) then Pdf_assets.open_block_ref b
-       | _ -> ())
+           if not (area && blank) then Pdf_assets.open_block_ref b)
      ([ text ~key:"pfp" ~style_class:"hl-page"
           [ text ~key:"pfs" ~as_:`Strong
               ~value:page [] ]

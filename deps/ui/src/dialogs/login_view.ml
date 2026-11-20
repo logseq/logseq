@@ -17,11 +17,6 @@ let cognito_url = Rtc_ops.cognito_url
 let client_id = Rtc_ops.client_id
 let oauth_token_url = Rtc_ops.oauth_token_url
 
-let text_of ev =
-  match ev with
-  | Lui_protocol.TextChanged (_, s) -> s
-  | _ -> ""
-
 (* Form field values belong to one mounted body and reset on tab switches. *)
 type fields =
   { email : string Signal.state
@@ -440,7 +435,7 @@ let input_row fields ~key ~id ~caption ?(autofocus = false) ~secure ~value
           ; ("aria-invalid", if invalid = id then "true" else "false") ])
           (Signal.value fields.invalid_field))
         ~text_signal:(Signal.value value)
-        ~on_input:(fun ev -> Signal.set value (text_of ev))
+        ~on_input:(fun text -> Signal.set value text)
         ~on_submit:(fun _ -> on_submit ())
         []
     ])
@@ -597,7 +592,7 @@ let panel ctx fields (a : auth_ui) : t =
     ((* cljs card-header (p-6 + pb-7) + card-title (text-2xl) *)
      Ui_components.with_props
        [ Ui_components.Prop.padding_top 24; Ui_components.Prop.padding_bottom 28 ]
-       (heading ~key:"lg-t" ~level:2 ~margin:0 ~letter_spacing:(-0.24)
+       (heading ~key:"lg-t" ~level:`h2 ~margin:0 ~letter_spacing:(-0.24)
        ~font_size:"1.5rem" ~font_weight:600 ~line_height:"1"
        ~style_class:"ui__dialog-title ls-auth-title"
        ~value:title [])

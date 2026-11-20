@@ -24,7 +24,8 @@ let arm_press ~on_press_detail (elem : Lui_elements.t) : Lui_elements.t =
   enable ctx node P.PressEnabled;
   enable ctx node P.PointerEnabled;
   ignore (on_event ctx node
-    (function P.PressDetail _ -> true | _ -> false) on_press_detail);
+    (function P.PressDetail _ -> true | _ -> false)
+    (function P.PressDetail (_, detail) -> on_press_detail detail | _ -> assert false));
   node
 
 
@@ -43,7 +44,7 @@ let icon_ ?key ?(cls = "") ?(size = 16) ?(attrs = []) ?transition name =
 (* Popovers own outside dismissal, Escape and focus return through their
    shared layer lifecycle. Sidebar state only handles the dismiss action. *)
 let menu_box ~key ~at ?min_width ~extra_cls ~dismiss children =
-  Ui_components.menu_surface (popover ~key ~at ~role:`menu ?min_width ~on_dismiss:dismiss
+  Ui_components.menu_surface (popover ~key ~target:(let x, y = at in At (x, y)) ~role:`menu ?min_width ~on_dismiss:dismiss
     ~transition:Ui_components.popover_transition
     ~style_class:("ui__dropdown-menu-content" ^ extra_cls)
     children)
@@ -104,9 +105,8 @@ let nav_edit_menu st =
   box ~key:"nav-edit-menu"
     [ Ui_components.menu_surface
         (popover ~key:"menu-box" ~role:`menu
-          ~anchor:`below ~anchor_alignment:`center ~anchor_offset:0.
-          ~anchor_alignment_offset:1.
-          ~anchor_target:"nav-edit-trigger" ~min_width:128
+          ~target:(Anchor { side = `below; source = Target "nav-edit-trigger";
+            align = `center; offset = 0.; align_offset = 1. }) ~min_width:128
           ~transition:Ui_components.popover_transition
           ~style_class:"ui__dropdown-menu-content"
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
@@ -177,11 +177,10 @@ let plugins_menu st =
    shortcuts; content-props class w-60 *)
 let lp_menu_items st ~close ~target ~recent =
   let item key label icon_name caps on_click =
-    Ui_components.with_props [Ui_components.Prop.height 33]
-      (Menu_item.el ~key:("lp-" ^ key) ~label
-         ~icon:(Icons.name_ref icon_name)
-         ~after:(match caps with [] -> [] | _ -> [ menu_sc caps ])
-         ~on_click:(fun () -> close (); on_click ()) ())
+    Menu_item.dropdown_el ~key:("lp-" ^ key) ~label ~height:33
+      ~icon:(Icons.name_ref icon_name)
+      ~after:(match caps with [] -> [] | _ -> [ menu_sc caps ])
+      ~on_click:(fun () -> close (); on_click ()) ()
   in
   (if recent then []
    else
@@ -215,13 +214,13 @@ let lp_menu st =
              (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
       in
       Ui_components.menu_surface
-        (dropdown_menu ~key:"lp-menu" ~at:(x, if flip then atop else abot)
+        (dropdown_menu_view (dropdown_menu ~key:"lp-menu" ~at:(x, if flip then atop else abot)
            ~transition:Ui_components.popover_transition
            ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
            ~style_class:
              ("ui__dropdown-menu-content w-60 ls-anchor-cx"
              ^ if flip then " ls-anchor-top" else "")
-           items)
+           items))
 ;;
 
 (* ---------- repos dropdown (cljs graphs-selector popup) ---------- *)
@@ -273,7 +272,7 @@ let repos_menu_content st (m : Model.t) : t =
     Ui_components.with_props
       [ Ui_components.Prop.opacity 0.7
       ; Ui_components.Prop.hover_opacity 0.9 ]
-      (Ui_components.button ~key ~variant:`ghost ~size:`sm
+      (Ui_components.button ~text:"" ~key ~variant:`ghost ~size:`sm
       ~label ~height:32 ~corner_radius:4 ~main:`start ~gap:6
       ~on_press:(fun _ ->
         close ();
@@ -316,8 +315,8 @@ let repos_menu_content st (m : Model.t) : t =
                     (Runtime.nav_hash "#/graphs")) ]) ]
 
 let repos_menu st (ms : Model.t Signal.signal) : t =
-  Ui_components.menu_surface (popover ~key:"repos-menu" ~anchor:`below ~anchor_alignment:`start
-    ~anchor_offset:0. ~anchor_alignment_offset:(-4.)
+  Ui_components.menu_surface (popover ~key:"repos-menu" ~target:(Anchor { side = `below; source = Parent;
+                                                          align = `start; offset = 0.; align_offset = (-4.) })
     ~role:`menu ~min_width:300 ~max_width:400
     ~padding_horizontal:8
     ~transition:Ui_components.popover_transition
@@ -375,7 +374,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
       (icon_ icon_name)
   in
   let leading =
-    [ icon; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
+    [ icon; text ~grow:1. ~white_space:`nowrap ~text_overflow:`ellipsis ~value:title [] ]
   in
   box ~key ~style_class:(class_ ^ act)
     [ (match href, on_shift_click with
@@ -385,9 +384,8 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
                Some (fun _ -> on_click ()) else None) [content])
        | None, None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
        | None, Some shift_click -> arm_press ~on_press_detail:(function
-           | P.PressDetail (_, d) ->
-               if d.modifiers land 2 <> 0 then shift_click () else on_click ()
-           | _ -> ()))
+           | d ->
+               if d.modifiers land 2 <> 0 then shift_click () else on_click ()))
         (Ui_components.with_props
            [ Ui_components.Prop.cursor `pointer
            ; Ui_components.Prop.font_size "0.875rem"
@@ -605,21 +603,19 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
          | title -> title)
   in
   let origin = ref None and dragged = ref false in
-  let drag_down = function
-    | P.PointerDown (_, d) when not recent && d.button = 0 ->
+  let drag_down (d : pointer_detail) =
+    if not recent && d.button = 0 then begin
         dragged := false;
         origin := Some (Runtime.repo (), d.x, d.y)
-    | _ -> () in
-  let drag_move = function
-    | P.PointerMove (_, d) ->
+    end in
+  let drag_move (d : pointer_detail) =
         (match !origin with
          | Some (_, x, y) when !dragged || Float.abs (d.x -. x) +. Float.abs (d.y -. y) >= 6. ->
              dragged := true;
              Sidebar_state.favorite_drop_at st d.x d.y
-         | _ -> ())
-    | _ -> () in
-  let drag_up = function
-    | P.PointerUp (_, d) when not recent && d.button = 0 ->
+         | _ -> ()) in
+  let drag_up (d : pointer_detail) =
+    if not recent && d.button = 0 then begin
         (match !origin, p.Model.page_uuid with
          | Some (repo, _, _), Some source when !dragged ->
              Sidebar_state.favorite_drop_at st d.x d.y;
@@ -628,7 +624,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
              go_page (d.modifiers land 2 <> 0)
          | _ -> ());
         origin := None
-    | _ -> () in
+    end in
   let drag_cancel _ =
     origin := None;
     Runtime.signal_set st.Sidebar_state.favorite_drop None in
@@ -667,10 +663,9 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             "var(--lx-gray-04, var(--ls-quaternary-background-color))" ]
         (arm_press ~on_press_detail:(fun ev ->
              match ev with
-             | Lui_protocol.PressDetail (_, d) ->
+             | d ->
                  (* Captured Favorites complete through PointerUp. *)
-                 if recent then go_page (d.Lui_protocol.modifiers land 2 <> 0)
-             | _ -> ())
+                 if recent then go_page (d.Lui_protocol.modifiers land 2 <> 0))
           (box ~pointer_capture:(not recent)
             ~on_pointer_down:drag_down ~on_pointer_move:drag_move
             ~on_pointer_up:drag_up ~on_pointer_cancel:drag_cancel
@@ -692,7 +687,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                [ Icon_picker.page_icon_el ~size:16. p ]
            ; text ~style_class:"page-title" ~value:p.Model.page_title
                ~foreground:"hsl(var(--foreground))"
-               ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
+               ~white_space:`nowrap ~text_overflow:`ellipsis ~grow:1.
                ~line_height:"1.25rem"
                ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
                [] ] ]))
@@ -713,9 +708,9 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
                   ~icon:(`app "dots")
                   ~style_class:"capsule sidebar-page-actions ui__button"
                   ~data_attrs:[("style", "transform:scale(0.75);font-size:0.875rem")]
-                  [ Ui_components.menu_card ~key:"sidebar-page-actions-menu"
-                      ~cls:"w-60" ~anchor:`below ~anchor_alignment:`center
-                      ~on_dismiss:(fun _ -> ()) page_menu_items ] ] ]))
+                  (Ui_components.dropdown_menu_card ~key:"sidebar-page-actions-menu"
+                      ~width:240 ~anchor:`below ~anchor_alignment:`center
+                      ~on_dismiss:(fun _ -> ()) page_menu_items) ] ]))
         ]) ctx parent
 
 (* cljs sidebar-content-group: .bd renders only when the group supplies a
@@ -887,7 +882,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
             ; Ui_components.Prop.hover_background "var(--lx-gray-04)"
             ; Ui_components.Prop.hover_foreground "hsl(var(--foreground))"
             ; Ui_components.Prop.pressed_opacity 0.7 ]
-            (Ui_components.button ~key:"gsel-a" ~variant:`ghost ~grow:1. ~height:32
+            (Ui_components.button ~text:"" ~key:"gsel-a" ~variant:`ghost ~grow:1. ~height:32
                ~label:(t "graph.switch/select-prompt")
                ~foreground:"hsl(var(--foreground))"
                ~main:`start ~cross:`center
@@ -920,7 +915,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                       ; Ui_components.Prop.padding_right 16
                       ; Ui_components.Prop.min_width 0 ]
                       (text ~key:"gsel-n"
-                          ~white_space:"nowrap" ~text_overflow:"ellipsis"
+                          ~white_space:`nowrap ~text_overflow:`ellipsis
                           ~font_weight:500 ~font_size:"var(--text-sm)"
                           ~line_height:"1.25rem"
                           ~value:(reactive name_of ms) ~grow:1. [])

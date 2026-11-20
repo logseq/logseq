@@ -25,7 +25,7 @@ depends: [
   "melange-edn-melange"
   "melange-edn-native"
   "melange-fest"
-  "alcotest"
+  "alcotest" {>= "1.10.1"}
   "melange-fetch"
   "melange-webapi"
   "rrbvec"
@@ -33,7 +33,7 @@ depends: [
   "uunf"
   "re"
   "yojson"
-  "digestif"
+  "digestif" {>= "1.4.2"}
   "decompress"
   "mirage-crypto"
   "mirage-crypto-rng"
@@ -41,7 +41,7 @@ depends: [
   "kdf"
   "x509"
   "uucp"
-  "eio"
+  "eio" {>= "1.7"}
   "eio_posix" {os != "win32"}
   "eio_windows" {os = "win32"}
   "httpun"

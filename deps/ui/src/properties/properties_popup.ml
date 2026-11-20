@@ -51,7 +51,7 @@ let virtual_anchor_for_id identifier =
    is the extra root class the e2e contract requires (e.g.
    "ui__popover-content", "ls-property-dropdown"). Returns the
    view-overlay key. *)
-let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?anchor_rect
+let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_source
     ?(anchor_alignment = `start) ?(fill_available = false)
     ?anchor_offset:anchor_offset_override
     ?anchor_alignment_offset:anchor_alignment_offset_override
@@ -59,21 +59,20 @@ let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_target ?anch
   (* cap at the space left below the anchor so long menus scroll instead
      of overflowing the viewport (radix's available-height behaviour) *)
   let avail = Ui_services.dom_viewport_height () -. y -. 8. in
-  let at, anchor_offset, anchor_alignment_offset =
-    match anchor_target, anchor_rect with
-    | None, None -> Some (x, y), 0., 0.
-    | _ ->
-        None,
-        Option.value anchor_offset_override ~default:(if right then -4. else 0.),
-        Option.value anchor_alignment_offset_override ~default:(if right then -4. else 0.)
+  let target =
+    match anchor_source with
+    | None -> At (x, y)
+    | Some source -> Anchor {
+        side = (if right then `right else `below); source; align = anchor_alignment;
+        offset = Option.value anchor_offset_override ~default:(if right then -4. else 0.);
+        align_offset = Option.value anchor_alignment_offset_override ~default:(if right then -4. else 0.) }
   in
   let view =
     Ui_components.with_props
       [ Ui_components.card_shadow
       ; Ui_components.Prop.font_size "1rem"
       ; Ui_components.Prop.line_height "1.5" ]
-    (popover ~key ~role ?at ?anchor_target ?anchor_rect ~anchor:(if right then `right else `below)
-      ~anchor_alignment ~anchor_offset ~anchor_alignment_offset ~style_class:cls
+    (popover ~key ~role ~target ~style_class:cls
       (* the kit caps role=menu popovers at 18rem; base-ui dropdowns only
          cap at the available height *)
       ?max_height:(if fill_available then Some (int_of_float (Float.max avail 120.))
@@ -137,7 +136,9 @@ let open_from_anchor ?role ?(cls = "") ?padding ?(freeze_anchor = false) ?anchor
         if right || anchor_alignment = `center then x, y, w, h
         else virtual_anchor_rect (x, y, w, h)
       in
-      let anchor_rect = if freeze_anchor || not right then Some (x, y, w, h) else None in
+      let anchor_source =
+        if freeze_anchor || not right then Some (Rect {x; y; width = w; height = h})
+        else Option.map (fun identifier -> Target identifier) anchor_target in
       let x, y =
         if right then
           x +. w +. anchor_alignment_offset, y +. anchor_offset
@@ -145,7 +146,7 @@ let open_from_anchor ?role ?(cls = "") ?padding ?(freeze_anchor = false) ?anchor
           x +. anchor_alignment_offset, y +. h +. anchor_offset
       in
       open_at_key ~key ?role ~cls ?padding ~anchor_alignment ?fill_available
-        ?anchor_target:(if freeze_anchor || not right then None else anchor_target) ?anchor_rect ~anchor_offset
+        ?anchor_source ~anchor_offset
         ~anchor_alignment_offset ~right ~x ~y content);
   key
 

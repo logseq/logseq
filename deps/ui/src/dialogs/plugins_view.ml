@@ -12,11 +12,6 @@ open Lui_elements
 
 let t = I18n.t
 
-let text_of ev =
-  match ev with
-  | Lui_protocol.TextChanged (_, s) -> s
-  | _ -> ""
-
 (* cljs marketplace search: fuzzy title match + description substring;
    substring on title/name/description covers the e2e queries *)
 let matches search pkg =
@@ -78,7 +73,7 @@ let toolbar_menu ~picked ~key ~icon ~label ~items : t =
   let close () = Runtime.signal_set opened false in
   row ~key
     [ Ui_components.with_props [Ui_components.Prop.position `relative]
-      (Ui_components.button ~key:"trigger" ~variant:`ghost ~size:`icon
+      (Ui_components.icon_button ~key:"trigger" ~variant:`ghost ~size:`icon
         ~width:30 ~height:28 ~min_width:30 ~min_height:28
         ~icon:(`app icon) ~label
         ~on_press:(fun _ -> Runtime.signal_set opened (not (Runtime.signal_get opened)))
@@ -92,7 +87,7 @@ let toolbar_menu ~picked ~key ~icon ~label ~items : t =
         (Ui_components.menu_card ~key:"menu" ~anchor:`below ~anchor_alignment:`end_
            ~on_dismiss:(fun _ -> close ())
            (List.mapi (fun i (label, icon, checked, run) ->
-              Menu_item.el ~key:(string_of_int i) ~label ~icon:(`app icon)
+              Menu_item.dropdown_el ~key:(string_of_int i) ~label ~icon:(`app icon)
                 ?checked ~on_click:(fun () -> close (); run ()) ()) items))
     ] ctx parent
 
@@ -184,7 +179,7 @@ let logs_body (_ms : Model.t Signal.signal) : t =
           time.hours time.minutes time.seconds
           (jstr entry "level") (jstr entry "tag") (jstr entry "message") in
       column ~gap:12
-        [ heading ~level:1 ~font_size:"1.125rem" ~font_weight:600
+        [ heading ~level:`h1 ~font_size:"1.125rem" ~font_weight:600
             ~value:(t "plugin/logs-title" ^ " · " ^ name) []
         ; row ~gap:8 ~cross:`center
             [ box ~grow:1. [Ui_components.search_row ~key:"filter" ~height:32
@@ -208,7 +203,7 @@ let logs_body (_ms : Model.t Signal.signal) : t =
                     (level = None || level = Some (Plugin_host.jstr e "level")) &&
                     I18n.contains_ci (Plugin_host.jstr e "message") query)
                     (List.rev entries) in
-                text ~white_space:"pre-wrap" ~font_size:"0.75rem"
+                text ~white_space:`pre_wrap ~font_size:"0.75rem"
                   ~value:(if filtered = [] then t "plugin/logs-empty"
                           else String.concat "\n" (List.map format_line filtered)) [])
                 (Signal.value log) (Signal.value query) (Signal.value level) ]
@@ -294,7 +289,7 @@ let market_card ~stats ~search_st pkg =
              ~main:`space_between
              [ text ~key:"t" ~style_class:"link-block" ~grow:1. ~min_width:0
                  ~font_size:"1.25rem" ~font_weight:700 ~line_height:"24px"
-                 ~white_space:"nowrap" ~text_overflow:"ellipsis" ~overflow:"hidden"
+                 ~white_space:`nowrap ~text_overflow:`ellipsis ~overflow:`hidden
                  ~value:(if title = "" then jstr pkg "name" else title)
                  ~on_press:open_readme []
              ])
@@ -319,7 +314,7 @@ let market_card ~stats ~search_st pkg =
          ; Ui_components.with_props
              [ Ui_components.Prop.opacity 0.7 ]
              (box ~key:"desc" ~height:60 ~padding_vertical:4
-               [ text ~line_clamp:2 ~overflow:"hidden" ~text_overflow:"ellipsis"
+               [ text ~line_clamp:2 ~overflow:`hidden ~text_overflow:`ellipsis
                 ~font_size:"0.75rem" ~line_height:"16px"
                 ~value:(jstr pkg "description") [] ])
          ; Ui_components.with_props
@@ -747,7 +742,7 @@ let body (_ms : Model.t Signal.signal) : t =
         column ~key:"plugins-page"
           ~style_class:"cp__plugins-page web-platform"
           [ Ui_components.with_props [Ui_components.Prop.padding_bottom 8]
-              (heading ~key:"pl-h" ~level:1 ~font_size:"1.375rem" ~font_weight:600
+              (heading ~key:"pl-h" ~level:`h1 ~font_size:"1.375rem" ~font_weight:600
                  ~line_height:"1.75rem" ~value:(t "nav/plugins") [])
           ; grid ~key:"pl-tabs" ~style_class:"tabs" ~columns:3 ~margin_bottom:12
               [ box []
@@ -810,7 +805,7 @@ let desc_h2 key title =
   row ~key:("h-" ^ key) ~cross:`center ~gap:8
     [ text ~key:"k"  ~value:key []
     ; icon ~key:"c" ~name:(`app "caret-right") ~size:`sm []
-    ; heading ~key:"t" ~level:2  ~value:title []
+    ; heading ~key:"t" ~level:`h2  ~value:title []
     ]
 
 (* `.desc-item` — label row + `.form-control` control: flex, center,
@@ -872,27 +867,23 @@ let item_input pid key s cur =
     match input_as with
     | "textarea" ->
         Ui_components.form_textarea ~key:"in" ~style_class:"form-input" ~text:v
-          ~on_input:(fun ev -> on_change (text_of ev))
+          ~on_input:on_change
           []
     | "color" ->
         Ui_components.input ~key:"in" ~style_class:"form-input" ~kind:`color ~text:v
-          ~on_input:(fun ev -> on_change (text_of ev))
+          ~on_input:on_change
           []
     | "range" ->
-        slider ~key:"in" ~width:120
+        slider ~key:"in" ~width:120 ~label:(if title = "" then key else title)
           ~value:
             (match float_of_string_opt v with
              | Some f -> f
              | None -> 0.)
-          ~on_change:(fun ev ->
-            match ev with
-            | Lui_protocol.ValueChanged (_, n) ->
-                on_change (Printf.sprintf "%g" n)
-            | _ -> ())
+          ~on_change:(fun n -> on_change (Printf.sprintf "%g" n))
           []
     | _ ->
         Ui_components.form_input ~key:"in" ~style_class:"form-input" ~text:v
-          ~on_input:(fun ev -> on_change (text_of ev))
+          ~on_input:on_change
           []
   in
   desc_item ~key:("i-" ^ key) ~label:(desc_h2 key title)
@@ -914,9 +905,8 @@ let item_toggle pid key s cur =
          (Ui_components.checkbox ~key:"cb" ~checked
             ~on_toggle:(fun ev ->
               match ev with
-              | Lui_protocol.ToggleChanged (_, on) ->
-                  set_v pid key (Js.Json.boolean on)
-              | _ -> ())
+              | on ->
+                  set_v pid key (Js.Json.boolean on))
             []
           :: html_desc key desc))
 
@@ -977,7 +967,7 @@ let code_mode_wrap owner pid code_mode =
         [ Ui_components.Prop.font_family "var(--ls-font-family-code, monospace)" ]
         (textarea ~key:"ta" ~style_class:"form-input ls-mono"
            ~text_signal:(Signal.value code_txt)
-           ~on_input:(fun ev -> Signal.set code_txt (text_of ev))
+           ~on_input:(fun text -> Signal.set code_txt text)
            [])
     ; row ~key:"btns" ~style_class:"ls-form-actions" ~main:`end_
         [ Ui_components.button ~key:"reset" ~variant:`ghost ~size:`sm
@@ -1021,7 +1011,7 @@ let settings_item pid s =
   | "object" -> item_object key s
   | "heading" ->
       box ~key:("h-" ^ key) 
-        [ heading ~key:"t" ~level:2
+        [ heading ~key:"t" ~level:`h2
             ~value:(Plugin_host.jstr s "title") [] ]
   | "button" -> item_button pid key s
   | _ ->
@@ -1064,7 +1054,7 @@ let settings_body (_ms : Model.t Signal.signal) : t =
             let schema = Plugin_host.plugin_settings_schema pid in
             let body =
               if schema = [] then
-                [ heading ~key:"none" ~level:2
+                [ heading ~key:"none" ~level:`h2
                     ~style_class:"warning ls-pl-warn"
                     ~font_size:"1.125rem" ~font_weight:700
                     ~padding_vertical:16
@@ -1072,7 +1062,7 @@ let settings_body (_ms : Model.t Signal.signal) : t =
               else
                 [ Ui_components.with_props
                     [ Ui_components.Prop.opacity 0.9 ]
-                    (heading ~key:"id" ~level:2 ~style_class:"ls-pl-id"
+                    (heading ~key:"id" ~level:`h2 ~style_class:"ls-pl-id"
                        ~font_size:"1.25rem"
                        ~data_attrs:
                          [ "style", "padding: 4px 8px 0" ]
