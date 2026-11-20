@@ -5909,6 +5909,10 @@ let () = with_test_entry (fun () ->
               resolve (Wire.Array [map ["id",uuid;"block",map ["block/uuid",uuid;
                 "db/id",Wire.Int 101;"block/title",Wire.String ""];"children",Wire.Array []]]) [@u]))
         | "thread-api/get-block-parents",_ -> Js.Promise.resolve (Wire.Array [])
+        | "thread-api/get-render-snapshots",_ ->
+            Js.Promise.resolve (Wire.Map [Wire.kw "slots",Wire.Map []])
+        | "thread-api/get-class-properties",_ | "thread-api/get-all-properties",_
+        | "thread-api/pull-many",_ -> Js.Promise.resolve (Wire.Array [])
         | _ -> failwith ("Unexpected New object fixture request: " ^ method_));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
       let host=Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
@@ -5941,7 +5945,12 @@ let () = with_test_entry (fun () ->
         ignore (Lui_app.start app);ignore (Lui_app.flush app);
         Runtime.read_model:=(fun () -> !model);Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
         let opens=ref 0 in
-        Runtime.app_send:=(function Action.Toggle_right_sidebar -> incr opens;true | _ -> false);
+        Runtime.app_send:=(function
+          | Action.Toggle_right_sidebar ->
+              incr opens;
+              model := { !model with right_sidebar_open = not (!model).right_sidebar_open };
+              true
+          | _ -> false);
         let store=Lui_host.store host in
         let ids=Lui_store.preorder store in
         let control=if header then List.find (fun id -> Lui_store.string_prop store id
