@@ -31,6 +31,7 @@ type block =
   { block_uuid : string option
   ; block_db_id : int option
   ; block_title : string
+  ; block_ref_count : int
   ; block_level : int
   ; block_tag_ids : int list (* block/tags ref ids from the pull *)
   ; block_tags : string list (* resolved tag titles, for .block-tags *)
@@ -65,6 +66,7 @@ type block =
   ; (* fetched blocks of the linked entity; never written back by
        structure ops (they belong to the source page) *)
     block_embed_children : block list
+  ; block_original : (string * string) option (* projected embed's host UUID and scope *)
   ; block_is_page : bool
   ; block_heading : int option (* resolved h1..h6 level *)
     (* page-typed outline child (carries block/name; cljs entity/page?) *)
@@ -198,6 +200,7 @@ type rtc_user =
 
 type rtc =
   { rtc_lock : bool (* ws open *)
+  ; rtc_graph_uuid : string option
   ; rtc_ws_state : string
   ; rtc_local_tx : int option
   ; rtc_remote_tx : int option
@@ -238,6 +241,7 @@ type toast =
   ; toast_code : toast_code option
   ; toast_kind : string (* "success" | "error" | "warning" | ... *)
   ; toast_key : string option (* sdk show_msg key — close_msg targets it *)
+  ; toast_duration : int option
   }
 
 type journals_status = Journal_pending | Journal_loaded | Journal_failed
@@ -264,6 +268,7 @@ type t =
   ; left_sidebar_open : bool
   ; right_sidebar_open : bool
   ; editing_title : bool
+  ; title_edit_click : (float * float) option
   ; page_menu
       : (float * float * float * bool * string option) option
         (* anchor cx/top/bottom, with_app_items, page uuid *)
@@ -313,6 +318,7 @@ let initial =
        | _ -> false)
   ; right_sidebar_open = false
   ; editing_title = false
+  ; title_edit_click = None
   ; page_menu = None
   ; appearance = false
   ; confirm = None
@@ -339,6 +345,7 @@ let empty_block ~uuid ~title ~is_page : block =
   { block_uuid = Some uuid
   ; block_db_id = None
   ; block_title = title
+  ; block_ref_count = 0
   ; block_level = 0
   ; block_tag_ids = []
   ; block_tags = []
@@ -365,6 +372,7 @@ let empty_block ~uuid ~title ~is_page : block =
   ; block_children = []
   ; block_link = None
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page = is_page
   ; block_heading = None
   ; block_default_collapsed = false

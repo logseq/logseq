@@ -262,7 +262,7 @@ let test_update () =
    | Model.Page "foo", None -> check "navigate clears route_page" true
    | _ -> check "navigate clears route_page" false);
   (* toast ids are allocated sequentially *)
-  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None; toast_code = None } in
+  let toast = { Model.toast_id = 0; toast_text = "hi"; toast_kind = "success"; toast_key = None; toast_code = None; toast_duration = None } in
   let m3 = Update.update m2 (Action.Toast_push toast) in
   let m3 = Update.update m3 (Action.Toast_push toast) in
   eqi "two toasts" 2 (List.length m3.toasts);
@@ -365,7 +365,13 @@ let test_decode2 () =
        eqs "toast kind" "success" toast.toast_kind
    | None -> check "toast_of_wire" false);
   check "toast empty -> None"
-    (Decode.toast_of_wire (Wire.Array []) = None)
+    (Decode.toast_of_wire (Wire.Array []) = None);
+  List.iter (fun (tail, expected) ->
+    check "worker notification preserves lifetime"
+      ((Option.get (Decode.toast_of_wire
+          (Wire.Array ([Wire.String "validation"; Wire.Keyword "success"] @ tail)))).Model.toast_duration = expected))
+    [[], Some 1500; [Wire.Bool true], Some 2000; [Wire.Bool false], Some 0;
+     [Wire.Bool true; Wire.Nil; Wire.Int 4200], Some 4200]
 
 (* ---- Router.parse_path ---- *)
 
@@ -589,10 +595,19 @@ let test_edn2 () =
   check "negative int" (Edn.parse "-7" = Wire.Int (-7));
   check "float" (Edn.parse "2.5" = Wire.Float 2.5);
   check "bool" (Edn.parse "false" = Wire.Bool false);
-  (* #tag literals don't decode: '#uuid' lexes as a symbol token *)
-  check "tagged literal lexes as symbol + value"
+  check "tagged literal decodes UUID"
     (Edn.parse "[#uuid \"x\"]"
-     = Wire.Array [ Wire.Symbol "#uuid"; Wire.String "x" ]);
+     = Wire.Array [ Wire.Uuid "x" ]);
+  List.iter (fun value ->
+    check "EDN backup type round trip" (Edn.parse (Edn.to_string value) = value))
+    [ Wire.Map []; Wire.Uuid "audit-id"; Wire.Date_ms 99L;
+      Wire.Tagged ("audit/value", Wire.Array []);
+      Wire.Map [Wire.kw "block/uuid", Wire.Uuid "audit-id";
+        Wire.kw "block/created-at", Wire.Date_ms 1795056453000L] ];
+  List.iter (fun source ->
+    check "EDN rejects invalid tagged values"
+      (try ignore (Edn.parse source); false with Edn.Parse_error _ -> true))
+    ["#uuid nil"; "#inst \"not a date\""];
   (* string escapes, both directions *)
   let s = "a\"b\\c\nd\te" in
   check "string escapes decode"
@@ -602,18 +617,15 @@ let test_edn2 () =
   eqs "print uuid" "#uuid \"u-1\"" (Edn.to_string (Wire.Uuid "u-1"));
   eqs "print tagged" "#x 1"
     (Edn.to_string (Wire.Tagged ("x", Wire.Int 1)));
-  eqs "print inst" "#inst 99" (Edn.to_string (Wire.Date_ms 99L));
+  eqs "print inst" "#inst \"1970-01-01T00:00:00.099Z\"" (Edn.to_string (Wire.Date_ms 99L));
   eqs "print set" "#{1 2}"
     (Edn.to_string (Wire.Set [ Wire.Int 1; Wire.Int 2 ]));
   eqs "print list" "(1 :a)"
     (Edn.to_string (Wire.List [ Wire.Int 1; Wire.kw "a" ]));
   eqs "print int64" "42" (Edn.to_string (Wire.Int64 42L));
   eqs "print float" "2.5" (Edn.to_string (Wire.Float 2.5));
-  (* odd trailing key in a map literal is dropped *)
-  (match Edn.parse "{:a 1 :dangling}" with
-   | Wire.Map kvs -> check "odd map drops trailing key"
-                       (List.length kvs = 1)
-   | _ -> check "odd map drops trailing key" false)
+  check "EDN rejects odd map"
+    (try ignore (Edn.parse "{:a 1 :dangling}"); false with Edn.Parse_error _ -> true)
 
 (* ---- Fuzzy ---- *)
 
@@ -1083,6 +1095,36 @@ let test_decode6 () =
 (* ---- Editor_state pure helpers ---- *)
 
 let test_editor_state () =
+  let module P = Outliner_projection in
+  let linked = {(block ~children:[block "embed-child" "child"] "linked" "Linked") with
+    Model.block_ref_count = 1} in
+  let linking = {(block "linking" "") with Model.block_link = Some 9;
+    block_embed_children = [linked]} in
+  let project blocks = P.create ~expanded:(fun ~scope:_ _ -> true)
+      ~children_of:Editor_state.children_of
+      [{P.section_key = "host"; repository = None; scope = "main";
+        page = page blocks; is_last = true}] in
+  let rows projection = List.filter_map (function P.Block row -> Some row | _ -> None)
+      projection.P.rows in
+  let projected = rows (project [linking]) in
+  check "Embed projection retains linked reference count"
+    ((List.hd projected).P.block.Model.block_ref_count = 1);
+  check "Embed projection replaces the linking row at the same depth"
+    (List.map (fun (row : P.block_row) -> row.block.block_uuid, row.depth) projected
+     = [Some "linked", 0; Some "embed-child", 1]);
+  check "Embed projection preserves the host owner on the linked root only"
+    (List.map (fun (row : P.block_row) -> row.block.block_original) projected
+     = [Some ("linking", "main"); None]);
+  let empty_page = {linked with Model.block_is_page = true; block_children = []} in
+  check "Empty page embed retains its linked title row"
+    (List.map (fun (row : P.block_row) -> row.block.block_title)
+       (rows (project [{linking with block_embed_children = [empty_page]}])) = ["Linked"]);
+  check "Loop-protected embed renders the original block"
+    (List.map (fun (row : P.block_row) -> row.block.block_uuid)
+       (rows (project [{linking with block_embed_children = []}])) = [Some "linking"]);
+  check "Malformed embed projection fails fast"
+    (try ignore (project [{linking with block_embed_children = [linked; linked]}]); false
+     with Invalid_argument _ -> true);
   let grandchild = block "g" "gc" in
   let child = block ~children:[ grandchild ] "c" "child" in
   let embed =
@@ -1251,22 +1293,25 @@ let test_outliner_ops2 () =
      | _ -> false)
 
 let test_outliner_ops3 () =
-  (* paste_block_maps flattens preorder with levels + parent refs *)
-  let child = block "cu" "ctitle" in
-  let parent = block ~children:[ child ] "pu" "ptitle" in
-  let maps = Outliner_ops.paste_block_maps [ parent ] in
-  check "paste maps preorder + level + parent"
-    (List.length maps = 2
-    && Wire.get (List.hd maps) "block/level" = Some (Wire.Int 1)
-    && Wire.get (List.nth maps 1) "block/level" = Some (Wire.Int 2)
-    && (match Wire.get (List.nth maps 1) "block/parent" with
-        | Some (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid "pu" ]) ->
-            true
-        | _ -> false));
-  check "paste_trees op"
+  let parent = "81ddcc75-063a-4faa-8385-4052a285eadd" in
+  let child = "ca417953-3027-4d1f-b563-3aadc9b771e1" in
+  let parent_ref = Wire.Array [Wire.kw "block/uuid"; Wire.Uuid parent] in
+  let block uuid title attrs =
+    Wire.Map ([Wire.kw "block/uuid", Wire.Uuid uuid;
+               Wire.kw "block/title", Wire.String title] @ attrs) in
+  let parent_block = block parent "Parent" [Wire.kw "user.property/priority", Wire.Int 3] in
+  let child_block = block child "Child"
+      [Wire.kw "block/parent", Wire.Map
+        [Wire.kw "db/id", Wire.Int 4; Wire.kw "block/uuid", Wire.Uuid parent]] in
+  let data = Editor_actions.encode_block_clipboard ~repo:"graph" ~cut:true
+      [parent_block; child_block] in
+  let cut, maps = Option.get (Editor_actions.decode_block_clipboard ~repo:"graph" data) in
+  check "Logseq clipboard preserves cut intent, preorder, parent refs and properties"
+    (cut && maps = [parent_block; block child "Child" [Wire.kw "block/parent", parent_ref]]);
+  check "paste_blocks op"
     (match
-       op_name_args (Outliner_ops.paste_trees [ parent ] "tgt"
-                       ~replace_empty:true)
+       op_name_args (Outliner_ops.paste_blocks maps "tgt"
+                       ~cut ~sibling:true ~replace_empty:true)
      with
      | Some ("insert-blocks", [ Wire.Array _; Wire.Uuid "tgt"; Wire.Map _ as m ]) ->
          Wire.get m "outliner-op" = Some (Wire.Keyword "paste")
@@ -1723,14 +1768,11 @@ let test_cmdk_groups () =
       (Cmdk_state.group_order v q rows total)
   in
   let v = Cmdk_state.initial_view in
-  (* cljs :default refresh only fires on an input change, so a fresh-open
-     blank palette shows recents alone; the filters group appears once
-     the input has been edited *)
   check "blank input order"
     (gids v "" [] 0 = [ Cmdk_state.G_recently_updated ]);
   check "blank input order after edit"
     (gids { v with Cmdk_state.edited = true } "" [] 0
-     = [ Cmdk_state.G_recently_updated; Cmdk_state.G_filters ]);
+     = [ Cmdk_state.G_recently_updated ]);
   check "query order"
     (gids v "abc" [] 0
      = [ Cmdk_state.G_nodes
@@ -2365,8 +2407,14 @@ let test_views_builder () =
   (match tree_of_src "\"text\"" with
    | COp ("and", [ CText "text" ]) -> check "tree_of_src text wrap" true
    | _ -> check "tree_of_src text wrap" false);
-  check "tree_of_src preserves unsupported source" (tree_of_src "sym" = CInvalid "sym");
-  check "tree_of_src preserves malformed source" (tree_of_src "(broken" = CInvalid "(broken");
+  check "tree_of_src treats bare symbols as full-text searches"
+    (tree_of_src "sym" = COp ("and", [CText "sym"]));
+  check "tree_of_src treats unwrapped clauses as full-text searches"
+    (tree_of_src "(broken" = COp ("and", [CText "(broken"]));
+  check "tree_of_src preserves malformed wrapped DSL"
+    (tree_of_src "(and (property :x)" = CInvalid "(and (property :x)");
+  check "tree_of_src retains the complete plain-text query"
+    (tree_of_src "Search seed parity" = COp ("and", [CText "Search seed parity"]));
   (* loc-based tree surgery: loc [i] at a group indexes clause i-1;
      [0] targets the group node itself *)
   let ta, tb, tc = (ci "a" [], ci "b" [], ci "c" []) in
@@ -2717,6 +2765,25 @@ let test_views_state () =
      = Some (Wire.Keyword "p/g"))
 
 let test_views_query () =
+  let inst = Views_state.make ~sched:test_sched
+      ~kind:(Views_state.KQuery {block_uuid = "property-query"})
+      ~feature:"query-result" ~owner:Wire.Nil in
+  Views_state.update inst (fun s ->
+      {s with Views_state.query_idents = ["logseq.property/type"; "block/tags"]});
+  Signal.stabilize test_sched;
+  check "Query columns include the built-in Property type metadata"
+    (List.exists (fun c -> c.Views_state.c_id = "logseq.property/type"
+       && c.Views_state.c_name = I18n.t "property.built-in/type")
+       (Views_table.build_columns inst []));
+  check "plain-text query source becomes a full-text DSL string"
+    (Views_query.parse_src "Search seed parity" = Views_query.QDsl "\"Search seed parity\"");
+  check "plain-text query quoting preserves literal quotes and backslashes"
+    (Views_query.parse_src "find \"quoted\" \\ text"
+     = Views_query.QDsl (Edn.to_string (Wire.String "find \"quoted\" \\ text")));
+  List.iter (fun source ->
+    check "structured DSL source is not quoted as full text"
+      (Views_query.parse_src source = Views_query.QDsl source))
+    ["[[Target Page]]"; "[?b :block/title ?title]"; "\"quoted text\"" ];
   check "parse blank" (Views_query.parse_src "" = Views_query.QBlank);
   check "parse (and)" (Views_query.parse_src "(and)" = Views_query.QBlank);
   (match Views_query.parse_src "(and (task \"TODO\"))" with
@@ -2903,9 +2970,8 @@ let test_views_table () =
   check "sortable"
     (Views_table.sortable col_title
     && not (Views_table.sortable { col_title with c_id = "select" })
-    && not
-         (Views_table.sortable
-            { col_title with c_id = "block.temp/refs-count" }))
+    && Views_table.sortable
+         { col_title with c_id = "block.temp/refs-count" })
 
 (* ---- popups_state ---- *)
 
@@ -3055,7 +3121,7 @@ let test_popups_state () =
   eqs "nlp key" "date.nlp/next-week"
     (Popups_state.nlp_i18n_key "Next week");
   check "nlp names"
-    (List.length Popups_state.nlp_en_names = 10
+    (List.length Popups_state.nlp_en_names = 33
     && List.mem "Tomorrow" Popups_state.nlp_en_names);
   let now = Dates.date_now () in
   let ms_diff en = Popups_state.nlp_date_of en -. now in
@@ -3064,6 +3130,21 @@ let test_popups_state () =
   check "nlp next week" (ms_diff "Next week" > 604700000.);
   check "nlp today" (abs_float (ms_diff "Today") < 5000.);
   check "nlp unknown" (abs_float (ms_diff "Bogus") < 5000.);
+  let monday = Dates.make ~year:2026 ~month:11 ~day:16 ~hours:15 () in
+  List.iter (fun (prefix, days) ->
+    List.iter2 (fun (weekday, _) expected ->
+      let actual = Dates.fields (Popups_state.nlp_date_of ~now:monday (prefix ^ " " ^ weekday)) in
+      check ("nlp " ^ prefix ^ " " ^ weekday)
+        (actual.year = 2026 && actual.month = 11 && actual.day = expected))
+      Popups_state.nlp_weekdays days)
+    ["Last",[9;10;11;12;13;14;15];"This",[16;17;18;19;20;21;22];"Next",[23;24;25;26;27;28;29]];
+  List.iter (fun (term, year, month, day) ->
+    let actual = Dates.fields (Popups_state.nlp_date_of ~now:monday term) in
+    check ("nlp period " ^ term) (actual.year = year && actual.month = month && actual.day = day))
+    ["This week",2026,11,15;"This month",2026,11,1;"This year",2026,1,1;"Last year",2025,11,16];
+  let sunday = Dates.make ~year:2026 ~month:11 ~day:15 () in
+  check "nlp next Monday on Sunday uses the upcoming Monday"
+    ((Dates.fields (Popups_state.nlp_date_of ~now:sunday "Next Monday")).day = 16);
   let with_month_end_clock : (unit -> Dates.fields) -> Dates.fields =
     [%mel.raw {js|function (read) {
       const { mock } = require("node:test");
@@ -3120,7 +3201,7 @@ let test_popups_state () =
   check "block_item"
     (bi.Popups_state.ai_label = "BT"
     && bi.ai_act = Popups_state.Emit ("[[bu]]", 0)
-    && bi.ai_node && bi.ai_node_icon = Some ("point-filled", true)
+    && bi.ai_node && bi.ai_node_icon = Some (Node_icon.tabler "point-filled", true)
     && bi.ai_breadcrumb = Some "");
   check "class_titles"
     (Popups_state.class_titles_of
@@ -3139,6 +3220,36 @@ let test_popups_state () =
      | _ -> false)
 
 (* ---- editor_actions pure helpers ---- *)
+
+let test_calc_variables () =
+  check "Calculator assignments and named functions share one block environment"
+    (Render_calc.results "a = 10\na*2\nsqrt(9)" = ["10"; "20"; "3"]);
+  check "An empty calculator retains its empty line" (Render_calc.results "" = [""]);
+  check "Calculator bindings do not leak to a fresh block"
+    (Render_calc.results "a" = ["?"])
+
+let test_calc_error_lines () =
+  check "Calculator errors preserve subsequent result positions"
+    (Render_calc.results "1/0\nbad(\n2+2\n" = ["Infinity"; "?"; "4"]);
+  List.iter (fun (source, expected) ->
+    check ("Calculator decimal precision: " ^ source)
+      (Render_calc.results source = expected))
+    [ "0.1+0.2\n1/3\n1e20+1",
+      ["0.3"; "0.33333333333333333333"; "100000000000000000001"]
+    ; "a=9007199254740993\na*3\na-9007199254740992",
+      ["9007199254740993"; "27021597764222979"; "1"]
+    ; "-2/3\n1/6\n0/0\n-1/0\n0.000000000000000000005/1",
+      ["-0.66666666666666666667"; "0.16666666666666666667"; "NaN"; "-Infinity";
+       "0.00000000000000000001"]
+    ; "1e20-1\n2^70\n2^-3\n0.01*0.02\n1e-23",
+      ["99999999999999999999"; "1.18059162071741130342e+21"; "0.125"; "0.0002"; "1e-23"]
+    ; "1e\n.\n1..2\nlast\n2+2", ["?"; "?"; "?"; "?"; "4"]
+    ; "0-0.01\n0.01-0\n-0.01+0\n0*1e-20", ["-0.01"; "0.01"; "-0.01"; "0"]
+    ; "sqrt(2)\nsqrt(1e60)\nsqrt(-1)\nsqrt(0)",
+      ["1.4142135623730950488"; "1e+30"; "NaN"; "0"]
+    ; "sin(0.5)\nln(2)\nexp(1)",
+      ["0.479425538604203"; "0.6931471805599453"; "2.718281828459045"]
+    ; "", [""] ]
 
 let test_editor_actions () =
   let b = block ~children:[ block "c1" "C1"; block "c2" "C2" ] "b" "B" in
@@ -3267,7 +3378,7 @@ let test_update2 () =
   check "right sidebar toggle"
     (m1.Model.right_sidebar_open = not m0.Model.right_sidebar_open);
   let rtc =
-    { Model.rtc_lock = true; rtc_ws_state = "on"
+    { Model.rtc_lock = true; rtc_ws_state = "on"; rtc_graph_uuid = None
     ; rtc_local_tx = Some 3; rtc_remote_tx = Some 4
     ; rtc_pending_local = 1; rtc_pending_asset = 2; rtc_pending_server = 3
     ; rtc_online_users = []; rtc_missing_files = [] }
@@ -3288,6 +3399,7 @@ let test_decode_rtc () =
   let w =
     wmap
       [ "rtc-state", wmap [ "ws-state", Wire.Keyword "open" ]
+      ; "graph-uuid", Wire.Uuid "00000000-0000-4000-8000-000000000085"
       ; "rtc-lock", Wire.Bool true
       ; "local-tx", Wire.Int 7
       ; "remote-tx", Wire.Int64 8L
@@ -3298,12 +3410,14 @@ let test_decode_rtc () =
   let r = Decode.rtc_of_wire w in
   check "rtc decode"
     (r.Model.rtc_ws_state = "open" && r.rtc_lock = true
+    && r.rtc_graph_uuid = Some "00000000-0000-4000-8000-000000000085"
     && r.rtc_local_tx = Some 7 && r.rtc_remote_tx = Some 8
     && r.rtc_pending_local = 1 && r.rtc_pending_asset = 2
     && r.rtc_pending_server = 3);
   let r2 = Decode.rtc_of_wire (Wire.Map []) in
   check "rtc decode defaults"
     (r2.Model.rtc_ws_state = "" && r2.rtc_lock = false
+    && r2.rtc_graph_uuid = None
     && r2.rtc_local_tx = None && r2.rtc_pending_local = 0)
 
 (* ---- properties_data ---- *)
@@ -3363,10 +3477,10 @@ let test_properties_data () =
   check "row_hidden" (Properties_data.row_hidden row);
   check "row_hide_empty" (Properties_data.row_hide_empty row);
   check "row_position"
-    (Properties_data.row_position row = "logseq.property.ui-position/block-left");
+    (Properties_data.row_position row = "block-left");
   check "row_position default"
     (Properties_data.row_position (Wire.Map [])
-     = "logseq.property.ui-position/properties");
+     = "properties");
   check "row_effective default"
     (Properties_data.row_effective_value row = Wire.Int 99);
   let rowv =
@@ -3428,15 +3542,17 @@ let test_properties_data () =
 
 let test_sidebar_favorite_order () =
   let original = ["a"; "b"; "c"] in
-  check "favorite moves preserve every identity and destination side"
-    (List.for_all (fun (source, target, before, expected) ->
-       Sidebar_state.favorite_order ~source ~target ~before original = expected)
-      [ ("a", "c", false, ["b"; "c"; "a"])
-      ; ("c", "a", true, ["c"; "a"; "b"])
-      ; ("a", "b", true, original)
-      ; ("b", "b", false, original)
-      ; ("gone", "b", false, original)
-      ; ("a", "gone", true, original) ])
+  check "favorite moves preserve every identity at the target's original index"
+    (List.for_all (fun (source, target, expected) ->
+       Sidebar_state.favorite_order ~source ~target original = expected)
+      [ ("a", "c", ["b"; "c"; "a"])
+      ; ("c", "a", ["c"; "a"; "b"])
+      ; ("a", "b", ["b"; "a"; "c"])
+      ; ("b", "a", ["b"; "a"; "c"])
+      ; ("b", "b", original)
+      ; ("gone", "b", original)
+      ; ("a", "gone", original) ]
+     && Sidebar_state.favorite_order ~source:"a" ~target:"b" [] = [])
 
 let test_sidebar_recents () =
   let previous = Ui_services.storage_get "recent-pages" in
@@ -3457,6 +3573,25 @@ let test_sidebar_recents () =
 let test_sidebar_state () =
   let p = page [ block "b" "B" ] in
   let it = Sidebar_state.item_of_page p in
+  let other = { it with Sidebar_state.key = "second"; title = "Second" } in
+  let snapshot = Sidebar_state.right_sidebar_snapshot ~previous:Wire.Nil
+      ~repo:"graph" ~open_:true [it; other] in
+  check "sidebar state survives its storage round trip"
+    (Edn.parse (Edn.to_string snapshot) = snapshot);
+  let unchanged = Sidebar_state.right_sidebar_snapshot ~previous:snapshot
+      ~repo:"graph" ~open_:false [{ other with collapsed = true }; it] in
+  check "sidebar open state persists without reorder or collapse"
+    (Wire.get unchanged "open?" = Some (Wire.Bool false)
+     && Wire.get unchanged "items" = Wire.get snapshot "items");
+  check "closing all sidebar items persists empty membership"
+    (Sidebar_state.saved_sidebar_items
+      (Sidebar_state.right_sidebar_snapshot ~previous:snapshot
+        ~repo:"graph" ~open_:false []) = []);
+  check "a different graph cannot reuse saved sidebar membership"
+    (Sidebar_state.saved_sidebar_items
+      (Sidebar_state.right_sidebar_snapshot ~previous:snapshot
+        ~repo:"other" ~open_:true [other]) <>
+      Sidebar_state.saved_sidebar_items snapshot);
   check "item_of_page"
     (it.Sidebar_state.key = "page-p" && it.kind = "page"
     && it.title = "p" && it.page_ref = Some "p"
@@ -3579,7 +3714,7 @@ let test_boot () =
 let test_update3 () =
   let keyed k =
     { Model.toast_id = 0; toast_text = "t"; toast_kind = "info"
-    ; toast_key = k; toast_code = None }
+    ; toast_key = k; toast_code = None; toast_duration = None }
   in
   let m =
     Update.update Model.initial (Action.Toast_push (keyed (Some "k1")))
@@ -3852,7 +3987,131 @@ let test_scoped_keyboard_selection () =
         expect "Upward range retains explicit children when its direction reverses" expected)
         [true, ["c2"; "sibling"]; true, ["c1"; "c2"; "sibling"];
          true, ["parent"; "c1"; "c2"; "sibling"];
-         false, ["c1"; "c2"; "sibling"]])
+         false, ["c1"; "c2"; "sibling"]];
+      let linked = block ~children:[block "child" "Child"] "linked" "Linked" in
+      let linking = {(block "linking" "") with Model.block_link = Some 9;
+        block_embed_children = [linked]} in
+      let linked_page = {(block ~children:[linked; block "t2" "Tail"] "target" "Target") with
+        Model.block_is_page = true} in
+      let page_link = {(block "page-link" "") with Model.block_link = Some 10;
+        block_embed_children = [linked_page]} in
+      model_stub := {Model.initial with route_page = Some
+        (page [block "h1" "Head"; linking; page_link; block "h2" "Host tail"])};
+      S.extra_sources := [];
+      let register_embed embed =
+        let scope = Outliner_projection.embedded_scope ~scope:"main" embed in
+        S.extra_sources := [{S.source_scope = scope; source_kind = S.Outliner;
+          source_blocks = (fun () -> [S.rendered_block ~scope:"main" embed])}] in
+      List.iter (fun embed ->
+        model_stub := {Model.initial with route_page = Some
+          (page [block "before-embed" "Before"; embed; block "after-embed" "After"])};
+        register_embed embed;
+        S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+          selected = S.String_set.singleton "before-embed"; anchor = Some "before-embed"});
+        A.move_selection_focus false;
+        let target = (List.hd embed.Model.block_embed_children).Model.block_uuid in
+        check "ArrowDown selects the rendered linked root rather than its invisible embed owner"
+          (S.String_set.elements (S.selected ()) = [Option.get target]
+           && S.editing_uuid () = None);
+        check "Arrow-selected embedded roots retain the owner mapping used by Tab and Shift+Tab"
+          (S.original_owner_in_scope ~scope:(S.selection_scope ()) (Option.get target)
+           = (Option.get embed.Model.block_uuid, "main"));
+        A.move_selection_focus true;
+        check "ArrowUp returns from an embedded root to its preceding host row"
+          (S.selected () = S.String_set.singleton "before-embed")) [linking;page_link];
+      let empty_page_link = {page_link with Model.block_embed_children =
+        [{linked_page with Model.block_children = []}]} in
+      model_stub := {Model.initial with route_page = Some
+        (page [block "before-embed" "Before"; empty_page_link; block "after-embed" "After"])};
+      register_embed empty_page_link;
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "before-embed"; anchor = Some "before-embed"});
+      List.iter (fun expected ->
+        A.move_selection_focus false;
+        check "ArrowDown traverses an empty page embed without losing selection"
+          (S.selected () = S.String_set.singleton expected)) ["target";"after-embed"];
+      A.move_selection_focus false;
+      check "ArrowDown at the end of the projection retains its selected row"
+        (S.selected () = S.String_set.singleton "after-embed");
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "missing"; anchor = Some "missing"});
+      A.move_selection_focus false;
+      check "Arrow navigation leaves an unavailable selection unchanged"
+        (S.selected () = S.String_set.singleton "missing");
+      model_stub := {Model.initial with route_page = Some
+        (page [block "h1" "Head"; linking; page_link; block "h2" "Host tail"])};
+      S.extra_sources := [];
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "h1"; anchor = Some "h1"});
+      check "Selection visual order projects linked identities at host depth"
+        (A.flat_uuids () = ["h1"; "linked"; "child"; "target"; "linked"; "child"; "t2"; "h2"]);
+      check "Cross-embed range includes duplicate linked occurrences in visual order"
+        (A.range_between "child" "h2" = ["child"; "target"; "linked"; "child"; "t2"; "h2"]);
+      check "An unavailable visual range endpoint yields no selection"
+        (A.range_between "missing" "h2" = []);
+      List.iter (fun expected -> A.extend_selection false;
+        check "Shift-Down crosses projected embed subtrees using linked identities"
+          (A.selected_uuids () = expected))
+        [["h1"; "linked"]; ["h1"; "linked"; "target"]; ["h1"; "linked"; "target"; "h2"]];
+      A.extend_selection false;
+      check "Shift-Down selects the visual add-block footer without inventing a UUID"
+        ((S.read ()).S.selected_footer = (Option.get (!model_stub).Model.route_page).Model.page_uuid
+         && List.length (A.selected_uuids ()) = 4);
+      A.extend_selection true;
+      check "Shift-Up reverses footer selection before changing UUID membership"
+        ((S.read ()).S.selected_footer = None && List.length (A.selected_uuids ()) = 4);
+      check "Selection membership highlights a UUID in every scope"
+        (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.selected ()));
+      check "Empty selection does not highlight an embedded occurrence"
+        (not (S.is_selected_in_view ~scope:"other-embed" "linked" ("main", S.String_set.empty)));
+      let embedded scope owner = {S.source_scope = scope; source_kind = S.Outliner;
+        source_blocks = (fun () -> [{linked with Model.block_original = Some ("link", owner)}])} in
+      S.extra_sources := [embedded "first-embed" "main"; embedded "second-embed" "main";
+        embedded "nested-embed" "second-embed"];
+      let collapsed = S.collapsed_ui_transform ~scope:"first-embed" "linked" true S.initial in
+      check "Embedded occurrences share immediate containing-outliner collapse state"
+        (List.for_all (fun scope -> S.collapsed_in ~scope collapsed "linked")
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]);
+      check "Independent sidebar containers retain independent root presentation"
+        (not (S.collapsed_in ~scope:"sidebar" collapsed "linked"));
+      let expanded = S.collapsed_ui_transform ~scope:"second-embed" "linked" false collapsed in
+      check "Expanding another occurrence synchronizes without a worker refresh"
+        (List.for_all (fun scope -> not (S.collapsed_in ~scope expanded "linked"))
+          ["main"; "first-embed"; "second-embed"; "nested-embed"]);
+      let duplicate = {linking with Model.block_uuid = Some "duplicate-link"} in
+      model_stub := {Model.initial with route_page = Some
+        (page [linking; block "between" "Between"; duplicate; page_link; block "tail" "Tail"])};
+      S.extra_sources := [];
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "linked"; anchor = Some "linked"});
+      List.iter (fun expected -> A.extend_selection false;
+        check "Shift-Down skips duplicate selected occurrences and includes the next embed root"
+          (A.selected_uuids () = expected))
+        [["linked"; "between"]; ["linked"; "between"; "target"]])
+
+let test_retired_embed_selection () =
+  let module S = Editor_state in
+  let module A = Editor_actions in
+  let saved_model = !model_stub and saved_state = !S.st and saved_sources = !S.extra_sources in
+  let saved_focus = !S.pending_focus in
+  Fun.protect ~finally:(fun () ->
+    model_stub := saved_model; S.st := saved_state; S.extra_sources := saved_sources;
+    S.pending_focus := saved_focus) (fun () ->
+    model_stub := {Model.initial with route_page = Some (page [block "other" "Other"])};
+    S.extra_sources := [];
+    List.iter (fun selected ->
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selection_scope = "retired-embed"; selected = S.String_set.of_list selected});
+      S.pending_focus := None;
+      let snapshot = try Some (A.selected_snapshot ()) with Not_found -> None in
+      check "Retired embed selection remains unresolved instead of throwing"
+        (Option.fold ~none:false ~some:(fun snapshot ->
+          S.String_set.equal snapshot.A.unresolved (S.String_set.of_list selected)) snapshot);
+      List.iter (fun indent ->
+        let completed = try A.indent_or_outdent ~indent; true with Not_found -> false in
+        check "Tab and Shift-Tab do not act on a retired embedded identity"
+          (completed && !S.pending_focus = None && S.String_set.elements (S.selected ()) = selected))
+        [true;false]) [[];["linked-page"]])
 
 (* ---- Update.update: remaining arm ---- *)
 
@@ -4437,7 +4696,7 @@ let test_props_data () =
     (List.length (Properties_data.row_closed_values row));
   check "row_hidden" (Properties_data.row_hidden row);
   check "row_hide_empty" (Properties_data.row_hide_empty row);
-  eqs "row_position" "logseq.property.ui-position/block-right"
+  eqs "row_position" "block-right"
     (Properties_data.row_position row);
   check "row_is_class_schema no"
     (not (Properties_data.row_is_class_schema row));
@@ -4447,7 +4706,7 @@ let test_props_data () =
   (* defaults on sparse row *)
   let bare = wmap [ ("property-id", Wire.kw "p") ] in
   eqs "row defaults" "default" (Properties_data.row_type bare);
-  eqs "row_position default" "logseq.property.ui-position/properties"
+  eqs "row_position default" "properties"
     (Properties_data.row_position bare);
   check "row_ident missing" (Properties_data.row_ident (wmap []) = None)
 
@@ -4841,8 +5100,51 @@ let test_delta_preserves_embed_children () =
                 (Editor_state.children_of b)=[child.Model.block_uuid, child.Model.block_title]
        | _ -> false)) [false;true]
 
+let test_delta_recursive_embed () =
+  let module D = Page_delta in
+  let own_child = block "own-child" "Original child" in
+  let source = { (block "source-parent" "Source") with Model.block_db_id = Some 213 } in
+  let link = { (block "page-link" "Page link") with Model.block_link = Some 207;
+    block_children = [own_child] } in
+  let page_root = { (block "source-page" "Source page") with Model.block_db_id = Some 207;
+    block_children = [{source with Model.block_children = [link]}] } in
+  let canonical = {link with Model.block_embed_children = [page_root]} in
+  let occurrence uuid = { (block uuid "") with Model.block_link = Some 213;
+    block_embed_children = [source] } in
+  List.iter (fun (name, upsert, failed) ->
+    let p : D.parsed = {rev=1;canon=D.SMap.empty;deleted=D.SSet.empty;affected=[];
+      patches=D.SMap.singleton "source-parent" {D.base_rev=0;remove=D.SSet.empty;upsert}} in
+    let canon_nodes = Hashtbl.create 1 and idx_nodes = Hashtbl.create 1 in
+    Hashtbl.add canon_nodes "page-link" canonical;
+    Hashtbl.add idx_nodes "source-parent" source;
+    let env : D.env = {p;canon_nodes;idx_nodes;consumed=Hashtbl.create 1;failed=false} in
+    let updated = D.splice_children env (Some "host")
+      [occurrence "first"; occurrence "second"] 1 in
+    let valid (outer : Model.block) = match outer.block_embed_children with
+      | [root] -> (match root.block_children with
+        | [] -> upsert = [] || failed
+        | [moved] when not failed -> (match moved.block_embed_children with
+          | [page] -> (match page.block_children with
+            | [parent] -> (match parent.block_children with
+              | [loop] -> loop.block_uuid = link.block_uuid
+                  && loop.block_embed_children = []
+                  && List.map (fun (b : Model.block) -> b.block_uuid, b.block_title)
+                       loop.block_children = [own_child.block_uuid, own_child.block_title]
+              | _ -> false)
+            | _ -> false)
+          | _ -> false)
+        | _ -> false)
+      | _ -> false in
+    check ("Page deltas bound recursive embeds without dropping sibling occurrences: " ^ name)
+      (env.failed = failed
+       && List.map (fun (b : Model.block) -> b.block_uuid) updated = [Some "first";Some "second"]
+       && List.for_all valid updated))
+    ["moved", ["page-link","a1"], false; "empty", [], false;
+     "missing", ["missing","a1"], true]
+
 let () =
   test_delta_preserves_embed_children ();
+  test_delta_recursive_embed ();
   test_pure_helpers ();
   Edit_model_test.run ();
   Edit_view_web_test.run ();
@@ -4894,6 +5196,8 @@ let () =
   test_views_table ();
   test_popups_state ();
   test_editor_actions ();
+  test_calc_variables ();
+  test_calc_error_lines ();
   test_update2 ();
   test_decode_rtc ();
   test_properties_data ();
@@ -4913,6 +5217,7 @@ let () =
   test_block_source_remount ();
   test_selected_uuids ();
   test_scoped_keyboard_selection ();
+  test_retired_embed_selection ();
   test_update_sidebar2 ();
   test_decode7 ();
   test_edn3 ();

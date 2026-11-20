@@ -468,11 +468,11 @@ let insert_view_block ~current ?(on_error = fun () -> ())
                  ; W.Map
                      [ (W.kw "sibling?", W.Bool sibling)
                      ; (W.kw "keep-uuid?", W.Bool true)
-                     ; (W.kw "outliner-op", W.Keyword "insert-blocks")
+                     ; (W.kw "outliner-op", W.Keyword "create-view")
                      ]
                  ]
              ])
-          (W.Map [])
+          (W.Map [ W.kw "source-outliner-op", W.Keyword "create-view" ])
       in
       Outliner_ops.check_loader_result result;
       if current () then after ();

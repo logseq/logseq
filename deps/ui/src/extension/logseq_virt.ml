@@ -618,6 +618,7 @@ let attach (ctx : Lui_ui.ui_context) st margin list_id scroll_parent_id
           ~onChange:(fun inst _sync -> publish inst)
           ~getItemKey:(fun i -> key_of !data.(i))
           ~overscan ~scrollMargin:!margin
+          ~useAnimationFrameWithResizeObserver:true
           (* the default measurement is offsetHeight (integer) —
              fractional row heights (headings, code blocks) get
              truncated and the next row then overlaps the remainder; a

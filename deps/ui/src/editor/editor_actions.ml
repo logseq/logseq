@@ -5,6 +5,8 @@
 module S = Editor_state
 module Ops = Outliner_ops
 
+let structural_uuid ~scope uuid = S.original_uuid_in_scope ~scope uuid
+
 let closest sel t =
   match t with Some el -> el.Ui_services.closest sel | None -> None
 
@@ -207,7 +209,13 @@ let rec apply_focus () =
           cancel_pending_focus ();
           last_focus_emitted := None;
       | None when Option.is_some request.S.focus_owner -> cancel_pending_focus ()
-      | None -> retry_focus ()
+      | None ->
+          if !(S.code_focus) ~caret uuid then begin
+            S.pending_focus := None;
+            focus_attempts := 0;
+            last_focus_emitted := None;
+            drain_pending_focus_actions ()
+          end else retry_focus ()
       | Some editing when editing.S.uuid <> uuid -> retry_focus ()
       | Some editing ->
         request.S.focus_owner <- Some (editing.S.scope, editing.S.epoch);
@@ -503,6 +511,9 @@ let run_structure ?recover ?current_guard ~restore p finish =
         completion := Some (fun result -> resolve (fun () -> result) [@u])) in
     finished ()
   in
+  ignore (owner_complete |> Js.Promise.catch (fun error ->
+    Ui_services.log_error ("editor structure failed", error);
+    Js.Promise.resolve ()));
   if claimed then begin
     structure_owner := Some (owner, owner_complete);
     S.structure_pending := true
@@ -583,12 +594,14 @@ let model_title uuid =
 
 let display_title uuid = S.title_for uuid (model_title uuid)
 
+let buffer_needs_save uuid buf =
+  let saved = match S.editing () with
+    | Some e when e.S.uuid = uuid -> Ops.trim_title uuid e.S.base
+    | _ -> model_title uuid in
+  buf <> saved
+
 let commit_result ?(after = fun () -> ()) uuid buf =
-  (* compare against the persisted title, not display_title — the
-     override may already hold buf (exit_edit sets it first) and
-     normalization (heading strip, ref rewrite) can make the saved
-     title differ from the buffer *)
-  if buf <> model_title uuid then (
+  if buffer_needs_save uuid buf then (
     let save = Ops.accept_save uuid buf in
     let title = Ops.normalized_title uuid buf in
     S.override_title uuid title;
@@ -598,10 +611,13 @@ let commit_result ?(after = fun () -> ()) uuid buf =
   else (
     let origin = Runtime.capture_reload_origin () in
     Option.iter Ops.release_save (Ops.take_pending_save_for uuid);
-    (match origin with
-     | Some origin when Runtime.reload_origin_current origin -> after ()
-     | _ -> ());
-    Js.Promise.resolve ())
+    if buf <> model_title uuid then
+      Ops.refresh_page_then (fun () -> after (); Js.Promise.resolve ())
+    else (
+      (match origin with
+       | Some origin when Runtime.reload_origin_current origin -> after ()
+       | _ -> ());
+      Js.Promise.resolve ()))
 
 let commit uuid buf = ignore (commit_result uuid buf)
 
@@ -690,6 +706,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
                   S.editing = Some editing
                 ; selection_scope = scope
                 ; selected = S.String_set.empty
+                ; selected_footer = None
                 ; anchor = None
                 ; action_bar = false
                 });
@@ -752,6 +769,7 @@ let rec exit_edit ~select =
                   { st with
                     S.editing = None
                   ; selection_scope = e.scope
+                  ; selected_footer = None
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
                   ; anchor = (if select then Some e.uuid else st.anchor)
@@ -781,7 +799,7 @@ let flush_edit () =
       cancel_pending_focus ();
       let buf = Ops.trim_title e.uuid (live_buffer e.uuid) in
       let save =
-        if buf <> model_title e.uuid then Some (Ops.accept_save e.uuid buf)
+        if buffer_needs_save e.uuid buf then Some (Ops.accept_save e.uuid buf)
         else (
           Option.iter Ops.release_save (Ops.take_pending_save_for e.uuid);
           None)
@@ -1183,11 +1201,15 @@ let split_at_cursor uuid =
           && (above || library || S.is_collapsed_in ~scope:e.S.scope uuid
               || b.Model.block_children = [])
         in
+        let insert_target, insert_scope =
+          if S.is_collapsed_in ~scope:e.S.scope uuid || b.Model.block_children = []
+          then S.original_owner_in_scope ~scope:e.S.scope uuid
+          else uuid, e.S.scope in
         mark "prelude";
         let opts = Ops.history_opts ~opts:(Ops.op_opts "insert-blocks")
             ~before:(S.history_editing e)
             ~after:(S.history_editing
-              (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope ~base:after ())) () in
+              (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:insert_scope ~base:after ())) () in
         (* Capture this block's debounce now, before the next editor can
            schedule a save for a UUID the worker has not inserted yet. *)
         let context = Runtime.model () in
@@ -1203,15 +1225,17 @@ let split_at_cursor uuid =
                    ~source:false new_uuid after |] in
           Ops.submit_result ~current context opts
             ([ Ops.op "save-block" [ a.(0); Wire.Map [] ]
-            ; Ops.insert_blocks [ a.(1) ] uuid ~sibling ]
-            @ if above then [ Ops.move_blocks [ uuid ] new_uuid ~sibling:true ] else [])
+            ; Ops.insert_blocks [ a.(1) ] insert_target ~sibling ]
+            @ if above then [ Ops.move_blocks [ insert_target ] new_uuid ~sibling:true ] else [])
         in
         mark "ops";
         (* optimistic insert: mount the new row and retitle the split
            block synchronously — the worker delta splices the real
            record over the placeholder when it lands *)
         optimistic_edit ~owner:batch.owner (fun p ->
-            Model.split_insert ~above p ~uuid ~before
+            Model.split_insert ~above p ~uuid:insert_target
+              ~before:(if insert_target = uuid then before else
+                (Option.get (S.find insert_target)).Model.block_title)
               ~new_block:
                 (Model.empty_block ~uuid:new_uuid ~title:after
                    ~is_page:library)
@@ -1230,7 +1254,7 @@ let split_at_cursor uuid =
             { st with
               S.editing =
                 Some
-                  (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:e.scope
+                  (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:insert_scope
                      ~base:after ()) });
         mark "editing";
         S.click_point := None;
@@ -1518,19 +1542,35 @@ let merge_next uuid =
 
 (* ---- selection ---- *)
 
+let selection_projection ~scope =
+  let scope = S.selection_owner_scope scope in
+  let main_scope = match Runtime.route () with Model.Block_zoom uuid -> "zoom-" ^ uuid | _ -> "main" in
+  if scope <> main_scope then None else
+  let model = Runtime.model () in
+  let pages = match model.Model.route_page with Some page -> [page] | None -> model.journals in
+  let sections = List.mapi (fun index page ->
+    {Outliner_projection.section_key = string_of_int index; repository = model.repo;
+      scope; page; is_last = false}) pages in
+  let projection = Outliner_projection.create ~children_of:S.children_of
+      ~expanded:(fun ~scope block -> not (S.effective_collapsed ~scope block)) sections in
+  Some (List.filter_map (function Outliner_projection.Block row -> Some row | _ -> None)
+      projection.rows)
+
 let flat_uuids () =
-  List.filter_map
-    (fun b -> b.Model.block_uuid)
-    (S.flat_visible ~scope:(S.interaction_scope ()) ())
+  let scope = S.interaction_scope () in
+  match selection_projection ~scope with
+  | Some rows -> List.filter_map (fun row -> row.Outliner_projection.block.Model.block_uuid) rows
+  | None -> List.filter_map (fun b -> b.Model.block_uuid) (S.flat_visible ~scope ())
 
 let selection_forest () =
   let model = Runtime.model () in
-  let scope = S.selection_scope () in
+  let scope = S.selection_owner_scope (S.selection_scope ()) in
   let main_scope =
     scope = "main"
     || match Runtime.route () with Model.Block_zoom u -> scope = "zoom-" ^ u | _ -> false
   in
-  if not main_scope then S.blocks_in_scope scope
+  if not main_scope then
+    (match S.outliner_blocks_in_scope scope with Some blocks -> blocks | None -> [])
   else
     let pages = match model.Model.route_page with Some p -> [p] | None -> model.journals in
     List.concat_map
@@ -1583,7 +1623,16 @@ let selected_uuids () =
 let open_selected_block ~at_end () =
   let uuids = selected_uuids () in
   match (if at_end then List.rev uuids else uuids) with
-  | uuid :: _ -> enter_edit ~scope:(S.selection_scope ()) uuid (if at_end then -1 else 0)
+  | uuid :: _ ->
+      (match (Runtime.model ()).Model.route_page with
+       | Some page when page.page_uuid = Some uuid
+                        && page.page_journal_day = None
+                        && S.selection_scope () = "main" ->
+           S.set (fun state -> {state with S.selected = S.String_set.empty;
+             anchor = None; action_bar = false});
+           Runtime.send Action.Title_edit_start;
+           Runtime.flush ()
+       | _ -> enter_edit ~scope:(S.selection_scope ()) uuid (if at_end then -1 else 0))
   | [] -> ()
 
 let index_of lst u =
@@ -1631,9 +1680,35 @@ let next_after_subtree ~scope uuid =
   | Some (b :: _) -> Some b
   | Some [] | None -> None
 
+let selection_neighbor ~scope ~selected uuid up =
+  match selection_projection ~scope with
+  | None -> (if up then S.prev_visible ~scope uuid else next_after_subtree ~scope uuid)
+  | Some rows ->
+      let matches row = row.Outliner_projection.block.Model.block_uuid = Some uuid in
+      let target = match List.find_opt (fun row -> matches row && row.Outliner_projection.scope = scope) rows with
+        | Some row -> Some row | None -> List.find_opt matches rows in
+      match target with
+      | None -> None
+      | Some target ->
+          let unselected row = match row.Outliner_projection.block.Model.block_uuid with
+            | Some uuid -> not (S.String_set.mem uuid selected)
+            | None -> false in
+          let rec scan previous = function
+            | [] -> None
+            | row :: rest when row == target ->
+                if up then Option.map (fun row -> row.Outliner_projection.block) previous
+                else List.find_map (fun row ->
+                  if row.Outliner_projection.depth <= target.depth && unselected row
+                  then Some row.block else None) rest
+            | row :: rest -> scan (if unselected row then Some row else previous) rest in
+          scan None rows
+
 (* Grow by explicit endpoints; reversing direction removes the active one. *)
 let extend_selection up =
   let sel = S.selected () in
+  if (S.read ()).S.selected_footer <> None then
+    (if up then S.set (fun st -> {st with S.selected_footer = None}))
+  else
   match S.anchor () with
   | None -> ()
   | Some anchor -> (
@@ -1669,7 +1744,8 @@ let extend_selection up =
                     S.selected = S.String_set.of_list range
                   ; anchor = Some anchor
                   ; action_bar = true
-                  })
+                  });
+              !(S.scroll_key_into_view) first
           | _ -> ())
       | Some h when h <> anchor
           && (if up then index_of uuids h > index_of uuids anchor
@@ -1677,14 +1753,16 @@ let extend_selection up =
           S.set (fun st ->
               { st with S.selected = S.String_set.remove h sel; action_bar = true })
       | Some h -> (
-          let nbr =
-            (if up
-             then S.prev_visible ~scope:(S.selection_scope ())
-             else next_after_subtree ~scope:(S.selection_scope ()))
-              h
-          in
+          let nbr = selection_neighbor ~scope:(S.selection_scope ()) ~selected:sel h up in
           match nbr with
           | None ->
+              if not up then
+                (match selection_projection ~scope:(S.selection_scope ()) with
+                 | Some rows ->
+                     Option.iter (fun row -> S.set (fun st ->
+                       {st with S.selected_footer = row.Outliner_projection.section.page.Model.page_uuid}))
+                       (List.find_opt (fun row -> row.Outliner_projection.block.Model.block_uuid = Some h) rows)
+                 | None -> ());
               (* head is the topmost flat block: cljs
                  navigable-sibling-block treats .ls-page-title as a
                  block, so shift+up past it conj's the title row into
@@ -1711,12 +1789,14 @@ let extend_selection up =
                         S.selected = S.String_set.add nu base
                       ; anchor = Some anchor
                       ; action_bar = true
-                      }))))
+                      });
+                  !(S.scroll_key_into_view) nu)))
 
 let select_single_in ~scope uuid =
   S.set (fun st ->
       { st with
         S.selected = S.String_set.singleton uuid
+      ; selected_footer = None
       ; selection_scope = scope
       ; anchor = Some uuid
       ; action_bar = false
@@ -1725,20 +1805,25 @@ let select_single_in ~scope uuid =
 let select_single uuid = select_single_in ~scope:(scope_of_uuid uuid) uuid
 
 let select_all () =
+  let scope = S.interaction_scope () in
   match flat_uuids () with
   | [] -> ()
-  | first :: _ ->
+  | first :: _ as uuids ->
       S.set (fun st ->
           { st with
-            S.selected = S.String_set.of_list (flat_uuids ())
+            S.selected = S.String_set.of_list uuids
+          ; selected_footer = None
+          ; selection_scope = scope
           ; anchor = Some first
           ; action_bar = false
-          })
+          });
+      Option.iter (fun _ -> exit_edit ~select:false) (S.editing ())
 
 let clear_selection ?scope () =
   S.set (fun st ->
       { st with
         S.selected = S.String_set.empty
+      ; selected_footer = None
       ; selection_scope = (match scope with Some scope -> scope | None -> st.selection_scope)
       ; anchor = None
       ; action_bar = false
@@ -1781,16 +1866,29 @@ let move_selection_focus up =
   let uuids = selected_uuids () in
   match (if up then uuids else List.rev uuids) with
   | cur :: _ -> (
+      let scope = S.selection_scope () in
       let nb =
-        (if up
-         then S.prev_visible ~scope:(S.selection_scope ())
-         else S.next_visible ~scope:(S.selection_scope ()))
-          cur
+        match selection_projection ~scope with
+        | Some rows ->
+            let matches row = row.Outliner_projection.block.Model.block_uuid = Some cur in
+            let target = match List.find_opt (fun row -> matches row && row.Outliner_projection.scope = scope) rows with
+              | Some row -> Some row
+              | None -> List.find_opt matches rows in
+            let rec scan previous = function
+              | [] -> None
+              | row :: rest when Some row = target ->
+                  if up then previous
+                  else List.nth_opt rest 0
+              | row :: rest -> scan (Some row) rest in
+            Option.map (fun row -> row.Outliner_projection.block, row.scope) (scan None rows)
+        | None ->
+            Option.map (fun block -> block, scope)
+              ((if up then S.prev_visible ~scope else S.next_visible ~scope) cur)
       in
       match nb with
-      | Some b -> (
+      | Some (b, scope) -> (
           match b.Model.block_uuid with
-          | Some u -> select_single_in ~scope:(S.selection_scope ()) u
+          | Some u -> select_single_in ~scope u
           | None -> ())
       | None -> ())
   | [] ->
@@ -1808,10 +1906,12 @@ let move_selection_focus up =
 let indent_or_outdent ~indent =
   let sel = S.selected () in
   let uuids =
-    match S.editing_uuid () with
-    | Some u when S.String_set.mem u sel -> selected_uuids ()
-    | Some u -> [ u ]
-    | None -> selected_uuids ()
+    if Option.is_none (S.outliner_blocks_in_scope (S.interaction_scope ())) then []
+    else match S.editing_uuid () with
+    | Some u when not (S.String_set.mem u sel) -> [u]
+    | Some _ | None ->
+        let snapshot = selected_snapshot () in
+        if S.String_set.is_empty snapshot.unresolved then snapshot.uuids else []
   in
   let uuids = List.filter (within_focused_root ~outdent:(not indent)) uuids
   in
@@ -1824,12 +1924,20 @@ let indent_or_outdent ~indent =
       if indent then
         List.iter
           (fun u ->
-            match S.prev_sibling u with
+            let original, scope = S.original_owner_in_scope ~scope:(S.interaction_scope ()) u in
+            match S.prev_sibling ~scope original with
             | Some s -> (
+                let target_scope = match s.Model.block_link with
+                  | Some _ -> Some (Outliner_projection.embedded_scope ~scope s)
+                  | None -> None in
+                let s = S.rendered_block ~scope s in
                 match s.Model.block_uuid with
                 | Some su ->
                     S.set_silent (fun st ->
-                        S.collapsed_ui_transform ~scope:(S.interaction_scope ()) su
+                      match target_scope with
+                      | Some scope -> S.expand_occurrence_transform ~scope su st
+                      | None ->
+                        S.collapsed_ui_transform ~scope su
                           false
                           { st with
                             S.collapsed =
@@ -1843,7 +1951,9 @@ let indent_or_outdent ~indent =
          get-first-block-original reads data-originalblockid off the ancestor
          .ls-block; the model parent is the embed block *)
       let parent_original =
-        match S.find_parent focus with
+        let original, scope = S.original_owner_in_scope ~scope:(S.interaction_scope ()) focus in
+        match S.find_parent_in_scope ~scope original with
+        | Some (Some {Model.block_original = Some (original, _); _}, _) -> Some original
         | Some (Some p, _) when p.Model.block_link <> None ->
             p.Model.block_uuid
         | _ -> None
@@ -1852,8 +1962,12 @@ let indent_or_outdent ~indent =
         | Some e when e.S.uuid = focus -> e.S.model.Edit_model.caret
         | _ -> 0
       in
-      with_focus_after ~restore:(S.editing ()) focus caret
-        (apply_indent_outdent ?parent_original uuids indent)
+      let restore = S.editing () in
+      let operation = apply_indent_outdent ?parent_original
+        (List.map (structural_uuid ~scope:(S.interaction_scope ())) uuids) indent in
+      match restore with
+      | Some _ -> with_focus_after ~restore focus caret operation
+      | None -> run_structure ~restore operation (fun () -> ())
 
 let move_up_down_tail = ref (Js.Promise.resolve ())
 
@@ -1871,6 +1985,7 @@ let move_blocks_up_down ?uuid up =
         | None, _ -> selected_uuids ()
       in
       let uuids = List.filter (within_focused_root ~outdent:false) uuids in
+      let uuids = List.map (structural_uuid ~scope) uuids in
       match uuids with
       | [] -> Js.Promise.resolve ()
       | uuids ->
@@ -1928,6 +2043,15 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               Js.Promise.resolve (Some (Option.get b.block_uuid, buffer))
           | _ -> Js.Promise.resolve None
         in
+        let page_title =
+          match previous, scope, context.Model.route, context.Model.route_page with
+          | None, "main", Model.Page _, Some page
+            when page.Model.page_journal_day = None ->
+              (match page.page_uuid with
+               | Some uuid when not (List.mem uuid uuids) -> Some uuid
+               | _ -> None)
+          | _ -> None
+        in
         let after =
           match previous with
           | Some (uuid, buffer) -> Wire.Map
@@ -1936,9 +2060,12 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
               ; Wire.Keyword "caret", Wire.Int (String.length buffer)
               ; Wire.Keyword "anchor", Wire.Nil ]
           | None -> Wire.Map
-              [ Wire.Keyword "scope", Wire.String scope
+              ([ Wire.Keyword "scope", Wire.String scope
               ; Wire.Keyword "selected-blocks", Wire.List []
               ; Wire.Keyword "selection-anchor", Wire.Nil ]
+              @ (match page_title with
+                 | Some uuid -> [Wire.Keyword "page-title", Wire.Uuid uuid]
+                 | None -> []))
         in
         if not (current ()) then Js.Promise.resolve ()
         else
@@ -1966,7 +2093,10 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
                    selected = S.String_set.empty; anchor = None; action_bar = false});
                 match editing with
                 | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
-                | None -> ());
+                | None -> Option.iter (fun uuid ->
+                    Runtime.send Action.Title_edit_start;
+                    Runtime.flush ();
+                    Editor_sink.focus_input uuid) page_title);
               Js.Promise.resolve ()
       in
       ignore
@@ -1982,16 +2112,31 @@ let delete_selection () =
   let snapshot = selected_snapshot () in
   if S.String_set.is_empty snapshot.unresolved then
     delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-      ~before:(S.history_cursor ()) snapshot.uuids
+      ~before:(S.history_cursor ())
+      (List.map (structural_uuid ~scope:snapshot.scope) snapshot.uuids)
   else Ui_services.log_error "selection entities unavailable"
 
 (* ---- drag & drop ---- *)
 
-let rec has_drag_source_parent sources uuid =
-  match S.find_parent uuid with
+let find_outliner_block ~scope uuid =
+  Option.bind (S.outliner_blocks_in_scope scope) (fun blocks -> S.find_in blocks uuid)
+
+type block_drag = {
+  source : string;
+  scope : string;
+  context : Model.t;
+  selected : S.String_set.t;
+  roots : string list;
+}
+
+let block_drag : block_drag option ref = ref None
+
+let rec has_drag_source_parent ?scope sources uuid =
+  match (match scope with None -> S.find_parent uuid
+    | Some scope -> S.find_parent_in_scope ~scope uuid) with
   | Some (Some p, _) -> (
       match p.Model.block_uuid with
-      | Some parent -> S.String_set.mem parent sources || has_drag_source_parent sources parent
+      | Some parent -> S.String_set.mem parent sources || has_drag_source_parent ?scope sources parent
       | None -> false)
   | _ -> false
 
@@ -1999,11 +2144,31 @@ let is_descendant uuid ancestor =
   has_drag_source_parent (S.String_set.singleton ancestor) uuid
 
 let begin_block_drag ~scope src =
-  if scope <> S.selection_scope () || not (S.String_set.mem src (S.selected ()))
-  then select_single_in ~scope src
+  let selected, roots =
+    if scope = S.selection_scope () && S.String_set.mem src (S.selected ()) then
+      let snapshot = selected_snapshot () in
+      snapshot.selection,
+      (if S.String_set.is_empty snapshot.unresolved then
+         List.filter_map (fun (b : Model.block) -> b.block_uuid) snapshot.roots
+       else [])
+    else
+      S.String_set.singleton src,
+      (if find_outliner_block ~scope src <> None then [src] else [])
+  in
+  let roots = List.map (structural_uuid ~scope) roots in
+  block_drag := Some { source = src; scope; context = Runtime.model (); selected; roots };
+  flush_edit ();
+  clear_selection ()
+
+let end_block_drag () = block_drag := None
 
 let dragged_block_uuids src =
-  if S.String_set.mem src (S.selected ()) then
+  match !block_drag with
+  | Some drag when drag.source = src ->
+      if Ops.context_current drag.context
+         && Option.is_some (S.outliner_blocks_in_scope drag.scope)
+      then drag.roots else []
+  | _ -> if S.String_set.mem src (S.selected ()) then
     let snapshot = selected_snapshot () in
     if S.String_set.is_empty snapshot.unresolved then
       List.filter_map (fun (b : Model.block) -> b.block_uuid) snapshot.roots
@@ -2013,10 +2178,15 @@ let dragged_block_uuids src =
 let can_drop_dragged_block src tgt =
   let selected = S.selected () in
   let sources =
-    if S.String_set.mem src selected then selected else S.String_set.singleton src
+    match !block_drag with
+    | Some drag when drag.source = src -> drag.selected
+    | _ -> if S.String_set.mem src selected then selected else S.String_set.singleton src
   in
+  let scope = Option.map (fun drag -> drag.scope) !block_drag in
+  dragged_block_uuids src <> []
+  &&
   S.find src <> None && S.find tgt <> None
-  && not (S.String_set.mem tgt sources || has_drag_source_parent sources tgt)
+  && not (S.String_set.mem tgt sources || has_drag_source_parent ?scope sources tgt)
 
 let insert_dragged_reference ~scope src tgt move_to =
   match Runtime.capture_reload_origin () with
@@ -2092,11 +2262,14 @@ let drop_dragged_block ~alt ~scope src tgt move_to =
   if not (can_drop_dragged_block src tgt) then ()
   else
     let selected = S.selected () in
-    let count = if S.String_set.mem src selected then S.String_set.cardinal selected else 1 in
+    let count = match !block_drag with
+      | Some drag when drag.source = src -> S.String_set.cardinal drag.selected
+      | _ -> if S.String_set.mem src selected then S.String_set.cardinal selected else 1 in
     (* Count original blocks before pruning selected descendants. *)
     if alt && count = 1 then insert_dragged_reference ~scope src tgt move_to
     else
     let sources = dragged_block_uuids src in
+    let tgt = if move_to = "nested" then tgt else structural_uuid ~scope tgt in
     if sources = [] then () else
     match move_to with
     | "top" -> (
@@ -2136,22 +2309,6 @@ let rec has_selected_ancestor sel uuid =
       | None -> false)
   | _ -> false
 
-(* export-blocks-as-markdown shape: every title of every selected root
-   tree, children flattened with two-space indentation *)
-let export_titles blocks =
-  let buf = Buffer.create 256 in
-  let rec go depth (b : Model.block) =
-    for _ = 1 to depth do
-      Buffer.add_string buf "  "
-    done;
-    Buffer.add_string buf "- ";
-    Buffer.add_string buf b.Model.block_title;
-    Buffer.add_string buf "\n";
-    List.iter (go (depth + 1)) b.Model.block_children
-  in
-  List.iter (go 0) blocks;
-  Buffer.contents buf
-
 let selected_copy_blocks ~plain snapshot =
   if S.String_set.is_empty snapshot.unresolved then
     Some (if plain then snapshot.blocks else snapshot.roots)
@@ -2159,25 +2316,107 @@ let selected_copy_blocks ~plain snapshot =
     Ui_services.log_error "selection entities unavailable";
     None)
 
-let selection_text ~plain blocks =
-  if plain then String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks)
-  else export_titles blocks
+let clipboard_attr = function
+  | Wire.Keyword attr ->
+      not (String.starts_with ~prefix:"block.temp/" attr)
+      && not (List.mem attr
+        [ "block/alias-source-page-class?"; "block/alias-source-page-id"
+        ; "block/alias-source-page-uuid"; "block/comment-threads"; "block/link-id"
+        ; "block/page-id"; "block/page-name"; "block/page-uuid"; "block/parent-id"
+        ; "block/parent-uuid"; "block/raw-title"; "block/properties"
+        ; "logseq.property/description-title"; "logseq.property/query-block?"
+        ; "logseq.property/query-id"; "logseq.property.recycle/original-page-title"
+        ; "logseq.property/view-for-id"; "logseq.property/views"
+        ; "logseq.property.view/gallery-asset-property-ident"
+        ; "logseq.property.view/type-id"; "logseq.property.view/type-ident" ])
+  | _ -> false
 
-let remember_selection_copy ~plain blocks text =
-  S.clipboard := (if plain then [] else blocks);
-  S.clipboard_text := text
+let clipboard_ref value =
+  match Wire.get value "db/id", Wire.get value "block/uuid" with
+  | Some _, Some (Wire.Uuid _ as uuid) -> Some (Wire.Array [Wire.kw "block/uuid"; uuid])
+  | _ -> None
 
-let copy_selection ev =
-  match selected_copy_blocks ~plain:false (selected_snapshot ()) with
-  | None | Some [] -> ()
-  | Some blocks ->
-      let text = selection_text ~plain:false blocks in
-      ev.Ui_services.clipboard_set "text/plain" text;
-      remember_selection_copy ~plain:false blocks text;
-      ev.Ui_services.prevent_default ()
+let clipboard_value value =
+  match clipboard_ref value, value with
+  | Some ref_, _ -> ref_
+  | None, (Wire.Array (_ :: _) | Wire.List (_ :: _) | Wire.Set (_ :: _)) ->
+      let values = Wire.elems value in
+      let refs = List.filter_map clipboard_ref values in
+      if List.length refs = List.length values then Wire.Set refs else value
+  | _ -> value
 
-let write_clipboard_text ~current text on_written =
-  let write = Ui_services.clipboard_write_text text in
+let clipboard_attrs = function Wire.Map attrs -> attrs | _ -> []
+
+let encode_block_clipboard ~repo ~cut blocks =
+  Edn.to_string (Wire.Map
+    [ Wire.kw "graph", Wire.String repo
+    ; Wire.kw "embed-block?", Wire.Nil
+    ; Wire.kw "op", Wire.Keyword (if cut then "cut" else "copy")
+    ; Wire.kw "blocks", Wire.Array (List.map (fun block ->
+          Wire.Map (List.filter_map (fun (k, v) ->
+              if clipboard_attr k && v <> Wire.Nil then Some (k, clipboard_value v)
+              else None) (clipboard_attrs block))) blocks) ])
+
+let decode_block_clipboard ~repo data =
+  match Edn.parse data with
+  | packet when Wire.map_get_string packet "graph" = Some repo
+                && Wire.get packet "embed-block?" <> Some (Wire.Bool true) ->
+      let blocks = Wire.elems (Option.value ~default:Wire.Nil (Wire.get packet "blocks")) in
+      if blocks = [] || not (List.for_all (fun block ->
+          match Wire.get block "block/uuid", Wire.get block "block/title" with
+          | Some (Wire.Uuid _), Some (Wire.String _) -> true
+          | _ -> false) blocks) then None
+      else
+        let cut = Wire.get packet "op" = Some (Wire.Keyword "cut") in
+        Some (cut, List.map (fun block ->
+            Wire.Map (List.filter (fun (k, _) -> clipboard_attr k) (clipboard_attrs block))) blocks)
+  | _ | exception Edn.Parse_error _ -> None
+
+let block_clipboard ~repo ~cut roots =
+  let ids = List.filter_map (fun b -> b.Model.block_uuid) roots in
+  let uuids = Wire.List (List.map (fun u -> Wire.Uuid u) ids) in
+  let children_opts = Wire.Map (List.map (fun key -> Wire.kw key, Wire.Bool true)
+      ["all?"; "children?"; "include-collapsed-children?"; "include-property-block?"]) in
+  let entities = Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+      (Wire.Array (List.map (fun id -> Wire.Map
+        [Wire.kw "id", Wire.Uuid id; Wire.kw "opts", children_opts]) ids)) in
+  let config = Wire.Map
+      [Wire.kw "export-bullet-indentation", Wire.String "\t";
+       Wire.kw "date-formatter", Wire.String "MMM do, yyyy";
+       Wire.kw "encode-highlight-as-mark?", Wire.Bool true] in
+  let export = Export_state.defaults () in
+  let text = Runtime.invoke "thread-api/export-blocks-as-format"
+      [ Wire.String repo; uuids; Wire.Keyword "markdown";
+        Wire.Map [Wire.kw "indent-style", Wire.String export.indent_style;
+                  Wire.kw "remove-options",
+                    Wire.Set (List.map Wire.kw export.remove_options)]; config ] in
+  let html = Runtime.invoke "thread-api/export-get-blocks-data"
+      [ Wire.String repo; uuids;
+        Wire.Map [Wire.kw "include-properties?", Wire.Bool true]; config ] in
+  Subs_state.task_of_promise
+    (let* entities = entities in
+     let* text = text in
+     let* html = html in
+     let seen = Hashtbl.create (List.length ids) in
+     let blocks = Wire.elems entities
+       |> List.concat_map (fun result ->
+           match Wire.get result "block" with
+           | Some (Wire.Map _ as root) ->
+               let children = Wire.elems
+                   (Option.value ~default:Wire.Nil (Wire.get result "children")) in
+               if Wire.get root "block/name" = None then root :: children else children
+           | _ -> failwith "Selected block missing from clipboard export")
+       |> List.filter (fun block ->
+           let uuid = Option.get (Wire.map_get_uuid block "block/uuid") in
+           if Hashtbl.mem seen uuid then false
+           else (Hashtbl.add seen uuid (); true)) in
+     let text = Option.get (Wire.as_string text) in
+     let html = Export_formats.html ~indent_unit:"\t"
+         (Option.get (Wire.map_get_string html "content")) in
+     Js.Promise.resolve
+       {Ui_services.text; html; logseq = encode_block_clipboard ~repo ~cut blocks})
+
+let after_clipboard_write ~current write on_written =
   let task = Ui_task.bind write (fun () ->
       if not (current ()) then Ui_task.reject Ui_task.Cancelled
       else (on_written (); Ui_task.resolve ())) in
@@ -2186,6 +2425,9 @@ let write_clipboard_text ~current text on_written =
        | _ -> Ui_services.log_error ("clipboard write failed", error));
       Ui_task.reject error));
   task
+
+let write_clipboard_text ~current text on_written =
+  after_clipboard_write ~current (Ui_services.clipboard_write_text text) on_written
 
 let clipboard_action_epoch = ref 0
 let cancel_clipboard_actions () = incr clipboard_action_epoch
@@ -2222,23 +2464,34 @@ let cut_editing_text uuid =
             Outliner_ops.schedule_save uuid (live_buffer uuid))
   | _ -> Ui_task.reject Ui_task.Cancelled
 
-let write_selection_copy ~plain ~cut =
+let write_selection_copy ?(capture = fun () -> ()) ~plain ~cut () =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
   let current = clipboard_action_current () in
   match selected_copy_blocks ~plain snapshot with
   | None | Some [] -> ()
   | Some blocks ->
-      let text = selection_text ~plain blocks in
-      ignore (write_clipboard_text ~current:(fun () -> current () &&
+      capture ();
+      let current () = current () &&
           List.for_all (fun block ->
             match block.Model.block_uuid with
             | Some uuid -> (match S.find uuid with Some live -> live == block | None -> false)
-            | None -> false) snapshot.blocks) text (fun () ->
-          remember_selection_copy ~plain blocks text;
-          if cut then
-            delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
-              ~before snapshot.uuids))
+            | None -> false) snapshot.blocks in
+      if plain then
+        ignore (write_clipboard_text ~current
+          (String.concat "\n" (List.map (fun b -> b.Model.block_title) blocks))
+          (fun () -> S.clipboard := None))
+      else
+        let data = block_clipboard ~repo:(Runtime.repo ()) ~cut blocks in
+        let written = Ui_services.clipboard_write_blocks data in
+        ignore (Ui_task.bind (after_clipboard_write ~current written ignore) (fun () ->
+          Ui_task.bind data (fun content ->
+              if current () then (
+                S.clipboard := Some content;
+                if cut then
+                  delete_selected_uuids ~selected:snapshot.selection ~scope:snapshot.scope
+                    ~before snapshot.uuids);
+              Ui_task.resolve ())))
 
 let cut_block_text uuid =
   match S.find uuid with
@@ -2250,11 +2503,12 @@ let cut_block_text uuid =
         block.Model.block_title (fun () ->
           ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ])))
 
-let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false
-let cut_selection_text () = write_selection_copy ~plain:false ~cut:true
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false ()
+let cut_selection_text () = write_selection_copy ~plain:false ~cut:true ()
+let copy_selection ev =
+  write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:false ()
 let cut_selection ev =
-  ev.Ui_services.prevent_default ();
-  cut_selection_text ()
+  write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:true ()
 
 (* ---- external paste (handler.paste.cljs/paste-copied-text) ----
 
@@ -2378,6 +2632,32 @@ let paste_source_text ~text ~html =
         | None -> text
       else text)
 
+let selection_within_link source lo hi =
+  let n = String.length source in
+  let rec scan i start destination =
+    if i >= n then false else
+    match source.[i], start, destination with
+    | '\n', _, _ -> scan (i + 1) None false
+    | '[', None, _ -> scan (i + 1) (Some i) false
+    | ']', Some _, false when Str_util.starts_at source i "](" ->
+        scan (i + 2) start true
+    | ')', Some first, true ->
+        (first <= lo && hi <= i + 1) || scan (i + 1) None false
+    | _ -> scan (i + 1) start destination
+  in
+  scan 0 None false
+
+let paste_editor_text (model : Edit_model.t) ~text ~html =
+  let lo, hi = sel_span_of model in
+  let selected = String.sub model.source lo (hi - lo) in
+  let text = String.concat "" (String.split_on_char '\r' text) in
+  let text_url = is_url text and selected_url = is_url selected in
+  if String.trim selected <> "" && (text_url || selected_url) then
+    if (text_url && selected_url) || selection_within_link model.source lo hi then text
+    else if selected_url then "[" ^ text ^ "](" ^ selected ^ ")"
+    else "[" ^ selected ^ "](" ^ text ^ ")"
+  else paste_source_text ~text ~html
+
 (* cljs edit-last-block-after-inserted! — after a paste, editing moves to
    the last inserted block so sequential pastes append in order *)
 let edit_last_inserted ?scope resp =
@@ -2434,9 +2714,25 @@ let paste_history_opts target_uuid =
       ; Wire.Keyword "caret", Wire.Keyword "end" ] in
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
-let paste_trees trees target_uuid ~replace_empty =
-  Ops.apply_and_refresh_result ~opts:(paste_history_opts target_uuid)
-    [ Ops.paste_trees trees target_uuid ~replace_empty ]
+let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
+  let context = Runtime.repo (), Runtime.route () in
+  let session_current = paste_session_current () in
+  let input_seq = !S.edit_input_seq in
+  let opts = Ops.history_opts ~opts:(Ops.op_opts "paste")
+      ~before:(S.history_cursor ()) ~after:Wire.Nil () in
+  let* resp = Ops.apply_and_refresh_result ~opts
+      [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
+  if context = (Runtime.repo (), Runtime.route ()) && session_current ()
+     && input_seq = !S.edit_input_seq && Option.is_some (Ops.last_inserted_uuid resp)
+  then begin
+    clear_pending_blur ();
+    cancel_pending_focus ();
+    Option.iter (fun e -> Editor_sink.invalidate e.S.uuid) (S.editing ());
+    let editing = S.editing () in
+    S.set (fun st -> {st with S.editing = None});
+    Option.iter (fun e -> S.notify_edit_exit e.S.uuid) editing
+  end;
+  Js.Promise.resolve resp
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks
@@ -2528,47 +2824,38 @@ let splice_clipboard_text uuid text =
    branch — html→markdown wins over plain text, block-shaped text
    extracts into blocks, blank-line text into one block per paragraph,
    and anything else splices at the cursor *)
-let paste_into_editor ~clipboard:(trees, copied_text) ev =
+let paste_into_editor ~clipboard ev =
   let clip_text = ev.Ui_services.clipboard_get "text/plain" in
   let clip_html = ev.Ui_services.clipboard_get "text/html" in
-  match (S.editing (), trees) with
+  match (S.editing (), clipboard) with
   | Some e, _ when S.is_draft e ->
       ev.Ui_services.prevent_default ();
       ev.Ui_services.stop_immediate ();
-      let text = paste_source_text ~text:clip_text ~html:clip_html in
-      if not (trees <> [] && clip_text = copied_text)
+      let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
+      if clipboard = None
          && not (markdown_blocks text || has_paragraph_break text) then
         splice_clipboard_text e.uuid text
-  | Some e, (_ :: _ as trees) when clip_text = copied_text -> (
+  | Some e, Some ((_, blocks) as copied) -> (
       match S.find e.uuid with
       | Some b ->
           ev.Ui_services.prevent_default ();
           (* keep the conduit's own paste listener from splicing the
              text a second time *)
           ev.Ui_services.stop_immediate ();
+          let has_children = S.children_of b <> [] in
           let replace_empty =
             String.trim b.Model.block_title = ""
             && String.trim e.S.buffer = ""
+            && (not has_children || List.length blocks = 1)
           in
-          let focus = paste_focus () in
           ignore
-            (let* resp = paste_trees trees e.uuid ~replace_empty in
-            (* replace-empty swaps the editing block's entity
-                      in place (same uuid, new title) — resync the live
-                      model buffer first, else edit_last_inserted's
-                      save_if_dirty reads the stale "" and commits it
-                      over the pasted title *)
-            let* () =
-              (if replace_empty then Ops.resync_open_editor ()
-               else Js.Promise.resolve ())
-            in
-            focus resp;
-            Js.Promise.resolve ())
+            (paste_copied_blocks copied e.uuid
+                ~sibling:(not has_children) ~replace_empty)
       | None -> ())
   | Some e, _ ->
       (* external paste while editing (no stored trees, or the event
          text differs from what our copy wrote) *)
-      let text = paste_source_text ~text:clip_text ~html:clip_html in
+      let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
       if String.trim text <> "" then (
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ();
@@ -2638,40 +2925,55 @@ let paste_external ev ~text ~html =
         ev.Ui_services.prevent_default ();
         paste_lines lines
 
-let paste_blocks ~clipboard:((trees, copied_text) as clipboard) ev =
+let paste_blocks ~clipboard ev =
   match S.editing () with
   | Some _ -> paste_into_editor ~clipboard ev
   | None -> (
-      match trees with
-      | _ :: _ when ev.Ui_services.clipboard_get "text/plain" = copied_text -> (
+      match clipboard with
+      | Some copied -> (
           ev.Ui_services.prevent_default ();
           match selected_uuids () with
           | _ :: _ as sel ->
-              let focus = paste_focus () in
               ignore
-                (let* resp =
-                  paste_trees trees
+                (paste_copied_blocks copied
                     (List.nth sel (List.length sel - 1))
-                    ~replace_empty:false
-                in
-                focus resp;
-                Js.Promise.resolve ())
+                    ~sibling:true ~replace_empty:false)
           | [] -> ())
-      | _ ->
+      | None ->
           paste_external ev
             ~text:(ev.Ui_services.clipboard_get "text/plain")
             ~html:(ev.Ui_services.clipboard_get "text/html"))
 
-(* ---- misc ---- *)
+let paste_from_clipboard ~cached ev =
+  let repo = Runtime.repo () in
+  let decode = decode_block_clipboard ~repo in
+  let data = ev.Ui_services.clipboard_get "application/logseq" in
+  let cached =
+    Option.bind cached (fun content ->
+        if content.Ui_services.text = ev.Ui_services.clipboard_get "text/plain"
+        then decode content.logseq else None) in
+  match decode data, cached, Ui_services.clipboard_read_blocks () with
+  | Some _ as clipboard, _, _ | None, (Some _ as clipboard), _ ->
+      paste_blocks ~clipboard ev
+  | None, None, None -> paste_blocks ~clipboard:None ev
+  | None, None, Some read ->
+      ev.Ui_services.prevent_default ();
+      ev.Ui_services.stop_immediate ();
+      let current = paste_context_current () in
+      let saved = {ev with Ui_services.prevent_default = ignore; stop_immediate = ignore} in
+      let read = Ui_task.catch (read ()) (fun _ -> Ui_task.resolve None) in
+      ignore (Ui_task.bind read (fun data ->
+          if current () then paste_blocks ~clipboard:(Option.bind data decode) saved;
+          Ui_task.resolve ()))
 
-let find_outliner_block ~scope uuid =
-  Option.bind (S.outliner_blocks_in_scope scope) (fun blocks -> S.find_in blocks uuid)
+(* ---- misc ---- *)
 
 let toggle_collapse_block ~scope ~persist (b : Model.block) =
   match b.Model.block_uuid with
   | Some uuid when S.children_of b <> [] ->
       if b.Model.block_default_collapsed
          && not (S.is_collapsed_in ~scope uuid)
+         && S.effective_collapsed ~scope b
       then
         (* view-default collapse (page child on a non-Library page): a
            click expands it locally without persisting — cljs
@@ -2778,7 +3080,7 @@ let toggle_children_collapse () =
           ignore
             (let* block = Runtime.invoke3 "thread-api/pull"
                  (Wire.String repo)
-                 (Wire.String "[:block/collapsed?]")
+                 (Wire.String "[:db/id :block/collapsed?]")
                  (Wire.Array [ Wire.kw "block/uuid"; Wire.Uuid u ]) in
              Ops.check_loader_result block;
              if Ops.context_current context then (
@@ -2828,7 +3130,102 @@ let toggle_open_blocks () =
       });
   if pairs <> [] then ignore (Ops.apply [ Ops.collapse_expand pairs ])
 
+module History_ui = struct
+  let map fields = Wire.Map (List.map (fun (key, value) -> Wire.kw key, value) fields)
+
+  let sidebar_snapshot = ref (fun () -> [])
+  let restore_sidebar = ref (fun (_ : Wire.t) -> Js.Promise.resolve ())
+  let paused = ref false
+  let restore_task = ref (Js.Promise.resolve ())
+  let restore_epoch = ref 0
+
+  let snapshot route =
+    let destination, parameters = match route with
+      | Model.Home -> "home", []
+      | Model.Journals -> "all-journals", []
+      | Model.Page name | Model.Block_zoom name -> "page", ["name", Wire.String name]
+      | Model.Library -> "page", ["name", Wire.String "Library"]
+      | Model.All_pages -> "all-pages", []
+      | Model.All_graphs -> "graphs", []
+      | Model.Import -> "import", []
+      | Model.Bug_report -> "bug-report", []
+      | Model.Bug_report_clipboard -> "bug-report-tool", []
+      | Model.Settings -> "settings", []
+      | Model.File path -> "file", ["path", Wire.String path]
+      | Model.Not_found path -> "not-found", ["path", Wire.String path] in
+    map (("route-data", map ["to", Wire.Keyword destination;
+      "path-params", map parameters; "query-params", Wire.Nil]) :: !sidebar_snapshot ())
+
+  let href state =
+    match Wire.get state "route-data" with
+    | None | Some Wire.Nil -> None
+    | Some route ->
+        match Wire.get route "to" with
+        | Some (Wire.Keyword "home") -> Some "#/"
+        | Some (Wire.Keyword "all-journals") -> Some "#/all-journals"
+        | Some (Wire.Keyword ("page" | "page-block")) ->
+            let parameters = Option.get (Wire.get route "path-params") in
+            let name = Option.get (Wire.map_get_string parameters "name") in
+            Some ("#/page/" ^ Ui_services.uri_encode_component name)
+        | _ -> None
+
+  let restoring : string option ref = ref None
+
+  let record_states old_state new_state =
+    if not !paused && old_state <> new_state then
+      match (Runtime.model ()).Model.repo with
+      | None -> ()
+      | Some repo ->
+          let payload = Wire.String (Transit.to_string
+            (map ["old-state", old_state; "new-state", new_state])) in
+          Ops.after_saves repo (fun () ->
+            ignore (Js.Promise.resolve ()
+              |> Js.Promise.then_ (fun () ->
+                Runtime.invoke2 "thread-api/undo-redo-record-ui-state" (Wire.String repo) payload)
+              |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+              |> Js.Promise.catch (fun error ->
+                Ui_services.log_error ("navigation history failed", error);
+                Js.Promise.resolve ())))
+
+  let record_navigation ~before ~after =
+    let old_state = snapshot before and new_state = snapshot after in
+    let restoring_route = match !restoring with
+      | Some path -> href new_state = Some path | None -> false in
+    restoring := None;
+    if not restoring_route then record_states old_state new_state
+
+  let record_sidebar ~before ~after =
+    let route = Option.get (Wire.get (snapshot (Runtime.route ())) "route-data") in
+    let state sidebar = map (("route-data", route) :: sidebar) in
+    record_states (state before) (state after)
+
+  let restore result =
+    match Wire.get result "ui-state-str" with
+    | None | Some Wire.Nil -> false
+    | Some (Wire.String payload) ->
+        let states = Transit.of_string payload in
+        let key = if Wire.get result "undo?" = Some (Wire.Bool true) then "old-state" else "new-state" in
+        let state = Option.get (Wire.get states key) in
+        (match href state with
+         | Some target when href (snapshot (Runtime.route ())) <> Some target ->
+             restoring := Some target;
+             Ui_services.nav_set_hash (Runtime.nav_hash target)
+         | _ -> ());
+        paused := true;
+        incr restore_epoch;
+        let epoch = !restore_epoch in
+        let finish () = if epoch = !restore_epoch then paused := false in
+        let task = Js.Promise.resolve ()
+          |> Js.Promise.then_ (fun () -> !restore_sidebar state)
+          |> Js.Promise.then_ (fun () -> finish (); Js.Promise.resolve ()) in
+        ignore (task |> Js.Promise.catch (fun _ -> finish (); Js.Promise.resolve ()));
+        restore_task := task;
+        true
+    | Some _ -> invalid_arg "Navigation history must contain a Transit string"
+end
+
 let restore_history result =
+  if History_ui.restore result then !(History_ui.restore_task) else
   let context = action_context () in
   let editing = S.editing () in
   let current () = context = action_context ()
@@ -2878,6 +3275,13 @@ let restore_history result =
            let selection_scope = Option.get (Wire.map_get_string cursor "scope") in
            S.set (fun st -> { st with S.editing = None; selected; anchor;
              selection_scope; action_bar = false });
+           (match Wire.map_get_uuid cursor "page-title", (Runtime.model ()).Model.route_page with
+            | Some uuid, Some page when page.Model.page_uuid = Some uuid
+                && page.page_journal_day = None && selection_scope = "main" ->
+                Runtime.send Action.Title_edit_start;
+                Runtime.flush ();
+                Editor_sink.focus_input uuid
+            | _ -> ());
            Js.Promise.resolve ())
 
 let () = S.restore_history := restore_history

@@ -398,6 +398,55 @@ let test_save_debounce (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_acknowledged_save_before_broadcast (h : host) =
+  let* () = settle h 40 in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (title, reject_refresh) :: rest ->
+        reset_editor ();
+        stage_page h [Test_check.block "b1" "old"];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:"old";
+        let writes = ref 0 in
+        Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              if name = "thread-api/apply-outliner-ops" then begin
+                incr writes;
+                Js.Promise.resolve (W.Map [W.kw "result", W.Nil])
+              end else if name = "thread-api/get-page-blocks-tree" then
+                if reject_refresh then h.reject_promise "deferred save refresh failed"
+                else Js.Promise.resolve (page_w (Test_check.page [Test_check.block "b1" title]))
+              else Js.Promise.resolve (h.base_handler name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        Ops.schedule_save "b1" title;
+        let* () = Ops.flush_pending_save () in
+        check "Acknowledged autosave can precede the throttled page broadcast"
+          ((editing_now ()).S.base = title && A.model_title "b1" = "old" && !writes = 1);
+        A.blur_commit ();
+        let* () = settle h 40 in
+        check "Blur does not add a history transaction for an acknowledged buffer"
+          (!writes = 1);
+        check "A clean blur refreshes deferred truth or retains editing on refresh failure"
+          (if reject_refresh then Option.is_some (S.editing ())
+           else S.editing () = None && A.model_title "b1" = title);
+        stage_page h [Test_check.block "b1" "old"];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:0 ~base:title;
+        A.flush_edit ();
+        let* () = h.wait_ms 25 in
+        check "Navigation does not resave an acknowledged buffer before its broadcast"
+          (!writes = 1 && S.editing () = None);
+        stage_page h [Test_check.block "b1" "old"];
+        set_editing ~uuid:"b1" ~buffer:"old" ~caret:3 ~base:title;
+        A.flush_edit ();
+        let* () = h.wait_ms 25 in
+        check "Returning to the stale page title still saves a changed buffer"
+          (!writes = 2 && S.editing () = None);
+        run rest
+  in
+  let* () = run ["saved", false; "", false; "saved", true] in
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_embed_persists_erased_buffer (h : host) =
   let* () = settle h 40 in
   let rec run = function
@@ -576,6 +625,215 @@ let test_suggestion_selection_commits_pending_save (h : host) =
   Popups_state.close_ac popup;
   Popups_state.active := previous_popup;
   reset_editor ();
+  Js.Promise.resolve ()
+
+let test_node_reference_suggestions (h : host) =
+  let* () = settle h 40 in
+  stage_page h [ Test_check.block "b1" "" ];
+  install_worker ~repo:h.repo h;
+  let previous_popup = !Popups_state.active in
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  let failed = ref false and searches = ref 0 in
+  let target = "00000000-0000-0000-0000-000000000006" in
+  let row uuid title page extra = W.Map
+    ([W.kw "block/uuid",W.Uuid uuid;W.kw "block/title",W.String title;
+      W.kw "page?",W.Bool page] @ extra) in
+  let results = [
+    row "target-page" "Target Page" true [];
+    row "class-page" "Whiteboard" true [W.kw "tag?",W.Bool true];
+    row target "Target linked title" false
+      [W.kw "block.temp/original-title",W.String "[[raw-reference-uuid]]"];
+    row "b1" "Target editing block" false []] in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
+    match name with
+    | "thread-api/get-all-page-titles" ->
+        Js.Promise.resolve (W.List [W.String "Tar private property"])
+    | "thread-api/q" -> Js.Promise.resolve (W.List [])
+    | "thread-api/search-blocks" ->
+        incr searches;
+        check "node search trims its query without changing the insertion range"
+          (match args with [_;W.String query;_] -> query = "Tar" | _ -> false);
+        if !failed then h.reject_promise "node search transport"
+        else Js.Promise.resolve (W.List results)
+    | _ -> Js.Promise.resolve (h.base_handler name args));
+    on_message = (fun _ _ -> ());
+    dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let open_query buffer caret query =
+    set_editing ~uuid:"b1" ~buffer ~caret ~base:"";
+    Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Page_ref;
+    match (Popups_state.get popup).Popups_state.ac with
+    | Some ac -> Popups_state.ac_update popup ac query
+    | None -> check "node-reference autocomplete opens" false in
+  open_query "[[ Tar ]]" 7 " Tar ";
+  let* () = h.wait_ms 25 in
+  (match (Popups_state.get popup).Popups_state.ac with
+   | Some ac ->
+       check "node search retains backend nodes and complete NLP suggestions"
+         (!searches > 0
+          && List.exists (fun item -> item.Popups_state.ai_label = "Whiteboard") ac.items
+          && List.for_all (fun term -> List.exists
+              (fun item -> item.Popups_state.ai_key = "nlp:" ^ term) ac.items)
+            ["Next year";"This year";"Last year";"Last Saturday";"This Saturday";"Next Saturday"]);
+       check "node search does not invent private pages or suggest its editing block"
+         (not (List.exists (fun item ->
+            item.Popups_state.ai_label = "Tar private property"
+            || item.ai_label = "Target editing block") ac.items));
+       (match List.find_opt (fun item ->
+          item.Popups_state.ai_act = Popups_state.Emit ("[[" ^ target ^ "]]",0)) ac.items with
+        | Some item ->
+            check "node search displays resolved titles rather than raw UUID markup"
+              (item.ai_label = "Target linked title");
+            Popups_state.apply_item popup ac ~meta:false item;
+            check "choosing a resolved block title still inserts its UUID reference"
+              (A.live_buffer "b1" = "[[" ^ target ^ "]]")
+        | None -> check "node search retains block results below pages and dates" false)
+   | None -> check "node search keeps its owning autocomplete" false);
+  Ops.cancel_pending_save ();
+  Popups_state.close_ac popup;
+  let open_slash prefix =
+    let source = prefix ^ "/Node reference" in
+    set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:prefix;
+    Popups_state.open_ac ~tpos:(String.length prefix) ~autopair:false popup Popups_state.Slash;
+    let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+    let item = Popups_state.mk_item ~key:"node-reference" ~label:"Node reference"
+      (Popups_state.Switch Popups_state.Page_ref) in
+    Popups_state.apply_item popup ac ~meta:false item in
+  let rec slash_cases = function
+    | [] -> Js.Promise.resolve ()
+    | prefix :: rest ->
+        open_slash prefix;
+        check "Node reference slash conversion retains its prefix and opens balanced brackets"
+          (A.live_buffer "b1"=prefix ^ "[[]]"
+           && match (Popups_state.get popup).Popups_state.ac with
+              | Some ac -> ac.tpos=String.length prefix && ac.tlen=2 && ac.query=""
+                  && List.length ac.items=33
+              | None -> false);
+        Editor_keys.apply_input "b1" (EI.Insert "Tar");
+        let* () = h.wait_ms 25 in
+        (match (Popups_state.get popup).Popups_state.ac with
+         | Some ac ->
+             check "Node reference searches only the post-command term on a nonempty host"
+               (ac.query="Tar");
+             (match List.find_opt (fun item -> item.Popups_state.ai_act
+                =Popups_state.Emit ("[[" ^ target ^ "]]",0)) ac.items with
+              | Some item ->
+                  Popups_state.apply_item popup ac ~meta:false item;
+                  check "Choosing a node preserves the nonempty host and removes the ghost pair"
+                    (A.live_buffer "b1"=prefix ^ "[[" ^ target ^ "]]")
+              | None -> check "Slash node reference retains existing node choices" false)
+         | None -> check "Slash node reference keeps its picker after typing" false);
+        Ops.cancel_pending_save ();
+        Popups_state.close_ac popup;
+        slash_cases rest in
+  let* () = slash_cases ["Keep host retake "; ""] in
+  failed := true;
+  open_query "[[Tar]]" 5 "Tar";
+  let* () = h.wait_ms 25 in
+  check "failed node search retains the query and local suggestions without cached private pages"
+    (match (Popups_state.get popup).Popups_state.ac with
+     | Some ac -> ac.query = "Tar"
+         && List.exists (fun item -> item.Popups_state.ai_key = "new:Tar") ac.items
+         && not (List.exists (fun item -> item.Popups_state.ai_label = "Tar private property") ac.items)
+     | None -> false);
+  Popups_state.close_ac popup;
+  failed := false;
+  let before = !searches in
+  open_query "[[ ]]" 3 " ";
+  let* () = h.wait_ms 25 in
+  check "empty node-reference query offers all 33 NLP dates without a graph search"
+    (match (Popups_state.get popup).Popups_state.ac with
+     | Some ac -> !searches = before && List.length ac.items = 33
+         && List.for_all (fun item -> Str_util.starts_with_ci item.Popups_state.ai_key "nlp:") ac.items
+     | None -> false);
+  Popups_state.close_ac popup;
+  Popups_state.active := previous_popup;
+  Ops.cancel_pending_save ();
+  install_worker ~repo:h.repo h;
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_reference_preview (h : host) =
+  let* () = settle h 40 in
+  let target = "00000000-0000-0000-0000-000000000001"
+  and child = "00000000-0000-0000-0000-000000000002"
+  and parent = "00000000-0000-0000-0000-000000000003" in
+  let previous_worker = !Runtime.worker in
+  let empty = ref false and failed_counts = ref false and failed_tree = ref false in
+  let parent_lookups = ref 0 and requested_counts = ref [] in
+  let summary uuid title = W.Map
+    [W.kw "block/uuid",W.Uuid uuid; W.kw "block/title",W.String title] in
+  let body = W.Array [W.Map
+    [W.kw "block/uuid",W.Uuid target; W.kw "block/title",W.String "Target block";
+     W.kw "block/children",W.Array [summary child "Nested block"]]] in
+  Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/get-page-route-info",[_;W.Uuid uuid] when uuid=target ->
+        Js.Promise.resolve (summary target "Target block")
+    | "thread-api/get-page-route-info",_ ->
+        Js.Promise.resolve (summary parent "Containing Page")
+    | "thread-api/get-block-page-info",_ ->
+        incr parent_lookups; Js.Promise.resolve (summary parent "Containing Page")
+    | "thread-api/get-blocks",_ ->
+        Js.Promise.resolve (W.Array [W.Map [W.kw "block",summary target "Target block";
+          W.kw "children",W.Array []]])
+    | "thread-api/get-block-parents",_ -> Js.Promise.resolve (W.Array [])
+    | "thread-api/get-page-blocks-tree",_ ->
+        if !failed_tree then h.reject_promise "preview tree transport"
+        else Js.Promise.resolve (if !empty then W.Array [] else body)
+    | "thread-api/get-render-snapshots",[_;request] ->
+        let keys = Option.value (Option.map W.elems (W.get request "resources")) ~default:[] in
+        requested_counts := keys :: !requested_counts;
+        if !failed_counts then h.reject_promise "preview count transport"
+        else Js.Promise.resolve (W.Map [W.kw "slots",W.Map
+          (List.map (fun key -> W.Array [W.kw "resource";key],
+            W.Map [W.kw "value",W.Int
+              (if key=W.Array [W.kw "block-ref-count";W.Uuid child] then 3 else 0)]) keys)])
+    | _ -> Js.Promise.resolve (h.base_handler name args));
+    on_message=(fun _ _ -> ()); dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let* preview = Popups_state.fetch_preview h.repo target in
+  check "A block preview uses its containing page for the header, not the block's title"
+    (preview.Popups_state.pc_title="Containing Page"
+     && Option.bind preview.pc_page (fun page -> page.Model.page_uuid)=Some parent);
+  check "A block preview retains its target as the insertion root and keeps descendants"
+    (preview.pc_root_uuid=Some target
+     && List.map (fun block -> block.Model.block_uuid) preview.pc_blocks=[Some target]
+     && match preview.pc_blocks with
+        | [block] -> List.map (fun child -> child.Model.block_uuid) block.block_children=[Some child]
+        | _ -> false);
+  check "Preview reference counts include nested blocks and omit zero badges"
+    (preview.pc_ref_counts=Some [child,3]
+     && match !requested_counts with
+        | [keys] -> List.length keys=2
+            && List.mem (W.Array [W.kw "block-ref-count";W.Uuid target]) keys
+            && List.mem (W.Array [W.kw "block-ref-count";W.Uuid child]) keys
+        | _ -> false);
+  let lookups = !parent_lookups in
+  let* page = Popups_state.fetch_preview h.repo "Containing Page" in
+  check "Named page previews retain their own root without looking up a block parent"
+    (page.pc_root_uuid=Some parent && page.pc_title="Containing Page"
+     && !parent_lookups=lookups);
+  let saved_item = { (Option.get (Sidebar_state.static_item
+    ("block-ref-" ^ target) "block-ref" "Old title")) with Sidebar_state.uuid=Some target } in
+  let* restored = Sidebar_state.refresh_item h.repo saved_item in
+  check "Restored block-reference panes retain their kind and refresh their title without an invisible outliner root"
+    (restored.kind="block-ref" && restored.title="Target block"
+     && restored.key=saved_item.key && restored.blocks=[]);
+  empty := true;
+  let batches = List.length !requested_counts in
+  let* blank = Popups_state.fetch_preview h.repo "Containing Page" in
+  check "Empty previews keep page metadata without requesting any reference counts"
+    (blank.pc_blocks=[] && blank.pc_ref_counts=Some []
+     && blank.pc_title="Containing Page" && List.length !requested_counts=batches);
+  empty := false; failed_counts := true;
+  let* partial = Popups_state.fetch_preview h.repo target in
+  check "A failed count resource retains the preview body without inventing zero counts"
+    (partial.pc_ref_counts=None && partial.pc_blocks<>[] && partial.pc_title="Containing Page");
+  failed_tree := true;
+  let* rejected =
+    (let* _ = Popups_state.fetch_preview h.repo target in Js.Promise.resolve false)
+    |> Js.Promise.catch (fun _ -> Js.Promise.resolve true) in
+  check "A failed preview tree is rejected instead of displaying an empty valid page" rejected;
+  Runtime.worker := previous_worker;
   Js.Promise.resolve ()
 
 let test_autocomplete_dismiss_resumes_pending_save (h : host) =
@@ -972,6 +1230,64 @@ let test_indent_outdent (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_indent_type_double_undo_caret (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "Parent";Test_check.block "b2" "Level two"];
+  set_editing ~uuid:"b2" ~buffer:"Level two" ~caret:0 ~base:"Level two";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let committed = ref !Runtime.current_page and history = ref [] and undos = ref 0 in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        let before = !committed in
+        let* result = worker.invoke_fn name args in
+        if before <> !Runtime.current_page then begin
+          history := (opts,before) :: !history;
+          committed := !Runtime.current_page
+        end;
+        Js.Promise.resolve result
+    | "thread-api/undo-redo-undo",_ ->
+        incr undos;
+        (match !history with
+         | (opts,page) :: rest ->
+             history := rest; committed := page;
+             Runtime.current_page := page; h.sync_page ();
+             let cursors = List.filter_map (W.get opts)
+               ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+             Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool true;
+               W.kw "editor-cursors",W.List cursors])
+         | [] -> Js.Promise.resolve (W.Map []))
+    | _ -> worker.invoke_fn name args)};
+  Editor_keys.apply_input "b2" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  Editor_keys.apply_input "b2" (EI.Insert "abc");
+  let* () = Ops.flush_pending_save () in
+  let* () = settle h 40 in
+  check "Indent and subsequent typing record separate before/after cursor pairs"
+    (List.length !history=2
+     && List.for_all (fun (opts,_) ->
+       match W.get opts "undo-redo/editor-info" with
+       | Some cursor -> W.get cursor "caret"=Some (W.Int 0)
+           && W.get cursor "block-uuid"=Some (W.Uuid "b2")
+       | None -> false) !history);
+  let rec undo_twice n =
+    if n=0 then Js.Promise.resolve () else begin
+      A.undo ();
+      let* () = h.wait_ms 25 in
+      let* () = settle h 40 in
+      check "Indent/type undo restores the recorded zero caret rather than the end of the block"
+        (S.editing_uuid ()=Some "b2" && (editing_now ()).model.EM.caret=0
+         && (editing_now ()).buffer="Level two");
+      undo_twice (n-1)
+    end in
+  let* () = undo_twice 2 in
+  check "The double-undo workflow consumes both recorded mutations" (!undos=2 && !history=[]);
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 (* ---------- run ---------- *)
 
 let test_exit_waits_for_save (h : host) =
@@ -999,6 +1315,54 @@ let test_exit_waits_for_save (h : host) =
   check "successful save exits editing" (S.editing () = None);
   check "saved text survives exit" (current_titles () = [ "saved before exit" ]);
   reset_editor ();
+  Js.Promise.resolve ()
+
+let test_select_all_exit (h : host) =
+  let* () = settle h 40 in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | rejected :: rest ->
+        reset_editor ();
+        stage_page h [ Test_check.block "b1" "old"; Test_check.block "b2" "second" ];
+        A.clear_selection ();
+        set_editing ~uuid:"b1" ~buffer:"saved before selection" ~caret:22 ~base:"old";
+        install_worker ~repo:h.repo h;
+        let worker = Option.get !Runtime.worker in
+        let attempted = ref false in
+        Runtime.worker := Some { worker with Worker_client.invoke_fn =
+          (fun name args ->
+            if name = "thread-api/apply-outliner-ops" then begin
+              attempted := true;
+              if rejected then h.reject_promise "select-all save rejected"
+              else worker.Worker_client.invoke_fn name args
+            end else worker.Worker_client.invoke_fn name args) };
+        Editor_keys.apply_input "b1"
+          (EI.Key (EM.key_ev ~meta:true ~shift:true "A", false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Select-all commits its edited block before retiring the input" !attempted;
+        if rejected then
+          check "A rejected select-all save retains the dirty editor"
+            (S.editing_uuid () = Some "b1"
+             && A.live_buffer "b1" = "saved before selection")
+        else begin
+          check "Select-all exits editing and preserves the outline selection"
+            (S.editing () = None
+             && S.String_set.equal (S.selected ()) (S.String_set.of_list ["b1"; "b2"])
+             && S.selection_scope () = "main" && S.anchor () = Some "b1");
+          check "Select-all saves the complete buffer"
+            (current_titles () = ["saved before selection"; "second"])
+        end;
+        Runtime.worker := Some worker;
+        run rest
+  in
+  let* () = run [false; true] in
+  reset_editor ();
+  stage_page h [];
+  A.clear_selection ();
+  A.select_all ();
+  check "Select-all on an empty outline leaves no editor or selection"
+    (S.editing () = None && S.String_set.is_empty (S.selected ()));
   Js.Promise.resolve ()
 
 let test_enter_edit_origin (h : host) =
@@ -1161,6 +1525,89 @@ let test_navigation_retires_dirty_editor (h : host) =
   in
   switch [ false; true ]
 
+let test_navigation_history (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "history source"];
+  let source = h.snapshot () in
+  let original_hash = Ui_services.nav_hash () in
+  let target = Model.Page "History Target" in
+  set_editing ~uuid:"b1" ~buffer:"history saved" ~caret:13 ~base:"history source";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let events = ref [] and payloads = ref [] and fail_record = ref false in
+  let release = ref (fun () -> ()) in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+    if name = "thread-api/apply-outliner-ops" then begin
+      events := !events @ ["save"];
+      let* _ = Js.Promise.make (fun ~resolve ~reject:_ ->
+        release := (fun () -> resolve W.Nil [@u])) in
+      worker.Worker_client.invoke_fn name args
+    end else if name = "thread-api/undo-redo-record-ui-state" then begin
+      events := !events @ ["record"];
+      match args with
+      | [W.String repo; W.String payload] ->
+          check "Route history remains bound to its initiating graph" (repo = h.repo);
+          if !fail_record then h.reject_promise "history record fixture rejected"
+          else (payloads := !payloads @ [payload]; Js.Promise.resolve W.Nil)
+      | _ -> invalid_arg "history record fixture protocol"
+    end else if name = "thread-api/undo-redo-undo" then begin
+      events := !events @ ["undo"];
+      Js.Promise.resolve (W.Map [W.kw "undo?", W.Bool true;
+        W.kw "ui-state-str", W.String (List.hd !payloads)])
+    end else if name = "thread-api/get-page-route-info" then Js.Promise.resolve W.Nil
+    else worker.Worker_client.invoke_fn name args) };
+  Ui_services.nav_set_hash (Runtime.nav_hash "#/page/History%20Target");
+  Router.resolve ();
+  let* () = h.wait_ms 25 in
+  check "Navigation cannot precede its accepted text save in undo history"
+    (!events = ["save"] && !payloads = []);
+  h.restore {source with Model.route = target; route_page = None};
+  let history = Ops.undo () in
+  let* () = h.wait_ms 25 in
+  check "Undo waits for a save already detached by route navigation" (!events = ["save"]);
+  !release ();
+  let* () = history in
+  check "Accepted text, navigation state and undo dispatch retain their order"
+    (!events = ["save";"record";"undo"]);
+  let payload = List.hd !payloads in
+  let states = Transit.of_string payload in
+  check "Undo of navigation restores its prior page hash"
+    (Ui_services.nav_hash () = Runtime.nav_hash
+       (Option.get (A.History_ui.href (Option.get (W.get states "old-state")))));
+  Router.resolve ();
+  h.restore source;
+  let* () = h.wait_ms 25 in
+  check "Restoring navigation does not create another undo entry" (List.length !payloads = 1);
+  let* () = A.restore_history (W.Map [W.kw "undo?", W.Bool false;
+    W.kw "ui-state-str", W.String payload]) in
+  check "Redo restores the destination rather than the editing source page"
+    (Ui_services.nav_hash () = Runtime.nav_hash "#/page/History%20Target");
+  Router.resolve ();
+  h.restore {source with Model.route = target; route_page = None};
+  let* () = h.wait_ms 25 in
+  check "Redo also suppresses recording its own navigation" (List.length !payloads = 1);
+  A.History_ui.record_navigation ~before:target ~after:target;
+  h.restore {source with Model.repo = None};
+  A.History_ui.record_navigation ~before:source.Model.route ~after:target;
+  check "Unchanged routes and sessions without a graph add no history" (List.length !payloads = 1);
+  check "A result without UI history is left to editor-cursor restoration"
+    (not (A.History_ui.restore W.Nil));
+  check "Invalid internal UI history payloads are rejected"
+    (try ignore (A.History_ui.restore (W.Map [W.kw "ui-state-str", W.Int 1])); false
+     with Invalid_argument _ -> true);
+  h.restore source;
+  fail_record := true;
+  A.History_ui.record_navigation ~before:source.Model.route ~after:target;
+  let* () = h.wait_ms 25 in
+  check "A failed history write neither invents an entry nor changes the active route"
+    (List.length !payloads = 1 && Runtime.route () = source.Model.route);
+  Runtime.worker := Some worker;
+  A.History_ui.restoring := None;
+  Ui_services.nav_replace_hash original_hash;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_history_after_navigation (h : host) =
   let* () = settle h 40 in
   stage_page h [ Test_check.block "b1" "first"; Test_check.block "b2" "second" ];
@@ -1279,10 +1726,344 @@ let test_delete_selection_history (h : host) =
                W.Keyword "editor-cursors", W.List [expected] ]) in
   check "undo restores the selected range anchor" ((S.read ()).anchor = Some "b2");
   reset_editor ();
+  let rec first_block = function
+    | [] -> Js.Promise.resolve ()
+    | (name, selected, reject, title_focus) :: rest ->
+        stage_page h [Test_check.block "b1" "first"];
+        Runtime.send Action.Title_edit_done;
+        S.set (fun st -> {st with S.selection_scope = "main";
+          selected = S.String_set.of_list selected; anchor = List.nth_opt selected 0});
+        options := W.Nil;
+        if reject then install_rejecting_worker h
+        else Runtime.worker := Some
+          { Worker_client.invoke_fn = (fun name args ->
+              if name = "thread-api/apply-outliner-ops" then
+                (match args with [_; _; opts] -> options := opts | _ -> ());
+              Js.Promise.resolve (worker_handler h name args))
+          ; on_message = (fun _ _ -> ())
+          ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+        A.delete_selection ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("first-block deletion retains the correct focus: " ^ name)
+          ((h.snapshot ()).Model.editing_title = title_focus
+           && S.editing () = None
+           && (not reject || S.String_set.mem "b1" (S.selected ())));
+        let* () = if title_focus then begin
+          let after = Option.get (W.map_get !options "undo-redo/editor-info-after") in
+          Runtime.send Action.Title_edit_done;
+          A.restore_history (W.Map [ W.Keyword "undo?", W.Bool false;
+            W.Keyword "editor-cursors", W.List [after] ])
+        end else Js.Promise.resolve () in
+        check ("first-block redo retains the correct focus: " ^ name)
+          ((h.snapshot ()).Model.editing_title = title_focus);
+        Runtime.send Action.Title_edit_done;
+        reset_editor ();
+        first_block rest
+  in
+  let* () = first_block
+      ["selected", ["b1"], false, true;
+       "empty selection", [], false, false;
+       "rejected deletion", ["b1"], true, false] in
   Js.Promise.resolve ()
 
 (* Explicit property commands must publish worker truth while the editor
    remains open, without waiting for a later autosave or broadcast. *)
+let test_task_cycle (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "task fixture"];
+  set_editing ~uuid:"b1" ~buffer:"task fixture" ~caret:4 ~base:"task fixture";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let status = ref None and available = ref true and reads = ref 0 and writes = ref [] in
+  let rows = List.mapi (fun index name ->
+    W.Map [W.kw "db/id", W.Int (index + 31);
+           W.kw "db/ident", W.Keyword ("logseq.property/status." ^ name)])
+    ["todo"; "doing"; "done"] in
+  Runtime.worker := Some { worker with Worker_client.invoke_fn = (fun name args ->
+    if name = "thread-api/get-blocks" then begin
+      incr reads;
+      Js.Promise.resolve (W.List [W.Map [W.kw "block",
+        W.Map (match !status with None -> [] | Some id ->
+          [W.kw "logseq.property/status", W.Map [W.kw "db/id", W.Int id]])]])
+    end else if name = "thread-api/get-property-closed-values" then
+      Js.Promise.resolve (if !available then W.List rows
+        else W.Map [W.kw "error", W.String "status fixture unavailable"])
+    else begin
+      if name = "thread-api/apply-outliner-ops" then
+        (match args with
+         | [_; W.Array mutations; _] -> List.iter (function
+             | W.Array [W.Keyword "batch-set-property";
+                        W.Array [_; W.Keyword "logseq.property/status"; W.Int id; _]] ->
+                 status := Some id; writes := !writes @ [!status]
+             | W.Array [W.Keyword "remove-block-property";
+                        W.Array [_; W.Keyword "logseq.property/status"]] ->
+                 status := None; writes := !writes @ [None]
+             | _ -> ()) mutations
+         | _ -> ());
+      worker.Worker_client.invoke_fn name args
+    end) };
+  let rec cycle = function
+    | [] -> Js.Promise.resolve ()
+    | (meta, expected) :: rest ->
+        Editor_keys.apply_input "b1"
+          (EI.Key (EM.key_ev ~meta ~ctrl:(not meta) "Enter", false));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Modified Enter cycles the latest task status without splitting or exiting"
+          (!status = expected && S.editing_uuid () = Some "b1"
+           && current_titles () = ["task fixture"]
+           && (editing_now ()).S.model.EM.caret = 4);
+        cycle rest in
+  let* () = cycle [true,Some 31; false,Some 32; true,Some 33; false,None] in
+  check "Task cycling reads authoritative properties for every step"
+    (!reads = 4 && !writes = [Some 31;Some 32;Some 33;None]);
+  available := false;
+  Editor_keys.apply_input "b1" (EI.Key (EM.key_ev ~meta:true "Enter", false));
+  let* () = h.wait_ms 25 in
+  check "Unavailable task values never dispatch a guessed property mutation"
+    (!writes = [Some 31;Some 32;Some 33;None] && S.editing_uuid () = Some "b1");
+  reset_editor ();
+  stage_page h [];
+  let before = !reads in
+  Editor_keys.apply_input "b1" (EI.Key (EM.key_ev ~meta:true "Enter", false));
+  let* () = h.wait_ms 25 in
+  check "An empty editor does not create a task or a content block"
+    (!reads = before && current_titles () = []);
+  let services = Cmdk_host.services () in
+  let shortcut_cycle uuids =
+    check "The shortcut host uses an implemented task dispatch"
+      (try services.Cmdk_services.cycle_todo uuids; true
+       with Invalid_argument _ -> false)
+  in
+  shortcut_cycle [];
+  check "The shortcut host does not invent a task target" (!reads = before);
+  stage_page h [Test_check.block "b1" "task fixture"];
+  set_editing ~uuid:"b1" ~buffer:"task fixture" ~caret:4 ~base:"task fixture";
+  available := true;
+  shortcut_cycle ["b1"];
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "The capture-phase shortcut host cycles the editing target without splitting"
+    (!status = Some 31 && S.editing_uuid () = Some "b1"
+     && current_titles () = ["task fixture"]
+     && !writes = [Some 31;Some 32;Some 33;None;Some 31]);
+  available := false;
+  shortcut_cycle ["b1"];
+  let* () = h.wait_ms 25 in
+  check "The shortcut host rejects unavailable task values without writing"
+    (!writes = [Some 31;Some 32;Some 33;None;Some 31]);
+  Runtime.worker := Some worker;
+  Js.Promise.resolve ()
+
+let test_code_conversion_focus (h : host) =
+  let previous_focus = !S.code_focus in
+  let mounted = ref false and focused = ref [] in
+  S.code_focus := (fun ~caret uuid ->
+    if !mounted then (focused := (uuid,caret) :: !focused; true) else false);
+  let convert () =
+    stage_page h [Test_check.block "b1" ""];
+    set_editing ~uuid:"b1" ~buffer:"/Code block" ~caret:11 ~base:"";
+    Editor_commands.run_editor_cmd "b1" "code-block" 0 11
+  in
+  let* () = settle h 40 in
+  install_worker ~repo:h.repo h;
+  convert ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Code conversion waits for its widget without reopening the text editor"
+    (S.editing () = None && !S.pending_focus <> None && !focused = []);
+  mounted := true;
+  A.focus_pending ();
+  check "A mounted code widget receives conversion focus after text editing exits"
+    (!focused = ["b1",0] && !S.pending_focus = None && S.editing () = None);
+  reset_editor ();
+  mounted := false;
+  focused := [];
+  let handler = worker_handler h in
+  Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
+    if name = "thread-api/apply-outliner-ops" then h.reject_promise "code conversion failed"
+    else Js.Promise.resolve (handler name args));
+    on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  convert ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "A failed code conversion restores editing without focusing a nonexistent widget"
+    (S.editing_uuid () = Some "b1" && !focused = []);
+  S.code_focus := previous_focus;
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  let rec math = function
+    | [] -> Js.Promise.resolve ()
+    | (title,rejected)::rest ->
+        stage_page h [Test_check.block "b1" title];
+        set_editing ~uuid:"b1" ~buffer:(title ^ "/Math")
+          ~caret:(String.length title+5) ~base:title;
+        install_worker ~repo:h.repo h;
+        if rejected then install_rejecting_worker h;
+        Editor_commands.run_editor_cmd "b1" "math-block"
+          (String.length title) (String.length title+5);
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Math converts the current block without inserting a sibling"
+          (not (List.mem "insert-blocks" (op_names ()))
+           && List.map String.trim (current_titles ())=[String.trim title]);
+        if not rejected then
+          check "Math writes the display type on the original block"
+            (List.exists (function
+              | W.Array [W.Keyword "set-block-property";
+                  W.Array [W.Uuid "b1";W.Keyword "logseq.property.node/display-type";W.Keyword "math"]] -> true
+              | _ -> false) !ops);
+        reset_editor ();
+        math rest
+  in
+  let* () = math ["",false;"Existing content ",false;"Existing content ",true] in
+  let services = Ui_services.get () and previous_popup = !Popups_state.active in
+  let off_insert = services.dom.subscribe_document_event ~capture:true
+    "ls:editor-insert" Editor_keys.on_editor_insert in
+  let off_command = services.dom.subscribe_document_event ~capture:true
+    "ls:editor-command" Editor_commands.on_command in
+  let rec slash = function
+    | [] ->
+        off_insert (); off_command (); Popups_state.active:=previous_popup;
+        reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
+    | (command,title,query,typed,sibling)::rest ->
+        reset_editor ();
+        stage_page h [{(Test_check.block "b1" title) with Model.block_display_type=typed}];
+        let source = title ^ "/" ^ query in
+        set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
+        install_worker ~repo:h.repo h;
+        let popup = Option.get previous_popup in
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false popup Popups_state.Slash;
+        let ac = Option.get (Popups_state.get popup).ac in
+        Popups_state.ac_update popup ac query;
+        let ac = Option.get (Popups_state.get popup).ac in
+        Ops.schedule_save "b1" source;
+        A.update_model "b1" (fun model -> EM.select model ~anchor:0 ~focus:0);
+        Popups_state.apply_item popup ac ~meta:false
+          (Popups_state.mk_item ~key:"conversion" ~label:"Conversion" (Popups_state.Editor_cmd command));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("Slash " ^ command ^ " removes its recorded trigger even after the caret moves")
+          (List.map String.trim (current_titles ())=
+            (if sibling then [String.trim title;""] else [String.trim title]));
+        check ("Slash " ^ command ^ " follows Master's in-place versus sibling rule")
+          (List.mem "insert-blocks" (op_names ())=sibling);
+        if command="code-block" || command="math-block" || command="quote" then
+          check ("Slash " ^ command ^ " writes display type to its intended block")
+            (List.exists (function
+              | W.Array [W.Keyword "set-block-property";
+                  W.Array [W.Uuid target;W.Keyword "logseq.property.node/display-type";_]] ->
+                    if sibling then target<>"b1" else target="b1"
+              | _ -> false) !ops);
+        slash rest
+  in
+  slash ["code-block","","",None,false;"code-block","","Code",None,false;
+    "code-block","Existing ","Code",None,true;"code-block","","Code",Some "math",true;
+    "calculator","","Calc",None,false;"quote","Existing ","Quote",None,false;
+    "quote","Existing ","Quote",Some "math",false;"math-block","Existing ","Math",None,false;
+    "heading:2","Existing ","Heading",None,false;"clear-heading","Existing ","Clear",None,false;
+    "normal-text","Existing ","Normal",None,false;"number-list","Existing ","Number",None,false]
+
+let test_calculator_exit_structure (h : host) =
+  let previous_buffer = !S.code_buffer_of in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (source, fail_save) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [{(Test_check.block "b1" "1+2") with Model.block_display_type=Some "code"}];
+        set_editing ~uuid:"b1" ~buffer:"1+2" ~caret:3 ~base:"1+2";
+        S.code_buffer_of := (fun uuid -> if uuid="b1" then Some source else previous_buffer uuid);
+        install_worker ~repo:h.repo h;
+        if fail_save then Runtime.worker := Some
+          {Worker_client.invoke_fn=(fun name args ->
+             if name="thread-api/apply-outliner-ops" then h.reject_promise "calculator save failed"
+             else Js.Promise.resolve (worker_handler h name args));
+           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        A.sync_buffer "b1" source;
+        Ops.schedule_save "b1" source;
+        if h.native then Code_mirror.on_native_event "b1"
+          ~name:"key" ~value:(Some source) ~key:(Some "Escape")
+        else A.exit_edit ~select:true;
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Calculator newline/empty input and Escape never append an outline root, including save failure"
+          (List.length (current_titles ())=1
+           && not (List.exists (fun op -> op_name op="insert-blocks") !ops)
+           && (if fail_save then S.editing_uuid ()=Some "b1" && A.live_buffer "b1"=source
+               else S.editing ()=None && current_titles ()=[source]));
+        run rest in
+  let* () = run ["1+2\n1+3",false; "",false; "1+2\nbad",true] in
+  reset_editor ();
+  stage_page h [{(Test_check.block "b1" "1+2") with Model.block_display_type=Some "code"}];
+  set_editing ~uuid:"b1" ~buffer:"1+2" ~caret:3 ~base:"1+2";
+  S.code_buffer_of := (fun uuid -> if uuid="b1" then Some "1+2" else previous_buffer uuid);
+  install_worker ~repo:h.repo h;
+  A.insert_sibling_after "b1";
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "The calculator Shift-Enter action explicitly appends exactly one empty sibling"
+    (current_titles ()=["1+2";""] && List.exists (fun op -> op_name op="insert-blocks") !ops);
+  S.code_buffer_of := previous_buffer;
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  Js.Promise.resolve ()
+
+let test_query_selection_conversion (h : host) =
+  let previous_popup = !Popups_state.active in
+  let popup = Option.get previous_popup in
+  let rec run = function
+    | [] -> Popups_state.active := previous_popup;
+        reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
+    | (title, advanced, rejected) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [Test_check.block "b1" title];
+        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:title;
+        A.update_model "b1" (fun m -> EM.select m ~anchor:0 ~focus:(String.length title));
+        Editor_keys.apply_input "b1" (EI.Insert "/");
+        Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Slash;
+        Editor_keys.apply_input "b1" (EI.Insert "Query");
+        install_worker ~repo:h.repo h;
+        let attempts = ref [] in
+        Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
+          if name="thread-api/apply-outliner-ops" then begin
+            (match args with [_;W.Array batch;_] -> attempts := batch :: !attempts | _ -> ());
+            if rejected then h.reject_promise "query conversion rejected"
+            else Js.Promise.resolve (worker_handler h name args)
+          end else if name="thread-api/get-blocks"
+            && (match args with [_;W.Array [request]] ->
+                  W.get request "id"=Some (W.Uuid "b1") | _ -> false) then
+            Js.Promise.resolve (W.Array [W.Map [W.Keyword "block", W.Map
+              [W.Keyword "block/uuid", W.Uuid "b1";
+               W.Keyword "logseq.property/query", W.Uuid "query-source"]]])
+          else Js.Promise.resolve
+            (if owned_call name then worker_handler h name args else h.base_handler name args));
+          on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced;
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        let batch = List.concat !attempts in
+        let saves uuid source = List.exists (function
+          | W.Array [W.Keyword "save-block";W.Array [block;_]] ->
+              W.get block "block/uuid"=Some (W.Uuid uuid)
+              && W.get block "block/title"=Some (W.String source)
+          | _ -> false) batch in
+        check "Query conversion preserves the pre-command title in its query property"
+          (if rejected then not (saves "query-source" title)
+           else saves "query-source" title && saves "b1" ""
+             && List.mem (Ops.set_block_property "b1" "block/tags"
+                  (W.Keyword "logseq.class/Query")) batch);
+        check "Query conversion does not leave a slash-trigger autosave pending"
+          (!Ops.pending_save=None);
+        check "Rejected query conversion never publishes a query title"
+          (not rejected || current_titles ()=[title]);
+        run rest in
+  run ["Search seed parity",false,false; "",false,false;
+       "Advanced seed",true,false; "Retain on rejection",false,true]
+
 let test_property_command_refresh (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -1318,6 +2099,36 @@ let test_property_command_refresh (h : host) =
   in
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
+
+let test_page_icon_refresh (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [];
+  let previous_worker = !Runtime.worker in
+  let response = ref (Ok (Some (W.Map
+    [W.String "type", W.String "emoji"; W.String "id", W.String "100"]))) in
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name args ->
+        if name="thread-api/get-case-page" then
+          match !response with
+          | Error () -> h.reject_promise "page icon read failed"
+          | Ok icon -> Js.Promise.resolve (W.Map
+              ([W.kw "block/uuid",W.Uuid "p"; W.kw "block/title",W.String "p"]
+               @ Option.to_list (Option.map (fun icon -> W.kw "logseq.property/icon",icon) icon)))
+        else Js.Promise.resolve (if owned_call name then worker_handler h name args
+                                 else h.base_handler name args))
+    ; on_message=(fun _ _ -> ())
+    ; dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let rec run = function
+    | [] -> Runtime.worker := previous_worker; Js.Promise.resolve ()
+    | (value, expected) :: rest ->
+        response := value;
+        let* () = Ops.refresh_page () in
+        check "Page refresh publishes authoritative own icons and preserves them on failed reads"
+          (Option.bind (h.snapshot ()).Model.route_page (fun p -> p.Model.page_icon)=expected);
+        run rest in
+  run [!response, Some (Node_icon.emoji "100");
+       Error (), Some (Node_icon.emoji "100"); Ok None, None]
 
 let test_selection_direction (h : host) =
   stage_page h
@@ -1370,9 +2181,32 @@ let test_selected_open (h : host) =
         reset_editor ();
         run rest
   in
-  run [ "Enter", (fun () -> Editor_keys.on_normal_key enter), "b2", 4;
+  let* () = run [ "Enter", (fun () -> Editor_keys.on_normal_key enter), "b2", 4;
         "Left", (fun () -> Editor_keys.dispatch_command "editor/left"), "b1", 0;
-        "Right", (fun () -> Editor_keys.dispatch_command "editor/right"), "b2", 4 ]
+        "Right", (fun () -> Editor_keys.dispatch_command "editor/right"), "b2", 4 ] in
+  stage_page h [];
+  reset_editor ();
+  Runtime.send Action.Title_edit_done;
+  let page = Option.get (h.snapshot ()).Model.route_page in
+  let uuid = Option.get page.Model.page_uuid in
+  A.select_single_in ~scope:"main" uuid;
+  Editor_keys.on_normal_key enter;
+  check "Enter on a selected page title resumes title editing, not block editing"
+    ((h.snapshot ()).Model.editing_title && S.editing () = None);
+  Runtime.send Action.Title_edit_done;
+  reset_editor ();
+  Editor_keys.on_normal_key enter;
+  check "Enter without selection does not start title editing"
+    (not (h.snapshot ()).Model.editing_title);
+  let journal = {page with Model.page_journal_day = Some 20260101} in
+  h.stage (Some journal);
+  Runtime.send (Action.Page_loaded journal);
+  A.select_single_in ~scope:"main" uuid;
+  Editor_keys.on_normal_key enter;
+  check "Protected journal titles do not enter title editing"
+    (not (h.snapshot ()).Model.editing_title);
+  reset_editor ();
+  Js.Promise.resolve ()
 
 let test_scoped_collapse_commands (h : host) =
   let scope = "collapse-sidebar" in
@@ -1397,17 +2231,21 @@ let test_scoped_collapse_commands (h : host) =
         let complete_read = ref (fun () -> ()) in
         Option.iter (fun collapsed ->
           S.set (fun st -> { st with S.collapsed =
-            (if collapsed then S.String_set.empty else S.String_set.singleton uuid) });
+            (if collapsed = Some true then S.String_set.empty else S.String_set.singleton uuid) });
           let worker = Option.get !Runtime.worker in
+          let selector = ref "" in
           let pending = Js.Promise.make (fun ~resolve ~reject:_ ->
             complete_read := (fun () -> resolve
-              (W.Map [W.Keyword "block/collapsed?", W.Bool collapsed]) [@u])) in
+              (match collapsed with
+               | Some collapsed -> W.Map [W.Keyword "block/collapsed?", W.Bool collapsed]
+               | None when !selector = "[:block/collapsed?]" -> W.Nil
+               | None -> W.Map [W.Keyword "db/id", W.Int 1]) [@u])) in
           Runtime.worker := Some { worker with Worker_client.invoke_fn =
             (fun name args ->
               match name, args with
               | "thread-api/pull",
-                [W.String repo; _; W.Array [W.Keyword "block/uuid"; W.Uuid id]]
-                when repo = h.repo && id = uuid -> pending
+                [W.String repo; W.String selected; W.Array [W.Keyword "block/uuid"; W.Uuid id]]
+                when repo = h.repo && id = uuid -> selector := selected; pending
               | _ -> worker.Worker_client.invoke_fn name args) }) db_before;
         List.iter (fun id ->
           S.set_collapsed ~scope:"main" id (not before);
@@ -1418,7 +2256,10 @@ let test_scoped_collapse_commands (h : host) =
             (S.mk_editing ~uuid ~buffer:uuid ~base:uuid ~scope ()) })
         else
           S.set (fun st -> { st with S.selected = S.String_set.of_list [ uuid; other ] });
-        Editor_keys.dispatch_command command;
+        (if command = "Meta+;" then
+           Editor_keys.apply_input uuid
+             (EI.Key ({ (EM.key_ev ";") with meta = true }, false))
+         else Editor_keys.dispatch_command command);
         let* () = match db_before with
           | None -> Js.Promise.resolve ()
           | Some _ ->
@@ -1440,8 +2281,10 @@ let test_scoped_collapse_commands (h : host) =
         reset_editor ();
         run rest
   in
-  run [ "selected toggle", "editor/toggle-block-children", false, false, false, Some true;
-        "editing toggle", "editor/toggle-block-children", true, true, true, Some false;
+  run [ "selected toggle", "editor/toggle-block-children", false, false, false, Some (Some true);
+        "editing toggle", "editor/toggle-block-children", true, true, true, Some (Some false);
+        "editing Meta+;", "Meta+;", true, false, true, Some (Some false);
+        "editing absent collapse flag", "Meta+;", true, false, true, Some None;
         "selected collapse", "editor/collapse-block-children", false, false, true, None;
         "selected expand", "editor/expand-block-children", false, true, false, None ]
 
@@ -1797,6 +2640,34 @@ let test_native_drag_scoped_drop (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_drag_selection_state (h : host) =
+  let saved = h.snapshot () in
+  reset_editor ();
+  stage_page h
+    [Test_check.block ~children:[Test_check.block "drag-child" "child"] "drag-parent" "parent";
+     Test_check.block "drag-other" "other"; Test_check.block "drag-target" "target"];
+  A.select_single_in ~scope:"main" "drag-parent";
+  S.set (fun st -> {st with S.selected = S.String_set.of_list
+    ["drag-parent";"drag-child";"drag-other"]});
+  A.begin_block_drag ~scope:"main" "drag-parent";
+  check "Dragging captures selected roots without keeping a selection toolbar"
+    (A.dragged_block_uuids "drag-parent" = ["drag-parent";"drag-other"]
+     && S.String_set.is_empty (S.selected ()));
+  check "Captured drag selection still rejects members and their descendants"
+    (not (A.can_drop_dragged_block "drag-parent" "drag-other")
+     && not (A.can_drop_dragged_block "drag-parent" "drag-child")
+     && A.can_drop_dragged_block "drag-parent" "drag-target");
+  A.end_block_drag ();
+  A.begin_block_drag ~scope:"main" "missing-drag-source";
+  check "A missing drag source cannot fabricate a move or selection"
+    (A.dragged_block_uuids "missing-drag-source" = []
+     && not (A.can_drop_dragged_block "missing-drag-source" "drag-target")
+     && S.String_set.is_empty (S.selected ()));
+  A.end_block_drag ();
+  reset_editor ();
+  h.restore saved;
+  Js.Promise.resolve ()
+
 let test_drop_top_owner (h : host) =
   let saved = h.snapshot () in
   let rec run = function
@@ -1810,6 +2681,9 @@ let test_drop_top_owner (h : host) =
               Test_check.block "drop-target" "target" ] in
         let unregister = S.register_block_source ~scope ~kind:S.Outliner (fun () -> blocks) in
         A.begin_block_drag ~scope "drop-source";
+        check ("Drag ownership does not create a block selection: " ^ name)
+          (S.String_set.is_empty (S.selected ())
+           && A.dragged_block_uuids "drop-source" = ["drop-source"]);
         install_worker ~repo:h.repo h;
         let release = ref (fun () -> ()) in
         let parent = Js.Promise.make (fun ~resolve ~reject:_ ->
@@ -1830,6 +2704,9 @@ let test_drop_top_owner (h : host) =
         check ("top drop preserves target owner and origin: " ^ name)
           (!ops = (if accept then
               [ Ops.move_blocks_top [ "drop-source" ] "sidebar-owner" ] else []));
+        A.end_block_drag ();
+        check ("Completed or canceled drops leave no source selection: " ^ name)
+          (S.String_set.is_empty (S.selected ()));
         unregister ();
         reset_editor ();
         h.restore saved;
@@ -1932,6 +2809,211 @@ let test_append_owner (h : host) =
         "zoom-root", "zoom-owner"; "preview", "preview-owner" ]
 
 (* synchronous stage: pure-model checks that need no app drain *)
+let test_authoritative_route_miss (h : host) =
+  let old_read = !Runtime.read_model and old_send = !Runtime.app_send
+  and old_worker = !Runtime.worker and old_loaded = !Router.loaded_route
+  and old_gen = !Runtime.load_gen in
+  let route = Model.Page "renamed-route" in
+  let model = ref { (h.snapshot ()) with Model.route; page_missing = false } in
+  let replies = ref [] in
+  Runtime.read_model := (fun () -> !model);
+  Runtime.app_send := (fun action -> model := Update.update !model action; true);
+  Router.loaded_route := Some route;
+  Runtime.worker := Some
+    { Worker_client.invoke_fn = (fun name _ ->
+        if name = "thread-api/get-page-route-info" then
+          Js.Promise.make (fun ~resolve ~reject:_ ->
+            replies := !replies @ [(fun () -> resolve W.Nil [@u])])
+        else Js.Promise.resolve W.Nil)
+    ; on_message = (fun _ _ -> ())
+    ; dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+  let restore () =
+    Runtime.read_model := old_read; Runtime.app_send := old_send;
+    Runtime.worker := old_worker; Router.loaded_route := old_loaded;
+    Runtime.load_gen := old_gen in
+  let task =
+    let forced = Router.load_page_ref ~accept_missing:true route (W.String "renamed-route") in
+    let ordinary = Router.load_page_ref route (W.String "renamed-route") in
+    List.iter (fun reply -> reply ()) !replies;
+    let* () = forced in
+    let* () = ordinary in
+    check "An authoritative route miss survives an overlapping sync refresh"
+      (!model).Model.page_missing;
+    restore ();
+    Js.Promise.resolve ()
+  in
+  task |> Js.Promise.catch (fun error ->
+    restore ();
+    Ui_services.log_error ("Authoritative route miss test failed", error);
+    failwith "Authoritative route miss test failed")
+
+let test_structured_paste_completion (h : host) =
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | outcome :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [Test_check.block "paste-target" ""; Test_check.block "other" "other"];
+        set_editing ~uuid:"paste-target" ~buffer:"" ~caret:0 ~base:"";
+        install_worker ~repo:h.repo h;
+        let worker = Option.get !Runtime.worker in
+        let release = ref (fun () -> ()) and after = ref None in
+        let gate = Js.Promise.make (fun ~resolve ~reject:_ ->
+            release := (fun () -> resolve true [@u])) in
+        let inserted = W.Map [W.kw "block/uuid", W.Uuid "paste-target";
+          W.kw "block/title", W.String "Clipboard parent"] in
+        Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+          if name <> "thread-api/apply-outliner-ops" then worker.Worker_client.invoke_fn name args
+          else begin
+            (match args with [_;_;opts] -> after := W.get opts "undo-redo/editor-info-after" | _ -> ());
+            let* _ = gate in
+            if outcome = "rejected" then h.reject_promise "paste rejected"
+            else if outcome = "empty" then Js.Promise.resolve (W.Map [W.kw "result", W.Nil])
+            else begin
+              Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+                [Test_check.block "paste-target" "Clipboard parent"; Test_check.block "other" "other"]}) !Runtime.current_page;
+              h.sync_page ();
+              Js.Promise.resolve (W.Map [W.kw "result", W.Map [W.kw "blocks", W.Array [inserted]]])
+            end
+          end)};
+        let failed = ref false in
+        let operation = A.paste_copied_blocks (false, [inserted]) "paste-target"
+            ~sibling:true ~replace_empty:true
+          |> Js.Promise.catch (fun _ -> failed := true; Js.Promise.resolve None) in
+        let* () = h.wait_ms 10 in
+        if outcome = "newer editor" then set_editing ~uuid:"other" ~buffer:"other" ~caret:5 ~base:"other";
+        !release ();
+        let* _ = operation in
+        let* () = h.wait_ms 10 in
+        check ("Structured paste completes without stealing focus: " ^ outcome)
+          (if outcome = "saved" then S.editing () = None && !S.pending_focus = None
+           else Option.map (fun e -> e.S.uuid) (S.editing ()) =
+             Some (if outcome = "newer editor" then "other" else "paste-target"));
+        check ("Structured paste retains failure state: " ^ outcome) (!failed = (outcome = "rejected"));
+        if outcome = "saved" then check "Structured paste redo does not reopen an editor" (!after = Some W.Nil);
+        reset_editor ();
+        run rest
+  in
+  run ["saved"; "empty"; "rejected"; "newer editor"]
+
+let test_numbering_preserves_unedited_title (h : host) =
+  let* () = settle h 40 in
+  stage_page h [Test_check.block "b1" "Plain second block"];
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  A.select_single_in ~scope:"main" "b1";
+  Editor_commands.toggle_own_list "b1" 0;
+  let* () = settle h 40 in
+  check "Numbering an unedited block preserves its stored title"
+    (Option.bind !Runtime.current_page (fun page ->
+       Option.map (fun (b : Model.block) -> b.Model.block_title)
+         (S.find_in page.Model.page_blocks "b1")) = Some "Plain second block");
+  Js.Promise.resolve ()
+
+let test_template_does_not_save_search_title (h : host) =
+  let* () = settle h 40 in
+  stage_page h [Test_check.block "b1" ""];
+  reset_editor ();
+  install_worker ~repo:h.repo h;
+  set_editing ~uuid:"b1" ~buffer:"Audit Template" ~caret:14 ~base:"";
+  let ac : Popups_state.ac =
+    { kind = Template_search; x = 0.; y = 0.; cy = 0.; pos_pending = false
+    ; flip = None; flipx = None; query = "Audit Template"; tpos = 0; tlen = 14
+    ; items = []; chosen = 0; auuid = "b1"; editor = None } in
+  Popups_state.apply_template (Option.get !Popups_state.active) ac "template";
+  let* () = h.wait_ms 20 in
+  check "Template search text is not persisted as a content block"
+    (Option.bind !Runtime.current_page (fun page ->
+       Option.map (fun (b : Model.block) -> b.Model.block_title)
+         (S.find_in page.Model.page_blocks "b1")) = Some "");
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | (base, outcome) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [Test_check.block "b1" base];
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        set_editing ~uuid:"b1" ~buffer:"/" ~caret:1 ~base;
+        let worker = Option.get !Runtime.worker in
+        Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+          let template_op = name="thread-api/apply-outliner-ops" &&
+            match args with _ :: W.Array os :: _ ->
+              List.exists (fun op -> op_name op="apply-template") os | _ -> false in
+          if template_op && outcome="rejected" then h.reject_promise "template rejected"
+          else
+            let* response = worker.invoke_fn name args in
+            if template_op && (outcome="inserted" || outcome="typed") then begin
+              Runtime.current_page := Option.map (fun p -> {p with Model.page_blocks =
+                [Test_check.block "b1" "T83 Template inserted child"]}) !Runtime.current_page;
+              h.sync_page ();
+              if outcome="typed" then A.sync_buffer "b1" "new input";
+              Js.Promise.resolve (W.Map [W.Keyword "result", W.Map
+                [W.Keyword "blocks", W.Array [W.Map [W.Keyword "block/uuid",W.Uuid "b1"]]]])
+            end else Js.Promise.resolve response) };
+        let ac = {ac with tlen=1; query=""} in
+        Popups_state.apply_template (Option.get !Popups_state.active) ac "template";
+        let* () = h.wait_ms 30 in
+        if outcome="inserted" then begin
+          check "Template replacement refreshes the reused target editor"
+            (A.live_buffer "b1"="T83 Template inserted child"
+             && (editing_now ()).S.base="T83 Template inserted child");
+          A.save_if_dirty "b1"
+        end else if outcome="typed" then
+          check "Template completion preserves newer editor input"
+            (A.live_buffer "b1"="new input")
+        else
+          check "Empty and rejected templates do not replace the live editor"
+            (A.live_buffer "b1"="");
+        let* () = h.wait_ms 430 in
+        if outcome="inserted" then
+          check "Template content survives a later editor commit"
+            (Option.bind !Runtime.current_page (fun page ->
+              Option.map (fun (b : Model.block) -> b.Model.block_title)
+                (S.find_in page.Model.page_blocks "b1"))=Some "T83 Template inserted child");
+        Runtime.worker := Some worker;
+        run rest
+  in
+  run ["","inserted"; "/","inserted"; "/","typed"; "/","empty"; "/","rejected"]
+
+let test_slash_cancellation_titles (h : host) =
+  let rec next = function
+    | [] -> Js.Promise.resolve ()
+    | (image, prefix) :: rest ->
+        let* () = settle h 40 in
+        stage_page h [Test_check.block "b1" prefix];
+        reset_editor ();
+        install_worker ~repo:h.repo h;
+        let typed = prefix ^ (if image then "/Image link" else "/Template") in
+        set_editing ~uuid:"b1" ~buffer:typed ~caret:(String.length typed) ~base:prefix;
+        let popup = Option.get !Popups_state.active in
+        let ac : Popups_state.ac =
+          { kind = Slash; x = 0.; y = 0.; cy = 0.; pos_pending = false;
+            flip = None; flipx = None; query = ""; tpos = String.length prefix;
+            tlen = 1; items = []; chosen = 0; auuid = "b1"; editor = None } in
+        Popups_state.set_ac popup (Some ac);
+        Popups_state.apply_item popup ac ~meta:false
+          (Popups_state.mk_item ~key:"cancel-command" ~label:""
+            (if image then Editor_cmd "image-link" else Switch Template_search));
+        let expected = prefix ^ (if image then "/link" else "/") in
+        check "Slash secondary commands retain Master's cancellation text"
+          (A.live_buffer "b1" = expected);
+        if image then begin
+          Editor_commands.open_link_form true "b1" (String.length prefix);
+          ignore (Editor_commands.popup_key ~key:"Escape"
+            ~inside:(fun () -> true) ~prevent_default:(fun () -> ()))
+        end else begin
+          Popups_state.close_ac popup;
+          A.exit_edit ~select:false
+        end;
+        let* () = h.wait_ms 450 in
+        check "Cancelled slash command text survives its save"
+          (Option.bind !Runtime.current_page (fun page ->
+             Option.map (fun (b : Model.block) -> b.block_title)
+               (S.find_in page.page_blocks "b1")) = Some expected);
+        next rest
+  in
+  next [true,""; false,""; true,"prefix "; false,"prefix "]
+
 let run (_h : host) =
   test_measure_deferred ();
   test_stale_line_ranges ()
@@ -1939,11 +3021,22 @@ let run (_h : host) =
 (* async stage: chained into the drive runner's promise drain *)
 let async_stage (h : host) : unit Js.Promise.t =
   let saved = h.snapshot () in
+  let* () = test_structured_paste_completion h in
+  let* () = test_numbering_preserves_unedited_title h in
+  let* () = test_code_conversion_focus h in
+  let* () = test_calculator_exit_structure h in
+  let* () = test_template_does_not_save_search_title h in
+  let* () = test_slash_cancellation_titles h in
+  let* () = test_authoritative_route_miss h in
   let* () = test_composition h in
   let* () = test_save_debounce h in
+  let* () = test_acknowledged_save_before_broadcast h in
   let* () = test_embed_persists_erased_buffer h in
   let* () = test_pending_save_order h in
   let* () = test_suggestion_selection_commits_pending_save h in
+  let* () = test_node_reference_suggestions h in
+  let* () = test_query_selection_conversion h in
+  let* () = test_reference_preview h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in
   let* () = test_autocomplete_save_gate_is_block_scoped h in
@@ -1957,14 +3050,19 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_continuous_delete_xfail h in
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
+  let* () = test_indent_type_double_undo_caret h in
   let* () = test_exit_waits_for_save h in
+  let* () = test_select_all_exit h in
+  let* () = test_task_cycle h in
   let* () = test_enter_edit_origin h in
   let* () = test_exit_after_navigation h in
   let* () = test_navigation_retires_dirty_editor h in
   let* () = test_history_after_navigation h in
+  let* () = test_navigation_history h in
   let* () = test_queued_history_origin h in
   let* () = test_delete_selection_history h in
   let* () = test_property_command_refresh h in
+  let* () = test_page_icon_refresh h in
   test_selection_direction h;
   let* () = test_selected_open h in
   let* () = test_scoped_collapse_commands h in
@@ -1976,6 +3074,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_zoom_structure_boundary h in
   let* () = test_native_drag_rect_reply h in
   let* () = test_native_drag_scoped_drop h in
+  let* () = test_drag_selection_state h in
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in

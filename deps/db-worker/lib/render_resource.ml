@@ -1771,12 +1771,21 @@ let filter_block_query_result db (cells : query_result list)
       (fun cell ->
         match query_result_cell_id cell with
         | Some cid -> (
-            match Ldb.ent_of_id db cid with
-            | Some e -> (
-                match Ldb.ref_ent e "block/parent" with
-                | Some p -> not (List.mem p.id ids)
-                | None -> true)
-            | None -> true)
+            let parent_id =
+              match cell with
+              | Result_entity _ ->
+                  Option.bind (Ldb.ent_of_id db cid) (fun e ->
+                      Option.map (fun (p : entity) -> p.id)
+                        (Ldb.ref_ent e "block/parent"))
+              | _ ->
+                  Option.bind
+                    (Option.bind
+                       (Wire.get "block/parent" (wire_cell_of_query_result cell))
+                       (Wire.get "db/id"))
+                    Wire.as_int
+            in
+            not (Option.fold ~none:false
+                   ~some:(fun id -> List.mem id ids) parent_id))
         | None -> true)
       cells
 
@@ -1824,7 +1833,16 @@ let execute_query_spec db (spec_kvs : (Wire.t * Wire.t) list) (kind : string)
              | None -> fail "Full-text query resource requires repository" []
              | Some repo ->
                  Render_deps.search_blocks ~repo ~db query_text 30
-                 |> List.map (fun (e : entity) -> [ Result_entity e.id ]))
+                 |> List.map (fun (e : entity) ->
+                        let attrs =
+                          List.filter_map (fun attr ->
+                              Option.map (fun v -> Keyword attr, v)
+                                (Ldb.value e attr))
+                            [ "block/uuid"; "block/title"; "block/parent" ]
+                        in
+                        [ Result_value
+                            (Map ((Keyword "db/id", Int64 (Int64.of_int e.id))
+                                  :: attrs)) ]))
         | None ->
             let opts =
               { Db_query_dsl.opt_cards =

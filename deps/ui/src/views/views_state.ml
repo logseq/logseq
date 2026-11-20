@@ -422,9 +422,7 @@ let ctx_of inst : W.t =
         in
         base @ [ (W.kw "initial-row-count", W.Int (max n s.fetch_limit)) ]
     | "linked-references", _ ->
-        let staged =
-          if s.fetch_limit > 0 then s.fetch_limit else Views_wire.ref_window
-        in
+        let staged = max Views_wire.ref_window s.fetch_limit in
         base
         @ [ (W.kw "initial-row-count", W.Int (min 1000 (max 1 staged))) ]
     | _ -> base
@@ -563,9 +561,20 @@ let persist_sized inst =
 
 let persist_display_type inst =
   let s = get inst in
-  Views_db.set_view_property s.view_uuid "logseq.property.view/type"
-    (W.Keyword ("logseq.property.view/type." ^ s.display_type))
-    (fun () -> ())
+  let group_query = (match inst.kind with KQuery _ -> true | _ -> false) && s.display_type = "list"
+    && (match s.view_ent with Some view -> view.vgroup_by = None | None -> s.group_by = None) in
+  let ops =
+    [Outliner_ops.op "set-block-property"
+      [W.Uuid s.view_uuid; W.Keyword "logseq.property.view/type";
+       W.Keyword ("logseq.property.view/type." ^ s.display_type)]]
+    @ if group_query then
+      [Outliner_ops.op "set-block-property"
+        [W.Uuid s.view_uuid; W.Keyword "logseq.property.view/group-by-property";
+         W.Keyword "block/page"]]
+    else []
+  in
+  if group_query then update inst (fun s -> {s with group_by = Some "block/page"});
+  Views_db.apply_ops ops (fun () -> ())
 
 let persist_group_sort_by ?current inst v =
   let s = get inst in

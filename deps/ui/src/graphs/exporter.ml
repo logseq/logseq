@@ -158,19 +158,27 @@ let export_zip () =
   | _ -> Js.Promise.resolve ()
 
 let export_edn () =
+  let graph = repo () in
+  let* validation = Runtime.invoke1 "thread-api/validate-db" (Wire.String graph) in
+  match Wire.get validation "errors" with
+  | Some errors when errors <> Wire.Nil && errors <> Wire.Array []
+                    && errors <> Wire.List [] && errors <> Wire.Map [] ->
+      Js.Promise.reject (Failure "Graph validation failed")
+  | _ ->
   let* w =
-    Runtime.invoke2 "thread-api/export-edn" (Wire.String (repo ()))
+    Runtime.invoke2 "thread-api/export-edn" (Wire.String graph)
       (Wire.Map
          [ (Wire.kw "export-type", Wire.Keyword "graph")
          ; ( Wire.kw "graph-options"
            , Wire.Map [ (Wire.kw "include-timestamps?", Wire.Bool true) ] )
          ])
   in
+  if Wire.get w "export-edn-error" <> None then Js.Promise.resolve () else
   let text =
     try Edn.to_string w with _ -> Transit.to_string w
   in
   Ui_services.files_download_text
-    ~filename:(Printf.sprintf "%s_%d.edn" (short_repo ()) (secs ()))
+    ~filename:(Printf.sprintf "%s_%d.edn" graph (secs ()))
     ~mime:"application/edn" text;
   Js.Promise.resolve ()
 
@@ -436,6 +444,7 @@ let auto_backup ctx =
                             folder_sig)
                           []
                       ; Ui_components.button ~key:"ab-x" ~size:`icon ~icon:(`app "x") ~variant:`ghost
+                          ~autofocus:true
                           ~style_class:"ui__button as-ghost"
                           ~label:(T.t "export.backup/cancel")
                           ~on_press:(fun _ -> clear_folder ctx)
@@ -458,6 +467,7 @@ let auto_backup ctx =
                     (Signal.map (fun f -> f = None) folder_sig))
                (column ~key:"ab-in" ~gap:16
                   [ Ui_components.button ~key:"ab-set"
+                      ~autofocus:true
                       ~variant:`primary
                       ~text:(T.t "export.backup/set-folder-first")
                       ~on_press:(fun _ -> choose_folder ctx) []

@@ -200,6 +200,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
             | Some el ->
                 h.click
                   { search_button = D.el_closest el "#search-button" <> None
+                  ; shift = D.ev_shift ev
                   ; inside_modal =
                       D.el_closest el root <> None
                   ; item_key =
@@ -368,7 +369,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
   ; toggle_collapse = Editor_actions.toggle_collapse
   ; set_collapsed = Editor_actions.set_collapsed
   ; toggle_open_blocks = Editor_actions.toggle_open_blocks
-  ; cycle_todo = (fun _ -> ignore (Editor_cmds.run ~scope:(Editor_state.interaction_scope ()) ~command:"cycle-todo" ~block:None ~value:None))
+  ; cycle_todo = List.iter Editor_commands.cycle_todo
   ; undo = Editor_actions.undo
   ; redo = Editor_actions.redo
   ; quick_add = Editor_actions.quick_add
@@ -378,7 +379,9 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
       (fun ~repo ~uuids ->
         if Runtime.repo () = repo then Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids)
   ; toggle_left_sidebar = (fun () -> Runtime.send Action.Toggle_left_sidebar)
-  ; toggle_right_sidebar = (fun () -> Runtime.send Action.Toggle_right_sidebar)
+  ; toggle_right_sidebar = (fun () ->
+      Runtime.send Action.Toggle_right_sidebar;
+      Option.iter Sidebar_state.ensure_contents !Sidebar_state.st_ref)
   ; toggle_help = (fun () -> Runtime.send Action.Help_toggle)
   ; rtc_start = Rtc_ops.start
   ; rtc_stop = Rtc_ops.stop

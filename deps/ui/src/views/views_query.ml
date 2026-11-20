@@ -23,6 +23,15 @@ let today_day () =
   + ((int_of_float (Js.Date.getMonth d) + 1) * 100)
   + int_of_float (Js.Date.getDate d)
 
+let sanitize_dsl source =
+  let n = String.length source in
+  let wrapped left right = n >= 2 && source.[0] = left && source.[n - 1] = right in
+  if n = 0 || wrapped '(' ')' || wrapped '"' '"'
+     || (n >= 4 && String.sub source 0 2 = "[[" && String.sub source (n - 2) 2 = "]]")
+     || (n >= 2 && String.sub source 0 2 = "[?")
+  then source
+  else Edn.to_string (W.String source)
+
 let parse_src (s : string) : qsrc =
   let t = String.trim s in
   if t = "" || t = "(and)" || t = "(and )" then QBlank
@@ -30,7 +39,7 @@ let parse_src (s : string) : qsrc =
     match Edn.parse t with
     | W.Map _ as m -> QDatalog m
     | _ -> QDsl t)
-  else QDsl t
+  else QDsl (sanitize_dsl t)
 
 (* Incomplete source is a query-local error while the user is editing. *)
 let parse_src_result src =
@@ -38,16 +47,17 @@ let parse_src_result src =
 
 (* -- [:query spec] construction — only the worker-allowed keys -- *)
 
-let common_pairs block_uuid =
+let common_pairs ?page_title ?(built_in=false) block_uuid =
   let page_title =
-    match !Runtime.current_page with
-    | Some p -> [ (W.kw "current-page-title", W.String p.M.page_title) ]
-    | None -> []
+    match page_title, !Runtime.current_page with
+    | Some title, _ -> [ (W.kw "current-page-title", W.String title) ]
+    | None, Some p -> [ (W.kw "current-page-title", W.String p.M.page_title) ]
+    | _ -> []
   in
-  [ (W.kw "current-block-uuid", W.Uuid block_uuid)
-  ; (W.kw "today-day", W.Int (today_day ()))
+  [ (W.kw "today-day", W.Int (today_day ()))
   ; (W.kw "remove-block-children?", W.Bool true)
   ]
+  @ (if built_in then [] else [(W.kw "current-block-uuid", W.Uuid block_uuid)])
   @ page_title
 
 (* cljs custom-query*: a keyword :view/:result-transform resolves through
@@ -71,18 +81,18 @@ let needs_config = function
       | _ -> false)
   | _ -> false
 
-let spec_of cfg block_uuid = function
+let spec_of ?page_title ?(built_in=false) cfg block_uuid = function
   | QDsl s ->
       Ok
         (W.Map
            ([ (W.kw "kind", W.Keyword "dsl"); (W.kw "query", W.String s) ]
-           @ common_pairs block_uuid))
+           @ common_pairs ?page_title ~built_in block_uuid))
   | QDatalog m -> (
       match W.get m "query" with
       | Some (W.Array ((W.Keyword "find" | W.Symbol "find") :: _) as q) ->
           let pairs =
             [ (W.kw "kind", W.Keyword "datalog"); (W.kw "query", q) ]
-            @ common_pairs block_uuid
+            @ common_pairs ?page_title ~built_in block_uuid
           in
           let pairs =
             match W.get m "inputs" with
@@ -175,7 +185,7 @@ let rec collect_uuids w acc =
       List.fold_left (fun a (k, v) -> collect_uuids v (collect_uuids k a)) acc kvs
   | _ -> acc
 
-let run inst (f : unit -> unit) =
+let run ?page_title ?(built_in=false) inst (f : unit -> unit) =
   match inst.V.kind with
   | V.KQuery { block_uuid } -> (
       let src = (V.get inst).V.qsrc in
@@ -205,7 +215,7 @@ let run inst (f : unit -> unit) =
       | Ok src_kind ->
           let run_with_cfg cfg =
             if not (V.fetch_fresh inst gen) then ()
-            else match spec_of cfg block_uuid src_kind with
+            else match spec_of ?page_title ~built_in cfg block_uuid src_kind with
             | Error msg ->
                 set_query_error inst msg;
                 f ()

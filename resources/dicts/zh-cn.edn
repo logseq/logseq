@@ -616,6 +616,7 @@
  :electron/wrong-release-warning-detail "当前版本通过 Rosetta 运行，速度可能非常慢。请优先下载 Apple Silicon (arm64) 版本；若该版本暂不支持您当前的系统版本，可使用 Nightly 版本。"
  :electron/wrong-release-warning-title "您正在 Apple Silicon 上使用 Intel (x64) 版本。"
 
+ :encryption/cloud-password "如果你丢失了密码，云端中的所有数据都将无法解密。你仍然可以访问图谱的本地版本。"
  :encryption/cloud-password-rich (fn [] ["如果你丢失了密码，云端中的所有数据都将无法解密。" [:span "你仍然可以访问图谱的本地版本。"]])
  :encryption/copy-key "复制"
  :encryption/current-password "当前密码"
@@ -638,6 +639,7 @@
  :encryption/password-updated-successfully "密码更新成功！"
  :encryption/private-key "私钥 (base64)"
  :encryption/public-key "公钥 (base64)"
+ :encryption/remember-password "请务必记住你设置的密码，因为一旦遗忘，我们无法为你重置或找回，并建议你妥善保存一份安全备份。"
  :encryption/remember-password-rich (fn [] [[:span "请务必"] "记住你设置的密码，因为一旦遗忘，我们无法为你重置或找回，" [:span "并建议你"] "妥善保存一份安全备份。"])
  :encryption/reset-password "重置密码"
  :encryption/set-new-password "设置新密码"
@@ -1951,8 +1953,10 @@
  :sync/conflicts-description "这些服务器版本与本地编辑冲突。复制你需要的文本，然后手动编辑该块。"
  :sync/conflicts-title "同步冲突"
  :sync/creating-remote-graph "正在创建远程图谱..."
+ :sync/download-error "无法下载图谱。请查看日志以了解详情。"
  :sync/downloading "下载中..."
  :sync/downloading-graph "正在下载 {1}……"
+ :sync/failed-local-changes-warning "部分本地更改无法同步。用于恢复的数据已保存在此设备上。"
  :sync/graph-count-exceed-limit "同步图谱数量超出限制"
  :sync/invitation-sent "邀请已发送！"
  :sync/last-synced-time-label "上次同步时间：{1}"

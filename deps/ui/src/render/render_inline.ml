@@ -96,15 +96,14 @@ let page_link ~(tag : bool) ?label ?uuid_sig name : t =
   in
   let cls = if tag then "tag" else "page-ref" in
   let fg =
-    if tag then "var(--lx-accent-11, var(--ls-tag-text-color))"
+    if tag then Ui_components.tag_link_foreground
     else "var(--lx-accent-11, var(--ls-link-text-color))"
   in
   let tag_style =
     if tag then
       [ ( "style"
-        , "font-size:0.875rem;line-height:1.42857;display:inline-flex;\
-           align-items:center;cursor:pointer;border-radius:4px;\
-           opacity:0.7" )
+        , "display:inline-flex;\
+           align-items:center;cursor:pointer;border-radius:4px" )
       ]
     else []
   in
@@ -115,7 +114,11 @@ let page_link ~(tag : bool) ?label ?uuid_sig name : t =
   in
   (* .page-ref:hover accent — typed channel, no stylesheet hook *)
   let hover =
-    if tag then (fun x -> x)
+    if tag then fun element ->
+      Ui_components.with_props
+        [ Ui_components.Prop.font_size "1rem"
+        ; Ui_components.Prop.line_height "1.42857" ]
+        (Ui_components.tag_link_appearance ~in_block:true element)
     else
       Ui_components.with_props
         [ ( Ui_components.Prop.hover_foreground
@@ -437,9 +440,14 @@ let name_uuid_state context name =
   st
 
 let external_link href label_els =
+  let local = Platform.is_file_url href in
   Ui_components.with_props
     [ Ui_components.Prop.text_decoration "none" ]
-    (link ~url:href ~target:`blank ~style_class:"external-link"
+    (link ~url:href ~target:`blank
+       ?icon:(if local then Some (`app "file") else None)
+       ?on_press:(if local && Daemon_client.is_electron ()
+         then Some (fun _ -> Ui_services.env_open_url href) else None)
+       ~style_class:(if local then "asset-ref" else "external-link")
        label_els)
 
 (* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
@@ -468,12 +476,16 @@ let block_ref uuid =
    its intrinsic dimensions; the `image` kind is a fixed-frame element
    (absolute-filled span) and collapses to 0x0 without explicit dims *)
 let image_el ~src ~alt =
+  let src = Platform.media_url src in
   D.el ~tag:"div" ~style_class:"asset-container image normalize"
-    [ D.el ~tag:"img"
+    [ Ui_components.with_props
+        [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
+        (row ~corner_radius:4 ~cross:`start
+        [D.el ~tag:"img"
         ~attrs:
           [ ("src", src); ("alt", alt); ("loading", "lazy")
           ; ("referrerpolicy", "no-referrer") ]
-        [] ]
+        []]) ]
 
 (* cljs asset-link pdf branch: a ![alt](x.pdf) embed renders
    a.asset-ref.is-pdf whose click opens the in-app pdf viewer — an
@@ -976,6 +988,9 @@ let video_width arguments =
 (* cljs youtube-video iframe + attrs; enablejsapi=1 is required for the
    timestamp seek postMessage *)
 let youtube_iframe id start =
+  (* the iframe-API driver behind Runtime.video_timestamp registers from
+     the document scan — an embed alone must install it *)
+  Render_libs.ensure ();
   let src =
     "https://www.youtube.com/embed/" ^ id ^ "?enablejsapi=1"
     ^ match start with Some s -> "&start=" ^ s | None -> ""
@@ -1389,19 +1404,64 @@ type run_spec =
    text by definition. *)
 type span_tok = { tok_start : int; tok_stop : int; tok_spec : run_spec }
 
+let footnote_anchor ~back name =
+  let encoded = Ui_services.uri_encode_component name in
+  let own, target = if back then "fn.", "fnr." else "fnr.", "fn." in
+  let marker = if back then {js|\u21a9\ufe0e|js} else "" in
+  let anchor = link ~url:"#" ~target:`self_
+    ~accessibility_identifier:(own ^ encoded)
+    ~data_attrs:[(if back then "data-footnote-back" else "data-footnote-ref"), name]
+    ~on_press:(fun _ ->
+      Option.iter (fun el -> el.Ui_services.scroll_into_view ())
+        (Ui_services.dom_query ("[id=\"" ^ target ^ encoded ^ "\"]")))
+    [text ~as_:`Sup ~value:(name ^ marker) []] in
+  if back then Ui_components.with_props [Ui_components.Prop.font_size "14px"] anchor
+  else anchor
+
 (* refs: uuids/names of the enclosing reference chain (cljs :ref-set) —
    a ref whose target is in it renders nothing, breaking self- and
    cycle-references. self: uuid of the block/page whose title is being
    parsed; added to refs of any resolved ref's children. *)
 
-let rec parse ?(refs = []) ?(self = "") s =
+(* cljs highlight-query-text (search-handler/highlight-exact-query): the
+   first case-insensitive match of [query] in a plain text run renders as
+   an unpadded <mark> *)
+let highlight_segments ~query text : t list =
+  let low = String.lowercase_ascii text
+  and q = String.lowercase_ascii query in
+  let n = String.length text and m = String.length q in
+  let rec find i =
+    if i + m > n then None
+    else if String.sub low i m = q then Some i
+    else find (i + 1)
+  in
+  let mark s =
+    D.el ~tag:"mark"
+      ~attrs:
+        [ ( "style"
+          , "background-color:var(--ls-page-mark-bg-color,#fef3ac);\
+             color:var(--ls-page-mark-color,#262626);padding:0;\
+             border-radius:0" ) ]
+      [ D.txt s ]
+  in
+  match if m = 0 then None else find 0 with
+  | None -> [ D.txt text ]
+  | Some j ->
+      (if j > 0 then [ D.txt (String.sub text 0 j) ] else [])
+      @ [ mark (String.sub text j m) ]
+      @ if j + m < n then [ D.txt (String.sub text (j + m) (n - j - m)) ] else []
+
+let rec parse ?(refs = []) ?(self = "") ?highlight s =
   let find = substring_finder s in
   let els = ref [] in
   let buf = Buffer.create 64 in
   let push e = els := e :: !els in
   let flush () =
     if Buffer.length buf > 0 then (
-      push (D.txt (Buffer.contents buf));
+      (match highlight with
+       | Some query ->
+           List.iter push (highlight_segments ~query (Buffer.contents buf))
+       | None -> push (D.txt (Buffer.contents buf)));
       Buffer.clear buf)
   in
   let n = String.length s in
@@ -1458,6 +1518,13 @@ and try_bracket ~find ~refs ~self s i =
           , j + 2 - i
           , Rs_atomic (String.trim inner, "ed-page-ref") )
     | _ -> None
+  else if Str_util.starts_at s i "[^" then
+    (match find (i + 2) "]" with
+     | j when j > i + 2 ->
+         let name = sub s (i + 2) (j - i - 2) in
+         if String.exists (fun c -> c = '\n' || c = '\r') name then None
+         else Some (footnote_anchor ~back:false name, j + 1 - i, Rs_plain)
+     | _ -> None)
   else if Str_util.starts_at s i "[:" then try_hiccup ~refs ~self s i
   else
     match find (i + 1) "](" with
@@ -1614,7 +1681,7 @@ and resolved_tag_ref ~refs ~self uuid : t =
     uuid_meta_state context uuid ~fallback:(plain_ref_meta uuid false false) ()
   in
   let title_sig = (Signal.value st) in
-  (Ui_components.with_props
+  (Ui_components.tag_link_appearance ~in_block:true (Ui_components.with_props
      [ Ui_components.Prop.position `relative ]
      (link ~url:"#" ~target:`self_ ~style_class:"tag"
     ~data_attrs:
@@ -1623,7 +1690,8 @@ and resolved_tag_ref ~refs ~self uuid : t =
            [ ("data-uuid", uuid); ("tabindex", "0")
            ; ("data-ref", String.lowercase_ascii n) ])
          title_sig)
-    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig) [] ]))
+    [ text ~value:(reactive (fun meta -> "#" ^ meta.title) title_sig)
+        ~foreground:Ui_components.tag_link_foreground [] ])))
     context parent
 
 and macro_el ~refs ~self body =
@@ -1790,7 +1858,8 @@ and try_image s i =
             let el =
               if
                 Str_util.ends_with
-                  (String.lowercase_ascii src) ".pdf"
+                  (String.lowercase_ascii (src |> String.split_on_char '#' |> List.hd
+                    |> String.split_on_char '?' |> List.hd)) ".pdf"
               then pdf_link_el ~src ~alt
               else image_el ~src ~alt
             in

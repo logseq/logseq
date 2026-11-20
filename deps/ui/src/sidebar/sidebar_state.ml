@@ -49,7 +49,7 @@ type item_source =
 type t =
   { favorites : Model.page list Signal.state
   ; home_page : Model.page option Signal.state
-  ; favorite_drop : (string * bool) option Signal.state
+  ; favorite_drop : string option Signal.state
   ; recents : Model.page list Signal.state
   ; nav_checked : string list Signal.state
   ; nav_tag_titles : (string * string) list Signal.state
@@ -60,9 +60,79 @@ type t =
   ; left_width : float Signal.state
   ; right_fraction : float Signal.state
   ; viewport_w : float Signal.state
+  ; restored_repo : string option ref
+  ; restoring : bool ref
+  ; history_repo : string option ref
+  ; history_state : (string * Wire.t) list option ref
   }
 
 let st_ref : t option ref = ref None
+
+let right_sidebar_storage_key = "ls-right-sidebar-state"
+
+let saved_right_sidebar () =
+  match Ui_services.storage_get right_sidebar_storage_key with
+  | None -> Wire.Nil
+  | Some text ->
+      (try Edn.parse text with Edn.Parse_error message ->
+        Ui_services.log_error ("Invalid saved right sidebar", message);
+        Wire.Nil)
+
+let saved_sidebar_items saved =
+  match Wire.get saved "items" with
+  | Some (Wire.Array items | Wire.List items) -> items
+  | _ -> []
+
+let right_sidebar_snapshot ~previous ~repo ~open_ (items : item list) =
+  let saved = saved_sidebar_items previous in
+  let items =
+    if Wire.map_get_string previous "repo" = Some repo
+       && List.length saved = List.length items then saved
+    else List.map (fun (item : item) -> Wire.Map
+      [ Wire.Keyword "key", Wire.String item.key
+      ; Wire.Keyword "kind", Wire.String item.kind
+      ; Wire.Keyword "title", Wire.String item.title
+      ; Wire.Keyword "uuid", (match item.uuid with Some uuid -> Wire.String uuid | None -> Wire.Nil)
+      ; Wire.Keyword "ref", (match item.page_ref with Some value -> Wire.String value | None -> Wire.Nil)
+      ]) items
+  in
+  Wire.Map [ Wire.Keyword "repo", Wire.String repo
+           ; Wire.Keyword "open?", Wire.Bool open_
+           ; Wire.Keyword "items", Wire.Array items ]
+
+let history_snapshot st =
+  let items = Runtime.signal_get st.items in
+  [ "ui/sidebar-open?", Wire.Bool (Runtime.model ()).Model.right_sidebar_open
+  ; "sidebar/blocks", Wire.Array (List.map (fun (item : item) -> Wire.Map
+      [ Wire.kw "key", Wire.String item.key
+      ; Wire.kw "kind", Wire.String item.kind
+      ; Wire.kw "title", Wire.String (if item.uuid = None then item.title else "")
+      ; Wire.kw "uuid", (match item.uuid with Some uuid -> Wire.Uuid uuid | None -> Wire.Nil)
+      ; Wire.kw "ref", (match item.uuid, item.page_ref with
+          | None, Some value -> Wire.String value | _ -> Wire.Nil)
+      ]) items)
+  ; "ui/sidebar-collapsed-blocks", Wire.Map (List.filter_map (fun (item : item) ->
+      if item.collapsed then Some (Wire.String item.key, Wire.Bool true) else None) items)
+  ]
+
+let persist_right_sidebar st =
+  let repo = Runtime.repo () in
+  if repo <> "" then begin
+    let after = history_snapshot st in
+    if !(st.history_repo) = Some repo && not !(st.restoring) then
+      Option.iter (fun before -> Editor_actions.History_ui.record_sidebar ~before ~after)
+        !(st.history_state);
+    st.history_repo := Some repo;
+    st.history_state := Some after
+  end;
+  if not !(st.restoring) && repo <> "" then begin
+    let open_ = (Runtime.model ()).Model.right_sidebar_open in
+    let previous = saved_right_sidebar () in
+    let saved = right_sidebar_snapshot ~previous ~repo
+        ~open_ (Runtime.signal_get st.items) in
+    if saved <> previous then
+      Ui_services.storage_set right_sidebar_storage_key (Edn.to_string saved)
+  end
 
 let retire_missing_sources st =
   let live = List.fold_left (fun scopes item ->
@@ -102,12 +172,13 @@ let set_items st items =
   Runtime.signal_set st.items items;
   retire_missing_sources st;
   (* Keep a closing editor's source until the ordinary save/exit completes. *)
-  if Editor_state.ready () then
+  (if Editor_state.ready () then
     match Editor_state.editing () with
     | Some editing when Hashtbl.mem st.block_sources editing.Editor_state.scope
         && not (List.exists (fun item -> item_scope item = editing.Editor_state.scope) items) ->
         Editor_actions.exit_edit ~select:false
-    | _ -> ()
+    | _ -> ());
+  persist_right_sidebar st
 
 (* the live model signal — stored at init so document-event handlers
    read current model state without a shadow ref of their own *)
@@ -913,6 +984,19 @@ let open_uuid ?(edit = false) st uuid =
        | None -> ());
       Js.Promise.resolve ())
 
+let open_block_references st uuid =
+  let repo = Runtime.repo () in
+  ignore ((let* item = block_item_of_uuid repo uuid in
+    (match item with
+     | Some item when Runtime.repo () = repo ->
+         ensure_right_open ();
+         push_item st {item with key = "block-ref-" ^ uuid; kind = "block-ref"; blocks = []}
+     | _ -> ());
+    Js.Promise.resolve ())
+    |> Js.Promise.catch (fun error ->
+      Ui_services.log_error ("Opening block references failed",error);
+      Js.Promise.resolve ()))
+
 let open_today_journal st =
   let repo = Runtime.repo () in
   if repo <> "" then
@@ -980,11 +1064,13 @@ let refresh_item repo (it : item) : item Js.Promise.t =
           match v with Some it' -> Js.Promise.resolve it'
         | None -> fallback)
       | None -> fallback)
-  | "block" -> (
+  | "block" | "block-ref" -> (
       match it.uuid with
       | Some u ->
           (let* v = block_item_of_uuid repo u in
-          match v with Some it' -> Js.Promise.resolve { it' with key = it.key }
+          match v with Some it' -> Js.Promise.resolve
+            { it' with key = it.key; kind = it.kind;
+              blocks = (if it.kind="block-ref" then [] else it'.blocks) }
         | None -> fallback)
       | None -> fallback)
   | _ -> fallback
@@ -1017,9 +1103,10 @@ let refresh_items repo st =
 
 (* ---------- favorites ---------- *)
 
-let favorite_order ~source ~target ~before uuids =
-  if source = target || not (List.mem source uuids && List.mem target uuids) then uuids
-  else
+let favorite_order ~source ~target uuids =
+  match List.find_index ((=) source) uuids, List.find_index ((=) target) uuids with
+  | Some source_index, Some target_index when source_index <> target_index ->
+    let before = source_index > target_index in
     let rec insert = function
       | [] -> []
       | uuid :: rest when uuid = target ->
@@ -1027,16 +1114,14 @@ let favorite_order ~source ~target ~before uuids =
       | uuid :: rest -> uuid :: insert rest
     in
     insert (List.filter ((<>) source) uuids)
+  | _ -> uuids
 
 let favorite_drop_at st x y =
   let target =
     Option.bind (Ui_services.dom_element_at x y) (fun hit ->
       Option.bind (hit.Ui_services.closest "#left-sidebar .favorites [data-lp-ref]")
         (fun row ->
-          Option.map (fun uuid ->
-            let _, top, _, height = row.Ui_services.rect () in
-            (uuid, y < top +. height /. 2.))
-            (row.Ui_services.attr "data-lp-ref")))
+          row.Ui_services.attr "data-lp-ref"))
   in
   Runtime.signal_set st.favorite_drop target
 
@@ -1046,10 +1131,10 @@ let finish_favorite_drag st ~repo ~source =
   if Runtime.repo () = repo then
     match target with
     | None -> ()
-    | Some (target, before) ->
+    | Some target ->
         let uuids = List.filter_map (fun (p : Model.page) -> p.page_uuid)
             (Runtime.signal_get st.favorites) in
-        let reordered = favorite_order ~source ~target ~before uuids in
+        let reordered = favorite_order ~source ~target uuids in
         if reordered <> uuids then begin
           incr favorites_gen;
           then_keep
@@ -1178,7 +1263,86 @@ let publish_navigation_page st (page : Model.page) =
   publish st.favorites;
   publish st.recents
 
+let history_request = Ui_effect.request ()
+
+let restore_history_state st state =
+  let repo = Runtime.repo () in
+  let generation = Ui_effect.issue history_request in
+  let before = history_snapshot st in
+  let open_ = match Wire.get state "ui/sidebar-open?" with
+    | Some (Wire.Bool value) -> value
+    | _ -> invalid_arg "Sidebar history must contain its open state" in
+  let collapsed = Option.get (Wire.get state "ui/sidebar-collapsed-blocks") in
+  let originals = match Wire.get state "sidebar/blocks" with
+    | Some (Wire.List items | Wire.Array items) -> List.map (fun wire ->
+        let key = Option.get (Wire.map_get_string wire "key") in
+        let kind = Option.get (Wire.map_get_string wire "kind") in
+        let title = Option.get (Wire.map_get_string wire "title") in
+        let item = Option.get (static_item key kind title) in
+        { item with uuid = Wire.map_get_uuid wire "uuid";
+                    page_ref = Wire.map_get_string wire "ref";
+                    collapsed = Wire.map_get collapsed key = Some (Wire.Bool true) }) items
+    | _ -> invalid_arg "Sidebar history must contain its items" in
+  let originals = Array.of_list originals in
+  let* items = Js.Promise.all (Array.map (refresh_item repo) originals) in
+  if Runtime.repo () = repo && Ui_effect.is_current history_request generation
+     && history_snapshot st = before then begin
+    let restoring = !(st.restoring) in
+    st.restoring := true;
+    set_items st (Array.to_list (Array.mapi (fun index item ->
+      let original = originals.(index) in
+      { item with key = original.key; kind = original.kind; collapsed = original.collapsed }) items));
+    if (Runtime.model ()).Model.right_sidebar_open <> open_ then
+      Runtime.send Action.Toggle_right_sidebar;
+    st.restoring := restoring;
+    persist_right_sidebar st
+  end;
+  Js.Promise.resolve ()
+
+let bind_history st =
+  Editor_actions.History_ui.sidebar_snapshot := (fun () -> history_snapshot st);
+  Editor_actions.History_ui.restore_sidebar := restore_history_state st
+
+let restore_right_sidebar st (m : Model.t) =
+  match m.repo with
+  | Some repo when m.phase = Model.Ready && !(st.restored_repo) <> Some repo ->
+      st.restored_repo := Some repo;
+      st.restoring := true;
+      let saved = saved_right_sidebar () in
+      let should_open = Wire.map_get_string saved "repo" = Some repo
+                        && Wire.get saved "open?" = Some (Wire.Bool true) in
+      if should_open && not m.right_sidebar_open then
+        Runtime.send Action.Toggle_right_sidebar;
+      let originals =
+        if not should_open then []
+        else List.map (fun wire ->
+          let key = Option.get (Wire.map_get_string wire "key")
+          and kind = Option.get (Wire.map_get_string wire "kind")
+          and title = Option.get (Wire.map_get_string wire "title") in
+          let item = Option.get (static_item key kind title) in
+          { item with uuid = Wire.map_get_uuid wire "uuid";
+                      page_ref = Wire.map_get_string wire "ref" }) (saved_sidebar_items saved)
+      in
+      let hydrated = Js.Promise.all (Array.of_list (List.map (refresh_item repo) originals))
+          |> Js.Promise.catch (fun _ ->
+              Ui_services.log_error "Right sidebar restore failed";
+              Js.Promise.resolve (Array.of_list originals)) in
+      ignore (let* items = hydrated in
+        if !(st.restored_repo) = Some repo && Runtime.repo () = repo then begin
+          let current = Runtime.signal_get st.items in
+          let restored = Array.to_list items |> List.filter (fun (item : item) ->
+            not (List.exists (fun (live : item) -> live.key = item.key) current)) in
+          set_items st (current @ restored);
+          st.restoring := false;
+          persist_right_sidebar st
+        end;
+        Js.Promise.resolve ())
+  | _ -> ()
+
 let on_model st (m : Model.t) =
+  if !(st.history_repo) <> m.repo then ignore (Ui_effect.issue history_request);
+  restore_right_sidebar st m;
+  persist_right_sidebar st;
   (match m.repo with
    | Some repo when !home_context <> Some (repo, configured_home m) ->
        Runtime.signal_set st.favorite_drop None;
@@ -1382,10 +1546,15 @@ let init (ms : Model.t Signal.signal) : t =
               (fraction_of_storage ~key:"ls-right-sidebar-width"
                  ~default:right_fraction_default)
         ; viewport_w = Signal.state owner (Ui_services.dom_viewport_width ())
+        ; restored_repo = ref None
+        ; restoring = ref true
+        ; history_repo = ref None
+        ; history_state = ref None
         }
       in
       st_ref := Some st;
       model_signal := Some ms;
+      bind_history st;
       ignore (Signal.subscribe ~emit_initial:false ms (on_model st));
       Ui_services.dom_on_document_event "ls:open-right-sidebar" (fun ev ->
           match detail_string "uuid" ev with

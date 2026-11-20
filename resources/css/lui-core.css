@@ -1314,14 +1314,6 @@ a.page-title {
 }
 
 
-.bottom-properties-pills-strip {
-  flex: 1 1 0;
-  width: 0;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
 /* pill container chrome is now the shared property_pill recipe
    (deps/ui/src/shared/ui_components.ml); keep only the inner tweaks:
    pill key is plain compact text — no icon, no ghost-button chrome */
@@ -1342,12 +1334,6 @@ a.page-title {
   min-height: 0;
   padding: 0;
   justify-content: flex-start;
-}
-
-.bottom-property-pill .property-value-container {
-  flex: 0 0 auto;
-  min-width: 0;
-  min-height: 0;
 }
 
 /* cljs common.css .external-link — border-bottom underline, no
@@ -1580,6 +1566,19 @@ a.page-title {
   > .block-control
   .control-hide {
   display: revert;
+}
+
+/* cljs block-control hides an untitled middle block's dot until the
+   row shows its controls */
+.bullet-container[data-empty-bullet="true"] .bullet {
+  visibility: hidden;
+}
+
+.block-main-container:hover
+  > .block-control-wrap
+  .bullet-container[data-empty-bullet="true"]
+  .bullet {
+  visibility: visible;
 }
 
 .bullet-container {
@@ -1989,10 +1988,8 @@ a.page-title {
     opacity: 1;
   }
 
-  /* cljs mounts no CodeMirror at rest (static pre); keep the mounted CM's
-     rest-state metrics identical — lib default is padding 4px 0 */
   .CodeMirror-lines {
-    padding: 0;
+    padding: 4px 0;
   }
 }
 

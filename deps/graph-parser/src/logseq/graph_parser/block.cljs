@@ -306,7 +306,9 @@
       (if day
         (let [original-page-name' (date-time-util/int->journal-title day date-formatter)
               default-journal-page-name (date-time-util/int->journal-title day date-time-util/default-journal-title-formatter)]
-          [original-page-name' (common-util/page-name-sanity-lc default-journal-page-name) day])
+          [original-page-name'
+           (common-util/page-name-sanity-lc (if export-to-db-graph? original-page-name' default-journal-page-name))
+           day])
         [original-page-name page-name day]))))
 
 (def convert-page-if-journal (memoize convert-page-if-journal-impl))
@@ -320,6 +322,13 @@
   (when (and db (string? page-name))
     (d/entity db
               (first (sort (map :e (entity-util/get-pages-by-name db page-name)))))))
+
+(defn- stored-block-attr
+  "Read a scalar from datoms. Journal `:block/title` on Entity is computed from
+  `title-format` and must not be used as a write-back value."
+  [db eid attr]
+  (when (and db eid)
+    (:v (first (d/datoms db :eavt eid attr)))))
 
 (defn- page-name-string->map
   [original-page-name db date-formatter
@@ -346,10 +355,15 @@
 
                         :else
                         (get-page db original-page-name')))
-        original-page-name' (or from-page (:block/title page-entity) original-page-name')
-        page-name' (if (and journal-day page-entity)
-                     (:block/name page-entity)
-                     page-name)
+        original-page-name' (or from-page
+                                (stored-block-attr db (:db/id page-entity) :block/title)
+                                original-page-name')
+        page-name' (cond
+                     (and journal-day page-entity)
+                     (stored-block-attr db (:db/id page-entity) :block/name)
+                     (and journal-day (or db-based? @*export-to-db-graph?))
+                     (common-util/page-name-sanity-lc original-page-name')
+                     :else page-name)
         page (merge
               {:block/name page-name'
                :block/title original-page-name'}

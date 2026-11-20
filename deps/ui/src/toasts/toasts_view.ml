@@ -27,19 +27,21 @@ let toast_icon_color (k : string) : string =
 
 let toast_item (t : Model.toast) : t =
   let kind = toast_kind_class t.toast_kind in
+  let reserved = t.toast_key = Some Toast.reserved_graph_name_key in
   let duration =
+    Option.value t.toast_duration ~default:(
     if kind = "error" || Option.is_some t.toast_code then 0
-    else if t.toast_key = None then 1500 else 2000
+    else if t.toast_key = None then 1500 else 2000)
   in
   fun ctx parent ->
     (toast ~key:("toast-" ^ string_of_int t.toast_id)
+       ~padding:12 ~data_attrs:["role", "dialog"]
        ~duration
        ~label:t.toast_text
        ~on_dismiss:(fun _ -> Toast.dismiss t.toast_id)
        ~style_class:kind
        [ overlay ~key:"ti-content"
-           [ row ~key:"ti-body" ~gap:8 ~padding_horizontal:12
-               ~padding_vertical:8 ~cross:`start
+           [ (row ~key:"ti-body" ~gap:8 ~padding_vertical:8 ~cross:`start
                [ icon ~key:"ti-icon" ~name:(toast_icon kind)
                    ~width:20 ~height:20
                    ~foreground:(toast_icon_color kind) []
@@ -48,7 +50,20 @@ let toast_item (t : Model.toast) : t =
                    ; Ui_components.Prop.line_height "1.25rem"
                    ; Ui_components.Prop.opacity 0.9 ]
                    (match t.toast_code with
+                    | None when reserved ->
+                        (match String.split_on_char '\n' t.toast_text with
+                         | title :: rows ->
+                             column ~key:"ti-reserved" ~grow:1. ~min_width:0 ~gap:8
+                               ~margin_top:8 ~margin_bottom:4
+                               [ text ~line_height:"1.5" ~value:title []
+                               ; column ~gap:4
+                                   (List.mapi (fun i line ->
+                                      row ~key:(string_of_int i) ~gap:9 ~cross:`start
+                                        [ text ~value:{js|◦|js} []; text ~grow:1. ~min_width:0 ~value:line [] ])
+                                    rows) ]
+                         | [] -> assert false)
                     | None -> text ~key:"ti-desc" ~grow:1.
+                      ~white_space:"pre-line"
                       ~foreground:"var(--ls-primary-text-color)"
                       ~value:t.toast_text []
                     | Some code ->
@@ -60,10 +75,11 @@ let toast_item (t : Model.toast) : t =
                             ~on_press:(fun _ -> Ui_services.clipboard_copy code.code_text) [] in
                         column ~key:"ti-code" ~grow:1. ~gap:12
                           (if code.code_copy_first then [copy; content] else [content; copy]))
-               ; spacer ~width:20 []
-               ]
-           ; align `trailing
+               ])
+           ; align (if reserved then `top_trailing else `trailing)
                (Ui_components.button ~key:"ti-close" ~variant:`ghost ~size:`icon
+                   ~margin_top:(if reserved then -8 else 0)
+                   ~margin_right:(if reserved then -6 else 0)
                    ~width:32 ~height:32 ~corner_radius:6
                    ~foreground:
                      "color-mix(in oklab, var(--lui-c-foreground) 50%, \

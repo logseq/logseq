@@ -120,7 +120,7 @@ let inflate_asset ~original_path ~href ~block_uuid ~block_db_id
       ; pdf_block_external_url = block_external_url
       ; pdf_identity = String.sub key (max 0 (n - 15)) (min 15 n)
       ; pdf_filename = filename
-      ; pdf_url = url
+      ; pdf_url = Platform.media_url url
       ; pdf_original_path = original_path
       }
 

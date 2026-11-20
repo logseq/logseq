@@ -1,5 +1,5 @@
 (* Create-a-new-graph dialog body (.new-graph): name input, Logseq Sync /
-   E2EE checkboxes (rtc-test mode only), Submit. Mirrors
+   E2EE checkboxes for RTC-eligible environments, Submit. Mirrors
    components/repo.cljs new-db-graph-inner: validation toasts +
    create-or-open-db via Graph.create_graph; the sync path calls the
    worker db-sync endpoints like the cljs flow does. *)
@@ -24,18 +24,14 @@ let checkbox_label ~key ~value ~on_press =
   Ui_components.with_props [Ui_components.Prop.opacity 0.7]
     (text ~key ~font_size:"0.875rem" ~value ~on_press [])
 
-let invalid_name name = Graphs_ops.invalid_chars name <> []
-
-let already_exists name = Graphs_ops.already_exists name
-
 let submit name_st cloud e2ee creating =
   let name = String.trim (Runtime.signal_get name_st) in
-  if String.trim name = "" then
-    Toast.warning (T.t "graph.validation/name-reserved-characters-warning")
-  else if already_exists name then
-    Toast.error (T.already_exists name)
-  else if invalid_name name then
-    Toast.warning (T.t "graph.validation/name-reserved-characters-warning")
+  if name = "" || Runtime.signal_get creating then ()
+  else if Graphs_ops.invalid_name name then
+    Graphs_ops.warn_invalid_name ()
+  else if Graphs_ops.already_exists name then (
+    Toast.error (T.already_exists name);
+    Dialogs_state.close_named "new-graph")
   else (
     Signal.set creating true;
     Runtime.flush ();
@@ -80,11 +76,9 @@ let body (_ms : Model.t Signal.signal) : t =
             | _ -> ())
           ~on_submit:(fun _ -> submit name_st cloud e2ee creating)
           []
-      ; (* cljs new-db-graph-inner: the sync row shows when
-           user-handler/rtc-group? (dev build, custom sync server, or a
-           cognito rtc group). ?rtc-test=true keeps it reachable in e2e
-           without auth *)
-        (if Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () then
+      ; (* cljs new-db-graph-inner gates this row on rtc-group?, not login. *)
+        (if Ui_services.env_rtc_test_mode ()
+            || Rtc_flows.rtc_group () then
            column ~key:"ng-rtc"
              [ row ~key:"ng-rtc-row" ~cross:`center ~gap:4
                  [ checkbox ~key:"rtc" ~id:"rtc-sync"

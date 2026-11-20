@@ -39,7 +39,9 @@ let block_transition =
   "transform 0.3s ease, background-color 0.2s cubic-bezier(0, 1, 0, 1)"
 
 let foldable_control ?key children : t =
-  box ?key ~style_class:"ls-foldable-title-control block-control"
+  box ?key ~data_attrs:[ ("tabindex", "0") ]
+    ~foreground:"var(--ls-primary-text-color)"
+    ~style_class:"ls-foldable-title-control block-control"
     ~width:22 ~height:22 ~padding:2 ~margin_top:1 ~margin_left:(-27) children
 
 (* Typed prop binds — see Ui_parts.Prop. *)
@@ -80,6 +82,8 @@ let input =
   form_control (fun background border_color border_width corner_radius ->
       Lui_elements.input ~background ~border_color ~border_width ~corner_radius)
 
+let form_input = input ~border_color:"var(--lx-gray-07, var(--rx-gray-07))"
+
 let text_field =
   form_control (fun background border_color border_width corner_radius ->
       Lui_elements.text_field ~background ~border_color ~border_width
@@ -99,6 +103,8 @@ let textarea =
   form_control (fun background border_color border_width corner_radius ->
       Lui_elements.textarea ~background ~border_color ~border_width
         ~corner_radius)
+
+let form_textarea = textarea ~border_color:"var(--lx-gray-07, var(--rx-gray-07))"
 
 (* Indicator borders are independent of the selected primary fill and label ink. *)
 let checkbox ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition (children : t list) : t =
@@ -195,7 +201,18 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
     ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition children)
 
 let chrome_button element =
-  with_props [Prop.opacity 0.7; Prop.hover_opacity 1.] element
+  with_props [Prop.opacity 0.7; Prop.hover_opacity 1.; Prop.pressed_opacity 1.;
+    Prop.hover_foreground "hsl(var(--foreground))"] element
+
+let tag_link_foreground =
+  "var(--lx-accent-11, var(--ls-tag-text-color, hsl(var(--primary))))"
+
+let tag_link_appearance ?(in_block = false) element =
+  with_props
+    [ Prop.opacity (if in_block then 1. else 0.7)
+    ; Prop.hover_opacity 1.
+    ; Prop.foreground tag_link_foreground
+    ; Prop.hover_foreground tag_link_foreground ] element
 
 let header_right_sidebar_toggle element : t =
  fun ctx parent ->
@@ -389,6 +406,7 @@ let cmdk_group_title ~key ~value ~on_press : t =
     (row ~key ~gap:0
        [ with_props [ Prop.user_select `none; Prop.cursor `pointer ]
            (text ~key:"t" ~style_class:"cp__cmdk-group-title" ~font_weight:700
+              ~data_attrs:["tabindex", "-1"]
               ~value ~on_press []) ])
 
 let cmdk_group_count ~key ~value : t =
@@ -404,7 +422,7 @@ let cmdk_group_more ~key ~on_press children : t =
        ; Prop.user_select `none
        ; Prop.cursor `pointer
        ]
-       (row ~key ~min_width:110
+       (row ~key ~min_width:110 ~data_attrs:["tabindex", "-1"]
           [ row ~key:"i"
               ~cross:`center ~gap:4 children ]))
 
@@ -418,7 +436,7 @@ let cmdk_group_more ~key ~on_press children : t =
 let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
     ~hover_background_signal ~hover_ring_signal
     ~(cursor_signal : [ `default | `pointer | `text ] Signal.signal)
-    ~header ~main : t =
+    ~on_press_detail ~header ~main : t =
   let children =
     (match header with Some h -> [ h ] | None -> [])
     @ [ main ]
@@ -433,7 +451,7 @@ let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
        [ Prop.font_size "var(--lx-text-row)"; Prop.line_height "1.25rem" ]
        (column ~key ~gap:2 ~cross:`stretch ~padding_vertical:6
           ~padding_horizontal:12 ~corner_radius:8
-          ~data_attrs_signal ~background_signal children))
+          ~data_attrs_signal ~background_signal ~on_press_detail children))
 
 (* Breadcrumb header inside an item row — 32px left inset, small light
    type, single-line ellipsis. *)
@@ -483,8 +501,11 @@ let cmdk_info_text ~key children =
       "var(--lx-gray-11, var(--ls-secondary-text-color, hsl(var(--muted-foreground))))"
     children
 
-let cmdk_badge ~key ~value : t =
+let cmdk_badge ?(compact=false) ~key ~value () : t =
   text ~key ~as_:`Span
+    ?height:(if compact then Some 18 else None)
+    ?min_height:(if compact then Some 18 else None)
+    ?max_height:(if compact then Some 18 else None)
     ~font_size:"var(--lx-text-header)" ~font_weight:500 ~line_height:"1"
     ~white_space:"nowrap" ~padding_vertical:2 ~padding_horizontal:8 ~corner_radius:9999
     ~border_width:1
@@ -566,7 +587,7 @@ let keycap_separator ~key : t =
    the surviving stylesheet still paints the same chrome, so the typed
    props below carry identical values for the native host, not a
    second paint. *)
-let shortcut_combo ~key ~glow children : t =
+let shortcut_combo ~key ~glow ?(natural_height = false) children : t =
   with_props
     ([ ( Prop.background "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
      ; Prop.corner_radius 4
@@ -583,7 +604,7 @@ let shortcut_combo ~key ~glow children : t =
        ; ( Prop.border_color "var(--lx-gray-06-alpha, var(--rx-gray-06-alpha))" )
        ])
     (row ~key ~style_class:"shui-shortcut-combo" ~cross:`stretch
-       ~height:20 ~gap:0 children)
+       ?height:(if natural_height then None else Some 20) ~gap:0 children)
 
 (* Separate: transparent container; the glow lives on each boxed key,
    matching .shui-shortcut-separate.shui-shortcut-glow kbd (no container
@@ -678,9 +699,7 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
     (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28
        ~padding_vertical:4 ~padding_horizontal:12
        ~style_class:"cp__cmdk-hint"
-       ~foreground:
-         "var(--lx-gray-11, var(--ls-secondary-text-color, \
-          hsl(var(--muted-foreground))))"
+       ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
        [ row ~key:"inner" ~cross:`center ~gap:4 children ])
 
 (* -- cmdk misc -------------------------------------------------------- *)
@@ -720,7 +739,7 @@ let cmdk_empty ~key children : t =
    unresolved: documented leftover). The fade-in animation and the
    rotated arrow transform remain CSS deco rules; pointer-events stays
    off so the bubble never steals hover from its own trigger. *)
-let tooltip_content ~key ~at ~arrow_x ~above children : t =
+let tooltip_content ~key ~at ~arrow_x ~side children : t =
  fun ctx parent ->
   let viewport = Ui_services.viewport_width_signal
     ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
@@ -729,12 +748,17 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
       int_of_float (Float.max 0. (Float.min 320. (viewport -. 10.)))) viewport)
     (with_props
     [ Prop.z_index 50
+    ; Prop.position `fixed
+    ; Prop.inset_left (fst at)
+    ; Prop.inset_top (snd at)
+    ; Prop.font_size "0.75rem"
+    ; Prop.line_height "16px"
     ; Prop.pointer_enabled false
     ; ( Prop.shadow
           "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" )
     ]
-    (popover ~transition:popover_transition ~key ~accessibility_identifier:"lui-tooltip" ~at
+    (column ~key ~accessibility_identifier:"lui-tooltip"
        ~style_class:"ui__tooltip-content" ~gap:6
        ~data_attrs:[ "role", "tooltip" ]
        ~padding_horizontal:12 ~padding_vertical:6
@@ -747,10 +771,12 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
         ; with_props
             ([ Prop.position `absolute
              ; Prop.pointer_enabled false
-             ; Prop.inset_left arrow_x
              ]
-            @ if above then [ Prop.inset_bottom (-4.) ]
-              else [ Prop.inset_top (-4.) ])
+            @ match side with
+              | `above -> [Prop.inset_left arrow_x; Prop.inset_bottom (-4.)]
+              | `below -> [Prop.inset_left arrow_x; Prop.inset_top (-4.)]
+              | `left -> [Prop.inset_top arrow_x; Prop.inset_right (-4.)]
+              | `right -> [Prop.inset_top arrow_x; Prop.inset_left (-4.)])
             (box ~key:"arrow" ~style_class:"ui__tooltip-arrow" ~width:8
                ~height:8 ~border_width:1
                ~border_color:"hsl(var(--border))"
@@ -759,11 +785,6 @@ let tooltip_content ~key ~at ~arrow_x ~above children : t =
 
 let ls_tooltip_col ~key children : t =
   column ~key ~cross:`start ~gap:4 children
-
-let ls_tooltip_keys ~key children : t =
-  with_props [ Prop.opacity 0.8 ]
-    (row ~key ~cross:`center ~gap:1
-       children)
 
 (* -- settings & properties recipes (task 5) ----------------------------- *)
 
@@ -827,8 +848,11 @@ let form_desc ~key ~value : t =
    surface. Typed edge padding keeps text, caret, and pointer coordinates in
    the same content box on every host. Trailing controls remain in row flow. *)
 let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
-    ?pad_right ?background ?(borderless = false) ?(trailing = []) ?autofocus
-    ?clear_label ?on_clear ~placeholder ~text_signal:text ~on_text () : t =
+    ?pad_right ?background ?focus_background ?line_height ?(focus_shadow = "none") ?(borderless = false) ?(trailing = []) ?autofocus
+    ?clear_label ?on_clear ?on_appear ?on_focus_within ?input_opacity_signal ?input_identifier ~placeholder ~text_signal:text ~on_text () : t =
+  let input_opacity element = match input_opacity_signal with
+    | None -> element
+    | Some value -> Ui_parts.float_prop P.Opacity ~value_signal:value element in
   let background =
     match background, borderless with
     | None, true -> Some "transparent"
@@ -856,18 +880,21 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
   in
   with_props
     [ Prop.position `relative ]
-    (row ~key ~cross:`center ~gap:0 ~min_width:0
+    (row ~key ~cross:`center ~gap:0 ~min_width:0 ?on_appear ?on_focus_within
        ([
-          with_props
+          input_opacity (with_props
             ([ Prop.font_size font_size; Prop.padding_left pad_left ]
+            @ Option.to_list (Option.map Prop.line_height line_height)
+            @ Option.to_list (Option.map Prop.focus_within_background focus_background)
             @ Option.to_list (Option.map Prop.padding_right pad_right)
             @
-            if borderless then [ Prop.border_width 0; Prop.focus_shadow "none" ]
+            if borderless then [ Prop.border_width 0; Prop.focus_shadow focus_shadow ]
             else [])
             (search_field ~key:"in" ~grow:1. ~min_width:0 ~height ?background
                ?style_class:
                  (Option.map (fun _ -> "ls-search-with-clear") clear_label)
-               ~placeholder ?autofocus ~text_signal:text ~on_input []);
+               ?accessibility_identifier:input_identifier
+               ~placeholder ?autofocus ~text_signal:text ~on_input []));
           with_props
             [
               Prop.position `absolute;
@@ -968,7 +995,7 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
 (* `.bottom-property-pill` — 24px rounded chip (key + ":" + value):
    gray-03 fill, inset 1px ring, nowrap. The class stays as the
    native/web hook; visuals ride typed props. *)
-let property_pill ~key children : t =
+let property_pill ?(expanded = false) ~key children : t =
   with_props
     [ ( Prop.shadow "inset 0 0 0 1px var(--lx-gray-06, var(--ls-border-color))" )
     ; Prop.font_size "0.875rem"
@@ -976,8 +1003,10 @@ let property_pill ~key children : t =
     ; Prop.overflow `hidden
     ]
     (row ~key ~style_class:"bottom-property-pill"
-       ~cross:`center ~gap:4 ~height:24 ~padding_vertical:2
-       ~padding_horizontal:8 ~corner_radius:9999 ~min_width:0
+       ~cross:(if expanded then `start else `center) ~gap:4
+       ?height:(if expanded then None else Some 24)
+       ~shrink:(if expanded then 1. else 0.) ~padding_vertical:2
+       ~padding_horizontal:8 ~corner_radius:(if expanded then 8 else 9999) ~min_width:0
        ~background:
          "var(--lx-gray-03, var(--ls-secondary-background-color))"
        ~foreground:
@@ -1425,16 +1454,18 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                     ~on_pick:pick)
                 (Signal.value date) (Signal.value day_focused);
             ];
-          column ~padding_horizontal:12 ~gap:12
+          column ~padding_horizontal:12 ~gap:20
             ((if datetime then
               [row ~key:"calendar-time" ~cross:`center ~gap:8
-                [input ~kind:`time ~accessibility_identifier:"calendar-time-input"
-                   ~label:(translate "ui.calendar/time-label") ~height:32 ~width:112
+                [with_props [Prop.width_auto]
+                 (input ~kind:`time ~accessibility_identifier:"calendar-time-input"
+                   ~label:(translate "ui.calendar/time-label") ~height:32
                    ~padding_horizontal:12 ~padding_vertical:0 ~submit_on_blur:true
                    ~text:(reactive Fun.id (Signal.value time))
                    ~on_input:(function P.TextChanged (_,value) -> Signal.set time value | _ -> ())
-                   ~on_submit:(fun _ -> commit_time ()) [];
-                 button ~variant:`ghost ~size:`sm ~grow:1. ~height:32 ~padding:0
+                   ~on_submit:(fun _ -> commit_time ()) []);
+                 button ~variant:`ghost ~size:`sm ~height:28
+                   ~padding_horizontal:12 ~padding_vertical:4
                    ~foreground:"hsl(var(--muted-foreground))"
                    ~text:(translate "ui/use-current-time")
                    ~accessibility_identifier:"calendar-current-time"

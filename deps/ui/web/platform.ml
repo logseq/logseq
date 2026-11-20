@@ -208,7 +208,29 @@ external add_window_listener : string -> (Js.Json.t -> unit) -> unit
 external remove_window_listener : string -> (Js.Json.t -> unit) -> unit
   = "removeEventListener" [@@mel.scope "window"]
 
-external open_url : string -> unit = "open" [@@mel.scope "window"]
+external browser_open_url : string -> unit = "open" [@@mel.scope "window"]
+external browser_window : Js.Json.t = "window"
+external window_apis : Js.Json.t -> Js.Json.t option = "apis"
+  [@@mel.get] [@@mel.return nullable]
+external api_open_path : Js.Json.t -> string -> unit Js.Promise.t = "openPath"
+  [@@mel.send]
+external api_do_action : Js.Json.t -> Js.Json.t = "doAction" [@@mel.get]
+
+let electron_apis () =
+  match window_apis browser_window with
+  | Some apis when Js.typeof (api_do_action apis) = "function" -> Some apis
+  | _ -> None
+
+let is_file_url s =
+  String.length s >= 5 && String.lowercase_ascii (String.sub s 0 5) = "file:"
+
+let open_url url =
+  match electron_apis () with
+  | Some apis when is_file_url url ->
+      ignore (api_open_path apis url |> Js.Promise.catch (fun _ ->
+        Ui_services.log_error ("open-path failed", url);
+        Js.Promise.resolve ()))
+  | _ -> browser_open_url url
 
 external qs_all_arr : string -> Js.Json.t array = "querySelectorAll"
   [@@mel.scope "document"]
@@ -237,11 +259,89 @@ external clipboard_write_text : string -> unit Js.Promise.t = "writeText"
 external clipboard_read_text : unit -> string Js.Promise.t = "readText"
   [@@mel.scope ("navigator", "clipboard")]
 
+type clipboard_item
+
+external clipboard_item_constructor : clipboard_item Js.Undefined.t = "ClipboardItem"
+  [@@mel.scope "globalThis"]
+external clipboard_item : Webapi.Blob.t Js.Promise.t Js.Dict.t -> clipboard_item
+  = "ClipboardItem" [@@mel.new]
+external supports_custom_format : string -> bool = "supports"
+  [@@mel.scope "ClipboardItem"]
+external has_supports : (string -> bool) Js.Undefined.t = "supports"
+  [@@mel.scope "ClipboardItem"]
+external clipboard_write : clipboard_item array -> unit Js.Promise.t = "write"
+  [@@mel.scope ("navigator", "clipboard")]
+external clipboard_read : unit -> clipboard_item array Js.Promise.t = "read"
+  [@@mel.scope ("navigator", "clipboard")]
+external clipboard_types : clipboard_item -> string array = "types" [@@mel.get]
+external clipboard_get_type : clipboard_item -> string -> Webapi.Blob.t Js.Promise.t
+  = "getType" [@@mel.send]
+external clipboard_blob : string array -> string Js.Dict.t -> Webapi.Blob.t
+  = "Blob" [@@mel.new]
+external clipboard_blob_text : Webapi.Blob.t -> string Js.Promise.t = "text" [@@mel.send]
+
+let logseq_mime = "application/logseq"
+let web_logseq_mime = "web " ^ logseq_mime
+let has_clipboard_item () = Option.is_some (Js.Undefined.toOption clipboard_item_constructor)
+let supports_logseq_clipboard () =
+  has_clipboard_item () && Option.is_some (Js.Undefined.toOption has_supports)
+  && supports_custom_format web_logseq_mime
+
+let clipboard_write_blocks (data : Ui_services.block_clipboard Js.Promise.t) =
+  if not (has_clipboard_item ()) then
+    let* content = data in
+    clipboard_write_text content.text
+  else
+    let item = Js.Dict.empty () in
+    let put key mime get =
+      let options = Js.Dict.fromList ["type", mime] in
+      Js.Dict.set item key
+        (let* content = data in
+         Js.Promise.resolve (clipboard_blob [|get content|] options))
+    in
+    put "text/plain" "text/plain" (fun content -> content.text);
+    put "text/html" "text/html" (fun content -> content.html);
+    if supports_logseq_clipboard () then
+      put web_logseq_mime logseq_mime (fun content -> content.logseq);
+    clipboard_write [|clipboard_item item|]
+
+let clipboard_read_blocks () =
+  let* items = clipboard_read () in
+  match Array.find_opt
+          (fun item -> Array.exists ((=) web_logseq_mime) (clipboard_types item))
+          items with
+  | None -> Js.Promise.resolve None
+  | Some item ->
+      let* blob = clipboard_get_type item web_logseq_mime in
+      let* content = clipboard_blob_text blob in
+      Js.Promise.resolve (Some content)
+
 let copy_to_clipboard s = ignore (clipboard_write_text s)
 
 external decode_uri : string -> string = "decodeURIComponent"
 
 external encode_uri_component : string -> string = "encodeURIComponent"
+
+external new_url : string -> Js.Json.t = "URL" [@@mel.new]
+external url_host : Js.Json.t -> string = "host" [@@mel.get]
+external url_pathname : Js.Json.t -> string = "pathname" [@@mel.get]
+external url_search : Js.Json.t -> string = "search" [@@mel.get]
+external url_hash : Js.Json.t -> string = "hash" [@@mel.get]
+
+let file_url_to_assets_url src =
+  if not (is_file_url src) then None
+  else try
+    let url = new_url src in
+    Some ("assets://localhost/logseq__file/"
+      ^ encode_uri_component ("file://" ^ url_host url ^ url_pathname url)
+      ^ url_search url ^ url_hash url)
+  with _ -> None
+
+let media_url src =
+  match electron_apis () with
+  | Some _ ->
+      Option.value (file_url_to_assets_url src) ~default:src
+  | _ -> src
 (* Import UTF-8 byte data, such as Dicts_gen.en. UI source literals use
    {js|...|js}; DOM and worker text must never pass through this decoder. *)
 let decode_utf8_bytes : string -> string =

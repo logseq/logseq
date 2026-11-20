@@ -332,7 +332,8 @@ let build_property_values_tx_m ?(pure = false) ?(pvalue_map = false)
   let gen_uuid_value_prefix : string option =
     if pure then
       match Block_map.attr_value block "db/ident" with
-      | Some (Keyword i) | Some (String i) -> Some i
+      | Some (Keyword i) -> Some (":" ^ i)
+      | Some (String i) -> Some i
       | _ -> Block_map.uuid_attr block "block/uuid"
     else None
   in

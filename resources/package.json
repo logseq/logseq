@@ -64,6 +64,10 @@
       "electron",
       "electron-winstaller",
       "keytar"
-    ]
+    ],
+    "overrides": {
+      "@electron/universal@2.0.3>minimatch": "11.0.1",
+      "app-builder-lib@26.17.0>minimatch": "11.0.1"
+    }
   }
 }

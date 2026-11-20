@@ -293,6 +293,18 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
     ~anchor_alignment:(if with_app_items then `end_ else `center)
     ~anchor_offset:0. ~anchor_alignment_offset:(if with_app_items then -33. else 0.)
     ~role:`menu ~width:(if with_app_items then 256 else 280)
+    ~on_appear:(fun _ ->
+      if with_app_items then
+        (if not (Editor_keys.page_menu_navigated ()) then
+         match List.rev (Editor_keys.page_menu_items
+          ".ls-dots-menu [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])") with
+         | target :: _ -> target.Ui_services.focus ()
+         | [] -> ())
+      else
+        Option.iter (fun menu ->
+          menu.Ui_services.set_attr "tabindex" "-1";
+          menu.Ui_services.focus ())
+          (Ui_services.dom_query ".ls-context-menu-content"))
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> Runtime.send (Action.Page_menu_set None))
     ~style_class:

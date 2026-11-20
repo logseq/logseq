@@ -66,7 +66,7 @@ let dispatch kind payload =
   | "notification" -> (
       match Decode.toast_of_wire payload with
       | Some t ->
-          Toast.show ?key:t.Model.toast_key ~kind:t.toast_kind t.toast_text
+          Toast.show ?key:t.Model.toast_key ?duration:t.toast_duration ~kind:t.toast_kind t.toast_text
       | None -> ())
   | "sync-db-changes" -> Subs.on_db_changes payload
   | "rtc-sync-state" -> (

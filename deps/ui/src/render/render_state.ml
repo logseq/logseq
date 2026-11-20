@@ -17,19 +17,11 @@ let with_repo f =
                | None -> ())
            | _ -> ()))
 
-(* {{embed [[page]]}} live block-tree renderer. Registered by the blocks
-   layer (tree.ml init) — render_inline cannot import that layer. The
-   default degrades to the page-name link (pre-init/defensive). *)
-let page_embed : (string -> Lui_elements.t) ref =
-  ref
-    (fun name ->
-      Logseq_el.el ~tag:"a" ~style_class:"page-ref"
-        ~attrs:[ ("data-ref", name) ] ~text:name [])
-
 (* Read-only block row for view list bodies (cljs block-container).
    Registered by tree.ml — views_table cannot import the blocks layer
    (cycle via comments -> render -> views). *)
 let block_row_static :
-    (collapse_scope:string -> persist_collapse:bool -> Model.block -> Lui_elements.t) ref
-    = ref (fun ~collapse_scope:_ ~persist_collapse:_ _ ->
+    (?highlight:string -> collapse_scope:string -> persist_collapse:bool ->
+     Model.block -> Lui_elements.t) ref
+    = ref (fun ?highlight:_ ~collapse_scope:_ ~persist_collapse:_ _ ->
         Logseq_el.el ~tag:"div" ~style_class:"ls-block" [])

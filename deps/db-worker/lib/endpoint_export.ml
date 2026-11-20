@@ -12,6 +12,7 @@
      thread-api/export-client-ops-db-binary
      thread-api/import-db-binary
      thread-api/export-edn
+     thread-api/validate-export
      thread-api/import-edn
      thread-api/build-publishing-html    (via Publishing_html/Publishing_db)
    init () wiring: Worker_core.init touches
@@ -265,6 +266,12 @@ let export_edn_endpoint args =
          [ Wire.keyword "export-edn-error", Wire.String (Printexc.to_string e) ])
 
 let () = Dispatcher.register "thread-api/export-edn" export_edn_endpoint
+
+let () = Dispatcher.register "thread-api/validate-export" (fun args ->
+  let validation = Sqlite_export.validate_export (value_arg args 0) in
+  Db_worker_effect.pure (Wire.Map (match validation.error with
+    | None -> []
+    | Some error -> [Wire.keyword "error", Wire.String error])))
 
 (* :thread-api/import-edn [repo export-edn] *)
 let import_edn_endpoint args =

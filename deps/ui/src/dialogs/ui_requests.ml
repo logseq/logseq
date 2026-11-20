@@ -75,17 +75,17 @@ let submit r two warn pw1 pw2 =
 
 (* cljs shui/toggle-password: the eye button toggles the field between
    password and text once it has content *)
-let pw_input ctx ~key ~placeholder ~autofocus ~value ~on_enter =
+let pw_input ?height ?label ctx ~key ~placeholder ~autofocus ~value ~on_enter =
   let visible = Signal.state ctx.Lui_ui.ui_scheduler false in
   let field =
     (* the kind itself switches (secure_field <-> text_field), so this
        branch is structural — a reactive prop can't express it *)
     reactive
       (fun vis ->
-        let ctor = if vis then text_field else secure_field in
+        let ctor = if vis then Ui_components.text_field else Ui_components.secure_field in
         ctor ~key:(key ^ "-i")
           ~style_class:"form-input"
-          ~placeholder ~autofocus
+          ?height ?label ~placeholder ~autofocus
           ~text_signal:(Signal.value value)
           ~on_input:(fun ev -> Signal.set value (text_of ev))
           ~on_submit:(fun _ -> on_enter ())

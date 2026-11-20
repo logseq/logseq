@@ -1903,6 +1903,40 @@ let test_linked_references_no_crash_missing_ident () =
   check "count is int" (view_count result >= 0);
   check "bar in data" (List.mem bar_id (data_ids result))
 
+let test_reference_filter_frequency_order () =
+  let conn = create_conn_with_blocks ~pages_and_blocks:
+    (List.map (fun name ->
+       {page = {default_page with pg_title = Some name};
+        blocks = if name = "Ref A" || name = "Ref B" then
+          [{default_block with b_title = Some "Reference"}] else []})
+       ["Target"; "Ref A"; "Ref B"; "Zebra"; "Alpha"]) () in
+  let db = db_of conn in
+  let target = eid_of_title db "Target" in
+  let blocks = List.map (fun page ->
+    let page_id = eid_of_title db page in
+    let id = List.hd (Ldb.get_block_children_ids db page_id) in
+    Option.get (Ldb.ent_of_id db id)) ["Ref A"; "Ref B"] in
+  List.iter2 (fun (block : entity) tag ->
+    transact_maps conn [op_db_add (Int64 block.id) "block/refs" (Int64 target);
+      op_db_add (Int64 block.id) "block/refs" (Int64 (eid_of_title db tag))])
+    blocks ["Zebra"; "Alpha"];
+  let db = db_of conn in
+  let blocks = List.map (fun (block : entity) -> Option.get (Ldb.ent_of_id db block.id)) blocks in
+  let expected = ["Ref A",1; "Ref B",1; "Zebra",1; "Alpha",1] in
+  let relevant = List.filter (fun (title, _) -> List.mem_assoc title expected) in
+  let counts = Db_view.get_ref_pages_count db target blocks [] |> Option.get
+    |> List.map (fun (title, n) -> Option.get title, n) in
+  check "View counts retain first-reference ties, not alphabetic order"
+    (relevant counts = expected);
+  check "Reference API retains the same tied counts"
+    (relevant (Db_reference.get_ref_pages_count db target blocks []) = expected);
+  check "View counts are descending"
+    (counts = List.stable_sort (fun (_, a) (_, b) -> compare b a) counts);
+  check "Empty references keep the nil view count result"
+    (Db_view.get_ref_pages_count db target [] [] = None);
+  check "Empty reference API counts stay empty"
+    (Db_reference.get_ref_pages_count db target [] [] = [])
+
 let test_groups_page_level_linked_references () =
   let conn =
     create_conn_with_blocks
@@ -1985,7 +2019,21 @@ let test_linked_references_row_limit_keeps_total () =
          ; "row-limit", Wire.Int 1 ])
   in
   check "row-limit keeps the index total" (view_count result = 2);
-  check "row-limit returns one group" (List.length (data_wire result) = 1)
+  check "row-limit returns one group" (List.length (data_wire result) = 1);
+  let check_filter ident value =
+    ignore (Datascript.transact_conn conn [Add (Entity_id target_id, ident, Ref value)]);
+    check "Reference filter is stored on the owner"
+      (Db_view.get_filters (Option.get (Ldb.ent_of_id (db_of conn) target_id)) <> None);
+    let filtered limit =
+      Db_view.get_view_data (db_of conn) (Some view_id)
+        (opts (["view-feature-type", kw "linked-references";
+                "view-for-id", Wire.Int target_id] @ limit)) in
+    let full = filtered [] in
+    let window = filtered ["row-limit", Wire.Int 1] in
+    check "Reference filters keep the same total with and without a row limit"
+      (view_count window = view_count full)
+  in
+  check_filter "logseq.property.linked-references/includes" a
 
 let test_class_objects_ref_filter_fast_path () =
   let conn =
@@ -2365,6 +2413,8 @@ let () =
         ; Alcotest.test_case
             "get-view-data-linked-references-page-view-does-not-crash-on-missing-db-ident-test"
             `Quick test_linked_references_no_crash_missing_ident
+        ; Alcotest.test_case "reference-filter-frequency-order" `Quick
+            test_reference_filter_frequency_order
         ; Alcotest.test_case
             "get-view-data-groups-page-level-linked-references-under-the-referring-page-test"
             `Quick test_groups_page_level_linked_references

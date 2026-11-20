@@ -6,7 +6,7 @@
    The LUI `tooltip` kind can't serve this: it anchors to its own
    parent trigger child, while this service tooltips arbitrary
    foreign elements found by delegated document listeners. So the
-   bubble mounts as a singleton `popover` node emitted from
+   bubble mounts as a singleton fixed column emitted from
    popups_view's fragment, driven by the state signal below; placement
    is the old arithmetic — mount under the trigger, measure the
    rendered bubble, then clamp to the viewport and flip above when
@@ -17,17 +17,18 @@ open Lui_elements
 type tip = {
   tip_label : string;
   tip_keys : string;
+  tip_binding : string option;
   tip_x : float; (* bubble left, viewport coords *)
   tip_y : float; (* bubble top *)
   tip_arrow_x : float; (* arrow left offset inside the bubble *)
-  tip_above : bool; (* bubble sits above the trigger *)
+  tip_side : Lui_elements.anchor;
 }
 
 let state : tip option Signal.state option ref = ref None
 let armed_on : Ui_services.el option ref = ref None
 let timer = ref (-1)
 let generation = ref 0
-let delay_ms = 500
+let delay_ms = 600
 let installed = ref false
 
 (* Inspect retained layer ownership on both hosts; tooltip surfaces and
@@ -132,6 +133,7 @@ let show_for (trig : Ui_services.el) =
       let keys =
         Option.value (trig.Ui_services.attr "data-tooltip-keys") ~default:""
       in
+      let binding = trig.Ui_services.attr "data-tooltip-binding" in
       let rec mount measure_attempts =
         if !layer_blocks_tip () || not (trig.Ui_services.connected ()) then hide ()
         else
@@ -149,10 +151,11 @@ let show_for (trig : Ui_services.el) =
                  {
                    tip_label = label;
                    tip_keys = keys;
+                   tip_binding = binding;
                    tip_x = trig_cx;
                    tip_y = trig_bottom;
                    tip_arrow_x = 0.;
-                   tip_above = false;
+                   tip_side = `below;
                  });
             let rec place tries =
               if !layer_blocks_tip () || not (trig.Ui_services.connected ()) || label_for trig <> Some label
@@ -181,19 +184,36 @@ let show_for (trig : Ui_services.el) =
                         Ui_services.dom_viewport_height () -. trig_bottom -. h
                         < 8.
                       in
+                      let side = match trig.Ui_services.attr "data-tooltip-side" with
+                        | Some "right" ->
+                            if tx +. tw +. w <= Ui_services.dom_viewport_width () -. 5.
+                            then `right else `left
+                        | Some "left" -> if tx -. w >= 5. then `left else `right
+                        | _ -> if above then `above else `below in
+                      let horizontal = side = `left || side = `right in
+                      let x = if horizontal then
+                          Float.max 5. (Float.min
+                            (if side = `left then tx -. w else tx +. tw)
+                            (Ui_services.dom_viewport_width () -. w -. 5.))
+                        else x in
+                      let y = Float.max 5. (Float.min
+                        (if horizontal then ty +. ((th -. h) /. 2.)
+                         else if above then ty -. h else trig_bottom)
+                        (Ui_services.dom_viewport_height () -. h -. 5.)) in
                       set_tip
                         (Some
                            {
                              tip_label = label;
                              tip_keys = keys;
+                             tip_binding = binding;
                              tip_x = x;
-                             tip_y = Float.max 5.
-                               (Float.min
-                                  (if above then ty -. h else trig_bottom)
-                                  (Ui_services.dom_viewport_height () -. h -. 5.));
+                             tip_y = y;
                              tip_arrow_x = Float.max 4.
-                               (Float.min (trig_cx -. x -. 4.) (w -. 12.));
-                             tip_above = above;
+                               (Float.min
+                                 (if horizontal then ty +. (th /. 2.) -. y -. 4.
+                                  else trig_cx -. x -. 4.)
+                                 ((if horizontal then h else w) -. 12.));
+                             tip_side = side;
                            })
             in
             schedule 16 (fun () -> place 8)
@@ -206,26 +226,47 @@ let show_for (trig : Ui_services.el) =
    .flex.flex-col.items-start.gap-1 column; the arrow is a rotated
    square half-overlapping the bubble edge, centred on the trigger *)
 let tip_view (tip : tip) : t =
-  let keys_cells =
-    tip.tip_keys |> String.split_on_char ' '
-    |> List.filter (fun k -> k <> "")
-    |> List.mapi (fun i k ->
-        Ui_components.keycap
-          ~key:("k" ^ string_of_int i)
-          ~boxed:false ~glow:false ~min_slot:20 ~value:k)
+  let words value = String.split_on_char ' ' value |> List.filter ((<>) "") in
+  let groups = match tip.tip_binding with
+    | Some binding -> words binding |> List.map (fun stroke ->
+        String.contains stroke '+', Keymap_record.keycaps stroke)
+    | None -> words tip.tip_keys |> List.map (fun key -> false, [key]) in
+  let keycap ~boxed key value =
+    Ui_components.keycap ~key ~boxed ~glow:false ~min_slot:20 ~value in
+  let combo key keys =
+    Ui_components.shortcut_combo ~key ~glow:false ~natural_height:true
+      (List.mapi (fun index value ->
+        (if index = 0 then [] else [Ui_components.keycap_separator
+          ~key:("separator-" ^ string_of_int index)])
+        @ [keycap ~boxed:false ("key-" ^ string_of_int index) value]) keys
+       |> List.concat) in
+  let shortcut = match groups with
+    | [true, keys] -> combo "keys" keys
+    | groups when List.for_all (fun (combo, _) -> not combo) groups ->
+        Ui_components.shortcut_separate ~key:"keys" ~glow:false
+          (List.concat_map snd groups |> List.mapi (fun index value ->
+            keycap ~boxed:true ("key-" ^ string_of_int index) value))
+    | groups ->
+        Ui_components.shortcut_chord ~key:"keys"
+          (List.mapi (fun index (_, keys) ->
+            (if index = 0 then [] else [Ui_components.chord_separator
+              ~key:("then-" ^ string_of_int index)])
+            @ [combo ("group-" ^ string_of_int index) keys]) groups
+           |> List.concat)
+  in
+  let label =
+    Ui_components.with_props
+      (if groups <> [] || tip.tip_binding <> None
+       then [Ui_components.Prop.opacity 0.8] else [])
+      (text ~key:"lbl" ~font_size:"12px" ~line_height:"16px" ~value:tip.tip_label [])
   in
   let body =
-    match keys_cells with
-    | [] -> text ~key:"lbl" ~value:tip.tip_label []
-    | cells ->
-        Ui_components.ls_tooltip_col ~key:"col"
-          [
-            text ~key:"lbl" ~value:tip.tip_label [];
-            Ui_components.ls_tooltip_keys ~key:"keys" cells;
-          ]
+    match groups with
+    | [] -> label
+    | _ -> Ui_components.ls_tooltip_col ~key:"col" [label; shortcut]
   in
   Ui_components.tooltip_content ~key:"lui-tip" ~at:(tip.tip_x, tip.tip_y)
-    ~arrow_x:tip.tip_arrow_x ~above:tip.tip_above [ body ]
+    ~arrow_x:tip.tip_arrow_x ~side:tip.tip_side [ body ]
 
 (* singleton bubble — one tip at a time, so the reactive can emit the
    popover directly under popups_view's fragment *)

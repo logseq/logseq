@@ -190,10 +190,11 @@ let rec clause_of_wire (w : W.t) : clause option =
   | _ -> None
 
 let tree_of_src (src : string) : clause =
-  let t = String.trim src in
-  if t = "" then COp ("and", [])
-  else try
-    match clause_of_wire (read_source t) with
+  match Views_query.parse_src_result src with
+  | Ok Views_query.QBlank -> COp ("and", [])
+  | Error _ | Ok (Views_query.QDatalog _) -> CInvalid src
+  | Ok (Views_query.QDsl source) -> try
+    match clause_of_wire (read_source source) with
     | Some (COp _ as op) -> op
     | Some c -> COp ("and", [ c ])
     | None -> CInvalid src
@@ -507,24 +508,53 @@ let tag_picker inst ~tree ~loc ~anchor =
            ()))
 
 let between_picker inst ~tree ~loc ~anchor =
-  let pick label on_pick =
-    if inst.active () then
-      ignore (P.show_custom ~anchor ~cls:"query-builder-picker"
-        (column ~padding:8 ~gap:8
-          [ text ~value:label []
-          ; Ui_components.date_picker
-              ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
-              ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
-              ~translate:I.t
-              ~on_pick:(fun ms ->
-                P.close_top ();
-                if inst.active () then on_pick (Dates.journal_title_of ms)) ]))
-  in
-  pick (I.t "query.builder/between-start-label") (fun start ->
-    pick (I.t "query.builder/between-end-label") (fun finish ->
-      let arg title = { a_dsl = "[[" ^ title ^ "]]"; a_disp = title } in
-      tree := append_at !tree loc (CItem ("between", [ arg start; arg finish ]));
-      commit inst ~tree ()))
+  if inst.active () then
+    ignore (P.show_custom ~anchor ~cls:"query-builder-picker"
+      (fun context parent ->
+        let start = Signal.state context.Lui_ui.ui_scheduler None
+        and finish = Signal.state context.Lui_ui.ui_scheduler None in
+        let picking = Signal.state context.Lui_ui.ui_scheduler None in
+        let close_calendar () = Signal.set picking None; Runtime.flush () in
+        let field first label value =
+          let key = if first then "start" else "end" in
+          let id = inst.key ^ "-between-" ^ key in
+          Ui_components.button ~variant:`secondary ~size:`sm
+            ~accessibility_identifier:id
+            ~text:(reactive (fun date -> Option.value date ~default:label) (Signal.value value))
+            ~on_press:(fun _ ->
+              if inst.active () then
+                begin Signal.set picking (Some first); Runtime.flush () end) []
+        in
+        column ~padding:16 ~gap:8
+          [row ~cross:`center ~gap:8
+            [field true (I.t "query.builder/between-start-label") start;
+             text ~value:"~" [];
+             field false (I.t "query.builder/between-end-label") finish];
+           Ui_components.button ~variant:`primary ~text:(I.t "ui/submit")
+             ~on_press:(fun _ ->
+               match Signal.get_state start, Signal.get_state finish with
+               | Some start, Some finish when inst.active () ->
+                   let arg title = { a_dsl = "[[" ^ title ^ "]]"; a_disp = title } in
+                   tree := append_at !tree loc (CItem ("between", [arg start;arg finish]));
+                   P.close_all ();
+                   commit inst ~tree ()
+               | _ -> ()) [];
+           reactive (function
+             | None -> spacer ~height:0 []
+             | Some first ->
+                 let value = if first then start else finish in
+                 let id = inst.key ^ "-between-" ^ (if first then "start" else "end") in
+                 P.anchored_popover ~key:(id ^ "-calendar") ~id:(id ^ "-calendar")
+                   ~anchor:(P.Target id) ~align_end:false ~cls:"query-builder-picker" ~card:true
+                   ~on_dismiss:(fun _ -> close_calendar ())
+                   [Ui_components.date_picker
+                     ~week_starts_on:(Sdk_config.calendar_week_starts_on ())
+                     ~month_label:I.calendar_month_label ~day_label:I.calendar_day_label
+                     ~translate:I.t
+                     ~on_pick:(fun ms ->
+                       if inst.active () then
+                         Signal.set value (Some (Dates.journal_title_of ms));
+                       close_calendar ())]) (Signal.value picking)] context parent))
 
 let full_text_picker inst ~tree ~loc ~anchor =
   ignore
@@ -673,23 +703,36 @@ let clause_id inst loc = "qbc-" ^ inst.key ^ "-" ^ loc_key loc
 let op_id inst loc = "qbo-" ^ inst.key ^ "-" ^ loc_key loc
 let add_id inst loc = "qba-" ^ inst.key ^ "-" ^ loc_key loc
 
+let clause_bracket ~key value =
+  Ui_components.with_props
+    [Ui_components.Prop.font_weight 700; Ui_components.Prop.opacity 0.5]
+    (text ~key ~value [])
+
 let rec clause_el inst ~tree ~loc (c : clause) : t =
   match c with
   | COp (op, xs) ->
-      box ~key:("qc-" ^ loc_key loc)
-        [ row ~key:"oc" ~cross:`center
-            [ text ~key:"bl" ~value:"(" []
+      box ~key:("qc-" ^ loc_key loc) ~min_width:0
+        [ row ~key:"oc" ~cross:`center ~min_width:0
+            [ clause_bracket ~key:"bl" "("
             ; clauses_group inst ~tree ~loc:(loc @ [ 0 ]) ~kind:op ~clauses:xs
-            ; text ~key:"br" ~value:")" []
+            ; clause_bracket ~key:"br" ")"
             ]
         ]
   | _ ->
       let id = clause_id inst loc in
-      box ~key:("qc-" ^ loc_key loc)
-        [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center
-            ~border_width:1 ~corner_radius:4
-           
-            [ Ui_components.button ~variant:`ghost ~size:`sm ~height:24
+      box ~key:("qc-" ^ loc_key loc) ~min_width:0
+        [ row ~key:"btn" ~gap:8 ~padding_horizontal:4 ~cross:`center ~min_width:0
+            ~border_width:1 ~border_color:"var(--ls-border-color)"
+            ~corner_radius:4 ~min_height:22
+            [ Ui_components.with_props
+                [ Ui_components.Prop.hover_background "transparent"
+                ; Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color)"
+                ; Ui_components.Prop.font_weight 400
+                ; Ui_components.Prop.white_space `normal
+                ; Ui_components.Prop.height_auto ] @@
+              Ui_components.button ~variant:`ghost ~size:`sm ~height:20
+                ~foreground:"var(--ls-primary-text-color)"
+                ~padding_horizontal:0 ~padding_vertical:0 ~corner_radius:0
                 ~key:"a" ~accessibility_identifier:id ~disabled:inst.disabled
                 ~style_class:"query-clause" ~text:(clause_label inst c)
                 ~label:(clause_label inst c)
@@ -704,7 +747,14 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
 
 and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
-  Ui_components.button ~variant:`ghost ~size:`sm ~height:24
+  Ui_components.with_props
+    [ Ui_components.Prop.font_weight 400
+    ; Ui_components.Prop.hover_background "transparent"
+    ; Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color)"
+    ; Ui_components.Prop.height_auto ]
+  (Ui_components.button ~variant:`ghost ~size:`sm
+    ~foreground:"var(--ls-primary-text-color)"
+    ~padding_horizontal:0 ~padding_vertical:0
     ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id ~disabled:inst.disabled
     ~style_class:"query-clause"
     ~text:(String.uppercase_ascii kind) ~label:(String.uppercase_ascii kind)
@@ -712,13 +762,14 @@ and op_label_el inst ~tree ~loc kind : t =
       match Ui_services.dom_by_id id with
       | Some anchor -> clause_popup inst ~tree ~loc ~anchor ~is_op_clause:true
       | None -> ())
-    []
+    [])
 
 and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
-  Ui_components.button ~variant:`ghost ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
+  Ui_components.button ~variant:`outline ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
     ~disabled:inst.disabled
-    ~icon:(`app "plus") ~size:`sm ~height:24 ~foreground:"muted-foreground"
+    ~icon:(`app "plus") ~size:`sm ~height:24 ~padding_horizontal:4
+    ~foreground:"muted-foreground"
     ~label:(I.t "view.filter/filter")
     ?text:(if with_label then Some (I.t "view.filter/filter") else None)
     ~min_width:0
@@ -731,19 +782,20 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
 
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in
-  Ui_components.with_props [ Ui_components.Prop.flex_wrap `wrap ]
-  (row ~key:("qg-" ^ loc_key loc) ~gap:4 ~cross:`center
+  Ui_components.with_props
+    [ Ui_components.Prop.flex_wrap `wrap
+    ; Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.line_height "1.25rem" ]
+  (row ~key:("qg-" ^ loc_key loc) ~gap:4 ~cross:`center ~min_width:0
     ( (if parens then
-         [ text ~key:"pl" ~value:"(" [] ]
+         [ clause_bracket ~key:"pl" "(" ]
        else [])
     @ (if not (loc = [ 0 ] && kind = "and" && List.length clauses <= 1) then
-         [ box ~key:"opl"
-             [ op_label_el inst ~tree ~loc kind ]
-         ]
+         [ op_label_el inst ~tree ~loc kind ]
        else [])
     @ List.mapi (fun i c -> clause_el inst ~tree ~loc:(loc @ [ i + 1 ]) c) clauses
     @ (if parens then
-         [ text ~key:"pr" ~value:")" [] ]
+         [ clause_bracket ~key:"pr" ")" ]
        else [])
     @ (if loc <> [ 0 ] then
          [ add_filter_btn inst ~tree ~loc ~with_label:false ]
@@ -757,7 +809,7 @@ let editor_el inst ~tree : t =
         ; text ~value:message [] ]
   | _ ->
   column ~style_class:"cp__query-builder"
-    [ row ~key:"f" ~gap:4 ~cross:`center ~flex_wrap:`wrap
+    [ row ~key:"f" ~gap:4 ~cross:`start ~flex_wrap:`wrap
         ( (match !tree with
            | COp ("and", []) -> []
            | t ->
@@ -790,10 +842,10 @@ let editor_of_inst inst ~active =
         Views_query.save_src ~after:(fun () -> refresh inst) inst qsrc)
     }
 
-let builder_el inst ~tree : t = fun context ->
+let builder_el inst ~tree ~active : t =
   editor_el
-    (editor_of_inst inst ~active:(fun () -> not (Signal.scope_is_disposed context.Lui_ui.ui_scope)))
-    ~tree context
+    (editor_of_inst inst ~active)
+    ~tree
 
 (* per-inst clause trees, re-parsed when the query source changed *)
 let trees : (int, clause ref * string) Hashtbl.t = Hashtbl.create 8

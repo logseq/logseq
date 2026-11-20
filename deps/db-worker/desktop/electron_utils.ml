@@ -459,6 +459,26 @@ let get_graph_dir (graph_name : string) : string option =
 let decode_protected_assets_schema_path (schema_path : string) : string =
   Common_util.str_replace_all schema_path "/logseq__colon/" ":/"
 
+external file_url_to_path : string -> string = "fileURLToPath" [@@mel.module "url"]
+
+let resolve_asset_path ~win32 url =
+  let length = List.fold_left (fun n c ->
+    match String.index_opt url c with Some i -> min n i | None -> n)
+    (String.length url) ['?'; '#'] in
+  let resource = String.sub url 0 length in
+  let prefix = Common_config.local_file_asset_prefix ^ "/" in
+  if Common_util.str_starts_with resource prefix then
+    try
+      let encoded = String.sub resource (String.length prefix)
+        (String.length resource - String.length prefix) in
+      Ok (file_url_to_path (Js.Global.decodeURIComponent encoded))
+    with _ -> Error (-6)
+  else
+    let path = resource |> decode_protected_assets_schema_path
+      |> fun s -> Common_util.str_replace_all s "assets://" ""
+      |> Js.Global.decodeURIComponent in
+    Ok (if win32 && not (Common_util.str_starts_with path "/") then "//" ^ path else path)
+
 let normalize = Unicode.nfc
 let normalize_lc s = normalize (Unicode.lowercase s)
 let safe_decode_uri_component = Common_util.safe_decode_uri_component

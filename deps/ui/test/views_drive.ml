@@ -50,6 +50,9 @@ let query_block_ent uuid : W.t =
     [ kw "block/uuid", W.Uuid uuid
     ; kw "db/id", W.Int 90
     ; kw "block/title", W.String ""
+    ; kw "logseq.property.view/type", kw
+        (if flag_view uuid "query-list" then "logseq.property.view/type.list"
+         else "logseq.property.view/type.table")
     ; kw "logseq.property/query", W.Map [ kw "block/uuid", W.Uuid vbu ]
     ; ( kw "block/children"
       , W.Array
@@ -203,6 +206,12 @@ let slot_value (rk : W.t) : W.t option =
   | W.Array (W.Keyword "views" :: _ :: _) ->
       Some
         (W.Array (List.map (fun (u, _, _) -> W.Uuid u) !views_list))
+  | W.Array [W.Keyword "view-data";W.Uuid vu;ctx] when flag_view vu "windowed-refs" ->
+      let rows = Hashtbl.find view_rows vu in
+      let limit = Option.get (W.map_get_int ctx "initial-row-count") in
+      Some (W.Map [kw "count",W.Int (List.length rows);
+        kw "rows",W.Array (List.filteri (fun i _ -> i<limit) rows |> List.map (fun (u,_) -> W.Uuid u));
+        kw "properties",W.Array [kw "block/title"]])
   | W.Array (W.Keyword "view-data" :: W.Uuid vu :: _) ->
       Some (view_data_value vu)
   | W.Array (W.Keyword "query" :: spec :: _) -> Some (query_value spec)
@@ -247,6 +256,12 @@ let scripted_response (name : string) (args : W.t list) : W.t =
         (match List.nth_opt args 1 with Some r -> r | None -> W.Map [])
   | "thread-api/get-blocks" -> blocks_response (List.nth_opt args 1)
   | "thread-api/get-all-properties" -> W.List []
+  | "thread-api/get-file-content" -> W.String "{}"
+  | "thread-api/pull-many" when List.nth_opt args 1=Some (W.String "[:db/id]") ->
+      W.Array (W.elems (List.nth args 2) |> List.map (fun _ -> W.Map [kw "db/id",W.Int 99]))
+  | "thread-api/get-view-data" ->
+      let rows = Option.value (Hashtbl.find_opt query_rows "") ~default:[] in
+      W.Map [kw "count",W.Int (List.length rows);kw "rows",W.Array (List.map (fun u -> W.Uuid u) rows)]
   | "thread-api/pull" | "thread-api/pull-many" -> W.List []
   | _ -> W.Map []
 
@@ -595,7 +610,7 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
           in
           let finish_workflow () =
             List.iter
-              (fun (_, scope) -> Editor_state.clear_collapse_scope ~scope)
+              (fun (_, scope) -> Editor_state.clear_collapse_scope ~scope ())
               !mounted_static_scopes;
             mounted_static_rows := [];
             mounted_static_scopes := [];
@@ -695,8 +710,396 @@ let grouped_entity_headers (h : (_, _) Shared_scenarios_views.host) ~finish =
               h.after 20 (fun () -> after_expand before_expand_writes)
     ))
 
+let plain_text_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  Runtime.read_model := (fun () -> {Model.initial with repo=Some "plain-text-query"});
+  let query = Views_state.make ~sched:(Signal.scheduler ())
+    ~kind:(Views_state.KQuery {block_uuid="empty-columns"}) ~feature:"query-result" ~owner:W.Nil in
+  check "Empty query column construction already supplies the Master defaults"
+    (List.map (fun column -> column.Views_state.c_id) (Views_table.build_columns query [])
+     = ["select";"block/title";"block/created-at";"block/updated-at"]);
+  let rec run = function
+    | [] -> Runtime.worker := previous_worker; Runtime.read_model := previous_model;
+        Runtime.app_flush := previous_flush; finish ()
+    | (uuid, source, error) :: rest ->
+        Hashtbl.replace query_src uuid source;
+        Hashtbl.replace query_rows uuid [];
+        Option.iter (fun message -> Hashtbl.replace query_err uuid message) error;
+        install_worker ();
+        let worker = Option.get !Runtime.worker in
+        let specs = ref [] in
+        Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+          (match name,args with
+           | "thread-api/get-render-snapshots",[_;request] ->
+               List.iter (function W.Array [W.Keyword "query";spec] -> specs := spec :: !specs
+                 | _ -> ()) (W.elems (Option.value (W.get request "resources") ~default:W.Nil))
+           | _ -> ());
+          worker.invoke_fn name args)};
+        let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+          ~initial:Model.initial ~reducer:Update.update
+          ~view:(fun _ _ _ -> Lui_elements.column
+            [Views_view.query_title_el ~block_uuid:uuid ~title:None;
+             Views_view.view ~kind:(Views_state.KQuery {block_uuid=uuid}) ~owner:(W.Uuid uuid)]) () in
+        Runtime.app_flush := (fun () -> S.flush mounted);
+        h.after 40 (fun () ->
+          S.flush mounted;
+          let nodes = M.all_nodes mounted.S.tree in
+          let has_text text = List.exists (fun node -> M.string_prop node "text"=Some text) nodes in
+          let has_class name = List.exists (fun node -> Shared_scenarios_views.has_tok node name) nodes in
+          check "Plain-text query builder keeps the Filter control"
+            (List.exists (fun node -> node.M.kind="button"
+              && M.string_prop node "accessibility-label"=Some (I18n.t "view.filter/filter")) nodes);
+          check "Plain-text query builder displays the full search clause"
+            (source="" || has_text (I18n.builder_search source));
+          check "Query resource receives quoted full-text source, not a bare symbol"
+            (if source="" then !specs=[] else List.exists (fun spec ->
+              W.get spec "query"=Some (W.String (Edn.to_string (W.String source)))) !specs);
+          check "Plain-text queries render an empty result table and preserve real errors"
+            (match error with
+             | Some message -> has_text message && not (has_class "query-result")
+             | None -> if source="" then not (has_class "query-result")
+                 else has_class "query-result");
+          let has_headers () = List.for_all (fun key ->
+            List.exists (fun node -> M.string_prop node "text"=Some (I18n.t key))
+              (M.all_nodes mounted.S.tree))
+            ["view.table/name-column";"page/created-at";"page/updated-at"] in
+          check "Empty query tables retain Name, Created At and Updated At after a fresh mount"
+            (if source<>"" && error=None then has_headers () else not (has_headers ()));
+          let finish_case () =
+            ignore (Lui_app.dispose mounted.S.app);
+            let key = Runtime.repo (),uuid in
+            Option.iter Views_builder.drop_tree (Hashtbl.find_opt Views_view.query_insts key);
+            Hashtbl.remove Views_view.query_insts key;
+            run rest
+          in
+          if source="" then begin
+            let inst = Hashtbl.find Views_view.query_insts (Runtime.repo (),uuid) in
+            (Views_state.ops ()).o_refresh_src inst "Search seed parity";
+            h.after 40 (fun () ->
+              S.flush mounted;
+              check "Live query source evaluation builds default headers for an empty result"
+                (has_headers ());
+              finish_case ())
+          end else finish_case ())
+  in run ["plain-query", "Search seed parity", None; "blank-query", "", None;
+          "failed-plain-query", "Rejected search", Some "search unavailable";
+          "plain-query", "Search seed parity", None]
+
+let positive_query_views (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  let uuid = "positive-query" and parent_uuid = "imported-parent"
+  and child_uuid = "imported-child" and blank_uuid = "imported-blank" in
+  Runtime.read_model := (fun () -> {Model.initial with repo=Some "positive-query"});
+  Hashtbl.replace query_src uuid "Imported";
+  Hashtbl.replace query_rows uuid [parent_uuid;child_uuid];
+  Hashtbl.replace titles parent_uuid "Imported parent";
+  Hashtbl.replace titles child_uuid "Imported child";
+  Hashtbl.replace flat_children parent_uuid
+    [W.Map [kw "block/uuid",W.Uuid blank_uuid; kw "block/title",W.String "";
+            kw "block/parent-uuid",W.Uuid parent_uuid]];
+  Hashtbl.replace view_data_overrides uuid
+    (W.Map [kw "partition",kw "flat"; kw "count",W.Int 2;
+            kw "rows",W.Array [W.Uuid parent_uuid;W.Uuid child_uuid];
+            kw "properties",W.Array [kw "logseq.property/type"]]);
+  install_worker ();
+  let mount () =
+    let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+      ~initial:Model.initial ~reducer:Update.update
+      ~view:(fun _ _ _ -> Views_view.view
+        ~kind:(Views_state.KQuery {block_uuid=uuid}) ~owner:(W.Uuid uuid)) () in
+    Runtime.app_flush := (fun () -> S.flush mounted);
+    mounted in
+  let inst () = Hashtbl.find Views_view.query_insts (Runtime.repo (),uuid) in
+  let dispose mounted =
+    ignore (Lui_app.dispose mounted.S.app);
+    Views_builder.drop_tree (inst ());
+    Hashtbl.remove Views_view.query_insts (Runtime.repo (),uuid) in
+  let check_rows mounted label =
+    S.flush mounted;
+    let state = Views_state.get (inst ()) in
+    check label (state.Views_state.query_rows=[parent_uuid;child_uuid]
+      && Views_head.count_of state=2
+      && Views_wire.row_count state.Views_state.data=2) in
+  let first = mount () in
+  h.after 40 (fun () ->
+    check_rows first "Full-text Table queries retain parent and child rows";
+    check "Positive query tables retain the Property type column"
+      (List.exists (fun c -> c.Views_state.c_id="logseq.property/type")
+        (Views_state.get (inst ())).Views_state.columns);
+    Hashtbl.replace view_flags uuid ["query-list"];
+    Hashtbl.replace view_data_overrides uuid
+      (W.Map [kw "partition",kw "grouped-list"; kw "count",W.Int 2;
+        kw "groups",W.Array [W.Map [kw "value",W.Nil;
+          kw "partitions",W.Array [W.Map [kw "breadcrumb-uuid",W.Uuid parent_uuid;
+            kw "rows",W.Array [W.Uuid parent_uuid;W.Uuid child_uuid]]]]]]);
+    Views_view.refresh (inst ());
+    h.after 40 (fun () ->
+      check_rows first "Switching a full-text query to List preserves both rows";
+      check "List results render blank descendants without an editable outliner scope"
+        (List.exists (fun n -> M.string_prop n "accessibility-identifier"
+          =Some ("ls-block-" ^ blank_uuid)) (M.all_nodes first.S.tree));
+      dispose first;
+      let reloaded = mount () in
+      h.after 40 (fun () ->
+        check_rows reloaded "Reloading the persisted List query preserves both rows";
+        check "Reloaded query retains its List display type and search source"
+          (let state=Views_state.get (inst ()) in
+           state.Views_state.display_type="list" && state.Views_state.qsrc="Imported");
+        Hashtbl.replace query_rows uuid [];
+        Views_view.refresh (inst ());
+        h.after 40 (fun () ->
+          check "An empty List query clears prior results"
+            (Views_head.count_of (Views_state.get (inst ()))=0);
+          Hashtbl.replace query_err uuid "search unavailable";
+          Views_view.refresh (inst ());
+          h.after 40 (fun () ->
+            check "A rejected List query exposes the error without stale rows"
+              (let state=Views_state.get (inst ()) in
+               state.Views_state.query_error=Some "search unavailable"
+               && Views_head.count_of state=0);
+            dispose reloaded;
+            List.iter (Hashtbl.remove titles) [parent_uuid;child_uuid];
+            Hashtbl.remove flat_children parent_uuid;
+            Hashtbl.remove view_flags uuid; Hashtbl.remove view_data_overrides uuid;
+            Hashtbl.remove query_src uuid; Hashtbl.remove query_rows uuid;
+            Hashtbl.remove query_err uuid;
+            Runtime.worker:=previous_worker; Runtime.read_model:=previous_model;
+            Runtime.app_flush:=previous_flush; finish ())))))
+
+let reference_filter_removal (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+  and previous_flush = !Runtime.app_flush in
+  let uuid = "reference-filter-view" in
+  let rows = ["reference-a","Ref A";"reference-b","Ref B"] in
+  Runtime.read_model := (fun () -> {Model.initial with repo=Some "reference-removal"});
+  Hashtbl.replace view_flags uuid ["windowed-refs"];
+  Hashtbl.replace view_rows uuid rows;
+  List.iter (fun (u,title) -> Hashtbl.replace titles u title) rows;
+  install_worker ();
+  let instance = ref None in
+  let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+    ~initial:Model.initial ~reducer:Update.update
+    ~view:(fun context _ _ ->
+      let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+        ~kind:Views_state.KLinkedRefs ~feature:"linked-references" ~owner:(W.Uuid "reference-owner") in
+      Views_state.update inst (fun s -> {s with view_uuid=uuid;display_type="list"});
+      instance:=Some inst; Views_view.body_el inst) () in
+  Runtime.app_flush := (fun () -> S.flush mounted);
+  let inst = Option.get !instance in
+  let check_rows label expected =
+    S.flush mounted;
+    let state = Views_state.get inst in
+    check label (Views_head.count_of state=List.length expected
+      && Views_wire.row_count state.data=List.length expected
+      && state.fetch_limit=List.length expected
+      && List.for_all (fun (uuid,_) -> List.exists (fun node ->
+        M.string_prop node "accessibility-identifier"=Some ("ls-block-" ^ uuid))
+        (M.all_nodes mounted.S.tree)) expected) in
+  Views_view.refresh inst;
+  h.after 30 (fun () ->
+    check_rows "Unfiltered references render both referring rows" rows;
+    Hashtbl.replace view_rows uuid [List.hd rows];
+    Views_view.refresh inst;
+    h.after 30 (fun () ->
+      check_rows "A selected reference facet shrinks the materialized window" [List.hd rows];
+      Hashtbl.replace view_rows uuid rows;
+      Views_view.refresh inst;
+      h.after 30 (fun () ->
+        check_rows "Removing a reference facet restores both rows, not just the header count" rows;
+        Hashtbl.replace view_rows uuid [];
+        Views_view.refresh inst;
+        h.after 30 (fun () ->
+          check_rows "Empty references clear the previous materialized rows" [];
+          Hashtbl.remove view_flags uuid;
+          Hashtbl.replace view_data_overrides uuid (W.Map [kw "error",W.Map [kw "message",W.String "references unavailable"]]);
+          Views_view.refresh inst;
+          h.after 30 (fun () ->
+            S.flush mounted;
+            check "Failed reference refreshes expose their error without stale rows"
+              ((Views_state.get inst).view_error=Some "references unavailable"
+               && (Views_state.get inst).data=Views_wire.VEmpty);
+            ignore (Lui_app.dispose mounted.S.app);
+            Hashtbl.remove view_rows uuid; Hashtbl.remove view_data_overrides uuid;
+            List.iter (fun (uuid,_) -> Hashtbl.remove titles uuid) rows;
+            Runtime.worker:=previous_worker; Runtime.read_model:=previous_model;
+            Runtime.app_flush:=previous_flush; finish ())))))
+
+let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
+  let previous_worker = !Runtime.worker and previous_read = !Runtime.read_model
+  and previous_source = !Runtime.model_source and previous_flush = !Runtime.app_flush in
+  let uuid = "configured-journal-marker" in
+  let query = Edn.parse {|{:title "Journal default" :query [:find (pull ?b [*]) :in $ ?today :where [?b :block/title "Journal marker"]] :inputs [:today] :collapsed? false}|} in
+  let config = W.Map [kw "default-queries",W.Map [kw "journals",W.Array [query]]] in
+  let model = {Model.initial with repo=Some "configured-journals";graph_config=config} in
+  let page = {(Test_check.page []) with Model.page_uuid=Some "journal-owner";
+    page_title="Today's journal";page_journal_day=Some (Dates.today_journal_day ())} in
+  Hashtbl.replace titles uuid "Journal marker";
+  Hashtbl.replace query_rows "" [uuid];
+  install_worker ();
+  let specs = ref [] and contexts = ref [] in
+  let worker = Option.get !Runtime.worker in
+  Runtime.worker:=Some {worker with Worker_client.invoke_fn=(fun name args ->
+    (match name,args with
+     | "thread-api/get-render-snapshots",[_;request] ->
+         List.iter (function W.Array [W.Keyword "query";spec] -> specs:=spec::!specs | _ -> ())
+           (W.elems (Option.value (W.get request "resources") ~default:W.Nil))
+     | "thread-api/get-view-data",[_;_;context] -> contexts:=context::!contexts
+     | _ -> ()); worker.invoke_fn name args)};
+  let mount ?(query=query) page =
+    let model = {model with Model.graph_config=W.Map
+      [kw "default-queries",W.Map [kw "journals",W.Array [query]]]} in
+    let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+      ~initial:model ~reducer:Update.update ~view:(fun _ctx source _ ->
+        Runtime.read_model:=(fun () -> Signal.get source);
+        Runtime.model_source:=Some source;
+        Page.today_queries page) () in
+    Runtime.app_flush:=(fun () -> S.flush mounted); mounted in
+  let mounted = mount page in
+  let subscription = List.hd (List.rev !Subs_state.sync_subs) in
+  let header mounted = List.find_opt (fun n ->
+    Shared_scenarios_views.has_tok n "custom-query-title") (M.all_nodes mounted.S.tree) in
+  let marker mounted = List.exists (fun n -> M.string_prop n "accessibility-identifier"
+    =Some ("ls-block-" ^ uuid)) (M.all_nodes mounted.S.tree) in
+  h.after 30 (fun () ->
+    S.flush mounted;
+    check "Configured journal queries load collapsed, overriding configured collapsed=false"
+      (header mounted<>None && not (marker mounted)
+       && List.exists (fun n -> M.string_prop n "text"=Some "Journal default") (M.all_nodes mounted.S.tree));
+    check "Configured journal queries use datalog and the owning journal date context"
+      (List.exists (fun spec -> W.get spec "kind"=Some (kw "datalog")
+        && W.get spec "current-block-uuid"=None
+        && W.get spec "current-page-title"=Some (W.String page.page_title)
+        && W.get spec "today-day"=Some (W.Int (Dates.today_journal_day ()))
+        && W.get spec "inputs"=Some (W.Array [kw "today"])) !specs);
+    S.press mounted (Option.get (header mounted)).M.id;
+    check "Expanding a configured query renders its real result block and count"
+      (marker mounted && List.exists (fun n -> M.string_prop n "text"=Some "1 result") (M.all_nodes mounted.S.tree));
+    check "Built-in journal query results request no containing-page grouping"
+      (!contexts<>[] && List.for_all (fun context -> W.get context "group-by-property-ident"=None) !contexts);
+    check "Journal query headings are plain foldable rows with an expanding title and separate count"
+      ((Option.get (header mounted)).M.kind<>"button"
+       && List.exists (fun n -> Shared_scenarios_views.has_tok n "title-text"
+         && Hashtbl.find_opt n.M.props "grow"=Some (Lui_protocol.FloatValue 1.)) (M.all_nodes mounted.S.tree)
+       && not (List.exists (fun n -> Shared_scenarios_views.has_tok n "ls-foldable") (M.all_nodes mounted.S.tree)));
+    check "Configured journal queries rely on the block-region minimum instead of a fixed top inset"
+      (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "today-queries"
+         && not (Hashtbl.mem n.M.props "margin-top")) (M.all_nodes mounted.S.tree)
+       && List.for_all (fun n -> not (Shared_scenarios_views.has_tok n "custom-query")
+         || not (Hashtbl.mem n.M.props "margin-left")) (M.all_nodes mounted.S.tree));
+    check "Journal query title ink has a one-pixel inset and counts use Master's top-aligned text-sm line box"
+      (Hashtbl.find_opt (Option.get (header mounted)).M.props "padding-horizontal"=Some (Lui_protocol.IntValue 1)
+       && List.exists (fun n -> Shared_scenarios_views.has_tok n "results-count"
+         && Hashtbl.find_opt n.M.props "height"=Some (Lui_protocol.IntValue 24)
+         && M.string_prop n "line-height"=Some "20px") (M.all_nodes mounted.S.tree));
+    Hashtbl.replace query_rows "" [];
+    subscription.Subs_state.run [];
+    h.after 30 (fun () ->
+      S.flush mounted;
+      check "Empty built-in journal queries disappear like Master" (header mounted=None && not (marker mounted));
+      Hashtbl.replace query_err "" "Journal query failed";
+      subscription.Subs_state.run [];
+      h.after 30 (fun () ->
+        S.flush mounted;
+        check "Rejected journal queries render an error instead of stale results"
+          (not (marker mounted) && List.exists (fun n ->
+            M.string_prop n "text"=Some "Journal query failed") (M.all_nodes mounted.S.tree));
+        ignore (Lui_app.dispose mounted.S.app);
+        Hashtbl.remove query_err ""; Hashtbl.replace query_rows "" [uuid];
+        let fresh = mount page in
+        h.after 30 (fun () ->
+          S.flush fresh;
+          check "Reloading today's configured query restores its heading and initial collapse"
+            (header fresh<>None && not (marker fresh));
+          ignore (Lui_app.dispose fresh.S.app);
+          let old = mount {page with Model.page_journal_day=Some 20000101} in
+          check "Configured queries are not mounted for older journals" (header old=None);
+          ignore (Lui_app.dispose old.S.app);
+          let rec title_cases = function
+            | [] ->
+                Hashtbl.remove titles uuid; Hashtbl.remove query_rows "";
+                Runtime.worker:=previous_worker; Runtime.read_model:=previous_read;
+                Runtime.model_source:=previous_source; Runtime.app_flush:=previous_flush;
+                finish ()
+            | (title,expected)::rest ->
+                let query = match query with W.Map fields -> W.Map
+                  ((kw "title",title)::List.remove_assoc (kw "title") fields) | _ -> assert false in
+                let mounted = mount ~query page in
+                h.after 30 (fun () ->
+                  S.flush mounted;
+                  let texts = List.filter_map (fun n -> M.string_prop n "text") (M.all_nodes mounted.S.tree) in
+                  check "Configured Hiccup titles render their content, including empty vectors, without an untitled fallback"
+                    (header mounted<>None && not (List.mem "Untitled query" texts)
+                     && List.for_all (fun text -> List.mem text texts) expected);
+                  S.press mounted (Option.get (header mounted)).M.id;
+                  check "Hiccup titled journal queries retain foldable results" (marker mounted);
+                  ignore (Lui_app.dispose mounted.S.app);
+                  title_cases rest) in
+          title_cases [Edn.parse {|[:h3 "Hiccup journal default"]|},["Hiccup journal default"];
+                       W.Array [],[]]))))
+
+let short_page_spacing ~finish =
+  let previous_flush = !Runtime.app_flush in
+  let section : Outliner_projection.section =
+    {section_key="short-page";repository=Some "short-page";scope="main";
+     page=Test_check.page [];is_last=true} in
+  let block = Outliner_projection.Block
+    {block=Test_check.block "short-block" "Short";scope="main";section;depth=0;ancestors=[]} in
+  let header = Outliner_projection.Header section and footer = Outliner_projection.Footer section in
+  let measurements = ref None and rows_state = ref None and spacing = ref None in
+  let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+    ~initial:Model.initial ~reducer:Update.update ~view:(fun ctx _ _ ->
+      let rows = Signal.state ctx.Lui_ui.ui_scheduler [header;block;footer] in
+      let measured = Virt_list.section_spacings ~blocks_only:true ctx ~minimum:32.
+          ~rows:(Signal.value rows) in
+      measurements := Some measured; rows_state := Some rows;
+      spacing := Some (measured.spacing_for (Outliner_projection.key header));
+      Properties_value.block_value_wrap (Lui_elements.text ~value:"SQLite roundtrip" [])) () in
+  Runtime.app_flush := (fun () -> S.flush mounted);
+  let measured = Option.get !measurements in
+  let value () = Signal.get (Option.get !spacing) in
+  let measure row kind height = measured.on_row_measure (Outliner_projection.key row)
+    (Outliner_projection.key header) kind height in
+  let change rows = Runtime.signal_set (Option.get !rows_state) rows; S.flush mounted in
+  let later f = ignore (Js.Global.setTimeout ~f 10) in
+  check "Property block values use the reference two-pixel vertical inset"
+    (List.exists (fun node -> Shared_scenarios_views.has_tok node "property-block-container"
+      && Hashtbl.find_opt node.M.props "padding-vertical"=Some (Lui_protocol.IntValue 2))
+      (M.all_nodes mounted.S.tree));
+  measure header "header" 100.; measure footer "footer" 200.; measure block "block" 28.;
+  later (fun () ->
+    check "A short page preserves sixty pixels for its block and add row" (value () +. 28. +. 28. = 60.);
+    measure block "block" nan;
+    later (fun () ->
+      check "Invalid body measurements do not change page spacing" (value ()=4.);
+      change [header;footer];
+      check "Empty pages clear residual body spacing" (value ()=0.);
+      change [header;block;footer]; measure block "block" 28.;
+      later (fun () ->
+        check "The first block restores short-page spacing after an empty page" (value ()=4.);
+        measure block "block" 56.;
+        later (fun () ->
+          check "Wrapped or property-bearing blocks need no extra body spacing" (value ()=0.);
+          let second = Outliner_projection.Block
+            {block=Test_check.block "second-short-block" "Second";scope="main";section;depth=0;ancestors=[]} in
+          change [header;block;second;footer];
+          measure block "block" 28.; measure second "block" 28.;
+          later (fun () ->
+            check "Two journal roots use their actual height without an extra four-pixel inset"
+              (value ()=0. && 28. +. 28. +. 28. +. value ()=84.);
+            change [header;block;footer];
+            check "Deleting the second journal root restores the sixty-pixel minimum"
+              (value ()=4. && 28. +. 28. +. value ()=60.);
+            change [header;block;second;footer]; measure second "block" 28.;
+            later (fun () ->
+              check "Undoing the second-root deletion removes only the minimum-height remainder"
+                (value ()=0.);
+              ignore (Lui_app.dispose mounted.S.app); Runtime.app_flush := previous_flush; finish ()))))))
+
 let run ~finish =
   query_result_replacement ();
   let h = host () in
-  grouped_entity_headers h ~finish:(fun () ->
-      Shared_scenarios_views.run h ~finish)
+  plain_text_queries h ~finish:(fun () -> positive_query_views h ~finish:(fun () -> reference_filter_removal h ~finish:(fun () -> configured_journal_queries h ~finish:(fun () -> short_page_spacing ~finish:(fun () ->
+    grouped_entity_headers h ~finish:(fun () ->
+      Shared_scenarios_views.run h ~finish))))))

@@ -22,6 +22,8 @@
    edit_view mounts it via `Lui_ui.extension` *)
 let identifier = "logseq-editor"
 
+let key_passthrough : (string -> string -> bool) ref = ref (fun _ _ -> false)
+
 type impl =
   { conduit : string -> Edit_input.conduit option
   ; focus_input : string -> unit

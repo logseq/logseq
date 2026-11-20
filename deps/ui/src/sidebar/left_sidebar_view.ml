@@ -81,7 +81,8 @@ let nav_edit_menu st =
      aria-checked ride data_attrs so the e2e
      `[role='menuitemcheckbox'][aria-checked]` hook sees them *)
   let mk (nav, label) =
-    Menu_item.chrome (menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
+    Ui_components.with_props [Ui_components.Prop.selected_background "transparent"]
+    (Menu_item.chrome (menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
       ~text:(t label)
       ~data_attrs:
         (reactive
@@ -90,22 +91,22 @@ let nav_edit_menu st =
              ; ("aria-checked", if List.mem nav cur then "true" else "false")
              ])
            (Signal.value st.Sidebar_state.nav_checked))
-      ~checked_signal:
-        (Signal.map
-           (fun cur -> List.mem nav cur)
-           (Signal.value st.Sidebar_state.nav_checked))
+      ~selection_placement:`leading ~gap:8
+      ~checked:(reactive (fun cur -> List.mem nav cur)
+        (Signal.value st.Sidebar_state.nav_checked))
       ~on_press:(fun _ ->
         Sidebar_state.toggle_nav st nav
           (not
              (List.mem nav
                 (Runtime.signal_get st.Sidebar_state.nav_checked))))
-      [])
+      []))
   in
   box ~key:"nav-edit-menu"
     [ Ui_components.menu_surface
         (popover ~key:"menu-box" ~role:`menu
-          ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4.
-          ~anchor_target:"nav-edit-trigger" ~min_width:180
+          ~anchor:`below ~anchor_alignment:`center ~anchor_offset:0.
+          ~anchor_alignment_offset:1.
+          ~anchor_target:"nav-edit-trigger" ~min_width:128
           ~transition:Ui_components.popover_transition
           ~style_class:"ui__dropdown-menu-content"
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
@@ -360,7 +361,7 @@ let shortcut_hint hov binding =
 
 (* cljs sidebar-item: wrapper div gets the nav class (+ `active`), the
    inner `a.item` also gets `active` when the route matches *)
-let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_click ~on_click
+let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_click ?href ~on_click
     ?(more = Logseq_el.nothing) () =
  fun context parent ->
   let act = if active then " active" else "" in
@@ -370,16 +371,20 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
   in
   let icon =
     Ui_components.with_props
-      [ Ui_components.Prop.margin_left 4; Ui_components.Prop.margin_right 8 ]
+      [ Ui_components.Prop.margin_left 0; Ui_components.Prop.margin_right 8 ]
       (icon_ icon_name)
   in
   let leading =
     [ icon; text ~grow:1. ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:title [] ]
   in
   box ~key ~style_class:(class_ ^ act)
-    [ (match on_shift_click with
-       | None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
-       | Some shift_click -> arm_press ~on_press_detail:(function
+    [ (match href, on_shift_click with
+       | Some url, _ -> (fun content ->
+           link ~url ~target:`self_ ~container_relative_frame:`horizontal
+             ?on_press:(if Ui_services.env_native_block_controls () then
+               Some (fun _ -> on_click ()) else None) [content])
+       | None, None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
+       | None, Some shift_click -> arm_press ~on_press_detail:(function
            | P.PressDetail (_, d) ->
                if d.modifiers land 2 <> 0 then shift_click () else on_click ()
            | _ -> ()))
@@ -394,6 +399,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
                "var(--lx-gray-04, \
                 var(--ls-quaternary-background-color))" ]
            (row ~cross:`center ~corner_radius:6 ~height:32
+              ?container_relative_frame:(Option.map (fun _ -> `horizontal) href)
               ~style_class:("item group" ^ act)
               ~padding_horizontal:2
               ~on_pointer_enter:(fun _ ->
@@ -414,6 +420,7 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
 let nav_route ~sched ~class_ ~active ~title ~icon_name ?shortcut hash =
   nav_link ~sched ~key:("nl-" ^ class_) ~class_ ~active ~title ~icon_name
     ?shortcut
+    ?href:(if hash = "#/all-pages" then Some (Runtime.nav_hash hash) else None)
     ~on_click:(fun () ->
       Ui_services.nav_set_hash (Runtime.nav_hash hash);
       Ui_services.dom_dispatch "ls:navigate")
@@ -513,7 +520,7 @@ let nav_group ms st =
                             text ~font_size:"0.75rem"
                               ~line_height:"1rem"
                               ~value:(t "sidebar.left/navigations") [] ]) ]
-               ; box ~key:"nav-more" ~style_class:"b"
+               ; row ~key:"nav-more" ~style_class:"b" ~cross:`center
                    ~width:28 ~height:32 ~main:`center
                    ~opacity_signal:
                      (Signal.map
@@ -527,7 +534,7 @@ let nav_group ms st =
                           [ Ui_components.Prop.position `relative
                           ; Ui_components.Prop.inset_top (-2.)
                           ; Ui_components.Prop.opacity 0.8 ]
-                          (row ~style_class:"as-edit" ~accessibility_identifier:"nav-edit-trigger"
+                          (row ~grow:1. ~style_class:"as-edit" ~accessibility_identifier:"nav-edit-trigger"
                              [ Ui_components.with_props
                                  [ Ui_components.Prop.margin_left 7 ]
                                  (icon_ ~size:14 "filter-edit") ])) ] ])
@@ -670,7 +677,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
             [ row ~cross:`center ~main:`space_between
            ~style_class:"link-item group"
            ~background:(reactive (function
-               | Some (uuid, _) when p.Model.page_uuid = Some uuid ->
+               | Some uuid when p.Model.page_uuid = Some uuid ->
                    "var(--lx-accent-04, var(--ls-tertiary-background-color))"
                | _ -> "transparent") (Signal.value st.Sidebar_state.favorite_drop))
            ~height:32 ~padding_horizontal:8 ~corner_radius:6
@@ -684,6 +691,7 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
            [ row ~cross:`center ~style_class:"page-icon" ~margin_right:4
                [ Icon_picker.page_icon_el ~size:16. p ]
            ; text ~style_class:"page-title" ~value:p.Model.page_title
+               ~foreground:"hsl(var(--foreground))"
                ~white_space:"nowrap" ~text_overflow:"ellipsis" ~grow:1.
                ~line_height:"1.25rem"
                ~data_attrs:[ ("style", "overflow:hidden;padding-right:32px") ]
@@ -745,7 +753,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                   (row ~key:(key ^ "-hd") ~cross:`center
                         ~main:`space_between ~height:32 ~corner_radius:6
                         ~style_class:"hd"
-                     [ box ~key:(key ^ "-a") ~style_class:"a" ~margin_left:4
+                     [ box ~key:(key ^ "-a") ~style_class:"a"
                          [ Ui_components.with_props
                              [ Ui_components.Prop.font_size "0.875rem"
                              ; Ui_components.Prop.line_height "1.25rem"
@@ -757,7 +765,7 @@ let content_group st ~key ~class_ ~label ~items_sig ~li_class ~ul_class
                                   text ~font_size:"0.75rem"
                                     ~line_height:"1rem"
                                     ~value:label [] ]) ]
-                     ; box ~key:(key ^ "-b") ~style_class:"b"
+                     ; row ~key:(key ^ "-b") ~style_class:"b" ~cross:`center
                          ~width:28 ~height:32 ~main:`center
                          ~opacity:0.4 ~transition:"opacity 0.15s"
                          [ (* web rotates .more 90deg on .is-expand —
@@ -883,7 +891,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                ~label:(t "graph.switch/select-prompt")
                ~foreground:"hsl(var(--foreground))"
                ~main:`start ~cross:`center
-               ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:4
+               ~padding_horizontal:4 ~padding_vertical:4 ~corner_radius:6
                ~style_class:"item"
                ~data_attrs:(reactive (fun menu _model ->
                    [ ("data-tooltip", ""); ("aria-haspopup", "menu")

@@ -24,6 +24,19 @@ let arg_str args n =
   | Some w -> Wire.as_string w
   | None -> None
 
+let () =
+  Dispatcher.register "thread-api/reveal-user-rsa-private-key" (fun args ->
+      let password = Option.get (arg_str args 0) in
+      run (fun () ->
+          match e2ee_base () with
+          | Some base when seq_ (Some base) ->
+              bind (!get_user_rsa_key_pair_raw_fn (Some base)) (fun pair ->
+                  match Wire.get "encrypted-private-key" pair with
+                  | Some (Wire.String _ as encrypted) ->
+                      !verify_e2ee_password_fn password encrypted
+                  | _ -> invalid_arg "Missing encrypted user private key")
+          | _ -> invalid_arg "Missing encryption server"))
+
 (* :thread-api/get-user-rsa-key-pair [_token _user-uuid] *)
 let () =
   Dispatcher.register "thread-api/get-user-rsa-key-pair" (fun _args ->

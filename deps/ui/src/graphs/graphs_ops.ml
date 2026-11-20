@@ -9,16 +9,37 @@ module T = I18n
 let repos () = (Runtime.model ()).Model.repos
 
 (* cljs repo.cljs invalid-graph-name? reserved chars *)
-let reserved = ":|\\*\\?\"<>|\\#\\\\/"
+let reserved_characters () =
+  [ '<', T.t "graph.validation/reserved-character-less-than"
+  ; '>', T.t "graph.validation/reserved-character-greater-than"
+  ; ':', T.t "graph.validation/reserved-character-colon"
+  ; '"', T.t "graph.validation/reserved-character-double-quote"
+  ; '/', T.t "graph.validation/reserved-character-forward-slash"
+  ; '\\', T.t "graph.validation/reserved-character-backslash"
+  ; '|', T.t "graph.validation/reserved-character-pipe"
+  ; '?', T.t "graph.validation/reserved-character-question-mark"
+  ; '*', T.t "graph.validation/reserved-character-asterisk"
+  ; '#', T.t "graph.validation/reserved-character-hash"
+  ; '+', T.t "graph.validation/reserved-character-plus" ]
 
 let invalid_chars name =
   let out = ref [] in
   String.iter
     (fun c ->
-      if String.contains reserved c then out := c :: !out)
+      if String.contains "<>:\"/\\|?*#" c then out := c :: !out)
     name;
   if String.contains name '+' then out := '+' :: !out;
   List.rev !out
+
+let invalid_name name = invalid_chars name <> []
+
+let warn_invalid_name () =
+  let lines =
+    List.map (fun (character, label) -> Printf.sprintf "%c (%s)" character label)
+      (reserved_characters ())
+  in
+  Toast.show ~key:Toast.reserved_graph_name_key ~kind:"warning" ~duration:0
+    (String.concat "\n" (T.t "graph.validation/name-reserved-characters-warning" :: lines))
 
 let is_demo repo =
   let suffixed = "Demo" in
@@ -45,7 +66,9 @@ let remote_graphs : (string * string * bool * string) list ref = ref []
 let list_remote_graphs () =
   (* the sync server rejects list-remote-graphs without a token — skip
      the request entirely when logged out and keep the local list *)
-  if not (Rtc_flows.logged_in ()) then Js.Promise.resolve !remote_graphs
+  if not (Rtc_flows.logged_in ()) then (
+    remote_graphs := [];
+    Js.Promise.resolve [])
   else begin
     (let* _ = Rtc_ops.sync_app_state (Runtime.model ()).Model.repo in
      let* w = Runtime.invoke "thread-api/db-sync-list-remote-graphs" [] in
@@ -220,42 +243,38 @@ let delete_remote_http uuid =
 
 let delete_graph repo ~remote =
   let drop_from_repos () =
-    Graphs_meta.drop repo;
     Runtime.send (Action.Repos_loaded (List.filter (fun r -> r <> repo) (repos ())));
     !on_repos_changed ()
   in
   let finish () =
     Editor_actions.after_pending_input (fun () ->
-    (* drop the repo from the local list before the worker round-trip:
-       the graphs view can re-render the remote row while the unlink is
-       in flight, and its click handler decides local-vs-remote from
-       `repos`. cljs removes via state/delete-repo! right after the
-       delete-graph! invoke resolves; removing on entry keeps the remote
-       row non-local for the whole window *)
-    drop_from_repos ();
     let* ok =
-      (let* _w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
-      Js.Promise.resolve true)
+      (let* w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
+       if Rtc_error.is_error w then begin
+         Rtc_error.report_outcome "unlink-db" w;
+         Js.Promise.resolve false
+       end else Js.Promise.resolve true)
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("unlink-db failed " ^ repo, e);
-             Runtime.send (Action.Repos_loaded (repo :: repos ()));
-             !on_repos_changed ();
              Js.Promise.resolve false)
     in
     if not ok then Js.Promise.resolve ()
-    else
+    else begin
+      drop_from_repos ();
+      Graphs_meta.drop repo;
       match (Runtime.model ()).Model.repo = Some repo, (repos ()) with
       | true, next :: _ ->
-          Toast.success (T.removed_redirecting repo next);
+          Toast.success (T.removed_redirecting (short_name repo) (short_name next));
           navigate_journal next
       | true, [] ->
-          Toast.success (T.removed repo);
+          Toast.success (T.removed (short_name repo));
           Runtime.send Action.Graph_closed;
           Router.resolve ();
           Js.Promise.resolve ()
       | false, _ ->
-          Toast.success (T.removed repo);
-          Js.Promise.resolve ())
+          Toast.success (T.removed (short_name repo));
+          Js.Promise.resolve ()
+    end)
   in
   if remote then
     match
@@ -277,8 +296,8 @@ let ask_delete ~remote repo =
      :title = confirm-desc, :description = delete-warning *)
   Dialogs_state.ask
     ~title:
-      (if remote then T.delete_remote_confirm repo
-       else T.delete_local_confirm repo)
+      (if remote then T.delete_remote_confirm (short_name repo)
+       else T.delete_local_confirm (short_name repo))
     ~desc:(T.t "graph/delete-warning")
     ~on_confirm:(fun () -> ignore (delete_graph repo ~remote))
     ()

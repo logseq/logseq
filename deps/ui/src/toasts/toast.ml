@@ -6,7 +6,7 @@ let dismiss id =
   Runtime.send (Action.Toast_dismiss id);
   Runtime.flush ()
 
-let show ?key ?code ~kind msg =
+let show ?key ?code ?duration ~kind msg =
   Option.iter (fun key -> Runtime.send (Action.Toast_dismiss_key key)) key;
   Runtime.send
     (Action.Toast_push
@@ -15,12 +15,14 @@ let show ?key ?code ~kind msg =
        ; toast_code = code
        ; toast_kind = kind
        ; toast_key = key
+       ; toast_duration = duration
        });
   Runtime.flush ()
 
 let success msg = show ~kind:"success" msg
 let error msg = show ~kind:"error" msg
 let warning msg = show ~kind:"warning" msg
+let reserved_graph_name_key = "reserved-graph-name"
 let code ?(prefix = "") ?(copy_first = false) msg =
   show ~kind:"success"
     ~code:{Model.code_text = msg; code_copy_first = copy_first} (prefix ^ msg)

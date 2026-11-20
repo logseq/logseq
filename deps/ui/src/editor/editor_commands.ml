@@ -64,16 +64,21 @@ let clear_range uuid from to_ = snd (replace_range uuid from to_ "")
 
 (* ---------- property batches ---------- *)
 
-(* save the live buffer together with property writes, keeping the block
-   in edit mode and the caret at [caret] after the refresh *)
+(* Save only the target's active buffer alongside property writes. *)
 let prop_batch ~caret uuid ops =
-  let buf = A.live_buffer uuid in
-  A.with_focus_after ~restore:(S.editing ()) uuid caret
-    (let* sop = Ops.save_block_parsed uuid buf in
-     let* () = Ops.apply_and_refresh (sop :: ops) in
-     (* Publish this block's chips as soon as its command commits. *)
-     Properties_state.refresh_entity uuid;
-     Js.Promise.resolve ())
+  let apply ops =
+    let* () = Ops.apply_and_refresh ops in
+    Properties_state.refresh_entity uuid;
+    Js.Promise.resolve ()
+  in
+  let editing = S.editing () in
+  match editing with
+  | Some e when e.S.uuid = uuid ->
+      let buf = A.live_buffer uuid in
+      A.with_focus_after ~restore:editing uuid caret
+        (let* sop = Ops.save_block_parsed uuid buf in
+         apply (sop :: ops))
+  | _ -> A.run_structure ~restore:editing (apply ops) (fun () -> ())
 
 (* same, but drop edit mode first (cljs :editor/exit — code blocks leave
    edit mode while the view re-renders the code surface), then focus
@@ -1554,13 +1559,14 @@ let run_editor_cmd uuid command from to_ =
   | "image-link" -> open_link_form true uuid from
   | _ ->
   let caret = clear_range uuid from to_ in
+  Ops.schedule_save uuid (A.live_buffer uuid);
   match command with
   | "scheduled" ->
       open_cal (Cal_prop ("logseq.property/scheduled", "")) uuid caret
   | "deadline" ->
       open_cal (Cal_prop ("logseq.property/deadline", "")) uuid caret
-  | "quote" -> upsert_type_block ~caret uuid "quote"
-  | "math-block" -> upsert_type_block ~caret uuid "math"
+  | "quote" -> set_props ~caret uuid "logseq.property.node/display-type" (W.Keyword "quote")
+  | "math-block" -> set_props ~caret uuid "logseq.property.node/display-type" (W.Keyword "math")
   | "code-block" -> upsert_type_block ~exit:true ~caret uuid "code"
   | "calculator" -> upsert_type_block ~lang:"calc" ~caret uuid "code"
   | "normal-text" | "clear-heading" ->

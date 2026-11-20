@@ -32,6 +32,7 @@ type select_item =
    signals the mount created. *)
 type popup =
   { p_id : int
+  ; p_anchor : string option
   ; p_view : t
   ; p_key : (U.ev -> unit) ref
   }
@@ -61,6 +62,17 @@ let ensure_open_st sched =
       st
 
 let open_signal sched = Signal.value ((ensure_open_st sched))
+
+let stack_signal sched =
+  let st = match !stack_st with
+    | Some st -> st
+    | None -> let st = Signal.state sched !open_popups in stack_st := Some st; st in
+  Signal.value st
+
+let open_for_anchors sched anchors =
+  Signal.map (List.exists (fun p ->
+    Option.fold ~none:false ~some:(fun anchor -> List.mem anchor anchors) p.p_anchor))
+    (stack_signal sched)
 
 let close_entry id =
   open_popups := List.filter (fun e -> e.p_id <> id) !open_popups;
@@ -93,12 +105,12 @@ let ensure_listeners () =
     U.dom_on_document_event ~capture:true "keydown" on_doc_keydown
   end
 
-let push view =
+let push ?anchor view =
   ensure_listeners ();
   incr next_id;
   let id = !next_id in
   open_popups
-    := !open_popups @ [ { p_id = id; p_view = view; p_key = ref noop } ];
+    := !open_popups @ [ { p_id = id; p_anchor = anchor; p_view = view; p_key = ref noop } ];
   publish ();
   id
 
@@ -119,7 +131,7 @@ let anchor_identifier (anchor : U.el) =
    (menu surfaces); select/custom popups keep caller-driven classes. *)
 type popup_anchor = Target of string | Rectangle of (float * float * float * float)
 
-let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role
+let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ?(padding = 4)
     ?max_height_viewport ~on_dismiss children : t =
   let anchor_target, anchor_rect, alignment = match anchor with
     | Target target -> Some target, None, (if align_end then `end_ else `start)
@@ -139,7 +151,7 @@ let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role
        ?border_width:(if card then Some 1 else None)
        ?corner_radius:(if card then Some 6 else None)
        ?min_width:(if card then Some 128 else None)
-       ?padding:(if card then Some 4 else None)
+       ?padding:(if card then Some padding else None)
        ~data_attrs:[ ("data-keep-selection", ""); ("tabindex", "-1") ]
        ~style_class:cls ~on_dismiss children)
 
@@ -354,7 +366,7 @@ let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
   close_all ();
   let id = !next_id + 1 in
   ignore
-    (push
+    (push ~anchor:anchor_target
        (fun context parent ->
          anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id) ~role:`menu
            ~id:(Printf.sprintf "vp-menu-%d" id) ~anchor:(Target anchor_target) ~align_end ~card:true
@@ -377,6 +389,9 @@ let show_custom_rect ~rect ~cls content =
     ~align_end:false ~cls ~card:true ~on_dismiss:(fun _ -> close_entry id) [content]))
 
 let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
+    ?(surface = `menu)
+    ?(item_icon = fun _ -> None)
+    ?(show_check = false)
     ?(selected_values = [])
     ?(input_padding_horizontal = 8)
     ?(width = 224) ?(fit_results = false)
@@ -463,7 +478,10 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                    ~checked:(reactive (fun sel -> List.mem it.si_value sel) ssig)
                    ~on_toggle:(fun _ -> choose i it) [] ]
              else [])
-            @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]) ]))
+            @ Option.fold ~none:[] ~some:(fun name -> [icon ~name ~point_size:16 []]) (item_icon it)
+            @ [ text ~key:"label" ~value:it.si_label ~grow:1. ~min_width:0 [] ]
+            @ (if show_check && not multiple && List.mem it.si_value selected_values then
+                 [icon ~name:(Icons.name_ref "check") ~point_size:16 []] else [])) ]))
     in
     let results =
       reactive (fun visible ->
@@ -534,18 +552,30 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
             | None -> [])
            @ [ select_col ])
     in
-    anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role:`menu
+    let role, padding, cls = match surface with
+      | `menu -> `menu, 4, "ui__dropdown-menu-content"
+      | `popover -> `dialog, 0, "ui__popover-content" in
+    anchored_popover ~key:("vpsel-p" ^ string_of_int id) ~role ~padding
       ~id:("vpsel-p" ^ string_of_int id) ~anchor:(Target anchor_target) ~align_end ~card:true
       ?max_height_viewport:(if fit_results then Some 0.75 else None)
-      ~cls:("ui__dropdown-menu-content " ^ wrap_cls)
+      ~cls:(cls ^ " " ^ wrap_cls)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
   in
-  ignore (push view)
+  ignore (push ~anchor:anchor_target view)
+
+let show_code_language_picker ~anchor ~languages ~on_choose =
+  let items = List.map (fun name ->
+    {si_label = name; si_value = name; si_extra = None}) languages in
+  show_select ~anchor ~items:(fixed_items items)
+    ~placeholder:(I.t "editor/code-language-placeholder")
+    ~wrap_cls:"ls-code-lang-picker"
+    ~on_chosen:(fun item _ _ -> on_choose item.si_value) ()
 
 (* ---------- confirm dialog ---------- *)
 
 let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "ui/yes"))
+    ?(wide = false)
     () =
   let id = !next_id + 1 in
   let view context parent =
@@ -557,7 +587,7 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "u
           Ui_components.Prop.padding_horizontal 12;
         ]
     in
-    dialog
+    dialog ?width:(if wide then Some 768 else None)
       ~key:(Printf.sprintf "vp-dlg-%d" id)
       ~accessibility_identifier:(Printf.sprintf "vp-dlg-%d" id)
       ~style_class:"ls-dialog-generic" ~max_width:768 ~padding:24
@@ -617,7 +647,7 @@ let show_custom ~(anchor : U.el) ?(align_end = false) ?owner_scope ~cls (content
   close_all ();
   let id = !next_id + 1 in
   ignore
-    (push
+    (push ~anchor:anchor_target
        (fun context parent ->
          anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
            ~id:(Printf.sprintf "vp-c-%d" id) ~anchor:(Target anchor_target) ~align_end ~cls ~card:true
@@ -636,14 +666,6 @@ let show_custom ~(anchor : U.el) ?(align_end = false) ?owner_scope ~cls (content
    sibling opening/closing never remounts an open menu's state. *)
 let layer : t =
  fun context parent ->
-  let st =
-    match !stack_st with
-    | Some s -> s
-    | None ->
-        let s = Signal.state context.Lui_ui.ui_scheduler !open_popups in
-        stack_st := Some s;
-        s
-  in
-  keyed ~source:(Signal.value (st)) ~key:(fun p -> p.p_id)
+  keyed ~source:(stack_signal context.Lui_ui.ui_scheduler) ~key:(fun p -> p.p_id)
     ~cmp:Int.compare ~mount:(fun p_s -> (get p_s).p_view)
     context parent

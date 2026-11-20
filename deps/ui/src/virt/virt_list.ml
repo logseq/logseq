@@ -25,7 +25,7 @@ type section_measurements =
   ; observe_eager : Lui_ui.ui_context -> root_id:string -> unit
   }
 
-let section_spacings ctx ~minimum ~(rows : P.row list Signal.signal) =
+let section_spacings ?(blocks_only = false) ctx ~minimum ~(rows : P.row list Signal.signal) =
   let epsilon = 0.25 in
   let row_info : (string, string * string) Hashtbl.t = Hashtbl.create 256 in
   let extents : (string, float) Hashtbl.t = Hashtbl.create 256 in
@@ -110,10 +110,11 @@ let section_spacings ctx ~minimum ~(rows : P.row list Signal.signal) =
         Hashtbl.replace next_info key (section, kind);
         Hashtbl.replace present key ();
         Hashtbl.replace next_sections section ();
-        if Hashtbl.mem measured_rows key then
+        let included = not blocks_only || kind = "block" in
+        if included && Hashtbl.mem measured_rows key then
           Hashtbl.replace next_measured_sections section ();
         let extent = Option.value (Hashtbl.find_opt extents key) ~default:32. in
-        Hashtbl.replace next_totals section
+        if included then Hashtbl.replace next_totals section
           (Option.value (Hashtbl.find_opt next_totals section) ~default:0. +. extent))
       current;
     let removed =
@@ -144,6 +145,7 @@ let section_spacings ctx ~minimum ~(rows : P.row list Signal.signal) =
     match Hashtbl.find_opt row_info key with
     | Some (current_section, current_kind)
       when current_section = section && current_kind = kind
+           && (not blocks_only || kind = "block")
            && Float.is_finite extent && extent > epsilon ->
         let previous = Option.value (Hashtbl.find_opt extents key) ~default:32. in
         let first_section_measurement =

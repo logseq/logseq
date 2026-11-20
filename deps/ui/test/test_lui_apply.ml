@@ -597,7 +597,7 @@ let test_icon_palette_search_lifecycle () =
       else button_owner (Option.get node.T.retained_parent) in
     let icons_tab = find (fun id _ -> prop id Wv.TextValue = Some (Wv.StringValue "Icons")) in
     let icons_tab = button_owner icons_tab in
-    send (Wv.ToggleChanged (icons_tab, true));
+    send (Wv.Press icons_tab);
     let count () = Hashtbl.length renderer.T.web_store.T.retained_nodes in
     let first_window_count = count () in
     window 500 512;

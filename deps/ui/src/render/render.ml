@@ -35,19 +35,24 @@ let h_element_tag tag =
   | _ -> invalid_arg ("wrap: not a heading tag: " ^ tag)
 
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
-    ?(wrap_attrs = []) ?(prefix : t option = None) s : t =
+    ?(wrap_attrs = []) ?(prefix : t option = None) ?highlight s : t =
+  let plain_text s =
+    match highlight with
+    | Some _ -> None
+    | None -> Render_inline.plain_text s
+  in
   if tag = "div" then
     (* cljs uses div.block-title-wrap.has-video-embed for video titles —
        a div host so the .video-embed-block children are legal *)
     D.el ~key:("btw-d-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
       ((match prefix with Some p -> [ p ] | None -> [])
        @
-       match Render_inline.plain_text s with
+       match plain_text s with
        | Some v -> [ D.txt v ]
-       | None -> Render_inline.parse ~self s)
+       | None -> Render_inline.parse ~self ?highlight s)
   else if tag <> "span" then
     (* h1..h6.block-title-wrap are e2e contract *)
-    match Render_inline.plain_text s, prefix with
+    match plain_text s, prefix with
     | Some text, None ->
         let level, as_tag = h_element_tag tag in
         heading ~key:("btw-t-" ^ tag) ~level ~as_:as_tag ~style_class:cls
@@ -64,9 +69,9 @@ let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
         (* TODO(component): same heading-children gap as btw-a *)
         D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
           ((match prefix with Some p -> [ p ] | None -> [])
-           @ Render_inline.parse ~self s)
+           @ Render_inline.parse ~self ?highlight s)
   else
-    match Render_inline.plain_text s, prefix with
+    match plain_text s, prefix with
     | Some v, None ->
         text ~key:("btw-t-" ^ tag) ~style_class:cls ~value:v []
     | Some v, Some p ->
@@ -81,7 +86,7 @@ let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
            katex slots) which a standard text node cannot admit *)
         D.el ~key:("btw-c-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
           ((match prefix with Some p -> [ p ] | None -> [])
-           @ Render_inline.parse ~self s)
+           @ Render_inline.parse ~self ?highlight s)
 
 (* #..###### markdown heading at title start *)
 let heading_level s =
@@ -181,6 +186,7 @@ let calc_results_el code =
            (List.map
               (fun line ->
                 text ~style_class:"extensions__code-calc-output-line"
+                  ~white_space:"nowrap" ~line_height:"1.45rem" ~min_height:23
                   ~value:line [])
               lines))
 
@@ -335,7 +341,8 @@ let is_cards_block (b : Model.block) =
    (a sibling inside .ls-block) — mounted declaratively as a KQuery view
    (.views-query-inner + raw-source .CodeMirror when the editor is open) *)
 let query_below_el uuid =
-  box ~key:("cq-" ^ uuid) 
+  Ui_components.with_props [ Ui_components.Prop.padding_left 42 ] @@
+  box ~key:("cq-" ^ uuid)
     [ box ~style_class:"bd"
         [ box ~style_class:"custom-query-results"
             [ Views_view.view
@@ -508,7 +515,7 @@ let block_els ~self ~wrap_attrs ~prefix s : t list =
 
 (* content for a (possibly quoted) body — headings nest inside quote *)
 let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
-    ?(prefix : t option = None) s =
+    ?(prefix : t option = None) ?highlight s =
   let rest, lvl =
     match heading with
     | Some lvl when lvl >= 1 && lvl <= 6 -> (s, Some lvl)
@@ -525,19 +532,19 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
       ~cls:
         ("block-title-wrap has-video-embed"
          ^ match lvl with Some _ -> " as-heading" | None -> "")
-      ~self ~wrap_attrs ~prefix rest
+      ~self ~wrap_attrs ~prefix ?highlight rest
   else
     match lvl with
     | Some lvl ->
         wrap ~tag:("h" ^ string_of_int lvl)
           ~cls:"block-title-wrap as-heading" ~self ~wrap_attrs ~prefix
-          rest
+          ?highlight rest
     | None ->
         if rest = "" then
           D.el ~key:"btw-empty" ~tag:"span"
             ~style_class:"block-title-wrap"
             [ text ~key:"btw-empty-line" ~value:{js|​|js} [] ]
-        else wrap ~self ~wrap_attrs ~prefix rest
+        else wrap ~self ~wrap_attrs ~prefix ?highlight rest
 
 
 (* @@html:<fragment> whole-title — parsed into real elements so the e2e
@@ -647,10 +654,66 @@ let table_el ~self (header, rows) : t =
                        (List.map (cell "td") r))
                    rows) ] ] ]
 
+let horizontal_rule s =
+  let s = String.trim s in
+  let length = String.length s in
+  if length < 3 || not (List.mem s.[0] ['-'; '*'; '_']) then false
+  else
+    let rec scan i count =
+      if i = length then count >= 3
+      else if s.[i] = s.[0] then scan (i + 1) (count + 1)
+      else if s.[i] = ' ' || s.[i] = '\t' then scan (i + 1) count
+      else false
+    in
+    scan 0 0
+
+let rule_el ~self : t =
+ fun ctx parent ->
+  let viewport = Ui_services.viewport_width_signal
+    ~scheduler:ctx.Lui_ui.ui_scheduler ~scope:ctx.Lui_ui.ui_scope in
+  (Ui_parts.int_prop Lui_protocol.MarginTop
+     ~value:(reactive (fun width -> if width >= 640. then 32 else 16) viewport)
+   (Ui_parts.int_prop Lui_protocol.MarginBottom
+     ~value:(reactive (fun width -> if width >= 640. then 32 else 16) viewport)
+   (divider ~key:("rule-" ^ self)
+     ~margin_horizontal:0
+     ~height:1 ~border_width:0
+     ~background:"var(--lx-gray-05, var(--ls-border-color, var(--rx-gray-05)))" [])))
+    ctx parent
+
 let body_el ~self s : t option =
-  match quote_body s with
+  if horizontal_rule s then Some (rule_el ~self)
+  else match quote_body s with
   | Some rest -> Some (quote_el ~self rest)
   | None -> Option.map (table_el ~self) (table_parts s)
+
+let footnote_parts source =
+  let definition line =
+    if not (Str_util.starts_with line "[^") then None
+    else match String.index_from_opt line 2 ']' with
+      | Some stop when stop > 2 && stop + 1 < String.length line && line.[stop + 1] = ':' ->
+          Some (String.sub line 2 (stop - 2),
+                String.trim (String.sub line (stop + 2) (String.length line - stop - 2)))
+      | _ -> None in
+  let rec continuation body = function
+    | line :: rest when Str_util.starts_with line "    " ->
+        continuation (String.sub line 4 (String.length line - 4) :: body) rest
+    | line :: rest when Str_util.starts_with line "\t" ->
+        continuation (String.sub line 1 (String.length line - 1) :: body) rest
+    | rest -> String.concat "\n" (List.rev body), rest in
+  let rec trim_tail = function
+    | line :: rest when String.trim line = "" -> trim_tail rest
+    | lines -> lines in
+  let rec collect body definitions = function
+    | [] -> String.concat "\n" (List.rev (trim_tail body)), List.rev definitions
+    | line :: rest ->
+        match definition line with
+        | Some (name, first) ->
+            let value, rest = continuation [first] rest in
+            collect body ((name, value) :: definitions) rest
+        | None -> collect (line :: body) definitions rest in
+  if String.contains source '^' then collect [] [] (String.split_on_char '\n' source)
+  else source, []
 
 (* cljs block-title picks the .block-head-wrap carrier by
    logseq.property.node/display-type: code -> .flex.flex-1.w-full,
@@ -669,19 +732,33 @@ let title_outer_kind (b : Model.block) =
         let s = b.Model.block_title in
         if src_block s <> None || src_eval_parts s <> None then
           Some `flex
+        else if quote_body s <> None || horizontal_rule s
+             || snd (footnote_parts s) <> [] then Some `block
         else Some `inline
 
 (* self: uuid of the block whose title this is — seeds the ref chain
    (cljs :ref-set) that suppresses self/cycle references.
    is_cards: class-Cards blocks append "Practice". *)
-let title ?heading ?(is_cards = false)
+let rec title ?heading ?(is_cards = false)
     ?(card_eid : int option = None) ?(self = "")
-    ?(wrap_attrs = []) ?(prefix : t option = None) (s : string) : t list =
+    ?(wrap_attrs = []) ?(prefix : t option = None) ?highlight (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
 
   | None ->
-      if deprecated_quote s then
+      let body, notes =
+        if src_block s <> None || src_eval_parts s <> None then s, []
+        else footnote_parts s in
+      if notes <> [] then
+        (if body = "" then [] else
+           title ?heading ~card_eid ~self ~wrap_attrs ~prefix body)
+        @ List.mapi (fun index (name, definition) ->
+            row ~key:("footnote-" ^ string_of_int index) ~display:`block
+              ~data_attrs:["data-footnote-definition", name]
+              (Render_inline.parse ~self definition
+               @ [Render_inline.footnote_anchor ~back:true name])) notes
+        @ (if is_cards then [practice_el ~eid:card_eid] else [])
+      else if deprecated_quote s then
         [ (* data-node-type attr is an e2e selector *)
           box ~key:"rc-quote"
             ~data_attrs:[ ("data-node-type", "quote") ]
@@ -703,13 +780,13 @@ let title ?heading ?(is_cards = false)
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)
             let tail = if is_cards then [ practice_el ~eid:card_eid ] else [] in
-            content ?heading ~self ~wrap_attrs ~prefix s :: tail))
+            content ?heading ~self ~wrap_attrs ~prefix ?highlight s :: tail))
 
 (* display-type/heading aware variant — the block model carries
    logseq.property.node/display-type + logseq.property/heading.
    ~resolved: the caller's ref-resolved title (uuid refs rendered to page
    titles); code/math surfaces keep the raw block_title. *)
-let title_block ?(self = "") ?resolved ?(annot = false)
+let title_block ?(self = "") ?resolved ?(annot = false) ?highlight
     (b : Model.block) : t list =
   let s = b.Model.block_title in
   let heading = b.Model.block_heading in
@@ -741,5 +818,5 @@ let title_block ?(self = "") ?resolved ?(annot = false)
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
           title ?heading ~is_cards:(is_cards_block b)
-            ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix
+            ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix ?highlight
             (Option.value resolved ~default:s))

@@ -62,9 +62,9 @@ test('chooseRunnableOperation falls back to add when operation preconditions are
   assert.equal(chooseRunnableOperation('redo', 0), 'redo');
 });
 
-test('parseArgs defaults to 500 ops on default debug port', () => {
+test('parseArgs defaults to 200 ops on default debug port', () => {
   const args = parseArgs([]);
-  assert.equal(args.ops, 500);
+  assert.equal(args.ops, 200);
   assert.equal(args.port, 9333);
   assert.equal(args.undoRedoDelayMs, 350);
 });
@@ -78,7 +78,7 @@ test('parseArgs supports overrides', () => {
 
 test('parseArgs rejects invalid numbers', () => {
   assert.throws(() => parseArgs(['--ops', '0']), /--ops must be a positive integer/);
-  assert.throws(() => parseArgs(['--ops', '499']), /--ops must be at least 500/);
+  assert.throws(() => parseArgs(['--ops', '199']), /--ops must be at least 200/);
   assert.throws(() => parseArgs(['--port', '-1']), /--port must be a positive integer/);
   assert.throws(() => parseArgs(['--undo-redo-delay-ms', '-1']), /--undo-redo-delay-ms must be a non-negative integer/);
 });

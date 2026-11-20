@@ -14,6 +14,7 @@ open Lui_elements
 module S = Popups_state
 module U = I18n
 module P = Lui_protocol
+module Preview_rows = Map.Make (String)
 
 (* -- autocomplete item ----------------------------------------------- *)
 
@@ -112,11 +113,9 @@ let node_icon_slot ~key (it : S.ac_item) : t =
      | Some (icn, true) ->
          [ row ~key:"cp" ~style_class:"icon-cp-container"
              ~cross:`center ~foreground:"inherit"
-             [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
-                 ~style_class:"ui__icon" [] ] ]
+             [ Icon_picker.icon_el ~key:"ni" ~size:14. ~cls:"ui__icon" icn ] ]
      | Some (icn, false) ->
-         [ icon ~key:"ni" ~name:(Icons.app_ref_of_id icn) ~point_size:14
-             ~style_class:"ui__icon" [] ]
+         [ Icon_picker.icon_el ~key:"ni" ~size:14. ~cls:"ui__icon" icn ]
      | None -> [])
 ;;
 
@@ -172,7 +171,7 @@ let ac_label_el (v : S.view) (it : S.ac_item) : t =
       | Some ic ->
           [ row ~key:"ic" ~style_class:"ls-ac-ic" ~cross:`center ~gap:4
               ~min_width:0
-              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~point_size:14
+              [ icon ~key:"icn" ~name:(Icons.name_ref ic) ~point_size:18
                   ~style_class:"ui__icon" []
               ; text ~key:"s" ~value:txt [] ] ]
       (* no-icon commands render the label as a bare text node *)
@@ -370,8 +369,8 @@ let ac_inner (st : S.t) : t =
                 box ~key:("grp" ^ g.g_key)
                   (text ~key:"ghdr"
                      ~style_class:"ui__ac-group-name" ~padding_horizontal:8
-                     ~padding_vertical:4
-                     ~font_size:"0.75rem" ~font_weight:500
+                     ~padding_vertical:8
+                     ~font_size:"0.75rem" ~line_height:"1rem" ~font_weight:500
                      ~foreground:"hsl(var(--popover-foreground) / 0.2)"
                      ~value:(Option.value ~default:"" g.g_hdr)
                      []
@@ -414,7 +413,9 @@ let ac_popover (st : S.t) : t =
      an inner box because the overlay CSS keys
      [data-editor-popup-ref]/[data-side] on that class, and ~data_attrs
      land on the positioner *)
-  (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+  (Ui_components.with_props [ Ui_components.card_shadow ]
+   (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+     ~background:"transparent" ~border_width:0 ~padding:0 ~corner_radius:6
      ~at_signal:
        (Logseq_el.own context
           (Signal.map
@@ -486,7 +487,8 @@ let ac_popover (st : S.t) : t =
                                | None -> "") ) ]
                       | None -> [])
                     vs))
-            ~padding:6
+            ~padding:6 ~border_width:1 ~border_color:"hsl(var(--border))"
+            ~background:"hsl(var(--popover))" ~corner_radius:6
             [ ac_inner st
             ; (* cljs page-search-aux: mod+enter hint under the tag list *)
               if_
@@ -524,7 +526,7 @@ let ac_popover (st : S.t) : t =
                    ; text ~key:"ht"
                        ~value:(U.t "editor/display-tag-inline-hint") [] ]))
             ]))
-     ])
+     ]))
     context parent
 ;;
 
@@ -546,7 +548,7 @@ let cm_item_attrs key attrs v =
   :: (if highlighted then ("data-highlighted", "") :: attrs else attrs)
 
 let cm_item_background key v =
-  if cm_highlighted key v then "var(--lx-gray-05, hsl(var(--muted)))"
+  if cm_highlighted key v then "hsl(var(--muted))"
   else "transparent"
 
 let cm_item_id ~sub idx = function
@@ -585,7 +587,9 @@ let cm_close_sub st =
 
 let close_cm st =
   cm_cancel_pending st;
-  S.close_cm st
+  let opened = (S.get st).S.cm <> None in
+  S.close_cm st;
+  if opened then Editor_actions.clear_selection ()
 
 let cm_color_row (st : S.t) : t =
   (* tailwind <color>-500 paints the web swatch dot; the --color-*
@@ -605,11 +609,11 @@ let cm_color_row (st : S.t) : t =
       ~style_class:"ls-cm-swatch" ~background:"transparent"
       ~label:(U.t "ui/remove-background")
       ~on_press:(fun _ -> run_cm_color st "")
-      [ box ~key:"bg" ~style_class:"heading-bg remove" ~width:18
+      [ row ~key:"bg" ~style_class:"heading-bg remove" ~width:18
           ~height:18 ~corner_radius:9999 ~main:`center ~cross:`center
           ~border_width:1
           ~border_color:"var(--lx-gray-07, hsl(var(--border)))"
-          [ text ~key:"t" ~value:"-" ~font_size:"10px" ~line_height:"1"
+          [ text ~key:"t" ~value:"-" ~font_size:"inherit" ~line_height:"1"
               [] ] ]
   in
   row ~key:"colors" ~style_class:"ls-cm-colors" ~main:`space_between
@@ -922,7 +926,7 @@ let cm_popover (st : S.t) : t =
   let vs = (Signal.value (st.S.vs)) in
   (Ui_parts.class_signal vs
      (fun (v : S.view) ->
-       "ls-context-menu-content ls-anchor-cx"
+       "ui__dropdown-menu-content ls-context-menu-content ls-anchor-cx"
        ^
        (match v.S.cm with
         | Some m ->
@@ -939,14 +943,10 @@ let cm_popover (st : S.t) : t =
               ~accessibility_identifier:"block-context-menu"
               ~on_appear:(fun _ ->
                 match (S.get st).S.cm with
-                | Some cm when not (Ui_services.env_component_menus ()) ->
+                | Some _ when not (Ui_services.env_component_menus ()) ->
                     Option.iter
-                      (fun (idx, item) -> focus_cm_item st ~sub:false idx item)
-                      (List.find_mapi
-                         (fun idx -> function
-                           | (S.Ci_item _ | S.Ci_sub _) as item -> Some (idx, item)
-                           | _ -> None)
-                         cm.S.entries)
+                      (fun menu -> menu.Ui_services.focus ())
+                      (Ui_services.dom_query ".ls-context-menu-content")
                 | _ -> ())
               ~at_signal:
           (Logseq_el.own context
@@ -1050,6 +1050,39 @@ let close_pv st =
   pv_cancel_hide ();
   S.close_pv st
 
+let preview_row_extras ~open_in_sidebar ~render_references context counts : Tree.row_extras =
+  let rows = List.fold_left (fun rows (uuid,count) ->
+    if count <= 0 then rows else
+    let expanded = Signal.state context.Lui_ui.ui_scheduler false in
+    let activate event =
+      let shift = match event with
+        | P.PressDetail (_,detail) -> detail.P.modifiers land 2 <> 0
+        | P.PressModifiers (_,modifiers) -> modifiers land 2 <> 0
+        | _ -> false in
+      if shift then open_in_sidebar uuid
+      else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ())
+    in
+    let right =
+      Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
+        (button ~key:("preview-count-" ^ uuid) ~variant:`ghost ~size:`sm
+          ~accessibility_identifier:("preview-reference-count-" ^ uuid)
+          ~label:(U.t "block/open-block-references")
+          ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
+          ~tooltip:(U.t "block/open-block-references")
+          ~on_press:activate ~on_press_detail:activate
+          [text ~font_size:"14px" ~value:(string_of_int count) []]) in
+    let below =
+      if_ ~test:(Signal.value expanded)
+        (column ~key:("preview-references-" ^ uuid)
+          ~margin_left:42 ~margin_vertical:8 ~padding_horizontal:16 ~padding_vertical:8
+          ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
+          [render_references uuid]) in
+    Preview_rows.add uuid (right,below) rows) Preview_rows.empty counts in
+  let find b = Option.bind b.Model.block_uuid (fun uuid -> Preview_rows.find_opt uuid rows) in
+  { Tree.right_of_block = (fun b -> Option.map fst (find b))
+  ; below_block = (fun b -> Option.map snd (find b))
+  }
+
 let pv_open st (wrap : Ui_services.el) =
   incr pv_generation;
   let generation = !pv_generation and graph = Router.repo () in
@@ -1059,7 +1092,9 @@ let pv_open st (wrap : Ui_services.el) =
       (if wrap.Ui_services.connected () then
          wrap.Ui_services.query "a[data-ref]"
        else None)
-      (fun a -> a.Ui_services.attr "data-ref")
+      (fun a -> match a.Ui_services.attr "data-uuid" with
+        | Some uuid when uuid <> "" -> Some uuid
+        | _ -> a.Ui_services.attr "data-ref")
   with
   | None -> ()
   | Some name ->
@@ -1069,24 +1104,27 @@ let pv_open st (wrap : Ui_services.el) =
       let x = rx +. (rw /. 2.0) -. 305.0
       and y = ry +. rh in
       ignore
-        (let* (title, page, blocks) =
+        ((let* content =
             S.fetch_preview graph name
         in
         (match !pv_pending with
          | Some el
            when generation = !pv_generation && graph = Router.repo ()
-                && Properties_state.same_el el wrap
+                && el == wrap
                 && wrap.Ui_services.connected () ->
              S.set_pv st
                (Some
                   { S.pv_x = x
                   ; S.pv_y = y
-                  ; S.pv_title = title
-                  ; S.pv_page = page
-                  ; S.pv_blocks = blocks
+                  ; S.pv_content = content
                   });
          | _ -> ());
         Js.Promise.resolve ())
+        |> Js.Promise.catch (fun error ->
+          Ui_services.log_error ("preview loading failed",error);
+          if generation = !pv_generation && graph = Router.repo () then
+            S.set_pv st None;
+          Js.Promise.resolve ()))
 
 let pv_track st (el : Ui_services.el) =
   if el.Ui_services.closest ".ls-preview-popup" <> None then (
@@ -1121,35 +1159,49 @@ let pv_track st (el : Ui_services.el) =
 let pv_popover (st : S.t) (p : S.pv) : t =
  fun context parent ->
   Editor_state.ensure context;
+  let content = p.S.pv_content in
+  let block_preview = match content.S.pc_page with
+    | Some page -> content.S.pc_root_uuid <> page.Model.page_uuid
+    | None -> false in
+  let extras = preview_row_extras context
+    (Option.value content.S.pc_ref_counts ~default:[])
+    ~open_in_sidebar:(fun uuid ->
+      Sidebar_state.open_block_references
+        (Sidebar_state.ensure (Option.get !Runtime.model_source)) uuid)
+    ~render_references:(fun uuid ->
+      Views_view.view ~kind:Views_state.KLinkedRefs ~owner:(Wire.Uuid uuid)) in
   (* same hover-reveal contract as the page title: actions only show
      while the pointer is over the title's content wrapper *)
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
-  (Ui_components.with_props [ Ui_components.card_shadow ]
+  (Ui_components.with_props [ Ui_components.card_shadow; Ui_components.Prop.padding_left 24 ]
      (popover ~transition:Ui_components.popover_transition ~key:"pv-pop" ~at:(p.S.pv_x, p.S.pv_y) ~min_width:128
-        ~padding:6
+        ~padding:4
         ~border_color:"hsl(var(--border))" ~border_width:1
         ~corner_radius:6
         ~available_height:
           (Ui_services.dom_viewport_height () -. p.S.pv_y -. 5.)
         ~style_class:"ui__popover-content ls-preview-popup"
-        ~data_attrs:[ ("style", "padding-left:1.5rem") ]
         ~on_dismiss:(fun _ -> close_pv st)
-    [ box ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
+    [ Ui_components.with_props
+        [Ui_components.Prop.padding_left 28; Ui_components.Prop.padding_bottom 64;
+         Ui_components.Prop.font_weight 500]
+      (column ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
         ~min_width:200 ~padding:8
-        ~data_attrs:
-          [ ("tabindex", "-1")
-          ; ( "style"
-            , "margin-left:-1.25rem;padding-left:1.75rem;\
-               padding-bottom:64px;text-align:left;font-weight:500" ) ]
-        [ box ~key:"pvp" ~style_class:"page"
+        ~margin_left:(-20) ~data_attrs:[ ("tabindex", "-1") ]
+        [ column ~key:"pvp" ~style_class:"page"
+            ~gap:32
+            ~margin_bottom:64
             [ box ~key:"pvt"
+                ~padding_vertical:(if block_preview then 0 else 2)
+                ~margin_top:(if block_preview then 8 else 0)
+                ~margin_bottom:(if block_preview then 8 else 0)
                 ~style_class:"ls-page-title content title"
                 ~accessibility_identifier:"page title"
                 [ box ~key:"pvtc"
                     ~style_class:"ls-page-title-container"
-                    [ box ~key:"pvtcw"
+                    [ Ui_components.with_props [Ui_components.Prop.position `relative]
+                      (row ~key:"pvtcw" ~cross:`center ~gap:8
                         ~style_class:"block-content-wrapper"
-                        ~data_attrs:[ ("style", "position:relative") ]
                         ~on_pointer_enter:(fun _ ->
                           Signal.set hover true;
                           Runtime.flush ())
@@ -1157,13 +1209,15 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                           if Runtime.signal_get hover then (
                             Signal.set hover false;
                             Runtime.flush ()))
-                        ([ text ~key:"pvtw"
-                             ~style_class:"block-title-wrap"
-                             ~value:p.S.pv_title [] ]
-                         @ (match p.S.pv_page with
-                            | Some page ->
+                        ([ Render.wrap ~cls:"block-title-wrap"
+                             ~self:(Option.value (Option.bind content.S.pc_page
+                               (fun page -> page.Model.page_uuid)) ~default:"")
+                             content.S.pc_title ]
+                         @ (match content.S.pc_page with
+                            | Some page when Option.is_some content.S.pc_root_uuid
+                                && content.S.pc_root_uuid = page.Model.page_uuid ->
                                 [ Properties_area.title_actions ~hover page ]
-                            | None -> []))
+                            | _ -> [])))
                     ]
                 ]
             ; box ~key:"pvb" ~style_class:"ls-page-blocks"
@@ -1172,28 +1226,25 @@ let pv_popover (st : S.t) (p : S.pv) : t =
                 [ column ~key:"pvbi"
                     ~style_class:"page-blocks-inner"
                     (List.map
-                       (Tree.block_row ~scope:"preview" ~editable:false)
-                       p.S.pv_blocks
+                       (Tree.block_row ~scope:"preview" ~editable:false ~extras)
+                       content.S.pc_blocks
                      @ [ (* cljs page-preview-content mounts the real
                             page-cp, which carries add-button *)
                          Add_button.el ~scope:"preview"
                            ~previous_blank:(reactive
-                             (Add_button.previous_blank ~scope:"preview" p.S.pv_blocks)
+                             (Add_button.previous_blank ~scope:"preview" content.S.pc_blocks)
                              (Editor_state.collapse_sig ()))
-                           ~library:(match p.S.pv_page with
+                           ~library:(match content.S.pc_page with
                              | Some page -> page.Model.page_is_library
                              | None -> false)
-                           ?puuid:
-                             (match p.S.pv_page with
-                              | Some pg -> pg.Model.page_uuid
-                              | None -> None)
+                           ?puuid:content.S.pc_root_uuid
                            ~flags:(fun ctx ->
                              Signal.constant ctx.Lui_ui.ui_scheduler
-                               (p.S.pv_blocks <> [], false)) ()
+                               (content.S.pc_blocks <> [], false)) ()
                        ])
                 ]
             ]
-        ]]))
+        ])]))
     context parent
 
 let pv_dyn (st : S.t) : t =
@@ -1351,7 +1402,20 @@ let handle_contextmenu st (ev : Ui_services.ev) =
               | None -> ())
           | _ -> ())
       | None ->
-      if el.Ui_services.closest ".ls-page-title" <> None then ()
+      if el.Ui_services.closest ".ls-page-title-context" <> None then (
+        let title = Option.get (el.Ui_services.closest ".ls-page-title-context") in
+        let uuid = title.Ui_services.attr "data-page-uuid" in
+        let model = Runtime.model () in
+        match List.find_opt (fun (page : Model.page) -> page.page_uuid = uuid)
+          (Option.to_list model.route_page @ model.journals) with
+        | Some page ->
+            ev.Ui_services.prevent_default ();
+            ev.Ui_services.stop_propagation ();
+            let ax, atop, abot = S.anchor_of_ev ev el in
+            Runtime.send (Action.Page_menu_set
+              (Some (ax, atop, abot, false, page.page_uuid)));
+            Runtime.flush ()
+        | None -> ())
       else
       (* cljs app-context-menu-observer: the block menu only opens from
          .bullet-container[data-blockid] (or a :block/link row's

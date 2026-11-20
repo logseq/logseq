@@ -16,6 +16,7 @@ type menu_ctx =
   ; owner_id : int option
   ; owner_is_tag : bool (* owner entity is a class/tag *)
   ; owner_title : string
+  ; has_owner : bool (* false on the property page: no owner block *)
   ; refresh : unit -> unit
   ; row : W.t
   }
@@ -28,7 +29,7 @@ let menuitem ?(cls = "") ?icon label act : t =
     ~on_press:(fun _ -> act ()) []
 
 let menu_root_class =
-  "ls-property-dropdown ui__dropdown-menu-content z-50 min-w-[8rem] \
+  "ui__dropdown-menu-content z-50 min-w-[8rem] \
    rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
 
 let prop_uuid m = D.entity_uuid_of (D.row_prop m.row)
@@ -37,6 +38,70 @@ let prop_title m = D.row_title m.row
 let prop_entity m = D.row_prop m.row
 let prop_type m = D.row_type m.row
 let closed_values m = D.row_closed_values m.row
+
+(* cljs dropdown-editor-menuitem .inner-wrap: title (opacity .9) on the
+   left; desc (text-xs, opacity .5) or a sm switch on the right *)
+let config_trailing ?desc ?toggle ?(chevron = false) ?(forbid = false) title
+    : t =
+  row ~grow:1. ~main:`space_between ~cross:`center ~gap:4
+    ([ Ui_components.with_props
+         [ Ui_components.Prop.white_space `nowrap
+         ; Ui_components.Prop.opacity 0.9 ]
+         (text ~value:title []) ]
+     @ (match desc with
+        | Some d when d <> "" ->
+            [ Ui_components.with_props
+                [ Ui_components.Prop.font_size "0.75rem"
+                ; Ui_components.Prop.line_height "1rem"
+                ; Ui_components.Prop.opacity 0.5
+                ; Ui_components.Prop.white_space `nowrap ]
+                (text ~value:d []) ]
+        | _ -> [])
+     @ (match toggle with
+        | Some on ->
+            [ switch_ ~style_class:"ui__switch" ~width:32 ~height:18
+                ~padding:3 ~border_width:0 ~corner_radius:9
+                ~background:
+                  (if on then "hsl(var(--primary))" else "hsl(var(--input))")
+                ~foreground:"hsl(var(--background))" ~checked:on [] ]
+        | None -> [])
+     @ (if forbid then
+          [ Ui_components.with_props [ Ui_components.Prop.opacity 0.4 ]
+              (icon ~name:(`app "forbid-2") ~point_size:15 []) ]
+        else [])
+     @
+     if chevron then
+       [ Ui_components.with_props [ Ui_components.Prop.opacity 0.3 ]
+           (icon ~name:(`app "chevron-right") ~point_size:16 []) ]
+     else [])
+
+let config_item ~icon_name ~title ?desc ?toggle ?chevron ~on_press () : t =
+  (* a menu_item without text needs an accessibility label *)
+  Ui_components.with_props [ Ui_components.Prop.accessibility_label title ]
+    (menu_item ~icon:(Icons.name_ref icon_name) ~on_press
+       [ config_trailing ?desc ?toggle ?chevron title ])
+
+(* dropdown-menu-sub: trigger row with desc + chevron, items in a
+   popover at the trigger's right edge *)
+let config_sub ?(padding = 4) ~icon_name ~title ?desc items : t =
+ fun context parent ->
+  let open_ = Signal.state context.Lui_ui.ui_scheduler false in
+  (Ui_components.with_props [ Ui_components.Prop.accessibility_label title ]
+   @@ menu_item ~icon:(Icons.name_ref icon_name)
+     ~on_press:(fun _ ->
+       Runtime.signal_set open_ (not (Runtime.signal_get open_)))
+     ~on_pointer_enter:(fun _ -> Runtime.signal_set open_ true)
+     [ config_trailing ?desc ~chevron:true title
+     ; if_ ~test:(Signal.value open_)
+         (popover ~anchor:`right ~anchor_alignment:`start
+            ~anchor_offset:(-4.) ~role:`menu ~min_width:128 ~padding
+            ~background:"hsl(var(--popover))"
+            ~border_color:"hsl(var(--border))" ~border_width:1
+            ~corner_radius:6 ~transition:Ui_components.popover_transition
+            ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
+            [ column ~gap:0 items ])
+     ])
+    context parent
 
 (* ----- type sub-pane ----- *)
 
@@ -50,13 +115,13 @@ let type_names =
 (* ----- ui-position sub-pane ----- *)
 
 let positions =
-  [ ("logseq.property.ui-position/properties"
+  [ ("properties"
     , "property/ui-position-properties")
-  ; ("logseq.property.ui-position/block-left"
+  ; ("block-left"
     , "property/ui-position-block-left")
-  ; ("logseq.property.ui-position/block-right"
+  ; ("block-right"
     , "property/ui-position-block-right")
-  ; ("logseq.property.ui-position/block-below"
+  ; ("block-below"
     , "property/ui-position-block-below") ]
 
 (* ---------- declarative menu view ---------- *)
@@ -76,8 +141,33 @@ type menu_pane =
   | MNodeTags
   | MEditChoice of W.t
 
-let type_submenu m ~close =
-  submenu ~text:(I18n.t "property/type")
+(* cljs: the type is locked (forbid icon, no submenu) once the property
+   has values *)
+let rec type_submenu m ~close : t =
+ fun context parent ->
+  let used = Signal.state context.Lui_ui.ui_scheduler false in
+  ignore
+    (let* values =
+       D.property_values ~property_ident:(prop_ident m)
+         ~block:(D.uuid_ref m.owner_uuid)
+     in
+     if Ui_effect.alive context.Lui_ui.ui_scope then
+       Runtime.signal_set used (W.elems values <> []);
+     Js.Promise.resolve ());
+  let desc = Option.map I18n.t (List.assoc_opt (prop_type m) type_names) in
+  (reactive
+     (fun locked ->
+       if locked then
+         Ui_components.with_props
+           [ Ui_components.Prop.accessibility_label (I18n.t "property/type") ]
+           (menu_item ~icon:(Icons.name_ref "letter-t") ~disabled:true
+              [ config_trailing ?desc ~forbid:true (I18n.t "property/type") ])
+       else type_sub_open m ~close ?desc ())
+     (Signal.value used))
+    context parent
+
+and type_sub_open m ~close ?desc () =
+  config_sub ~icon_name:"letter-t" ~title:(I18n.t "property/type") ?desc
     (List.map
        (fun (ty, label_key) ->
          menu_item ~text:(I18n.t label_key)
@@ -97,7 +187,11 @@ let type_submenu m ~close =
        type_names)
 
 let position_submenu m ~close =
-  submenu ~text:(I18n.t "property/ui-position")
+  config_sub ~icon_name:"float-left" ~title:(I18n.t "property/ui-position")
+    ?desc:(match D.getf (prop_entity m) "logseq.property/ui-position" with
+           | Some _ ->
+               Option.map I18n.t (List.assoc_opt (D.row_position m.row) positions)
+           | None -> None)
     (List.map
        (fun (pos, label_key) ->
          menu_item ~text:(I18n.t label_key)
@@ -113,6 +207,15 @@ let position_submenu m ~close =
              | None -> ())
            [])
        positions)
+
+let supports_position m =
+  List.mem (prop_type m) ["default"; "number"; "date"; "checkbox"; "node"]
+  && not (List.mem (prop_ident m)
+    ["logseq.property.class/extends"; "logseq.property.class/properties";
+     "logseq.property/enable-history?"; "block/title"; "block/tags";
+     "block/created-at"; "block/updated-at"])
+  && not (prop_type m = "default" && closed_values m = []
+    && D.row_position m.row = "properties")
 
 (* delete confirmation as a semantic dialog on the view-overlay stack *)
 let delete_confirm_dialog context m ~close =
@@ -446,7 +549,8 @@ let multiple_values_item m ~close : t =
       S.refresh_all ();
       Js.Promise.resolve ())
   in
-  (menu_item ~text:(I18n.t "property/multiple-values") ~checked:many
+  (Ui_components.with_props [ Ui_components.Prop.accessibility_label (I18n.t "property/multiple-values") ]
+   @@ menu_item ~icon:(Icons.name_ref "checks")
      ~disabled:(reactive (function None -> true | Some used -> many && used) (Signal.value used))
      ~on_press:(fun _ ->
        match Runtime.signal_get used with
@@ -457,7 +561,9 @@ let multiple_values_item m ~close : t =
            if used then
              Dialogs_state.ask ~title:(I18n.t "property/multiple-values")
                ~desc:(I18n.t "property/multiple-values-confirm") ~on_confirm:save ()
-           else save ()) []) context parent
+           else save ())
+     [ config_trailing ~toggle:many (I18n.t "property/multiple-values") ])
+    context parent
 
 let default_value_pane_view m ~close : t =
  fun context parent ->
@@ -493,10 +599,141 @@ let default_value_pane_view m ~close : t =
 (* the config items of the main pane — shared by menu_view (in-tree
    anchor) and open_menu (element anchor); [context] is needed for the
    delete item's view-overlay confirm dialog *)
+(* cljs checkbox-state-mapping: pick the choice an unchecked / checked
+   checkbox maps to (logseq.property/choice-checkbox-state false/true) *)
+let checkbox_mapping_item m ~close : t =
+  let choices = closed_values m in
+  let state_of c =
+    match D.getf (D.untag c) "logseq.property/choice-checkbox-state" with
+    | Some (W.Bool b) -> Some b
+    | _ -> None
+  in
+  let pick state c =
+    match D.entity_uuid_of c with
+    | Some cu ->
+        ignore
+          (let* _ =
+             D.set_block_property ~block_uuid:cu
+               ~ident:"logseq.property/choice-checkbox-state"
+               ~value:(W.Bool state)
+           in
+           let* _ =
+             Js.Promise.all
+               (Array.of_list
+                  (List.filter_map
+                     (fun other ->
+                       match D.entity_uuid_of other with
+                       | Some ou when ou <> cu && state_of other = Some state ->
+                           Some
+                             (D.remove_block_property ~block_uuid:ou
+                                ~ident:"logseq.property/choice-checkbox-state")
+                       | _ -> None)
+                     choices))
+           in
+           S.refresh_all ();
+           Js.Promise.resolve ());
+        close ()
+    | None -> ()
+  in
+  (* cljs shui/select h-8 per state: trigger shows the mapped choice
+     or the placeholder, choices open below it *)
+  let select_for key state : t =
+   fun context parent ->
+    let open_ = Signal.state context.Lui_ui.ui_scheduler false in
+    let current = List.find_opt (fun c -> state_of c = Some state) choices in
+    (column ~key:("cbm-" ^ key) ~gap:8
+       [ text ~value:(I18n.t key) []
+       ; box ~key:("cbm-w-" ^ key)
+           [ select ~key:("cbm-s-" ^ key)
+               ?text:(Option.map D.ref_title current)
+               ~placeholder:(I18n.t "property/select-choice")
+               ~container_relative_frame:`horizontal ~height:32
+               ~corner_radius:6 ~background:"hsl(var(--background))"
+               ~border_width:1 ~border_color:"hsl(var(--input))"
+               ~on_press:(fun _ ->
+                 Runtime.signal_set open_ (not (Runtime.signal_get open_)))
+               []
+           ; if_ ~test:(Signal.value open_)
+               (popover ~anchor:`below ~anchor_alignment:`start
+                  ~anchor_offset:4. ~role:`menu ~min_width:128 ~padding:4
+                  ~background:"hsl(var(--popover))"
+                  ~border_color:"hsl(var(--border))" ~border_width:1
+                  ~corner_radius:6
+                  ~transition:Ui_components.popover_transition
+                  ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
+                  [ column ~gap:0
+                      (List.map
+                         (fun c ->
+                           menu_item ~text:(D.ref_title c)
+                             ~checked:(state_of c = Some state)
+                             ~on_press:(fun _ -> pick state c) [])
+                         choices) ])
+           ]
+       ])
+      context parent
+  in
+  config_sub ~icon_name:"checkbox"
+    ~title:(I18n.t "property/checkbox-state-mapping")
+    [ Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
+        (column ~gap:16 ~padding:8 ~width:159
+           [ select_for "property/map-unchecked-to" false
+           ; select_for "property/map-checked-to" true ]) ]
+
+(* cljs: owner menu toggle adding the property to the owner's
+   logseq.property/checkbox-display-properties *)
+let show_as_checkbox_item m ~close : t =
+ fun context parent ->
+  let checked = Signal.state context.Lui_ui.ui_scheduler false in
+  let prop_id = D.entity_id_of (prop_entity m) in
+  let ref_id w =
+    match D.untag w with
+    | W.Int i -> Some i
+    | W.Map _ as e -> D.geti e "db/id"
+    | _ -> None
+  in
+  ignore
+    (let* owner = D.entity_by_uuid m.owner_uuid in
+     let ids =
+       match D.getf (D.untag owner) "logseq.property/checkbox-display-properties" with
+       | Some w -> List.filter_map ref_id (W.elems w)
+       | None -> []
+     in
+     if Ui_effect.alive context.Lui_ui.ui_scope then
+       Runtime.signal_set checked
+         (match prop_id with Some id -> List.mem id ids | None -> false);
+     Js.Promise.resolve ());
+  let title =
+    I18n.t
+      (if m.owner_is_tag then "property/show-as-checkbox-on-tagged-nodes"
+       else "property/show-as-checkbox-on-node")
+  in
+  (reactive
+     (fun on ->
+       Ui_components.with_props [ Ui_components.Prop.accessibility_label title ]
+         (menu_item ~icon:(Icons.name_ref "checkbox")
+            ~on_press:(fun _ ->
+              match prop_id with
+              | Some id ->
+                  let ident = "logseq.property/checkbox-display-properties" in
+                  ignore
+                    (if on then
+                       D.delete_property_value ~block_uuid:m.owner_uuid ~ident
+                         ~value:(W.Int id)
+                     else
+                       D.set_block_property ~block_uuid:m.owner_uuid ~ident
+                         ~value:(W.Int id));
+                  S.refresh_all ();
+                  close ()
+              | None -> ())
+            [ config_trailing ~toggle:on title ]))
+     (Signal.value checked))
+    context parent
+
 let main_items context m ~set_pane ~close =
   let toggle_view label ident_key =
     let current = D.getb (prop_entity m) ident_key in
-    menu_item ~text:label ~checked:current
+    Ui_components.with_props [ Ui_components.Prop.accessibility_label label ]
+    @@ menu_item ~icon:(Icons.name_ref "eye-off")
       ~on_press:(fun _ ->
         match prop_uuid m with
         | Some pu ->
@@ -506,19 +743,27 @@ let main_items context m ~set_pane ~close =
             S.refresh_all ();
             close ()
         | None -> ())
-      []
+      [ config_trailing ~toggle:current label ]
   in
-  [ menu_item ~text:(I18n.t "property/name")
-      ~on_press:(fun _ -> Runtime.signal_set set_pane MName) []
+  let sep k = Menu_item.separator ~key:("cfg-sep-" ^ k) ~mv:8 ~mh:0 in
+  [ config_item ~icon_name:"pencil" ~title:(I18n.t "property/name")
+      ~desc:(prop_title m) ~chevron:true
+      ~on_press:(fun _ -> Runtime.signal_set set_pane MName) ()
     ; type_submenu m ~close
     ]
     @ (if prop_type m = "node" then
-         [ menu_item ~text:(I18n.t "property/specify-node-tags")
-             ~on_press:(fun _ -> Runtime.signal_set set_pane MNodeTags)
-               [] ]
+         [ config_item ~icon_name:"hash"
+             ~title:(I18n.t "property/specify-node-tags")
+             ~on_press:(fun _ -> Runtime.signal_set set_pane MNodeTags) () ]
        else [])
     @ (if supports_default_value m then
-       [ menu_item ~text:(I18n.t "property/default-value")
+       let title = I18n.t "property/default-value" in
+       let desc = if prop_type m = "checkbox" then None else
+         Some (match D.getf (prop_entity m) "logseq.property/default-value" with
+           | Some value -> D.ref_title value
+           | None -> I18n.t "property/set-value") in
+       [ Ui_components.with_props [Ui_components.Prop.accessibility_label title]
+         (menu_item ~icon:(Icons.name_ref "settings-2")
           ~checked:(prop_type m = "checkbox"
             && D.getb (prop_entity m) "logseq.property/scalar-default-value")
           ~on_press:(fun _ ->
@@ -531,20 +776,36 @@ let main_items context m ~set_pane ~close =
                 S.refresh_all ();
                 Js.Promise.resolve ());
               close ()
-            end else Runtime.signal_set set_pane MDefaultValue) [] ]
+            end else Runtime.signal_set set_pane MDefaultValue)
+          [config_trailing ?desc ~chevron:(prop_type m <> "checkbox") title]) ]
        else [])
     @ (if D.row_supports_choices m.row then
-      [ menu_item ~text:(I18n.t "property/available-choices")
-          ~on_press:(fun _ -> Runtime.signal_set set_pane MChoices) []
+      [ config_item ~icon_name:"list"
+          ~title:(I18n.t "property/available-choices")
+          ~desc:(match closed_values m with
+                 | [] -> ""
+                 | vs -> I18n.t1 "property/choices-count"
+                           (string_of_int (List.length vs)))
+          ~chevron:true
+          ~on_press:(fun _ -> Runtime.signal_set set_pane MChoices) ()
       ] else [])
+    @ (if D.row_supports_choices m.row
+          && List.length (closed_values m) >= 2 then
+      [ checkbox_mapping_item m ~close ] else [])
     @ (if D.row_supports_many m.row then
       [ multiple_values_item m ~close ] else [])
-    @ [ position_submenu m ~close
-      ; toggle_view (I18n.t "property/hide-by-default")
+    @ [ sep "position" ]
+    @ (if supports_position m then [position_submenu m ~close] else [])
+    @ [ toggle_view (I18n.t "property/hide-by-default")
           "logseq.property/hide?"
       ; toggle_view (I18n.t "property/hide-empty-value")
           "logseq.property/hide-empty-value"
-      ; menu_item ~text:(I18n.t "property/go-to-this-property")
+      ]
+    (* cljs: go-to / delete only when opened for an owner block *)
+    @ (if not m.has_owner then [] else
+      [ sep "owner"
+      ; menu_item ~icon:(Icons.name_ref "share-3")
+          ~text:(I18n.t "property/go-to-this-property")
           ~on_press:(fun _ ->
             (match prop_uuid m with
              | Some u ->
@@ -553,8 +814,11 @@ let main_items context m ~set_pane ~close =
                    (Runtime.nav_hash ("#/page/" ^ u))
              | None -> ());
             close ())
-          []
-      ; menu_item ~variant:`destructive
+          [] ]
+    @ (if D.row_supports_choices m.row
+          && List.length (closed_values m) >= 2 then
+         [ show_as_checkbox_item m ~close ] else [])
+    @ [ menu_item ~variant:`destructive ~icon:(Icons.name_ref "x")
           ~text:
             (I18n.t
                (if m.owner_is_tag then "property/delete-from-tag"
@@ -564,7 +828,7 @@ let main_items context m ~set_pane ~close =
               ~view:(delete_confirm_dialog context m ~close)
               ~on_escape:(fun () -> ()))
           []
-      ]
+      ])
 
 (* the pane-swapping body shared by menu_view (in-tree anchor) and
    open_menu (element anchor): MMain lists more_options + the config
@@ -580,10 +844,15 @@ let menu_body_view ~more_options ~with_title m ~close : t =
         column ~gap:0
           [ (match p with
              | MMain ->
-                 column ~gap:0
+                 (* cljs .ls-property-dropdown: w-[260px] p-1.5 *)
+                 column ~gap:0 ~width:260 ~padding:6
                    ((if with_title then
-                       [ text ~style_class:"ls-menu-h3"
-                           ~value:(I18n.t "ui/configure") [] ]
+                       [ Ui_components.with_props
+                           [ Ui_components.Prop.padding_vertical 8
+                           ; Ui_components.Prop.padding_horizontal 8
+                           ; Ui_components.Prop.opacity 0.8 ]
+                           (text ~style_class:"ls-menu-h3"
+                              ~value:(I18n.t "property/configure") []) ]
                      else [])
                     @ more_options
                     @ main_items context m ~set_pane:pane ~close)
@@ -599,8 +868,9 @@ let menu_body_view ~more_options ~with_title m ~close : t =
 let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
     ~close row : t =
  fun context parent ->
+  let has_owner = true in
   let m =
-    { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row }
+    { owner_uuid; owner_id; owner_is_tag; owner_title; has_owner; refresh; row }
   in
   (popover ~anchor:`below ~anchor_alignment:`start ~role:`menu
      ~anchor_offset:4.0 ~min_width:200
@@ -616,9 +886,9 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
    Configure title. *)
 let open_menu ~(anchor : Ui_services.el) ~owner_uuid ~owner_id
     ~owner_is_tag ~owner_title ~refresh ?(more_options = [])
-    ?(with_title = true) row =
+    ?(with_title = true) ?(has_owner = true) ?anchor_alignment row =
   let m =
-    { owner_uuid; owner_id; owner_is_tag; owner_title; refresh; row }
+    { owner_uuid; owner_id; owner_is_tag; owner_title; has_owner; refresh; row }
   in
   let close = ref (fun () -> ()) in
   let content =
@@ -626,6 +896,7 @@ let open_menu ~(anchor : Ui_services.el) ~owner_uuid ~owner_id
       ~close:(fun () -> !close ())
   in
   let key =
-    Properties_popup.open_anchored ~role:`menu ~cls:menu_root_class anchor content
+    Properties_popup.open_anchored ~role:`menu ~cls:menu_root_class ~padding:4
+      ~fill_available:true ?anchor_alignment anchor content
   in
   close := (fun () -> S.remove_view_overlay key)

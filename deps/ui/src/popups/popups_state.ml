@@ -55,8 +55,8 @@ type ac_item =
   ; ai_title : string option (* cljs item-render div[title] *)
   ; ai_help : bool (* cljs item-render div.has-help > small help icon *)
   ; ai_node : bool (* cljs node-render shape (page/tag/block search) *)
-  ; ai_node_icon : (string * bool) option
-  (* icon name for the h-5 slot; bool = wrap in .icon-cp-container *)
+  ; ai_node_icon : (Node_icon.t * bool) option
+  (* resolved icon for the h-5 slot; bool = wrap in .icon-cp-container *)
   ; ai_title_icon : string option
   (* entity icon → gap-1 wrap around the title (block-title-with-icon) *)
   ; ai_breadcrumb : string option (* mb-1 breadcrumb row; Some "" = empty *)
@@ -66,7 +66,13 @@ type ac_item =
   }
 
 let mk_item ~key ~label ?english ?icon ?group ?info ?(desc = Desc_none)
-    ?(node = false) ?node_icon ?title_icon ?breadcrumb act =
+    ?(node = false) ?node_icon ?node_entity ?title_icon ?breadcrumb act =
+  let node_icon = Option.bind node_icon (fun (name, wrapped) ->
+    let fallback = Node_icon.tabler name in
+    let resolved = match node_entity with
+      | Some entity -> Node_icon.of_entity ~fallback:(Some fallback) entity
+      | None -> Some fallback in
+    Option.map (fun value -> value, wrapped) resolved) in
   let title, help =
     match desc with
     | Desc_none -> (None, false)
@@ -177,14 +183,18 @@ type cm =
        block context menu *)
   }
 
+type preview_content =
+  { pc_title : string
+  ; pc_page : Model.page option
+  ; pc_root_uuid : string option
+  ; pc_blocks : Model.block list
+  ; pc_ref_counts : (string * int) list option
+  }
+
 type pv =
   { pv_x : float
   ; pv_y : float
-  ; pv_title : string
-  ; pv_page : Model.page option (* feeds the title actions — cljs
-                                     page-preview renders page-cp with
-                                     with-actions? *)
-  ; pv_blocks : Model.block list
+  ; pv_content : preview_content
   }
 
 type view =
@@ -354,24 +364,72 @@ let () = Editor_state.on_edit_exit (fun _uuid ->
 (* title + blocks of the page a .preview-ref-link points at — same bare
    uuid/name ref as sidebar_state.fetch_blocks *)
 
-let fetch_preview repo name
-    : (string * Model.page option * Model.block list) Js.Promise.t =
+let preview_ref_counts repo blocks =
+  let rec collect acc blocks =
+    List.fold_left (fun acc (block : Model.block) ->
+      let acc = match block.block_uuid with Some uuid -> uuid :: acc | None -> acc in
+      collect acc block.block_children) acc blocks
+  in
+  let uuids = List.sort_uniq String.compare (collect [] blocks) in
+  if uuids = [] then Js.Promise.resolve (Some [])
+  else
+    (let keys = List.map (fun uuid ->
+       Wire.Array [Wire.kw "block-ref-count";Wire.Uuid uuid]) uuids in
+     let* snapshot = Runtime.invoke2 "thread-api/get-render-snapshots"
+       (Wire.String repo)
+       (Wire.Map [Wire.kw "blocks",Wire.Array [];Wire.kw "children",Wire.Array [];
+                  Wire.kw "resources",Wire.Array keys]) in
+     Outliner_ops.check_loader_result snapshot;
+     let slots = match Wire.get snapshot "slots" with
+       | Some (Wire.Map slots) -> slots
+       | _ -> failwith "Invalid preview reference-count snapshot" in
+     Js.Promise.resolve (Some (List.filter_map (fun (key,slot) ->
+       let value = Wire.get slot "value" in
+       Option.iter Outliner_ops.check_loader_result value;
+       match key, value with
+       | Wire.Array [Wire.Keyword "resource";
+           Wire.Array [Wire.Keyword "block-ref-count";Wire.Uuid uuid]],
+         Some (Wire.Int n) when n > 0 -> Some (uuid,n)
+       | _ -> None) slots)))
+    |> Js.Promise.catch (fun error ->
+      Ui_services.log_error ("preview reference counts failed",error);
+      Js.Promise.resolve None)
+
+let fetch_preview repo name : preview_content Js.Promise.t =
   let* info =
     Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
       (Wire.page_ref name)
   in
-  let page = Decode.page_of_summary info in
-  let title =
-    match page with
-    | Some p -> p.Model.page_title
-    | None -> name
-  in
+  Outliner_ops.check_loader_result info;
+  let root = Decode.page_of_summary info in
   let* w =
     Runtime.invoke3 "thread-api/get-page-blocks-tree"
       (Wire.String repo) (Wire.page_ref name) Wire.Nil
   in
+  Outliner_ops.check_loader_result w;
+  let blocks = Decode.blocks_of_wire w in
+  let* page = match Wire.page_ref name with
+    | Wire.Uuid uuid ->
+        let* parent = Runtime.invoke2 "thread-api/get-block-page-info"
+          (Wire.String repo) (Wire.Uuid uuid) in
+        Outliner_ops.check_loader_result parent;
+        (match Wire.map_get_uuid parent "block/uuid" with
+         | Some parent_uuid when parent_uuid <> uuid ->
+             let* parent_info = Runtime.invoke2 "thread-api/get-page-route-info"
+               (Wire.String repo) (Wire.Uuid parent_uuid) in
+             Outliner_ops.check_loader_result parent_info;
+             Js.Promise.resolve (Decode.page_of_summary parent_info)
+         | _ -> Js.Promise.resolve root)
+    | _ -> Js.Promise.resolve root
+  in
+  let* counts = preview_ref_counts repo blocks in
   Js.Promise.resolve
-    (title, page, Decode.blocks_of_wire w)
+    { pc_title = (match page with Some page -> page.Model.page_title | None -> name)
+    ; pc_page = page
+    ; pc_root_uuid = Option.bind root (fun page -> page.Model.page_uuid)
+    ; pc_blocks = blocks
+    ; pc_ref_counts = counts
+    }
 
 let ac_class_of_kind = function
   | Slash -> "cp__commands-slash"
@@ -596,6 +654,9 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
                  ~icon:"puzzle" ?group:g ~desc:Desc_none
                  (Plugin_slash (pid, tag)))
              xs)
+    ; [mk_item ~key:"editor.slash/cloze" ~label:(U.t "editor.slash/cloze")
+         ~english:(U.en_text "editor.slash/cloze") ~icon:"brackets-contain"
+         (Emit ("{{cloze }}", 2))]
     ] in
   let labels = Hashtbl.create (List.length items) in
   let items = List.fold_right (fun item result ->
@@ -668,34 +729,68 @@ let filter_slash q items =
 (* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
    date pages (calendar icon); choosing one emits [[<journal title>]]
    parsed from the english name *)
-let nlp_date_of (en : string) : Dates.t =
-  let now = Dates.date_now () in
+let nlp_weekdays =
+  ["Monday",1;"Tuesday",2;"Wednesday",3;"Thursday",4;"Friday",5;"Saturday",6;"Sunday",0]
+
+let nlp_date_of ?(now = Dates.date_now ()) (en : string) : Dates.t =
   let add n = Dates.add_days now (int_of_float n) in
   let shift_month n = Dates.shift_month now (int_of_float n) in
   let shift_year n = Dates.shift_year now (int_of_float n) in
+  let f = Dates.fields now in
+  let noon ?(month = f.month) day = Dates.make ~year:f.year ~month ~day ~hours:12 () in
   match en with
   | "Today" -> now
   | "Tomorrow" -> add 1.
   | "Yesterday" -> add (-1.)
   | "Next week" -> add 7.
-  | "This week" -> now
+  | "This week" -> noon (f.day - f.wday)
   | "Last week" -> add (-7.)
   | "Next month" -> shift_month 1.
-  | "This month" -> now
+  | "This month" -> noon 1
   | "Last month" -> shift_month (-1.)
   | "Next year" -> shift_year 1.
-  | _ -> now
+  | "This year" -> noon ~month:1 1
+  | "Last year" -> shift_year (-1.)
+  | _ ->
+      match String.split_on_char ' ' en with
+      | [prefix; weekday] ->
+          (match List.assoc_opt weekday nlp_weekdays with
+           | Some day ->
+               let delta = match prefix with
+                 | "This" -> (day - f.wday + 7) mod 7
+                 | "Last" -> -1 - ((f.wday - day + 6) mod 7)
+                 | "Next" -> 7 - ((f.wday + 6) mod 7) + ((day + 6) mod 7)
+                 | _ -> invalid_arg "Unknown weekday reference" in
+               noon (f.day + delta)
+           | None -> now)
+      | _ -> now
 
 let nlp_en_names =
   [ "Today"; "Tomorrow"; "Yesterday"; "Next week"; "This week"
-  ; "Last week"; "Next month"; "This month"; "Last month"; "Next year" ]
+  ; "Last week"; "Next month"; "This month"; "Last month"; "Next year"; "This year"; "Last year" ]
+  @ List.concat_map (fun prefix -> List.map (fun (day, _) -> prefix ^ " " ^ day) nlp_weekdays)
+      ["Last";"This";"Next"]
 
 let nlp_i18n_key en =
   "date.nlp/"
   ^ String.concat "-"
       (List.map String.lowercase_ascii (String.split_on_char ' ' en))
 
+let nlp_items kind =
+  List.map (fun en ->
+    let title = Dates.journal_title_of (nlp_date_of en) in
+    mk_item ~key:("nlp:" ^ en) ~label:(U.t (nlp_i18n_key en)) ~english:en
+      ~node:true ~node_icon:("calendar", false) ~icon:"calendar"
+      (match kind with
+       | Page_embed -> Emit ("{{embed [[" ^ title ^ "]]}}", 0)
+       | _ -> Emit ("[[" ^ title ^ "]]", 0))) nlp_en_names
+
+let node_search_text item =
+  item.ai_label ^ " " ^
+    (if Str_util.starts_with_ci item.ai_key "nlp:" then item.ai_english else "")
+
 let page_items_for t kind q =
+  let q = if kind = Page_ref then String.trim q else q in
   let act_of ~created title =
     match kind with
     | Tag_search -> if created then Tag_create title else Tag_apply title
@@ -720,18 +815,10 @@ let page_items_for t kind q =
         (* cljs get-matched-classes → fuzzy-search (limit 20) *)
         Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
         |> List.map wrap_tag
-    | Page_ref | Page_embed ->
+    | Page_ref -> Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nlp_items kind) q
+    | Page_embed ->
         if q = "" then
-          List.map
-            (fun en ->
-              let jt = Dates.journal_title_of (nlp_date_of en) in
-              mk_item ~key:("nlp:" ^ en) ~node:true
-                ~node_icon:("calendar", false)
-                ~label:(U.t (nlp_i18n_key en)) ~icon:"calendar"
-                (match kind with
-                 | Page_embed -> Emit ("{{embed [[" ^ jt ^ "]]}}", 0)
-                 | _ -> Emit ("[[" ^ jt ^ "]]", 0)))
-            nlp_en_names
+          nlp_items kind
         else
           Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
           |> List.map wrap
@@ -795,8 +882,8 @@ let repo = Runtime.repo
 let page_item_of_row ?(kind = Page_ref) i w =
   let title =
     match
-      [ Cmdk_state.str_field w "block.temp/original-title"
-      ; Cmdk_state.str_field w "block/title" ]
+      [ Cmdk_state.str_field w "block/title"
+      ; Cmdk_state.str_field w "block.temp/original-title" ]
       |> List.filter_map Fun.id
     with
     | t :: _ -> t
@@ -828,9 +915,27 @@ let page_item_of_row ?(kind = Page_ref) i w =
     ~key:("node-" ^ uuid ^ "-" ^ string_of_int i)
     ~label:title ~node:true
     ~node_icon:((if is_page then "file" else "point-filled"), true)
+    ~node_entity:w
     ?breadcrumb:(if is_page then None else Cmdk_state.breadcrumb_of w)
     act
 ;;
+
+let node_search_items ~kind rows query =
+  let page_keys = Hashtbl.create 20 in
+  let nodes = List.mapi (fun index row ->
+    let item = page_item_of_row ~kind index row in
+    if Wire.get row "page?" = Some (Wire.Bool true) then
+      Hashtbl.replace page_keys item.ai_key ();
+    item) rows in
+  let dates = if kind = Page_ref then nlp_items kind else [] in
+  let ranked = Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nodes @ dates) query in
+  let seen = Hashtbl.create 50 in
+  List.iter (fun item -> Hashtbl.replace seen item.ai_key ()) ranked;
+  let unmatched = List.filter (fun item -> not (Hashtbl.mem seen item.ai_key)) nodes in
+  let pages, blocks = List.partition (fun item ->
+    Hashtbl.mem page_keys item.ai_key || Str_util.starts_with_ci item.ai_key "nlp:")
+      (ranked @ unmatched) in
+  pages @ blocks
 
 let refresh_items t ac =
   match ac.kind with
@@ -921,11 +1026,13 @@ let run_block_search t ac =
 let run_node_search t ac =
   incr t.gen;
   let gen = !(t.gen) and graph = repo () and session = !(t.session) in
+  let query = String.trim ac.query in
+  if ac.kind = Page_ref && query = "" then () else
   ignore
     ((let* w =
        Runtime.invoke3 "thread-api/search-blocks"
          (Wire.String graph)
-         (Wire.String ac.query)
+         (Wire.String query)
          (* cljs <get-matched-blocks passes :enable-snippet? false — the
             page-ref menu renders no snippets and snippet() is the
             expensive part of the FTS query *)
@@ -956,71 +1063,14 @@ let run_node_search t ac =
                  | Some origin, Some editor ->
                      editor.uuid = ac.auuid && origin.epoch == editor.epoch
                  | _ -> false) ->
-          let rows =
-            if a.kind = Embed_ref then
-              List.filter (fun row ->
+          let rows = List.filter (fun row ->
                 Wire.map_get_uuid row "block/uuid" <> Some a.auuid
                 && Cmdk_state.str_field row "block/uuid" <> Some a.auuid) rows
-            else rows
           in
-          let pages, blocks =
-            List.partition
-              (fun w ->
-                match Wire.get w "page?" with
-                | Some (Wire.Bool b) -> b
-                | _ -> false)
-              rows
-          in
-          (* cljs <get-matched-blocks: block-search rows go through a
-             client-side fuzzy re-rank (limit 50) and the unmatched
-             leftovers are appended rather than dropped. The loaded page
-             titles stand in for cljs's leftover source so a search index
-             that is still (re)building can't starve the menu, and nlp
-             date pages join the pool as they do in cljs nlp-pages?. *)
-          let matched_pages = List.mapi (page_item_of_row ~kind:a.kind) pages
-          and matched_blocks = List.mapi (page_item_of_row ~kind:a.kind) blocks in
+          let matched = node_search_items ~kind:a.kind rows query in
           let items =
-            if a.kind = Embed_ref then matched_pages @ matched_blocks
+            if a.kind = Embed_ref then matched
             else begin
-          let seen = Hashtbl.create 32 in
-          List.iter
-            (fun it -> Hashtbl.replace seen it.ai_label ())
-            matched_pages;
-          let leftover =
-            List.filter_map
-              (fun title ->
-                 if Hashtbl.mem seen title then None
-                 else Some (mk_item ~key:("page:" ^ title) ~label:title
-                              ~node:true ~node_icon:("file", true)
-                              (Emit ("[[" ^ title ^ "]]", 0))))
-              (Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50
-                 !(t.titles) a.query)
-          in
-          List.iter
-            (fun it -> Hashtbl.replace seen it.ai_label ()) leftover;
-          let nlp =
-            List.filter_map
-              (fun en ->
-                 let jt = Dates.journal_title_of (nlp_date_of en) in
-                 let label = U.t (nlp_i18n_key en) in
-                 if Hashtbl.mem seen jt || Hashtbl.mem seen label
-                 then None
-                 else
-                   Some
-                     (mk_item ~key:("nlp:" ^ en) ~node:true
-                        ~node_icon:("calendar", false) ~label
-                        ~icon:"calendar"
-                        (Emit ("[[" ^ jt ^ "]]", 0))))
-              (Fuzzy.fuzzy_search
-                 ~extract:(fun en ->
-                    en ^ " "
-                    ^ Dates.journal_title_of (nlp_date_of en))
-                 ~limit:10 nlp_en_names a.query)
-          in
-          let matched =
-            take 50
-              (matched_pages @ nlp @ leftover @ matched_blocks)
-          in
           match
               List.filter
                 (fun it -> S.sub it.ai_key 0 4 = "new:")
@@ -1030,7 +1080,7 @@ let run_node_search t ac =
             | new_items ->
                 let first_starts =
                   match matched with
-                  | m :: _ -> Str_util.starts_with_ci m.ai_label a.query
+                  | m :: _ -> Str_util.starts_with_ci m.ai_label query
                   | [] -> false
                 in
                 if first_starts then
@@ -1592,14 +1642,14 @@ let emit ?(exit = false) auuid tpos text =
   Editor_sink.focus_input auuid
 ;;
 
-let emit_cmd ?pos command extra =
+let emit_cmd ?range command extra =
   Ui_services.dom_dispatch_json "ls:editor-command"
     (detail_obj
        (("command", Json.String command)
-        :: (match pos with
-            | Some p ->
-                [ "from", Json.Number (float_of_int p)
-                ; "to", Json.Number (float_of_int p) ]
+        :: (match range with
+            | Some (from, to_) ->
+                [ "from", Json.Number (float_of_int from)
+                ; "to", Json.Number (float_of_int to_) ]
             | None -> [])
         @ extra))
 ;;
@@ -1759,17 +1809,43 @@ let apply_tag t ac ~create ~inline title =
               Js.Promise.resolve ())
   | _ -> ()
 
-let apply_template t _ac uuid =
+let apply_template t ac uuid =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
+      erase_trigger_text ac;
       let buf = Editor_actions.live_buffer buuid in
+      let editor = Editor_state.editing () in
+      let input_seq = !Editor_state.edit_input_seq in
+      let session_current = Editor_actions.paste_session_current () in
+      let context = Runtime.repo (), Runtime.route () in
+      let current () = context = (Runtime.repo (), Runtime.route ())
+        && session_current () && input_seq = !Editor_state.edit_input_seq in
+      let focus = Editor_actions.paste_focus () in
       close_ac t;
       ignore
-        (let* sop = Outliner_ops.save_block_parsed buuid buf in
-         Outliner_ops.apply_and_refresh
+        ((let* sop = Outliner_ops.save_block_parsed buuid buf in
+         let* result = Outliner_ops.apply_and_refresh_result
            ~opts:(Outliner_ops.op_opts "apply-template")
-           [ sop; Outliner_ops.apply_template uuid buuid ])
+           [ sop; Outliner_ops.apply_template uuid buuid ] in
+         let unchanged () = current ()
+           && match editor, Editor_state.editing () with
+              | Some before, Some live -> before.epoch == live.epoch
+                  && before.model.version = live.model.version
+                  && live.buffer = buf
+              | _ -> false in
+         let* () =
+           if unchanged () && Option.is_some (Outliner_ops.last_inserted_uuid result) then begin
+             Editor_state.set_silent (fun st ->
+               match st.Editor_state.editing with
+               | Some e -> {st with Editor_state.editing = Some {e with base = buf}}
+               | None -> st);
+             let* () = Outliner_ops.resync_open_editor () in
+             if current () then focus result;
+             Js.Promise.resolve ()
+           end else Js.Promise.resolve () in
+         Js.Promise.resolve ())
+         |> Views_db.catch_quiet)
 (* cljs run-query-command! / advanced-query-steps: save the current
    block, tag it logseq.class/Query, create the hidden
    logseq.property/query value block and copy the current title into it
@@ -1780,13 +1856,14 @@ let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      emit ac.auuid ac.tpos "";
+      let title = (Option.get ac.editor).Editor_state.base in
+      Outliner_ops.cancel_pending_save ();
+      Editor_actions.sync_buffer buuid title;
       close_ac t;
-      let title = Editor_actions.live_buffer buuid in
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
       ignore
-        (let* sop = Outliner_ops.save_block_parsed buuid title in
+        ((let* sop = Outliner_ops.save_block_parsed buuid title in
         let* _ =
            Outliner_ops.apply
              [ sop
@@ -1845,6 +1922,7 @@ let run_query t ac ~advanced =
           in
           Outliner_ops.apply_parsed ~rest
             [ (quuid, title); (buuid, "") ])
+        |> Views_db.catch_quiet)
 
 exception Unsupported_configured_input
 
@@ -2474,7 +2552,10 @@ let apply_item t ac ~meta it =
            with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
       invalidate_ac t;
-      erase_trigger_text ac;
+      (match kind with
+       | Template_search -> insert_text ac "/" 0
+       | Page_ref -> insert_text ac "[[]]" 2
+       | _ -> erase_trigger_text ac);
       (match kind with
        | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
@@ -2482,7 +2563,8 @@ let apply_item t ac ~meta it =
       set_ac t
         (Some
            (refresh_items t
-              { ac with kind; flip = None; flipx = None; query = ""; tlen = 0
+              { ac with kind; flip = None; flipx = None; query = "";
+                tlen = (match kind with Template_search -> 1 | Page_ref -> 2 | _ -> 0)
               ; items = []; chosen = 0 }));
       measure_ac t kind
   | Embed_target target_id ->
@@ -2491,20 +2573,31 @@ let apply_item t ac ~meta it =
       Editor_embed.insert ~target_id ""
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
+  | Editor_cmd "youtube-timestamp" ->
+      (* cljs :youtube/insert-timestamp — insert! the macro (nil strips
+         only the trigger) *)
+      (match !(Runtime.video_timestamp) () with
+       | Runtime.Playback_time seconds ->
+           insert_text ac (Printf.sprintf "{{youtube-timestamp %d}}" seconds) 0
+       | Runtime.Player_pending ->
+           Toast.warning (I18n.t "youtube/player-not-ready");
+           insert_text ac "" 0
+       | Runtime.No_video -> insert_text ac "" 0);
+      close_ac t
   | Editor_cmd c ->
-      (match c with
+      let to_ = match c with
        | "date-picker" ->
            (* cljs :editor/show-date-picker keeps the typed trigger
               text — the calendar's commit replaces it *)
-           ()
+           ac.tpos
        | "link" | "image-link" ->
            (* cljs [:editor/input "/link"] — the buffer holds the literal
               command text while the form is open *)
-           emit ac.auuid ac.tpos ("/" ^ c)
+           insert_text ac "/link" 0;
+           ac.tpos
        | _ ->
-           (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
-           emit ac.auuid ac.tpos "");
-      emit_cmd ~pos:ac.tpos c [];
+           ac.tpos + ac.tlen + S.length ac.query in
+      emit_cmd ~range:(ac.tpos, to_) c [];
       close_ac t  | Plugin_slash (pid, tag) ->
       (* cljs handle-steps — strip the "/tag" trigger like an Emit ""
          insert, then run each step (editor/input inserts text;
@@ -2628,8 +2721,8 @@ let ac_keydown t ev =
         (* cljs enter/meta-complete/shift-complete: apply the chosen
            item — mod+enter inlines a tag — or the kind's on-enter when
            no item matched. shift+enter shares enter: no AC supplies
-           on-shift-chosen. Tab is NOT an ac binding on master
-           (:editor/indent) — it falls through to the editor keymap *)
+           on-shift-chosen. Tab is not an ac binding; master's active
+           editor action leaves browser focus traversal intact. *)
         | Keymap_data.Command command -> (
             let inline = command = "auto-complete/meta-complete" in
             (match List.nth_opt ac.items ac.chosen with
@@ -2961,6 +3054,10 @@ let run_cm_item t label =
            | _ -> ())
        | None -> emit_cmd label
            [ "block", Json.String cm.block_id; "scope", Json.String cm.scope ]);
+      (match cm.tag, label with
+       | None, ("copy-ref" | "toggle-numbered-list" | "expand-children" | "collapse-children") ->
+           Editor_actions.clear_selection ()
+       | _ -> ());
       close_cm t
   | None -> ()
 ;;

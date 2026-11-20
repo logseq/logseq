@@ -1,7 +1,6 @@
 (* The native code conduit proposes source changes to the same OCaml
    buffer and debounced persistence path as the web CodeMirror adapter. *)
 
-open Lui_elements
 module W = Wire
 
 let composition_active (ev : Ui_services.ev) = ev.composing
@@ -70,21 +69,7 @@ let open_lang_picker uuid =
     Ui_services.dom_query ("#ls-block-" ^ uuid ^ " .select-language")
   with
   | Some anchor ->
-      let menu =
-        column ~gap:0
-          (List.map
-             (fun name ->
-               menu_item ~text:name
-                 ~data_attrs:[ ("data-lang", name) ]
-                 ~on_press:(fun _ ->
-                   pick_lang uuid name;
-                   Properties_state.close_overlays ())
-                 [])
-             languages)
-      in
-      ignore
-        (Properties_popup.open_anchored ~cls:"ls-code-lang-picker"
-           anchor menu)
+      Views_popup.show_code_language_picker ~anchor ~languages ~on_choose:(pick_lang uuid)
   | None -> ()
 
 (* file route: no native CodeMirror — the plain textarea stays the editor

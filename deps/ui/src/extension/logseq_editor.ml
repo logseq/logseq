@@ -732,6 +732,8 @@ let on_keydown el ev =
   let st = state_of el in
   let key = Option.value (jstr ev "key") ~default:"" in
   let meta = jbool ev "metaKey" and ctrl = jbool ev "ctrlKey" in
+  let passthrough = not (meta || ctrl || jbool ev "altKey")
+    && !(Editor_sink.key_passthrough) st.block_id key in
   (* Native text controls keep the caret visible during repeated editing,
      including readline movement and keys that cannot move past an edge. *)
   if not (st.composing || jbool ev "isComposing")
@@ -757,7 +759,7 @@ let on_keydown el ev =
   if not st.composing && not (meta || ctrl)
      && (String.length key = 1 || List.mem key [ "Dead"; "Process"; "Unidentified" ])
   then ignore (select_range_el el 0 0);
-  if (not st.composing) && not clipboard_key
+  if (not st.composing) && not clipboard_key && not passthrough
      && (List.mem key command_keys || meta || ctrl)
   then prevent_default ev
 

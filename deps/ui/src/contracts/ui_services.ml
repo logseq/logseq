@@ -134,9 +134,13 @@ type uri = { encode_component : string -> string }
 
 (* Clipboard ops are best-effort host requests; the task resolves when
    the host confirms. copy is the fire-and-forget plain-text write. *)
+type block_clipboard = { text : string; html : string; logseq : string }
+
 type clipboard = {
   copy : string -> unit;
   write_text : string -> unit Ui_task.t;
+  write_blocks : block_clipboard Ui_task.t -> unit Ui_task.t;
+  read_blocks : (unit -> string option Ui_task.t) option;
   read_text : unit -> string Ui_task.t;
 }
 
@@ -377,6 +381,7 @@ type dom = {
   body : unit -> el;
   viewport_width : unit -> float;
   viewport_height : unit -> float;
+  device_pixel_ratio : unit -> float;
   document_visible : unit -> bool;
   dispatch : string -> unit;
   (* Cross-area custom event, payload-less (detail = null). *)
@@ -496,6 +501,8 @@ let perf_mark name = (get ()).perf.mark name
 let uri_encode_component s = (get ()).uri.encode_component s
 let clipboard_copy s = (get ()).clipboard.copy s
 let clipboard_write_text s = (get ()).clipboard.write_text s
+let clipboard_write_blocks data = (get ()).clipboard.write_blocks data
+let clipboard_read_blocks () = (get ()).clipboard.read_blocks
 let clipboard_read_text () = (get ()).clipboard.read_text ()
 let session_get k = (get ()).session.get k
 let session_set k v = (get ()).session.set k v
@@ -531,7 +538,22 @@ let viewport_width_signal ~scheduler ~scope =
   Signal.on_dispose scope (fun () -> cancel (); Signal.dispose_signal (Signal.value width));
   Signal.value width
 let dom_query sel = (get ()).dom.query sel
+let viewport_height_signal ~scheduler ~scope =
+  let height = Signal.state scheduler ((get ()).dom.viewport_height ()) in
+  let cancel = (get ()).dom.subscribe_window_event "resize" (fun _ ->
+    Signal.set height ((get ()).dom.viewport_height ());
+    request_flush ()) in
+  Signal.on_dispose scope (fun () -> cancel (); Signal.dispose_signal (Signal.value height));
+  Signal.value height
 let dom_query_all sel = (get ()).dom.query_all sel
+let dom_focus_body () =
+  Option.iter (fun body ->
+    let tabindex = body.attr "tabindex" in
+    body.set_attr "tabindex" "-1";
+    body.focus ();
+    match tabindex with
+    | Some value -> body.set_attr "tabindex" value
+    | None -> body.rm_attr "tabindex") ((get ()).dom.query "body")
 let dom_by_id id = (get ()).dom.by_id id
 let dom_measure_rect id = (get ()).dom.measure_rect id
 let dom_active_element () = (get ()).dom.active_element ()
@@ -540,6 +562,7 @@ let dom_root () = (get ()).dom.doc_root ()
 let dom_body () = (get ()).dom.body ()
 let dom_viewport_width () = (get ()).dom.viewport_width ()
 let dom_viewport_height () = (get ()).dom.viewport_height ()
+let dom_device_pixel_ratio () = (get ()).dom.device_pixel_ratio ()
 let dom_document_visible () = (get ()).dom.document_visible ()
 let dom_dispatch name = (get ()).dom.dispatch name
 let dom_dispatch_json name detail = (get ()).dom.dispatch_json name detail

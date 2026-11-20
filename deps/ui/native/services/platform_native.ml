@@ -699,6 +699,9 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
     ; clipboard =
         { copy = Host.clipboard_write
         ; write_text = clipboard_write_text
+        ; write_blocks = (fun data ->
+            Ui_task.bind data (fun data -> clipboard_write_text data.Ui_services.text))
+        ; read_blocks = None
         ; read_text = clipboard_read_text
         }
     ; session =

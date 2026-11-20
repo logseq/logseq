@@ -1947,7 +1947,8 @@ let () = with_test_entry (fun () ->
           {favorites=state [];home_page=state None;favorite_drop=state None; recents=state []; nav_checked=state [];
            nav_tag_titles=state []; items=state []; block_sources=Hashtbl.create 8;
            open_menu=state ""; groups_collapsed=state [];
-           left_width=state 246.; right_fraction=state 0.3; viewport_w=state 1440.} in
+           left_width=state 246.; right_fraction=state 0.3; viewport_w=state 1440.;
+           restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
         Left_sidebar_view.content_group st ~key:"native-recent" ~class_:"recent"
           ~label:"Recent" ~items_sig:(Signal.value st.recents)
           ~li_class:"recent-item" ~ul_class:"" ~always_bd:true ~recent:true) in
@@ -4840,7 +4841,7 @@ let () =
               key "c" true;
               expect
                 "Native recorded prefixes must include multi-stroke command bindings"
-                (count_class "shortcut-row" = 4);
+                (count_class "shortcut-row" = 3);
               let timer_ids_before =
                 Hashtbl.fold (fun id _ ids -> id :: ids) Host.timers []
               in
@@ -5308,7 +5309,8 @@ let () = with_test_entry (fun () ->
           {favorites=state [];home_page=state None;favorite_drop=state None; recents=state []; nav_checked=state [];
            nav_tag_titles=state []; items=state []; block_sources=Hashtbl.create 8;
            open_menu=state ""; groups_collapsed=state [];
-           left_width=state 246.; right_fraction=state 0.3; viewport_w=state 240.} in
+           left_width=state 246.; right_fraction=state 0.3; viewport_w=state 240.;
+           restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
         (* Leave room for a real outside-click target below the anchored menu. *)
         Lui_elements.column ~width:240 ~height:640
           [Left_sidebar_view.page_item_el st page
@@ -5444,7 +5446,8 @@ let () = with_test_entry (fun () ->
         {favorites=state [target];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
          nav_tag_titles=state [];items=state [];block_sources=Hashtbl.create 8;
          open_menu=state "";groups_collapsed=state [];
-         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in
+         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
+         restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) in
   Fun.protect ~finally:(fun () ->
@@ -5923,7 +5926,8 @@ let () = with_test_entry (fun () ->
           let state value=Signal.state context.Lui_ui.ui_scheduler value in
           let st:Sidebar_state.t={favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
             nav_tag_titles=state [];items=state [];block_sources=Hashtbl.create 8;open_menu=state "";groups_collapsed=state [];
-            left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1000.} in
+            left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1000.;
+            restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
           sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
           Sidebar_state.bind_editor_sources st context;
           let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
@@ -6014,7 +6018,8 @@ let () = with_test_entry (fun () ->
           let sidebar : Sidebar_state.t =
             {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];block_sources=Hashtbl.create 8;open_menu=state "";groups_collapsed=state [];
-             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1140.} in
+             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1140.;
+             restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
           Sidebar_state.st_ref:=Some sidebar;Sidebar_state.model_signal:=Some model;
           let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
             ~kind:Views_state.KAllPages ~feature:"all-pages" ~owner:Wire.Nil in
@@ -7761,8 +7766,7 @@ let () =
                     let background =
                       Option.get
                         (Theme_vars.color_of
-                           "var(--lx-gray-01, \
-                            var(--ls-primary-background-color, \
+                           "var(--lx-gray-01, var(--ls-primary-background-color, \
                             hsl(var(--background))))")
                     in
                     expect
@@ -8951,10 +8955,11 @@ let () = with_test_entry (fun () ->
         let values=List.filter_map (function
           | [_;W.Array [W.Array [W.Keyword op;W.Array args]];_] ->
               expect (label^": selected owners must share one batch write")
-                (op=(if entry="dialog" then "batch-set-property" else "set-block-property"));
-              if entry="dialog" then
-                expect (label^": the batch retains all selected owners")
-                  (match args with W.List owners::_ -> owners=[W.Uuid "date-owner";W.Uuid "date-other"] | _ -> false);
+                (op="batch-set-property");
+              expect (label^": the batch retains all selected owners")
+                (match args with W.List owners::_ ->
+                  owners=(if entry="dialog" then [W.Uuid "date-owner";W.Uuid "date-other"]
+                    else [W.Uuid "date-owner"]) | _ -> false);
               (match args with _::W.Keyword id::value::_ when id=ident -> Some value | _ -> None)
           | _ -> None) (List.rev !writes) in
         expect (label^": activating a calendar date writes its property") (values<>[]);
@@ -9072,13 +9077,16 @@ let () = with_test_entry (fun () ->
       | "thread-api/apply-outliner-ops",[_;Wire.Array ops;_] ->
           writes:=args::!writes;
           List.iter (function
+            | Wire.Array [Wire.Keyword "batch-set-property";
+                Wire.Array [Wire.List [Wire.Uuid "repeat-owner"];
+                  Wire.Keyword "logseq.property.repeat/repeated?";Wire.Bool b;Wire.Map []]] ->
+                current_repeated:=b
             | Wire.Array [Wire.Keyword "set-block-property";Wire.Array [_;Wire.Keyword ident;value]] ->
                 (match ident,value with
                  | "logseq.property.repeat/recur-frequency",Wire.Int n -> current_frequency:=n
                  | "logseq.property.repeat/recur-unit",Wire.Int n -> current_unit:=n
                  | "logseq.property.repeat/repeat-type",Wire.Int n -> current_type:=n
                  | "logseq.property.repeat/checked-property",Wire.Int n -> current_when:=n
-                 | "logseq.property.repeat/repeated?",Wire.Bool b -> current_repeated:=b
                  | _ -> ())
             | Wire.Array [Wire.Keyword "remove-block-property";Wire.Array [_;Wire.Keyword "logseq.property.repeat/repeat-type"]] ->
                 current_type:=0
@@ -9368,7 +9376,8 @@ let () = with_test_entry (fun () ->
   let previous_model = !Runtime.read_model and previous_remote = !Graphs_view.remote_st_ref
   and previous_graphs = !Graphs_ops.remote_graphs and previous_refresh = !Graphs_ops.on_repos_changed in
   let previous_token=Hashtbl.find_opt Platform_native.ls "id-token"
-  and previous_language=Hashtbl.find_opt Platform_native.ls "preferred-language" in
+  and previous_language=Hashtbl.find_opt Platform_native.ls "preferred-language"
+  and previous_metadata=Hashtbl.find_opt Platform_native.ls Graphs_meta.key in
   let restore key = function Some value -> Hashtbl.replace Platform_native.ls key value
     | None -> Hashtbl.remove Platform_native.ls key in
   let model={Model.initial with phase=Model.Ready;route=Model.All_graphs;
@@ -9376,6 +9385,7 @@ let () = with_test_entry (fun () ->
   Runtime.read_model:=(fun () -> model);Graphs_view.remote_st_ref:=None;
   Graphs_ops.remote_graphs:=[];Hashtbl.remove Platform_native.ls "id-token";
   Hashtbl.replace Platform_native.ls "preferred-language" "\"en\"";
+  List.iter (fun repo -> Graphs_meta.upsert repo [Wire.kw "created-at", Wire.Int 0]) model.repos;
   let store=Lui_store.create () in
   let backend={backend_profile=profile MacOS GenericHost;
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
@@ -9387,6 +9397,7 @@ let () = with_test_entry (fun () ->
     Graphs_view.remote_st_ref:=previous_remote;Graphs_ops.remote_graphs:=previous_graphs;
     Graphs_ops.on_repos_changed:=previous_refresh;
     restore "id-token" previous_token;restore "preferred-language" previous_language;
+    restore Graphs_meta.key previous_metadata;
     Theme_vars.set_dark false;Theme_vars.set_accent "logseq") (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
     let ids=Lui_store.preorder store in
@@ -11304,7 +11315,8 @@ let () = with_test_entry (fun () ->
           let st : Sidebar_state.t =
             {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];nav_tag_titles=state [];
              items=state [];block_sources=Hashtbl.create 8;open_menu=state "";groups_collapsed=state [];
-             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 800.} in
+             left_width=state 246.;right_fraction=state 0.3;viewport_w=state 800.;
+             restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
           sidebar:=Some st;
           let items = Signal.value (if recent then st.recents else st.favorites) in
           Lui_elements.column ~width:240
@@ -11443,7 +11455,7 @@ let () = with_test_entry (fun () ->
     Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;Runtime.worker:=previous_worker) (fun () ->
     ignore (Lui_app.start app);ignore (Lui_app.flush app);
     Runtime.read_model:=(fun () -> model);
-    Runtime.app_send:=(fun action -> (match action with Action.Title_edit_start -> incr edits | _ -> ());true);
+    Runtime.app_send:=(fun action -> (match action with Action.Title_edit_start | Action.Title_edit_start_at _ -> incr edits | _ -> ());true);
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
     Platform.dom_parent_of:=Lui_store.parent store;
     let nodes=Lui_store.preorder store in
@@ -11732,13 +11744,14 @@ let () = with_test_entry (fun () ->
         let ids = subtree (root "breadcrumb-result") in
         let find_class name = List.find (fun id -> Lui_store.string_prop store id "style-class"=Some name) ids in
         let header = find_class "breadcrumb" and main = find_class "cp__cmdk-item-main-text" in
-        let first_row parent = List.find (fun id -> Lui_store.kind store id="row") (Lui_store.child_ids store parent) in
-        let header_label = first_row header and title_label =
+        let header_label = List.find (fun id ->
+          Lui_store.kind store id="text" && Lui_store.string_prop store id "text"=Some path)
+            (Lui_store.child_ids store header) and title_label =
           List.find (fun id -> Lui_store.kind store id="text") (Lui_store.child_ids store main) in
         let h = rect header and title = rect title_label and label = rect header_label in
         let row = List.find (fun id -> Lui_store.bool_prop store id "press-enabled") ids in
         if badge=Cmdk_state.Header_badge then begin
-          let badge_node = List.find (fun id -> Lui_store.kind store id="text") (Lui_store.child_ids store header) in
+          let badge_node = List.find (fun id -> id<>header_label && Lui_store.kind store id="text") (Lui_store.child_ids store header) in
           let text = Option.get (Lui_store.string_prop store badge_node "text") in
           let natural_width,_ = Text_engine.pad_size store badge_node ~scale
             (Text_engine.measure_text ~width:0. engine badge_node text) in
@@ -12123,8 +12136,8 @@ let () =
           (match Theme_vars.color_of "var(--left-sidebar-bg-color)" with
            | Some color -> color.a=255 | None -> false)) Ui_theme_css.accents)
       [Ui_theme.Light;Ui_theme.Dark];
-    Theme_vars.set_accent "none";Theme_vars.set_dark false;
-    install Ui_theme.Light ["--secondary","120 100% 25%"];
+    Theme_vars.set_accent "tomato";Theme_vars.set_dark false;
+    install Ui_theme.Light ["--rx-mauve-02","hsl(120 100% 25%)"];
     expect "Application CSS aliases must inherit the computed body custom properties"
       (Theme_vars.color_of "var(--left-sidebar-bg-color)"=Some (Lui_scene.color 0 128 0 255)));
   List.iter prerr_endline (List.rev !failures);

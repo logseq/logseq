@@ -55,7 +55,7 @@ let control_target ev =
 
 let control_owned_key ev =
   not (mods ev || ev.Ui_services.alt)
-  && control_target ev
+  && (control_target ev || closest ".CodeMirror" ev.Ui_services.target <> None)
   && (match ev_key ev with
       | "Enter" | " " | "Tab" | "Escape" | "Backspace" | "Delete"
       | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
@@ -84,12 +84,10 @@ let uuid_of_prefixed prefix id =
    key with no visible item picked *)
 let ac_popup_open () = Popups_state.ac_attached ()
 
-(* keys the open autocomplete consumes — master's auto-complete map
-   (enter/up/ctrl+p/down/ctrl+n/shift+enter/mod+enter/escape). Tab is
-   deliberately absent: master leaves it bound to :editor/indent while
-   the popup is open *)
+(* Autocomplete handles activation/navigation; Tab is left to browser
+   focus traversal while the editor action is active. *)
 let ac_owned_key = function
-  | "Enter" | "Escape" | "ArrowUp" | "ArrowDown" -> true
+  | "Enter" | "Escape" | "ArrowUp" | "ArrowDown" | "Tab" -> true
   | _ -> false
 
 (* -- line-editing ops (cljs editor/clear-block, kill-line-before,
@@ -101,6 +99,44 @@ let is_word_char c =
   || (c >= 'A' && c <= 'Z')
   || (c >= '0' && c <= '9')
   || c = '_' || Char.code c > 127
+
+let word_separator = function ' ' | '\n' -> true | _ -> false
+
+let forward_word_range (m : Edit_model.t) =
+  let lo, _ = A.sel_span_of m in
+  let n = String.length m.source in
+  let rec skip i =
+    if i < n && word_separator m.source.[i] then skip (i + 1) else i in
+  let rec stop i =
+    if i < n && not (word_separator m.source.[i]) then stop (i + 1) else i in
+  let first = skip lo in
+  first, stop first
+
+let backward_word_position (m : Edit_model.t) =
+  let lo, _ = A.sel_span_of m in
+  let rec previous i =
+    if i <= 0 then 0
+    else if word_separator m.source.[i] then i else previous (i - 1) in
+  let rec skip i =
+    if i >= 0 && word_separator m.source.[i] then skip (i - 1) else i + 1 in
+  match previous (lo - 1) with 0 -> 0 | i -> skip i
+
+let move_shortcut_word ~backward (m : Edit_model.t) =
+  let target = if backward then backward_word_position m else snd (forward_word_range m) in
+  let target = Edit_model.snap_ref m target ~forward:(not backward) in
+  Edit_model.select m ~anchor:target ~focus:target
+
+let kill_word_forward (m : Edit_model.t) =
+  let lo, hi = A.sel_span_of m in
+  let first, last = forward_word_range m in
+  let last = match Edit_model.atomic_starting_at m first with
+    | Some run -> run.end_off | None -> last in
+  let stop = if last < String.length m.source && word_separator m.source.[last]
+    then last + 1 else last in
+  let updated = Edit_model.splice m first stop "" in
+  let adjust pos = if pos > stop then pos - (stop - first)
+    else if pos > first then first else pos in
+  Edit_model.select updated ~anchor:(adjust lo) ~focus:(adjust hi)
 
 (* kill from caret back to the start of the visual line *)
 let kill_line_before (m : Edit_model.t) =
@@ -393,6 +429,17 @@ let wrap_model (m : Edit_model.t) marker =
     Edit_model.select updated
       ~anchor:(if blank then lo + ml else caret) ~focus:caret
 
+let insert_link_model (m : Edit_model.t) =
+  let lo, hi = A.sel_span_of m in
+  let selected = String.sub m.source lo (hi - lo) in
+  let content, forward =
+    if selected = "" then "[]()", 1
+    else if A.is_url selected then "[](" ^ selected ^ ")", 1
+    else "[" ^ selected ^ "]()", String.length selected + 3
+  in
+  let updated = Edit_model.splice m lo hi content in
+  Edit_model.select updated ~anchor:(lo + forward) ~focus:(lo + forward)
+
 (* up/down inside the editing model: alt/meta+shift moves the block, mod
    collapses, boundary arrows leave the buffer *)
 let move_block_chord ~shift ~alt ~meta ~ctrl =
@@ -470,6 +517,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
        | "i" when (meta || ctrl) && not shift -> wrap_model m "*"
        | "s" when (meta || ctrl) && shift -> wrap_model m "~~"
        | "h" when (meta || ctrl) && shift -> wrap_model m "=="
+       | "l" when (meta || ctrl) && not shift -> insert_link_model m
        | "v" when (meta || ctrl) && shift -> paste_text_at_caret uuid; m
        | "z" | "y" when meta || ctrl -> m
        | _ -> defer ())
@@ -479,6 +527,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         (* cljs editor/cycle-todo — mod+enter never splits *)
         Editor_commands.cycle_todo uuid;
         m
+    | "Enter" when (meta || ctrl) && shift -> m
     | "Enter" when shift ->
         if Settings_state.doc_mode_newline () then
           Edit_input.handle ~route ~conduit m (Edit_input.Key ({kev with shift = false}, repeat))
@@ -527,11 +576,11 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
         (* ctrl edit keys — before the mod cases: mods ⊃ ctrl *)
         | "l" when ctrl && not meta -> clear_block m
         | "u" when ctrl && not meta -> kill_line_before m
-        | "w" when ctrl && not meta -> Edit_model.delete_word_backward m
+        | "w" when ctrl && not meta -> kill_word_forward m
         | "b" when ctrl && shift ->
-            Edit_model.move m Edit_model.Word_left ~extend:false
+            move_shortcut_word ~backward:true m
         | "f" when ctrl && shift ->
-            Edit_model.move m Edit_model.Word_right ~extend:false
+            move_shortcut_word ~backward:false m
         | "n" when ctrl && not meta ->
             A.arrow_nav uuid false;
             m
@@ -589,9 +638,7 @@ let edit_key ~route ~conduit ~repeat uuid (kev : Edit_model.key_event)
             follow_link m ~sidebar:shift;
             m
         | "l" when meta && not shift ->
-            (* cljs editor/insert-link *)
-            Editor_commands.open_link_form false uuid m.Edit_model.caret;
-            m
+            insert_link_model m
         | "c" when (meta || ctrl) && shift ->
             (* cljs editor/copy-text — the block's text to clipboard *)
             Ui_services.clipboard_copy m.Edit_model.source;
@@ -702,6 +749,10 @@ let stroke_of ev =
    except the non-editing-only set *)
 let chord_may_run ~target ~control editing cid =
   if editing && (cid = "editor/copy" || cid = "editor/cut") then false
+  else if cid = "editor/indent" || cid = "editor/outdent" then
+    not control && (S.editing () <> None || not (S.String_set.is_empty (S.selected ()))
+                    || !S.pending_focus <> None)
+  else if control && cid = "editor/select-all-blocks" then false
   else if cid = "editor/select-parent" then
     not control
     && (match S.editing () with
@@ -724,8 +775,61 @@ let palette_open () =
   | Some st -> (Cmdk_state.get st).Cmdk_state.open_
   | None -> false
 
+let navigated_page_menu = ref None
+
+let page_menu_navigated () =
+  match !navigated_page_menu, (Runtime.model ()).Model.page_menu with
+  | Some previous, Some current -> previous == current
+  | _ -> false
+
+let page_menu_items selector =
+  Ui_services.dom_query_all selector
+  |> List.filter (fun item -> item.Ui_services.closest "[inert]" = None)
+
+let page_menu_key ev =
+  match (Runtime.model ()).Model.page_menu, ev_key ev with
+  | Some (_, _, _, app, _), ("ArrowDown" | "ArrowUp" | "Home" | "End" as key)
+    when not (ev.Ui_services.default_prevented || ev.Ui_services.composing
+              || ev.Ui_services.meta || ev.Ui_services.ctrl || ev.Ui_services.alt) ->
+      let selector = if app then ".ls-dots-menu" else ".ls-context-menu-content" in
+      let items = page_menu_items
+        (selector ^ " [role='menuitem']:not([aria-disabled='true'])") in
+      let count = List.length items in
+      if count = 0 then false else begin
+        let active = Ui_services.dom_active_element () in
+        let index_of active = List.mapi (fun index item -> index, item) items
+          |> List.find_opt (fun (_, item) ->
+            Option.fold ~none:false ~some:item.Ui_services.contains active)
+          |> Option.map fst in
+        let current = match index_of active with
+          | Some index -> index
+          | None when app ->
+              (match List.rev (page_menu_items
+                (selector ^ " [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])")) with
+               | last :: _ -> Option.value (index_of (Some last)) ~default:(-1)
+               | [] -> -1)
+          | None -> -1 in
+        let index = match key with
+          | "Home" -> 0 | "End" -> count - 1
+          | "ArrowDown" -> (current + 1) mod count
+          | _ -> if current < 0 then count - 1 else (current + count - 1) mod count in
+        (List.nth items index).Ui_services.focus ();
+        navigated_page_menu := (Runtime.model ()).Model.page_menu;
+        ev.Ui_services.prevent_default ();
+        ev.Ui_services.stop_immediate ();
+        true
+      end
+  | _ -> false
+
 let on_global_key ev =
-  if ev.Ui_services.default_prevented || input_composing ev
+  if page_menu_key ev then ()
+  else if not ev.Ui_services.default_prevented
+     && (Runtime.model ()).Model.help_open && ev_key ev = "Escape"
+     && (closest "#help-menu" ev.Ui_services.target <> None
+         || closest "#help-menu-trigger" ev.Ui_services.target <> None) then (
+    ev.Ui_services.prevent_default ();
+    ev.Ui_services.stop_immediate ())
+  else if ev.Ui_services.default_prevented || input_composing ev
      || closest ".pswp" ev.Ui_services.target <> None
      || control_owned_key ev
   then chord_seq := []
@@ -762,7 +866,7 @@ let on_global_key ev =
               ev.Ui_services.prevent_default ();
               ev.Ui_services.stop_immediate ();
               if cid = "go/search" && palette_open () then
-                Option.iter Cmdk_state.close !Cmdk_state.latest_st
+                ()
               else if cid = "editor/select-parent" then
                 (match S.editing () with
                  | Some _ -> A.exit_edit ~select:true
@@ -1313,7 +1417,10 @@ and apply_input ?frame uuid ev =
   | _ -> ()
   end
 
-let () = S.surface_input := fun frame uuid input -> apply_input ~frame uuid input
+let () =
+  S.surface_input := (fun frame uuid input -> apply_input ~frame uuid input);
+  Editor_sink.key_passthrough := (fun uuid key ->
+    key = "Tab" && S.editing_uuid () = Some uuid && ac_popup_open ())
 
 (* translate a DOM keydown into the Edit_input event the conduit would
    have emitted for it *)
@@ -1390,8 +1497,7 @@ let dispatch_command cid =
       in
       apply_input ?frame:!S.active_frame editing.S.uuid
         (Edit_input.Key (Edit_model.key_ev key, false))
-  | Some editing, "editor/insert-link" ->
-      Editor_commands.open_link_form false editing.S.uuid editing.S.model.Edit_model.caret
+  | Some _, "editor/insert-link" -> update insert_link_model
   | Some editing, ("editor/follow-link" | "editor/open-link-in-sidebar") ->
       follow_link editing.S.model ~sidebar:(cid = "editor/open-link-in-sidebar")
   | Some editing, "editor/zoom-in" -> A.zoom_to editing.S.uuid
@@ -1411,15 +1517,22 @@ let dispatch_command cid =
   | _, "editor/italics" -> update (fun model -> wrap_model model "*")
   | _, "editor/strike-through" -> update (fun model -> wrap_model model "~~")
   | _, "editor/highlight" -> update (fun model -> wrap_model model "==")
+  | Some _, "editor/insert-youtube-timestamp" ->
+      (match !(Runtime.video_timestamp) () with
+       | Runtime.No_video -> ()
+       | Runtime.Player_pending -> Toast.warning (I18n.t "youtube/player-not-ready")
+       | Runtime.Playback_time seconds ->
+           update (fun model -> Edit_model.insert_text model
+             (Printf.sprintf "{{youtube-timestamp %d}} " seconds)))
   | _, "editor/clear-block" -> update clear_block
   | _, "editor/kill-line-before" -> update kill_line_before
   | _, "editor/kill-line-after" -> update kill_line_after
   | _, "editor/backward-kill-word" -> update Edit_model.delete_word_backward
-  | _, "editor/forward-kill-word" -> update Edit_model.delete_word_forward
+  | _, "editor/forward-kill-word" -> update kill_word_forward
   | _, "editor/backward-word" ->
-      update (fun model -> Edit_model.move model Edit_model.Word_left ~extend:false)
+      update (move_shortcut_word ~backward:true)
   | _, "editor/forward-word" ->
-      update (fun model -> Edit_model.move model Edit_model.Word_right ~extend:false)
+      update (move_shortcut_word ~backward:false)
   | _, "editor/beginning-of-block" ->
       update (fun model -> Edit_model.move model Edit_model.Doc_start ~extend:false)
   | _, "editor/end-of-block" ->
@@ -1809,22 +1922,24 @@ let on_paste ev =
       ev.Ui_services.prevent_default ();
       ev.Ui_services.stop_immediate ();
       A.upload_file_snapshots ev.Ui_services.files
-    end else if editor_target || not (is_editable_target ev.Ui_services.target) then
-      let clipboard = !(S.clipboard), !(S.clipboard_text) in
+    end else if editor_target then
+      let cached = !(S.clipboard) in
+      let text = ev.Ui_services.clipboard_get "text/plain"
+      and html = ev.Ui_services.clipboard_get "text/html"
+      and logseq = ev.Ui_services.clipboard_get "application/logseq" in
+      let saved = { ev with Ui_services.clipboard_get =
+          (function "text/plain" -> text | "text/html" -> html
+            | "application/logseq" -> logseq | _ -> "") } in
       if !S.structure_pending then (
-        let text = ev.Ui_services.clipboard_get "text/plain"
-        and html = ev.Ui_services.clipboard_get "text/html" in
         ev.Ui_services.prevent_default ();
         ev.Ui_services.stop_immediate ();
-        let saved = { ev with Ui_services.clipboard_get =
-            (function "text/plain" -> text | "text/html" -> html | _ -> "") } in
         let context = Runtime.repo (), Runtime.route () in
         let before = S.editing () in
         S.enqueue_edit_action ~real:true (fun () ->
             if context = (Runtime.repo (), Runtime.route ())
                && S.replay_current before (S.editing ()) then
-              A.paste_blocks ~clipboard saved))
-      else A.paste_blocks ~clipboard ev
+              A.paste_from_clipboard ~cached saved))
+      else A.paste_from_clipboard ~cached saved
 
 (* a clipboard event aimed at the open editor's conduit input *)
   end

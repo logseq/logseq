@@ -119,7 +119,7 @@ ignored while editing.
 | `mod+[`, `mod+]` | nav back/forward | **parity** |
 | `mod+c mod+c` | clear right sidebar | **parity** |
 | `mod+c mod+s` | rebuild search index | **parity** (wired) |
-| `mod+c mod+r` | highlight recent blocks | **parity** (wired) |
+| `t h` | highlight recent blocks | **parity** (shared key dispatch and rendered cmdk binding verified) |
 | `alt+shift+c` | toggle Contents | **parity** (wired) |
 | `mod+m` | publish dialog | **parity** (wired) |
 | `shift+/` | help | **parity** (wired) |

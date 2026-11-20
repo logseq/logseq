@@ -90,8 +90,26 @@
    (sanitize-ref-value db nil v))
   ([db tx-data v]
    (cond
-     (vector? v) (stable-entity-ref-with-tx-data db tx-data v)
-     (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
+     (and (vector? v) (= 2 (count v)) (get-in db [:schema (first v) :db/unique]))
+     (stable-entity-ref-with-tx-data db tx-data v)
+
+     (vector? v)
+     (mapv (fn [ref-value]
+             ;; Reference maps carry creation data for replay.
+             (if (or (map? ref-value) (de/entity? ref-value))
+               ref-value
+               (stable-entity-ref-with-tx-data db tx-data ref-value)))
+           v)
+
+     (or (set? v) (sequential? v))
+     (into #{} (map (fn [ref-value]
+                      (let [ref-uuid (:block/uuid ref-value)]
+                        (if (and (map? ref-value)
+                                 (uuid? ref-uuid)
+                                 (nil? (d/entity db [:block/uuid ref-uuid])))
+                          (dissoc ref-value :db/id)
+                          (stable-entity-ref-with-tx-data db tx-data ref-value)))))
+           v)
      :else (stable-entity-ref-with-tx-data db tx-data v))))
 
 (defn- sanitize-upsert-property-schema
@@ -136,13 +154,16 @@
    (sanitize-block-payload db block nil))
   ([db block {:keys [created-uuids tx-data]}]
    (if (map? block)
-     (let [refs (sanitize-block-refs (:block/refs block))
-           created-ref-uuids (when (and (seq created-uuids) (seq refs))
-                               (->> refs
-                                    (keep :block/uuid)
-                                    (filter (set created-uuids))
-                                    distinct
-                                    vec))
+     (let [;; A replayed payload keeps the reference metadata recorded with it.
+           refs (or (get block rebase-refs-key)
+                    (sanitize-block-refs (:block/refs block)))
+           created-ref-uuids (or (get block rebase-created-refs-key)
+                                 (when (and (seq created-uuids) (seq refs))
+                                   (->> refs
+                                        (keep :block/uuid)
+                                        (filter (set created-uuids))
+                                        distinct
+                                        vec)))
           m (reduce-kv
              (fn [m k v]
                (cond
@@ -189,8 +210,13 @@
   (let [refs (get block rebase-refs-key)
         created-ref-uuids (set (get block rebase-created-refs-key))
         missing-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
-        retracted-refs (remove (fn [block]
-                                 (contains? created-ref-uuids (:block/uuid block)))
+        block-refs (set (:block/refs block))
+        nil-refs? (contains? block-refs nil)
+        ;; Replay recreates the references behind a nil, so their links stay.
+        retracted-refs (remove (fn [{ref-uuid :block/uuid}]
+                                 (or (contains? created-ref-uuids ref-uuid)
+                                     (and nil-refs?
+                                          (not (contains? block-refs [:block/uuid ref-uuid])))))
                                missing-refs)
         tag-lookups (->> (:block/tags block)
                          (filter (fn [v]
@@ -203,7 +229,20 @@
                                                      (or (get missing-ref-by-lookup block-ref)
                                                          block-ref))]
                                    (map rewrite-ref v)))
-        block' (cond-> block
+        recovered-block (if nil-refs?
+                          (do
+                            (when-not (and (seq refs)
+                                           (every? #(uuid? (:block/uuid %)) refs)
+                                           (every? #(string? (:block/title %)) missing-refs))
+                              (throw (ex-info "Cannot recover nil block refs without reference metadata"
+                                              {:block/uuid (:block/uuid block)})))
+                            ;; Several missing references can collapse into one nil in a set.
+                            (assoc block :block/refs
+                                   (into (disj block-refs nil)
+                                         (map (fn [ref-entity] [:block/uuid (:block/uuid ref-entity)]))
+                                         refs)))
+                          block)
+        block' (cond-> recovered-block
                  (seq retracted-refs)
                  (update :block/title
                          (fn [title]

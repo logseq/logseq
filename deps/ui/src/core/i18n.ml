@@ -166,6 +166,10 @@ let t1 key arg = replace_all (t key) ~pat:"{1}" ~rep:arg
 let asset_already_exists title uuid = tf "asset/already-exists" [ title; uuid ]
 let page_not_found () = t "page/not-found" ^ ": "
 let live_query n = tf "view.table/live-query-title" [ string_of_int n ]
+let result_count n =
+  match t_locale "search/result-count" with
+  | Some format -> sub format [string_of_int n]
+  | None -> string_of_int n ^ (if n > 1 then " results" else " result")
 let no_group_value prop = tf "view.table/no-group-value" [ prop ]
 let selected_count n = tf "view.table/selected-count" [ string_of_int n ]
 let total n = tf "view.table/total-count" [ string_of_int n ]

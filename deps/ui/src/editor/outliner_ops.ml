@@ -190,8 +190,49 @@ let trim_title uuid title = if source_block uuid then title else String.trim tit
    same origin repo. Navigation retires UI actions, not committed text. *)
 let autosave_revisions : (string option * string, int) Hashtbl.t = Hashtbl.create 4
 let autosave_revision = ref 0
+let save_waiters : (string, (unit -> unit) list) Hashtbl.t = Hashtbl.create 4
+let active_saves : (string, int) Hashtbl.t = Hashtbl.create 4
+
+let saves_in_flight repo =
+  Option.value (Hashtbl.find_opt active_saves repo) ~default:0 > 0
+  || Hashtbl.fold (fun (source, _) _ pending -> pending || source = Some repo)
+       autosave_revisions false
+
+let notify_saves = function
+  | Some repo when not (saves_in_flight repo) ->
+      let callbacks = Option.value (Hashtbl.find_opt save_waiters repo) ~default:[] in
+      Hashtbl.remove save_waiters repo;
+      List.iter (fun finish -> finish ()) (List.rev callbacks)
+  | _ -> ()
+
+let after_saves repo finish =
+  if not (saves_in_flight repo) then finish ()
+  else Hashtbl.replace save_waiters repo
+      (finish :: Option.value (Hashtbl.find_opt save_waiters repo) ~default:[])
+
+let await_saves repo =
+  Js.Promise.make (fun ~resolve ~reject:_ ->
+    after_saves repo (fun () -> resolve Wire.Nil [@u]))
+  |> Js.Promise.then_ (fun _ -> Js.Promise.resolve ())
+
+let begin_save = function
+  | None -> ()
+  | Some repo -> Hashtbl.replace active_saves repo
+      (1 + Option.value (Hashtbl.find_opt active_saves repo) ~default:0)
+
+let finish_save repo =
+  (match repo with
+   | None -> ()
+   | Some repo ->
+       let count = Hashtbl.find active_saves repo - 1 in
+       if count = 0 then Hashtbl.remove active_saves repo
+       else Hashtbl.replace active_saves repo count);
+  notify_saves repo
+
 let invalidate_autosave uuid =
-  Hashtbl.remove autosave_revisions ((Runtime.model ()).Model.repo, uuid)
+  let repo = (Runtime.model ()).Model.repo in
+  Hashtbl.remove autosave_revisions (repo, uuid);
+  notify_saves repo
 
 (* cljs wrap-parse-block on save: markdown headings normalize into
    logseq.property/heading, and [[page]]/#tag references resolve into
@@ -271,42 +312,13 @@ let insert_blocks ?(bottom = false) ?(replace_empty_target = false)
 let delete_blocks uuids =
   op "delete-blocks" [ uuids_list uuids; Wire.Map [] ]
 
-(* flatten block trees for paste: flat preorder map list where each child
-   carries block/parent as a [:block/uuid u] lookup-ref — same shape as
-   sdk_write.flatten_batch; blocks_with_level re-derives levels *)
-let paste_block_maps (trees : Model.block list) =
-  let rec go acc ~level ~parent (b : Model.block) =
-    match b.Model.block_uuid with
-    | None -> acc
-    | Some u ->
-        let parent_kv =
-          match parent with
-          | Some pu ->
-              [ str "block/parent"
-                  (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid pu ]) ]
-          | None -> []
-        in
-        let m =
-          Wire.Map
-            (str "block/uuid" (Wire.Uuid u)
-             :: title_kvs (String.trim b.Model.block_title)
-            @ [ str "block/level" (Wire.Int level) ]
-            @ parent_kv)
-        in
-        let acc = m :: acc in
-        List.fold_left
-          (fun a c -> go a ~level:(level + 1) ~parent:(Some u) c)
-          acc b.Model.block_children
-  in
-  List.rev (List.fold_left (fun a b -> go a ~level:1 ~parent:None b) [] trees)
-
-let paste_trees trees target_uuid ~replace_empty =
+let paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty =
   op "insert-blocks"
-    [ Wire.Array (paste_block_maps trees)
+    [ Wire.Array blocks
     ; Wire.Uuid target_uuid
     ; Wire.Map
-        [ kw "sibling?" (Wire.Bool true)
-        ; kw "keep-uuid?" (Wire.Bool true)
+        [ kw "sibling?" (Wire.Bool sibling)
+        ; kw "keep-uuid?" (Wire.Bool cut)
         ; kw "replace-empty-target?" (Wire.Bool replace_empty)
         ; kw "outliner-op" (Wire.Keyword "paste")
         ]
@@ -460,6 +472,28 @@ let check_loader_result value =
    fetched trees; [ancestors] is the chain of linked db ids guarding
    self-embed loops, [collapsed] accumulates :block/collapsed? flags from
    the embed wires (Decode drops the flag). *)
+let resolve_embed_ref_counts repo blocks =
+  let rec collect acc blocks = List.fold_left (fun acc (b : Model.block) ->
+    collect (match b.block_uuid with Some uuid -> uuid :: acc | None -> acc)
+      b.block_children) acc blocks in
+  let uuids = List.sort_uniq String.compare (collect [] blocks) in
+  let keys = List.map (fun uuid -> Wire.Array [Wire.kw "block-ref-count"; Wire.Uuid uuid]) uuids in
+  let* snapshot = Runtime.invoke2 "thread-api/get-render-snapshots" (Wire.String repo)
+      (Wire.Map [Wire.kw "blocks", Wire.Array []; Wire.kw "children", Wire.Array [];
+        Wire.kw "resources", Wire.Array keys]) in
+  check_loader_result snapshot;
+  let counts = Hashtbl.create (List.length uuids) in
+  List.iter2 (fun uuid key ->
+    match Views_wire.snapshot_slot_value snapshot key with
+    | Some (Wire.Int count) when count >= 0 -> Hashtbl.add counts uuid count
+    | Some value -> check_loader_result value; failwith "Invalid block reference count"
+    | None -> failwith "Missing block reference count") uuids keys;
+  let rec apply blocks = List.map (fun (b : Model.block) ->
+    {b with Model.block_ref_count = (match b.block_uuid with
+       | Some uuid -> Hashtbl.find counts uuid | None -> b.block_ref_count);
+      block_children = apply b.block_children}) blocks in
+  Js.Promise.resolve (apply blocks)
+
 let rec fill_embed_children repo ancestors collapsed
     (blocks : Model.block list) : Model.block list Js.Promise.t =
   (* siblings fetch their children/embed trees in parallel —
@@ -479,8 +513,31 @@ let rec fill_embed_children repo ancestors collapsed
           in
           check_loader_result w;
           collapsed := collect_collapsed !collapsed w;
-          fill_embed_children repo (link_id :: ancestors)
-            collapsed (Decode.blocks_of_wire w)
+          let blocks = Decode.blocks_of_wire w in
+          let* roots =
+            match blocks with
+            | root :: _ when root.Model.block_db_id = Some link_id ->
+                Js.Promise.resolve blocks
+            | _ ->
+                let* entities = Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo)
+                    (Wire.Array [Wire.Map [Wire.String "id", Wire.Int link_id;
+                      Wire.String "opts", Wire.Map []]]) in
+                check_loader_result entities;
+                let pairs = match entities with
+                  | Wire.Array pairs | Wire.List pairs -> pairs
+                  | _ -> failwith "Expected linked entity results" in
+                let root = match pairs with
+                  | [pair] -> (match Wire.block_of_pair pair with
+                      | Some entity ->
+                          collapsed := collect_collapsed !collapsed entity;
+                          Decode.block_of_wire entity
+                      | None -> failwith "Linked entity is unavailable")
+                  | _ -> failwith "Expected one linked entity" in
+                Js.Promise.resolve [{root with Model.block_children = blocks;
+                  block_default_collapsed = false}]
+          in
+          let* roots = resolve_embed_ref_counts repo roots in
+          fill_embed_children repo (link_id :: ancestors) collapsed roots
       | _ -> Js.Promise.resolve []
     in
     let* a = Js.Promise.all [| children_p; embed_p |] in
@@ -657,7 +714,8 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
   let kept = List.filter keep titles in
   Js.Promise.resolve
     { page with
-      Model.page_tags =
+      Model.page_icon = Node_icon.own w
+    ; page_tags =
         List.map (fun (_, (t, _, _, _, _)) -> t) kept
     ; page_tag_idents =
         List.map (fun (_, (_, ident, _, _, _)) -> ident) kept
@@ -1128,10 +1186,17 @@ let save_current save =
 
 let release_save save =
   if save_current save then
-    Hashtbl.remove autosave_revisions (save.context.repo, save.uuid)
+    Hashtbl.remove autosave_revisions (save.context.repo, save.uuid);
+  notify_saves save.context.repo
 
 let save_pending_result ?current save =
   if not (save_current save) then Js.Promise.resolve None else
+  let () = begin_save save.context.repo in
+  let finished = ref false in
+  let finish () = if not !finished then begin
+    finished := true;
+    finish_save save.context.repo
+  end in
   let write =
     let* bm =
       block_map_parsed_source ~origin_repo:(Option.get save.context.repo)
@@ -1152,7 +1217,13 @@ let save_pending_result ?current save =
     end;
     Js.Promise.resolve (if accepted then result else None)
   in
-  write |> Js.Promise.catch (fun _ -> release_save save; write)
+  let guarded = write |> Js.Promise.catch (fun _ ->
+       release_save save;
+       finish ();
+       write) in
+  let* result = guarded in
+  finish ();
+  Js.Promise.resolve result
 
 let save_pending ?current save =
   let* _ = save_pending_result ?current save in
@@ -1963,6 +2034,15 @@ let restore_history ?owner result =
   if refresh_current ?owner context then !(S.restore_history) result
   else Js.Promise.resolve ()
 
+let apply_history_result ?owner result =
+  match Wire.get result "ui-state-str" with
+  | Some (Wire.String _) -> !(S.restore_history) result
+  | _ ->
+      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
+      match owner with
+      | Some owner -> require_refresh_success owner
+      | None -> Js.Promise.resolve ()
+
 let undo ?owner () =
   let context = Runtime.model () in
   let owner = refresh_owner_for owner in
@@ -1970,14 +2050,12 @@ let undo ?owner () =
   match context.Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
+      let* () = await_saves repo in
       if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-undo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
-      match owner with
-      | Some owner -> require_refresh_success owner
-      | None -> Js.Promise.resolve ()))
+      apply_history_result ?owner result))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("undo failed", e);
              Toast.error (I18n.t "editor/undo-error");
@@ -1991,14 +2069,12 @@ let redo ?owner () =
   match context.Model.repo with
   | Some repo ->
       (let* () = flush_pending_save () in
+      let* () = await_saves repo in
       if not (current ()) then Js.Promise.resolve () else
       let* result = Runtime.invoke1 "thread-api/undo-redo-redo" (Wire.String repo) in
       if not (current ()) then Js.Promise.resolve () else (
       S.clear_overrides ();
-      let* () = refresh_page_then ?owner (fun () -> restore_history ?owner result) in
-      match owner with
-      | Some owner -> require_refresh_success owner
-      | None -> Js.Promise.resolve ()))
+      apply_history_result ?owner result))
       |> Js.Promise.catch (fun e ->
              Ui_services.log_error ("redo failed", e);
              Toast.error (I18n.t "editor/redo-error");

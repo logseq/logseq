@@ -735,6 +735,12 @@ let () =
       in
       match args with
       | Wire.String repo :: _ ->
+          let prepared =
+            if Sqlite.pooled_runtime () then
+              Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo)
+            else Db_worker_effect.pure ()
+          in
+          Db_worker_effect.bind prepared (fun () ->
           cancel_ui_requests "unsafe-unlink-db" repo;
           close_db_aux repo;
           (* cljs unsafe-unlink-db: pool.removeVfs on browser; node
@@ -753,7 +759,7 @@ let () =
                          (fun entry ->
                            File_sys.remove (Filename.concat (db_dir repo) entry))
                          entries))))
-          |> Db_worker_effect.map (fun () -> Wire.nil)
+          |> Db_worker_effect.map (fun () -> Wire.nil))
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 
 (* :thread-api/release-access-handles [repo] — closes any active import

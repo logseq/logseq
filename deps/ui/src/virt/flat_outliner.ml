@@ -6,8 +6,8 @@ type guide = { ancestor : P.ancestor; inset : int }
 
 let guides ~library (row : P.block_row) =
   let _, reversed = List.fold_left (fun (inset, guides) ancestor ->
-    let next = inset + Tree.children_indent ~library ancestor.P.ancestor_block in
-    next, {ancestor; inset = next} :: guides)
+    let next = inset + Tree.children_indent in
+    next, {ancestor; inset = next + Tree.guide_offset ~library ancestor.P.ancestor_block} :: guides)
     (0, []) (List.rev row.ancestors) in
   List.rev reversed
 
@@ -36,9 +36,65 @@ let block_attrs row =
 let block_row ~state ~library ~source : t =
  fun ctx parent ->
   let initial = block_of_row (Signal.get source) in
-  let indent row = List.fold_left (fun total ancestor ->
-    total + Tree.children_indent ~library ancestor.P.ancestor_block)
-    0 (block_of_row row).ancestors in
+  let expanded = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let count = Signal.state ctx.ui_scheduler initial.block.Model.block_ref_count in
+  let repo = Runtime.repo () in
+  let alive = ref true and generation = ref 0 in
+  let load () =
+    let block = (block_of_row (Signal.get source)).block in
+    match block.Model.block_uuid, block.block_db_id with
+    | Some uuid, Some _ when !alive && Runtime.repo () = repo ->
+        incr generation;
+        let token = !generation in
+        let key = Views_db.key_ref_count uuid in
+        Views_db.snapshots [key] ~f:(fun snapshot ->
+          if !alive && token = !generation && Runtime.repo () = repo then
+            match Views_db.snapshot_value snapshot key with
+            | Some (Wire.Int value) -> Runtime.signal_set count value
+            | _ -> ())
+    | _ -> () in
+  let subscription = Runtime.on_sync
+    ~watch:{Subs_state.w_all=false; w_tags=[];
+      w_keys=(match initial.block.block_uuid with
+        | Some uuid -> [Subs_state.watch_key_uuid "refs" uuid] | None -> [])}
+    (fun _ -> load ()) in
+  ignore (Signal.own ctx.ui_scope
+    (Signal.subscribe ~emit_initial:false source (fun row ->
+      let block = (block_of_row row).block in
+      Runtime.signal_set count block.Model.block_ref_count;
+      load ())));
+  Signal.on_dispose ctx.ui_scope (fun () -> alive := false; Runtime.off_sync subscription);
+  if initial.block.block_ref_count = 0 then load ();
+  let extras : Tree.row_extras =
+    { right_of_block = (fun block ->
+        if block.Model.block_ref_count <= 0 then None else
+        let uuid = Option.get block.block_uuid in
+        let activate event =
+          let shift = match event with
+            | Lui_protocol.PressDetail (_, detail) -> detail.Lui_protocol.modifiers land 2 <> 0
+            | Lui_protocol.PressModifiers (_, modifiers) -> modifiers land 2 <> 0
+            | _ -> false in
+          if shift then Sidebar_state.open_block_references
+              (Sidebar_state.ensure (Option.get !Runtime.model_source)) uuid
+          else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ()) in
+        Some (Ui_components.with_props
+          [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
+          (button ~key:("reference-count-" ^ uuid) ~variant:`ghost ~size:`sm
+            ~style_class:"block-refs-count"
+            ~label:(I18n.t "block/open-block-references")
+            ~tooltip:(I18n.t "block/open-block-references")
+            ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
+            ~on_press:activate ~on_press_detail:activate
+            [text ~font_size:"14px" ~value:(string_of_int block.block_ref_count) []])))
+    ; below_block = (fun block ->
+        if block.Model.block_ref_count <= 0 then None else
+        let uuid = Option.get block.block_uuid in
+        Some (if_ ~test:(Signal.value expanded)
+          (column ~margin_left:42 ~margin_vertical:8 ~padding_horizontal:16 ~padding_vertical:8
+            ~border_width:1 ~border_color:"hsl(var(--border))" ~corner_radius:4
+            [Views_view.view ~kind:Views_state.KLinkedRefs ~owner:(Wire.Uuid uuid)]))) } in
+  let indent row = Tree.children_indent * List.length (block_of_row row).ancestors in
+  (Ui_parts.int_prop Lui_protocol.PaddingLeft ~value:(reactive indent source)
   (Ui_components.with_props [Ui_components.Prop.position `relative]
     (column ~key:(P.key (P.Block initial)) ~min_width:0 ~margin_left:(-20)
       ~style_class:"page-blocks-inner"
@@ -53,7 +109,7 @@ let block_row ~state ~library ~source : t =
               ; Ui_components.Prop.inset_top 0.
               ; Ui_components.Prop.inset_bottom 0. ]
               (Ui_parts.float_prop Lui_protocol.InsetLeft
-                ~value:(reactive (fun guide -> float_of_int (guide.inset - 1)) guide)
+                ~value:(reactive (fun guide -> float_of_int (guide.inset - 2)) guide)
                 (box ~key:(let ancestor = (Signal.get guide).ancestor in
                    P.scoped_key ancestor.ancestor_scope (P.block_identity ancestor.ancestor_block)) ~width:4
                   ~style_class:"block-children-left-border"
@@ -73,23 +129,31 @@ let block_row ~state ~library ~source : t =
                         (box ~key:"guide-line" ~width:1
                           ~style_class:"block-children-indent-guide"
                           ~background:"var(--lx-gray-04-alpha, var(--ls-guideline-color))" [])) ]))))
-      ; Ui_parts.int_prop Lui_protocol.MarginLeft ~value:(reactive indent source)
-          (Tree.projected_block_row ~scope:initial.scope ~library
+      ; Tree.projected_block_row ~extras ~scope:initial.scope ~library
                 ~depth:(reactive (fun row -> (block_of_row row).depth) source)
-                ~source:(reactive (fun row -> (block_of_row row).block) source)) ]))
+                ~source:(reactive (fun row count ->
+                  {(block_of_row row).block with Model.block_ref_count=count})
+                  source (Signal.value count)) ])))
     ctx parent
 
-let view ~state ~library ~header ~footer ?section_minimum_height
+let view ~state ~library ~header ~footer ?section_minimum_height ?(section_blocks_only = false)
+    ?section_body_minimum_height
     ?(padding_horizontal = 0)
     ?(on_end = fun () -> ()) () : t =
  fun ctx parent ->
+  if section_body_minimum_height <> None && section_minimum_height = None then
+    invalid_arg "Section body measurements require a section measurement root";
+  let body_measurements = match state.Outline_viewport_state.native, section_body_minimum_height with
+    | None, Some minimum ->
+        Some (Virt_list.section_spacings ~blocks_only:true ctx ~minimum ~rows:state.rows)
+    | _ -> None in
   let measurements = match state.Outline_viewport_state.native, section_minimum_height with
     | None, Some minimum ->
         let root_id =
           "main-outline-journal-measure-"
           ^ string_of_int (Outline_viewport_state.fresh_presentation_id ())
         in
-        Some (root_id, Virt_list.section_spacings ctx ~minimum ~rows:state.rows)
+        Some (root_id, Virt_list.section_spacings ~blocks_only:section_blocks_only ctx ~minimum ~rows:state.rows)
     | _ -> None in
   let root = column ~key:"main-outline"
       ?accessibility_identifier:(Option.map fst measurements)
@@ -104,6 +168,8 @@ let view ~state ~library ~header ~footer ?section_minimum_height
     | P.Header _ -> header ~source:(reactive section_of_row source)
     | P.Footer section ->
         footer ~source:(reactive section_of_row source)
+          ~body_spacing:(Option.map (fun measured ->
+            measured.Virt_list.spacing_for (P.key (P.Header section))) body_measurements)
           ~spacing:(Option.map
             (fun (_, section_measurements) ->
               section_measurements.Virt_list.spacing_for
@@ -138,7 +204,9 @@ let view ~state ~library ~header ~footer ?section_minimum_height
       let eager_rows : t = fun rows_ctx rows_parent ->
         Option.iter
           (fun (root_id, section_measurements) ->
-            section_measurements.Virt_list.observe_eager rows_ctx ~root_id)
+            section_measurements.Virt_list.observe_eager rows_ctx ~root_id;
+            Option.iter (fun measured -> measured.Virt_list.observe_eager rows_ctx ~root_id)
+              body_measurements)
           measurements;
         keyed ~source:state.rows ~key:P.key ~cmp:String.compare ~mount
           rows_ctx rows_parent
@@ -149,11 +217,16 @@ let view ~state ~library ~header ~footer ?section_minimum_height
             Virt_list.rows_sig ~key:P.key ~cmp:String.compare ~mount
               ?on_projection_measure:
                 (Option.map (fun (_, section_measurements) ->
-                   section_measurements.Virt_list.on_row_measure)
+                   fun key section kind height ->
+                     section_measurements.Virt_list.on_row_measure key section kind height;
+                     Option.iter (fun measured ->
+                       measured.Virt_list.on_row_measure key section kind height) body_measurements)
                    measurements)
               ?on_projection_width:
                 (Option.map (fun (_, section_measurements) ->
-                   section_measurements.Virt_list.on_width_change)
+                   fun width ->
+                     section_measurements.Virt_list.on_width_change width;
+                     Option.iter (fun measured -> measured.Virt_list.on_width_change width) body_measurements)
                    measurements)
               ~estimate_size:(fun _ -> 32.) ~on_end state.rows
           else eager_rows)

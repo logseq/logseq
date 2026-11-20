@@ -3948,7 +3948,8 @@ let test_migrate_65_35_removes_file_graph_attributes () =
        :block/scheduled 20240102 :block/deadline 20240103 :block/marker \"NOW\"
        :block/priority \"B\" :block/properties-text-values {:key \"value\"}
        :block/invalid-properties #{\"@key\"}}]");
-  ignore (Db_migrate.migrate conn);
+  ignore (Db_migrate.migrate
+    ~target_version:(Db_schema.parse_schema_version (String "65.35")) conn);
   let db = Datascript.db conn in
   List.iter (fun attr ->
     check ("legacy attribute removed: " ^ attr)
@@ -3957,13 +3958,40 @@ let test_migrate_65_35_removes_file_graph_attributes () =
      "block/properties-text-values"; "block/invalid-properties"];
   check "migration advances to 65.35"
     (match Datascript.entity db (Ident "logseq.kv/schema-version") with
-     | Some entity -> Option.map Db_schema.parse_schema_version (Ldb.value entity "kv/value") = Some Db_schema.version
-         && Db_schema.version.sv_minor = Some 35
+     | Some entity -> Option.map Db_schema.parse_schema_version (Ldb.value entity "kv/value")
+         = Some (Db_schema.parse_schema_version (String "65.35"))
      | None -> false);
   let block = Option.get (Datascript.entity db (Lookup_ref ("block/uuid", Uuid "33333333-3333-4333-8333-333333333333"))) in
   check "migration retains task text and heading"
     (Ldb.value block "block/title" = Some (String "Task text")
      && Ldb.value block "logseq.property/heading" = Some (Int64 2L));
+  check "migration is idempotent"
+    (Db_migrate.migrate ~target_version:(Db_schema.parse_schema_version (String "65.35")) conn = None)
+
+let test_migrate_65_36_repairs_journal_names () =
+  let conn = Db_test_util.create_conn () in
+  ignore (Datascript.transact_conn_string conn
+    "[{:db/ident :logseq.kv/schema-version :kv/value {:major 65 :minor 35}}
+      {:block/uuid #uuid \"11111111-1111-1111-1111-111111111111\"
+       :block/title \"2024-01-01\" :block/name \"2024-01-01\"
+       :block/journal-day 20240101 :block/tags :logseq.class/Journal}
+      {:block/uuid #uuid \"22222222-2222-2222-2222-222222222222\"
+       :block/title \"2024-01-02\" :block/name \"2024-01-02\"
+       :block/journal-day 20240102 :block/tags :logseq.class/Journal}
+      {:block/uuid #uuid \"33333333-3333-3333-3333-333333333333\"
+       :block/title \"Jan 2nd, 2024\" :block/name \"jan 2nd, 2024\"}]");
+  let result = Option.get (Db_migrate.migrate conn) in
+  check "migration advances to 65.36"
+    (result.to_version = Db_schema.parse_schema_version (String "65.36"));
+  let db = Datascript.db conn in
+  let check_page uuid title name =
+    let page = Option.get (Datascript.entity db (Lookup_ref ("block/uuid", Uuid uuid))) in
+    check ("retains correct journal title and name for " ^ uuid)
+      (Ldb.value page "block/title" = Some (String title)
+       && Ldb.value page "block/name" = Some (String name))
+  in
+  check_page "11111111-1111-1111-1111-111111111111" "Jan 1st, 2024" "jan 1st, 2024";
+  check_page "22222222-2222-2222-2222-222222222222" "2024-01-02" "2024-01-02";
   check "migration is idempotent" (Db_migrate.migrate conn = None)
 
 let () =
@@ -4001,7 +4029,9 @@ let () =
     ; "misc-worker-util", Test_misc_native.worker_util_cases
     ; "render-resource", Test_render_resource_native.cases
     ; "render-affected-keys", Test_render_affected_keys_native.cases
-    ; "master-migrations", [Alcotest.test_case "migrate-65-35-removes-file-graph-attributes" `Quick test_migrate_65_35_removes_file_graph_attributes]
+    ; "master-migrations",
+      [ Alcotest.test_case "migrate-65-35-removes-file-graph-attributes" `Quick test_migrate_65_35_removes_file_graph_attributes
+      ; Alcotest.test_case "migrate-65-36-repairs-journal-names" `Quick test_migrate_65_36_repairs_journal_names ]
     ; "db-worker", Test_db_worker_native.cases
     ; "platform", Test_platform_native.cases
     ; "search-benchmark", Test_search_benchmark_native.cases

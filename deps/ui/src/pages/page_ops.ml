@@ -34,11 +34,17 @@ let set_public uuid value =
 let rename uuid new_title =
   if String.trim new_title = "" then Js.Promise.resolve ()
   else
+    let graph = repo () and route = Runtime.route () in
     let* _ =
       Sdk_util.apply_op "rename-page"
         [ Wire.Uuid uuid; Wire.String new_title ]
     in
-    Js.Promise.resolve (reload ())
+    if repo () <> graph || Runtime.route () <> route then Js.Promise.resolve ()
+    else match route with
+    | Model.Page name ->
+        ignore (Router.load_page_ref ~accept_missing:true route (Wire.page_ref name));
+        Js.Promise.resolve ()
+    | _ -> Js.Promise.resolve (reload ())
 
 let delete uuid =
   (* bounce to Home after deleting, but only when the route still

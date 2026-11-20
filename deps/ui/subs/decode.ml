@@ -424,7 +424,9 @@ let rec block_of_wire ?(order_index = 1) ?(parent_query_id = None)
       ref_ids w "logseq.property.comments/blocks"
   ; block_children = children
   ; block_link = link
+  ; block_ref_count = Option.value (Wire.map_get_int w "block.temp/refs-count") ~default:0
   ; block_embed_children = []
+  ; block_original = None
   ; block_is_page =
       Option.is_some (Wire.map_get_string w "block/name")
   ; block_heading =
@@ -652,7 +654,7 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
     | _ -> None
   in
   match w with
-  | Wire.Array (m :: ty :: _) | Wire.List (m :: ty :: _) -> (
+  | Wire.Array (m :: ty :: options) | Wire.List (m :: ty :: options) -> (
       match text_of m with
       | Some text ->
           Some
@@ -661,6 +663,14 @@ let toast_of_wire (w : Wire.t) : Model.toast option =
             ; toast_kind = Option.value (text_of ty) ~default:"info"
             ; toast_key = None
             ; toast_code = None
+            ; toast_duration = Some (
+                if text_of ty = Some "error" then 0
+                else match options with
+                | Wire.Bool false :: _ -> 0
+                | _ :: _ :: Wire.Int timeout :: _ -> timeout
+                | _ :: _ :: Wire.Float timeout :: _ -> int_of_float timeout
+                | [] -> 1500
+                | _ -> 2000)
             }
       | None -> None)
   | _ -> None
@@ -704,6 +714,7 @@ let rtc_of_wire (w : Wire.t) : Model.rtc =
       Option.value (Option.bind (Wire.get w "rtc-lock") Wire.as_bool)
         ~default:false
   ; rtc_ws_state = ws_state
+  ; rtc_graph_uuid = Wire.map_get_uuid w "graph-uuid"
   ; rtc_local_tx = Wire.map_get_int w "local-tx"
   ; rtc_remote_tx = Wire.map_get_int w "remote-tx"
   ; rtc_pending_local = int "unpushed-block-update-count"

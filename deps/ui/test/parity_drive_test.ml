@@ -296,7 +296,7 @@ let test_ac_slash_switch st (s : ('m, 'a) S.t) =
                 (* an empty [[ query lists the i18n nlp date pages —
                    cljs page-search renders calendar rows *)
                 check "empty page query lists nlp dates"
-                  (List.length ac'.P.items = 10
+                  (List.length ac'.P.items = 33
                    && List.exists
                         (fun it -> it.P.ai_key = "nlp:Today")
                         ac'.P.items)
@@ -565,8 +565,7 @@ let test_editor_format_wraps () =
    | None -> check "editing survives removing markers" false);
   clear_editing ()
 
-(* cljs config: ctrl+shift+b/f are the mac word-movement bindings;
-   ctrl+w kills a word backward *)
+(* cljs config: ctrl+shift+b/f are the mac word-movement bindings. *)
 let test_editor_word_nav () =
   stage_main_session [ block "b1" "hello world" ];
   set_editing "b1" "hello world" ~caret:11;
@@ -574,7 +573,7 @@ let test_editor_word_nav () =
   (match Editor_state.editing () with
    | Some e ->
        check "ctrl+shift+b moves a word left"
-         (e.Editor_state.model.Edit_model.caret = 6)
+         (e.Editor_state.model.Edit_model.caret = 5)
    | None -> check "editing survives word-left" false);
   Editor_keys.on_keydown (key_event ~ctrl:true ~shift:true "f");
   (match Editor_state.editing () with
@@ -583,28 +582,161 @@ let test_editor_word_nav () =
          (e.Editor_state.model.Edit_model.caret = 11)
    | None -> check "editing survives word-right" false);
   Editor_keys.on_keydown (key_event ~ctrl:true "w");
-  check "ctrl+w deletes a word backward"
-    (Editor_actions.live_buffer "b1" = "hello ");
+  check "ctrl+w at the block end has no forward word to delete"
+    (Editor_actions.live_buffer "b1" = "hello world");
+  clear_editing ();
+  stage_main_session [ block "b1" "Plain second block" ];
+  set_editing "b1" "Plain second block" ~caret:6;
+  Editor_keys.dispatch_command "editor/forward-kill-word";
+  check "Forward word deletion consumes its following separator"
+    (Editor_actions.live_buffer "b1" = "Plain block");
+  Editor_keys.dispatch_command "editor/backward-word";
+  check "Backward word movement stops at the separator before the caret"
+    (match Editor_state.editing () with
+     | Some e -> e.Editor_state.model.Edit_model.caret = 5
+     | None -> false);
   clear_editing ()
 
-(* cljs :editor/insert-link "mod+l" opens the link form overlay for the
-   editing block *)
 let test_editor_link () =
-  stage_main_session [ block "b1" "hello" ];
-  set_editing "b1" "hello" ~caret:5;
-  Editor_keys.on_keydown (key_event ~meta:true "l");
-  check "mod+l opens the link form"
-    (match !Editor_commands.active with
-     | Some (p : Editor_commands.popup) -> (
-         match p.kind with
-         | Editor_commands.Link_form _ -> p.uuid = "b1"
-         | _ -> false)
-     | None -> false);
-  Editor_commands.active := None;
-  Runtime.editor_popup_open := false;
+  List.iter (fun (source, anchor, caret, expected, expected_caret) ->
+    stage_main_session [ block "b1" source ];
+    set_editing "b1" source ~caret;
+    Editor_actions.update_model "b1" (fun m ->
+      Edit_model.select m ~anchor ~focus:caret);
+    Editor_keys.on_keydown (key_event ~meta:true "l");
+    check "mod+l formats the selected label or destination"
+      (Editor_actions.live_buffer "b1" = expected);
+    check "mod+l places the caret at the next input position"
+      (match Editor_state.editing () with
+       | Some e -> e.Editor_state.model.Edit_model.caret = expected_caret
+           && not (Edit_model.has_selection e.model)
+       | None -> false);
+    check "mod+l does not open a form" (!Editor_commands.active = None);
+    ignore (Editor_commands.click_guard ());
+    clear_editing ())
+    ["Plain first block", 0, 5, "[Plain]() first block", 8;
+     "hello", 3, 3, "hel[]()lo", 4;
+     "https://example.com", 0, 19, "[](https://example.com)", 1];
+  Editor_keys.dispatch_command "editor/insert-link";
+  check "Insert link without an editing target is inert"
+    (Editor_state.editing () = None && !Editor_commands.active = None)
+
+let test_editor_ac_tab st s =
+  stage_main_session [ block "b1" "[[Tar]]" ];
+  set_editing "b1" "[[Tar]]" ~caret:5;
+  P.open_ac st P.Page_ref;
+  S.flush s;
+  let prevented = ref false in
+  let ev = { (key_event "Tab") with
+    Ui_services.prevent_default = (fun () -> prevented := true) } in
+  Editor_keys.on_global_key ev;
+  Editor_keys.on_keydown ev;
+  check "Page-reference autocomplete leaves Tab available for focus traversal"
+    (not !prevented && Editor_actions.live_buffer "b1" = "[[Tar]]");
+  let document = Stub_dom.get_field Stub_dom.global "document" in
+  let sink = Logseq_editor.create 0 document (fun name fields ->
+    Option.iter (Editor_keys.apply_input "b1") (Edit_input.decode name fields)) in
+  Stub_dom.set_field (Logseq_editor.el_json sink) "ownerDocument" document;
+  Logseq_editor.set_property sink "block-id" (Wv.StringValue "b1");
+  Fun.protect ~finally:(fun () ->
+    Logseq_editor.cleanup sink;
+    P.close_ac st;
+    S.flush s;
+    clear_editing ()) (fun () ->
+      let tab ?(shift = false) () =
+        let event = Stub_dom.make_event ~target:(Logseq_editor.el_json sink)
+          ~fields:["key", Js.Json.string "Tab"; "shiftKey", Js.Json.boolean shift]
+          "keydown" in
+        Logseq_editor.on_keydown sink event;
+        Stub_dom.ev_flag event "defaultPrevented" in
+      check "The live editor conduit preserves autocomplete Tab focus traversal"
+        (not (tab ()) && Editor_actions.live_buffer "b1" = "[[Tar]]");
+      check "The live editor conduit preserves reverse autocomplete focus traversal"
+        (not (tab ~shift:true ()));
+      clear_editing ();
+      check "A retired autocomplete does not release the conduit's Tab default"
+        (tab ());
+      P.close_ac st;
+      S.flush s;
+      stage_main_session [ block "b1" "Plain" ];
+      set_editing "b1" "Plain";
+      check "Ordinary editor Tab stays owned by the conduit" (tab ()))
+
+let test_editor_unbound_enter () =
+  stage_main_session [ block "b1" "Plain second block" ];
+  set_editing "b1" "Plain second block" ~caret:6;
+  Editor_keys.on_keydown (key_event ~meta:true ~shift:true "Enter");
+  check "Unbound mod+shift+Enter preserves the block and caret"
+    (Editor_actions.live_buffer "b1" = "Plain second block"
+     && match Editor_state.editing () with
+        | Some e -> e.Editor_state.model.Edit_model.caret = 6
+        | None -> false);
   clear_editing ()
+
+let test_code_editor_enter () =
+  stage_main_session [ block "b1" "1+2" ];
+  set_editing "b1" "1+2" ~caret:3;
+  let base = Ui_services.dom_body () in
+  let target = { base with Ui_services.editable = (fun () -> true);
+    closest = (fun selector ->
+      if Str_util.contains selector ".CodeMirror" then Some base else None) } in
+  let prevented = ref false in
+  Editor_keys.on_global_key
+    { (key_event "Enter") with Ui_services.target = Some target;
+      prevent_default = (fun () -> prevented := true) };
+  check "CodeMirror retains plain Enter instead of the outliner command"
+    (not !prevented);
+  check "CodeMirror Enter never creates an outline sibling through the global dispatcher"
+    (match !Runtime.current_page with
+     | Some page -> List.map (fun (b : Model.block) -> b.block_title) page.page_blocks=["1+2"]
+     | None -> false);
+  clear_editing ()
+
+let test_editor_paste_link () =
+  List.iter (fun (source, anchor, caret, pasted, expected) ->
+    stage_main_session [ block "b1" source ];
+    set_editing "b1" source ~caret;
+    Editor_actions.update_model "b1" (fun m ->
+      Edit_model.select m ~anchor ~focus:caret);
+    let ev = key_event "" in
+    Editor_actions.paste_into_editor ~clipboard:None
+      { ev with Ui_services.clipboard_get =
+          (function "text/plain" -> pasted | _ -> "") };
+    check "Pasted links preserve labels and replace existing link ranges"
+      (Editor_actions.live_buffer "b1" = expected);
+    clear_editing ())
+    ["Plain first block", 0, 5, "https://example.com", "[Plain](https://example.com) first block";
+     "hello", 0, 0, "https://example.com", "https://example.comhello";
+     "Plain first block", 0, 5, "words", "words first block";
+     "https://old.example", 0, 19, "https://example.com", "https://example.com";
+     "[label](url)", 0, 7, "https://example.com", "https://example.com(url)"]
 
 (* cljs ctrl+p/ctrl+n inside editing move to the previous/next block *)
+let test_selected_clipboard_paste () =
+  let clipboard = !Editor_state.clipboard in
+  let previous = Editor_state.read () in
+  List.iter (fun (internal, text) ->
+    stage_main_session [ block "b1" "Plain second block" ];
+    clear_editing ();
+    Editor_actions.select_single "b1";
+    Editor_state.clipboard := (if internal then Some
+      {Ui_services.text = "Plain second block"; html = "<ul><li>Plain second block</li></ul>";
+       logseq = Editor_actions.encode_block_clipboard ~repo:(Runtime.repo ()) ~cut:false
+         [Wire.Map [Wire.kw "block/uuid", Wire.Uuid "b1";
+                    Wire.kw "block/title", Wire.String text]]}
+      else None);
+    let prevented = ref false in
+    Editor_keys.on_paste { (key_event "") with
+      Ui_services.clipboard_get = (function "text/plain" -> text | _ -> "");
+      prevent_default = (fun () -> prevented := true) };
+    check "Document paste outside an editor preserves the selected block without taking ownership"
+      (not !prevented && Editor_state.editing () = None
+       && Editor_state.String_set.elements (Editor_state.selected ()) = ["b1"]
+       && List.length (Editor_state.page_blocks ()) = 1))
+    [true,"Plain second block";false,"external text";false,""];
+  Editor_state.clipboard := clipboard;
+  Editor_state.set (fun _ -> previous)
+
 let test_editor_ctrl_np () =
   stage_main_session
     [ block "b1" "first"; block "b2" "second"; block "b3" "third" ];
@@ -626,6 +758,36 @@ let test_editor_ctrl_np () =
    C. Block context menu — cljs components/content.cljs
    block-context-menu-content + ui.cljs dropdown menu
    ================================================================ *)
+
+let test_cm_dismissal st =
+  stage_main_session [block "b1" "First";block "b2" "Second"];
+  let select uuid = Editor_state.set (fun state ->
+    {state with selection_scope="main"; selected=Editor_state.String_set.singleton uuid;
+      anchor=Some uuid;action_bar=true}) in
+  let open_menu () = P.open_cm ~scope:"main" st
+    ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false in
+  select "b1";
+  open_menu ();
+  Popups_view.close_cm st;
+  check "Dismissing a live context menu clears its block selection and action bar"
+    (cm_of st=None && Editor_state.String_set.is_empty (Editor_state.selected ())
+     && not (Editor_state.read ()).Editor_state.action_bar);
+  open_menu ();
+  Popups_view.close_cm st;
+  check "Dismissing a menu with no selected blocks remains safe"
+    (cm_of st=None && Editor_state.String_set.is_empty (Editor_state.selected ()));
+  select "b1";
+  open_menu ();
+  let action_owner = Editor_state.value () in
+  P.close_cm st;
+  Popups_view.close_cm st;
+  check "A delayed dismissal after command close does not invalidate asynchronous action ownership"
+    (Editor_state.value () == action_owner);
+  select "b2";
+  Popups_view.close_cm st;
+  check "An already-closed menu never clears a newer selection"
+    (Editor_state.selected ()=Editor_state.String_set.singleton "b2");
+  Editor_actions.clear_selection ()
 
 let test_cm_entries st =
   P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
@@ -801,7 +963,14 @@ let test_cm_scope st =
         else previous event);
       P.run_cm_item st "collapse-children";
       check "menu activation keeps the captured scope despite ambient editing"
-        (E.is_collapsed_in ~scope uuid && not (E.is_collapsed_in ~scope:"main" uuid)))
+        (E.is_collapsed_in ~scope uuid && not (E.is_collapsed_in ~scope:"main" uuid));
+      check "Completing a context-menu action releases its block selection"
+        (E.String_set.is_empty (E.selected ()) && (E.read ()).anchor = None
+         && not (E.read ()).action_bar);
+      A.select_single_in ~scope uuid;
+      P.close_cm st;
+      check "Closing an absent context menu preserves unrelated block selection"
+        (E.String_set.equal (E.selected ()) (E.String_set.singleton uuid)))
 
 (* submenu state: opening marks the trigger highlighted; closing the
    sub returns highlight to the trigger (base-ui parity) *)
@@ -855,10 +1024,11 @@ let test_cm_submenu st =
    items (Ci_item + Ci_sub only; separators and composite rows are
    skipped), Enter runs the highlighted command. The cljs menu owns
    keys only while the target sits inside #block-context-menu *)
-let test_cm_keynav st =
+let test_cm_keynav st s =
   let document = Stub_dom.get_field Stub_dom.global "document" in
   let prev_byid : string -> Js.Json.t =
     Stub_dom.get_field document "getElementById" in
+  let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
   let menu_el = Stub_dom.make_element "div" in
   let item_el = Stub_dom.make_element "div" in
   let rect =
@@ -872,6 +1042,8 @@ let test_cm_keynav st =
   let set_attr : string -> string -> unit =
     Stub_dom.get_field menu_el "setAttribute" in
   set_attr "id" "block-context-menu";
+  Stub_dom.set_field menu_el "className" "ls-context-menu-content";
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") menu_el);
   Stub_dom.set_field document "getElementById" (fun id ->
       if id = "block-context-menu"
          || Str_util.starts_with id "cm-item-"
@@ -879,9 +1051,19 @@ let test_cm_keynav st =
       then menu_el else prev_byid id);
   Fun.protect
     ~finally:(fun () ->
-      Stub_dom.set_field document "getElementById" prev_byid)
+      Stub_dom.set_field document "getElementById" prev_byid;
+      Stub_dom.detach menu_el;
+      Stub_dom.set_field document "activeElement" previous_focus)
     (fun () ->
       P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      S.flush s;
+      let popup = List.find (fun n ->
+        M.string_prop n "accessibility-identifier" = Some "block-context-menu")
+          (nodes s) in
+      S.appear s popup.M.id;
+      check "A pointer-opened block menu focuses its container without selecting an action"
+        (Option.fold ~none:false ~some:(fun cm -> cm.P.highlighted = None) (cm_of st)
+         && Stub_dom.get_field document "activeElement" == menu_el);
       let first_interactive_idx entries =
         Option.get
           (List.find_mapi
@@ -969,6 +1151,112 @@ let test_cm_keynav st =
    ================================================================ *)
 
 let test_page_menu () =
+  let document = Stub_dom.get_field Stub_dom.global "document" in
+  let previous_query : string -> Js.Json.t =
+    Stub_dom.get_field document "querySelectorAll" in
+  let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
+  let previous_model = !Runtime.read_model in
+  let root = Stub_dom.make_element "div" in
+  let first = Stub_dom.make_element "button" in
+  let second = Stub_dom.make_element "button" in
+  ignore (Stub_dom.append_child root first);
+  ignore (Stub_dom.append_child root second);
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") root);
+  let entries = ref [| first; second |] in
+  let initial_entries = ref [||] in
+  let open_menu = ref (Some (100., 10., 100., true, None)) in
+  Fun.protect ~finally:(fun () ->
+    Runtime.read_model := previous_model;
+    Stub_dom.set_field document "querySelectorAll" previous_query;
+    Stub_dom.detach root;
+    Stub_dom.set_field document "activeElement" previous_focus) (fun () ->
+      Runtime.read_model := (fun () ->
+        { Model.initial with Model.page_menu = !open_menu });
+      Stub_dom.set_field document "querySelectorAll" (fun selector ->
+        if selector = ".ls-dots-menu [role='menuitem']:not([aria-disabled='true'])"
+        then Stub_dom.with_item_fn (Stub_dom.arr_of !entries)
+        else if selector = ".ls-dots-menu [role='menuitem']:not([aria-disabled='true']):not([data-menu-tail])"
+        then Stub_dom.with_item_fn (Stub_dom.arr_of !initial_entries)
+        else previous_query selector);
+      Stub_dom.set_field document "activeElement" root;
+      Editor_keys.on_global_key (key_event "ArrowDown");
+      check "The first page-menu Down focuses its first action"
+        (Stub_dom.get_field document "activeElement" == first);
+      Editor_keys.on_global_key (key_event "ArrowDown");
+      check "The next page-menu Down advances past the focused action"
+        (Stub_dom.get_field document "activeElement" == second);
+      open_menu := Some (101., 10., 100., true, None);
+      let token = Ui_services.storage_get "id-token" in
+      Ui_services.storage_remove "id-token";
+      let toolbar = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
+        ~initial:Model.initial ~reducer:(fun m _ -> m)
+        ~view:(fun _ _ _ -> Page_menu.view (100., 10., 100., true) None) () in
+      Fun.protect ~finally:(fun () ->
+        ignore (Lui_app.dispose toolbar.S.app);
+        Option.iter (Ui_services.storage_set "id-token") token) (fun () ->
+        S.flush toolbar;
+        let rows = nodes toolbar |> List.filter (fun node -> node.M.kind="menu-item")
+          |> List.map (fun node ->
+            let element = Stub_dom.make_element "button" in
+            ignore (Stub_dom.append_child root element);
+            node, element) in
+        entries := Array.of_list (List.map snd rows);
+        initial_entries := Array.of_list (List.filter_map (fun (node, element) ->
+          if data_attr node "data-menu-tail" = None then Some element else None) rows);
+        let login = List.find (fun (node, _) ->
+          M.string_prop node "text" = Some (I18n.t "ui/login")) rows |> snd in
+        let popup = List.find (fun node -> has_tok node "ls-dots-menu") (nodes toolbar) in
+        Stub_dom.set_field document "activeElement" root;
+        Stub_dom.set_field document "activeElement" (!entries).(0);
+        S.appear toolbar popup.M.id;
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "The mounted toolbar's first Down focuses Login"
+          (Stub_dom.get_field document "activeElement" == login);
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "The toolbar's next Down wraps to its first action"
+          (Stub_dom.get_field document "activeElement" == (!entries).(0));
+        Stub_dom.set_field document "activeElement" root;
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Rapid toolbar entry focuses Login before appearance is delivered"
+          (Stub_dom.get_field document "activeElement" == login);
+        S.appear toolbar popup.M.id;
+        check "Deferred appearance preserves the user's rapid menu navigation"
+          (Stub_dom.get_field document "activeElement" == login);
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Rapid toolbar entry then wraps to its first action"
+          (Stub_dom.get_field document "activeElement" == (!entries).(0));
+        let active_entries = !entries and active_initial = !initial_entries in
+        let retiring = Stub_dom.make_element "div" in
+        let set : string -> string -> unit = Stub_dom.get_field retiring "setAttribute" in
+        set "inert" "";
+        ignore (Stub_dom.append_child root retiring);
+        let old_rows = Array.map (fun _ ->
+          let row = Stub_dom.make_element "button" in
+          ignore (Stub_dom.append_child retiring row);
+          row) active_entries in
+        entries := Array.append old_rows active_entries;
+        initial_entries := Array.append
+          (Array.sub old_rows 0 (Array.length active_initial)) active_initial;
+        open_menu := Some (102., 10., 100., true, None);
+        S.appear toolbar popup.M.id;
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Reopened toolbar first Down focuses its live Login"
+          (Stub_dom.get_field document "activeElement" == login);
+        Editor_keys.on_global_key (key_event "ArrowDown");
+        check "Reopened toolbar wraps past the inert exit-transition menu"
+          (Stub_dom.get_field document "activeElement" == active_entries.(0));
+        Stub_dom.detach retiring;
+        entries := [||]; initial_entries := [||];
+        Stub_dom.set_field document "activeElement" root;
+        S.appear toolbar popup.M.id;
+        check "An empty toolbar DOM does not steal focus on appearance"
+          (Stub_dom.get_field document "activeElement" == root));
+      entries := [||];
+      check "An empty page menu does not claim arrow navigation"
+        (not (Editor_keys.page_menu_key (key_event "ArrowDown")));
+      open_menu := None;
+      check "A closed page menu does not claim arrow navigation"
+        (not (Editor_keys.page_menu_key (key_event "ArrowDown"))));
   let session =
     S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
       ~initial:Model.initial ~reducer:(fun m _ -> m)
@@ -1236,7 +1524,9 @@ let test_sidebar_nav () =
           ; groups_collapsed = state []
           ; left_width = state 246.
           ; right_fraction = state 0.3
-          ; viewport_w = state 1280. }
+          ; viewport_w = state 1280.
+          ; restored_repo = ref None; restoring = ref true
+          ; history_repo = ref None; history_state = ref None }
         in
         Left_sidebar_view.nav_group ms sidebar)
       ()
@@ -1357,6 +1647,77 @@ let restore snap =
   Editor_commands.active := snap.editor_cmds;
   Editor_commands.popup_vs := snap.editor_popup_vs
 
+let test_preview_lifetime st ~finish =
+  let previous_worker = !Runtime.worker in
+  let child = "00000000-0000-0000-0000-000000000321" in
+  let rejected = ref false and reads = ref 0 in
+  let targets = ref [] in
+  Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
+    (fun name args ->
+      incr reads;
+      (match name, args with
+       | "thread-api/get-page-route-info", [_; target] -> targets := target :: !targets
+       | _ -> ());
+      Js.Promise.resolve
+        (if !rejected then W.Tagged ("error", W.String "preview fixture failure")
+         else match name with
+         | "thread-api/get-page-route-info" ->
+             W.Map [W.kw "block/title", W.String "Preview heading"]
+         | "thread-api/get-page-blocks-tree" ->
+             W.Array [W.Map [W.kw "block/uuid", W.Uuid child;
+                            W.kw "block/title", W.String "Preview content"]]
+         | "thread-api/get-render-snapshots" ->
+             W.Map [W.kw "slots", W.Map
+               [W.Array [W.kw "resource"; W.Array [W.kw "block-ref-count"; W.Uuid child]],
+                W.Map [W.kw "value", W.Int 2]]]
+         | _ -> W.Nil)) };
+  let trigger ?uuid name =
+    let wrap = Stub_dom.make_element "span" and link = Stub_dom.make_element "a" in
+    let set : string -> string -> unit = Stub_dom.get_field link "setAttribute" in
+    set "data-ref" name;
+    Option.iter (set "data-uuid") uuid;
+    Stub_dom.append_child wrap link;
+    Ui_dom_web.el_of wrap in
+  let open_preview ?uuid name =
+    Popups_view.close_pv st;
+    Popups_view.pv_open st (trigger ?uuid name);
+    for _ = 0 to Ui_dom_web.token_ring_size do
+      ignore (Ui_dom_web.el_of (Stub_dom.make_element "span"))
+    done in
+  let rec run = function
+    | [] ->
+        Popups_view.close_pv st;
+        let before = !reads in
+        Popups_view.pv_open st (Ui_dom_web.el_of (Stub_dom.make_element "span"));
+        check "An empty reference trigger does not fetch preview data" (!reads = before);
+        targets := [];
+        open_preview ~uuid:child "lowercased block title";
+        after 40 (fun () ->
+          check "Resolved block hover fetches by entity identity rather than its lowercased display title"
+            (List.mem (W.Uuid child) !targets
+             && not (List.mem (W.String "lowercased block title") !targets));
+        rejected := true;
+        open_preview "rejected preview";
+        after 40 (fun () ->
+          check "A failed reference preview does not leave stale content" ((P.get st).P.pv = None);
+          Popups_view.close_pv st;
+          Runtime.worker := previous_worker;
+          finish ()))
+    | name :: rest ->
+        open_preview name;
+        after 40 (fun () ->
+          check "Reference previews survive host element-token churn while loading"
+            (match (P.get st).P.pv with
+             | Some preview ->
+                 preview.P.pv_content.P.pc_title = "Preview heading"
+                 && List.map (fun block -> block.Model.block_title)
+                      preview.P.pv_content.P.pc_blocks = ["Preview content"]
+                 && preview.P.pv_content.P.pc_ref_counts = Some [child,2]
+             | None -> false);
+          run rest)
+  in
+  run ["Preview page"; "00000000-0000-0000-0000-000000000123"]
+
 let run ~finish =
   ignore (Fake_worker.install worker_handler);
   let snap = snapshot () in
@@ -1387,16 +1748,22 @@ let run ~finish =
   test_ac_paren_warn st s;
   (* C. block context menu *)
   test_cm_entries st;
+  test_cm_dismissal st;
   test_cm_activation st;
   test_cm_scope st;
   test_cm_submenu st;
-  test_cm_keynav st;
+  test_cm_keynav st s;
   (* B. editor keys *)
   test_editor_escape ();
   test_editor_shift_enter ();
   test_editor_format_wraps ();
   test_editor_word_nav ();
   test_editor_link ();
+  test_editor_ac_tab st s;
+  test_editor_unbound_enter ();
+  test_code_editor_enter ();
+  test_editor_paste_link ();
+  test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
   test_editor_tab ();
   test_editor_enter_split ();
@@ -1411,6 +1778,7 @@ let run ~finish =
   test_sidebar_nav ();
   after 30 (fun () ->
       async_checks ();
+      test_preview_lifetime st ~finish:(fun () ->
       (* cleanup after the deferred stage so async ops still resolve
          against the live session *)
       Runtime.read_model := prev_reader;
@@ -1423,4 +1791,4 @@ let run ~finish =
       P.close_cm st;
       ignore (Lui_app.dispose s.S.app);
       restore snap;
-      finish ())
+      finish ()))

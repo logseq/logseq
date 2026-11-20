@@ -32,9 +32,11 @@ let icon_ ?key ?(cls = "") ?(size = 16) name =
 (* ---------- topbar ---------- *)
 
 let topbar_btn key label on_click =
-  Ui_components.button ~variant:`ghost ~key:("tb-" ^ key) ~text:label
+  Ui_components.with_props [Ui_components.Prop.font_weight 400]
+  (Ui_components.button ~variant:`ghost ~key:("tb-" ^ key) ~text:label
     ~height:32 ~padding_horizontal:10 ~padding_vertical:4 ~corner_radius:6
-    ~on_press:(fun _ -> on_click ()) []
+    ~background:"var(--ls-secondary-background-color)"
+    ~on_press:(fun _ -> on_click ()) [])
 
 let topbar st =
   (* cljs right_sidebar.cljs topbar: Contents / Page graph / Help, then
@@ -110,14 +112,15 @@ let item_menu st (it : Sidebar_state.item) =
     let anchor = !Sidebar_state.im_anchor in
     match anchor with
     | Sidebar_state.Item_trigger ->
-        popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:160
-          ~anchor:`below ~anchor_alignment:`end_ ~anchor_offset:4.
-          ~anchor_target:("sbi-more-" ^ it.key)
+        popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:128
+          ~anchor:`below ~anchor_alignment:`center ~anchor_offset:0.
+          ~anchor_alignment_offset:0.5
+          ~anchor_target:("sbi-more-icon-" ^ it.key)
           ~transition:Ui_components.popover_transition
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
           ~style_class:"ui__dropdown-menu-content" children
     | Sidebar_state.Item_rect rect ->
-        popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:160
+        popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:128
           ~anchor:`below ~anchor_alignment:`center ~anchor_rect:rect
           ~transition:Ui_components.popover_transition
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
@@ -357,14 +360,15 @@ let item_header st idx (it : Sidebar_state.item) =
             ~width:32 ~height:32 ~padding:0
             ~foreground:"hsl(var(--muted-foreground))"
             ~on_press:(fun _ -> Sidebar_state.toggle_item_menu st it.key)
-            [ Icons.icon ~size:16. "dots" ]
+            [ icon ~name:(Icons.name_ref "dots") ~point_size:18
+                ~accessibility_identifier:("sbi-more-icon-" ^ it.key) [] ]
         ; Ui_components.button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
             ~main:`center ~cross:`center
             ~label:(t "ui/close") ~width:32 ~height:32 ~padding:0
             ~foreground:"hsl(var(--muted-foreground))"
             ~on_pointer_up:(close_on_middle st it.key)
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
-            [ Icons.icon ~size:16. "x" ] ]
+            [ Icons.icon ~size:18. "x" ] ]
     ])
 
 (* cljs onboarding.cljs help pane: .help.cp__sidebar-help-docs is a
@@ -384,14 +388,18 @@ let help_pane st =
   let icon_item ~key label ic =
     box ~key ~style_class:"ls-hp-item"
       ~data_attrs:[ ("style", item_style) ]
-      [ Ui_components.button ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
+      [ Ui_components.with_props
+          [ Ui_components.Prop.font_size "16px"
+          ; Ui_components.Prop.line_height "24px"
+          ; Ui_components.Prop.font_weight 400 ]
+        (Ui_components.button ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
           ~height:24 ~padding:0 ~main:`start ~cross:`center ~gap:4
           ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
           ~data_attrs:[ ("style", "cursor:pointer") ]
           ~on_press:(fun _ ->
             Sidebar_state.open_sticky_item st "shortcut-settings")
-          [ text ~value:label []
-          ; icon_ ~size:18 ic ]
+          [ text ~value:label ~font_size:"16px" ~line_height:"24px" []
+          ; icon_ ~size:18 ic ])
       ]
   in
   let icon_ext_item ~key label ic url =
@@ -454,12 +462,14 @@ let help_trigger ~on_press () =
     [Ui_components.Prop.opacity 0.7;Ui_components.Prop.hover_opacity 1.;
      Ui_components.Prop.font_weight 700;
      Ui_components.Prop.hover_background background;
-     Ui_components.Prop.hover_foreground "var(--ls-primary-text-color)"]
+     Ui_components.Prop.hover_foreground "hsl(var(--foreground))";
+     Ui_components.Prop.pressed_opacity 1.]
     (Ui_components.button ~key:"help" ~variant:`ghost ~label:(t "help/toggle-menu")
+      ~data_attrs:["data-tooltip", t "help.shortcuts/desc"]
       ~accessibility_identifier:"help-menu-trigger" ~style_class:"cp__sidebar-help-btn"
       ~width:32 ~height:32 ~min_width:32 ~min_height:32 ~padding:0 ~gap:0
       ~main:`center ~cross:`center ~corner_radius:16 ~background
-      ~foreground:"var(--ls-primary-text-color)"
+      ~foreground:"hsl(var(--foreground))"
       ~on_press:(fun _ -> on_press ())
       [icon_ ~size:30 "help-small"])
 
@@ -481,6 +491,7 @@ let help_menu ~close ~open_handbook ~open_bug_report () =
   Ui_components.with_props
     [Ui_components.Prop.shadow "0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)"]
     (popover ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
+      ~accessibility_identifier:"help-menu"
       ~transition:Ui_components.popover_transition ~role:`dialog
       ~anchor_target:"help-menu-trigger" ~anchor:`above ~anchor_alignment:`end_ ~anchor_offset:8.
       ~width:260 ~padding:0 ~border_width:1 ~border_color:"hsl(var(--border))"
@@ -683,6 +694,13 @@ let item_body ?search st idx (it : Sidebar_state.item) =
         ~padding_horizontal:8
         ~data_attrs:[ ("style", "padding-top:8px") ]
         [ help_pane st ]
+  | "block-ref" ->
+      box ~key:("body-" ^ it.key)
+        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
+        ~style_class:"sidebar-panel-content" ~padding:8
+        [match it.Sidebar_state.uuid with
+         | Some uuid -> Page.references_view ~page_uuid:uuid ~has_refs:true ()
+         | None -> Logseq_el.nothing]
   | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)

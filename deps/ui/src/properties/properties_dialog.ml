@@ -175,7 +175,9 @@ let rec property_chosen d prop =
     finish_write d (D.class_add_property ~class_uuid:d.d_target.uuid
          ~ident:(ident_of prop)))
   else if is_checkbox prop && d.d_target.uuids = [] then (
-    write_prop_value d prop (Some (W.Bool false)))
+    write_prop_value d prop
+      (Some (Option.value (D.getf prop "logseq.property/scalar-default-value")
+        ~default:(W.Bool false))))
   else if d.d_target.uuids = []
           && not (is_many prop)
           && List.mem (type_of prop) ["default"; "url"]
@@ -307,7 +309,7 @@ and on_type_chosen d name ty =
    switches to the anchored popover spec (32px input + 32px rows) —
    master's mod+p picker is that compact dropdown, not the roomier
    centered-card variant *)
-let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?new_option ?on_search ?selected_keys
+let async_select ~placeholder ?(compact = false) ?(presentation = Sel.Standard) ?(multiple_choices = false) ?(clear_input_on_choice = false) ?(new_case_sensitive = false) ?new_option ?on_search ?selected_keys
     fetch : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -323,13 +325,16 @@ let async_select ~placeholder ?(compact = false) ?(new_case_sensitive = false) ?
         match m with
         | None -> column ~gap:2 []
         | Some items ->
-            Sel.view ~placeholder ~compact ~new_case_sensitive ?new_option ?on_search ?selected_keys items)
+            Sel.view ~placeholder ~compact ~presentation ~multiple_choices ~clear_input_on_choice ~new_case_sensitive ?new_option ?on_search ?selected_keys items)
      (Signal.value items_st))
     context parent
 
 let prop_select_view d : t =
-  async_select ~placeholder:(I18n.t "property/add-or-change")
-    ~compact:(d.d_placement <> Centered)
+  row ~gap:0 ~cross:`start
+    [Ui_components.with_props [Ui_components.Prop.overflow `hidden; Ui_components.Prop.width_auto]
+    (box ~min_width:210 ~height:286 ~min_height:286
+      [async_select ~placeholder:(I18n.t "property/add-or-change")
+    ~compact:true ~presentation:Sel.Property_name
     ~new_case_sensitive:true
     ~new_option:(fun name ->
       (* no client-side name validation: invalid names go through
@@ -349,7 +354,7 @@ let prop_select_view d : t =
                     (fun () -> property_chosen d p)))
          (W.elems w)
      in
-     Js.Promise.resolve items)
+     Js.Promise.resolve items)])]
 
 let type_select_view d name : t =
  fun context parent ->
@@ -469,17 +474,13 @@ let value_items ?closed_values ~on_pick prop wire_values =
 
 (* :logseq.property/icon's value editor is the icon picker — the
    generic select paths would write a text-block ref or entity id
-   where the icon schema requires a {:type :id} map. Mount an anchor
-   element and open the picker on appear (same as the p i chord's
-   block picker, which passes ~del:false). *)
+   where the icon schema requires a {:type :id} map. *)
 let icon_value_view d : t =
  fun context parent ->
-  let anchor_id = "pd-icon-" ^ d.d_target.uuid in
-  (box ~accessibility_identifier:anchor_id
-     ~on_appear:(fun _ ->
-       match Ui_services.dom_query ("#" ^ anchor_id) with
-       | Some anchor ->
-           Icon_picker.open_picker ~anchor ~del:false
+  Emoji_mart.install ();
+  (Ui_components.with_props
+     [Ui_components.Prop.font_size "1rem"; Ui_components.Prop.line_height "1.5"]
+     (Icon_picker.picker_view ~del:false ~emoji_only:false ~close:(fun () -> close_current d)
              ~on_chosen:(fun c ->
                (match c with
                 | Icon_picker.Remove ->
@@ -505,9 +506,7 @@ let icon_value_view d : t =
                             | Some c -> [ (W.Keyword "color", W.String c) ]
                             | None -> [])) in
                     Js.Promise.resolve ())
-               |> finish_write d)
-       | None -> ())
-     [])
+               |> finish_write d)))
     context parent
 
 let date_value_view d prop : t =
@@ -602,7 +601,7 @@ let value_edit_view d prop : t =
     let placeholder = I18n.t1 "property/set-placeholder" (title_of prop) in
     let closed = Option.fold ~none:[] ~some:W.elems (D.getf prop "property/closed-values") in
     let on_new =
-      if closed <> [] || List.mem ty ["page";"property";"asset"] then None
+      if closed <> [] || List.mem ty ["property";"asset"] then None
       else if ty = "number" then
         Some
           (fun text ->
@@ -613,7 +612,7 @@ let value_edit_view d prop : t =
             | None -> ())
       else if ty = "string" then
         Some (fun text -> write_new (W.String text))
-      else if ty = "node" || ty = "class" then
+      else if List.mem ty ["node";"page";"class"] then
         Some
           (fun text ->
             ignore
@@ -654,10 +653,15 @@ let value_edit_view d prop : t =
          Js.Promise.resolve (value_items ~closed_values:eligible ~on_pick prop []))) context parent
     else if List.mem ty [ "node"; "page"; "class"; "property"; "asset" ] then
       let initial, on_search =
-        V.node_items_source ~block:(D.uuid_ref d.d_target.uuid) ~prop
+        V.node_items_source ~block:(D.uuid_ref d.d_target.uuid)
+          ~block_uuid:d.d_target.uuid ~prop
           ~on_pick
       in
-      (async_select ~placeholder ~compact:(d.d_placement <> Centered) ~selected_keys:(Signal.value selected)
+      (* cljs select-node: the same node picker as a value cell —
+         left checkboxes for many-cardinality, viewport-bound results *)
+      (async_select ~placeholder ~presentation:Sel.Node_picker
+         ~multiple_choices:(is_many prop) ~clear_input_on_choice:true
+         ~selected_keys:(Signal.value selected)
          ?new_option:on_new
          ~on_search:(Some on_search) initial)
         context parent
@@ -675,6 +679,10 @@ let date_phase = function
   | Value_edit prop -> List.mem (type_of prop) ["date";"datetime"]
   | Prop_select | Type_select _ | Node_tags _ -> false
 
+let icon_phase = function
+  | Value_edit prop -> ident_of prop = "logseq.property/icon"
+  | Prop_select | Type_select _ | Node_tags _ -> false
+
 let with_phase d render : t =
  fun context parent ->
   let phase=Signal.state context.Lui_ui.ui_scheduler d.d_phase in
@@ -684,13 +692,29 @@ let with_phase d render : t =
 
 let dialog_content ?compact_width ~phase d : t =
   reactive (fun p ->
-    column ~gap:0 ?width:(if date_phase p then None else match p with
-      | Type_select _ -> None | _ -> compact_width)
+    let content_sized = d.d_placement <> Centered && match p with
+      | Value_edit prop ->
+          let ty = type_of prop in
+          ident_of prop <> "logseq.property/icon"
+          && not (List.mem ty ["date"; "datetime"; "checkbox"; "string"; "asset"])
+          && (List.mem ty ["node"; "page"; "class"; "property"; "number"]
+              || Option.fold ~none:false ~some:(fun values -> W.elems values <> [])
+                   (D.getf prop "property/closed-values"))
+      (* cljs property-key popup is w-auto: an unmatched name's
+         nowrap "+ New option: …" row widens it past the 224 minimum *)
+      | Prop_select -> d.d_placement <> Centered
+      | Type_select _ | Node_tags _ -> false in
+    Ui_components.with_props
+      (if content_sized then [Ui_components.Prop.width_auto;
+        Ui_components.Prop.min_width 224; Ui_components.Prop.max_width 600] else [])
+    (column ~gap:0 ?width:(if icon_phase p then Some 380 else if date_phase p || content_sized then None else match p with
+      | Prop_select -> Some 224 | Type_select _ -> None | _ -> compact_width)
       [match p with
        | Prop_select -> prop_select_view d
        | Type_select name -> type_select_view d name
        | Node_tags prop -> node_tags_view d prop
-       | Value_edit prop -> value_edit_view d prop]) phase
+       | Value_edit prop -> Properties_popup.with_value_hover ~property_type:(type_of prop)
+           (value_edit_view d prop)])) phase
 
 (* the dialog rendered inside .cp__overlays: with an anchor point it
    is the anchored ui__popover-content dropdown master uses (title
@@ -717,14 +741,14 @@ let view : t =
             | (Point _ | Anchor_rect _) as placement ->
                 let at, anchor_rect = match placement with
                   | Point (x, y) -> Some (x, y), None
-                  | Anchor_rect rect -> None, Some rect
+                  | Anchor_rect rect -> None, Some (Properties_popup.virtual_anchor_rect rect)
                   | Centered | Trigger _ -> assert false in
                 Ui_components.with_props
                   [Ui_components.Prop.font_size "14px";
                    Ui_components.Prop.line_height "20px";
                    Ui_components.card_shadow]
                 (popover ~key:"prop-pop" ?at ?anchor_rect
-                  ~anchor:`below ~anchor_alignment:`start ~anchor_offset:4.
+                  ~anchor:`below ~anchor_alignment:`start ~anchor_offset:0.
                   ~padding:0 ~border_width:1 ~corner_radius:6
                   ~background:"hsl(var(--popover))"
                   ~foreground:"hsl(var(--popover-foreground))"
@@ -742,9 +766,9 @@ let view : t =
                   ~style_class:"ls-property-dialog"
                   ~on_dismiss:(fun _ -> close ())
                   [ Ui_parts.int_prop Lui_protocol.MaxWidth
-                      ~value:(reactive (fun p -> if date_phase p then 556 else 520) phase)
+                      ~value:(reactive (fun p -> if date_phase p then 564 else 520) phase)
                       (Ui_parts.int_prop Lui_protocol.MinWidth
-                         ~value:(reactive (fun p -> if date_phase p then 556 else 340) phase)
+                         ~value:(reactive (fun p -> if date_phase p then 564 else 340) phase)
                          (Ui_parts.int_prop Lui_protocol.PaddingValue
                             ~value:(reactive (fun p -> if date_phase p then 0 else 8) phase)
                             (card [ dialog_content ~phase d ])))
@@ -788,6 +812,7 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
         on_close ()
     | _ -> ());
   (button_group ~key ~gap:0 ?margin_left ~background:"transparent"
+     ~accessibility_identifier:key
      ~border_width:0 ~corner_radius:0
      [ make_button (fun () -> match !current with
          | Some d when d.d_placement = Trigger key -> close ()
@@ -801,9 +826,10 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
                  [Ui_components.Prop.overflow `auto; Ui_components.card_shadow]
                  (Ui_parts.int_prop Lui_protocol.MaxHeight
                     ~value:(reactive (fun p ->
-                      if date_phase p then max 0 (int_of_float (Ui_services.dom_viewport_height ())-16)
+                      if date_phase p || icon_phase p then max 0 (int_of_float (Ui_services.dom_viewport_height ())-16)
                       else 288) phase)
-                  (popover ~anchor:`below ~anchor_offset:0.
+                  (popover ~anchor:`below ~anchor_alignment:`start ~anchor_offset:0.
+                    ?anchor_rect:(Properties_popup.virtual_anchor_for_id key)
                     ~padding:0 ~border_width:1
                     ~corner_radius:6 ~background:"hsl(var(--popover))"
                     ~foreground:"hsl(var(--popover-foreground))"

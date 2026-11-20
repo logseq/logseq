@@ -467,7 +467,7 @@ and get_attr el r k =
     | _ -> None)
 
 and contains_el el other =
-  List.exists (fun n -> n == other) (all_descendants el)
+  el == other || List.exists (fun n -> n == other) (all_descendants el)
 
 and rect_obj () =
   let d = Js.Json.object_ (Js.Dict.empty ()) in

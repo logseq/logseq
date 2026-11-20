@@ -21,7 +21,8 @@
                   non-menu pickers use popover ~role:`menu instead
 
    Writes: create-property-text-block / save-block for text & url,
-   set-block-property for scalars and refs, remove-block-property /
+   set-block-property for direct edits, batch-set-property for picker values,
+   remove-block-property /
    delete-property-value to clear. *)
 
 open Promise_ext
@@ -107,6 +108,18 @@ let set_scalar ctx ~ident ~value =
     S.refresh_all ();
     Js.Promise.resolve ())
 
+let set_picker_value ctx ~ident ~value =
+  ignore (let* _ = D.batch_set_property ~block_uuids:[ctx.block_uuid] ~ident ~value in
+    S.refresh_all ();
+    Js.Promise.resolve ())
+
+let select_reference ctx row id =
+  let ident = D.row_ident row |> Option.value ~default:"" in
+  if D.row_type row = "asset" then
+    D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
+  else
+    D.select_property_value ~block_uuids:[ctx.block_uuid] ~ident ~id
+
 (* text/url: create a value block (or update the existing one) *)
 let save_text_value ctx row new_title =
   let ident = D.row_ident row |> Option.value ~default:"" in
@@ -172,7 +185,7 @@ let today_day () =
 
 let set_date ctx ident day =
   (let* id = D.resolve_journal_day day in
-  set_scalar ctx ~ident ~value:(W.Int id);
+  set_picker_value ctx ~ident ~value:(W.Int id);
   Js.Promise.resolve ())
   |> ignore
 
@@ -182,7 +195,7 @@ let commit_date_text ctx ident ~is_datetime v =
   let v = String.trim v in
   if is_datetime then
     match if v = "" then Some (Ui_services.time_now ()) else parse_ms v with
-    | Some ms -> set_scalar ctx ~ident ~value:(W.Float ms)
+    | Some ms -> set_picker_value ctx ~ident ~value:(W.Float ms)
     | None -> ()
   else
     let day =
@@ -214,9 +227,9 @@ let ymd_of_datetime_value (v : W.t) : (int * int * int) option =
       | Some (W.Int d) -> Some (d / 10000, d mod 10000 / 100, d mod 100)
       | _ -> None)
 
-let date_display ty value =
-  match ty = "datetime", ymd_of_datetime_value value with
-  | true, Some (y, m, d) -> Render_inline.date_label y m d
+let date_display value =
+  match ymd_of_datetime_value value with
+  | Some (y, m, d) -> Render_inline.date_label y m d
   | _ -> D.value_display value
 
 (* ---------- select pickers (choices / node refs) ---------- *)
@@ -313,30 +326,156 @@ let reference_keys value =
    get-property-node-selector-data, filtering re-queries the worker via
    search-blocks (cljs property-value-select-node). on_pick gets the
    chosen entity's db/id. *)
-let node_items_source ~block ~prop ~on_pick =
+let node_items_source ~block ~block_uuid ~prop ~on_pick =
   let to_item v =
     match D.entity_id_of v with
     | Some id ->
-        Some (Sel.item ~key:("entity-" ^ string_of_int id) (D.ref_title v) (fun () -> on_pick id))
+        Some (Sel.item ~key:("entity-" ^ string_of_int id) ~has_header:true
+          (D.ref_title v) (fun () -> on_pick id))
     | None -> None
   in
   let items_of w = List.filter_map to_item (W.elems w) in
   let classes = Option.fold ~none:[] ~some:W.elems (D.getf prop "logseq.property/classes") in
   let classes_only = D.getk prop "logseq.property/type" = Some "class"
     || D.getk prop "db/ident" = Some "block/tags" in
+  let is_tags = D.getk prop "db/ident" = Some "block/tags" in
   let scoped = List.exists (fun c ->
     match D.getk c "db/ident" with
     | Some "logseq.class/Root" | Some "logseq.class/Page" -> false
     | _ -> true) classes in
+  let property_id =
+    match D.entity_id_of prop with
+    | Some id -> Js.Promise.resolve (Some id)
+    | None when D.getk prop "db/ident" = Some "block/tags" ->
+        let* property =
+          D.entity (W.List [ W.Keyword "db/ident"; W.Keyword "block/tags" ])
+        in
+        (match D.entity_id_of property with
+         | Some id -> Js.Promise.resolve (Some id)
+         | None -> failwith "Built-in block/tags property entity is missing db/id")
+    | None -> Js.Promise.resolve None
+  in
+  let selector_data =
+    let* property_id in
+    match property_id with
+    | Some property_id -> D.node_selector_data ~property_id ~block
+    | None -> Js.Promise.resolve W.Nil
+  in
+  let page_item data =
+    let all_classes = Option.fold ~none:[] ~some:W.elems (D.getf data "all-classes") in
+    match List.find_opt
+            (fun c -> D.getk c "db/ident" = Some "logseq.class/Page") all_classes with
+    | None -> failwith "Built-in Page class entity is missing from the class selector data"
+    | Some entity ->
+        (match to_item entity with
+         | Some item -> entity, {item with Sel.it_has_header = false}
+         | None -> failwith "Built-in Page class entity is missing db/id")
+  in
+  let dedupe_by_key items =
+    let seen = Hashtbl.create (List.length items) in
+    List.filter (fun item ->
+      match item.Sel.it_key with
+      | None -> true
+      | Some key ->
+          if Hashtbl.mem seen key then false
+          else (Hashtbl.add seen key (); true)) items
+  in
+  let option_key value =
+    Option.map (fun id -> "entity-" ^ string_of_int id) (D.entity_id_of value)
+  in
+  let dedupe_options options =
+    let seen = Hashtbl.create (List.length options) in
+    List.filter (fun option ->
+      match option_key option with
+      | None -> true
+      | Some key ->
+          if Hashtbl.mem seen key then false
+          else (Hashtbl.add seen key (); true)) options
+  in
+  let property_value_content entity =
+    match D.getf entity "block/title" with
+    | Some (W.Nil | W.Bool false) | None ->
+        Option.value (D.getf entity "logseq.property/value") ~default:W.Nil
+    | Some content -> content
+  in
+  let sort_options selected_keys options =
+    let selected option =
+      match option_key option with
+      | Some key -> List.mem key selected_keys
+      | None -> false
+    in
+    List.stable_sort (fun left right ->
+      let selection_order = Bool.compare (not (selected left)) (not (selected right)) in
+      if selection_order <> 0 then selection_order
+      else Stdlib.compare (property_value_content left) (property_value_content right)) options
+  in
+  let page_first page items =
+    let page_key = page.Sel.it_key in
+    dedupe_by_key
+      (page :: List.filter (fun item -> item.Sel.it_key <> page_key) items)
+  in
   let initial =
-    (match D.entity_id_of prop with
-     | Some property_id ->
-         let* w = D.node_selector_data ~property_id ~block in
-         Js.Promise.resolve
-           (match D.getf w (if classes_only then "class-options" else "initial-choices") with
-            | Some v -> items_of v
-            | None -> [])
-     | None -> Js.Promise.resolve [])
+    let* property_id in
+    match property_id with
+    | Some _ ->
+        let* data = selector_data in
+        let* current = D.entity_by_uuid block_uuid in
+        let current = D.untag current in
+        let property_ident = Option.value (D.getk prop "db/ident") ~default:"" in
+        let* selected_keys =
+          reference_keys (Option.value (D.getf current property_ident) ~default:W.Nil)
+        in
+        let options =
+          match D.getf data (if classes_only then "class-options" else "initial-choices") with
+          | Some v -> W.elems v
+          | None -> []
+        in
+        let options = if classes_only then dedupe_options options else options in
+        if not classes_only then
+          Js.Promise.resolve (List.filter_map to_item (sort_options selected_keys options))
+        else
+          let page_entity, page = page_item data in
+          let* block_tag_keys =
+            reference_keys (Option.value (D.getf current "block/tags") ~default:W.Nil)
+          in
+          let page_id = Option.get (D.entity_id_of page_entity) in
+          let page_key = "entity-" ^ string_of_int page_id in
+          let has_class_tag ident =
+            match List.find_opt
+                    (fun c -> D.getk c "db/ident" = Some ident)
+                    (Option.fold ~none:[] ~some:W.elems (D.getf data "all-classes")) with
+            | Some entity ->
+                (match D.entity_id_of entity with
+                 | Some id -> List.mem ("entity-" ^ string_of_int id) block_tag_keys
+                 | None -> false)
+            | None -> false
+          in
+          let internal_page = List.mem page_key block_tag_keys in
+          let block_is_page = internal_page
+            || has_class_tag "logseq.class/Journal"
+            || has_class_tag "logseq.class/Tag"
+            || has_class_tag "logseq.class/Property" in
+          let created_from_property =
+            match D.getf current "logseq.property/created-from-property" with
+            | None | Some W.Nil | Some (W.Bool false) -> false
+            | Some _ -> true
+          in
+          let include_page =
+            List.mem page_key selected_keys
+            || not ((block_is_page && not internal_page) || created_from_property)
+          in
+          let options = List.filter (fun option -> option_key option <> Some page_key) options in
+          let options =
+            if not include_page then options
+            else if is_tags then page_entity :: options
+            else options @ [page_entity]
+          in
+          let items = List.filter_map to_item (sort_options selected_keys options) in
+          let items = List.map (fun item ->
+            if item.Sel.it_key = page.Sel.it_key then page else item) items in
+          Js.Promise.resolve
+            (if is_tags && include_page then page_first page items else items)
+    | None -> Js.Promise.resolve []
   in
   let sub_of needle hay =
     let nl = String.length needle and hl = String.length hay in
@@ -350,30 +489,21 @@ let node_items_source ~block ~prop ~on_pick =
     if q' = "" then initial
     else if scoped || classes_only then
       let* items = initial in
-      Js.Promise.resolve
-        (Fuzzy.fuzzy_search ~extract:(fun it -> it.Sel.it_title) ~limit:100 items q')
+      let results = Fuzzy.fuzzy_search ~extract:(fun it -> it.Sel.it_title) ~limit:100 items q' in
+      if not is_tags then Js.Promise.resolve results
+      else
+        let* data = selector_data in
+        let _, page = page_item data in
+        Js.Promise.resolve
+          (if sub_of (String.lowercase_ascii q')
+               (String.lowercase_ascii page.Sel.it_title)
+           then page_first page results else results)
     else
       let searched =
         (let* w = D.search_blocks q in
         Js.Promise.resolve (items_of w))
       in
-      (* cljs re-adds the built-in Page class for block/tags — block-search
-         filters built-ins out *)
-      let is_tags =
-        D.getk prop "db/ident" = Some "block/tags"
-        && sub_of (String.lowercase_ascii q') "page"
-      in
-      if is_tags then
-        let* items = searched in
-        let* e =
-          D.entity
-            (W.List [ W.Keyword "db/ident"; W.Keyword "logseq.class/Page" ])
-        in
-        Js.Promise.resolve
-          (match to_item e with
-           | Some it -> items @ [ it ]
-           | None -> items)
-      else searched
+      searched
   in
   (initial, on_search)
 
@@ -412,10 +542,7 @@ let new_node ctx row ~close text =
            let* id = D.db_id_of_uuid uuid in
            match id with
            | Some id ->
-               let ident =
-                 D.row_ident row |> Option.value ~default:"" in
-               let* _ = D.set_block_property ~block_uuid:ctx.block_uuid
-                 ~ident ~value:(W.Int id) in
+               let* _ = select_reference ctx row id in
                ctx.refresh ();
                close ();
                Js.Promise.resolve ()
@@ -425,7 +552,10 @@ let new_node ctx row ~close text =
 (* ---------- views ---------- *)
 
 (* Fetch-backed chooser content mounted in an independent popup scope. *)
-let picker_content ?selected_keys ~placeholder ~new_option ~initial ~on_search
+let picker_content ?selected_keys ?(multiple_choices = false)
+    ?(presentation = Sel.Standard)
+    ?(clear_input_on_choice = false)
+    ~placeholder ~new_option ~initial ~on_search
     : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
@@ -439,20 +569,28 @@ let picker_content ?selected_keys ~placeholder ~new_option ~initial ~on_search
      if Ui_effect.alive context.Lui_ui.ui_scope then
        Runtime.signal_set items_st (Some (items, on_search));
      Js.Promise.resolve ());
-  (column ~min_width:240
-     [ reactive
-         ~equal:(fun a b -> Option.is_some a = Option.is_some b)
-         (fun m ->
-            match m with
-        | None -> column ~gap:2 []
-            | Some (items, on_search) ->
-                Sel.view ~placeholder ?new_option ?selected_keys
-                  ~on_search:(Some on_search) items)
-         (Signal.value items_st)
-     ])
-    context parent
+  let content =
+    column ~min_width:(if presentation = Sel.Node_picker then 224 else 240)
+      [ reactive
+          ~equal:(fun a b -> Option.is_some a = Option.is_some b)
+          (fun m ->
+             match m with
+             | None -> column ~gap:2 []
+             | Some (items, on_search) ->
+                 Sel.view ~placeholder ~presentation ~clear_input_on_choice
+                   ~multiple_choices ?new_option ?selected_keys
+                   ~on_search:(Some on_search) items)
+          (Signal.value items_st)
+      ]
+  in
+  let content =
+    if presentation = Sel.Node_picker then
+      Ui_components.with_props [Ui_components.Prop.max_height_viewport 0.75] content
+    else content
+  in
+  content context parent
 
-let open_value_picker anchor_id build =
+let open_value_picker ?(presentation = Sel.Standard) ?(freeze_anchor = false) anchor_id build =
   let key = ref None in
   let content context parent =
     let closed = ref false in
@@ -465,7 +603,11 @@ let open_value_picker anchor_id build =
     build ~alive ~close context parent
   in
   match Ui_services.dom_by_id anchor_id with
-  | Some anchor -> key := Some (Properties_popup.open_anchored ~padding:0 anchor content)
+  | Some anchor ->
+      let padding = if presentation = Sel.Node_picker then 4 else 0 in
+      key := Some
+        (Properties_popup.open_anchored ~freeze_anchor
+           ~padding anchor content)
   | None -> ()
 
 (* Closed values share a searchable property chooser on both hosts. *)
@@ -499,7 +641,7 @@ let value_button ~text ~on_press : t =
     ~on_press [Lui_elements.text ~value:text ~white_space:"pre-wrap" []]
 
 (* text/number cell: ghost button <-> autofocused text_field *)
-let scalar_edit_cell ?(jump_target = true) ctx row : t =
+let scalar_edit_cell ?(jump_target = true) ?(bottom_pill = false) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let ident = D.row_ident row |> Option.value ~default:"" in
@@ -536,11 +678,17 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
   if Runtime.signal_get editing then (
     add_active_edit ctx row;
     close_editor := commit);
+  let display = value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ()) in
+  let display = if bottom_pill then
+      Ui_components.with_props [Ui_components.Prop.height 20;
+        Ui_components.Prop.padding_horizontal 0; Ui_components.Prop.padding_vertical 0;
+        Ui_components.Prop.font_weight 400] display
+    else display in
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
             ~owner:ctx.jump_owner ~activate:(fun () -> open_editor ~steal:true ())
-            (value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ())))
+            display)
      ; if_ ~test:(Signal.value editing)
          (fun edit_context edit_parent ->
           let live = ref true in
@@ -644,7 +792,7 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
 let checkbox_view ?(jump_target = true) ctx row : t =
   let value = D.row_value row in
   let checked = match value with W.Bool b -> b | _ -> false in
-  let activate () = set_scalar ctx
+  let activate () = set_picker_value ctx
       ~ident:(D.row_ident row |> Option.value ~default:"") ~value:(W.Bool (not checked)) in
   Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ D.row_title row)
     ~owner:ctx.jump_owner ~activate (Ui_components.checkbox ~checked
@@ -652,7 +800,7 @@ let checkbox_view ?(jump_target = true) ctx row : t =
       match ev with
       | Lui_protocol.ToggleChanged (_, b) ->
           let ident = D.row_ident row |> Option.value ~default:"" in
-          set_scalar ctx ~ident ~value:(W.Bool b)
+          set_picker_value ctx ~ident ~value:(W.Bool b)
       | _ -> ())
     [])
 
@@ -713,7 +861,9 @@ let builtin_prop_p ident =
   String.length ident > 7 && String.sub ident 0 7 = "logseq."
 
 let rep_set ctx ~ident ~value =
-  D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value |> ignore;
+  (if ident = "logseq.property.repeat/repeated?" then
+     D.batch_set_property ~block_uuids:[ctx.block_uuid] ~ident ~value
+   else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value) |> ignore;
   S.refresh_all ()
 
 let fetch_repeat ctx ~ident ~is_datetime (k : rep -> unit) =
@@ -983,7 +1133,7 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
         on_value (W.Int id);on_dismiss ());
       Js.Promise.resolve ())
   in
-  (row ~key:"property-date-content" ~width:556 ~gap:0 ~cross:`start
+  (row ~key:"property-date-content" ~width:564 ~gap:8 ~cross:`start
      ~style_class:"ls-property-date-picker"
      [ Ui_components.calendar ~week_starts_on:(Sdk_config.calendar_week_starts_on ()) ~month_label:I18n.calendar_month_label ~day_label:I18n.calendar_day_label ~initial ~datetime:is_datetime ~initial_focus_day:true
          ~translate:I18n.t ~on_pick:pick
@@ -992,12 +1142,13 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
 
 let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : t =
  fun context parent ->
+  let anchor_rect = Properties_popup.virtual_anchor_for_id anchor_target in
   let alive = ref true in
   Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false);
   let dismiss = on_dismiss in
   let on_dismiss () = if !alive then (alive := false; dismiss ()) in
   (Ui_components.with_props [Ui_components.Prop.overflow `auto;Ui_components.card_shadow]
-  (popover ~anchor:`below ~anchor_target ~anchor_alignment:`start ~anchor_offset:4.
+  (popover ~anchor:`below ~anchor_target ?anchor_rect ~anchor_alignment:`start ~anchor_offset:0.
     ~max_height:(max 0 (int_of_float (Ui_services.dom_viewport_height ())-16))
     ~background:"hsl(var(--popover))"
     ~foreground:"hsl(var(--popover-foreground))" ~border_width:1
@@ -1005,9 +1156,9 @@ let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : 
     ~transition:Ui_components.popover_transition
     ~on_dismiss:(fun _ -> on_dismiss ())
     [date_picker_content ctx ~ident ~is_datetime ~value
-       ~on_value:(fun value -> set_scalar ctx ~ident ~value)
+       ~on_value:(fun value -> set_picker_value ctx ~ident ~value)
        ~on_clear:(fun () ->
-         ignore (let* _ = D.set_block_property ~block_uuid:ctx.block_uuid ~ident
+         ignore (let* _ = D.batch_set_property ~block_uuids:[ctx.block_uuid] ~ident
            ~value:(W.Keyword "logseq.property/empty-placeholder") in
            S.refresh_all ();
            on_dismiss ();
@@ -1031,6 +1182,60 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
   let is_datetime = D.row_type row = "datetime" in
   let ident = D.row_ident row |> Option.value ~default:"" in
   let anchor_id = "property-date-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
+  let repeated = Signal.state sched false in
+  let now = Signal.state sched (Dates.date_now ()) in
+  let alive = ref true in
+  let compare_date =
+    match D.untag value with
+    | W.Int n -> Some (float_of_int n)
+    | W.Int64 n -> Some (Int64.to_float n)
+    | W.Float n when Float.is_finite n -> Some n
+    | W.Map _ as date ->
+        Option.bind (D.geti date "block/journal-day") (fun day ->
+          Ui_services.time_parse
+            (Printf.sprintf "%04d-%02d-%02dT23:59:59Z"
+               (day / 10000) (day mod 10000 / 100) (day mod 100)))
+    | _ -> None
+  in
+  let overdue_property = match D.untag value with
+    | W.Map _ -> D.getk (D.row_prop row) "db/id"
+    | _ -> Some ident
+  in
+  let overdue time repeated =
+    (repeated || Option.fold ~none:false
+       ~some:(fun ident -> List.mem ident ["logseq.property/deadline"; "logseq.property/scheduled"])
+       overdue_property)
+    && Option.fold ~none:false ~some:(fun date -> time > date +. 59000.) compare_date
+  in
+  let foreground time repeated =
+    if overdue time repeated then
+      "var(--lx-property-overdue-fg)"
+    else "inherit"
+  in
+  let link_foreground time repeated =
+    if overdue time repeated then foreground time repeated
+    else "var(--lx-accent-11, var(--ls-link-text-color))"
+  in
+  let overdue_attrs time repeated =
+    if overdue time repeated then
+      let label = I18n.t "property/overdue" in
+      ["data-tooltip", label; "aria-description", label]
+    else []
+  in
+  if not (D.value_empty_p value) then (
+    let timer = Ui_services.timers_interval (fun () ->
+      if !alive then Runtime.signal_set now (Dates.date_now ())) 180000 in
+    Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
+      alive := false;
+      Ui_services.timers_clear_interval timer);
+    ignore (Js.Promise.catch (fun error ->
+      if !alive then Ui_services.log_error ("property date owner failed", error);
+      Js.Promise.resolve ())
+      (let* block = D.entity_by_uuid ctx.block_uuid in
+       if !alive then Runtime.signal_set repeated
+         (D.getb (D.untag block) "logseq.property.repeat/repeated?");
+       Js.Promise.resolve ())))
+  else Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false);
   let open_picker () =
     let key = "date-picker-" ^ anchor_id ^ "-" ^ Properties_popup.next_key () in
     let dismiss () = S.remove_view_overlay key in
@@ -1057,7 +1262,11 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
        if cell_hover && Runtime.signal_get hover then (
          Signal.set hover false;
          Runtime.flush ()))
-     [ (if D.value_empty_p value then
+     [ if_ ~test:(Signal.value repeated)
+         (Ui_components.with_props [Ui_components.Prop.opacity 0.4]
+            (icon ~name:(`app "repeat") ~point_size:14 ~foreground:"inherit"
+               ~style_class:"property-date-repeat" []));
+       (if D.value_empty_p value then
           (* empty date has no journal link — keep the ghost button so
              a click opens the picker *)
           if D.row_many row then
@@ -1071,23 +1280,44 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
               ~on_press:(fun _ -> open_picker ()) []
           else value_button ~text:"" ~on_press:(fun _ -> open_picker ())
         else
-          (match ymd_of_datetime_value value with
+          Ui_parts.string_prop Lui_protocol.StyleClass
+            ~value:(reactive (fun time repeated ->
+              if overdue time repeated then "overdue" else "")
+              (Signal.value now) (Signal.value repeated))
+          (Lui_elements.row ~cross:`center ~gap:4
+            ~data_attrs:(reactive overdue_attrs (Signal.value now) (Signal.value repeated))
+            ~foreground:(reactive foreground (Signal.value now) (Signal.value repeated))
+            [(match ymd_of_datetime_value value with
            | Some (y, m, d) ->
-               (* cljs datetime-value renders the journal page-ref —
-                  the text navigates, the pencil opens the picker *)
-               link ~style_class:"page-ref"
+               Ui_parts.string_prop Lui_protocol.HoverForeground
+                 ~value:(reactive link_foreground (Signal.value now) (Signal.value repeated))
+               (link ~style_class:"page-ref"
+                 ~data_attrs:(reactive overdue_attrs (Signal.value now) (Signal.value repeated))
+                 ~foreground:(reactive link_foreground (Signal.value now) (Signal.value repeated))
                  ~url:
                    ("#/page/"
                    ^ Ui_services.uri_encode_component
                        (Dates.journal_title_ymd ~y ~m ~d))
                  ~target:`self_
-                 ~text:(date_display (D.row_type row) value) []
+                 ~text:(date_display value) [])
            | None ->
                value_button
-                 ~text:(date_display (D.row_type row) value)
-                 ~on_press:(fun _ -> open_picker ())))
+                 ~text:(date_display value)
+                 ~on_press:(fun _ -> open_picker ()));
+             (match is_datetime, ms_of_value value with
+              | true, Some ms ->
+                  let date = Dates.fields ms in
+                  if date.hours = 0 && date.minutes = 0 then Logseq_el.nothing
+                  else text ~value:(Printf.sprintf "%02d:%02d" date.hours date.minutes) []
+              | _ -> Logseq_el.nothing)]))
      ; (if (if bottom_pill then not has_pill_value else D.value_empty_p value)
         then Logseq_el.nothing
+        else if not bottom_pill then
+          Ui_components.with_props
+            [Ui_components.Prop.hover_background "transparent"]
+            (Ui_components.button ~variant:`ghost ~height:24 ~padding:0 ~grow:1.
+               ~background:"transparent" ~label:(I18n.t "ui/edit")
+               ~on_press:(fun _ -> open_picker ()) [])
         else
           Ui_parts.float_prop Lui_protocol.Opacity
             ~value:(reactive
@@ -1096,7 +1326,7 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
             (Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
                 ~style_class:"prop-edit-ico"
                 ~width:18 ~height:18
-                ~data_attrs:[ ("style", "min-width:0;padding:0") ]
+                ~min_width:0 ~padding:0
                 ~label:(I18n.t "ui/edit")
                 ~on_press:(fun _ -> open_picker ()) []))
 
@@ -1104,12 +1334,11 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
     context parent
 
 let many_dates_view ~jump_target ~hover ctx row : t =
-  let ty = D.row_type row in
   let values = List.filter (fun value -> not (D.value_empty_p value))
     (D.value_elems (D.row_value row)) in
   Lui_elements.row ~gap:4 ~cross:`center ~flex_wrap:`wrap ~min_width:0
     (List.concat_map (fun (index, value) ->
-      let label = date_display ty value in
+      let label = date_display value in
       (if index = 0 then [] else [text ~value:"," ~foreground:"var(--lx-gray-09)" []])
       @ [match D.ref_uuid value with
          | Some uuid -> link ~url:("#/page/" ^ uuid) ~target:`self_ ~text:label []
@@ -1118,28 +1347,83 @@ let many_dates_view ~jump_target ~hover ctx row : t =
       @ [date_view ~jump_target ~hover ctx (D.row_with_value row W.Nil)])
 
 (* chips of the current refs — click navigates to the page *)
-let ref_chips row : t list =
+let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
+    ?(bottom_expanded = false) ?on_activate row : t list =
   let value = D.row_value row in
-  List.filter_map
+  let tag = table_view && D.row_ident row = Some "block/tags" in
+  let chips = List.filter_map
     (fun r ->
       let title = D.ref_title r in
       if title = "" then None
       else
         let class_p = D.ref_is_class r in
-        Some
-          (Ui_components.button ~variant:`secondary ~size:`sm
-             ~text:((if class_p then "#" else "") ^ title)
-             ~on_press:(fun _ ->
-               match D.ref_uuid r with
-               | Some u ->
-                   Runtime.send
-                     (Action.Navigate_to (Model.Page u))
-               | None -> ())
-             []))
+        let navigate _ =
+          match on_activate with
+          | Some activate -> activate ()
+          | None -> (match D.ref_uuid r with
+            | Some u -> Runtime.send (Action.Navigate_to (Model.Page u))
+            | None -> ()) in
+        Some (if plain then
+          let is_tag = D.row_ident row = Some "block/tags" in
+          let foreground = if is_tag then Ui_components.tag_link_foreground
+            else "var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)))" in
+          let chip = Ui_components.with_props
+            [ Ui_components.Prop.font_size (if is_tag || bottom_pill then "0.875rem" else "1rem")
+            ; Ui_components.Prop.line_height (if is_tag || bottom_pill then "1.25rem" else "1.5rem")
+            ; Ui_components.Prop.font_weight 400
+            ; Ui_components.Prop.hover_foreground
+                "var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))))" ]
+            ((if bottom_pill then (fun children ->
+                Ui_components.with_props [Ui_components.Prop.height_auto]
+                (Lui_elements.button ~variant:`ghost ~style_class:"bottom-property-node-value"
+                  ~min_width:0 ~min_height:20 ~padding_horizontal:0 ~padding_vertical:0
+                  ~border_width:0 ~gap:0 ~main:`start ~background:"transparent"
+                  ~foreground ~text_alignment:`start ~label:title ~on_press:navigate children))
+              else (fun children -> link ~style_class:(if is_tag then "tag" else "page-ref")
+               ~min_width:0
+               ~foreground ~text:((if is_tag then "#" else "") ^ title) ~on_press:navigate
+               ~data_attrs:(["tabindex","0";"draggable","true";
+                 "data-ref",String.lowercase_ascii title]
+                 @ (match D.ref_uuid r with Some uuid -> ["data-uuid",uuid] | None -> [])) children))
+               (if bottom_pill then [text ~value:((if is_tag then "#" else "") ^ title)
+                  ~min_width:0 ~font_size:"0.875rem" ~line_height:"20px"
+                  ?line_clamp:(if bottom_expanded then None else Some 1)
+                  ~white_space:(if bottom_expanded then "normal" else "nowrap")
+                  ~text_overflow:"ellipsis" ~overflow:"hidden" []] else [])) in
+          if is_tag then Ui_components.tag_link_appearance chip else chip
+        else if tag then
+          let uuid_attrs = match D.ref_uuid r with
+            | Some uuid -> ["data-uuid",uuid]
+            | None -> [] in
+          Lui_elements.row ~cross:`center ~gap:4 ~height:20 ~padding_vertical:0
+            ~padding_horizontal:0 ~corner_radius:6 ~display:`inline_flex
+            ~style_class:"select-item block-tag"
+            ~data_attrs:(["data-tag-title",title]
+              @ (match D.ref_uuid r with Some uuid -> ["data-tag-uuid",uuid] | None -> []))
+            [Ui_components.tag_link_appearance
+             (link ~style_class:"tag" ~text:("#" ^ title) ~on_press:navigate
+              ~data_attrs:(["tabindex","0";"draggable","true";
+                "data-ref",String.lowercase_ascii title] @ uuid_attrs) [])]
+        else
+          let chip = Ui_components.button ~variant:`secondary ~size:`sm
+            ?height:(if table_view then Some 24 else None)
+            ~text:((if class_p then "#" else "") ^ title)
+            ~on_press:navigate [] in
+          if D.row_ident row = Some "block/tags" then
+            Ui_components.tag_link_appearance chip
+          else chip))
     (D.value_elems value)
+  in
+  let rec separated = function
+    | [] -> []
+    | [chip] -> [chip]
+    | chip :: rest ->
+        chip :: box ~opacity:0.5 ~margin_left:(-4) [text ~value:"," []] :: separated rest
+  in
+  if D.row_many row && D.row_type row <> "asset" then separated chips else chips
 
 (* multi-toggle extends picker — stays open across picks *)
-let extends_view ~jump_target ctx row : t =
+let extends_view ?(table_view = false) ~jump_target ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let open_ = Signal.state sched false in
@@ -1213,25 +1497,30 @@ let extends_view ~jump_target ctx row : t =
             List.filter (fun x -> x <> id) selected)
           else (
             ignore
-              (D.set_block_property ~block_uuid:ctx.block_uuid ~ident
-                 ~value:(W.Int id));
+              (select_reference ctx row id);
             id :: selected)
         in
         S.refresh_all ();
         Runtime.signal_set picker_st (Some (options, selected'))
   in
-  let chips = ref_chips row in
+  let chips = ref_chips ~plain:(not table_view) row in
   (Jump_state.target ~enabled:jump_target ~key:("extends-" ^ ctx.owner_key)
      ~owner:ctx.jump_owner ~activate:(fun () -> load (); Runtime.signal_set open_ true)
   (column ~gap:2 ~grow:1.0 ~min_width:0
-     [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
+     [ Lui_elements.row ?grow:(if table_view then None else Some 1.)
+         ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
          (chips
-         @ [ Ui_components.button ~variant:`ghost ~icon:(`app "plus") ~text:""
+         @ [ Ui_components.button ~variant:`ghost ?icon:(if table_view then Some (`app "plus") else None)
+               ?grow:(if table_view then None else Some 1.)
+               ?height:(if table_view then None else Some 24)
+               ?min_width:(if table_view then None else Some 0)
+               ?padding_horizontal:(if table_view then None else Some 0)
+               ?padding_vertical:(if table_view then None else Some 0) ~text:""
                ~label:(I18n.t "property/select-property-placeholder")
                ~on_press:(fun _ ->
                  load ();
                  Runtime.signal_set open_ true)
-               []
+               (if not table_view && chips=[] then [text ~value:(I18n.t "ui/empty") []] else [])
            ])
      ; if_ ~test:(Signal.value open_)
          (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
@@ -1265,7 +1554,7 @@ let extends_view ~jump_target ctx row : t =
      ]))
     context parent
 
-let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t =
+let closed_value_view ?(jump_target = true) ?(icon_size = 18.) ~positioned ~table_view ctx row : t =
  fun context parent ->
   let value = D.row_value row in
   let many = D.row_many row in
@@ -1281,7 +1570,7 @@ let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t 
   in
   let label = if display = "" then I18n.t "ui/empty" else display in
   let show_text = display <> "" &&
-    not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
+    not (positioned && Option.is_some icon_id) in
   let activate () =
     open_value_picker anchor_id
              (fun ~alive ~close popup_context popup_parent ->
@@ -1314,8 +1603,7 @@ let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t 
                                         let* _ =
                                           if remove then D.delete_property_value
                                             ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
-                                          else D.set_block_property ~block_uuid:ctx.block_uuid
-                                            ~ident ~value:(W.Int id) in
+                                          else select_reference ctx row id in
                                         let keys = selected_keys current in
                                         let key = choice_key c in
                                         let keys = if remove then List.filter ((<>) key) keys
@@ -1336,7 +1624,7 @@ let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t 
                    if alive () then
                      Runtime.signal_set items_st (Some items);
                    Js.Promise.resolve ())));
-             (column ~min_width:226
+             (column ~min_width:224
                [ reactive
                    ~equal:(fun a b -> Option.is_some a = Option.is_some b)
                    (function
@@ -1361,74 +1649,139 @@ let closed_value_view ?(jump_target = true) ~positioned ~table_view ctx row : t 
              (if many && not (D.value_empty_p value) then
                 List.concat_map (fun (index, item) ->
                   (if index = 0 then [] else [text ~value:"," ~foreground:"var(--lx-gray-09)" []])
-                  @ (match closed_value_icon_id item with None -> [] | Some id -> [Icons.icon id])
-                  @ [text ~value:(D.value_display item) []])
+                  @ (match closed_value_icon_id item with None -> [] | Some id -> [Icons.icon ~size:icon_size id])
+                  @ (if positioned && Option.is_some (closed_value_icon_id item) then []
+                     else [text ~value:(D.value_display item) []]))
                   (List.mapi (fun index item -> index, item) (D.value_elems value))
-              else (match icon_id with None -> [] | Some id -> [ Icons.icon id ])
+              else (match icon_id with None -> [] | Some id -> [ Icons.icon ~size:icon_size id ])
                 @ if show_text then [ text ~value:display [] ] else []) ])
      ]))
     context parent
 
 (* node/page/class/asset: ref chips + picker button *)
-let node_view ?(jump_target = true) ctx row : t =
+let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
+    ?(bottom_expanded = false) ctx row : t =
  fun context parent ->
   let ident = D.row_ident row |> Option.value ~default:"" in
   let many = D.row_many row in
-  let chips = ref_chips row in
+  let plain = not table_view && List.mem (D.row_type row) ["node";"page";"class";"property"] in
+  let table_many = table_view && many in
+  let table_tags = table_many && ident = "block/tags" in
+  let row = if table_tags then
+    D.row_with_value row (W.Array (List.filter (fun value ->
+      D.getk (D.untag value) "db/ident" <> Some "logseq.class/Page")
+      (D.value_elems (D.row_value row))))
+    else row in
   let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   let activate () =
-    open_value_picker anchor_id
+    open_value_picker ~presentation:Sel.Node_picker anchor_id
+           ~freeze_anchor:(table_view && many)
            (fun ~alive ~close context' parent' ->
            let selected = Signal.state context'.Lui_ui.ui_scheduler [] in
+           let opening_block = D.entity_by_uuid ctx.block_uuid in
            let block = D.uuid_ref ctx.block_uuid in
            let prop = D.row_prop row in
            let on_pick id =
-             ignore (let* block = D.entity_by_uuid ctx.block_uuid in
+             ignore (let* opened_block = opening_block in
+               let* block = D.entity_by_uuid ctx.block_uuid in
                let current = Option.value (D.getf (D.untag block) ident) ~default:W.Nil in
                let* keys = reference_keys current in
                let key = "entity-" ^ string_of_int id in
                let remove = many && List.mem key keys in
                let* _ = if remove then
                  D.delete_property_value ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id)
-                 else D.set_block_property ~block_uuid:ctx.block_uuid ~ident ~value:(W.Int id) in
+                 else select_reference ctx row id in
                if alive () then
                  Runtime.signal_set selected (if remove then List.filter ((<>) key) keys
                    else if many then key :: keys else [key]);
                S.refresh_all ();
-               if not many then close ();
+               if not many
+                  || (table_view && remove
+                      && List.length (D.value_elems (Option.value
+                           (D.getf (D.untag opened_block) ident) ~default:W.Nil)) <= 1)
+               then close ();
                Js.Promise.resolve ())
            in
            let initial, on_search =
-             node_items_source ~block ~prop ~on_pick
+            node_items_source ~block ~block_uuid:ctx.block_uuid ~prop ~on_pick
            in
            let initial =
-             let* current = D.entity_by_uuid ctx.block_uuid in
+             let* current = opening_block in
              let* keys = reference_keys (Option.value (D.getf (D.untag current) ident) ~default:W.Nil) in
              if alive () then Runtime.signal_set selected keys;
              initial
            in
            (picker_content ~selected_keys:(Signal.value selected)
+              ~multiple_choices:many
+              ~presentation:Sel.Node_picker
+              ~clear_input_on_choice:true
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
-              ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
+              ~new_option:(if List.mem (D.row_type row) ["node";"page";"class"] then
                 Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
              context' parent') in
+  let chips = ref_chips ~table_view:table_many ~plain ~bottom_pill ~bottom_expanded
+    ?on_activate:(if bottom_pill then Some activate else None) row in
+  let table_value_height = if table_tags && chips <> [] then 20 else 24 in
+  let picker_button =
+    if plain then
+      Ui_components.with_props
+        [ Ui_components.Prop.font_size "1rem"; Ui_components.Prop.line_height "1.5rem"
+        ; Ui_components.Prop.font_weight 400; Ui_components.Prop.hover_background "transparent" ]
+        (Ui_components.button ~variant:`ghost ~grow:1.
+           ~accessibility_identifier:(anchor_id ^ "-picker")
+           ~label:(I18n.t "property/select-property-placeholder")
+           ~height:(if bottom_pill then 20 else 24) ~min_height:(if bottom_pill then 20 else 24)
+           ~min_width:0 ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
+           ~on_press:(fun _ -> activate ())
+           (if chips=[] then [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []] else []))
+    else if table_many then
+      Ui_components.with_props
+        [ Ui_components.Prop.cursor `pointer
+        ; Ui_components.Prop.hover_background "transparent" ]
+        (Ui_components.button ~variant:`ghost ~grow:1.0
+           ~accessibility_identifier:(anchor_id ^ "-picker")
+           ~label:(I18n.t "property/select-property-placeholder")
+           ~height:table_value_height ~min_height:table_value_height ~min_width:0
+           ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
+           ~style_class:"empty-text-btn"
+           ~on_press:(fun _ -> activate ()) [])
+    else
+      Ui_components.button ~variant:`ghost
+        ~accessibility_identifier:anchor_id
+        ?icon:(if many then Some (`app "plus") else None)
+        ~label:(I18n.t "property/select-property-placeholder")
+        ~main:`start ~min_height:24 ~min_width:24
+        ~on_press:(fun _ -> activate ())
+        (if many then [] else if chips = [] then
+          [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
+         else chips)
+  in
+  let trigger_row =
+    if plain then
+      Ui_components.with_props
+        [Ui_components.Prop.font_size (if bottom_pill then "0.875rem" else "1rem");
+         Ui_components.Prop.line_height (if bottom_pill then "20px" else "1.5rem");
+         Ui_components.Prop.font_weight 400]
+        (Lui_elements.row ~grow:1. ~gap:4 ~cross:`center ~min_width:0
+           ~flex_wrap:(if bottom_pill then `nowrap else `wrap)
+           ~accessibility_identifier:anchor_id
+           ((if bottom_pill && chips <> [] then
+               [Lui_elements.row ~grow:1. ~min_width:0 ~gap:4 ~cross:`center
+                 ~flex_wrap:(if bottom_expanded then `wrap else `nowrap) chips]
+             else chips @ [picker_button])))
+    else if table_many then
+      Lui_elements.row ~grow:1.0 ~gap:4 ~cross:`center ~min_width:0
+        ~height:table_value_height
+        ~accessibility_identifier:anchor_id
+        ~flex_wrap:`nowrap (chips @ [picker_button])
+    else
+      Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
+        ((if many then chips else []) @ [picker_button])
+  in
   (Jump_state.target ~enabled:jump_target ~key:anchor_id ~owner:ctx.jump_owner ~activate
-  (column ~gap:2 ~grow:1.0 ~min_width:0
-     [ Lui_elements.row ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
-         ((if many then chips else [])
-         @ [ Ui_components.button ~variant:`ghost
-               ~accessibility_identifier:anchor_id
-               ?icon:(if many then Some (`app "plus") else None)
-               ~label:(I18n.t "property/select-property-placeholder")
-               ~main:`start ~min_height:24 ~min_width:24
-               ~on_press:(fun _ -> activate ())
-               (if many then [] else if chips = [] then
-                 [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
-                else chips)
-           ])
-     ]))
+  (column ~gap:2 ~grow:1.0 ~min_width:0 [trigger_row]))
     context parent
 
 (* ---------- dispatch ---------- *)
@@ -1496,7 +1849,7 @@ let many_number_values_view ~jump_target ctx row : t =
    hover over the whole property-pair so hover-only affordances like
    the date edit pencil match the cljs row-hover rule. *)
 let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
-    ?(bottom_pill = false) ~(hover : bool Signal.state option)
+    ?(bottom_pill = false) ?(bottom_expanded = false) ?(positioned_icon_size = 18.) ~(hover : bool Signal.state option)
     ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
@@ -1514,9 +1867,12 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
       | _ -> Logseq_el.fragment (Render_inline.parse (D.value_display value))
     in
     display (D.row_effective_value row')
-  else if ident = "logseq.property/icon" then icon_view ~jump_target ctx row'
+  else
+    let cell =
+    if ident = "logseq.property/icon" then icon_view ~jump_target ctx row'
   else if D.row_many row' && List.mem ty ["date"; "datetime"] then many_dates_view ~jump_target ~hover ctx row'
-  else if D.row_closed_values row' <> [] then closed_value_view ~jump_target ~positioned ~table_view ctx row'
+  else if D.row_closed_values row' <> [] then closed_value_view ~jump_target
+    ~icon_size:positioned_icon_size ~positioned ~table_view ctx row'
   else if D.row_many row' && List.mem ty ["default";"url"] then
     many_text_values_view ~jump_target ctx row
   else
@@ -1524,24 +1880,27 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
     | "checkbox" -> checkbox_view ~jump_target ctx row'
     | "number" ->
         if D.row_many row then many_number_values_view ~jump_target ctx row'
-        else scalar_edit_cell ~jump_target ctx row'
+        else scalar_edit_cell ~jump_target ~bottom_pill ctx row'
     | "date" | "datetime" ->
         date_view ~jump_target ~bottom_pill ~raw_value:(D.row_value row) ~hover ctx row'
     | "url" -> url_view ~jump_target ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
-          extends_view ~jump_target ctx row'
-        else node_view ~jump_target ctx row'
+          extends_view ~jump_target ~table_view ctx row'
+        else node_view ~jump_target ~table_view ~bottom_pill ~bottom_expanded ctx row'
     | _ ->
         let cell = if ty = "default" && not (D.row_many row)
           then text_edit_cell ~jump_target ctx row
-          else scalar_edit_cell ~jump_target ctx row' in
+          else scalar_edit_cell ~jump_target ~bottom_pill ctx row' in
         (* cljs embeds every non-closed scalar value in a
            .property-block-container .ls-block row — control-wrap bullet
            + content; empty values show only .property-panel-bullet *)
         if ty = "default" && not (D.value_empty_p (D.row_value row))
         then block_value_wrap cell
         else cell
+    in
+    if table_view then cell
+    else Properties_popup.with_value_hover ~property_type:ty cell
 
 and many_text_values_view ~jump_target ctx row : t =
   column ~gap:0 ~grow:1. ~min_width:0
@@ -1571,14 +1930,14 @@ and icon_view ?(jump_target = true) ctx row : t =
                         D.remove_block_property ~block_uuid:ctx.block_uuid
                           ~ident:"logseq.property/icon"
                     | Icon_picker.Emoji id ->
-                        D.set_block_property ~block_uuid:ctx.block_uuid
+                        D.batch_set_property ~block_uuids:[ctx.block_uuid]
                           ~ident:"logseq.property/icon"
                           ~value:
                             (W.Map
                                [ (W.Keyword "type", W.Keyword "emoji")
                                ; (W.Keyword "id", W.String id) ])
                     | Icon_picker.Tabler (id, color) ->
-                        D.set_block_property ~block_uuid:ctx.block_uuid
+                        D.batch_set_property ~block_uuids:[ctx.block_uuid]
                           ~ident:"logseq.property/icon"
                           ~value:
                             (W.Map
@@ -1615,7 +1974,7 @@ and icon_view ?(jump_target = true) ctx row : t =
 and block_value_wrap (inner : t) : t =
   Ui_components.with_props
     [ Ui_components.Prop.font_size "0.875rem"; Ui_components.Prop.line_height "20px" ]
-  (Lui_elements.column ~min_width:0 ~grow:1. ~padding_vertical:4
+  (Lui_elements.column ~min_width:0 ~grow:1. ~padding_vertical:2
     ~style_class:"property-block-container content"
     [ Lui_elements.column ~min_width:0 ~grow:1. ~style_class:"ls-block"
         ~transition:Ui_components.block_transition

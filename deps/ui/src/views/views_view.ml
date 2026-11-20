@@ -217,12 +217,16 @@ let query_content_key (s : V.vstate) =
   match Views_query.parse_src_result s.V.qsrc with
   | Error message -> `Error message
   | Ok Views_query.QBlank -> `Blank
-  | Ok _ ->
+  | Ok source ->
+      let plain_text = match source with
+        | Views_query.QDsl dsl -> String.length dsl > 0 && dsl.[0] = '"'
+        | _ -> false in
       if s.V.query_error <> None then `Error (Option.get s.V.query_error)
       else if s.V.query_view <> W.Nil then `Custom s.V.query_view
       else if s.V.query_scalar_rows <> [] then `Scalar s.V.query_scalar_rows
-      else if s.V.query_rows <> [] || s.V.data <> Wr.VEmpty || not s.V.loading then `Table
-      else `Loading
+      else if plain_text || s.V.query_rows <> [] || (s.V.loading && s.V.data <> Wr.VEmpty) then `Table
+      else if s.V.loading then `Loading
+      else `Empty
 
 let query_content inst (s : V.vstate) : t =
   match query_content_key s with
@@ -244,13 +248,14 @@ let query_content inst (s : V.vstate) : t =
            list_item ~text:v [])
          rows)
   | `Table ->
-    (* block results → the query-result view. cljs renders the foldable
-       live-query shell ("Live query (n)" head + view-actions + table)
-       even when the result is empty. Keep this shell during a refresh. *)
+    (* Raw block results can produce an empty filtered view. *)
     column ~style_class:"query-result" ~gap:0 ~grow:1. ~min_width:0 ~min_height:0
       [ Views_table.foldable inst ~key:"qr"
           ~title:(Views_head.render_head inst)
           ~body:(body_el inst) ]
+  | `Empty ->
+    Ui_components.with_props [Ui_components.Prop.opacity 0.9]
+      (text ~font_size:"0.875rem" ~margin_top:8 ~value:(I.t "search/no-result") [])
   | `Loading -> spacer ~key:"query-loading" []
 
 let query_setting_el inst : t =
@@ -266,28 +271,35 @@ let query_setting_el inst : t =
     [ tooltip ~key:"query-setting-tip" ~text:label ~anchor:`above
         ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500 [] ]
 
-let query_builder_header inst (s : V.vstate) : t =
-  let builder =
-    match Views_query.parse_src_result s.V.qsrc with
-    | Error _ | Ok (Views_query.QDatalog _) -> []
-    | Ok _ ->
-        if s.V.is_advanced then []
-        else [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ]
+let query_builder_el inst ~active (s : V.vstate) : t =
+  let current () = active () && (V.get inst).V.qsrc = s.V.qsrc in
+  let untitled =
+    Ui_components.with_props
+      [ Ui_components.Prop.opacity 0.75; Ui_components.Prop.hover_opacity 1. ]
+      (text ~font_size:"1rem" ~value:(I.t "block/untitled-query") [])
   in
-  let settings =
-    if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
-      [ query_setting_el inst ]
-    else []
-  in
-  row ~key:"query-builder-header" ~style_class:"block-head-wrap"
-    ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap (builder @ settings)
+  match Views_query.parse_src_result s.V.qsrc with
+  | Ok (Views_query.QDatalog query) -> (
+      match W.map_get_string query "title" with
+      | Some title -> text ~font_weight:500 ~value:title []
+      | None -> untitled)
+  | _ when s.V.is_advanced -> untitled
+  | Error _ -> D.nothing
+  | Ok _ ->
+      row ~key:"query-builder-header" ~style_class:"block-head-wrap"
+        ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap
+        [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ~active:current ]
+
+let query_settings_el inst (s : V.vstate) : t =
+  if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
+    query_setting_el inst
+  else D.nothing
 
 let query_view_el inst : t =
   Logseq_el.fragment
     [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
         [ column ~gap:0 ~min_width:0 ~min_height:0 ~grow:1.
-            [ reactive ~equal:body_eq (query_builder_header inst) (sig_of inst)
-            ; reactive ~equal:(fun a b -> query_content_key a=query_content_key b
+            [ reactive ~equal:(fun a b -> query_content_key a=query_content_key b
                 && (a.V.query_view = W.Nil || a.V.blocks == b.V.blocks))
                 (query_content inst) (sig_of inst)
             ]
@@ -515,7 +527,7 @@ let build_columns inst =
 (* [fetch_limit] overrides the vstate's staged value — Signal.set is
    pending until the next stabilize, so a same-tick [V.ctx_of] would
    still read the old limit *)
-let load_view_data ?(fetch_limit = 0) inst =
+let load_view_data ?(fetch_limit = 0) ?(built_in=false) inst =
   let gen = V.new_fetch inst in
   let ctx =
     match V.ctx_of inst, fetch_limit > 0 with
@@ -641,7 +653,26 @@ let load_view_data ?(fetch_limit = 0) inst =
               inst uuids continue
           end
   in
-  if Ui_services.env_publishing () && view_uuid = "" then
+  if built_in then begin
+    let repo = Db.repo () in
+    ignore ((let* entities = Runtime.invoke3 "thread-api/pull-many"
+        (W.String repo) (W.String "[:db/id]")
+        (W.Array (List.map (fun uuid -> W.Array [W.kw "block/uuid"; W.Uuid uuid])
+          (V.get inst).V.query_rows)) in
+      Outliner_ops.check_loader_result entities;
+      if not (V.fetch_fresh inst gen) then Js.Promise.resolve () else
+      let fields = match ctx with W.Map fields -> fields | _ -> assert false in
+      let fields = List.filter_map (fun (k,v) -> match k with
+        | W.Keyword "query-row-uuids" | W.Keyword "group-by-property-ident" -> None
+        | W.Keyword "feature-type" -> Some (W.kw "view-feature-type",v)
+        | _ -> Some (k,v)) fields in
+      let fields = (W.kw "render?",W.Bool true) ::
+        (W.kw "query-entity-ids",W.Array (List.map (fun entity ->
+          W.Int (Option.get (W.map_get_int entity "db/id"))) (W.elems entities))) :: fields in
+      let* data = Runtime.invoke3 "thread-api/get-view-data" (W.String repo) W.Nil (W.Map fields) in
+      Outliner_ops.check_loader_result data;
+      apply (Some data); Js.Promise.resolve ()) |> Db.catch_quiet ~on_error:(fail_view inst gen))
+  end else if Ui_services.env_publishing () && view_uuid = "" then
     let repo = Db.repo () in
     let owner_ref = match inst.V.owner with
       | W.String name -> W.Array [ W.kw "block/name"; W.String name ]
@@ -669,6 +700,60 @@ let load_view_data ?(fetch_limit = 0) inst =
     ~f:(fun snap -> apply (Db.snapshot_value snap key))
     [ Db.resource_view_data view_uuid ctx ]
 
+let load_query_results ?(built_in=false) inst =
+  if (V.get inst).V.query_rows <> [] then load_view_data ~built_in inst
+  else begin
+    build_columns inst;
+    V.update inst (fun s -> { s with V.loading = false })
+  end
+
+let configured_query ~(page : Model.page) query : t =
+ fun ctx parent ->
+  let uuid = match page.Model.page_uuid with Some uuid -> uuid | None -> Ui_services.env_random_uuid () in
+  let inst = V.make ~sched:ctx.Lui_ui.ui_scheduler
+    ~kind:(V.KQuery {block_uuid=uuid}) ~feature:"query-result" ~owner:(W.Uuid uuid) in
+  let inst = {inst with V.virtualize=false} in
+  let collapsed = Signal.state ctx.Lui_ui.ui_scheduler true in
+  let title = match W.get query "title", W.get query "title-key" with
+    | _, Some (W.Keyword key) -> text ~value:(I.t key) []
+    | Some (W.String title), _ -> row ~flex_wrap:`wrap (Render_inline.parse title)
+    | Some (W.Array _ as title), _ -> column ~gap:0 (hiccup_els inst title)
+    | _ -> text ~value:(I.t "block/untitled-query") [] in
+  V.update inst (fun s -> {s with V.qsrc=Edn.to_string query;is_advanced=true;
+    display_type=(if W.get query "table-view?"=Some (W.Bool true) then "table" else "list");
+    group_by=None});
+  let refresh () =
+    if Ui_effect.alive ctx.Lui_ui.ui_scope then
+      Views_query.run ~page_title:page.page_title ~built_in:true inst
+        (fun () -> load_query_results ~built_in:true inst) in
+  let sub = Runtime.on_sync (fun _ -> refresh ()) in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    Runtime.off_sync sub; incr inst.V.data_gen;
+    Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ());
+  ignore (Js.Promise.(resolve () |> then_ (fun () -> refresh (); resolve ())));
+  (if_ ~test:(reactive (fun s -> s.V.query_error<>None || s.V.query_rows<>[]
+          || s.V.query_scalar_rows<>[]) (sig_of inst))
+        (column ~style_class:"custom-query" ~min_width:0 ~gap:0
+          [ Ui_parts.pressable
+              ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ())
+              (row ~style_class:"custom-query-title" ~cross:`center ~gap:4 ~min_height:24 ~margin_left:(-18)
+                ~padding_horizontal:1
+              [ icon ~width:14 ~height:14
+                  ~name:(reactive (fun c -> `app (if c then "chevron-right" else "chevron-down"))
+                    (Signal.value collapsed)) []
+              ; column ~style_class:"title-text" ~min_width:0 ~grow:1. [title]
+              ; Ui_components.with_props [Ui_components.Prop.opacity 0.6]
+                (text ~style_class:"results-count" ~font_size:"0.875rem" ~margin_left:8
+                  ~height:24 ~line_height:"20px"
+                  ~value:(reactive (fun s -> I.result_count
+                    (List.length s.V.query_rows + List.length s.V.query_scalar_rows)) (sig_of inst)) []) ])
+          ; if_ ~test:(reactive not (Signal.value collapsed))
+              (column ~style_class:"custom-query-results" ~margin_left:4 ~margin_top:4
+                [ reactive ~equal:body_eq (fun s ->
+                    match query_content_key s with
+                    | `Table -> Views_table.result_el inst s
+                    | _ -> query_content inst s) (sig_of inst) ]) ])) ctx parent
+
 let refresh inst =
   match inst.V.kind with
   | V.KQuery _ ->
@@ -677,9 +762,7 @@ let refresh inst =
       if (V.get inst).V.query_rows = [] then
         V.update inst (fun s -> { s with V.loading = true });
       Views_query.refresh_block inst (fun () ->
-          Views_query.run inst (fun () ->
-              if (V.get inst).V.query_rows <> [] then load_view_data inst
-              else V.update inst (fun s -> { s with V.loading = false })))
+          Views_query.run inst (fun () -> load_query_results inst))
   | _ ->
       V.update inst (fun s -> { s with V.loading = true });
       (match inst.V.kind with
@@ -791,6 +874,7 @@ let ensure_default_view inst =
       owner_uuid inst ~on_error (function
         | _ when not (current ()) -> ()
         | Some ouuid ->
+            let create () =
             let uuid =
               Db.gen_view_uuid ~owner:ouuid ~feature_type:inst.V.feature
             in
@@ -810,6 +894,19 @@ let ensure_default_view inst =
                               refresh inst)) ()
               | None ->
                   V.update inst (fun s -> { s with V.loading = false }))
+            in
+            if inst.V.kind = V.KLinkedRefs then
+              let key = Db.key_ref_count ouuid in
+              Db.snapshots ~on_error [Db.res key] ~f:(fun snap ->
+                if current () then
+                  match Db.snapshot_value snap key with
+                  | Some (W.Int count) when count > 0 -> create ()
+                  | Some (W.Int 0) ->
+                      V.update inst (fun s -> {s with V.loading=false; items_count=0;
+                        data=Wr.VGroupedList []; view_error=None});
+                      kick_page_extras inst
+                  | _ -> invalid_arg "Missing linked-reference count before default view creation")
+            else create ()
         | None -> V.update inst (fun s -> { s with V.loading = false }))
 
 (* ---------- actions ---------- *)
@@ -850,7 +947,7 @@ let export_edn inst =
      Runtime.send
        (A.Toast_push
           { M.toast_id = 0; toast_key = None; toast_text = (I.t "export/view-nodes-data-copied")
-          ; toast_kind = "success"; toast_code = None });
+          ; toast_kind = "success"; toast_code = None; toast_duration = None });
      Ui_task.resolve ()))
 
 (* Next reference window. A worker that ignored row-limit left every
@@ -1028,8 +1125,7 @@ let install_ops () =
              roundtrip *)
           V.update inst
             (fun s -> { s with V.qsrc = src; loading = false });
-          Views_query.run inst (fun () ->
-              if (V.get inst).V.query_rows <> [] then load_view_data inst))
+          Views_query.run inst (fun () -> load_query_results inst))
     ; o_create_view =
         (fun inst ->
           let uuid = Ui_services.env_random_uuid () in
@@ -1057,36 +1153,58 @@ let query_insts : (string * string, V.inst) Hashtbl.t = Hashtbl.create 8
    broadcast; an inst leaves the table when its host unmounts *)
 let live : (int, V.inst) Hashtbl.t = Hashtbl.create 16
 
+let query_inst ~sched ~kind ~owner block_uuid =
+  let repo = Runtime.repo () in
+  match Hashtbl.find_opt query_insts (repo, block_uuid) with
+  | Some inst ->
+      if !(inst.V.data_context_revision) <>
+          (Runtime.model ()).Model.context_revision then begin
+        incr inst.V.data_gen;
+        Signal.set inst.V.st (V.table_clear_selection (V.get inst))
+      end;
+      (inst, false)
+  | None ->
+      let inst =
+        V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
+      in
+      Hashtbl.replace query_insts (repo, block_uuid) inst;
+      (* staged, not flushed — V.update flushes, and a flush inside
+         the element mount corrupts the pending op stream *)
+      Signal.set inst.V.st
+        { (V.get inst) with
+          V.is_advanced =
+            (let t = String.trim (V.get inst).V.qsrc in
+             String.length t > 0 && t.[0] = '{')
+        ; view_uuid = block_uuid
+        };
+      (inst, true)
+
+(* cljs block-title-aux: a class-Query block's title row carries the
+   query builder (or "Untitled query" for advanced queries) when the
+   title is blank, followed by the query-setting button *)
+let query_title_el ~block_uuid ~(title : t option) : t =
+ fun ctx parent ->
+  let kind = V.KQuery { block_uuid } in
+  let inst, _ =
+    query_inst ~sched:ctx.Lui_ui.ui_scheduler ~kind
+      ~owner:(W.Uuid block_uuid) block_uuid
+  in
+  row ~key:"query-title" ~cross:`center ~gap:4 ~min_width:0
+    [ (match title with
+       | Some t -> t
+       | None -> reactive ~equal:body_eq
+           (query_builder_el inst ~active:(fun () -> not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)))
+           (sig_of inst))
+    ; reactive ~equal:body_eq (query_settings_el inst) (sig_of inst)
+    ] ctx parent
+
 let view_with_virtualization ~virtualize ~kind ~owner : t =
  fun ctx parent ->
   let sched = ctx.Lui_ui.ui_scheduler in
   let repo = Runtime.repo () in
   let inst, fresh =
     match kind with
-    | V.KQuery { block_uuid } -> (
-        match Hashtbl.find_opt query_insts (repo, block_uuid) with
-        | Some inst ->
-            if !(inst.V.data_context_revision) <>
-                (Runtime.model ()).Model.context_revision then begin
-              incr inst.V.data_gen;
-              Signal.set inst.V.st (V.table_clear_selection (V.get inst))
-            end;
-            (inst, false)
-        | None ->
-            let inst =
-              V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner
-            in
-            Hashtbl.replace query_insts (repo, block_uuid) inst;
-            (* staged, not flushed — V.update flushes, and a flush inside
-               the element mount corrupts the pending op stream *)
-            Signal.set inst.V.st
-              { (V.get inst) with
-                V.is_advanced =
-                  (let t = String.trim (V.get inst).V.qsrc in
-                   String.length t > 0 && t.[0] = '{')
-              ; view_uuid = block_uuid
-              };
-            (inst, true))
+    | V.KQuery { block_uuid } -> query_inst ~sched ~kind ~owner block_uuid
     | _ ->
         (V.make ~sched ~kind ~feature:(feature_of_kind kind) ~owner, true)
   in
@@ -1115,7 +1233,7 @@ let view_with_virtualization ~virtualize ~kind ~owner : t =
           resolve ()));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
       Hashtbl.remove live inst.V.id;
-      Editor_state.clear_collapse_scope ~scope:inst.V.collapse_scope;
+      Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ();
       match inst.V.kind with
       | V.KQuery _ -> ()
       | _ -> incr inst.V.data_gen; Views_builder.drop_tree inst);

@@ -877,6 +877,16 @@ let resolve_dynamic_template (content : string) ~current_page_title ~today_day :
 
 (* ->journal-day-int / ->timestamp — inputs are keyword/symbol/string forms *)
 
+let journal_day_of_uuid name =
+  if Common_util.uuid_string name && String.starts_with ~prefix:"00000001-" name then
+    let day = int_of_string_opt (String.sub name 9 4 ^ String.sub name 14 4) in
+    Option.bind day (fun day ->
+      if Common_uuid.gen_journal_page_uuid day = name then
+        Option.map (fun _ -> day)
+          (Time.local_date_of_journal_day (Time.local_tz ()) day)
+      else None)
+  else None
+
 let to_journal_day_int (input : query_form) : int option =
   let input = Unicode.lowercase (name_of_form input) in
   match input with
@@ -899,9 +909,12 @@ let to_journal_day_int (input : query_form) : int option =
         String.concat "" (String.split_on_char ':' name)
         |> Date_time_util.capitalize_all
       in
-      if valid_journal_title ~formatters:journal_title_formatters name then
-        journal_title_to_int name
-      else None
+      (match journal_day_of_uuid name with
+       | Some _ as day -> day
+       | None ->
+           if valid_journal_title ~formatters:journal_title_formatters name then
+             journal_title_to_int name
+           else None)
   | _ ->
       let len = String.length input in
       if len < 1 then None

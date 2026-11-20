@@ -365,7 +365,8 @@ let flashcards_config ~registry ~profile =
         let sidebar : Sidebar_state.t =
           {favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state ["flashcards";"all-pages"];
            nav_tag_titles=state [];block_sources = Hashtbl.create 8; items = state [];open_menu=state "";groups_collapsed=state [];
-           left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.} in
+           left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1280.;
+           restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
         popup:=Some (Popups_state.make ctx.Lui_ui.ui_scheduler);
         Left_sidebar_view.nav_group ms sidebar) () in
     Runtime.app_flush:=(fun () -> S.flush session);
@@ -398,6 +399,11 @@ let flashcards_config ~registry ~profile =
     check "Feature visibility does not mount Settings" (not (Settings_state.ready ()));
     check "Feature visibility retains unrelated navigation"
       (List.exists (fun node -> class_has node "all-pages-nav") (nodes session));
+    check "The Pages navigation link stays in the current application tab"
+      (List.exists (fun node -> node.M.kind="link"
+        && Option.fold ~none:false ~some:(fun url -> String.starts_with ~prefix:"#/all-pages" url)
+             (M.string_prop node "url")
+        && M.string_prop node "target"=Some "_self") (nodes session));
     ignore (Lui_app.dispose session.S.app))
 
 let grouped_table_selection ~registry ~profile =
@@ -422,6 +428,16 @@ let grouped_table_selection ~registry ~profile =
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app))
     (fun () ->
       let inst = Option.get !instance in
+      List.iter (fun (data,items_count,expected) ->
+        let state={(V.get inst) with V.data;items_count} in
+        check "View totals count unique grouped entities while preserving full result counts"
+          (Views_head.count_of state=expected))
+        [(V.get inst).V.data,0,3;
+         Views_wire.VGroupedList [{glv=Wire.Nil;glparts=["first",["a";"b"];"second",["b";"c"]]}],0,3;
+         (V.get inst).V.data,7,7;
+         Views_wire.VFlat {rows=["a";"b"];count=9;previews=Hashtbl.create 0;qprops=[]},0,9;
+         Views_wire.VEmpty,0,0;
+         Views_wire.VEmpty,7,7];
       let headers = List.filter
           (fun node -> M.string_prop node "accessibility-identifier" =
             Some "header-checkbox") (nodes session) in
@@ -772,10 +788,561 @@ let page_disclosure ~registry ~profile =
       ignore (Lui_app.dispose session.S.app);
       Hashtbl.remove Properties_state.areas (Properties_area.page_key uuid)) [false;true])
 
+let reference_disclosure ~registry ~profile =
+  let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker in
+  let previous_settings = !Settings_state.st in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
+  let writes = ref 0 in
+  let scope = "reference-disclosure" in
+  let child_id = "reference-default-child" and leaf_id = "reference-default-leaf" in
+  let default block = {block with Model.block_default_collapsed = true} in
+  let child = default (Test_check.block child_id "Reference child"
+    ~children:[Test_check.block leaf_id "Reference leaf"]) in
+  let empty = default (Test_check.block "reference-empty" "Empty reference") in
+  let root = Test_check.block "reference-root" "Reference root" ~children:[child;empty] in
+  let blank = Test_check.block "reference-blank" "" in
+  let child = {child with Model.block_children = child.Model.block_children @ [blank]} in
+  let root = {root with Model.block_children = [child;empty]} in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+    Settings_state.st := previous_settings;
+    Runtime.worker := previous_worker; Runtime.app_flush := previous_flush) (fun () ->
+    Editor_state.st := None; Editor_state.field_sigs_opt := None;
+    Settings_state.st := None;
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun name _ ->
+      if name = "thread-api/apply-outliner-ops" then incr writes;
+      Js.Promise.resolve Wire.Nil);
+      on_message=(fun _ _ -> ());
+      dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ -> Tree.block_row_static
+        ~collapse_scope:scope ~persist_collapse:false root) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      Runtime.app_flush := (fun () -> S.flush session);
+      check "Static reference rows mount without registering an editable ref scope"
+        (Option.is_none (Editor_state.block_source "ref"));
+      let editable uuid =
+        List.exists (fun node ->
+          M.string_prop node "accessibility-identifier"=Some ("ls-block-" ^ uuid)
+          && List.assoc_opt "data-editable" (P.data_attrs_decode
+            (Option.value (M.string_prop node "data-attrs") ~default:""))=Some "true")
+          (nodes session) in
+      check "Linked-reference roots and children advertise editability"
+        (editable "reference-root" && editable child_id);
+      check "Linked-reference editing resolves its root and child in the occurrence scope"
+        (Editor_state.find_in (Editor_state.blocks_in_scope scope) child_id<>None);
+      Editor_state.set_collapsed ~scope:"other-reference" child_id false;
+      S.flush session;
+      let leaf_visible () = List.exists (fun node ->
+        M.string_prop node "accessibility-identifier"=Some ("ls-block-" ^ leaf_id))
+        (nodes session) in
+      let press uuid =
+        let control = List.find (fun node -> M.string_prop node "accessibility-identifier"
+          = Some ("control-" ^ uuid)) (nodes session) in
+        S.press session control.M.id; S.flush session in
+      check "A default-collapsed reference child initially hides its descendants" (not (leaf_visible ()));
+      List.iter (fun expanded ->
+        press child_id;
+        check "Repeated reference caret presses expand and collapse the same child"
+          (leaf_visible ()=expanded
+           && Editor_state.effective_collapsed ~scope child=not expanded);
+        check "Reference disclosure leaves another projection's override unchanged"
+          (not (Editor_state.effective_collapsed ~scope:"other-reference" child)))
+        [true;false;true;false];
+      press "reference-empty";
+      check "An empty reference child cannot create a collapse override"
+        (not (Editor_state.is_collapsed_in ~scope "reference-empty")
+         && not (leaf_visible ()));
+      check "Reference disclosure never writes a graph collapse property" (!writes=0);
+      let edit uuid title =
+        Editor_state.set (fun state -> {state with Editor_state.editing=Some
+          (Editor_state.mk_editing ~uuid ~scope ~buffer:title ~base:title ())});
+        S.flush session;
+        List.filter (fun n -> M.string_prop n "accessibility-identifier"
+          =Some ("editor-edit-block-" ^ uuid)) (nodes session) in
+      check "A linked-reference child mounts its editor in place"
+        (List.length (edit child_id "Reference child")=1);
+      check "Editing the linked root replaces the child editor instead of duplicating it"
+        (List.length (edit "reference-root" "Reference root")=1
+         && not (List.exists (fun n -> M.string_prop n "accessibility-identifier"
+           =Some ("editor-edit-block-" ^ child_id)) (nodes session)))))
+
+let preview_reference_disclosure ~registry ~profile =
+  let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker in
+  let previous_settings = !Settings_state.st in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt in
+  let opened = ref [] in
+  let root_id = "preview-reference-root" and child_id = "preview-reference-child" in
+  let root = Test_check.block root_id "Preview root"
+    ~children:[Test_check.block child_id "Preview child"] in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+    Settings_state.st := previous_settings;
+    Runtime.worker := previous_worker; Runtime.app_flush := previous_flush) (fun () ->
+    Editor_state.st := None; Editor_state.field_sigs_opt := None;
+    Settings_state.st := None;
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun _ _ -> Js.Promise.resolve Wire.Nil);
+      on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun _ _ _ context parent ->
+        let extras = Popups_view.preview_row_extras context [root_id,0;child_id,3]
+          ~open_in_sidebar:(fun uuid -> opened := uuid :: !opened)
+          ~render_references:(fun uuid -> Lui_elements.text
+            ~value:("references for " ^ uuid) []) in
+        Tree.block_row ~scope:"preview-reference-count-test" ~editable:false ~extras root
+          context parent) () in
+    Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+      Runtime.app_flush := (fun () -> S.flush session);
+      let counter uuid = List.find_opt (fun node ->
+        M.string_prop node "accessibility-identifier"=Some ("preview-reference-count-" ^ uuid))
+        (nodes session) in
+      let references_visible () = List.exists (fun node ->
+        M.string_prop node "text"=Some ("references for " ^ child_id)) (nodes session) in
+      check "A nested preview block exposes its positive count without a zero-count root badge"
+        (Option.is_some (counter child_id) && Option.is_none (counter root_id)
+         && not (references_visible ()));
+      let child_counter = Option.get (counter child_id) in
+      check "Preview reference counts expose the action's accessible label"
+        (M.string_prop child_counter "accessibility-label" =
+           Some (I18n.t "block/open-block-references"));
+      List.iter (fun expected ->
+        S.press session child_counter.M.id; S.flush session;
+        check "Preview count presses expand and re-collapse the referenced block's inline references"
+          (references_visible ()=expected)) [true;false];
+      S.dispatch session (P.PressDetail (child_counter.M.id,
+        {x=0.;y=0.;modifiers=2;button=0;target_class=""}));
+      S.flush session;
+      check "Shift-clicking a preview count opens that block's sidebar references without expanding inline"
+        (!opened=[child_id] && not (references_visible ()))))
+
+let keymap_recording_workflow ~registry ~profile ~finish =
+  let previous_flush = !Runtime.app_flush in
+  let previous_send = !Runtime.app_send in
+  let errors = ref 0 in
+  Runtime.app_send := (function
+    | Action.Toast_push { Model.toast_kind = "error"; _ } -> incr errors; true
+    | _ -> false);
+  let previous = Ui_services.storage_get "ls-shortcuts" in
+  Ui_services.storage_remove "ls-shortcuts";
+  Keymap_data.reload_shortcuts ();
+  let id = "ui/toggle-left-sidebar" in
+  let row = List.find (fun (r : Keymap_data.row) ->
+    Keymap_data.command_id r.title = id)
+    (Keymap_data.unique_rows (Keymap_data.current_items ())) in
+  let view ctx _ _ =
+    let st = Signal.state ctx.Lui_ui.ui_scheduler (Settings_page.initial_keymap ()) in
+    let editing = Signal.state ctx.ui_scheduler (Some id) in
+    Settings_page.keymap_row st editing ~key:"recorder-fixture" row in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+    ~reducer:(fun m () -> m) ~view () in
+  Runtime.app_flush := (fun () -> S.flush session);
+  let key key =
+    Keyboard_capture.dispatch
+      { Ui_services.x = 0.; y = 0.; shift = false; meta = false; ctrl = false;
+        alt = false; composing = false; key = Some key; key_char = None;
+        buttons = 0; button = 0; repeat = false; movement_x = 0.; movement_y = 0.;
+        default_prevented = false; target = None; touches = [];
+        detail = (fun _ -> None); detail_json = (fun _ -> None);
+        clipboard_get = (fun _ -> "");
+        clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot);
+        clipboard_set = (fun _ _ -> ()); data_transfer_get = (fun _ -> "");
+        files = []; has_files = false; prevent_default = (fun () -> ());
+        stop_propagation = (fun () -> ()); stop_immediate = (fun () -> ()) };
+    S.flush session in
+  let later f = ignore (Ui_services.timers_timeout f 450) in
+  let original = Keymap_data.bindings id in
+  key "F8";
+  later (fun () ->
+    check "shortcut recording auto-saves without an explicit Save action"
+      (Keymap_data.bindings id = original @ ["f8"]);
+    key "g";
+    key "Escape";
+    check "Escape cancels pending shortcut input without closing its recorder"
+      (Keyboard_capture.active ());
+    later (fun () ->
+      check "cancelled shortcut input cannot commit after its debounce"
+        (Keymap_data.bindings id = original @ ["f8"]);
+      key "Backspace";
+      check "idle Backspace removes the last committed shortcut"
+        (Keymap_data.bindings id = original);
+      let storage : Js.Json.t = Stub_dom.get_field Stub_dom.global "localStorage" in
+      let set_item : string -> string -> unit = Stub_dom.get_field storage "setItem" in
+      Stub_dom.set_field storage "setItem" (fun name value ->
+        if name = "ls-shortcuts" then failwith "shortcut storage fixture"
+        else set_item name value);
+      key "F9";
+      later (fun () ->
+        Stub_dom.set_field storage "setItem" set_item;
+        check "a rejected shortcut write preserves the saved bindings"
+          (Keymap_data.bindings id = original);
+        eqi "a rejected shortcut write reports its failure once" 1 !errors;
+        key "Escape";
+        ignore (Lui_app.dispose session.S.app);
+        check "recorder disposal releases its exclusive keyboard ownership"
+          (not (Keyboard_capture.active ()));
+        (match previous with
+         | Some value -> Ui_services.storage_set "ls-shortcuts" value
+         | None -> Ui_services.storage_remove "ls-shortcuts");
+        Keymap_data.reload_shortcuts ();
+        Runtime.app_send := previous_send;
+        Runtime.app_flush := previous_flush;
+        finish ())))
+
+let sidebar_history ~registry ~profile ~finish =
+  let open Promise_ext in
+  let previous_model = !Runtime.read_model and previous_send = !Runtime.app_send
+  and previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker
+  and previous_sidebar_model = !Sidebar_state.model_signal
+  and previous_snapshot = !Editor_actions.History_ui.sidebar_snapshot
+  and previous_restore = !Editor_actions.History_ui.restore_sidebar
+  and previous_paused = !Editor_actions.History_ui.paused
+  and previous_restoring = !Editor_actions.History_ui.restoring in
+  let previous_storage = Ui_services.storage_get Sidebar_state.right_sidebar_storage_key in
+  let sidebar = ref None in
+  let session = S.mount ~registry ~profile
+    ~initial:{Model.initial with repo=Some "sidebar-history-fixture";
+      route=Model.Page "Current"; phase=Model.Ready}
+    ~reducer:Update.update ~view:(fun ctx ms _ ->
+      let state value = Signal.state ctx.Lui_ui.ui_scheduler value in
+      let st : Sidebar_state.t =
+        { favorites=state [];home_page=state None;favorite_drop=state None;recents=state [];
+          nav_checked=state [];nav_tag_titles=state [];items=state [];
+          block_sources=Hashtbl.create 4;open_menu=state "";groups_collapsed=state [];
+          left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
+          restored_repo=ref (Some "sidebar-history-fixture");restoring=ref false;
+          history_repo=ref None;history_state=ref None } in
+      sidebar:=Some st;
+      Sidebar_state.model_signal:=Some ms;
+      Sidebar_state.bind_history st;
+      let subscription = Signal.subscribe ~emit_initial:false ms
+        (fun _ -> Sidebar_state.persist_right_sidebar st) in
+      Signal.on_dispose ctx.ui_scope (fun () -> Signal.dispose_subscription subscription);
+      Lui_elements.column []) () in
+  let st = Option.get !sidebar in
+  Runtime.read_model := (fun () -> Lui_app.model session.S.app);
+  Runtime.app_flush := (fun () -> S.flush session);
+  Runtime.app_send := (fun action ->
+    let changed = Lui_app.send session.S.app action in S.flush session; changed);
+  Editor_actions.History_ui.paused:=false;
+  Editor_actions.History_ui.restoring:=None;
+  let payloads = ref [] and reject_page = ref false in
+  Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/undo-redo-record-ui-state",[Wire.String "sidebar-history-fixture";Wire.String payload] ->
+        payloads:= !payloads @ [payload];Js.Promise.resolve Wire.Nil
+    | "thread-api/get-page-route-info",_ when !reject_page ->
+        Js.Promise.then_ (fun () -> failwith "sidebar history fixture rejection") (Js.Promise.resolve ())
+    | _ -> Js.Promise.resolve Wire.Nil);
+    on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+  let rec settle n = if n=0 then Js.Promise.resolve () else
+    Js.Promise.then_ (fun () -> settle (n-1)) (Js.Promise.resolve ()) in
+  let restore undo payload = Editor_actions.restore_history
+    (Wire.Map [Wire.kw "undo?",Wire.Bool undo;Wire.kw "ui-state-str",Wire.String payload]) in
+  let items () = Runtime.signal_get st.items in
+  let cleanup () =
+    st.restoring:=true;Sidebar_state.set_items st [];
+    ignore (Lui_app.dispose session.S.app);
+    Runtime.read_model:=previous_model;Runtime.app_send:=previous_send;
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;
+    Sidebar_state.model_signal:=previous_sidebar_model;
+    Editor_actions.History_ui.sidebar_snapshot:=previous_snapshot;
+    Editor_actions.History_ui.restore_sidebar:=previous_restore;
+    Editor_actions.History_ui.paused:=previous_paused;
+    Editor_actions.History_ui.restoring:=previous_restoring;
+    (match previous_storage with
+     | Some value -> Ui_services.storage_set Sidebar_state.right_sidebar_storage_key value
+     | None -> Ui_services.storage_remove Sidebar_state.right_sidebar_storage_key);
+    finish () in
+  ignore ((let* () = settle 8 in
+    Sidebar_state.persist_right_sidebar st;
+    Sidebar_state.open_sticky_item st "help";
+    let* () = settle 8 in
+    check "Sidebar membership and open state enter UI undo history" (!payloads<>[]);
+    Sidebar_state.open_sticky_item st "shortcut-settings";
+    Sidebar_state.toggle_collapsed st "help";
+    let* () = settle 8 in
+    let collapsed_payload = List.hd (List.rev !payloads) in
+    let count = List.length !payloads in
+    let* () = restore true collapsed_payload in
+    check "Sidebar undo preserves order and expands the previously open item"
+      (List.map (fun (it : Sidebar_state.item) -> it.key,it.collapsed) (items ()) =
+       ["shortcut-settings",false;"help",false]
+       && (Runtime.model ()).right_sidebar_open);
+    let* () = restore false collapsed_payload in
+    check "Sidebar redo restores the recorded collapse without recording itself"
+      (List.map (fun (it : Sidebar_state.item) -> it.key,it.collapsed) (items ()) =
+       ["shortcut-settings",false;"help",true] && List.length !payloads=count);
+    Sidebar_state.clear_items st;
+    let* () = settle 8 in
+    check "Closing every sidebar item records an empty closed sidebar"
+      (items ()=[] && not (Runtime.model ()).right_sidebar_open);
+    let closed_payload = List.hd (List.rev !payloads) in
+    let* () = restore true closed_payload in
+    check "Undo of sidebar close restores its open state"
+      ((Runtime.model ()).right_sidebar_open);
+    let* () = restore false closed_payload in
+    check "Redo of sidebar close restores an empty closed sidebar"
+      (items ()=[] && not (Runtime.model ()).right_sidebar_open);
+    let page = Option.get (Sidebar_state.static_item "page-missing" "page" "Missing") in
+    let page = {page with Sidebar_state.uuid=Some "missing"} in
+    let old_state = Editor_actions.History_ui.snapshot (Runtime.route ()) in
+    st.restoring:=true;Sidebar_state.set_items st [page];st.restoring:=false;
+    let new_state = Editor_actions.History_ui.snapshot (Runtime.route ()) in
+    st.restoring:=true;Sidebar_state.set_items st [];st.restoring:=false;
+    Sidebar_state.persist_right_sidebar st;
+    let failing = Transit.to_string (Editor_actions.History_ui.map
+      ["old-state",old_state;"new-state",new_state]) in
+    reject_page:=true;
+    let rejected=ref false in
+    let* () = restore false failing |> Js.Promise.catch (fun _ ->
+      rejected:=true;Js.Promise.resolve ()) in
+    check "Failed sidebar hydration leaves membership intact and releases history pause"
+      (!rejected && items ()=[] && not !Editor_actions.History_ui.paused);
+    let count=List.length !payloads in
+    Sidebar_state.open_sticky_item st "help";
+    let* () = settle 8 in
+    check "Sidebar actions can be recorded after a failed history restoration"
+      (List.length !payloads>count);
+    cleanup ();Js.Promise.resolve ())
+    |> Js.Promise.catch (fun _ -> check "Sidebar history workflow completes" false;
+      cleanup ();Js.Promise.resolve ()))
+
+let preview_block_spacing ~registry ~profile =
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st and previous_popup = !Popups_state.active in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st:=previous_editor; Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings; Popups_state.active:=previous_popup) (fun () ->
+    let page = {(Test_check.page []) with Model.page_title="Containing page"} in
+    List.iter (fun (root_uuid,block_preview) ->
+      Editor_state.st:=None; Editor_state.field_sigs_opt:=None; Settings_state.st:=None;
+      let session = S.mount ~registry ~profile ~initial:Model.initial
+        ~reducer:(fun model () -> model) ~view:(fun _ _ _ context parent ->
+          Popups_view.pv_popover (Popups_state.make context.Lui_ui.ui_scheduler)
+            {Popups_state.pv_x=10.;pv_y=10.;pv_content={pc_title="Containing page";
+              pc_page=Some page;pc_root_uuid=root_uuid;pc_ref_counts=None;
+              pc_blocks=[Test_check.block "preview-spacing-root" "Preview parent"
+                ~children:[Test_check.block "preview-spacing-child" "Preview child"]]}}
+            context parent) () in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+        let sections=List.find (fun n -> class_has n "page") (nodes session) in
+        let title=List.find (fun n -> M.string_prop n "accessibility-identifier"
+          =Some "page title") (nodes session) in
+        let prop n key value = Hashtbl.find_opt n.M.props key=Some (P.IntValue value) in
+        check "Page and block previews retain Master's section gap and page-inner bottom margin"
+          (prop sections "gap" 32 && prop sections "margin-bottom" 64);
+        check "Block preview breadcrumbs retain both my-2 margins without changing page titles"
+          (prop title "margin-top" (if block_preview then 8 else 0)
+           && prop title "margin-bottom" (if block_preview then 8 else 0));
+        check "Page preview titles retain Master's ls-block vertical padding, unlike breadcrumbs"
+          (prop title "padding-vertical" (if block_preview then 0 else 2))))
+      [Some "preview-spacing-root",true;page.Model.page_uuid,false])
+
+let bottom_pills_rows () =
+  let row ident title ty value = Wire.Map [
+    Wire.kw "property-id", Wire.kw ident;
+    Wire.kw "property", Wire.Map [Wire.kw "block/title", Wire.String title;
+      Wire.kw "block/uuid", Wire.Uuid (if ty="node" then "00000000-0000-4000-8000-000000000031" else "00000000-0000-4000-8000-000000000032");
+      Wire.kw "logseq.property/type", Wire.kw ty];
+    Wire.kw "value", value] in
+  [row "fixture/bottom-node" "Bottom Node" "node"
+     (Wire.Map [Wire.kw "block/title", Wire.String (String.concat " "
+         (List.init 16 (fun _ -> "Long node property value")));
+       Wire.kw "block/uuid", Wire.Uuid "00000000-0000-4000-8000-000000000033"]);
+   row "fixture/bottom-number" "Bottom Number" "number" (Wire.Int 42)]
+
+let bottom_pills_fixture ?source ?(overlays = false) profile initial_rows =
+  let rows = ref None in
+  let source = Option.value source ~default:(ref initial_rows) in
+  let uuid = "00000000-0000-4000-8000-000000000030" in
+  let session = S.mount ~profile ~initial:Model.initial ~reducer:(fun model () -> model)
+    ~view:(fun context _ _ ->
+      let state = Properties_state.area_state context ~key:(Properties_area.block_key uuid)
+        ~fetch:(fun publish -> publish {Properties_state.empty_area_data with below= !source};
+          Js.Promise.resolve ()) in
+      rows := Some state;
+      Lui_elements.column
+        ([Tree.block_row_sig (Signal.constant context.Lui_ui.ui_scheduler
+          (Test_check.block uuid "Bottom properties owner"))]
+         @ if overlays then [Properties_view.overlays] else [])) () in
+  Runtime.signal_set (Option.get !rows) {Properties_state.empty_area_data with below=initial_rows};
+  S.flush session;
+  session, Option.get !rows
+
+let bottom_pills ~profile =
+  let previous_flush = !Runtime.app_flush in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st in
+  Editor_state.st:=None; Editor_state.field_sigs_opt:=None; Settings_state.st:=None;
+  let session, rows = bottom_pills_fixture profile (bottom_pills_rows ()) in
+  Runtime.app_flush := (fun () -> S.flush session);
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose session.S.app); Runtime.app_flush := previous_flush;
+    Editor_state.st:=previous_editor; Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings;
+    Hashtbl.remove Properties_state.areas (Properties_area.block_key "00000000-0000-4000-8000-000000000030")) (fun () ->
+    let find cls = List.find (fun n -> class_has n cls) (nodes session) in
+    let control () = find "bottom-property-expand-btn" in
+    let check_prop node name value = Hashtbl.find_opt node.M.props name=Some value in
+    check "Collapsed bottom properties use intrinsic fitting and retain a single 32px row"
+      (List.exists (fun n -> n.M.kind="view-that-fits") (nodes session)
+       && check_prop (find "bottom-properties-row") "max-height" (P.IntValue 32)
+       && button_label (control ())=Some (I18n.t "property/expand-bottom-pills"));
+    let ids = List.filter_map (fun n -> M.string_prop n "accessibility-identifier") (nodes session) in
+    check "Adaptive pill candidates have distinct property and value-picker targets"
+      (List.length ids=List.length (List.sort_uniq String.compare ids));
+    check "Long bottom node values truncate inside their own content instead of covering the key"
+      (List.exists (fun n -> M.string_prop n "text-overflow"=Some "ellipsis"
+        && M.string_prop n "white-space"=Some "nowrap") (nodes session)
+       && check_prop (find "bottom-property-content") "overflow" (P.StringValue "hidden"));
+    S.press session (control ()).M.id;
+    check "Expand reveals all pills with auto height and a translated Collapse control"
+      (button_label (control ())=Some (I18n.t "property/collapse-bottom-pills")
+       && not (List.exists (fun n -> n.M.kind="view-that-fits") (nodes session))
+       && List.length (List.filter (fun n -> class_has n "bottom-property-pill") (nodes session))=2
+       && List.for_all (fun n -> not (class_has n "bottom-property-pill")
+          || (not (Hashtbl.mem n.M.props "height") && check_prop n "corner-radius" (P.IntValue 8))) (nodes session));
+    check "Expanded pill keys and numeric values keep the compact 20px line box"
+      (List.for_all (fun n -> not (class_has n "property-k" || class_has n "pv-scalar")
+        || check_prop n "height" (P.IntValue 20)) (nodes session));
+    check "Bottom pill text keeps Master's regular weight and no trailing empty-picker gap"
+      (List.for_all (fun n -> not (class_has n "property-k" || class_has n "pv-scalar")
+        || check_prop n "font-weight" (P.IntValue 400)) (nodes session)
+       && not (List.exists (fun n -> n.M.kind="button"
+         && M.string_prop n "accessibility-label"=Some (I18n.t "property/select-property-placeholder")) (nodes session)));
+    let numeric_refresh = List.map (fun row ->
+      if Properties_data.row_type row = "number"
+      then Properties_data.row_with_value row (Wire.Int 88) else row)
+      (bottom_pills_rows ()) in
+    Runtime.signal_set rows {Properties_state.empty_area_data with below=numeric_refresh};
+    Render_inline.invalidate_pull_caches ();
+    Editor_state.bump_invalidation ();
+    S.flush session;
+    check "Numeric value refresh and block-content remount retain expanded bottom pills"
+      (button_label (control ())=Some (I18n.t "property/collapse-bottom-pills")
+       && check_prop (find "bottom-properties-row") "max-height" (P.IntValue 384)
+       && List.exists (fun n -> button_label n=Some "88") (nodes session));
+    let updated = List.map (fun row -> Properties_data.row_with_value row Wire.Nil) (bottom_pills_rows ()) in
+    Runtime.signal_set rows {Properties_state.empty_area_data with below=updated}; S.flush session;
+    check "Property refresh preserves expansion and handles missing values"
+      (button_label (control ())=Some (I18n.t "property/collapse-bottom-pills"));
+    S.press session (control ()).M.id;
+    check "Collapse restores the single-line layout after a property refresh"
+      (check_prop (find "bottom-properties-row") "max-height" (P.IntValue 32)
+       && button_label (control ())=Some (I18n.t "property/expand-bottom-pills"));
+    Runtime.signal_set rows Properties_state.empty_area_data; S.flush session;
+    check "Empty bottom properties mount no fit probes or expansion controls"
+      (not (List.exists (fun n -> class_has n "bottom-properties-row" || n.M.kind="view-that-fits") (nodes session))))
+
+let bottom_pills_commit ~profile ~finish =
+  let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker
+  and previous_model = !Runtime.read_model and previous_send = !Runtime.app_send
+  and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st and previous_overlays = !Properties_state.view_overlays_state
+  and previous_close = !Properties_value.close_editor and previous_active = !Properties_value.active_editor
+  and previous_refresh = Runtime.hooks.refresh_after_ops in
+  Editor_state.st:=None; Editor_state.field_sigs_opt:=None; Settings_state.st:=None;
+  Properties_state.view_overlays_state:=None; Properties_value.close_editor:=(fun () -> ());
+  Properties_value.active_editor:=None;
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "bottom-commit-fixture"});
+  Runtime.hooks.refresh_after_ops<-(fun () -> Ui_task.resolve ());
+  let source = ref (bottom_pills_rows ()) and operations = ref [] and navigated = ref false in
+  ignore (Fake_worker.install (fun name args ->
+    if name="thread-api/apply-outliner-ops" then begin
+      let ops=Wire.elems (List.nth args 1) in
+      operations:= !operations @ ops;
+      List.iter (function
+        | Wire.Array [Wire.Keyword "set-block-property";Wire.Array [_;_;value]] ->
+            source:=List.map (fun row -> if Properties_data.row_type row="number"
+              then Properties_data.row_with_value row value else row) !source
+        | Wire.Array [Wire.Keyword "remove-block-property";_] ->
+            source:=List.map (fun row -> if Properties_data.row_type row="number"
+              then Properties_data.row_with_value row Wire.Nil else row) !source
+        | _ -> ()) ops;
+      Render_inline.invalidate_pull_caches (); Editor_state.bump_invalidation ();
+      Wire.Map [Wire.kw "result",Wire.Nil]
+    end else Wire.Nil));
+  Runtime.app_send:=(fun action -> (match action with Action.Navigate_to _ -> navigated:=true | _ -> ());true);
+  let session,_ = bottom_pills_fixture ~source ~overlays:true profile !source in
+  Runtime.app_flush:=(fun () -> S.flush session);
+  let find cls = List.find (fun n -> class_has n cls) (nodes session) in
+  let expanded () = button_label (find "bottom-property-expand-btn")=Some (I18n.t "property/collapse-bottom-pills") in
+  let numeric () = find "pv-scalar" in
+  let field () = List.find (fun n -> n.M.kind="text-field") (nodes session) in
+  check "Collapsed Node values use typed single-line ellipsis truncation"
+    (List.exists (fun n -> Hashtbl.find_opt n.M.props "line-clamp"=Some (P.IntValue 1)
+      && M.string_prop n "text-overflow"=Some "ellipsis") (nodes session));
+  let commit value = S.press session (numeric ()).M.id;
+    S.text_changed session (field ()).M.id value; S.submit session (field ()).M.id in
+  let done_ () =
+    Properties_state.close_all_view_overlays (); ignore (Lui_app.dispose session.S.app);
+    Hashtbl.remove Properties_state.areas (Properties_area.block_key "00000000-0000-4000-8000-000000000030");
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Runtime.app_send:=previous_send;Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings;Properties_state.view_overlays_state:=previous_overlays;
+    Properties_value.close_editor:=previous_close;Properties_value.active_editor:=previous_active;
+    Runtime.hooks.refresh_after_ops<-previous_refresh;finish () in
+  S.press session (find "bottom-property-expand-btn").M.id;
+  commit "89";
+  ignore (Js.Global.setTimeout ~f:(fun () ->
+    S.flush session;
+    check "Numeric Submit dispatches and refreshes the saved value without Escape or collapse"
+      (expanded () && button_label (numeric ())=Some "89"
+       && match !operations with
+       | [Wire.Array [Wire.Keyword "set-block-property";Wire.Array [_;_;Wire.Float value]]] -> value=89.
+       | _ -> false);
+    commit "not-a-number";
+    check "Rejected numeric text preserves expansion and performs no write" (expanded () && List.length !operations=1);
+    commit "";
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      S.flush session;
+      check "Empty numeric Submit removes the value without collapsing"
+        (expanded () && button_label (numeric ())=Some (I18n.t "ui/empty") && List.length !operations=2);
+      let chip = List.find (fun n -> class_has n "bottom-property-node-value") (nodes session) in
+      let target = Stub_dom.make_element (if chip.M.kind="link" then "a" else "button") in
+      let set_attr : string -> string -> unit = Stub_dom.get_field target "setAttribute" in
+      set_attr "class" (Option.value (M.string_prop chip "style-class") ~default:"");
+      let text_target=Stub_dom.make_element "span" in
+      let append : Js.Json.t -> unit = Stub_dom.get_field target "appendChild" in
+      append text_target;
+      let click=Ui_dom_web.ev_of (Stub_dom.make_event ~target:text_target "click") in
+      check "Bottom Node's rendered text child cannot hit the delegated reference-navigation selector"
+        (chip.M.kind="button" && M.string_prop chip "accessibility-label"<>None
+         && Sidebar_state.click_target "a.page-ref, a.tag" click=None);
+      check "Expand matches Master's medium text and four-pixel icon gap"
+        (Hashtbl.find_opt (find "bottom-property-expand-btn").M.props "font-weight"=Some (P.IntValue 500)
+         && Hashtbl.find_opt (find "bottom-property-expand-btn").M.props "gap"=Some (P.IntValue 4));
+      let anchor = List.find (fun n -> Option.fold ~none:false ~some:(fun id -> Str_util.contains id "property-node-")
+        (M.string_prop n "accessibility-identifier")) (nodes session) in
+      let id=Option.get (M.string_prop anchor "accessibility-identifier") in
+      let document= !(Stub_dom.document_ref) in
+      let lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+      let element=Stub_dom.make_element "div" in
+      let set : string -> string -> unit = Stub_dom.get_field element "setAttribute" in
+      set "id" id;
+      Stub_dom.set_field document "getElementById" (fun key -> if key=id then element else lookup key);
+      S.press session chip.M.id;
+      Stub_dom.set_field document "getElementById" lookup;
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        S.flush session;
+        check "Bottom Node text opens its Set value picker instead of navigating"
+          (not !navigated && Properties_state.view_overlay_open ()
+           && List.exists (fun n -> M.string_prop n "placeholder"=Some (I18n.t1 "property/set-placeholder" "Bottom Node")) (nodes session));
+        done_ ()) 0)) 0)) 0)
+
 let run_views ~registry ~profile ~finish =
+  let finish () = bottom_pills_commit ~profile ~finish in
+  bottom_pills ~profile;
+  preview_block_spacing ~registry ~profile;
   page_disclosure ~registry ~profile;
+  reference_disclosure ~registry ~profile;
+  preview_reference_disclosure ~registry ~profile;
   show_brackets_rendering ~registry ~profile;
-  let finish () = configured_continuations finish in
+  let finish () = sidebar_history ~registry ~profile ~finish:(fun () ->
+    keymap_recording_workflow ~registry ~profile
+      ~finish:(fun () -> configured_continuations finish)) in
   configured_popup_ownership ();
   table_resize_transaction ();
   table_range_selection ();
@@ -796,6 +1363,390 @@ let run_views ~registry ~profile ~finish =
     Runtime.app_flush := (fun () -> S.flush s);
     s
   in
+  let () =
+    let token = Ui_services.storage_get "id-token"
+    and server = Ui_services.storage_get "sync-server-url" in
+    Ui_services.storage_remove "id-token";
+    let set key = function Some value -> Ui_services.storage_set key value | None -> Ui_services.storage_remove key in
+    let check_sync server =
+      set "sync-server-url" server;
+      let expected = Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () in
+      let graph = mount New_graph.body in
+      check "Signed-out Create graph follows Master's RTC group eligibility"
+        (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")
+          (nodes graph) = expected);
+      if expected then begin
+        let sync = List.find (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")
+          (nodes graph) in
+        S.dispatch graph (P.ToggleChanged (sync.M.id,true));
+        check "Signed-out eligible Create graph retains the Sync encryption option"
+          (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-graph-e2ee")
+            (nodes graph))
+      end;
+      ignore (Lui_app.dispose graph.S.app)
+    in
+    Fun.protect ~finally:(fun () -> set "id-token" token;set "sync-server-url" server) (fun () ->
+      check_sync (Some "https://sync.example.test");
+      check_sync None)
+  in
+  let () =
+    let warning : Model.toast =
+      {toast_id=810;toast_text="Reserved characters:\n/ (forward slash)";
+       toast_kind="warning";toast_key=Some Toast.reserved_graph_name_key;
+       toast_code=None;toast_duration=Some 0} in
+    let toast = mount (fun _ -> Toasts_view.toast_item warning) in
+    let description = List.find (fun n -> n.M.kind="column"
+      && Hashtbl.find_opt n.M.props "margin-top"=Some (P.IntValue 8)) (nodes toast) in
+    check "Reserved graph warning keeps Master's paragraph margins and available description width"
+      (Hashtbl.find_opt description.M.props "margin-bottom" = Some (P.IntValue 4)
+       && Hashtbl.find_opt description.M.props "gap" = Some (P.IntValue 8)
+       && not (List.exists (fun n -> Hashtbl.find_opt n.M.props "padding-right" = Some (P.IntValue 24)) (nodes toast)));
+    ignore (Lui_app.dispose toast.S.app)
+  in
+  let () =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
+    let writes = ref [] in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "query-page-grouping-fixture"});
+    ignore (Fake_worker.install (fun name args ->
+      if name="thread-api/apply-outliner-ops" then
+        writes := Option.value (List.nth_opt args 1) ~default:Wire.Nil :: !writes;
+      Wire.Nil));
+    Fun.protect ~finally:(fun () -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model) (fun () ->
+      let uuid = "00000000-0000-0000-0000-000000000081" in
+      let test kind display group data should_group =
+        writes:=[];
+        let inst = Views_state.make ~sched:(Signal.scheduler ()) ~kind ~feature:"query-result" ~owner:(Wire.Uuid uuid) in
+        Views_state.set inst {(Views_state.empty_vstate ()) with
+          view_uuid=uuid; display_type=display; group_by=group; data};
+        Views_state.persist_display_type inst;
+        let group_op = Outliner_ops.op "set-block-property"
+          [Wire.Uuid uuid;Wire.Keyword "logseq.property.view/group-by-property";Wire.Keyword "block/page"] in
+        let grouped = List.exists (function Wire.Array ops -> List.mem group_op ops | _ -> false) !writes in
+        check "Query List selection atomically persists page grouping without overriding explicit groups"
+          (grouped=should_group && List.length !writes=1);
+        check "Query page grouping remains available when returning to Table or Gallery"
+          ((Views_state.get inst).group_by = (if should_group then Some "block/page" else group))
+      in
+      test (Views_state.KQuery {block_uuid=uuid}) "list" None (Views_wire.VFlat {rows=["a";"b";"c"];count=3;previews=Hashtbl.create 0;qprops=[]}) true;
+      test (Views_state.KQuery {block_uuid=uuid}) "list" None Views_wire.VEmpty true;
+      test (Views_state.KQuery {block_uuid=uuid}) "list" (Some "fixture/custom-group") Views_wire.VEmpty false;
+      test (Views_state.KQuery {block_uuid=uuid}) "table" None Views_wire.VEmpty false;
+      test Views_state.KAllPages "list" None Views_wire.VEmpty false)
+  in
+  let login = mount Login_view.body in
+  let login_links () = List.filter (fun node -> class_has node "ls-auth-link") (nodes login) in
+  check "Login links use the same accent-first color as Master anchors"
+    (List.length (login_links ()) = 2 && List.for_all (fun node ->
+       M.string_prop node "foreground" = Some "var(--lx-accent-11, var(--ls-link-text-color))")
+       (login_links ()));
+  let footer = List.find (fun node -> class_has node "ls-auth-foot") (nodes login) in
+  check "Login footer retains the paragraph margins and padding"
+    (Hashtbl.find_opt footer.M.props "margin-vertical" = Some (P.IntValue 8)
+     && Hashtbl.find_opt footer.M.props "padding-top" = Some (P.IntValue 16));
+  let _, login_width, _ = Dialogs_view.dialog_spec "login" in
+  check "Login width includes padding and both border pixels at desktop and mobile sizes"
+    (login_width 1600. = 490. && login_width 400. = 330.);
+  let signup = List.find (fun node -> button_label node = Some (I18n.t "account/sign-up"))
+    (login_links ()) in
+  S.press login signup.M.id;
+  check "The Login signup link still switches panels"
+    (List.exists (fun node -> M.string_prop node "accessibility-identifier" = Some "auth-username")
+       (nodes login));
+  ignore (Lui_app.dispose login.S.app);
+  let contribution = mount (fun _ -> Plugins_view.contribution) in
+  check "Marketplace contribution props are accepted by their component kinds"
+    (List.for_all (fun node ->
+       let props = List.fold_left (fun props property ->
+         match Hashtbl.find_opt node.M.props (Lui_wire_schema.property_name property) with
+         | Some value -> P.Property_map.add property value props
+         | None -> props) P.Property_map.empty Lui_wire_schema.all_properties in
+       let kind = Lui_wire.kind_of_name node.M.kind in
+       P.node_properties_supported kind props
+       && P.Property_map.for_all (fun property value ->
+         P.property_supported kind property
+         && P.property_value_supported_for_kind kind property value) props)
+       (nodes contribution));
+  ignore (Lui_app.dispose contribution.S.app);
+  let counts = ["Page",2; "tags",2; "Ref A",1; "Ref B",1; "Zebra",1; "Alpha",1] in
+  check "Reference filter preserves the worker frequency order including tied pages"
+    (Views_head.reference_filter_options ~query:"" ~selected:[] counts = counts);
+  check "Selected reference chips do not reorder the remaining pages"
+    (Views_head.reference_filter_options ~query:"" ~selected:["zebra"] counts
+      = List.filter (fun (title, _) -> title <> "Zebra") counts);
+  check "Reference search retains descending frequencies"
+    (Views_head.reference_filter_options ~query:"a" ~selected:[] counts
+      = List.stable_sort (fun (_, a) (_, b) -> compare b a)
+        (Fuzzy.fuzzy_search ~extract:fst ~limit:100 counts "a"));
+  check "Empty reference filters have no options"
+    (Views_head.reference_filter_options ~query:"" ~selected:[] [] = []);
+  let many = List.init 110 (fun i -> Printf.sprintf "Page %03d" i, 1) in
+  let first = fst (List.hd (Fuzzy.fuzzy_search ~extract:fst ~limit:100 many "Page")) in
+  check "Reference search limits before removing selected chips like Master"
+    (List.length (Views_head.reference_filter_options ~query:"Page"
+      ~selected:[String.lowercase_ascii first] many) = 99);
+  check "Malformed reference counts are rejected"
+    (try ignore (Views_wire.decode_ref_counts_resource
+      (Wire.Map [Wire.kw "ref-pages-count", Wire.Array [Wire.Array [Wire.String "Page"; Wire.Int (-1)]]]));
+      false with Invalid_argument _ -> true);
+  let description = "Anki Sync keeps your Logseq flashcards synchronized with Anki across all of your decks and notes." in
+  let card = mount (fun _ -> fun context parent ->
+    let search = Signal.state context.Lui_ui.ui_scheduler "" in
+    Plugins_view.market_card ~stats:Js.Json.null ~search_st:search
+      (Js.Json.object_ (Js.Dict.fromList
+        ["id", Js.Json.string "anki"; "repo", Js.Json.string "owner/anki";
+         "title", Js.Json.string "Anki Sync"; "description", Js.Json.string description]))
+      context parent) in
+  let paragraph = List.find (fun node -> M.string_prop node "text" = Some description) (nodes card) in
+  check "Marketplace descriptions clamp an unpadded paragraph inside the card's spacing box"
+    (Hashtbl.find_opt paragraph.M.props "line-clamp" = Some (P.IntValue 2)
+      && not (Hashtbl.mem paragraph.M.props "height")
+      && not (Hashtbl.mem paragraph.M.props "padding-vertical")
+      && M.string_prop paragraph "text-overflow" = Some "ellipsis");
+  check "Marketplace repository links use Master's filled GitHub mark"
+    (List.exists (fun node -> M.string_prop node "icon" = Some "app:github-mark") (nodes card)
+     && String.starts_with ~prefix:"<svg" (List.assoc "github-mark" Icons.custom_icons));
+  ignore (Lui_app.dispose card.S.app);
+  let token = Ui_services.storage_get "id-token"
+  and server = Ui_services.storage_get "sync-server-url"
+  and remotes = !Graphs_ops.remote_graphs
+  and rtc_uuid = !Rtc_flows.db_rtc_uuid
+  and rtc_repo = !Rtc_flows.db_rtc_repo
+  and settings = !Settings_state.st in
+  Fun.protect ~finally:(fun () ->
+    restore_storage "id-token" token; restore_storage "sync-server-url" server;
+    Graphs_ops.remote_graphs := remotes; Rtc_flows.db_rtc_uuid := rtc_uuid;
+    Rtc_flows.db_rtc_repo := rtc_repo;
+    Settings_state.st := settings) (fun () ->
+    let model = {Model.initial with repo = Some (Graph.full_graph_name "Recent")} in
+    Ui_services.storage_remove "id-token";
+    Ui_services.storage_set "sync-server-url" "https://sync.invalid";
+    Graphs_ops.remote_graphs := ["Recent", "remote-uuid", false, "manager"];
+    Rtc_flows.db_rtc_uuid := Some "remote-uuid";
+    check "Signed-out recent highlights do not mount their controls"
+      (not (Chrome.recent_controls_visible model));
+    Settings_state.st := None;
+    let recent = mount (fun _ -> fun context parent ->
+      Settings_state.ensure context;
+      Settings_state.toggle_recent ();
+      let source = Signal.state context.Lui_ui.ui_scheduler model in
+      Chrome.recent_slider (Signal.value source) context parent) in
+    check "Plain local-page shortcut mode has no Quit highlight button or slider"
+      (not (List.exists (fun node -> node.M.kind = "slider"
+        || button_label node = Some (I18n.t "header/quit-highlight-recent-blocks")) (nodes recent))
+       && Settings_state.Recent_blocks.is_empty (Settings_state.value ()).recent_blocks);
+    ignore (Lui_app.dispose recent.S.app);
+    Ui_services.storage_set "id-token" "test-token";
+    check "Eligible remote graphs can show recent controls"
+      (Chrome.recent_controls_visible model);
+    Rtc_flows.db_rtc_repo := model.repo;
+    Settings_state.st := None;
+    let remote = mount (fun _ -> fun context parent ->
+      Settings_state.ensure context;
+      Settings_state.toggle_recent ();
+      let source = Signal.state context.Lui_ui.ui_scheduler model in
+      Chrome.recent_slider (Signal.value source) context parent) in
+    check "Eligible remote highlight mode mounts its slider"
+      (List.exists (fun node -> node.M.kind = "slider") (nodes remote));
+    let quit = List.find (fun node -> button_label node =
+      Some (I18n.t "header/quit-highlight-recent-blocks")) (nodes remote) in
+    S.press remote quit.M.id;
+    check "Quit highlight unmounts the controls and clears recent rows"
+      (not (List.exists (fun node -> node.M.kind = "slider") (nodes remote))
+       && not (Settings_state.value ()).highlight_recent
+       && Settings_state.Recent_blocks.is_empty (Settings_state.value ()).recent_blocks);
+    ignore (Lui_app.dispose remote.S.app);
+    check "No open graph has no recent controls"
+      (not (Chrome.recent_controls_visible Model.initial));
+    Rtc_flows.db_rtc_uuid := None;
+    let rtc = Decode.rtc_of_wire (Wire.Map []) in
+    check "An RTC state without a graph UUID cannot show recent controls"
+      (not (Chrome.recent_controls_visible {model with rtc = Some rtc}));
+    check "Another remote graph's RTC state cannot show recent controls"
+      (not (Chrome.recent_controls_visible
+        {model with rtc = Some {rtc with rtc_graph_uuid = Some "another-uuid"}}));
+    check "Matching RTC state enables controls before the DB UUID resolves"
+      (Chrome.recent_controls_visible
+        {model with rtc = Some {rtc with rtc_graph_uuid = Some "remote-uuid"}});
+    Graphs_ops.remote_graphs := [];
+    check "Signed-in local graphs still do not show recent controls"
+      (not (Chrome.recent_controls_visible model)));
+  let market_state = ref None in
+  let marketplace = mount (fun _ -> fun ctx parent ->
+    let filter = Signal.state ctx.Lui_ui.ui_scheduler Plugins_view.All
+    and search = Signal.state ctx.ui_scheduler "" in
+    market_state := Some (filter, search);
+    (Lui_elements.column
+      [Plugins_view.search_input ~key:"market-search" search;
+       Plugins_view.options_menu ~key:"market-filter" ~icon:"filter"
+         ~label:(I18n.t "cmdk.action/filter") ~state:filter
+         [Plugins_view.All, I18n.t "plugin/all";
+          Plugins_view.Installed, I18n.t "plugin/installed"]]) ctx parent) in
+  let market_option label =
+    let trigger = List.find (fun node -> button_label node = Some (I18n.t "cmdk.action/filter"))
+      (nodes marketplace) in
+    S.press marketplace trigger.M.id;
+    let option = List.find (fun node -> M.string_prop node "text" = Some label)
+      (nodes marketplace) in
+    S.press marketplace option.M.id in
+  let applied_market_option () = List.exists (fun node ->
+    match M.string_prop node "data-attrs" with
+    | Some value -> I18n.contains_ci value "data-plugin-option-active"
+    | None -> false) (nodes marketplace) in
+  check "The default marketplace filter has no applied marker" (not (applied_market_option ()));
+  market_option (I18n.t "plugin/installed");
+  check "Choosing the installed marketplace filter applies its state and marker"
+    (Runtime.signal_get (fst (Option.get !market_state)) = Plugins_view.Installed
+     && applied_market_option ());
+  market_option (I18n.t "plugin/all");
+  check "Clearing the marketplace filter clears its state and applied marker"
+    (Runtime.signal_get (fst (Option.get !market_state)) = Plugins_view.All
+     && not (applied_market_option ()));
+  let market_input = List.find (fun node -> node.M.kind = "search-field") (nodes marketplace) in
+  S.text_changed marketplace market_input.M.id "No marketplace match";
+  check "Marketplace search remains editable while filtering"
+    (Runtime.signal_get (snd (Option.get !market_state)) = "No marketplace match");
+  S.text_changed marketplace market_input.M.id "";
+  check "Marketplace search accepts an empty query"
+    (Runtime.signal_get (snd (Option.get !market_state)) = "");
+  ignore (Lui_app.dispose marketplace.S.app);
+  List.iter (fun (source, expected) ->
+    check "Markdown thematic breaks accept repeated markers but not empty or malformed text"
+      (Render.horizontal_rule source = expected))
+    ["---",true;"* * *",true;"___",true;"",false;"--",false;"--x",false];
+  let inline_image = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse "![Fixture](https://example.invalid/fixture.png)after-image-fixture")) in
+  check "A Markdown image commits its render transaction and preserves following content"
+    (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
+      (nodes inline_image));
+  ignore (Lui_app.dispose inline_image.S.app);
+  let install_file_host : (string -> unit Js.Promise.t) -> (unit -> unit) =
+    [%mel.raw {|function (openPath) {
+      const previous = window.apis;
+      window.apis = {openPath, doAction: () => Promise.resolve(null)};
+      return () => { if (previous === undefined) delete window.apis; else window.apis = previous; };
+    }|}] in
+  let opened = ref [] in
+  let restore_host = install_file_host (fun url -> opened := url :: !opened; Js.Promise.resolve ()) in
+  let file_pdf = "FILE:///Workspace/sample%2520%23name.pdf?download=1#page=2" in
+  let expected_pdf = "assets://localhost/logseq__file/file%3A%2F%2F%2FWorkspace%2Fsample%252520%2523name.pdf?download=1#page=2" in
+  List.iter (fun (source,expected) ->
+    check "Local file previews preserve URL encoding, drives, hosts and document suffixes"
+      (Platform.file_url_to_assets_url source=expected))
+    [file_pdf,Some expected_pdf;
+     "file://C:/docs/sample.pdf",Some "assets://localhost/logseq__file/file%3A%2F%2F%2FC%3A%2Fdocs%2Fsample.pdf";
+     "file://server/share/sample.pdf",Some "assets://localhost/logseq__file/file%3A%2F%2Fserver%2Fshare%2Fsample.pdf";
+     "",None;"https://example.com/sample.pdf",None;"file://[",None];
+  let local_image = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse "![Local](file:///tmp/image%2520.png)")) in
+  check "Markdown file images load through Electron's local-file asset protocol"
+    (List.exists (fun node -> match M.string_prop node "attrs" with
+      | Some attrs -> let obj=Js.Json.decodeObject (Js.Json.parseExn attrs) in
+          Option.bind obj (fun o -> Option.bind (Js.Dict.get o "src") Js.Json.decodeString)
+            =Some "assets://localhost/logseq__file/file%3A%2F%2F%2Ftmp%2Fimage%252520.png"
+      | None -> false) (nodes local_image));
+  ignore (Lui_app.dispose local_image.S.app);
+  let local_link = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse ("[Local PDF](" ^ file_pdf ^ ")"))) in
+  let local_anchor = List.find (fun n -> n.M.kind="link"
+    && M.string_prop n "url"=Some file_pdf) (nodes local_link) in
+  S.press local_link local_anchor.M.id;
+  check "File links retain their file icon and dispatch the original URL to the host opener"
+    (!opened=[file_pdf] && M.string_prop local_anchor "icon"=Some "app:file");
+  ignore (Lui_app.dispose local_link.S.app);
+  let pdf = Pdf_assets.inflate_asset ~original_path:file_pdf ~href:file_pdf
+    ~block_uuid:None ~block_db_id:None ~block_external_url:None in
+  check "Local PDF inflation uses the preview URL without changing its original identity"
+    (Option.map (fun asset -> asset.Model.pdf_url,asset.pdf_original_path) pdf
+      =Some (expected_pdf,file_pdf));
+  let pdf_link = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse ("![Local PDF](" ^ file_pdf ^ ")"))) in
+  check "PDF URLs with query and fragment still render the PDF opener"
+    (List.exists (fun n -> class_has n "is-pdf") (nodes pdf_link));
+  ignore (Lui_app.dispose pdf_link.S.app);
+  restore_host ();
+  check "Browser previews retain file URLs instead of using an Electron-only scheme"
+    (Platform.media_url file_pdf=file_pdf);
+  let install_browser_host : bool -> (string -> unit) -> (unit -> unit) =
+    [%mel.raw {|function (shim, open) {
+      const previousApis = window.apis, previousOpen = window.open;
+      if (shim) window.apis = {on() {}, emit() {}}; else delete window.apis;
+      window.open = open;
+      return () => {
+        if (previousApis === undefined) delete window.apis; else window.apis = previousApis;
+        window.open = previousOpen;
+      };
+    }|}] in
+  List.iter (fun shim ->
+    let browser_opened = ref [] in
+    let restore_browser = install_browser_host shim (fun url -> browser_opened:=url::!browser_opened) in
+    let browser_link = mount (fun _ -> Lui_elements.column
+      (Render_inline.parse ("[Local](" ^ file_pdf ^ ")"))) in
+    let anchor = List.find (fun n -> n.M.kind="link"
+      && M.string_prop n "url"=Some file_pdf) (nodes browser_link) in
+    check "Browser file links keep native navigation without an application press handler"
+      (!browser_opened=[] && M.string_prop anchor "target"=Some "_blank"
+       && Hashtbl.find_opt anchor.M.props "press-enabled"<>Some (P.BoolValue true)
+       && M.string_prop anchor "icon"=Some "app:file");
+    Platform.open_url file_pdf;
+    Platform.open_url "";
+    check "Browser open_url never calls Electron APIs, with or without the plugin shim"
+      (!browser_opened=["";file_pdf] && Platform.media_url file_pdf=file_pdf);
+    ignore (Lui_app.dispose browser_link.S.app);
+    restore_browser ()) [false;true];
+  List.iter (fun code ->
+    let results = mount (fun _ -> Option.get (Render.calc_results_el code)) in
+    let lines = List.filter (fun node ->
+      class_has node "extensions__code-calc-output-line") (nodes results) in
+    check "Calculator results retain one single-height line per expression"
+      (List.map (fun node -> M.string_prop node "text") lines
+       = List.map Option.some (Render_calc.results code)
+       && List.for_all (fun node ->
+         M.string_prop node "white-space" = Some "nowrap"
+         && M.string_prop node "line-height" = Some "1.45rem"
+         && Hashtbl.find_opt node.M.props "min-height" = Some (P.IntValue 23)) lines);
+    ignore (Lui_app.dispose results.S.app))
+    ["1+1"; "2^256"; ""; "bad(" ];
+  let footnote_document : Js.Json.t = Stub_dom.get_field Stub_dom.global "document" in
+  let previous_query : string -> Js.Json.t = Stub_dom.get_field footnote_document "querySelector" in
+  let jumped = ref [] in
+  let target name =
+    let el = Stub_dom.make_element "a" in
+    Stub_dom.set_field el "scrollIntoView" (fun () -> jumped := name :: !jumped);
+    el in
+  let note_target = target "definition" and reference_target = target "reference" in
+  Stub_dom.set_field footnote_document "querySelector" (fun selector ->
+    if selector = "[id=\"fn.1\"]" then note_target
+    else if selector = "[id=\"fnr.1\"]" then reference_target
+    else if selector = "[id=\"fn.missing\"]" then Js.Json.null
+    else previous_query selector);
+  Fun.protect ~finally:(fun () -> Stub_dom.set_field footnote_document "querySelector" previous_query)
+    (fun () ->
+      let notes = mount (fun _ -> Lui_elements.column
+        (Render.title "Footnote[^1]\n\n[^1]: footnote text")) in
+      let anchor id = List.find (fun node ->
+        M.string_prop node "accessibility-identifier" = Some id) (nodes notes) in
+      check "Footnote definitions render their body instead of raw Markdown syntax"
+        (List.exists (fun node -> M.string_prop node "text" = Some "footnote text") (nodes notes));
+      check "Footnote backlinks preserve the Unicode return marker"
+        (List.exists (fun node -> M.string_prop node "text" = Some {js|1↩︎|js}) (nodes notes));
+      S.press notes (anchor "fnr.1").M.id;
+      S.press notes (anchor "fn.1").M.id;
+      check "Footnote links navigate to the definition and back to their reference"
+        (!jumped = ["reference"; "definition"]);
+      ignore (Lui_app.dispose notes.S.app);
+      List.iter (fun source ->
+        let session = mount (fun _ -> Lui_elements.column (Render.title source)) in
+        check "Empty and malformed footnotes do not create navigation targets"
+          (not (List.exists (fun node ->
+            Option.fold ~none:false ~some:(fun id -> Str_util.starts_with id "fn.")
+              (M.string_prop node "accessibility-identifier")) (nodes session)));
+        ignore (Lui_app.dispose session.S.app)) [""; "Footnote[^]\n\n[^]: invalid"];
+      let missing = mount (fun _ -> Lui_elements.column (Render.title "Unresolved[^missing]")) in
+      let link = List.find (fun node ->
+        M.string_prop node "accessibility-identifier" = Some "fnr.missing") (nodes missing) in
+      S.press missing link.M.id;
+      check "An unresolved footnote leaves navigation unchanged" (!jumped = ["reference"; "definition"]);
+      ignore (Lui_app.dispose missing.S.app));
   let startup_error=I18n.t "graph/load-error" in
   let failed_startup=mount (fun _ context parent ->
     Page.region (Signal.constant context.Lui_ui.ui_scheduler
@@ -1121,6 +2072,94 @@ let run_views ~registry ~profile ~finish =
   Views_popup.close_all ();
   ignore (Lui_app.dispose delayed_filter.S.app);
   Views_popup.stack_st := previous_stack;
+  let reference_facet_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_stack = !Views_popup.stack_st and previous_ops = !Views_state.ops_ref in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "reference-facets"});
+    Views_state.install_ops
+      {o_refresh=(fun _ -> ()); o_refresh_src=(fun _ _ -> ()); o_create_view=(fun _ -> ());
+       o_rename_box=(fun _ _ -> Lui_elements.spacer []); o_export=(fun _ -> ());
+       o_add_object=(fun _ -> ()); o_title_of_uuid=(fun _ uuid -> uuid);
+       o_load_more=(fun _ -> ()); o_full_action_rows=(fun _ reply -> reply (Error "Full action rows are not installed"))};
+    let rec next = function
+      | [] ->
+          Runtime.worker:=previous_worker; Runtime.read_model:=previous_model;
+          Views_popup.stack_st:=previous_stack; Views_state.ops_ref:=previous_ops; done_ ()
+      | scenario::rest ->
+          Views_popup.stack_st:=None;
+          let selected = ref false and requests = ref 0 in
+          let counts = ["Page",2;"tags",2;"Ref A",1;"Ref B",1;"Zebra",1;"Alpha",1] in
+          let key = Views_db.key_ref_pages_count "facet-owner" in
+          ignore (Fake_worker.install (fun name args -> match name with
+            | "thread-api/get-render-snapshots" ->
+                let resources = Wire.get (List.nth args 1) "resources" |> Option.get |> Wire.elems in
+                let slots = List.map (fun resource ->
+                  let value = if resource=key then begin
+                    incr requests;
+                    let counts = if scenario=`Empty then [] else if !selected
+                      then ["Page",1;"Ref B",1;"tags",1] else counts in
+                    if scenario=`Error then Wire.Map [Wire.kw "error",Wire.String "facet request failed"]
+                    else Wire.Map [Wire.kw "ref-pages-count",Wire.Array
+                      (List.map (fun (title,n) -> Wire.Array [Wire.String title;Wire.Int n]) counts)]
+                  end else Wire.Int 1 in
+                  Wire.Array [Wire.kw "resource";resource],Wire.Map [Wire.kw "value",value]) resources in
+                Wire.Map [Wire.kw "slots",Wire.Map slots]
+            | "thread-api/pull" -> Wire.Map [Wire.kw "db/id",Wire.Int 12]
+            | "thread-api/apply-outliner-ops" -> selected:=true; Wire.Map []
+            | "thread-api/pull-many" -> Wire.Array [Wire.Map
+                (if !selected then [Wire.kw Views_db.includes_prop,Wire.Array [Wire.Map
+                  [Wire.kw "block/name",Wire.String "alpha";Wire.kw "block/title",Wire.String "Alpha"]]] else [])]
+            | _ -> Wire.Nil));
+          let instance = ref None and scope = ref None in
+          let popup = mount (fun _ context parent ->
+            instance:=Some (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KLinkedRefs ~feature:"linked-references" ~owner:(Wire.Uuid "facet-owner"));
+            scope:=Some context.ui_scope; popup_layer context parent) in
+          let inst = Option.get !instance in
+          let open_popup () =
+            Views_head.ref_filter_dialog ~owner_scope:(Option.get !scope) inst (popup_anchor ());
+            S.flush popup in
+          let chips () = List.filter (fun n -> class_has n "ls-ref-btn") (nodes popup) in
+          let labels () = List.filter_map button_label (chips ()) in
+          let count_labels () = nodes popup |> List.filter_map (fun n ->
+            match M.string_prop n "text" with Some (" 1"|" 2" as value) -> Some value | _ -> None)
+            |> List.sort String.compare in
+          let includes () = List.exists (fun n -> M.string_prop n "text"=
+            Some (I18n.t "reference.filter/includes")) (nodes popup) in
+          open_popup ();
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            S.flush popup;
+            let finish () = Views_popup.close_all (); ignore (Lui_app.dispose popup.S.app); next rest in
+            match scenario with
+            | `Empty -> check "Empty reference facets leave an editable search without chips"
+                (chips ()=[] && List.exists (fun n -> M.string_prop n "placeholder"=
+                  Some (I18n.t "reference.filter/search-placeholder")) (nodes popup)); finish ()
+            | `Error -> check "Failed reference facets show the existing error, not stale options"
+                (chips ()=[] && List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "view/error")) (nodes popup)); finish ()
+            | `Select ->
+                let original_counts = count_labels () in
+                check "Reference popup opens with all original facets" (labels ()=List.map fst counts);
+                let alpha = List.find (fun n -> button_label n=Some "Alpha") (chips ()) in
+                S.dispatch popup (P.PressDetail (alpha.M.id,
+                  {x=0.;y=0.;modifiers=0;button=0;target_class=""}));
+                ignore (Js.Global.setTimeout ~f:(fun () ->
+                  S.flush popup; Runtime.run_sync_subs [];
+                  ignore (Js.Global.setTimeout ~f:(fun () ->
+                    S.flush popup;
+                    check "Selecting Alpha saves the live page filter"
+                      (!selected && (Views_state.get inst).ref_includes=["alpha","Alpha"]);
+                    check "Selection and sync keep the popup's full facets and original counts"
+                      (labels ()=List.map fst counts && count_labels ()=original_counts && !requests=1);
+                    check "Includes does not appear in an already-open unfiltered snapshot" (not (includes ()));
+                    Views_popup.close_all (); S.flush popup; open_popup ();
+                    ignore (Js.Global.setTimeout ~f:(fun () ->
+                      S.flush popup;
+                      check "Reopening reflects the saved Includes section and fresh filtered counts"
+                        (includes () && labels ()=["Alpha";"Page";"Ref B";"tags"]
+                         && count_labels ()=[" 1";" 1";" 1"] && !requests=2);
+                      finish ()) 20)) 200)) 0)) 200)
+    in next [`Select;`Empty;`Error]
+  in
   let filter_value_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_stack = !Views_popup.stack_st in
@@ -1602,7 +2641,7 @@ let run_views ~registry ~profile ~finish =
           ~kind:(if query then Views_state.KQuery {block_uuid="scope-query"} else Views_state.KAllPages)
           ~feature:"filter-scope-fixture" ~owner:Wire.Nil in
         instance:=Some inst;
-        Views_state.update inst (fun state -> {state with qsrc="(task TODO)";loading=false;
+        Views_state.update inst (fun state -> {state with qsrc="(task TODO)";loading=false;query_rows=["scope-result"];
           data=Views_wire.VFlat {rows=[];count=0;previews=Hashtbl.create 0;qprops=[]};
           filters=[{Views_state.c_prop="fixture/value";c_op=operator;c_val=None}]});
         Lui_elements.column [if query then Views_view.query_view_el inst else Views_view.view_el inst] context parent) in
@@ -1695,11 +2734,13 @@ let run_views ~registry ~profile ~finish =
     Properties_dialog.current := None;
     Properties_dialog.current_sig := None;
     Properties_dialog.open_scope := None;
-    let operations = ref [] and dismissed = ref 0 in
+    let operations = ref [] and dismissed = ref 0 and available = ref [] in
+    let previous_pending = !Properties_value.pending_edit in
     ignore (Fake_worker.install (fun name args ->
       if name="thread-api/apply-outliner-ops" then (
         operations := Wire.elems (List.nth args 1) @ !operations;
         Wire.Map [Wire.kw "result",Wire.Nil])
+      else if name="thread-api/get-all-properties" then Wire.Array !available
       else Wire.Nil));
     let target : Properties_dialog.target =
       {uuid="batch-first";uuids=["batch-first";"batch-second"];
@@ -1708,7 +2749,7 @@ let run_views ~registry ~profile ~finish =
       Wire.kw "block/title",Wire.String "Flag";
       Wire.kw "logseq.property/type",Wire.kw "checkbox"] in
     let picker = mount (fun _ -> Properties_dialog.view) in
-    let rec next = function
+    let rec defaults = function
       | [] ->
           ignore (Lui_app.dispose picker.S.app);
           Properties_dialog.current := previous_dialog;
@@ -1717,7 +2758,44 @@ let run_views ~registry ~profile ~finish =
           Properties_dialog.current_on_close := previous_close;
           Runtime.worker := previous_worker;
           Runtime.read_model := previous_model;
+          Properties_value.pending_edit := previous_pending;
           done_ ()
+      | (ty,default,expected)::rest ->
+          operations := [];
+          available := [Wire.Map ([Wire.kw "db/ident",Wire.kw "fixture/batch-flag";
+            Wire.kw "block/title",Wire.String "Flag";
+            Wire.kw "logseq.property/type",Wire.kw ty]
+            @ match default with None -> [] | Some value ->
+              [Wire.kw (if ty="checkbox" then "logseq.property/scalar-default-value"
+                 else "logseq.property/default-value"),value])];
+          Properties_dialog.open_at ~remove:false ~phase:Properties_dialog.Prop_select
+            (Properties_dialog.Anchor_rect (120.,80.,104.,32.)) {target with uuids=[]};
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            S.flush picker;
+            let choice=List.find (fun n -> n.M.kind="list-item") (nodes picker) in
+            S.press picker choice.M.id;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check "Adding a property through its picker writes its configured default"
+                (match !operations,expected with
+                 | [Wire.Array [Wire.Keyword "batch-set-property";
+                     Wire.Array [Wire.List [Wire.Uuid "batch-first"];
+                       Wire.Keyword "fixture/batch-flag";value;_]]],Wire.Bool _ -> value=expected
+                 | [Wire.Array [Wire.Keyword "create-property-text-block";
+                     Wire.Array [Wire.Uuid "batch-first";
+                       Wire.Keyword "fixture/batch-flag";value;_]]],Wire.String _ -> value=expected
+                 | _ -> false);
+              check "Successful default application closes the Set property picker"
+                (not (Properties_dialog.is_open ()));
+              defaults rest) 0)) 0)
+    in
+    let rec next = function
+      | [] -> defaults [
+          "checkbox",Some (Wire.Bool true),Wire.Bool true;
+          "checkbox",Some (Wire.Bool false),Wire.Bool false;
+          "checkbox",None,Wire.Bool false;
+          "default",Some (Wire.Map [Wire.kw "block/title",Wire.String "Default text"]),Wire.String "Default text";
+          "url",Some (Wire.Map [Wire.kw "block/title",Wire.String "https://example.com"]),Wire.String "https://example.com";
+          "default",None,Wire.String ""]
       | value :: rest ->
           operations := [];
           Properties_dialog.open_at ~on_close:(fun () -> incr dismissed)
@@ -1731,8 +2809,8 @@ let run_views ~registry ~profile ~finish =
           ignore (Js.Global.setTimeout ~f:(fun () ->
             S.flush picker;
             let popup=List.find (fun n -> n.M.kind="popover") (nodes picker) in
-            check "Batch property pickers keep the toolbar trigger rectangle"
-              (M.string_prop popup "anchor-rect"=Some "120. 80. 104. 32."
+            check "Batch property pickers keep the toolbar trigger's virtual reference"
+              (M.string_prop popup "anchor-rect"=Some "116. 80. 1. 32."
                && M.string_prop popup "anchor"=Some "below"
                && M.string_prop popup "anchor-alignment"=Some "start");
             check "Batch property pickers have one compact surface without a modal card"
@@ -1756,7 +2834,716 @@ let run_views ~registry ~profile ~finish =
               next rest) 0)) 0)
     in next [true;false]
   in
+  let embedded_indent_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_send = !Runtime.app_send and previous_flush = !Runtime.app_flush
+    and previous_page = !Runtime.current_page
+    and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+    and previous_settings = !Settings_state.st in
+    Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+    let entity id uuid title children =
+      {(Test_check.block ~children uuid title) with Model.block_db_id = Some id} in
+    let child = entity 214 "embed-child" "Child" [] in
+    let root = entity 213 "embed-target" "Target" [child] in
+    let link id uuid target = {(entity id uuid "" []) with Model.block_link = Some target} in
+    let first = link 210 "first-link" 213 and second = link 211 "second-link" 213
+    and page_link = link 212 "page-link" 207 in
+    let between = entity 215 "between" "Between" [] in
+    let page_root = {(entity 207 "linked-page" "Source" [root]) with Model.block_is_page = true} in
+    let host = {(Test_check.page
+      [{first with Model.block_embed_children = [root]}; between;
+       {second with Model.block_embed_children = [root]};
+       {page_link with Model.block_embed_children = [page_root]}]) with
+        Model.page_uuid = Some "host-page"; page_db_id = Some 208} in
+    let model = ref {Model.initial with repo = Some "embed-indent";
+      route = Model.Page "host-page"; route_page = Some host} in
+    let state = ref None and viewport = ref None in
+    Runtime.read_model := (fun () -> !model);
+    Runtime.current_page := Some host;
+    let moved = ref false and restored = ref false and writes = ref 0 and rejected = ref false in
+    let source_view = ref false and source_restored = ref false in
+    let completed = ref 0 and failures = ref 0 in
+    let observe_structure () =
+      Option.iter (fun (_, completion) -> ignore (completion
+        |> Js.Promise.then_ (fun () -> incr completed; Js.Promise.resolve ())
+        |> Js.Promise.catch (fun _ -> incr failures; Js.Promise.resolve ())))
+        !Editor_actions.structure_owner in
+    let rec wire (block : Model.block) = Wire.Map
+      ([Wire.kw "db/id", Wire.Int (Option.get block.block_db_id);
+        Wire.kw "block/uuid", Wire.Uuid (Option.get block.block_uuid);
+        Wire.kw "block/title", Wire.String block.block_title;
+        Wire.kw "block/children", Wire.List (List.map wire block.block_children)]
+       @ (if block.block_is_page then [Wire.kw "block/name", Wire.String "source"] else [])
+       @ (match block.block_link with None -> [] | Some id ->
+         [Wire.kw "block/link", Wire.Map [Wire.kw "db/id",Wire.Int id]])) in
+    Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
+      if name = "thread-api/apply-outliner-ops" && !rejected then
+        Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "indent rejected") [@u])
+      else Js.Promise.resolve (match name,args with
+      | "thread-api/apply-outliner-ops", [_;Wire.Array operations;_] ->
+          List.iter (function
+            | Wire.Array [Wire.Keyword "indent-outdent-blocks";
+                Wire.Array [Wire.List [Wire.Uuid owner]; Wire.Bool indent; opts]] ->
+                incr writes;
+                if owner = "page-link" && indent then moved := true
+                else if owner = "page-link" && not indent && !source_view
+                  && Wire.get opts "parent-original" = None then begin
+                  moved := false; source_restored := true
+                end
+                else if owner = "page-link" && not indent
+                  && Option.bind (Wire.get opts "parent-original")
+                      (fun value -> Wire.map_get_uuid value "block/uuid") = Some "second-link" then begin
+                  moved := false; restored := true
+                end
+            | _ -> ()) operations;
+          Wire.Map [Wire.kw "result",Wire.Nil]
+      | "thread-api/get-page-blocks-tree", _ ->
+          let root = if !moved then {root with Model.block_children = page_link :: root.block_children} else root in
+          let blocks = match List.nth_opt args 1 with
+            | Some (Wire.Int 213) -> [root]
+            | Some (Wire.Int 207) -> [{page_root with Model.block_children = [root]}]
+            | _ when !source_view -> [root] @ if !moved then [] else [page_link]
+            | _ -> [first;between;second] @ if !moved then [] else [page_link] in
+          Wire.List (List.map wire blocks)
+      | "thread-api/get-render-snapshots", [_;request] ->
+          Wire.Map [Wire.kw "slots", Wire.Map (List.map (fun key ->
+            Wire.Array [Wire.kw "resource";key], Wire.Map [Wire.kw "value",Wire.Int 2])
+            (Wire.elems (Option.value (Wire.get request "resources") ~default:Wire.Nil)))]
+      | "thread-api/get-file-content", _ -> Wire.String "{}"
+      | _ -> Wire.Nil));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let mounted = mount (fun _ context parent ->
+      let source = Signal.state context.Lui_ui.ui_scheduler !model in
+      state := Some source;
+      viewport := Some (Outline_viewport_state.create context (Signal.value source));
+      Lui_elements.column [] context parent) in
+    Runtime.app_send := (fun action ->
+      model := Update.update !model action;
+      Option.iter (fun source -> Runtime.signal_set source !model) !state;
+      true);
+    let page_scope = Outliner_projection.embedded_scope ~scope:"main" page_link in
+    Editor_state.set_collapsed "embed-target" true;
+    Editor_actions.select_single_in ~scope:page_scope "linked-page";
+    Editor_actions.indent_or_outdent ~indent:true;
+    observe_structure ();
+    check "Selection-only embedded indent does not wait for a nonexistent editor sink"
+      (Editor_state.editing () = None && !Editor_state.pending_focus = None);
+    check "Indenting an embedded root reveals only its target occurrence"
+      (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" first) "embed-target"
+       && not (Editor_state.is_collapsed_in ~scope:(Outliner_projection.embedded_scope ~scope:"main" second) "embed-target"));
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      S.flush mounted;
+      check "Embedded-root Tab completes without a structural failure" (!completed = 1 && !failures = 0);
+      let rows = Signal.get (Option.get !viewport).Outline_viewport_state.rows in
+      check "Canonical embed relocation retains a visible selected root and live source scope"
+        (!moved && Editor_state.is_selected "linked-page"
+         && List.exists (function Outliner_projection.Block row ->
+              row.block.Model.block_uuid = Some "linked-page"
+              && row.scope = Editor_state.selection_scope () | _ -> false) rows);
+      Editor_actions.indent_or_outdent ~indent:false;
+      observe_structure ();
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        S.flush mounted;
+        check "Outdenting the relocated embed moves its link back to the host container"
+          (!restored && not !moved && Editor_state.is_selected "linked-page");
+        check "Embedded-root Shift-Tab completes without a structural failure" (!completed = 2 && !failures = 0);
+        check "Selection-only embedded outdent does not arm editor focus"
+          (!Editor_state.pending_focus = None);
+        Editor_state.set (fun st -> {st with selected = Editor_state.String_set.empty; anchor = None});
+        let before = !writes in
+        Editor_actions.indent_or_outdent ~indent:true;
+        check "An empty embedded selection does not move a block" (!writes = before);
+        check "An empty embedded selection does not arm editor focus"
+          (!Editor_state.pending_focus = None);
+        Editor_actions.select_single_in ~scope:page_scope "linked-page";
+        rejected := true;
+        Editor_actions.indent_or_outdent ~indent:true;
+        check "A rejected selection-only move does not arm editor focus"
+          (!Editor_state.pending_focus = None);
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "Rejected embedded moves retain selection ownership"
+            (Editor_state.is_selected "linked-page" && not !moved);
+          rejected := false; source_view := true; moved := true;
+          Editor_state.set_collapsed "embed-target" false;
+          let source_page = {host with Model.page_uuid = Some "linked-page";
+            page_db_id = Some 207; page_blocks = [{root with Model.block_children = page_link :: root.block_children}]} in
+          model := {!model with Model.route = Model.Page "source"; route_page = Some source_page};
+          Runtime.current_page := Some source_page;
+          Option.iter (fun source -> Runtime.signal_set source !model) !state;
+          S.flush mounted;
+          Editor_actions.select_single_in ~scope:page_scope "page-link";
+          Editor_actions.indent_or_outdent ~indent:false;
+          observe_structure ();
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+          S.flush mounted;
+          check "Source-view outdent follows its actual parent instead of returning to the host"
+            (!source_restored && not !moved && Editor_state.is_selected "page-link"
+             && !completed = 3 && !failures = 0);
+          ignore (Lui_app.dispose mounted.S.app);
+          Runtime.worker := previous_worker; Runtime.read_model := previous_model;
+          Runtime.app_send := previous_send; Runtime.app_flush := previous_flush;
+          Runtime.current_page := previous_page;
+          Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+          Settings_state.st := previous_settings;
+          done_ ()) 20)) 20)) 20)) 20)
+  in
+  let ordinary_reference_count_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_flush = !Runtime.app_flush
+    and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+    and previous_settings = !Settings_state.st in
+    Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+    let block = {(Test_check.block "ordinary-reference-target" "Target") with Model.block_db_id=Some 201} in
+    let page = Test_check.page [block] in
+    let model = {Model.initial with repo=Some "ordinary-references";route_page=Some page} in
+    Runtime.read_model := (fun () -> model);
+    let count = ref 2 and failed = ref false in
+    Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+      if name="thread-api/get-render-snapshots" && !failed then
+        Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "reference count rejected") [@u])
+      else Js.Promise.resolve (match name,args with
+        | "thread-api/get-render-snapshots",[_;request] ->
+            let resources=Option.value (Wire.get request "resources") ~default:Wire.Nil in
+            Wire.Map [Wire.kw "slots",Wire.Map (List.map (fun key ->
+              let value=match Wire.elems key with
+                | [Wire.Keyword "block-ref-count";_] -> Wire.Int !count
+                | _ -> Wire.Array [] in
+              Wire.Array [Wire.kw "resource";key],Wire.Map [Wire.kw "value",value]) (Wire.elems resources))]
+        | "thread-api/get-file-content", _ -> Wire.String "{}"
+        | _ -> Wire.Nil));on_message=(fun _ _ -> ());
+      dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let mounted=mount (fun _ context parent ->
+      let ms=Signal.constant context.Lui_ui.ui_scheduler model in
+      let state=Outline_viewport_state.ensure context ms in
+      let section : Outliner_projection.section = {section_key="ordinary";repository=model.repo;
+        scope="main";page;is_last=true} in
+      let source=Signal.constant context.ui_scheduler (Outliner_projection.Block
+        {block;scope="main";section;depth=0;ancestors=[]}) in
+      Flat_outliner.block_row ~state ~library:false ~source context parent) in
+    let visible () = S.flush mounted;
+      List.exists (fun node -> class_has node "block-refs-count") (nodes mounted) in
+    let changed () = Subs_state.run_sync_subs [Wire.Array [Wire.kw "refs";Wire.Uuid "ordinary-reference-target"]] in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "Ordinary rows expose their incoming reference count" (visible ());
+      failed:=true;changed ();
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        check "A rejected reference-count refresh retains the last successful count" (visible ());
+        failed:=false;count:=0;changed ();
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "Removing the final incoming reference hides its count" (not (visible ()));
+          ignore (Lui_app.dispose mounted.S.app);
+          Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;Runtime.app_flush:=previous_flush;
+          Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+          Settings_state.st := previous_settings;
+          done_ ()) 0)) 0)) 0)
+  in
+  let optimistic_reactions_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_flush = !Runtime.app_flush
+    and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+    and previous_settings = !Settings_state.st in
+    Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+    Runtime.read_model := (fun () -> {Model.initial with repo = Some "optimistic-reactions"});
+    let persisted = ref false and premature = ref false and source = ref None in
+    Runtime.worker := Some {
+      Worker_client.invoke_fn = (fun name args -> Js.Promise.resolve (match name,args with
+        | "thread-api/get-render-snapshots", [_;request] ->
+            let resources = Option.value (Wire.get request "resources") ~default:Wire.Nil in
+            Wire.Map [Wire.kw "slots", Wire.Map (List.filter_map (fun key ->
+              match Wire.elems key with
+              | Wire.Keyword "block-reactions" :: Wire.Uuid "optimistic-target" :: _ ->
+                  if not !persisted then premature := true;
+                  let value = if not !persisted then Wire.Map [] else Wire.Array [Wire.Map
+                    [Wire.kw "emoji-id", Wire.String "grinning"; Wire.kw "count", Wire.Int 1;
+                     Wire.kw "reacted-by-me?", Wire.Bool false; Wire.kw "usernames", Wire.Nil]] in
+                  Some (Wire.Array [Wire.kw "resource";key], Wire.Map [Wire.kw "value",value])
+              | _ -> None) (Wire.elems resources))]
+        | _ -> Wire.Nil));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+    let block = Test_check.block "optimistic-target" "new block" in
+    let mounted = mount (fun _ context parent ->
+      let state = Signal.state context.Lui_ui.ui_scheduler block in
+      source := Some state;
+      Tree.block_row_sig ~scope:"optimistic-reactions" ~editable:false
+        (Signal.value state) context parent) in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "Optimistic rows do not read reactions before their worker entity exists" (not !premature);
+      persisted := true;
+      Runtime.signal_set (Option.get !source) {block with Model.block_db_id = Some 101};
+      S.flush mounted;
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        S.flush mounted;
+        check "Canonical new rows load reactions after insertion is acknowledged"
+          (List.exists (fun node -> button_label node = Some "grinning 1") (nodes mounted));
+        ignore (Lui_app.dispose mounted.S.app);
+        Runtime.worker := previous_worker;
+        Runtime.read_model := previous_model;
+        Runtime.app_flush := previous_flush;
+        Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
+        Settings_state.st := previous_settings;
+        done_ ()) 0)) 0)
+  in
+  let reaction_refresh_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_flush = !Runtime.app_flush in
+    Runtime.read_model := (fun () -> { Model.initial with repo = Some "reaction-refresh" });
+    let count = ref 0 and failed = ref false in
+    Runtime.worker := Some {
+      Worker_client.invoke_fn = (fun name args ->
+        if name = "thread-api/get-render-snapshots" && !failed then
+          Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "reaction read failed") [@u])
+        else Js.Promise.resolve (match name, args with
+          | "thread-api/get-render-snapshots", [_; request] ->
+              let resources = Option.value (Wire.get request "resources") ~default:Wire.Nil in
+              Wire.Map [ Wire.kw "slots", Wire.Map (List.map (fun key ->
+                let value = if !count = 0 then Wire.Array [] else Wire.Array [Wire.Map
+                  [ Wire.kw "emoji-id", Wire.String "grinning";
+                    Wire.kw "count", Wire.Int !count;
+                    Wire.kw "reacted-by-me?", Wire.Bool true;
+                    Wire.kw "usernames", Wire.Nil ]] in
+                Wire.Array [Wire.kw "resource"; key], Wire.Map [Wire.kw "value", value])
+                (Wire.elems resources)) ]
+          | "thread-api/apply-outliner-ops", _ ->
+              count := 1;
+              Wire.Map [Wire.kw "result", Wire.Nil]
+          | _ -> Wire.Nil));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+    let mounted = mount (fun _ -> Comments_view.reactions_el "reaction-target") in
+    let has_count n = S.flush mounted;
+      List.exists (fun node -> button_label node = Some ("grinning " ^ string_of_int n)) (nodes mounted) in
+    let changed () = Subs_state.run_sync_subs
+      [Wire.Array [Wire.kw "reactions"; Wire.Uuid "reaction-target"]] in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      check "A block without reactions has no reaction badge" (not (has_count 1));
+      Comments_view.toggle_reaction "reaction-target" "grinning";
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        check "A local reaction appears without navigating away" (has_count 1);
+        failed := true;
+        changed ();
+        ignore (Js.Global.setTimeout ~f:(fun () ->
+          check "A failed reaction refresh retains the successful badge" (has_count 1);
+          failed := false;
+          count := 0;
+          changed ();
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            check "A remote reaction removal clears the badge without navigation" (not (has_count 1));
+            ignore (Lui_app.dispose mounted.S.app);
+            Runtime.worker := previous_worker;
+            Runtime.read_model := previous_model;
+            Runtime.app_flush := previous_flush;
+            done_ ()) 0)) 0)) 0)) 0)
+  in
+  let graph_delete_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_send = !Runtime.app_send and previous_changed = !Graphs_ops.on_repos_changed
+    and metadata = Graphs_meta.read () in
+    let first = "logseq_db_Delete fixture" and last = "logseq_db_Last fixture" in
+    let state = ref { Model.initial with repos = [first;last] } in
+    let mode = ref `Pending and requests = ref [] and unlink_done = ref None in
+    Runtime.read_model := (fun () -> !state);
+    Runtime.app_send := (fun action -> state := Update.update !state action; true);
+    Graphs_ops.on_repos_changed := (fun () -> ());
+    List.iter (fun repo -> Graphs_meta.remember_uuid repo repo) [first;last];
+    Runtime.worker := Some { Worker_client.invoke_fn = (fun name args ->
+      requests := (name,args) :: !requests;
+      match !mode with
+      | `Pending -> Js.Promise.make (fun ~resolve ~reject:_ -> unlink_done := Some resolve)
+      | `Success -> Js.Promise.resolve Wire.Nil
+      | `Error -> Js.Promise.resolve (Wire.Tagged ("error", Wire.String "locked"))
+      | `Reject -> Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "locked") [@u]));
+      on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
+    let success_text name =
+      List.exists (fun (toast : Model.toast) -> toast.toast_text = I18n.removed name) (!state).toasts in
+    let open Promise_ext in
+    ignore (
+      let deletion = Graphs_ops.delete_graph first ~remote:false in
+      let* () = Js.Promise.resolve () in
+      check "Pending graph deletion retains its row and metadata until storage completes"
+        (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
+         && (!state).repos = [first;last] && Graphs_meta.uuid_of first = Some first
+         && (!state).toasts = []);
+      (Option.get !unlink_done) Wire.Nil [@u];
+      let* () = deletion in
+      check "Graph deletion sends the internal repo to storage but displays its name"
+        (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
+         && (!state).repos = [last] && success_text "Delete fixture"
+         && Graphs_meta.uuid_of first = None);
+      let rec failures = function
+        | [] -> Js.Promise.resolve ()
+        | failure :: rest ->
+            mode := failure;
+            state := { !state with toasts = [] };
+            let* () = Graphs_ops.delete_graph last ~remote:false in
+            check "Failed graph deletion restores membership and retains metadata without a success toast"
+              ((!state).repos = [last] && Graphs_meta.uuid_of last = Some last
+               && (!state).toasts = []);
+            failures rest
+      in
+      let* () = failures [`Error;`Reject] in
+      mode := `Success;
+      let* () = Graphs_ops.delete_graph last ~remote:false in
+      check "Deleting the final listed graph leaves an empty list and uses its display name"
+        ((!state).repos = [] && success_text "Last fixture" && Graphs_meta.uuid_of last = None);
+      Runtime.worker := previous_worker;
+      Runtime.read_model := previous_model;
+      Runtime.app_send := previous_send;
+      Graphs_ops.on_repos_changed := previous_changed;
+      Graphs_meta.write metadata;
+      done_ ();
+      Js.Promise.resolve ())
+  in
+  let missing_reference_view_check done_ =
+    let previous_worker= !Runtime.worker and previous_model= !Runtime.read_model
+    and previous_flush= !Runtime.app_flush in
+    Runtime.read_model:=(fun () -> {Model.initial with repo=Some "missing-reference-view"});
+    let rec next = function
+      | [] -> Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Runtime.app_flush:=previous_flush;done_ ()
+      | count::rest ->
+          let stored=ref None and source_op=ref None and history_source=ref None in
+          ignore (Fake_worker.install (fun name args -> match name,args with
+            | "thread-api/get-render-snapshots",[_;request] ->
+                let resources=Option.value (Wire.get request "resources") ~default:Wire.Nil in
+                Wire.Map [Wire.kw "slots",Wire.Map (List.map (fun key ->
+                  let value=match key with
+                    | Wire.Array [Wire.Keyword "block-ref-count";_] ->
+                        (match count with Some n -> Wire.Int n | None -> Wire.Nil)
+                    | Wire.Array [Wire.Keyword "page-identity";_] -> Wire.Uuid "views-page"
+                    | Wire.Array [Wire.Keyword "views";_;_] ->
+                        Wire.Array (match !stored with None -> [] | Some block ->
+                          [Option.get (Wire.get block "block/uuid")])
+                    | Wire.Array (Wire.Keyword "view-data"::_) -> Wire.Map
+                        [Wire.kw "count",Wire.Int 0;Wire.kw "partition",Wire.kw "grouped";
+                         Wire.kw "groups",Wire.Array []]
+                    | _ -> Wire.Nil in
+                  Wire.Array [Wire.kw "resource";key],Wire.Map [Wire.kw "value",value])
+                  (Wire.elems resources))]
+            | "thread-api/get-blocks",[_;Wire.Array requests] ->
+                Wire.Array (List.map (fun request ->
+                  let id=Option.get (Wire.get request "id") in
+                  let block=if id=Wire.Uuid "views-page" then
+                      Wire.Map [Wire.kw "block/uuid",id;Wire.kw "block/children",Wire.Array []]
+                    else Option.value !stored ~default:Wire.Nil in
+                  Wire.Map [Wire.kw "id",id;Wire.kw "block",block]) requests)
+            | "thread-api/apply-outliner-ops",[_;Wire.Array ops;tx_opts] ->
+                history_source:=Wire.get tx_opts "source-outliner-op";
+                List.iter (function
+                  | Wire.Array [Wire.Keyword "insert-blocks";
+                      Wire.Array [Wire.List [block];_;opts]] ->
+                      stored:=Some block;source_op:=Wire.get opts "outliner-op"
+                  | _ -> ()) ops;
+                Wire.Map [Wire.kw "result",Wire.Nil]
+            | _ -> Wire.Nil));
+          let instance=ref None in
+          let mounted=mount (fun _ context parent ->
+            instance:=Some (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KLinkedRefs ~feature:"linked-references" ~owner:(Wire.Uuid "owner"));
+            Lui_elements.column [] context parent) in
+          let inst=Option.get !instance in
+          Views_view.ensure_default_view inst;
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            let state=Views_state.get inst in
+            check "Missing linked-reference views are created only after a positive count, never on failure"
+              (match count with
+               | Some 0 -> !stored=None && not state.loading && state.view_error=None
+                   && state.data=Views_wire.VGroupedList []
+               | Some _ -> Option.is_some !stored && !source_op=Some (Wire.kw "create-view")
+                   && state.views<>[] && state.view_error=None
+               | None -> !stored=None && Option.is_some state.view_error);
+            check "Automatic reference views carry the worker's non-undoable source marker"
+              (!history_source=(if !stored=None then None else Some (Wire.kw "create-view")));
+            ignore (Lui_app.dispose mounted.S.app);next rest) 0)
+    in next [Some 0;Some 1;None]
+  in
+  let node_picker_lifetime_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_overlays = !Properties_state.view_overlays_state
+    and previous_flush = !Runtime.app_flush in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "node-lifetime-fixture"});
+    let entity id title = Wire.Map [Wire.kw "db/id",Wire.Int id;
+      Wire.kw "block/uuid",Wire.Uuid ("node-" ^ string_of_int id);
+      Wire.kw "block/title",Wire.String title] in
+    let page = Wire.Map [Wire.kw "db/id",Wire.Int 4;
+      Wire.kw "db/ident",Wire.kw "logseq.class/Page";Wire.kw "block/title",Wire.String "Page"] in
+    let audit = entity 80 "Audit Target" and card = entity 81 "Card" in
+    let rec next = function
+      | [] ->
+          Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+          Properties_state.view_overlays_state:=previous_overlays;
+          Runtime.app_flush:=previous_flush;done_ ()
+      | (table_view, ident, metadata, initial, closes)::rest ->
+          Properties_state.view_overlays_state:=None;
+          let chosen = ref initial and created = ref [] in
+          let prop = Wire.Map [Wire.kw "db/id",Wire.Int 100;
+            Wire.kw "db/ident",Wire.kw ident;
+            Wire.kw "logseq.property/type",Wire.kw (if ident="block/tags" then "class" else if ident="block/alias" then "page" else "node");
+            Wire.kw "db/cardinality",Wire.kw "db.cardinality/many"] in
+          ignore (Fake_worker.install (fun name args -> match name with
+            | "thread-api/entity" ->
+                (match List.nth_opt args 1 with
+                 | Some (Wire.List [Wire.Keyword "db/ident";Wire.Keyword "block/tags"]) -> prop
+                 | _ -> Wire.Map [Wire.kw ident,Wire.Set (List.map (fun id -> Wire.Int id) !chosen)])
+            | "thread-api/get-property-node-selector-data" -> Wire.Map
+                [Wire.kw "all-classes",Wire.Array [page;audit;card];
+                 Wire.kw "initial-choices",Wire.Array [page;audit;card];
+                 Wire.kw "class-options",Wire.Array [audit;card]]
+            | "thread-api/get-case-page" -> entity 82 "New Alias"
+            | "thread-api/apply-outliner-ops" ->
+                (match List.nth_opt args 1 with
+                 | Some (Wire.Array ops) -> List.iter (function
+                     | Wire.Array [Wire.Keyword "create-page";Wire.Array [Wire.String title;opts]] ->
+                         created := [title];
+                         check "New aliases create ordinary pages rather than classes"
+                           (Wire.get opts "class?"=Some (Wire.Bool false))
+                     | Wire.Array [Wire.Keyword "batch-set-property";
+                         Wire.Array [Wire.List [Wire.Uuid "node-owner"];Wire.Keyword key;Wire.Int id;
+                           Wire.Map [(Wire.Keyword "entity-id?",Wire.Bool true)]]] when key=ident ->
+                         chosen:=id::List.filter ((<>) id) !chosen
+                     | Wire.Array [Wire.Keyword "delete-property-value";
+                         Wire.Array [_;Wire.Keyword key;Wire.Int id]] when key=ident ->
+                         chosen:=List.filter ((<>) id) !chosen
+                     | Wire.Array [Wire.Keyword "batch-set-property";
+                         Wire.Array [Wire.List [Wire.Uuid "node-owner"];Wire.Keyword "block/alias";
+                           Wire.Int id;Wire.Map []]] when ident="block/alias" -> chosen:=[id]
+                     | _ -> ()) ops
+                 | _ -> ());
+                Wire.Map [Wire.kw "result",if !created=[] then Wire.Nil
+                  else Wire.Array [Wire.Nil;Wire.Uuid "node-82"]]
+            | _ -> Wire.Nil));
+          let ctx : Properties_value.ctx = {owner_key="node-lifetime";block_uuid="node-owner";
+            jump_owner=Jump_state.owner ~scope:"main" ~container:"node-owner";
+            block_id=Some 196;refresh=ignore;is_page=false;class_schema=false} in
+          let values = Wire.Array (List.filter (fun entity ->
+            List.mem (Option.get (Properties_data.entity_id_of entity)) initial) [page;audit;card]) in
+          let row = Wire.Map [Wire.kw "property-id",Wire.kw ident;
+            Wire.kw "value",values;Wire.kw "property",prop] in
+          let owner = ref ctx.owner_key in
+          let picker = mount (fun _ context parent ->
+            let cell = if not table_view then
+              Properties_value.node_view ~jump_target:false ctx row
+            else
+              let inst=Views_state.make ~sched:context.Lui_ui.ui_scheduler
+                ~kind:Views_state.KAllPages ~feature:"node-lifetime-fixture" ~owner:Wire.Nil in
+              owner:="view-" ^ string_of_int inst.Views_state.id;
+              let column={(Views_table.tags_column ()) with Views_state.c_id=ident;
+                c_prop=(if metadata then Some prop else None)} in
+              let blk=Wire.Map [Wire.kw ident,values] in
+              Views_table.cell_el inst ~row_uuid:ctx.block_uuid ~blk column in
+            Lui_elements.column [cell;Properties_view.overlays] context parent) in
+          if table_view && ident="block/tags" then
+            check "Table Tags hide the implicit Page chip without changing stored references"
+              (not (List.exists (fun n -> List.mem (button_label n) [Some "Page";Some "#Page"])
+                (nodes picker)) && !chosen=initial);
+          let id = "property-node-" ^ !owner ^ "-node-owner-" ^ ident in
+          let control_id=id ^ "-picker" in
+          let trigger = List.find_opt (fun n -> M.string_prop n "accessibility-identifier"=Some control_id)
+            (nodes picker) in
+          match trigger with
+          | None ->
+              check "Populated table node cells expose an editable picker" false;
+              ignore (Lui_app.dispose picker.S.app);next rest
+          | Some trigger ->
+          if List.mem 81 initial then begin
+            let chip=List.find (fun n -> (n.M.kind="button" || n.M.kind="link")
+              && List.mem (button_label n) [Some "Card";Some "#Card"]) (nodes picker) in
+            let actions=ref [] and previous_send= !Runtime.app_send in
+            Runtime.app_send:=(fun action -> actions:=action::!actions;true);
+            S.press picker chip.M.id;
+            Runtime.app_send:=previous_send;
+            check "A populated table node chip navigates without editing or opening a picker"
+              (!actions=[Action.Navigate_to (Model.Page "node-81")]
+               && !chosen=initial && not (Properties_state.view_overlay_open ()))
+          end;
+          let document = !(Stub_dom.document_ref) in
+          let lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+          let anchor = Stub_dom.make_element "button" in
+          let set : string -> string -> unit = Stub_dom.get_field anchor "setAttribute" in
+          set "id" id;
+          Stub_dom.set_field document "getElementById" (fun key -> if key=id then anchor else lookup key);
+          S.press picker trigger.M.id;
+          Stub_dom.set_field document "getElementById" lookup;
+          let toggle title checked =
+            let option = List.find (fun n -> n.M.kind="checkbox"
+              && M.string_prop n "accessibility-label"=Some title) (nodes picker) in
+            S.toggle picker option.M.id checked in
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            if ident="block/alias" then begin
+              let input=List.find (fun n -> n.M.kind="text-field") (nodes picker) in
+              S.text_changed picker input.M.id "New Alias";
+              check "Alias search exposes a new option for a missing page"
+                (List.exists (fun n -> M.string_prop n "accessibility-label"=
+                  Some (I18n.t1 "select/new-option" "New Alias")) (nodes picker));
+              S.submit picker input.M.id;
+              ignore (Js.Global.setTimeout ~f:(fun () ->
+                check "Choosing a new alias creates its page and stores its entity reference"
+                  (!created=["New Alias"] && !chosen=[82]);
+                Properties_state.close_all_view_overlays ();
+                ignore (Lui_app.dispose picker.S.app);
+                let previous_dialog = !Properties_dialog.current in
+                let d : Properties_dialog.dlg_state =
+                  {d_target={uuid="node-owner";uuids=[];db_id=Some 79;is_tag=false;title=""};
+                   d_remove=false;d_placement=Properties_dialog.Centered;
+                   d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+                chosen:=[];created:=[];
+                Properties_dialog.current:=Some d;
+                let dialog=mount (fun _ -> Properties_dialog.value_edit_view d prop) in
+                ignore (Js.Global.setTimeout ~f:(fun () ->
+                  let input=List.find (fun n -> n.M.kind="text-field") (nodes dialog) in
+                  S.text_changed dialog input.M.id "Dialog Alias";
+                  S.submit dialog input.M.id;
+                  ignore (Js.Global.setTimeout ~f:(fun () ->
+                    check "The Set property Alias picker also creates and stores a new page"
+                      (!created=["Dialog Alias"] && !chosen=[82]);
+                    ignore (Lui_app.dispose dialog.S.app);
+                    Properties_dialog.current:=previous_dialog;
+                    next rest) 0)) 0)) 0)
+            end else begin
+            check "Reopening a table node picker preserves and checks its existing values"
+              (!chosen=initial && List.for_all (fun (title,id) ->
+                List.exists (fun n -> n.M.kind="checkbox"
+                  && M.string_prop n "accessibility-label"=Some title
+                  && Hashtbl.find_opt n.M.props "checked"=Some (P.BoolValue (List.mem id initial)))
+                  (nodes picker)) ["Page",4;"Card",81]);
+            toggle "Audit Target" true;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check "A many-node add updates values and retains its popup"
+                (List.sort compare !chosen=List.sort compare (80::initial)
+                 && Properties_state.view_overlay_open ());
+              toggle "Audit Target" false;
+              ignore (Js.Global.setTimeout ~f:(fun () ->
+                check "Table removal dismissal uses the opening raw value count, not the live count"
+                  (List.sort compare !chosen=List.sort compare initial
+                   && Properties_state.view_overlay_open ()=not closes);
+                let finish () =
+                  Properties_state.close_all_view_overlays ();
+                  ignore (Lui_app.dispose picker.S.app);next rest in
+                if table_view && initial=[4;81] then begin
+                  toggle "Card" false;
+                  ignore (Js.Global.setTimeout ~f:(fun () ->
+                    check "An initially plural table value does not close merely because its last visible tag is removed"
+                      (!chosen=[4] && Properties_state.view_overlay_open ());
+                    finish ()) 0)
+                end else finish ()) 0)) 0) end) 0)
+    in
+    next [true,"block/tags",false,[4],true;true,"block/tags",false,[],true;
+      true,"block/tags",false,[4;81],false;false,"block/tags",false,[4],false;
+      true,"block/tags",true,[4;81],false;true,"fixture/nodes",true,[4;81],false;
+      false,"fixture/nodes",true,[4;81],false;false,"fixture/nodes",true,[],false;
+      false,"block/alias",true,[],false]
+  in
   let property_picker_check done_ =
+    let items =
+      List.map
+        (fun (key, title) -> Properties_select.item ~key title (fun () -> ()))
+        [ "entity-83", "Gamma"; "entity-81", "Alpha"; "entity-82", "Beta" ]
+    in
+    let visible ?(filter = "") ?(selected_keys = []) () =
+      Properties_select.visible_items_with_selection ~multiple_choices:true ~selected_keys
+        ~items ~filter ~searched:None ~new_option:None ~new_case_sensitive:false ()
+    in
+    let item_keys items = List.filter_map (fun item -> item.Properties_select.it_key) items in
+    let initial = visible () in
+    check "Selecting a many-value option does not reorder the unfiltered choices"
+      (item_keys initial = item_keys (visible ~selected_keys:[ "entity-81" ] ()));
+    let searched = visible ~filter:"a" () in
+    let selected_searched = visible ~filter:"a" ~selected_keys:[ "entity-81" ] () in
+    let selected, unselected =
+      List.partition
+        (fun item -> item.Properties_select.it_key = Some "entity-81") searched
+    in
+    check "A selected matching many-value choice leads the fuzzy results"
+      (item_keys selected_searched = item_keys (selected @ unselected));
+    let toggle_count = ref 0 and selected_signal = ref None in
+    let previous_flush = !Runtime.app_flush in
+    let selector = mount (fun _ context parent ->
+      let selected = Signal.state context.Lui_ui.ui_scheduler [] in
+      selected_signal := Some selected;
+      let choose () =
+        incr toggle_count;
+        let current = Runtime.signal_get selected in
+        Runtime.signal_set selected
+          (if List.mem "entity-91" current then [] else ["entity-91"])
+      in
+      Properties_select.view ~placeholder:"Search" ~multiple_choices:true
+        ~clear_input_on_choice:true
+        ~selected_keys:(Signal.value selected)
+        [Properties_select.item ~key:"entity-91" "Alpha" choose]
+        context parent)
+    in
+    let input () = List.find (fun node -> node.M.kind = "text-field") (nodes selector) in
+    let original_input = (input ()).M.id in
+    S.text_changed selector original_input "a";
+    S.flush selector;
+    let option () = List.find_opt (fun node -> node.M.kind = "checkbox"
+      && M.string_prop node "accessibility-label" = Some "Alpha") (nodes selector) in
+    let checked = function
+      | Some node -> Hashtbl.find_opt node.M.props "checked" = Some (P.BoolValue true)
+      | None -> false
+    in
+    let selected () = Runtime.signal_get (Option.get !selected_signal) in
+    check "A many-value property option has reactive checkbox semantics"
+      (Option.is_some (option ()) && not (checked (option ())));
+    Option.iter (fun node -> S.toggle selector node.M.id true)
+      (option ());
+    S.flush selector;
+    check "A checkbox selection toggles once and clears the search query"
+      (!toggle_count = 1 && selected () = ["entity-91"]
+       && (input ()).M.id = original_input
+       && M.string_prop (input ()) "text" = Some ""
+       && checked (option ()));
+    S.submit selector original_input;
+    S.flush selector;
+    check "Enter toggles the active many-value choice once and clears search"
+      (!toggle_count = 2 && selected () = []
+       && (input ()).M.id = original_input
+       && M.string_prop (input ()) "text" = Some ""
+       && not (checked (option ())));
+    ignore (Lui_app.dispose selector.S.app);
+    Runtime.app_flush := previous_flush;
+    List.iter (fun (presentation, multiple_choices, query, index, enter) ->
+      let chosen = ref [] in
+      let selector = mount (fun _ -> Properties_select.view ~placeholder:"Search"
+        ~presentation ~multiple_choices ~clear_input_on_choice:true
+        (List.map (fun (key, title) -> Properties_select.item ~key title
+          (fun () -> chosen:=key::!chosen))
+          ["page","Page";"audit","Audit Target";"card","Card"])) in
+      let input () = List.find (fun n -> n.M.kind="text-field") (nodes selector) in
+      let original_input = (input ()).M.id in
+      S.text_changed selector original_input query;
+      for _ = 1 to index do
+        S.dispatch selector (P.NavigateNext original_input)
+      done;
+      let list = List.find (fun n -> n.M.kind="list") (nodes selector) in
+      let picked = Option.get (M.string_prop list "scroll-target") in
+      let title = List.assoc picked ["page","Page";"audit","Audit Target";"card","Card"] in
+      let option = List.find (fun n ->
+        n.M.kind=(if multiple_choices then "checkbox" else "list-item")
+        && M.string_prop n "text"=Some title) (nodes selector) in
+      S.dispatch selector (P.PointerEnter option.M.id);
+      if enter then S.submit selector original_input
+      else if multiple_choices then S.toggle selector option.M.id true
+      else S.press selector option.M.id;
+      let expected = if presentation=Properties_select.Node_picker && multiple_choices
+        then List.nth ["page";"audit";"card"] index else "page" in
+      let list = List.find (fun n -> n.M.kind="list") (nodes selector) in
+      check "Choice clears the query while only many-node pickers retain the numeric active index"
+        (!chosen=[picked] && (input ()).M.id=original_input
+         && M.string_prop (input ()) "text"=Some ""
+         && M.string_prop list "scroll-target"=Some expected);
+      S.submit selector original_input;
+      check "Repeated Enter chooses the active index in the restored unfiltered results"
+        (!chosen=[expected;picked]);
+      ignore (Lui_app.dispose selector.S.app))
+      [Properties_select.Node_picker,true,"",1,false;
+       Properties_select.Node_picker,true,"",1,true;
+       Properties_select.Node_picker,true,"Audit",0,false;
+       Properties_select.Node_picker,true,"Audit",0,true;
+       Properties_select.Node_picker,true,"a",1,false;
+       Properties_select.Node_picker,true,"a",1,true;
+       Properties_select.Standard,true,"",1,false;
+       Properties_select.Standard,true,"",1,true;
+       Properties_select.Node_picker,false,"",1,false;
+       Properties_select.Node_picker,false,"",1,true];
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
     let previous_dialog = !Properties_dialog.current in
     let previous_dialog_sig = !Properties_dialog.current_sig in
@@ -2074,6 +3861,38 @@ let run_views ~registry ~profile ~finish =
       {owner_key="property-date-fixture";block_uuid="date-owner";block_id=Some 79;
        jump_owner=Jump_state.owner ~scope:"main" ~container:"date-owner";
        refresh=(fun () -> ());is_page=false;class_schema=false} in
+    ignore (Fake_worker.install (fun _ _ -> Wire.Nil));
+    List.iter (fun (positioned,many,icon) ->
+      let value=Wire.Map ([Wire.kw "db/id",Wire.Int 80;Wire.kw "block/title",Wire.String "High"]
+        @ if icon then [Wire.kw "logseq.property/icon",Wire.Map
+            [Wire.kw "id",Wire.String "priority-lvl-high"]] else []) in
+      let prop=Wire.Map ([Wire.kw "db/ident",Wire.kw "logseq.property/priority";
+        Wire.kw "logseq.property/type",Wire.kw "default";
+        Wire.kw "property/closed-values",Wire.Array [value]]
+        @ if many then [Wire.kw "db/cardinality",Wire.kw "db.cardinality/many"] else []) in
+      let priority=mount (fun _ -> Properties_value.view ~positioned ~hover:None ctx
+        (Wire.Map [Wire.kw "property-id",Wire.kw "logseq.property/priority";
+          Wire.kw "property",prop;Wire.kw "value",if many then Wire.Set [value] else value])) in
+      check "Positioned priority icons suppress visible labels, not accessible names"
+        ((List.exists (fun n -> M.string_prop n "text"=Some "High") (nodes priority))
+           =not (positioned && icon)
+         && List.exists (fun n -> M.string_prop n "accessibility-label"=Some "High") (nodes priority));
+      ignore (Lui_app.dispose priority.S.app))
+      [true,false,true;false,false,true;true,false,false;true,true,true;false,true,true];
+    List.iter (fun ident ->
+      List.iter (fun future ->
+        let row=Wire.Map [Wire.kw "property-id",Wire.kw ident;
+          Wire.kw "property",Wire.Map [Wire.kw "db/ident",Wire.kw ident;
+            Wire.kw "logseq.property/type",Wire.kw "datetime"];
+          Wire.kw "value",Wire.Float (Dates.make ~year:(if future then 2999 else 2000) ~month:1 ~day:1 ())] in
+        let date=mount (fun _ -> Properties_value.view ~hover:None ctx row) in
+        let link=List.find (fun n -> n.M.kind="link") (nodes date) in
+        let expected=if not future && ident<>"fixture/date" then "var(--lx-property-overdue-fg)"
+          else "var(--lx-accent-11, var(--ls-link-text-color))" in
+        check "Date links use link blue while scheduled/deadline overdue colors remain intact"
+          (M.string_prop link "foreground"=Some expected);
+        ignore (Lui_app.dispose date.S.app)) [true;false])
+      ["logseq.property/scheduled";"logseq.property/deadline";"fixture/date"];
     let many_date_check () =
       let ident = "fixture/date" in
       let selected = ref None in
@@ -2127,8 +3946,8 @@ let run_views ~registry ~profile ~finish =
                | Some (Wire.Array ops) -> List.iter (function
                    | Wire.Array [Wire.Keyword "create-page";Wire.Array [Wire.String title;_]] ->
                        if Dates.journal_title_parts title=Some (10,11,2026) then journal:=Some page
-                   | Wire.Array [Wire.Keyword "set-block-property";
-                       Wire.Array [Wire.Uuid "date-owner";Wire.Keyword "fixture/date";value]] ->
+                   | Wire.Array [Wire.Keyword "batch-set-property";
+                       Wire.Array [Wire.List [Wire.Uuid "date-owner"];Wire.Keyword "fixture/date";value;_]] ->
                        written:=Some value
                    | _ -> ()) ops
                | _ -> ());
@@ -2138,7 +3957,7 @@ let run_views ~registry ~profile ~finish =
             Some (mount (fun _ -> Properties_value.date_picker_content ctx
               ~ident:"fixture/date" ~is_datetime:false
               ~value:(Wire.Map [Wire.kw "block/journal-day",Wire.Int 20261101])
-              ~on_value:(fun value -> Properties_value.set_scalar ctx ~ident:"fixture/date" ~value)
+              ~on_value:(fun value -> Properties_value.set_picker_value ctx ~ident:"fixture/date" ~value)
               ~on_clear:(fun () -> ()) ~on_dismiss:(fun () -> ())))
             else None in
           (match selector with
@@ -2167,8 +3986,9 @@ let run_views ~registry ~profile ~finish =
               ignore (Lui_app.dispose reopened.S.app);
               next rest) 0)) 0)
     in
-    batch_property_check (fun () -> property_picker_check (fun () -> property_text_many_check
-      (fun () -> property_value_completion_check (fun () -> next [false,false;false,true;true,false;true,true]))))
+    batch_property_check (fun () -> property_picker_check (fun () -> embedded_indent_check (fun () -> ordinary_reference_count_check (fun () -> optimistic_reactions_check (fun () -> reaction_refresh_check (fun () -> graph_delete_check (fun () -> missing_reference_view_check (fun () -> node_picker_lifetime_check
+      (fun () -> property_text_many_check (fun () -> property_value_completion_check
+        (fun () -> next [false,false;false,true;true,false;true,true])))))))))))
   in
   let custom_date_check done_ =
     let measured_options=Hashtbl.create 3 in
@@ -2495,7 +4315,8 @@ let run_views ~registry ~profile ~finish =
         {favorites=state [target];home_page=state None;favorite_drop=state None;recents=state [];nav_checked=state [];
          nav_tag_titles=state [];block_sources = Hashtbl.create 8; items = state [];
          open_menu=state "";groups_collapsed=state [];
-         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.} in
+         left_width=state 246.;right_fraction=state 0.3;viewport_w=state 1440.;
+         restored_repo=ref None;restoring=ref true;history_repo=ref None;history_state=ref None} in
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) () in
   let st = Option.get !sidebar in
@@ -2603,6 +4424,26 @@ let run_views ~registry ~profile ~finish =
    | None -> check "icon picker renders icon buttons" false);
   ignore (Lui_app.dispose picker.S.app);
   restore_storage "ls-icon-color-preset" previous_preset;
+  List.iter (fun fail ->
+    let accepted = ref [] and closed = ref 0 in
+    let terminal = mount (fun _ ->
+      Icon_picker.picker_view ~del:true ~emoji_only:false
+        ~on_chosen:(fun choice ->
+          accepted := choice :: !accepted;
+          if fail then failwith "icon selection failed")
+        ~close:(fun () -> incr closed)) in
+    check "An unopened icon choice has no commit" (!accepted=[] && !closed=0);
+    let choices = nodes terminal |> List.filter (fun n ->
+      n.M.kind="button" && class_has n "ls-emoji-cell") in
+    let activate node =
+      try S.press terminal node.M.id with Failure _ -> () in
+    activate (List.hd choices);
+    activate (List.hd choices);
+    activate (List.nth choices 1);
+    check (if fail then "Failed icon selection remains terminal before teardown"
+           else "One icon selection cannot commit again before teardown")
+      (List.length !accepted=1 && !closed=1);
+    ignore (Lui_app.dispose terminal.S.app)) [false;true];
   restore_storage "ls-icons-used" previous_used;
   let actions = ref 0 in
   let menu = mount (fun _ -> Menu_item.dots_menu ~key:"parity-actions"
@@ -2828,7 +4669,11 @@ let run_views ~registry ~profile ~finish =
       move (Some button); fire ();
       check "Closing the surface restores normal tooltip delay and display" (shown ()<>None))
       [1;2;3]);
-  let keymap = mount (fun _ -> Settings_page.keymap_pane ()) in
+  let keymap_state = ref None in
+  let keymap = mount (fun _ context parent ->
+    let state = Signal.state context.Lui_ui.ui_scheduler (Settings_page.initial_keymap ()) in
+    keymap_state := Some state;
+    Settings_page.keymap_pane ~state () context parent) in
   check "keycap modifier glyphs are ready for the host text runtime"
     (Keymap_record.keycaps "meta+shift+k" =
       [{js|⌘|js};{js|⇧|js};"K"]);
@@ -2912,7 +4757,7 @@ let run_views ~registry ~profile ~finish =
   eqi "global category toggle collapses a partly collapsed list" 0
     (List.length (keymap_rows ()));
   S.text_changed keymap input.M.id "Undo";
-  eqi "search ignores category collapse" 14 (List.length (keymap_rows ()));
+  eqi "search ignores category collapse" 15 (List.length (keymap_rows ()));
   eqi "query results hide category actions" 0 (List.length (category_tools ()));
   S.text_changed keymap input.M.id "";
   eqi "clearing search retains category collapse" 0
@@ -2938,7 +4783,7 @@ let run_views ~registry ~profile ~finish =
   check "keymap search uses fuzzy command identifiers and descriptions"
     (List.length (keymap_rows ()) > 1);
   check "query results flatten categories" (category_headers () = []);
-  eqi "query results retain matches in their original categories" 14
+  eqi "query results retain matches in their original categories" 15
     (List.length (keymap_rows ()));
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "accessibility-label"
@@ -2951,7 +4796,7 @@ let run_views ~registry ~profile ~finish =
   S.press keymap (pill "Disabled").M.id;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
-  eqi "pressing the active filter restores all query results" 14
+  eqi "pressing the active filter restores all query results" 15
     (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
   (match clear_buttons () with
@@ -2970,6 +4815,11 @@ let run_views ~registry ~profile ~finish =
        (fun n ->
          M.string_prop n "text" = Some (I18n.t "keymap/no-matching-shortcuts"))
        (keymap_nodes ()));
+  Settings_page.keymap_escape (Option.get !keymap_state);
+  S.flush keymap;
+  check "Escape clears shortcut search without replacing its owner"
+    (M.string_prop input "text" = Some ""
+     && List.exists (fun n -> n.M.id = input.M.id) (keymap_nodes ()));
   S.text_changed keymap input.M.id "  ";
   check "whitespace query restores categories and hides clear"
     (category_headers () <> [] && clear_buttons () = []);
@@ -3110,7 +4960,7 @@ let run_views ~registry ~profile ~finish =
   let push kind text =
     ignore (Lui_app.send notifications.S.app
         (Action.Toast_push { Model.toast_id = 0; toast_text = text;
-          toast_kind = kind; toast_key = None; toast_code = None }));
+          toast_kind = kind; toast_key = None; toast_code = None; toast_duration = None }));
     S.flush notifications
   in
   push "success" "First";
@@ -3284,9 +5134,120 @@ let run_views ~registry ~profile ~finish =
            ~title:(Views_head.render_head inst)
            ~body:(Lui_elements.spacer []);
          Page.fold_arrow ~on_click:(fun () -> incr fold_presses) "page-fold-fixture";
+         Views_table.with_column_width inst (Views_table.created_column ())
+           (Lui_elements.column ~accessibility_identifier:"table-width-fixture" []);
+         Views_table.table_el inst initial;
+         Views_table.grouped_table inst ~rows:[];
+         (fun context parent ->
+           let grouped = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+             ~kind:(Views_state.KQuery {block_uuid="group-query-fixture"}) ~feature:"query" ~owner:Wire.Nil in
+           let state = Views_state.empty_vstate () in
+           Hashtbl.replace state.Views_state.ref_titles "group-journal-fixture" "T94 Journal";
+           Hashtbl.replace state.Views_state.blocks "group-row-fixture"
+             (Wire.Map [Wire.kw "block/title", Wire.String "Grouped row"]);
+           let state = {state with Views_state.loading=false;
+             columns=[Views_table.select_column ();Views_table.created_column ()];
+             data=Views_wire.VFlat {rows=["group-row-fixture"];count=1;
+               previews=Hashtbl.create 0;qprops=[]}} in
+           Signal.set grouped.Views_state.st state;
+           Lui_elements.column
+             [ Lui_elements.column ~accessibility_identifier:"flat-select-fixture"
+                 [Views_table.table_el grouped state]
+             ; Lui_elements.column ~accessibility_identifier:"grouped-select-fixture"
+                 [Views_table.grouped_table grouped ~rows:["group-row-fixture"]]
+             ; Lui_elements.column ~accessibility_identifier:"pages-select-fixture"
+                 [Views_table.table_el {grouped with Views_state.kind=Views_state.KAllPages} state]
+             ; Views_table.table_group_heading grouped state
+                 (Wire.Map [Wire.kw "kind", Wire.Keyword "entity"; Wire.kw "uuid", Wire.Uuid "group-journal-fixture"])
+             ; Views_table.table_group_heading grouped state Wire.Nil
+             ; Views_table.table_group_heading grouped state
+                 (Wire.Map [Wire.kw "kind", Wire.Keyword "entity"; Wire.kw "uuid", Wire.Uuid "unavailable-group-fixture"]) ]
+             context parent);
+         Views_builder.clause_el (Views_builder.editor_of_inst inst ~active:(fun () -> true))
+           ~tree:(ref (Views_builder.COp ("and",[]))) ~loc:[99]
+           (Views_builder.CText "Wrapping clause fixture");
+         Views_builder.editor_el (Views_builder.editor_of_inst inst ~active:(fun () -> true))
+           ~tree:(ref (Views_builder.COp ("and", [Views_builder.CText "Alignment fixture";
+             Views_builder.CText "Second alignment fixture"])));
+         Views_view.query_content inst {initial with loading=false;qsrc="(between [[Nov 18th, 2026]] [[Nov 20th, 2026]])"};
          popup_layer]
         context parent) in
   let inst = Option.get !sorting_inst in
+  let empty_query = {(Views_state.empty_vstate ()) with loading=false;qsrc="(between [[Nov 18th, 2026]] [[Nov 20th, 2026]])"} in
+  check "Empty raw DSL results display Master's no-result message without a table"
+    (Views_view.query_content_key empty_query=`Empty
+     && List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "search/no-result")) (nodes sorting)
+     && not (List.exists (fun n -> class_has n "query-result") (nodes sorting)));
+  check "Raw block results retain the query view even when its filtered rows are empty"
+    (Views_view.query_content_key {empty_query with qsrc="Search seed parity";query_rows=["self-match"]}=`Table);
+  check "Loading, blank and failed queries do not display the settled empty state"
+    (Views_view.query_content_key {empty_query with loading=true}=`Loading
+     && Views_view.query_content_key {empty_query with qsrc=""}=`Blank
+     && Views_view.query_content_key {empty_query with query_error=Some "query unavailable"}=`Error "query unavailable");
+  let cell = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "table-width-fixture") (nodes sorting) in
+  check "The final table column retains both its own width and minimum"
+    (Hashtbl.find_opt cell.M.props "min-width"=Some (P.IntValue 160)
+     && Hashtbl.find_opt cell.M.props "width"=Some (P.IntValue 160));
+  let header = List.find (fun n -> class_has n "ls-table-header") (nodes sorting) in
+  let parent node = List.find (fun n -> Some n.M.id=node.M.parent) (nodes sorting) in
+  check "The real empty-table header overlay fills a column parent instead of shrink-to-fit"
+    ((parent header).M.kind="overlay" && (parent (parent header)).M.kind="column");
+  check "Grouped table frames can shrink to the viewport without clipping sticky body cells"
+    (List.exists (fun n -> n.M.kind="column"
+       && Hashtbl.find_opt n.M.props "min-width"=Some (P.IntValue 0)
+       && List.exists (fun child -> child.M.kind="overlay") (M.children sorting.S.tree n.M.id))
+       (nodes sorting));
+  let body_of identifier =
+    let root = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some identifier) (nodes sorting) in
+    let rec find node =
+      if class_has node "ls-table-row" then Some node
+      else List.find_map find (M.children sorting.S.tree node.M.id)
+    in
+    Option.get (find root)
+  in
+  check "Flat query rows clip sticky body cells just like Master's indexed item wrappers"
+    (M.string_prop (body_of "flat-select-fixture") "overflow"=Some "hidden");
+  check "Grouped query rows preserve sticky body cells while Pages rows still scroll away"
+    (M.string_prop (body_of "grouped-select-fixture") "overflow"=None
+     && M.string_prop (body_of "pages-select-fixture") "overflow"=Some "hidden");
+  let journal = List.find (fun n -> M.string_prop n "text"=Some "group-journal-fixture") (nodes sorting) in
+  let attr node key = List.assoc_opt key (P.data_attrs_decode
+    (Option.value (M.string_prop node "data-attrs") ~default:"")) in
+  check "Entity table group headings use the navigating page-reference target and link color"
+    (class_has journal "page-ref"
+     && attr journal "data-uuid"=Some "group-journal-fixture"
+     && M.string_prop journal "foreground"=Some "var(--lx-accent-11, var(--ls-link-text-color))");
+  check "Empty and unavailable table groups do not fabricate reference links"
+    (not (List.exists (fun n -> attr n "data-uuid"=Some "unavailable-group-fixture") (nodes sorting)));
+  let handle = List.find (fun n -> class_has n "ls-table-resize-handle") (nodes sorting) in
+  check "The four-pixel resize handle extends one pixel beyond the header edge"
+    (Hashtbl.find_opt handle.M.props "width"=Some (P.IntValue 4)
+     && Hashtbl.find_opt handle.M.props "min-width"=Some (P.IntValue 4)
+     && Hashtbl.find_opt handle.M.props "inset-right"=Some (P.FloatValue (-1.)));
+  let operator = List.find (fun n -> class_has n "query-clause"
+    && M.string_prop n "text"=Some "AND") (nodes sorting) in
+  let group = parent operator in
+  check "The first clause line is not lowered by the taller adjacent Filter control"
+    (M.string_prop (parent group) "cross"=Some "start");
+  check "Query operators have no button padding or inline-wrapper baseline gap"
+    (Hashtbl.find_opt operator.M.props "padding-horizontal"=Some (P.IntValue 0)
+     && Hashtbl.find_opt operator.M.props "padding-vertical"=Some (P.IntValue 0)
+     && M.string_prop operator "height"=Some "auto"
+     && group.M.kind="row");
+  check "Query groups share Master's fourteen-pixel text and twenty-pixel line height"
+    (M.string_prop group "font-size"=Some "0.875rem"
+     && M.string_prop group "line-height"=Some "1.25rem");
+  let clause = List.find (fun n -> Option.fold ~none:false ~some:(fun text ->
+    Str_util.contains text "Wrapping clause fixture") (M.string_prop n "text")) (nodes sorting) in
+  check "Operator and clause text use Master's theme-aware primary and hover colors"
+    (List.for_all (fun node ->
+       M.string_prop node "foreground"=Some "var(--ls-primary-text-color)"
+       && M.string_prop node "hover-foreground"=Some "var(--ls-secondary-text-color)")
+       [operator;clause]);
+  check "Query clause text uses normal weight and wraps without a fixed line height"
+    (Hashtbl.find_opt clause.M.props "font-weight"=Some (P.IntValue 400)
+     && M.string_prop clause "white-space"=Some "normal"
+     && M.string_prop clause "height"=Some "auto");
   let tab = List.find (fun n -> class_has n "ls-view-tab") (nodes sorting) in
   check "Pages preserves the default All view title"
     (M.string_prop tab "accessibility-label" = Some (I18n.t "view/all"));
@@ -3369,7 +5330,7 @@ let run_views ~registry ~profile ~finish =
   let search_input = List.find (fun n -> M.string_prop n "placeholder"
     = Some (I18n.t "view.filter/type-to-search")) (nodes sorting) in
   check "view search shares the measured reference width and padding across hosts"
-    (Hashtbl.find_opt search_input.M.props "width" = Some (P.IntValue 183)
+    (Hashtbl.find_opt search_input.M.props "width" = Some (P.IntValue 190)
      && Hashtbl.find_opt search_input.M.props "padding-horizontal" = Some (P.IntValue 12));
   check "expanded search input stays inside its control group"
     (match search_input.M.parent with
@@ -3495,6 +5456,27 @@ let run_views ~registry ~profile ~finish =
   eqi "view select query filters its portable result rows" 1 (List.length (choice_rows ()));
   S.submit sorting select_input.M.id;
   check "view select submits the filtered result" (List.nth_opt (List.rev !selected_items) 0 = Some ("29",true));
+  let chosen_language = ref None in
+  Views_popup.show_code_language_picker ~anchor:(popup_anchor ())
+    ~languages:["JavaScript";"Python"] ~on_choose:(fun name -> chosen_language:=Some name);
+  S.flush sorting;
+  let language_input = List.find (fun n -> n.M.kind="input"
+    && M.string_prop n "placeholder"=Some (I18n.t "editor/code-language-placeholder")) (nodes sorting) in
+  S.text_changed sorting language_input.M.id "Java";
+  check "Code language search narrows the available modes"
+    (List.length (choice_rows ())=1);
+  S.submit sorting language_input.M.id;
+  check "Code language search submits the selected language and dismisses"
+    (!chosen_language=Some "JavaScript" && !Views_popup.open_popups=[]);
+  Views_popup.show_code_language_picker ~anchor:(popup_anchor ()) ~languages:[]
+    ~on_choose:(fun name -> chosen_language:=Some name);
+  S.flush sorting;
+  let language_input = List.find (fun n -> n.M.kind="input"
+    && M.string_prop n "placeholder"=Some (I18n.t "editor/code-language-placeholder")) (nodes sorting) in
+  S.text_changed sorting language_input.M.id "Missing language";
+  S.submit sorting language_input.M.id;
+  check "An empty code language search cannot invent a mode"
+    (!chosen_language=Some "JavaScript" && choice_rows ()=[]);
   open_choices [];
   let select_input = choice_input () in
   navigate sorting select_input (P.NavigateNext select_input.M.id);
@@ -3541,6 +5523,104 @@ let run_views ~registry ~profile ~finish =
   let full_text_rendered = try S.flush sorting;true with Invalid_argument _ -> false in
   check "query builder full-text input only uses supported component properties" full_text_rendered;
   Views_popup.close_all ();
+  let () =
+    let saved = ref [] and active = ref true in
+    let editor = { (Views_builder.editor_of_inst inst ~active:(fun () -> !active)) with
+      save=(fun clause -> saved := Views_builder.tree_to_dsl clause :: !saved) } in
+    let open_range () =
+      Views_builder.between_picker editor ~tree:(ref (Views_builder.COp ("and",[])))
+        ~loc:[0] ~anchor:(popup_anchor ()); S.flush sorting
+    in
+    let press label =
+      match List.find_opt (fun n -> n.M.kind="button" && M.string_prop n "text"=Some label) (nodes sorting) with
+      | Some node -> S.press sorting node.M.id
+      | None -> check ("Between exposes " ^ label) false
+    in
+    let pick () =
+      match List.find_opt (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes sorting) with
+      | Some input -> S.text_changed sorting input.M.id "2026-11-19";S.submit sorting input.M.id
+      | None -> check "Between date field opens a retained calendar" false
+    in
+    open_range ();
+    check "Between opens Start / End / Submit without forcing a calendar"
+      (List.for_all (fun label -> List.exists (fun n -> M.string_prop n "text"=Some label) (nodes sorting))
+        [I18n.t "query.builder/between-start-label";I18n.t "query.builder/between-end-label";I18n.t "ui/submit"]
+       && not (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes sorting)));
+    press (I18n.t "ui/submit");
+    check "An empty Between range does not submit or dismiss" (!saved=[] && List.length !Views_popup.open_popups=1);
+    press (I18n.t "query.builder/between-start-label");
+    S.flush sorting;
+    check "Between keeps its range form mounted beneath the selected date calendar"
+      (let calendar = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes sorting) in
+       let rec owners node =
+         match node.M.parent with
+         | None -> 0
+         | Some id -> let parent=Hashtbl.find sorting.S.tree.M.nodes id in
+             (if parent.M.kind="popover" then 1 else 0) + owners parent
+       in owners calendar=2);
+    pick ();
+    check "Picking the start date returns to End date without auto-opening another calendar"
+      (!saved=[] && List.length !Views_popup.open_popups=1
+       && List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-end-label")) (nodes sorting));
+    press (I18n.t "ui/submit");
+    check "A partial Between range waits for its second date" (!saved=[]);
+    press (I18n.t "query.builder/between-end-label");pick ();
+    check "Both Between dates remain uncommitted until Submit" (!saved=[]);
+    press (I18n.t "ui/submit");
+    let title = Dates.journal_title_of (Dates.make ~year:2026 ~month:11 ~day:19 ()) in
+    check "Between submits the two selected journal dates and dismisses the range"
+      (!saved=["(between [[" ^ title ^ "]] [[" ^ title ^ "]])"] && !Views_popup.open_popups=[]);
+    saved:=[];open_range ();press (I18n.t "query.builder/between-start-label");
+    active:=false;pick ();
+    check "A retired query cannot receive a date or submit a stale Between clause" (!saved=[]);
+    Views_popup.close_all ()
+  in
+  let () =
+    let uuid = "00000000-0000-0000-0000-000000000091" in
+    let cache_key = Runtime.repo (),uuid in
+    let previous_stack = !Views_popup.stack_st in
+    Views_popup.stack_st:=None;
+    let owner = mount (fun _ -> Lui_elements.column
+      [Views_view.query_title_el ~block_uuid:uuid ~title:None;popup_layer]) in
+    let previous_id : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+    let trigger = Stub_dom.make_element "button" in
+    let attr : string -> string -> unit = Stub_dom.get_field trigger "setAttribute" in
+    Stub_dom.set_field document "getElementById" (fun id -> attr "id" id;trigger);
+    Fun.protect ~finally:(fun () ->
+      Stub_dom.set_field document "getElementById" previous_id;
+      Views_popup.close_all ();
+      ignore (Lui_app.dispose owner.S.app);
+      Option.iter Views_builder.drop_tree (Hashtbl.find_opt Views_view.query_insts cache_key);
+      Hashtbl.remove Views_view.query_insts cache_key;
+      Views_popup.stack_st:=previous_stack;
+      Runtime.app_flush:=(fun () -> S.flush sorting)) (fun () ->
+      let press label =
+        let node = List.find (fun n -> button_label n=Some label) (nodes owner) in
+        S.press owner node.M.id in
+      press (I18n.t "view.filter/filter");
+      press (Views_builder.item_label "between");
+      press (I18n.t "query.builder/between-start-label");
+      let input = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes owner) in
+      let query = Hashtbl.find Views_view.query_insts cache_key in
+      Views_state.update query (fun s -> {s with loading=not s.loading;query_rows=["refresh-row"]});
+      check "A query result refresh does not unmount the active Between calendar"
+        (List.exists (fun n -> n.M.id=input.M.id) (nodes owner));
+      S.text_changed owner input.M.id "2026-11-19";
+      S.submit owner input.M.id;
+      let title = Dates.journal_title_of (Dates.make ~year:2026 ~month:11 ~day:19 ()) in
+      check "A date remains selectable after its query builder rerenders for result data"
+        (List.exists (fun n -> M.string_prop n "text"=Some title) (nodes owner)
+         && not (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-start-label")) (nodes owner)));
+      press (I18n.t "query.builder/between-end-label");
+      let input = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes owner) in
+      Views_state.update query (fun s -> {s with qsrc="\"replacement\""});
+      S.text_changed owner input.M.id "2026-11-20";S.submit owner input.M.id;
+      check "Changing the query source retires its older date range draft"
+        (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-end-label")) (nodes owner));
+      press (I18n.t "ui/submit");
+      check "A stale Between form cannot overwrite a newer query source"
+        ((Views_state.get query).qsrc="\"replacement\""))
+  in
   ignore (Lui_app.dispose sorting.S.app);
   Views_popup.stack_st := previous_popup_stack;
   Views_state.ops_ref := previous_view_ops;
@@ -3550,6 +5630,8 @@ let run_views ~registry ~profile ~finish =
   in
   let handlers : Cmdk_services.handlers option ref = ref None in
   let shortcut_actions = ref 0 in
+  let shortcut_dialogs = ref [] in
+  let highlight_toggles = ref 0 in
   let routed_commands = ref [] and legacy_selection = ref 0 in
   let services =
     { (Cmdk_host.services ()) with
@@ -3557,6 +5639,9 @@ let run_views ~registry ~profile ~finish =
     ; focus_input_init = (fun _ -> ())
     ; install_listeners = (fun _scope h -> handlers := Some h)
     ; toggle_left_sidebar = (fun () -> incr shortcut_actions)
+    ; dialogs_open = (fun name -> shortcut_dialogs := name :: !shortcut_dialogs)
+    ; settings_toggle_recent = (fun () -> incr highlight_toggles)
+    ; dialogs_is_open = (fun _ -> false)
     ; editor_command = (fun cid -> routed_commands := cid :: !routed_commands)
     ; extend_selection = (fun _ -> incr legacy_selection)
     ; move_selection_focus = (fun _ -> incr legacy_selection)
@@ -3566,6 +5651,7 @@ let run_views ~registry ~profile ~finish =
     }
   in
   let search = mount (fun ms -> Cmdk_view.render ~services ms) in
+  let search_st = Option.get !Cmdk_state.latest_t in
   let footer_effects = ref [] in
   let record_effect value = footer_effects := value :: !footer_effects in
   let footer_services =
@@ -3650,6 +5736,146 @@ let run_views ~registry ~profile ~finish =
     ((Cmdk_state.get footer_st).filter = Some G_commands
      && (Cmdk_state.get footer_st).open_);
   let pages = [item 0 (Open_page "first-page"); item 1 (Open_page "second-page")] in
+  let previous_active : Js.Json.t = Stub_dom.get_field document "activeElement" in
+  let previous_query : string -> Js.Json.t = Stub_dom.get_field document "querySelector" in
+  let search_input = Stub_dom.make_element "input"
+  and footer_action = Stub_dom.make_element "button" in
+  Stub_dom.set_field search_input "closest" (fun selector ->
+    if selector=".cp__cmdk-search-input" then search_input else Js.Json.null);
+  Stub_dom.set_field footer_action "focus" (fun () ->
+    Stub_dom.set_field document "activeElement" footer_action);
+  let has_footer = ref true in
+  Stub_dom.set_field document "querySelector" (fun selector ->
+    if selector=".cp__cmdk__modal .cp__cmdk-hint" then
+      (if !has_footer then footer_action else Js.Json.null)
+    else previous_query selector);
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field document "activeElement" previous_active;
+    Stub_dom.set_field document "querySelector" previous_query) (fun () ->
+    select pages 0;
+    Stub_dom.set_field document "activeElement" search_input;
+    let tab shift = Cmdk_view.handle_keydown footer_st
+      {key="Tab";meta=false;ctrl=false;shift;alt=false;composing=false} in
+    let answer = tab false in
+    check "Tab from palette search transfers focus to the footer action"
+      (answer.prevent && answer.stop
+       && Stub_dom.get_field document "activeElement" == footer_action);
+    Stub_dom.set_field document "activeElement" search_input;
+    check "Reverse Tab retains default focus traversal" (not (tab true).prevent);
+    has_footer:=false;
+    select [] (-1);
+    check "An empty palette without footer actions does not swallow Tab"
+      (not (tab false).prevent));
+  let () =
+  let window : Js.Json.t = Stub_dom.get_field Stub_dom.global "window" in
+  let previous_timeout : Js.Json.t = Stub_dom.get_field window "setTimeout"
+  and previous_clear : Js.Json.t = Stub_dom.get_field window "clearTimeout" in
+  let previous_schedule = !Runtime.schedule_flush and previous_flush = !Runtime.app_flush
+  and previous_pending = !Runtime.flush_pending in
+  let previous_view = Cmdk_state.get search_st in
+  let body : Js.Json.t = Stub_dom.get_field document "body" in
+  let trigger = Stub_dom.make_element "button"
+  and surface = Stub_dom.make_element "div"
+  and input = Stub_dom.make_element "input" in
+  ignore (Stub_dom.append_child body trigger);
+  ignore (Stub_dom.append_child body surface);
+  ignore (Stub_dom.append_child surface input);
+  let focus element = (Stub_dom.get_field element "focus" : unit -> unit) () in
+  let pending = Queue.create () and cancelled = Hashtbl.create 4 and next_timer = ref 0 in
+  let run_timer () =
+    let id, callback = Queue.take pending in
+    if not (Hashtbl.mem cancelled id) then callback () in
+  let drain () = while not (Queue.is_empty pending) do run_timer () done in
+  let was_open = ref previous_view.open_ in
+  Fun.protect ~finally:(fun () ->
+    Stub_dom.set_field window "setTimeout" previous_timeout;
+    Stub_dom.set_field window "clearTimeout" previous_clear;
+    Runtime.schedule_flush := previous_schedule; Runtime.app_flush := previous_flush;
+    Runtime.flush_pending := previous_pending;
+    Signal.set search_st.Cmdk_state.vs previous_view; S.flush search;
+    Stub_dom.detach trigger; Stub_dom.detach surface;
+    Stub_dom.set_field document "activeElement" previous_active) (fun () ->
+    Stub_dom.set_field window "setTimeout" (fun callback _ ->
+      incr next_timer; Queue.add (!next_timer, callback) pending; !next_timer);
+    Stub_dom.set_field window "clearTimeout" (fun id -> Hashtbl.replace cancelled id ());
+    Runtime.flush_pending := false;
+    Runtime.schedule_flush := (fun callback -> ignore (Ui_services.timers_timeout callback 0));
+    Runtime.app_flush := (fun () ->
+      S.flush search;
+      let open_ = (Cmdk_state.get search_st).open_ in
+      if !was_open && not open_ then begin
+        focus trigger;
+        ignore (Ui_services.timers_timeout (fun () ->
+          if Stub_dom.get_field document "activeElement" == body then focus trigger) 0)
+      end;
+      was_open := open_);
+    let open_search items =
+      Cmdk_state.set search_st {Cmdk_state.initial_view with open_=true;persist=false;
+        groups=[{gid=G_nodes;gtitle="Results";gitems=items;gtotal=List.length items;
+          glimit=10;gexpanded=false;gfilter_active=false}]};
+      drain (); focus input in
+    let escape () = ignore (Cmdk_view.handle_keydown search_st
+      {key="Escape";meta=false;ctrl=false;shift=false;alt=false;composing=false}) in
+    List.iter (fun items ->
+      open_search items; escape (); drain ();
+      check "Palette Escape focuses BODY after deferred host trigger restoration"
+        (not (Cmdk_state.get search_st).open_
+         && Stub_dom.get_field document "activeElement" == body)) [pages;[]];
+    open_search pages; escape ();
+    run_timer (); run_timer ();
+    Cmdk_state.set search_st {Cmdk_state.initial_view with open_=true;persist=false};
+    focus input; drain ();
+    check "Reopening the palette cancels pending Escape body focus"
+      ((Cmdk_state.get search_st).open_
+       && Stub_dom.get_field document "activeElement" == input)) in
+  List.iter (fun (action, shift, expected) ->
+    select [item 0 action] 0;
+    Cmdk_view.handle_click footer_st
+      {search_button=false; inside_modal=true; item_key=Some "0"; shift};
+    check "Document capture preserves pointer navigation modifiers"
+      (!footer_effects = [expected] && not (Cmdk_state.get footer_st).open_))
+    [Open_page "first-page", true, "sidebar:first-page";
+     Open_block "first-block", true, "sidebar:first-block";
+     Open_page "first-page", false, "#/page/first-page"];
+  select [] (-1);
+  Cmdk_view.handle_click footer_st
+    {search_button=false; inside_modal=true; item_key=Some "0"; shift=true};
+  check "An empty palette cannot dispatch a stale pointer result"
+    (!footer_effects=[] && (Cmdk_state.get footer_st).open_);
+  select pages 0;
+  Cmdk_view.handle_click footer_st
+    {search_button=false; inside_modal=true; item_key=Some "absent"; shift=true};
+  check "Unknown document result keys do not navigate"
+    (!footer_effects=[] && (Cmdk_state.get footer_st).open_);
+  List.iter (fun (action, modifiers, expected) ->
+    select [item 0 action] 0;
+    let pointer = mount (fun _ context parent ->
+      let value = Signal.state context.Lui_ui.ui_scheduler (item 0 action) in
+      Cmdk_view.item_row footer_services footer_st (Signal.value value) context parent) in
+    let target = List.find (fun node ->
+      Option.fold ~none:false ~some:(fun attrs ->
+        List.assoc_opt "data-cmdk-item" (P.data_attrs_decode attrs) = Some "true")
+        (M.string_prop node "data-attrs")) (nodes pointer) in
+    S.dispatch pointer (P.PressDetail (target.M.id,
+      {x=0.;y=0.;modifiers;button=0;target_class=""}));
+    check "cmdk pointer activation respects Shift without changing command actions"
+      (List.mem expected !footer_effects && not (Cmdk_state.get footer_st).open_);
+    let effects = !footer_effects in
+    S.press pointer target.M.id;
+    check "the following plain press cannot replay a closed cmdk result"
+      (!footer_effects = effects);
+    ignore (Lui_app.dispose pointer.S.app))
+    [Open_page "first-page", 2, "sidebar:first-page";
+     Open_page "first-page", 0, "#/page/first-page";
+     Run "ui/toggle-left-sidebar", 2, "toggle-sidebar"];
+  select [item 0 (Open_page "first-page"); item 1 (Create_page "New page")] 1;
+  let fallback_open = List.find_opt (fun n ->
+    M.string_prop n "accessibility-label" = Some (I18n.t "cmdk.action/open")) (nodes footer) in
+  check "a create selection keeps the matched-result footer actions" (fallback_open <> None);
+  Option.iter (fun button -> S.press footer button.M.id;
+    check "fallback footer actions dispatch the live create selection"
+      (List.mem "page:New page" !footer_effects
+       && not (Cmdk_state.get footer_st).open_)) fallback_open;
   select pages 0;
   let open_id = (footer_button "cmdk.action/open").M.id in
   select pages 1;
@@ -3716,6 +5942,27 @@ let run_views ~registry ~profile ~finish =
   let stroke key = Editor_keys.on_global_key (key_event key) in
   stroke "t"; stroke "l";
   eqi "default global sequence dispatches once" 1 !shortcut_actions;
+  stroke "t"; stroke "p";
+  check "The Plugins chord dispatches the same named dialog as its command"
+    (!shortcut_dialogs = ["plugins"]);
+  stroke "t"; stroke "s";
+  check "The Settings chord retains its named-dialog dispatch alongside Plugins"
+    (!shortcut_dialogs = ["settings"; "plugins"]);
+  let highlight = List.find (fun (it : Cmdk_state.item) ->
+    it.act=Cmdk_state.Run "ui/highlight-recent-blocks") (Cmdk_state.commands_items services "") in
+  check "The recent-highlight command advertises Master's unmodified chord"
+    (highlight.isc="t h");
+  let shortcut = mount (fun _ context parent ->
+    Cmdk_view.shortcut_slot services (Signal.constant context.Lui_ui.ui_scheduler highlight)
+      context parent) in
+  check "The command palette renders t and h without Command modifiers"
+    (List.exists (fun n -> M.string_prop n "text"=Some "T") (nodes shortcut)
+     && List.exists (fun n -> M.string_prop n "text"=Some "H") (nodes shortcut)
+     && not (List.exists (fun n -> M.string_prop n "text"=Some {js|⌘|js}) (nodes shortcut)));
+  ignore (Lui_app.dispose shortcut.S.app);
+  stroke "t"; stroke "h";
+  check "The displayed recent-highlight chord dispatches its actual command once"
+    (!highlight_toggles=1);
   let previous_shortcuts = Ui_services.storage_get "ls-shortcuts" in
   Ui_services.storage_set "ls-shortcuts"
     "{:ui/toggle-left-sidebar [\"f8\"]}";
@@ -3819,7 +6066,7 @@ let run_views ~registry ~profile ~finish =
        toggle_search ();
        check "search reopens after host dismissal" (search_inputs () <> []);
        toggle_search ();
-       check "search shortcut closes the reopened input" (search_inputs () = []));
+       check "search shortcut keeps the reopened input open" (search_inputs () <> []));
   ignore (Lui_app.dispose search.S.app);
   let vs, current, shortcuts, services = previous_cmdk in
   Cmdk_state.latest_vs := vs;
@@ -3861,9 +6108,12 @@ let run_views ~registry ~profile ~finish =
     d.Signal.stabilization_rounds + d.Signal.stabilization_dirty_tasks
   in
   let baseline = publish_work () in
+  let metadata = Graphs_meta.read () in
+  Graphs_meta.upsert "logseq_db_Layout fixture" [Wire.kw "created-at", Wire.Int 0];
   let graph_rows=mount (fun _ -> Lui_elements.column
     [Graphs_view.graph_row "logseq_db_Layout fixture";
      Graphs_view.remote_row ("Remote fixture","layout-fixture",false,"manager")]) in
+  Graphs_meta.write metadata;
   List.iter (fun label ->
     let name=List.find (fun n -> M.string_prop n "text"=Some label) (nodes graph_rows) in
     check "Graph names use the current theme accent"
@@ -3909,8 +6159,8 @@ let run_views ~registry ~profile ~finish =
       Graphs_view.remote_st_ref := remote_before;
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
-      async_selection_check (fun () -> filter_value_check (fun () ->
-        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())))))))))));
+      async_selection_check (fun () -> reference_facet_check (fun () -> filter_value_check (fun () ->
+        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))))
 
 let popup_press (ev : Ui_services.ev) =

@@ -268,6 +268,9 @@ let set_recent_days days =
   Ui_services.storage_set "highlight-recent-days" (string_of_int days);
   set (fun state -> {state with recent_days = days})
 
+let clear_recent () =
+  if ready () then set (fun state -> {state with recent_blocks = Recent_blocks.empty})
+
 let refresh_recent uuids =
   let state = value () in
   let current = capture_context () in

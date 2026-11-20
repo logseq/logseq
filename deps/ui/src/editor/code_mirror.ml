@@ -192,11 +192,11 @@ let mode_file lang =
 
 let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 
-(* theme ("solarized <light|dark>") follows the root .dark class the same
+(* theme ("lsradix <light|dark>") follows the root .dark class the same
    way cljs theme-name does via the ui/theme subscription *)
 let theme_name () =
-  if D.el_class_contains D.document_element "dark" then "solarized dark"
-  else "solarized light"
+  if D.el_class_contains D.document_element "dark" then "lsradix dark"
+  else "lsradix light"
 
 (* -- instances keyed by block uuid -- *)
 
@@ -356,6 +356,7 @@ let update_calc c =
             (fun line ->
               D.el_append_child res
                 (D.h ~cls:"extensions__code-calc-output-line" ~text:line
+                   ~attrs:["style", "white-space:pre;line-height:1.45rem;height:1.45rem"]
                    ()))
             (Render_calc.results (get_value c))
       | None -> ())
@@ -683,17 +684,10 @@ let open_lang_picker uuid =
           ("#ls-block-" ^ uuid ^ " .select-language")
       with
       | Some button ->
-          Views_popup.show_menu ~anchor:button
-            ~cls_prefix:"ls-code-lang-picker "
-            (List.filter_map
-               (fun info ->
-                 match json_string info "name" with
-                 | Some name ->
-                     Some
-                       (Views_popup.MItem
-                          (name, fun () -> pick_lang uuid name))
-                 | None -> None)
-               (Array.to_list (mode_infos (cm ()))))
+          Views_popup.show_code_language_picker ~anchor:button
+            ~languages:(List.filter_map (fun info -> json_string info "name")
+              (Array.to_list (mode_infos (cm ()))))
+            ~on_choose:(pick_lang uuid)
       | None -> ());
      Js.Promise.resolve ())
 
@@ -708,6 +702,7 @@ let copy_button uuid =
            (Action.Toast_push
               { Model.toast_id = 0
               ; toast_key = None
+              ; toast_duration = None
               ; toast_code = None
               ; toast_text = I18n.t "notification/copied"
               ; toast_kind = "success"

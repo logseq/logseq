@@ -178,6 +178,8 @@ external win_inner_height : float = "innerHeight" [@@mel.scope "window"]
 
 external win_inner_width : float = "innerWidth" [@@mel.scope "window"]
 
+external win_device_pixel_ratio : float option = "devicePixelRatio" [@@mel.scope "window"]
+
 external win_scroll_x : float = "scrollX" [@@mel.scope "window"]
 
 external win_scroll_y : float = "scrollY" [@@mel.scope "window"]

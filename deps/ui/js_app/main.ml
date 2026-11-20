@@ -12,7 +12,13 @@ external add_window_listener : string -> (Js.Json.t -> unit) -> unit =
 
 external rejection_reason : Js.Json.t -> Js.Json.t = "reason" [@@mel.get]
 
-external error_error : Js.Json.t -> Js.Json.t = "error" [@@mel.get]
+external error_error : Js.Json.t -> Js.Json.t Js.Nullable.t = "error"
+  [@@mel.get]
+
+external error_message : Js.Json.t -> string = "message" [@@mel.get]
+external error_filename : Js.Json.t -> string = "filename" [@@mel.get]
+external error_lineno : Js.Json.t -> int = "lineno" [@@mel.get]
+external error_colno : Js.Json.t -> int = "colno" [@@mel.get]
 
 external set_interval : (unit -> unit) -> int -> unit = "setInterval"
   [@@mel.scope "window"]
@@ -34,7 +40,16 @@ let describe_json (v : Js.Json.t) =
 
 let install_error_reporting () =
   add_window_listener "error" (fun ev ->
-      Platform.console_error ("UNCAUGHT " ^ describe_json (error_error ev)));
+      (* ErrorEvent.error is null for cross-origin scripts and
+         ResizeObserver loop notices; the message and location remain *)
+      let detail =
+        match Js.Nullable.toOption (error_error ev) with
+        | Some error -> describe_json error
+        | None ->
+            Printf.sprintf "%s @ %s:%d:%d" (error_message ev)
+              (error_filename ev) (error_lineno ev) (error_colno ev)
+      in
+      Platform.console_error ("UNCAUGHT " ^ detail));
   add_window_listener "unhandledrejection" (fun ev ->
       Platform.console_error
         ("UNHANDLED-REJECTION " ^ describe_json (rejection_reason ev)))

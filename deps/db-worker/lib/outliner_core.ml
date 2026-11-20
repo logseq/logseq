@@ -699,7 +699,24 @@ let entity_select_map (e : entity) : value =
 (* -> (resolved ref map, page creation tx) *)
 let resolve_page_ref (db : db) ?(base_db : db option) (v : value)
     (tag_names : string list) : value * tx_op list =
-  if not (new_page_ref v) then (v, [])
+  if not (new_page_ref v) then
+    let tag_identity = function
+      | Map _ as tag -> Option.value ~default:tag (map_key_of tag "db/id")
+      | tag -> tag
+    in
+    let tags = function
+      | Vector vs -> Vector (List.map tag_identity vs)
+      | List vs -> List (List.map tag_identity vs)
+      | Set vs -> Set (List.map tag_identity vs)
+      | tag -> tag_identity tag
+    in
+    let v = match v with
+      | Map kvs -> Map (List.map (fun (k, value) ->
+          if k = Keyword "block/tags" || k = String "block/tags"
+          then k, tags value else k, value) kvs)
+      | _ -> v
+    in
+    (v, [])
   else
     let name =
       match map_key_of v "block/name" with

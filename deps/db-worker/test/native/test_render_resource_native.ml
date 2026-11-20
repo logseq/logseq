@@ -3326,6 +3326,7 @@ let test_query_resource_keeps_pull_maps_without_uuid () =
 let test_quoted_full_text_query_uses_worker_search () =
   let conn, u = render_resource_fixture () in
   let hidden_uuid = next_uuid () in
+  let child_uuid = next_uuid () in
   let calls = ref [] in
   let resource_key =
     wkey [ kw "query"
@@ -3338,6 +3339,9 @@ let test_quoted_full_text_query_uses_worker_search () =
     (Printf.sprintf
        "[{:block/uuid %s :block/title \"needle hidden\" :logseq.property/hide? true}]"
        (quid hidden_uuid));
+  tx conn (Printf.sprintf
+      "[{:block/uuid %s :block/title \"needle child\" :block/parent [:block/uuid %s]}]"
+      (quid child_uuid) (quid (u "resource-block")));
   let db = db_of conn in
   let ent uuid_s =
     match Datascript.entity db (Lookup_ref ("block/uuid", Uuid uuid_s)) with
@@ -3349,7 +3353,7 @@ let test_quoted_full_text_query_uses_worker_search () =
     Some
       (fun ~repo ~db:_ query_text limit ->
         calls := (repo, query_text, limit) :: !calls;
-        [ ent (u "view-row"); ent hidden_uuid; ent (u "resource-block") ]);
+        [ ent (u "view-row"); ent hidden_uuid; ent (u "resource-block"); ent child_uuid ]);
   Fun.protect ~finally:(fun () -> Render_deps.search_blocks_fn := saved)
     (fun () ->
       let r =
@@ -3359,7 +3363,7 @@ let test_quoted_full_text_query_uses_worker_search () =
         (!calls = [ (test_repo, "needle", 30) ]);
       assert_resource_envelope db resource_key
         [ wkey [ kw "graph" ] ]
-        (Wire.Map [ kw "rows", Wire.Array [ wu (u "resource-block") ] ])
+        (Wire.Map [ kw "rows", Wire.Array [ wu (u "resource-block"); wu child_uuid ] ])
         r)
 
 (* view-and-query-resources-reject-non-data-contracts-test *)

@@ -1234,6 +1234,40 @@ let test_apply_template_op_resolves_dynamic_variables () =
    | _ ->
        check "apply-template-op-resolves-dynamic-variables time string" false)
 
+let test_apply_tagged_template_to_blank_target () =
+  let target_uuid = "10000000-0000-4000-8000-000000000083" in
+  let conn = create_conn_with_blocks
+    ~pages_and_blocks:
+      [ { page = {default_page with pg_title = Some "Template source"};
+          blocks = [{default_block with b_title = Some "T83 Useful Template";
+            b_tags = ["Template"];
+            b_children = [{default_block with b_title = Some "T83 Template inserted child"}]}] };
+        { page = {default_page with pg_title = Some "Template target"};
+          blocks = [{default_block with b_title = Some ""; b_uuid = Some target_uuid}] } ] () in
+  let template = find_block conn "T83 Useful Template" in
+  let apply template_uuid = ignore (Outliner_op.apply_ops conn
+    (Wire.List [Wire.List [Wire.Keyword "save-block"; Wire.List
+       [Wire.Map [Wire.Keyword "block/uuid",Wire.Uuid target_uuid;
+          Wire.Keyword "block/title",Wire.String ""]; Wire.Map []]];
+     Wire.List [Wire.Keyword "apply-template";
+      Wire.List [Wire.Uuid template_uuid; Wire.Uuid target_uuid;
+        Wire.Map [Wire.Keyword "replace-empty-target?", Wire.Bool true]]]])
+    (Wire.Map [Wire.Keyword "outliner-op",Wire.Keyword "apply-template"])) in
+  apply (uuid_of template);
+  let target = entity_by_uuid_exn conn target_uuid in
+  check "applying a tagged template replaces the blank target with its first child"
+    (ent_title target = Some "T83 Template inserted child");
+  check "applying a leaf template does not create extra children"
+    (Ldb.parent_children target = []);
+  check "applying a tagged template records the source template"
+    (Option.map (fun (e : entity) -> e.id) (Ldb.ref_ent target "logseq.property/used-template") = Some template.id);
+  check "applying a tagged template leaves the source tree intact"
+    (List.map ent_title (Ldb.parent_children (entity_by_uuid_exn conn (uuid_of template)))
+      = [Some "T83 Template inserted child"]);
+  apply "10000000-0000-4000-8000-000000000000";
+  check "a missing template does not insert content"
+    (ent_title (entity_by_uuid_exn conn target_uuid) = Some "")
+
 (* (deftest apply-ops-requires-uuid-block-ids-and-keyword-property-ids-test ...) *)
 let test_apply_ops_requires_uuid_block_ids_and_keyword_property_ids () =
   let conn =
@@ -2600,6 +2634,7 @@ let op_cases : unit Alcotest.test_case list =
     Alcotest.test_case "remove-block-property-op-rejects-lookup-ref-block-id-test" `Quick test_remove_block_property_op_rejects_lookup_ref_block_id;
     Alcotest.test_case "direct-plugin-many-page-property-appends-values-test" `Quick test_direct_plugin_many_page_property_appends_values;
     Alcotest.test_case "apply-template-op-resolves-dynamic-variables-test" `Quick test_apply_template_op_resolves_dynamic_variables;
+    Alcotest.test_case "apply-tagged-template-to-blank-target" `Quick test_apply_tagged_template_to_blank_target;
     Alcotest.test_case "apply-ops-requires-uuid-block-ids-and-keyword-property-ids-test" `Quick test_apply_ops_requires_uuid_block_ids_and_keyword_property_ids ]
 
 (* pipeline_test.cljs *)

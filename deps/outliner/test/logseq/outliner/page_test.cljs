@@ -3,7 +3,6 @@
             [datascript.core :as d]
             [logseq.common.config :as common-config]
             [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -315,18 +314,16 @@
                 (map #(:db/ident (d/entity @conn (:db/id %))))))
         "New journal only has Journal tag")))
 
-(deftest create-journal-keeps-default-block-name-with-custom-title-format
+(deftest create-journal-name-matches-custom-title-format
   (let [conn (db-test/create-conn)
         _ (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]])
         [_ page-uuid] (outliner-page/create! conn "Dec 16th, 2024" {})
         page (d/entity @conn [:block/uuid page-uuid])
-        default-name (-> (:block/journal-day page)
-                         (date-time-util/int->journal-title date-time-util/default-journal-title-formatter)
-                         common-util/page-name-sanity-lc)]
+        expected-name (common-util/page-name-sanity-lc "2024-12-16 Monday")]
     (is (= "2024-12-16 Monday" (:block/title page))
         "Journal title follows configured formatter")
-    (is (= default-name (:block/name page))
-        "Journal block/name remains the default formatter, independent of title format")))
+    (is (= expected-name (:block/name page))
+        "Journal block/name matches the configured title")))
 
 (deftest create-slash-formatted-journal-does-not-create-namespace-pages
   (let [conn (db-test/create-conn)

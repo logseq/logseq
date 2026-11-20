@@ -111,7 +111,7 @@ let toggle_row ~key ~label ?(label_extra = []) ?(detail = [])
     ?(density = `regular) ?binding ~on ~on_checked () =
   let control =
     row ~key:(key ^ "-i") ~gap:16 ~cross:`center ~min_height:24
-      ~min_width:0 ~flex_wrap:`wrap
+      ~min_width:0
       ?max_width:(match binding with Some _ -> Some 320 | None -> None)
       (switch_controls ~key ~on ~on_checked
          ~extra:(match binding with Some _ -> [] | None -> detail)

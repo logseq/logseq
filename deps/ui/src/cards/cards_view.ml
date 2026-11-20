@@ -328,7 +328,10 @@ let cards_body st =
    parent's overlay copy instead of being its own layer. The shared
    parent is a plain box — fragment can't be returned from a reactive
    branch (it has no parent to mount into). *)
-let modal st =
+let modal st : t =
+ fun context parent ->
+  let viewport = Ui_services.viewport_height_signal
+      ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.ui_scope in
   (* The scrim mounts while the opening gesture is still in flight: its
      mouseup lands on the overlay and would instantly re-close the modal.
      Ignore overlay presses for a short grace window after mount. The
@@ -355,15 +358,17 @@ let modal st =
         [ (* no ~grow on the main column — the dialog hugs its
              content height instead of filling the window *)
           column ~key:"cards-main"
-            [ column ~key:"cards-modal"
+            [ Ui_parts.int_prop Lui_protocol.HeightValue
+                ~value:(reactive (fun height -> min 1024 (int_of_float (height *. 0.7))) viewport)
+              (column ~key:"cards-modal" ~max_height:1024
                 ~accessibility_identifier:"cards-modal"
                 ~style_class:"ls-cards-stack" ~grow:1.
-                [ selector_row st; cards_body st ] ]
+                [ selector_row st; cards_body st ]) ]
         ; Ui_components.dialog_close ~key:"cards-close"
             ~label:(t_ "ui/close")
             ~on_press:(fun _ -> Cards_state.close st)
         ]
-    ]
+    ] context parent
 
 let render (ms : Model.t Signal.signal) : t =
   let st = Cards_state.init ms in

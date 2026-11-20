@@ -1026,6 +1026,43 @@ let test_undo_history_allows_non_semantic_outliner_op () =
              | None | Some Wire.Nil -> true
              | _ -> false))
 
+let test_view_creation_preserves_user_history () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let page_uuid, _, child_uuid = seed_page_parent_child () in
+      let title uuid = Option.bind (ent_at_uuid (db_of conn) uuid) ent_title_of in
+      let original = title child_uuid in
+      Undo_redo.clear_history test_repo;
+      save_block_title conn child_uuid "edited child";
+      ignore (Undo_redo.undo test_repo);
+      check "user edit is undone" (title child_uuid = original);
+      let undo_before = stack_of Undo_redo.undo_ops test_repo
+      and redo_before = stack_of Undo_redo.redo_ops test_repo in
+      check "undone edit is available for redo" (List.length redo_before = 1);
+      let view_uuid = Uuid_gen.uuid () in
+      let create_view () =
+        ignore (Outliner_op.apply_ops conn
+          (edn_wire (Printf.sprintf
+            "[[:insert-blocks [[{:block/uuid %s :block/title \"Linked references\" :logseq.property/view-for [:block/uuid %s] :logseq.property.view/feature-type :linked-references :logseq.property.view/type [:db/ident :logseq.property.view/type.list] :logseq.property.view/group-by-property [:db/ident :block/page]}] %s {:sibling? false :keep-uuid? true :outliner-op :create-view}]]]"
+            (uuid_lit view_uuid) (uuid_lit page_uuid) (uuid_lit page_uuid)))
+          (edn_wire "{:client-id \"test-client\" :source-outliner-op :create-view}"));
+        check "reference view is persisted" (title view_uuid = Some "Linked references");
+        check "view creation adds no undo entry"
+          (stack_of Undo_redo.undo_ops test_repo = undo_before);
+        check "view creation preserves pending redo"
+          (stack_of Undo_redo.redo_ops test_repo = redo_before)
+      in
+      create_view ();
+      ignore (transact_conn_string conn (Printf.sprintf
+        "[[:db.fn/retractEntity [:block/uuid %s]]]" (uuid_lit view_uuid)));
+      create_view ();
+      ignore (Undo_redo.redo test_repo);
+      check "user redo survives reference view recreation"
+        (title child_uuid = Some "edited child");
+      ignore (Undo_redo.undo test_repo);
+      check "next undo reverts the user edit, not the reference view"
+        (title child_uuid = original && title view_uuid = Some "Linked references"))
+
 let test_undo_history_canonicalizes_insert_block_uuids () =
   with_worker_conns (fun () ->
       Undo_redo.clear_history test_repo;
@@ -2820,6 +2857,8 @@ let cases =
       `Quick test_undo_history_records_semantic_action_metadata
   ; Alcotest.test_case "undo-history-allows-non-semantic-outliner-op-test"
       `Quick test_undo_history_allows_non_semantic_outliner_op
+  ; Alcotest.test_case "view-creation-preserves-user-history"
+      `Quick test_view_creation_preserves_user_history
   ; Alcotest.test_case "undo-history-canonicalizes-insert-block-uuids-test"
       `Quick test_undo_history_canonicalizes_insert_block_uuids
   ; Alcotest.test_case "undo-works-for-local-graph-test" `Quick

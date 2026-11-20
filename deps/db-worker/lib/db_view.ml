@@ -299,7 +299,9 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
         (let children = List.filter_map (Ldb.ent_of_id db) children_ids in
       let hidden_ref = hidden_ref_pred db id in
       let counts : (entity_id, int) Hashtbl.t = Hashtbl.create 31 in
+      let order = ref [] in
       let bump (e : entity) =
+        if not (Hashtbl.mem counts e.id) then order := e.id :: !order;
         Hashtbl.replace counts e.id
           (1 + Option.value (Hashtbl.find_opt counts e.id) ~default:0)
       in
@@ -307,8 +309,9 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
       List.iter
         (fun (b : entity) -> List.iter bump (Ldb.ref_ents b "block/refs"))
         (ref_blocks @ children);
-      Hashtbl.fold
-        (fun eid size acc ->
+      List.rev !order |> List.filter_map
+        (fun eid ->
+           let size = Hashtbl.find counts eid in
            match Ldb.ent_of_id db eid with
            | Some ref_e ->
                if
@@ -316,11 +319,10 @@ let get_ref_pages_count db (id : entity_id) (ref_blocks : entity list)
                  && ref_e.id <> id
                  && Ldb.ident_of ref_e <> Some "block/tags"
                  && not (hidden_ref ref_e)
-               then (Ldb.string_value ref_e "block/title", size) :: acc
-               else acc
-           | None -> acc)
-        counts []
-        |> List.sort (fun (_, a) (_, b) -> compare b a))
+               then Some (Ldb.string_value ref_e "block/title", size)
+               else None
+           | None -> None)
+        |> List.stable_sort (fun (_, a) (_, b) -> compare b a))
 
 (* reference/get-filters *)
 let get_filters (page : entity) : (entity list * entity list) option =
@@ -1572,7 +1574,7 @@ let build_fast_filter_pred db (filters : view_filters) (input : string) :
 let row_matched db (row : entity) (filters : view_filters) (input : string) : bool =
   let title_ok =
     Unicode.trim input = ""
-    || (match Ldb.string_value row "block/title" with
+    || (match Db_content.block_title row with
         | Some t -> contains_substring (lowercase t) (lowercase input)
         | None -> false)
   in
@@ -3100,7 +3102,8 @@ let get_view_data db (view_id_opt : entity_id option) (opt : Wire.t) : Wire.t =
     let linked_window =
       match feat_type, class_id, row_limit with
       | Some "linked-references", Some id, Some n
-        when n > 0 && (not filters.vf_present) && Unicode.trim input = "" ->
+        when n > 0 && (not filters.vf_present) && Unicode.trim input = ""
+             && Option.bind (Ldb.ent_of_id db id) get_filters = None ->
           let ents, total = linked_refs_window db id ~limit:n in
           let result =
             { ref_blocks = ents

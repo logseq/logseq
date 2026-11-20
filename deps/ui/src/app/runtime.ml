@@ -2,6 +2,8 @@
    frontend.state atoms: the worker client and the LUI app handle. *)
 
 let worker : Worker_client.t option ref = ref None
+type video_timestamp = No_video | Player_pending | Playback_time of int
+let video_timestamp : (unit -> video_timestamp) ref = ref (fun () -> No_video)
 let app_send : (Action.t -> bool) ref = ref (fun _ -> false)
 let app_flush : (unit -> unit) ref = ref (fun () -> ())
 
