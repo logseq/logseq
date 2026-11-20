@@ -268,6 +268,7 @@ let delete_graph repo ~remote =
           navigate_journal next
       | true, [] ->
           Toast.success (T.removed (short_name repo));
+          Custom_css.remove ();
           Runtime.send Action.Graph_closed;
           Router.resolve ();
           Js.Promise.resolve ()
@@ -342,6 +343,8 @@ let ask_upload repo =
    resolve back to the repo (cljs handler.graph/remember-current-graph-id-in-tab!) *)
 let () =
   Runtime.hooks.on_graph_opened <- fun repo ->
+    (* cljs theme.cljs reset-custom-css! on :current-graph-changed *)
+    ignore (Custom_css.reset_for_repo repo);
     ignore
       (let* w = Runtime.invoke1 "thread-api/get-graph-uuid" (Wire.String repo) in
       (* cljs graph_tab/set-tab-graph! — sessionStorage keys so a
