@@ -56,3 +56,8 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | table-title-caret | 17 views/table | Click title cell → caret at end | Caret at 0 (empty/stale wire title) | All pages / objects table → click title | low | fixed `5a77fbc091` |
 | table-page-column | 17 views/table | Page column empty on page rows | Showed the page's own name | All pages table Page column | low | fixed `5a77fbc091` |
 | header-rs-toggle-narrow | 03 header | Right-sidebar toggle visible at 500px | Hidden below 640px breakpoint | resize to 500px | low | fixed `07911eac8f` |
+| custom-css-apply | 39 custom.css | Edit applies immediately and after reload | Saved file; never injected (`--parity-x` empty) | edit `logseq/custom.css`; blur; reload | med | fixed `df7e4f80fa` |
+| recycle-permanent-delete | 39 recycle | `window.confirm` with permanent-delete copy | In-app dialog with raw i18n key | Recycle → Delete → confirm | med | fixed `6a700399b2` |
+| recycle-block-delete | 39 recycle | Bullet Delete clears selection; neighbor not editing | Neighbor entered edit mode | right-click bullet → Delete | low | fixed `8cbb6ba824` |
+| recycle-open | 39 recycle | Avatar + page icon + strikethrough title | Plain title row only | header More → Recycle | low | fixed `f1d831bf51` |
+| ref-header-controls | 39 linked refs | Fold caret; count; 5 toolbar icons | No fold caret; 6 icons (View Type) | hover Linked references header | low | fixed `cae8cf95bc` |
