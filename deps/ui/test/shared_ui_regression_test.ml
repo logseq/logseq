@@ -915,6 +915,16 @@ let preview_reference_disclosure ~registry ~profile =
         {x=0.;y=0.;modifiers=2;button=0;target_class=""}));
       S.flush session;
       check "Shift-clicking a preview count opens that block's sidebar references without expanding inline"
+        (!opened=[child_id] && not (references_visible ()));
+      opened := [];
+      List.iter (fun modifiers ->
+        S.dispatch session (P.PressModifiers (child_counter.M.id, modifiers));
+        S.flush session;
+        check "Unshifted modifier presses toggle inline references without opening the sidebar"
+          (!opened=[] && references_visible ()=(modifiers=0))) [0;1];
+      S.dispatch session (P.PressModifiers (child_counter.M.id, 2));
+      S.flush session;
+      check "Shift-modified preview activation opens sidebar references without expanding inline"
         (!opened=[child_id] && not (references_visible ()))))
 
 let keymap_recording_workflow ~registry ~profile ~finish =

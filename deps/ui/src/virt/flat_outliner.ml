@@ -73,16 +73,17 @@ let block_row ~state ~library ~source : t =
           if shift then Sidebar_state.open_block_references
               (Sidebar_state.ensure (Option.get !Runtime.model_source)) uuid
           else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ()) in
-        Some (Ui_components.with_props
+        Some (Ui_parts.pressable_with_modifiers
+          ~on_press:(fun modifiers -> activate (modifiers land 2 <> 0))
+          (Ui_components.with_props
           [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
           (button ~text:"" ~key:("reference-count-" ^ uuid) ~variant:`ghost ~size:`sm
             ~style_class:"block-refs-count"
             ~label:(I18n.t "block/open-block-references")
             ~tooltip:(I18n.t "block/open-block-references")
             ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
-            ~on_press:(fun () -> activate false)
             ~on_press_detail:(fun detail -> activate (detail.Lui_protocol.modifiers land 2 <> 0))
-            [text ~font_size:"14px" ~value:(string_of_int block.block_ref_count) []])))
+            [text ~font_size:"14px" ~value:(string_of_int block.block_ref_count) []]))))
     ; below_block = (fun block ->
         if block.Model.block_ref_count <= 0 then None else
         let uuid = Option.get block.block_uuid in
