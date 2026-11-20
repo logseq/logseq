@@ -11,6 +11,22 @@ It includes the Cloudflare Worker implementation and a Node.js adapter for self-
 
 ### Cloudflare Worker
 
+Graph sync clients POST to the authenticated asset endpoint with
+`action: "prepare"` and the asset's plaintext size and SHA-256 checksum.
+The Cloudflare Worker returns a presigned R2 PUT for encoded bodies over
+100 MiB. After the PUT, the client POSTs to the same endpoint with
+`action: "complete"` before publishing the asset's remote metadata.
+Smaller uploads and the self-hosted Node adapter receive a plan to PUT
+the file to the Logseq asset endpoint.
+
+`R2_ASSET_UPLOAD_BUCKET` must name the bucket used by `LOGSEQ_SYNC_ASSETS`.
+Set `R2_ASSET_UPLOAD_ENDPOINT` to the account's R2 S3 API endpoint and configure
+the Worker secrets `R2_ASSET_UPLOAD_ACCESS_KEY_ID` and
+`R2_ASSET_UPLOAD_SECRET_ACCESS_KEY` with Object Read & Write credentials scoped
+to that environment's bucket. Configure bucket CORS to allow `PUT` from the
+Logseq browser origins and the `content-type`, `if-match`, `if-none-match`,
+`x-amz-meta-checksum`, `x-amz-meta-size` and `x-amz-meta-type` headers.
+
 ```bash
 cd deps/db-sync
 pnpm watch

@@ -8,8 +8,32 @@ import {
 } from "./logseq_icon.mjs";
 import { ensureMcpAcceptHeader } from "./mcp_request.mjs";
 import { openAiAppsChallengeResponse } from "./openai_app_challenge.mjs";
+import { r2AssetUploadSigner } from "./r2_asset_upload.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import { uploadChatGptAsset } from "./chatgpt_asset_upload.mjs";
+
+test("R2 presigned uploads bind the object, byte length, metadata, and write precondition", async () => {
+  const sign = r2AssetUploadSigner({
+    R2_ASSET_UPLOAD_BUCKET: "assets",
+    R2_ASSET_UPLOAD_ENDPOINT: "https://example.r2.cloudflarestorage.com/",
+    R2_ASSET_UPLOAD_ACCESS_KEY_ID: "fixture-access",
+    R2_ASSET_UPLOAD_SECRET_ACCESS_KEY: "fixture-secret",
+  });
+  const headers = {
+    "content-type": "text/plain",
+    "if-none-match": "*",
+    "x-amz-meta-checksum": "fixture",
+    "x-amz-meta-size": "209715200",
+    "x-amz-meta-type": "bin",
+  };
+  const signed = new URL(await sign("graph/test asset.bin", 279620315, headers));
+  const differentSize = new URL(await sign("graph/test asset.bin", 279620314, headers));
+  assert.equal(signed.pathname, "/assets/graph/test%20asset.bin");
+  assert.equal(signed.searchParams.get("X-Amz-Expires"), "600");
+  assert.equal(signed.searchParams.get("X-Amz-SignedHeaders"),
+    "content-length;content-type;host;if-none-match;x-amz-meta-checksum;x-amz-meta-size;x-amz-meta-type");
+  assert.notEqual(signed.searchParams.get("X-Amz-Signature"), differentSize.searchParams.get("X-Amz-Signature"));
+});
 
 test("OpenAI app domain challenge returns the configured token as plain text", async () => {
   const token = "openai-domain-verification-token";

@@ -907,7 +907,7 @@ let () =
     Wire.Map [ kw "cipher", Wire.String "encrypted-payload" ]
   in
   let expected_body = Transit_codec.to_string encrypted_payload in
-  let fetch_call = ref None in
+  let fetch_calls = ref [] in
   let encrypt_input = ref None in
   let prev_graph_e2ee = !Sync_deps.graph_e2ee in
   let prev_ensure = !Sync_deps.ensure_graph_aes_key in
@@ -923,8 +923,14 @@ let () =
         Db_worker_effect.pure encrypted_payload);
   Sync_assets.http_send_fn :=
     (fun (req : Http.request) ->
-      fetch_call := Some req;
-      Db_worker_effect.pure { Http.status = 200; headers = []; body = "" });
+      fetch_calls := req :: !fetch_calls;
+      let body =
+        match Option.map Json_codec.parse req.body, req.method_ with
+        | Some body, "POST" when Wire.get "action" body = Some (Wire.String "prepare") ->
+            {|{"mode":"direct","url":"https://r2.example.test/signed","headers":{"if-none-match":"*"}}|}
+        | _ -> ""
+      in
+      Db_worker_effect.pure { Http.status = 200; headers = []; body });
   Broadcast.set_post_fn (fun ~kind:_ ~payload:_ -> ());
   Fun.protect
     (fun () ->
@@ -933,10 +939,16 @@ let () =
             (Some "png") (Some checksum));
        check "upload-remote-asset encrypts the raw bytes"
          (!encrypt_input = Some asset_bytes);
-       check "upload-remote-asset sends transit-encoded payload"
-         (match !fetch_call with
-          | Some req -> req.Http.body = Some expected_body
-          | None -> false))
+       check "upload-remote-asset sends transit bytes directly and confirms on Logseq"
+         (match List.rev !fetch_calls with
+          | [prepare; upload; complete] ->
+              prepare.Http.method_ = "POST"
+              && complete.Http.url = prepare.Http.url
+              && complete.Http.method_ = "POST"
+              && upload.Http.url = "https://r2.example.test/signed"
+              && upload.Http.headers = ["if-none-match", "*"]
+              && upload.Http.body = Some expected_body
+          | _ -> false))
     ~finally:(fun () ->
       Sync_deps.graph_e2ee := prev_graph_e2ee;
       Sync_deps.ensure_graph_aes_key := prev_ensure;
@@ -1211,6 +1223,9 @@ let with_asset_server f =
         let path = Http_server.req_url req in
         let status, body =
           match Http_server.req_method req with
+          | "POST" ->
+              ignore (await (Http_server.read_body_buffer req));
+              200, {|{"mode":"proxy"}|}
           | "PUT" ->
               Hashtbl.replace stored path
                 (await (Http_server.read_body_buffer req));

@@ -39,6 +39,7 @@
     "@modelcontextprotocol/sdk": "^1.31.0",
     "@sentry/cloudflare": "^11.2.0",
     "@sentry/node": "^11.2.0",
+    "aws4fetch": "1.0.20",
     "better-sqlite3": "^13.0.3",
     "mldoc": "^1.6.0",
     "shadow-cljs": "^3.5.4",

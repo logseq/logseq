@@ -145,6 +145,59 @@ let http_bytes_send_fn
     : (Http_bytes.request -> Http_bytes.response Db_worker_effect.t) ref =
   ref Http_bytes.send
 
+let checked_upload ?allowed status =
+  if (status >= 200 && status < 300) || allowed = Some status then ()
+  else
+    raise
+      (err "rtc.exception/upload-asset-failed" "upload-asset failed"
+         ~data:[ (Wire.Keyword "status", Wire.Int status) ])
+
+let upload_asset_payload ~url ~asset_type ~checksum ~size ~payload ~text_payload =
+  let auth = Sync_util.auth_headers () in
+  let put url headers =
+    if text_payload then
+      !http_send_fn { Http.url; method_ = "PUT"; headers; body = Some payload }
+      >>= fun (response : Http.response) -> Db_worker_effect.pure response.status
+    else
+      !http_bytes_send_fn { Http_bytes.url; method_ = "PUT"; headers; body = Some payload }
+      >>= fun (response : Http_bytes.response) -> Db_worker_effect.pure response.status
+  in
+  let proxy () =
+    put url (auth @ [ "x-amz-meta-checksum", checksum; "x-amz-meta-type", asset_type ])
+    >>= fun status -> Db_worker_effect.pure (checked_upload status)
+  in
+  let control action =
+    let body =
+      Json_codec.encode
+        (Wire.Map [ Wire.String "action", Wire.String action
+                  ; Wire.String "size", Wire.Int size
+                  ; Wire.String "checksum", Wire.String checksum ])
+    in
+    !http_send_fn
+      { Http.url; method_ = "POST"
+      ; headers = ("content-type", "application/json") :: auth; body = Some body }
+    >>= fun response ->
+    checked_upload response.status;
+    Db_worker_effect.pure response.body
+  in
+  let complete () = control "complete" >>= fun _ -> Db_worker_effect.pure () in
+  control "prepare" >>= fun body ->
+    let plan = Json_codec.parse body in
+    match Wire.get "mode" plan with
+    | Some (Wire.String "proxy") -> proxy ()
+    | Some (Wire.String "present") -> complete ()
+    | Some (Wire.String "direct") ->
+        (match Wire.get "url" plan, Wire.get "headers" plan with
+         | Some (Wire.String target), Some (Wire.Map headers) ->
+             let headers = List.map (function
+               | Wire.Keyword key, Wire.String value -> key, value
+               | _ -> invalid_arg "invalid asset upload headers") headers in
+             put target headers >>= fun status ->
+             checked_upload ~allowed:412 status;
+             complete ()
+         | _ -> invalid_arg "invalid direct asset upload plan")
+    | _ -> invalid_arg "invalid asset upload plan"
+
 (* upload-remote-asset! *)
 let upload_remote_asset repo graph_id asset_uuid asset_type checksum
     : unit Db_worker_effect.t =
@@ -168,6 +221,7 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
                 (err "rtc.exception/read-asset-failed" "read-asset failed"))
          >>= fun asset_bytes ->
          clear_missing_asset_upload_file repo asset_id;
+         let size = String.length asset_bytes in
          (match aes_key with
           | None -> Db_worker_effect.pure (asset_bytes, false)
           | Some key ->
@@ -184,36 +238,12 @@ let upload_remote_asset repo graph_id asset_uuid asset_type checksum
            else String.length payload
          in
          notify_asset_progress repo asset_id "upload" 0 total;
-         let headers =
-           Sync_util.auth_headers ()
-           @ [ "x-amz-meta-checksum", cs; "x-amz-meta-type", at ]
-         in
          (* Transit ciphertext is Unicode text. Raw asset bytes stay on
             the byte transport so values above 127 are not UTF-8-encoded. *)
-         (if text_payload then
-            !http_send_fn
-              { Http.url = put_url
-              ; method_ = "PUT"
-              ; headers
-              ; body = Some payload }
-            >>= fun (resp : Http.response) ->
-            Db_worker_effect.pure resp.status
-          else
-            !http_bytes_send_fn
-              { Http_bytes.url = put_url
-              ; method_ = "PUT"
-              ; headers
-              ; body = Some payload }
-            >>= fun (resp : Http_bytes.response) ->
-            Db_worker_effect.pure resp.status)
-         >>= fun status ->
+         upload_asset_payload ~url:put_url ~asset_type:at ~checksum:cs ~size ~payload ~text_payload
+         >>= fun () ->
          notify_asset_progress repo asset_id "upload" total total;
-         if status >= 200 && status < 300 then
-           Db_worker_effect.pure ()
-         else
-           raise
-             (err "rtc.exception/upload-asset-failed" "upload-asset failed"
-                ~data:[ (Wire.Keyword "status", Wire.Int status) ]))
+         Db_worker_effect.pure ())
         (fun e ->
            match e with
            | Dispatcher.Exn_info (_, kvs)
