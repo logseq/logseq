@@ -683,9 +683,11 @@ let canonical_binding b =
       String.concat "+" (List.sort compare (fold_ctrl_to_mod ms) @ [ key ])
   | [] -> b
 
-(* (binding stroke sequence, command id) — one row per binding *)
+(* (binding stroke sequence, command id) — one row per binding.
+   Uses dispatch_items so handler-only shortcuts (master registers them
+   outside Keymap categories) still participate in chord matching. *)
 let chord_table () =
-    Keymap_data.current_items () |> Keymap_data.unique_rows
+    Keymap_data.dispatch_items () |> Keymap_data.unique_rows
     |> List.concat_map
        (fun (row : Keymap_data.row) ->
           let cid = Keymap_data.command_id row.title in
