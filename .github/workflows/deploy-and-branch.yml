@@ -23,6 +23,20 @@ jobs:
           ref: ${{ inputs.branch }}
           fetch-depth: 0
 
+      - name: Install LUI system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libpango1.0-dev libx11-dev libxext-dev
+
+      - name: Install pinned SDL3
+        run: |
+          lui_ref=$(sed -n 's/.*lui\.git#\([0-9a-f]\{40\}\).*/\1/p' deps/ui/scripts/install-opam-deps.sh)
+          test -n "$lui_ref"
+          curl --fail --silent --show-error --location --retry 3 \
+            "https://raw.githubusercontent.com/logseq/lui/$lui_ref/tooling/install_sdl3.py" \
+            --output "$RUNNER_TEMP/install-sdl3.py"
+          python3 "$RUNNER_TEMP/install-sdl3.py" "$RUNNER_TEMP/sdl3" --github-env
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
