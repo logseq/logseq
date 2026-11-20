@@ -522,7 +522,7 @@ let build_columns inst =
 (* [fetch_limit] overrides the vstate's staged value — Signal.set is
    pending until the next stabilize, so a same-tick [V.ctx_of] would
    still read the old limit *)
-let load_view_data ?(fetch_limit = 0) inst =
+let load_view_data ?(fetch_limit = 0) ?(built_in=false) inst =
   let gen = V.new_fetch inst in
   let ctx =
     match V.ctx_of inst, fetch_limit > 0 with
@@ -648,7 +648,26 @@ let load_view_data ?(fetch_limit = 0) inst =
               inst uuids continue
           end
   in
-  if Ui_services.env_publishing () && view_uuid = "" then
+  if built_in then begin
+    let repo = Db.repo () in
+    ignore ((let* entities = Runtime.invoke3 "thread-api/pull-many"
+        (W.String repo) (W.String "[:db/id]")
+        (W.Array (List.map (fun uuid -> W.Array [W.kw "block/uuid"; W.Uuid uuid])
+          (V.get inst).V.query_rows)) in
+      Outliner_ops.check_loader_result entities;
+      if not (V.fetch_fresh inst gen) then Js.Promise.resolve () else
+      let fields = match ctx with W.Map fields -> fields | _ -> assert false in
+      let fields = List.filter_map (fun (k,v) -> match k with
+        | W.Keyword "query-row-uuids" -> None
+        | W.Keyword "feature-type" -> Some (W.kw "view-feature-type",v)
+        | _ -> Some (k,v)) fields in
+      let fields = (W.kw "render?",W.Bool true) ::
+        (W.kw "query-entity-ids",W.Array (List.map (fun entity ->
+          W.Int (Option.get (W.map_get_int entity "db/id"))) (W.elems entities))) :: fields in
+      let* data = Runtime.invoke3 "thread-api/get-view-data" (W.String repo) W.Nil (W.Map fields) in
+      Outliner_ops.check_loader_result data;
+      apply (Some data); Js.Promise.resolve ()) |> Db.catch_quiet ~on_error:(fail_view inst gen))
+  end else if Ui_services.env_publishing () && view_uuid = "" then
     let repo = Db.repo () in
     let owner_ref = match inst.V.owner with
       | W.String name -> W.Array [ W.kw "block/name"; W.String name ]
@@ -676,12 +695,55 @@ let load_view_data ?(fetch_limit = 0) inst =
     ~f:(fun snap -> apply (Db.snapshot_value snap key))
     [ Db.resource_view_data view_uuid ctx ]
 
-let load_query_results inst =
-  if (V.get inst).V.query_rows <> [] then load_view_data inst
+let load_query_results ?(built_in=false) inst =
+  if (V.get inst).V.query_rows <> [] then load_view_data ~built_in inst
   else begin
     build_columns inst;
     V.update inst (fun s -> { s with V.loading = false })
   end
+
+let configured_query ~(page : Model.page) query : t =
+ fun ctx parent ->
+  let uuid = match page.Model.page_uuid with Some uuid -> uuid | None -> Ui_services.env_random_uuid () in
+  let inst = V.make ~sched:ctx.Lui_ui.ui_scheduler
+    ~kind:(V.KQuery {block_uuid=uuid}) ~feature:"query-result" ~owner:(W.Uuid uuid) in
+  let inst = {inst with V.virtualize=false} in
+  let collapsed = Signal.state ctx.Lui_ui.ui_scheduler true in
+  let title = match W.map_get_string query "title", W.get query "title-key" with
+    | _, Some (W.Keyword key) -> I.t key
+    | Some title, _ -> title
+    | _ -> I.t "block/untitled-query" in
+  V.update inst (fun s -> {s with V.qsrc=Edn.to_string query;is_advanced=true;
+    display_type=(if W.get query "table-view?"=Some (W.Bool true) then "table" else "list");
+    group_by=(if W.get query "group-by-page?"=Some (W.Bool false)
+      then None else Some "block/page")});
+  let refresh () =
+    if Ui_effect.alive ctx.Lui_ui.ui_scope then
+      Views_query.run ~page_title:page.page_title ~built_in:true inst
+        (fun () -> load_query_results ~built_in:true inst) in
+  let sub = Runtime.on_sync (fun _ -> refresh ()) in
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    Runtime.off_sync sub; incr inst.V.data_gen;
+    Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ());
+  ignore (Js.Promise.(resolve () |> then_ (fun () -> refresh (); resolve ())));
+  (if_ ~test:(reactive (fun s -> s.V.query_error<>None || s.V.query_rows<>[]
+          || s.V.query_scalar_rows<>[]) (sig_of inst))
+        (column ~style_class:"custom-query" ~min_width:0 ~margin_left:2 ~gap:4
+          [ row ~cross:`center ~gap:8
+              [ Ui_components.button ~variant:`ghost ~text:title
+                  ~icon:(reactive (fun c -> `app (if c then "chevron-right" else "chevron-down"))
+                    (Signal.value collapsed))
+                  ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ()) []
+              ; Ui_components.with_props [Ui_components.Prop.opacity 0.6]
+                (text ~font_size:"0.875rem"
+                  ~value:(reactive (fun s -> I.result_count
+                    (List.length s.V.query_rows + List.length s.V.query_scalar_rows)) (sig_of inst)) []) ]
+          ; if_ ~test:(reactive not (Signal.value collapsed))
+              (column ~style_class:"custom-query-results"
+                [ reactive ~equal:body_eq (fun s ->
+                    match query_content_key s with
+                    | `Table -> Views_table.result_el inst s
+                    | _ -> query_content inst s) (sig_of inst) ]) ])) ctx parent
 
 let refresh inst =
   match inst.V.kind with
@@ -1162,7 +1224,7 @@ let view_with_virtualization ~virtualize ~kind ~owner : t =
           resolve ()));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
       Hashtbl.remove live inst.V.id;
-      Editor_state.clear_collapse_scope ~scope:inst.V.collapse_scope;
+      Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ();
       match inst.V.kind with
       | V.KQuery _ -> ()
       | _ -> incr inst.V.data_gen; Views_builder.drop_tree inst);

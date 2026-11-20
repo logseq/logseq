@@ -2552,8 +2552,10 @@ let apply_item t ac ~meta it =
            with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
       invalidate_ac t;
-      (if kind = Template_search then insert_text ac "/" 0
-       else erase_trigger_text ac);
+      (match kind with
+       | Template_search -> insert_text ac "/" 0
+       | Page_ref -> insert_text ac "[[]]" 2
+       | _ -> erase_trigger_text ac);
       (match kind with
        | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
@@ -2562,7 +2564,7 @@ let apply_item t ac ~meta it =
         (Some
            (refresh_items t
               { ac with kind; flip = None; flipx = None; query = "";
-                tlen = (if kind = Template_search then 1 else 0)
+                tlen = (match kind with Template_search -> 1 | Page_ref -> 2 | _ -> 0)
               ; items = []; chosen = 0 }));
       measure_ac t kind
   | Embed_target target_id ->

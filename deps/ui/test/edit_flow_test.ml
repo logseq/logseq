@@ -690,6 +690,42 @@ let test_node_reference_suggestions (h : host) =
    | None -> check "node search keeps its owning autocomplete" false);
   Ops.cancel_pending_save ();
   Popups_state.close_ac popup;
+  let open_slash prefix =
+    let source = prefix ^ "/Node reference" in
+    set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:prefix;
+    Popups_state.open_ac ~tpos:(String.length prefix) ~autopair:false popup Popups_state.Slash;
+    let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+    let item = Popups_state.mk_item ~key:"node-reference" ~label:"Node reference"
+      (Popups_state.Switch Popups_state.Page_ref) in
+    Popups_state.apply_item popup ac ~meta:false item in
+  let rec slash_cases = function
+    | [] -> Js.Promise.resolve ()
+    | prefix :: rest ->
+        open_slash prefix;
+        check "Node reference slash conversion retains its prefix and opens balanced brackets"
+          (A.live_buffer "b1"=prefix ^ "[[]]"
+           && match (Popups_state.get popup).Popups_state.ac with
+              | Some ac -> ac.tpos=String.length prefix && ac.tlen=2 && ac.query=""
+                  && List.length ac.items=33
+              | None -> false);
+        Editor_keys.apply_input "b1" (EI.Insert "Tar");
+        let* () = h.wait_ms 25 in
+        (match (Popups_state.get popup).Popups_state.ac with
+         | Some ac ->
+             check "Node reference searches only the post-command term on a nonempty host"
+               (ac.query="Tar");
+             (match List.find_opt (fun item -> item.Popups_state.ai_act
+                =Popups_state.Emit ("[[" ^ target ^ "]]",0)) ac.items with
+              | Some item ->
+                  Popups_state.apply_item popup ac ~meta:false item;
+                  check "Choosing a node preserves the nonempty host and removes the ghost pair"
+                    (A.live_buffer "b1"=prefix ^ "[[" ^ target ^ "]]")
+              | None -> check "Slash node reference retains existing node choices" false)
+         | None -> check "Slash node reference keeps its picker after typing" false);
+        Ops.cancel_pending_save ();
+        Popups_state.close_ac popup;
+        slash_cases rest in
+  let* () = slash_cases ["Keep host retake "; ""] in
   failed := true;
   open_query "[[Tar]]" 5 "Tar";
   let* () = h.wait_ms 25 in

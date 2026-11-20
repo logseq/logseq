@@ -568,6 +568,124 @@ Rebuilt-application Code/Quote
 conversion, reload and popup visuals remain unverified. No web bundle build,
 `static/` writes or `:3010` access.
 
+## Table86: reference editing, refresh, file links and journal queries
+
+Table86 accepts Code/Quote conversion and reload, signed-out recent-highlight
+gating, Marketplace clamp/icon/geometry, initial reference facets, selection and
+Shift-exclusion. Evidence is under `/Users/devin/table86/evidence/`.
+
+Linked-reference List rows reached `Tree.block_row_static`, which explicitly
+declared `data-editable=false` and rendered display content without an editor.
+Source history identifies `e871bd161e` as the explicit pointer-entry blocker:
+it added that attribute and the `Editor_keys.readonly_block_target` guard.
+`7780c723df` also disabled content-jump editing for those rows. The static
+display-only renderer predates both. The same false attribute and display-only
+path are present before `7de86b98` and in `5e29f4b4`, `504f60ea` and `9385eb03`;
+those suspected recent commits did not introduce this path. This is a
+source-history diagnosis, not a historical built-browser bisect or proof of
+which row presentation the earlier E40 acceptance exercised.
+
+Snapshot rows now register a mount-owned outliner source, advertise editability
+outside publishing, and mount the ordinary editor for the active occurrence.
+Each result root has its own scope, shared by its children, so a matching UUID
+elsewhere does not claim another editor. Local reference collapse and the
+existing local-sibling bullet calculation remain; view disposal clears child
+scopes. Mounted regressions assert root/child editability, scoped child lookup,
+child editor mounting and replacement by the root editor.
+
+Removing a filter exposed a different windowing issue: a one-row response set
+`fetch_limit=1`; the next unfiltered request reused it as `initial-row-count`.
+`Render_resource` converts that field into the worker's `row-limit`, retaining
+the total count but returning only one row. Reference refresh now requests at
+least the ordinary reference window. The regression restores both rows after a
+one-row filter and covers empty and rejected responses.
+
+Browser file links now retain their ordinary anchor without an application
+press handler. The web platform recognizes Electron by the callable preload
+`doAction`, matching the existing daemon capability check, rather than by the
+mere presence of `window.apis`: the browser plugin shim is an event emitter
+without `openPath`. Mounted tests cover absent/shim bridges, browser navigation
+and media URLs, retaining the existing working Electron opener test. No native
+platform opener was changed.
+
+Today's journal now renders configured `:default-queries :journals`, including
+the Home journal list and journal page route, but not older journals or sidebar
+pages. Queries start collapsed, use the configured title and existing result
+count translation, and reuse datalog evaluation and ordinary query-result
+rendering. Built-ins receive today's date and journal title without a query
+block UUID. Their result UUIDs are resolved to entity IDs for the existing
+worker view-data renderer without creating a persisted query view. Empty
+built-ins disappear like Master; errors replace stale results. Mounted tests
+cover expansion, context/spec, result title/count, empty/error, remount and an
+older journal.
+
+The confirmed nonempty-host Node reference picker issue was in `Switch Page_ref`:
+it erased the slash command but set a zero-length trigger while the input
+handler still expected `[[`. The next keystroke therefore took its
+missing-trigger branch and searched the entire host buffer from offset zero.
+Switching now inserts balanced `[[]]` with the caret inside and retains the
+two-character trigger at the original command position, following Master's
+`:editor/input` plus `:editor/search-page` command. Regression cases cover empty
+and nonempty hosts, initially empty suggestions, term-only worker search,
+existing-node selection, prefix preservation and ghost-pair removal. Existing
+search rejection coverage is retained.
+
+The proposed block-preview regression was withdrawn after the clean-graph
+retake confirmed parity. History for the requested Master range
+`d608268212..0ba402070c` changes file-asset handling and zoomed-query page context
+in the relevant block/page components, not the preview's root/children rule.
+`page-preview-source` still resolves the selected entity/alias and mounts the
+shared page renderer. No preview content/loading rule or existing preview
+regression was changed for the dissimilar initial fixtures.
+
+The subsequent same-UUID comparison identified a separate spacing difference:
+Master's block breadcrumb has `my-2`, followed by the desktop page grid's 32px
+gap, and the page inner ends with `mb-16`. The flattened LUI preview omitted
+all three. Block previews now retain the two 8px breadcrumb margins, the 32px
+section gap and the additional 64px bottom margin, without imposing a fixed
+popup height or removing children/counts. Page preview title spacing is left
+unchanged. Mounted web/native regressions assert the emitted section and
+breadcrumb props for both roots. Rebuilt-browser geometry is still unverified:
+the independent component capture could not initialize outside the complete
+test harness (`caml_restore_raw_backtrace not polyfilled by Melange yet`), and a
+separate Master tab did not load the fixture's graph. The temporary Master tab
+was closed. No screenshot of the changed geometry is claimed.
+
+Verification: UI aggregate passes 6622 checks; native experimental tests and
+native experimental build pass. The worker aggregate retains the
+same platform cases 1, 7 and 8 as the preceding Table85 follow-up log: 3 failures
+out of 994, including `Native secrets require the OS keychain host`. The i18n
+hardcoded-text lint cannot start: Babashka is arm64, but its cached
+`go-sqlite3/0.3.13/mac_os_x/aarch64` pod is an x86_64 binary, producing
+`Exec failed, error: 86 (Bad CPU type in executable)`. No dictionaries changed.
+
+These new fixes remain rebuilt-application/browser and visually unverified;
+mounted tests are not acceptance of OS file opening, browser caret/focus or
+query expansion/reload. No web bundle build, `static/` writes or `:3010` access.
+Logs are under `/Users/devin/attachments/table86-*`.
+
+### Larger facet ties: identity-hash ordering, not an ID-based order
+
+The new boundary evidence has nine visible facets: Page 5, Alpha 3, and seven
+ties. Master orders the initial ties Ref D/C/B/A/Beta/Gamma/E; LUI retains
+Ref A/B/C/D/E/Beta/Gamma. This difference is retained, not claimed repaired.
+
+Master's `get-ref-pages-count` calls `frequencies` on DataScript **Entity**
+objects before filtering hidden/non-page references or extracting titles.
+The array-map-to-HAMT boundary counts all distinct Entity keys, not just visible
+facets. The pinned DataScript fork (`3f141af97b70e1f14c65eaa119acd822ebece37e`),
+`impl/entity.cljc:159`, hashes an Entity with
+`db/combine-hashes(hash(eid), goog/getUid(db))`; equality likewise requires the
+same database object identity. `goog/getUid(db)` is a runtime object allocation
+identity, not a graph/entity ID or persisted database value. Therefore matching
+entity IDs and graph contents does not determine the CLJS HAMT traversal order.
+Reproducing just numeric-ID hashes or freezing the reported order would be
+incorrect; inventing a synthetic CLJS database identity in the OCaml worker
+would not reproduce Master's runtime allocation history. Count sorting and
+small-map encounter order remain aligned. This is an application/backend
+identity-order difference, not a LUI SDK limitation. No hash-order emulation or
+hard-coded fixture ordering was added.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -628,9 +746,11 @@ neither category claims the underlying operating system can never support them.
 | Calculator extra root | Global plain-Enter dispatch and newline/empty-input save-and-Escape tests do not append roots, including failed saves. The explicit Shift+Enter action appends one empty sibling. The original full CodeMirror flow remains unverified; this does not establish which event ran there. No speculative fix. |
 | Table74 calculator long output | Source repaired in both output paths: retained lines use typed nowrap/1.45rem line-height props with an empty-line minimum; live CodeMirror lines preserve whitespace without wrapping and use Master's 1.45rem height/line-height. Normal, long, empty and error results are covered, including repeated live replacement. Browser long-output height acceptance remains pending. |
 | Shell N7 | Sidebar-menu action comparison needs equivalent target classification: Master conditionally includes Open as page for page/contents or a resolved page entity. The retained pair shows different sidebar contents and LUI explicitly has a page item; unconditional removal would diverge from Master. The horizontal-origin source repair is recorded below. |
-| Reference filters | Table85 source-repaired: empty search preserves worker order without an alphabetical tie-break; small-group count ties retain first encounter. Rebuilt-browser acceptance pending. See the source-order caveat above for larger Master frequency maps. |
-| Reference filter updates | LUI immediately moves chips after selection; Master leaves stale chips. Difference retained by the child, not established as an approved intentional exception. |
-| Marketplace cards | Residual title truncation and other icon artwork. Table85 source-repairs two-line description clamping and the repository mark; rebuilt-browser acceptance pending. |
+| Reference filters | Table86 accepts initial order/counts and selection/exclusion. Larger-map ties differ because Master's Entity hash includes runtime database object identity; see the precise boundary analysis above. |
+| Reference filter updates | Table86 accepts the opening facet snapshot; removing a filter now restores at least the normal result window. The latter repair awaits rebuilt-browser acceptance. |
+| Linked-reference editing | Scoped snapshot sources now expose editable roots/children and mount the active editor. Source-history cause and mounted coverage are recorded above; rebuilt-browser editing remains unverified. |
+| Configured journal queries | Today's journal now renders configured collapsed default queries with datalog results; empty/error/remount cases are covered. Rebuilt-browser acceptance remains pending. |
+| Marketplace cards | Table86 accepts clamp, repository icon and geometry. Other residual title/artwork differences have not had a fresh broad audit. |
 | Marketplace controls | Table77 accepts the control dimensions: an 81px statistics block at Master's x position, 7px footer inset, 181x15 contribution hitbox and normal-weight Install control. Statistics retain an 18px start inset, 16px icons and 12px item padding; Install uses 13px unit line-height and 4px padding. Width remains content-sized, not fixed to an English label. The last vertical offsets are source-repaired: a 3px inset inside the Marketplace's fixed-height list viewport moves the grid without resizing the dialog or changing Installed; the absolute contribution wrapper moves down 2.5px without changing its hitbox or horizontal alignment. These position adjustments await rebuilt-browser verification. Empty filter (unmatched search) matches Master: dialog, tabs and toolbar remain, the content area is empty and the search stays editable. Search margins, toolbar actions and filter/sort dots follow Master's source. |
 | Login | Table74 measured LUI 488×390 versus Master 490×405.97; link RGB(16,107,163) versus RGB(27,104,152). Source now includes the dialog's two border pixels in its responsive width, uses Master's accent-first link token, and models the footer paragraph's 8px vertical margins, 16px top padding and 24px line boxes without a form gap before it. Authentication logic is unchanged. Exact geometry/tone and shared dialog opening still need browser acceptance. |
 | Signup validation | Native email-validity and required-field validation behavior is not aligned. Entry-screen appearance does not establish submission parity. |

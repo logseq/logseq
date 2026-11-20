@@ -214,12 +214,18 @@ external window_apis : Js.Json.t -> Js.Json.t option = "apis"
   [@@mel.get] [@@mel.return nullable]
 external api_open_path : Js.Json.t -> string -> unit Js.Promise.t = "openPath"
   [@@mel.send]
+external api_do_action : Js.Json.t -> Js.Json.t = "doAction" [@@mel.get]
+
+let electron_apis () =
+  match window_apis browser_window with
+  | Some apis when Js.typeof (api_do_action apis) = "function" -> Some apis
+  | _ -> None
 
 let is_file_url s =
   String.length s >= 5 && String.lowercase_ascii (String.sub s 0 5) = "file:"
 
 let open_url url =
-  match window_apis browser_window with
+  match electron_apis () with
   | Some apis when is_file_url url ->
       ignore (api_open_path apis url |> Js.Promise.catch (fun _ ->
         Ui_services.log_error ("open-path failed", url);
@@ -332,9 +338,10 @@ let file_url_to_assets_url src =
   with _ -> None
 
 let media_url src =
-  match window_apis browser_window with
-  | Some _ -> Option.value (file_url_to_assets_url src) ~default:src
-  | None -> src
+  match electron_apis () with
+  | Some _ ->
+      Option.value (file_url_to_assets_url src) ~default:src
+  | _ -> src
 (* Import UTF-8 byte data, such as Dicts_gen.en. UI source literals use
    {js|...|js}; DOM and worker text must never pass through this decoder. *)
 let decode_utf8_bytes : string -> string =

@@ -477,8 +477,9 @@ let set_collapsed ?(scope = "main") uuid v =
   if ready () then set (collapsed_ui_transform ~scope uuid v)
   else defer_init (collapsed_ui_transform ~scope uuid v)
 
-let clear_collapse_scope ~scope =
-  let prefixes = collapse_key scope "" :: occurrence_collapse_keys scope "" in
+let clear_collapse_scope ?(descendants=false) ~scope () =
+  let prefixes = collapse_key scope "" :: occurrence_collapse_keys scope ""
+    @ (if descendants then [scope ^ ":"; "occurrence:" ^ scope ^ ":"] else []) in
   let has_prefix s =
     List.exists (fun prefix ->
     String.length s >= String.length prefix

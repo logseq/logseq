@@ -822,6 +822,16 @@ let reference_disclosure ~registry ~profile =
       Runtime.app_flush := (fun () -> S.flush session);
       check "Static reference rows mount without registering an editable ref scope"
         (Option.is_none (Editor_state.block_source "ref"));
+      let editable uuid =
+        List.exists (fun node ->
+          M.string_prop node "accessibility-identifier"=Some ("ls-block-" ^ uuid)
+          && List.assoc_opt "data-editable" (P.data_attrs_decode
+            (Option.value (M.string_prop node "data-attrs") ~default:""))=Some "true")
+          (nodes session) in
+      check "Linked-reference roots and children advertise editability"
+        (editable "reference-root" && editable child_id);
+      check "Linked-reference editing resolves its root and child in the occurrence scope"
+        (Editor_state.find_in (Editor_state.blocks_in_scope scope) child_id<>None);
       Editor_state.set_collapsed ~scope:"other-reference" child_id false;
       S.flush session;
       let leaf_visible () = List.exists (fun node ->
@@ -844,7 +854,19 @@ let reference_disclosure ~registry ~profile =
       check "An empty reference child cannot create a collapse override"
         (not (Editor_state.is_collapsed_in ~scope "reference-empty")
          && not (leaf_visible ()));
-      check "Reference disclosure never writes a graph collapse property" (!writes=0)))
+      check "Reference disclosure never writes a graph collapse property" (!writes=0);
+      let edit uuid title =
+        Editor_state.set (fun state -> {state with Editor_state.editing=Some
+          (Editor_state.mk_editing ~uuid ~scope ~buffer:title ~base:title ())});
+        S.flush session;
+        List.filter (fun n -> M.string_prop n "accessibility-identifier"
+          =Some ("editor-edit-block-" ^ uuid)) (nodes session) in
+      check "A linked-reference child mounts its editor in place"
+        (List.length (edit child_id "Reference child")=1);
+      check "Editing the linked root replaces the child editor instead of duplicating it"
+        (List.length (edit "reference-root" "Reference root")=1
+         && not (List.exists (fun n -> M.string_prop n "accessibility-identifier"
+           =Some ("editor-edit-block-" ^ child_id)) (nodes session)))))
 
 let preview_reference_disclosure ~registry ~profile =
   let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker in
@@ -1087,7 +1109,38 @@ let sidebar_history ~registry ~profile ~finish =
     |> Js.Promise.catch (fun _ -> check "Sidebar history workflow completes" false;
       cleanup ();Js.Promise.resolve ()))
 
+let preview_block_spacing ~registry ~profile =
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st and previous_popup = !Popups_state.active in
+  Fun.protect ~finally:(fun () ->
+    Editor_state.st:=previous_editor; Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings; Popups_state.active:=previous_popup) (fun () ->
+    let page = {(Test_check.page []) with Model.page_title="Containing page"} in
+    List.iter (fun (root_uuid,block_preview) ->
+      Editor_state.st:=None; Editor_state.field_sigs_opt:=None; Settings_state.st:=None;
+      let session = S.mount ~registry ~profile ~initial:Model.initial
+        ~reducer:(fun model () -> model) ~view:(fun _ _ _ context parent ->
+          Popups_view.pv_popover (Popups_state.make context.Lui_ui.ui_scheduler)
+            {Popups_state.pv_x=10.;pv_y=10.;pv_content={pc_title="Containing page";
+              pc_page=Some page;pc_root_uuid=root_uuid;pc_ref_counts=None;
+              pc_blocks=[Test_check.block "preview-spacing-root" "Preview parent"
+                ~children:[Test_check.block "preview-spacing-child" "Preview child"]]}}
+            context parent) () in
+      Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+        let sections=List.find (fun n -> class_has n "page") (nodes session) in
+        let title=List.find (fun n -> M.string_prop n "accessibility-identifier"
+          =Some "page title") (nodes session) in
+        let prop n key value = Hashtbl.find_opt n.M.props key=Some (P.IntValue value) in
+        check "Block previews retain Master's section gap and page-inner bottom margin"
+          (prop sections "gap" (if block_preview then 32 else 0)
+           && prop sections "margin-bottom" (if block_preview then 64 else 0));
+        check "Block preview breadcrumbs retain both my-2 margins without changing page titles"
+          (prop title "margin-top" (if block_preview then 8 else 0)
+           && prop title "margin-bottom" (if block_preview then 8 else 0))))
+      [Some "preview-spacing-root",true;page.Model.page_uuid,false])
+
 let run_views ~registry ~profile ~finish =
+  preview_block_spacing ~registry ~profile;
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;
   preview_reference_disclosure ~registry ~profile;
@@ -1374,7 +1427,7 @@ let run_views ~registry ~profile ~finish =
   let install_file_host : (string -> unit Js.Promise.t) -> (unit -> unit) =
     [%mel.raw {|function (openPath) {
       const previous = window.apis;
-      window.apis = {openPath};
+      window.apis = {openPath, doAction: () => Promise.resolve(null)};
       return () => { if (previous === undefined) delete window.apis; else window.apis = previous; };
     }|}] in
   let opened = ref [] in
@@ -1418,6 +1471,33 @@ let run_views ~registry ~profile ~finish =
   restore_host ();
   check "Browser previews retain file URLs instead of using an Electron-only scheme"
     (Platform.media_url file_pdf=file_pdf);
+  let install_browser_host : bool -> (string -> unit) -> (unit -> unit) =
+    [%mel.raw {|function (shim, open) {
+      const previousApis = window.apis, previousOpen = window.open;
+      if (shim) window.apis = {on() {}, emit() {}}; else delete window.apis;
+      window.open = open;
+      return () => {
+        if (previousApis === undefined) delete window.apis; else window.apis = previousApis;
+        window.open = previousOpen;
+      };
+    }|}] in
+  List.iter (fun shim ->
+    let browser_opened = ref [] in
+    let restore_browser = install_browser_host shim (fun url -> browser_opened:=url::!browser_opened) in
+    let browser_link = mount (fun _ -> Lui_elements.column
+      (Render_inline.parse ("[Local](" ^ file_pdf ^ ")"))) in
+    let anchor = List.find (fun n -> n.M.kind="link"
+      && M.string_prop n "url"=Some file_pdf) (nodes browser_link) in
+    check "Browser file links keep native navigation without an application press handler"
+      (!browser_opened=[] && M.string_prop anchor "target"=Some "_blank"
+       && Hashtbl.find_opt anchor.M.props "press-enabled"<>Some (P.BoolValue true)
+       && M.string_prop anchor "icon"=Some "app:file");
+    Platform.open_url file_pdf;
+    Platform.open_url "";
+    check "Browser open_url never calls Electron APIs, with or without the plugin shim"
+      (!browser_opened=["";file_pdf] && Platform.media_url file_pdf=file_pdf);
+    ignore (Lui_app.dispose browser_link.S.app);
+    restore_browser ()) [false;true];
   List.iter (fun code ->
     let results = mount (fun _ -> Option.get (Render.calc_results_el code)) in
     let lines = List.filter (fun node ->

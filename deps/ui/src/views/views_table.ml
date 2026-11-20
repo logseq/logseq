@@ -1532,7 +1532,7 @@ let list_row_el inst ~row_uuid ~blk : t =
     | _ -> None
   in
   !Render_state.block_row_static ?highlight
-    ~collapse_scope:inst.V.collapse_scope ~persist_collapse b
+    ~collapse_scope:(inst.V.collapse_scope ^ ":" ^ row_uuid) ~persist_collapse b
 
 let row_title s u =
   match Hashtbl.find_opt s.V.blocks u with

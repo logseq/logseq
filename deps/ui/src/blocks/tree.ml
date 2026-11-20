@@ -514,7 +514,7 @@ let content_wrapper ?highlight ~scope ~editable uuid (b : Model.block) : t =
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
 
-let content_or_editor ~editable uuid scope (b : Model.block) : t =
+let content_or_editor ?highlight ~editable uuid scope (b : Model.block) : t =
  fun ctx parent ->
   (* cljs unmounts .block-content while editing and removes the editor
      entirely in normal mode — .block-title-wrap must be absent for the
@@ -536,7 +536,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
               (* fenced-code blocks keep their rendered surface while
                  editing — the mounted CodeMirror IS the editor, so the
                  DOM must not swap or the instance is destroyed *)
-              content_wrapper ~scope ~editable uuid b
+              content_wrapper ?highlight ~scope ~editable uuid b
           | _ ->
               if editing && editable then
                 (* cljs styles the editor textarea uniline-block.hN —
@@ -549,7 +549,7 @@ let content_or_editor ~editable uuid scope (b : Model.block) : t =
                   | None -> ""
                 in
                 editor_el ~cls uuid scope
-              else content_wrapper ~scope ~editable uuid b))
+              else content_wrapper ?highlight ~scope ~editable uuid b))
     (* the derivation outlives the mount unless it's owned into the
        row's scope — editing_sig is shared *)
     (Logseq_el.own ctx
@@ -1156,13 +1156,7 @@ and children_el ?extras ~depth ~editable ~library ~virtualize uuid scope
     (children_dom ?extras ~depth ~editable ~library ~virtualize uuid scope bs)
     ctx parent
 
-(* Read-only row for linked-reference lists: same shell as row_el but the
-   content never swaps to editor_el — a block shown in .references can
-   simultaneously be under edit in its own page, and a second
-   logseq-editor sink for it breaks locators. The rfs- reload key also
-   keeps the row from claiming the live row's DOM node on reconciliation —
-   both are keyed ls-…/rfs-… on the same uuid but are distinct logical
-   nodes. *)
+(* Snapshot rows own a separate editing scope from the main outliner. *)
 and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight ~collapse_scope
     ~persist_collapse (b : Model.block) : t =
  fun ctx parent ->
@@ -1171,6 +1165,11 @@ and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight
      exist before the per-row signals below *)
   S.ensure ctx;
   (let uuid = Option.value b.block_uuid ~default:"" in
+  let editable = not (Ui_services.env_publishing ()) in
+  if depth = 0 && editable then begin
+    let remove = S.register_block_source ~scope:collapse_scope ~kind:S.Outliner (fun () -> [b]) in
+    Signal.on_dispose ctx.Lui_ui.ui_scope remove
+  end;
   let on_toggle () =
     Editor_actions.exit_edit ~select:false;
     Editor_actions.toggle_collapse_block ~scope:collapse_scope
@@ -1178,18 +1177,19 @@ and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight
   in
   let key = block_key b in
   let has_children = b.block_children <> [] in
-  track_mounted_row ~scope:"ref" b
+  track_mounted_row ~scope:collapse_scope b
     (with_editor_font
     (Ui_parts.string_prop Lui_protocol.StyleClass
-      ~value:(reactive (row_class_str ~scope:"ref" b uuid) (S.selection_sig ()) (S.drag_sig ()))
+      ~value:(reactive (row_class_str ~scope:collapse_scope b uuid) (S.selection_sig ()) (S.drag_sig ()))
     (column ~key:("rfs-" ^ key)
        ~accessibility_identifier:("ls-block-" ^ key)
        ~transition:Ui_components.block_transition
-       ~data_attrs_signal:(row_attrs_sig ~scope:collapse_scope ~depth ~editable:false uuid b)
+       ~data_attrs:(reactive (fun view -> ("data-cid",collapse_scope) ::
+         row_attrs_of ~scope:collapse_scope ~depth ~editable uuid b view) (S.collapse_sig ()))
     [ row ~key:("main-" ^ key)
         ~style_class:"block-main-container" ~gap:4
         ~data_attrs:(heading_attrs b)
-        [ control_wrap ~on_toggle ~siblings ~scope:"ref" ~collapse_scope ~library uuid b
+        [ control_wrap ~on_toggle ~siblings ~scope:collapse_scope ~collapse_scope ~library uuid b
         ; column ~key:("col-" ^ key) ~grow:1.
             [ column ~key:("col2-" ^ key)
                 [ row ~key:("bmc-" ^ key)
@@ -1202,7 +1202,7 @@ and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight
                                     ~style_class:"block-row"
                                     ~grow:1. ~gap:4 ~cross:`center
                                     [ Properties_area.block_left_chips ~scope:"reference" ~uuid
-                                    ; content_wrapper ?highlight ~scope:"ref" ~editable:false uuid b
+                                    ; content_or_editor ?highlight ~editable uuid collapse_scope b
                                     ; row ~key:("br-" ^ key)
                                         ~style_class:"ls-block-right"
                                         ~gap:4 ~cross:`center

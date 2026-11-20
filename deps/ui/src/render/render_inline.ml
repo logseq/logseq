@@ -445,7 +445,8 @@ let external_link href label_els =
     [ Ui_components.Prop.text_decoration "none" ]
     (link ~url:href ~target:`blank
        ?icon:(if local then Some (`app "file") else None)
-       ?on_press:(if local then Some (fun _ -> Ui_services.env_open_url href) else None)
+       ?on_press:(if local && Daemon_client.is_electron ()
+         then Some (fun _ -> Ui_services.env_open_url href) else None)
        ~style_class:(if local then "asset-ref" else "external-link")
        label_els)
 

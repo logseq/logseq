@@ -422,9 +422,7 @@ let ctx_of inst : W.t =
         in
         base @ [ (W.kw "initial-row-count", W.Int (max n s.fetch_limit)) ]
     | "linked-references", _ ->
-        let staged =
-          if s.fetch_limit > 0 then s.fetch_limit else Views_wire.ref_window
-        in
+        let staged = max Views_wire.ref_window s.fetch_limit in
         base
         @ [ (W.kw "initial-row-count", W.Int (min 1000 (max 1 staged))) ]
     | _ -> base

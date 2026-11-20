@@ -1160,6 +1160,9 @@ let pv_popover (st : S.t) (p : S.pv) : t =
  fun context parent ->
   Editor_state.ensure context;
   let content = p.S.pv_content in
+  let block_preview = match content.S.pc_page with
+    | Some page -> content.S.pc_root_uuid <> page.Model.page_uuid
+    | None -> false in
   let extras = preview_row_extras context
     (Option.value content.S.pc_ref_counts ~default:[])
     ~open_in_sidebar:(fun uuid ->
@@ -1185,8 +1188,12 @@ let pv_popover (st : S.t) (p : S.pv) : t =
       (column ~key:"pvw" ~style_class:"tippy-wrapper as-page" ~width:600
         ~min_width:200 ~padding:8
         ~margin_left:(-20) ~data_attrs:[ ("tabindex", "-1") ]
-        [ box ~key:"pvp" ~style_class:"page"
+        [ column ~key:"pvp" ~style_class:"page"
+            ~gap:(if block_preview then 32 else 0)
+            ~margin_bottom:(if block_preview then 64 else 0)
             [ box ~key:"pvt"
+                ~margin_top:(if block_preview then 8 else 0)
+                ~margin_bottom:(if block_preview then 8 else 0)
                 ~style_class:"ls-page-title content title"
                 ~accessibility_identifier:"page title"
                 [ box ~key:"pvtc"

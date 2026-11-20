@@ -973,6 +973,18 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
   | Some d -> d = Dates.today_journal_day () && m.route <> Model.Home
   | None -> false
 
+let today_queries (page : Model.page) : t =
+ fun ctx parent ->
+  (if not (is_today_journal page) then Logseq_el.nothing else
+  column ~accessibility_identifier:"today-queries" ~gap:8
+    [ reactive ~equal:(fun a b -> a.Model.graph_config=b.Model.graph_config)
+        (fun model ->
+          let queries = match Wire.get model.Model.graph_config "default-queries" with
+            | Some queries -> Option.value (Wire.get queries "journals") ~default:Wire.Nil
+            | None -> Wire.Nil in
+          column ~gap:8 (List.map (Views_view.configured_query ~page) (Wire.elems queries)))
+        (Runtime.model_signal ()) ]) ctx parent
+
 (* cljs page-inner wrap classes — shared by the page route and each
    journal item in the journals list *)
 let page_wrap_cls (m : Model.t) (page : Model.page) : string =
@@ -1035,7 +1047,7 @@ let journal_section ms ~footer ?spacing ~source : t =
                        (fun page ->
                          column ~key:"journal-reference-content" ~gap:32
                            ((if is_today_journal page then
-                               [box ~key:"today-queries" ~accessibility_identifier:"today-queries" []]
+                               [today_queries page]
                              else [])
                             @ [journal_references_view page])) ps ] ]) ]
          @ (match spacing with
@@ -1406,7 +1418,7 @@ let linked_refs_el (m : Model.t) : t =
             (* cljs page-inner: #today-queries div first on today's journal,
                then the linked refs section *)
             ((if is_today_page m page then
-                [ box ~key:"tq" ~accessibility_identifier:"today-queries" [] ]
+                [ today_queries page ]
               else [])
             @ [ box ~key:"lrefs"
                   [ references_view ~page_uuid:uuid ~has_refs:true () ] ]))
