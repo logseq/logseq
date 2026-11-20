@@ -175,7 +175,9 @@ let rec property_chosen d prop =
     finish_write d (D.class_add_property ~class_uuid:d.d_target.uuid
          ~ident:(ident_of prop)))
   else if is_checkbox prop && d.d_target.uuids = [] then (
-    write_prop_value d prop (Some (W.Bool false)))
+    write_prop_value d prop
+      (Some (Option.value (D.getf prop "logseq.property/scalar-default-value")
+        ~default:(W.Bool false))))
   else if d.d_target.uuids = []
           && not (is_many prop)
           && List.mem (type_of prop) ["default"; "url"]
@@ -599,7 +601,7 @@ let value_edit_view d prop : t =
     let placeholder = I18n.t1 "property/set-placeholder" (title_of prop) in
     let closed = Option.fold ~none:[] ~some:W.elems (D.getf prop "property/closed-values") in
     let on_new =
-      if closed <> [] || List.mem ty ["page";"property";"asset"] then None
+      if closed <> [] || List.mem ty ["property";"asset"] then None
       else if ty = "number" then
         Some
           (fun text ->
@@ -610,7 +612,7 @@ let value_edit_view d prop : t =
             | None -> ())
       else if ty = "string" then
         Some (fun text -> write_new (W.String text))
-      else if ty = "node" || ty = "class" then
+      else if List.mem ty ["node";"page";"class"] then
         Some
           (fun text ->
             ignore

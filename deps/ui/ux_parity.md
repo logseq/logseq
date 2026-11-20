@@ -359,6 +359,61 @@ the OS keychain host`. The reported browser's exact post-insertion write has
 not been traced; rebuilt-application picker, display and reload acceptance
 remain browser/visually unverified. No `static/` writes or `:3010` access.
 
+### Table84 creation, commands and property presentation
+
+Table84 accepts Between filtering and tagged-template child insertion on
+`141b8be5`. New evidence is under `/Users/devin/table84/evidence/`, including
+the Alias and code-language picker comparisons, Math command comparisons,
+`*-last-checks.json`, checkbox-default application and priority/deadline
+discovery captures.
+
+Seven application-layer repairs follow Master's source:
+
+- Alias is a page reference. Both the value-cell picker and Set property
+  dialog now offer New option for page values, using the existing create-page
+  and entity-reference write paths rather than creating a string alias.
+- Web and native code-language actions share the searchable select in
+  `views_popup.ml`, with the existing translated Choose language placeholder.
+  Selecting a filtered result retains the existing language-persistence action;
+  an empty result cannot invent a mode. No build/module configuration changed.
+- Math removes the command trigger and writes display-type on the current
+  block, preserving its content instead of taking the sibling-insertion path.
+- Recent-block highlighting defaults to `t h`, matching Master's keymap.
+  The command palette and global dispatcher consume the same binding source;
+  explicit user overrides remain supported. The native recorder's old Command-C
+  prefix count is reduced by one because highlighting no longer has that prefix.
+- Adding a single checkbox property uses scalar-default-value, including true
+  and explicit false; only a missing default uses Master's false value. Batch
+  selection still asks for an explicit value. Single Text and URL value-block
+  creation already seeds default content; the existing many-value behavior and
+  Number value-picker flow are preserved rather than blanket auto-writing defaults.
+- Positioned closed choices with icons render icon-only, including priority
+  and many-value choices, matching Master's positioned icon option. Panel/table
+  labels and iconless fallbacks remain visible; accessible names are retained.
+- Date-page links use the existing link-blue token instead of inheriting gray.
+  Scheduled/deadline overdue color and surrounding time text are preserved.
+
+Mounted regressions cover both Alias creation entry points, filtered language
+selection and empty results, blank/nonempty Math conversion and rejected writes,
+the rendered highlight keycaps and actual chord dispatch, checkbox true/false/no
+default through the property selector, Text/URL seed content, priority label
+visibility and scheduled/deadline/custom date link and overdue colors.
+
+These are application adaptations, not SDK limitations. Full rebuilt-browser
+picker, reload and exact visual acceptance remain pending; mounted/native
+coverage is not browser acceptance. No `static/` writes or `:3010` access.
+
+Verification: UI passes 6519 checks with zero failures; native experimental
+tests and build pass. The worker aggregate still runs 994 tests with three
+platform failures and `Native secrets require the OS keychain host`, matching
+the preceding Table83 aggregate. The native recorder initially retained its
+obsolete four-row Command-C expectation; updating it to the three remaining
+bindings restores the native gate without changing recorder behavior.
+The i18n lint command is environment-blocked before analysis: its cached
+SQLite pod is x86_64 on this arm64 machine (`Exec failed, error: 86 (Bad CPU
+type in executable)`). The picker reuses an existing translation key; no
+dictionary text changed. UI journal diagnostics retain the 102/52 baseline.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -374,6 +429,10 @@ remain browser/visually unverified. No `static/` writes or `:3010` access.
 
 These are limitations of the current typed SDK/host surface, not permission to
 add raw DOM, CSS-layout, or untyped widget escape hatches.
+
+SDK entries mean LUI's currently exposed typed capability set. Host/platform
+entries describe missing integrations or platform-specific controls separately;
+neither category claims the underlying operating system can never support them.
 
 | Surface | Unsupported parity detail |
 |---|---|

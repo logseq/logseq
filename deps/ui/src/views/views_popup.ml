@@ -564,6 +564,14 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
   in
   ignore (push ~anchor:anchor_target view)
 
+let show_code_language_picker ~anchor ~languages ~on_choose =
+  let items = List.map (fun name ->
+    {si_label = name; si_value = name; si_extra = None}) languages in
+  show_select ~anchor ~items:(fixed_items items)
+    ~placeholder:(I.t "editor/code-language-placeholder")
+    ~wrap_cls:"ls-code-lang-picker"
+    ~on_chosen:(fun item _ _ -> on_choose item.si_value) ()
+
 (* ---------- confirm dialog ---------- *)
 
 let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "ui/yes"))

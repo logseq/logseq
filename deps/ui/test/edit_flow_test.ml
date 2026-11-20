@@ -1858,7 +1858,31 @@ let test_code_conversion_focus (h : host) =
   S.code_focus := previous_focus;
   reset_editor ();
   install_worker ~repo:h.repo h;
-  Js.Promise.resolve ()
+  let rec math = function
+    | [] -> Js.Promise.resolve ()
+    | (title,rejected)::rest ->
+        stage_page h [Test_check.block "b1" title];
+        set_editing ~uuid:"b1" ~buffer:(title ^ "/Math")
+          ~caret:(String.length title+5) ~base:title;
+        install_worker ~repo:h.repo h;
+        if rejected then install_rejecting_worker h;
+        Editor_commands.run_editor_cmd "b1" "math-block"
+          (String.length title) (String.length title+5);
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Math converts the current block without inserting a sibling"
+          (not (List.mem "insert-blocks" (op_names ()))
+           && List.map String.trim (current_titles ())=[String.trim title]);
+        if not rejected then
+          check "Math writes the display type on the original block"
+            (List.exists (function
+              | W.Array [W.Keyword "set-block-property";
+                  W.Array [W.Uuid "b1";W.Keyword "logseq.property.node/display-type";W.Keyword "math"]] -> true
+              | _ -> false) !ops);
+        reset_editor ();
+        math rest
+  in
+  math ["",false;"Existing content ",false;"Existing content ",true]
 
 let test_calculator_exit_structure (h : host) =
   let previous_buffer = !S.code_buffer_of in

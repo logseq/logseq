@@ -1565,7 +1565,7 @@ let run_editor_cmd uuid command from to_ =
   | "deadline" ->
       open_cal (Cal_prop ("logseq.property/deadline", "")) uuid caret
   | "quote" -> upsert_type_block ~caret uuid "quote"
-  | "math-block" -> upsert_type_block ~caret uuid "math"
+  | "math-block" -> set_props ~caret uuid "logseq.property.node/display-type" (W.Keyword "math")
   | "code-block" -> upsert_type_block ~exit:true ~caret uuid "code"
   | "calculator" -> upsert_type_block ~lang:"calc" ~caret uuid "code"
   | "normal-text" | "clear-heading" ->

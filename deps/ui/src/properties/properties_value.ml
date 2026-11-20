@@ -1206,6 +1206,10 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
       "var(--lx-property-overdue-fg)"
     else "inherit"
   in
+  let link_foreground time repeated =
+    if overdue time repeated then foreground time repeated
+    else "var(--lx-accent-11, var(--ls-link-text-color))"
+  in
   let overdue_attrs time repeated =
     if overdue time repeated then
       let label = I18n.t "property/overdue" in
@@ -1280,10 +1284,10 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
             [(match ymd_of_datetime_value value with
            | Some (y, m, d) ->
                Ui_parts.string_prop Lui_protocol.HoverForeground
-                 ~value:(reactive foreground (Signal.value now) (Signal.value repeated))
+                 ~value:(reactive link_foreground (Signal.value now) (Signal.value repeated))
                (link ~style_class:"page-ref"
                  ~data_attrs:(reactive overdue_attrs (Signal.value now) (Signal.value repeated))
-                 ~foreground:(reactive foreground (Signal.value now) (Signal.value repeated))
+                 ~foreground:(reactive link_foreground (Signal.value now) (Signal.value repeated))
                  ~url:
                    ("#/page/"
                    ^ Ui_services.uri_encode_component
@@ -1545,7 +1549,7 @@ let closed_value_view ?(jump_target = true) ?(icon_size = 18.) ~positioned ~tabl
   in
   let label = if display = "" then I18n.t "ui/empty" else display in
   let show_text = display <> "" &&
-    not (positioned && ident = "logseq.property/status" && Option.is_some icon_id) in
+    not (positioned && Option.is_some icon_id) in
   let activate () =
     open_value_picker anchor_id
              (fun ~alive ~close popup_context popup_parent ->
@@ -1625,7 +1629,8 @@ let closed_value_view ?(jump_target = true) ?(icon_size = 18.) ~positioned ~tabl
                 List.concat_map (fun (index, item) ->
                   (if index = 0 then [] else [text ~value:"," ~foreground:"var(--lx-gray-09)" []])
                   @ (match closed_value_icon_id item with None -> [] | Some id -> [Icons.icon ~size:icon_size id])
-                  @ [text ~value:(D.value_display item) []])
+                  @ (if positioned && Option.is_some (closed_value_icon_id item) then []
+                     else [text ~value:(D.value_display item) []]))
                   (List.mapi (fun index item -> index, item) (D.value_elems value))
               else (match icon_id with None -> [] | Some id -> [ Icons.icon ~size:icon_size id ])
                 @ if show_text then [ text ~value:display [] ] else []) ])
@@ -1692,7 +1697,7 @@ let node_view ?(jump_target = true) ?(table_view = false) ctx row : t =
               ~clear_input_on_choice:true
               ~placeholder:
                 (I18n.t1 "property/set-placeholder" (D.row_title row))
-              ~new_option:(if List.mem (D.row_type row) ["node";"class"] then
+              ~new_option:(if List.mem (D.row_type row) ["node";"page";"class"] then
                 Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
              context' parent') in

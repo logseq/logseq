@@ -4841,7 +4841,7 @@ let () =
               key "c" true;
               expect
                 "Native recorded prefixes must include multi-stroke command bindings"
-                (count_class "shortcut-row" = 4);
+                (count_class "shortcut-row" = 3);
               let timer_ids_before =
                 Hashtbl.fold (fun id _ ids -> id :: ids) Host.timers []
               in

@@ -2221,11 +2221,13 @@ let run_views ~registry ~profile ~finish =
     Properties_dialog.current := None;
     Properties_dialog.current_sig := None;
     Properties_dialog.open_scope := None;
-    let operations = ref [] and dismissed = ref 0 in
+    let operations = ref [] and dismissed = ref 0 and available = ref [] in
+    let previous_pending = !Properties_value.pending_edit in
     ignore (Fake_worker.install (fun name args ->
       if name="thread-api/apply-outliner-ops" then (
         operations := Wire.elems (List.nth args 1) @ !operations;
         Wire.Map [Wire.kw "result",Wire.Nil])
+      else if name="thread-api/get-all-properties" then Wire.Array !available
       else Wire.Nil));
     let target : Properties_dialog.target =
       {uuid="batch-first";uuids=["batch-first";"batch-second"];
@@ -2234,7 +2236,7 @@ let run_views ~registry ~profile ~finish =
       Wire.kw "block/title",Wire.String "Flag";
       Wire.kw "logseq.property/type",Wire.kw "checkbox"] in
     let picker = mount (fun _ -> Properties_dialog.view) in
-    let rec next = function
+    let rec defaults = function
       | [] ->
           ignore (Lui_app.dispose picker.S.app);
           Properties_dialog.current := previous_dialog;
@@ -2243,7 +2245,44 @@ let run_views ~registry ~profile ~finish =
           Properties_dialog.current_on_close := previous_close;
           Runtime.worker := previous_worker;
           Runtime.read_model := previous_model;
+          Properties_value.pending_edit := previous_pending;
           done_ ()
+      | (ty,default,expected)::rest ->
+          operations := [];
+          available := [Wire.Map ([Wire.kw "db/ident",Wire.kw "fixture/batch-flag";
+            Wire.kw "block/title",Wire.String "Flag";
+            Wire.kw "logseq.property/type",Wire.kw ty]
+            @ match default with None -> [] | Some value ->
+              [Wire.kw (if ty="checkbox" then "logseq.property/scalar-default-value"
+                 else "logseq.property/default-value"),value])];
+          Properties_dialog.open_at ~remove:false ~phase:Properties_dialog.Prop_select
+            (Properties_dialog.Anchor_rect (120.,80.,104.,32.)) {target with uuids=[]};
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            S.flush picker;
+            let choice=List.find (fun n -> n.M.kind="list-item") (nodes picker) in
+            S.press picker choice.M.id;
+            ignore (Js.Global.setTimeout ~f:(fun () ->
+              check "Adding a property through its picker writes its configured default"
+                (match !operations,expected with
+                 | [Wire.Array [Wire.Keyword "batch-set-property";
+                     Wire.Array [Wire.List [Wire.Uuid "batch-first"];
+                       Wire.Keyword "fixture/batch-flag";value;_]]],Wire.Bool _ -> value=expected
+                 | [Wire.Array [Wire.Keyword "create-property-text-block";
+                     Wire.Array [Wire.Uuid "batch-first";
+                       Wire.Keyword "fixture/batch-flag";value;_]]],Wire.String _ -> value=expected
+                 | _ -> false);
+              check "Successful default application closes the Set property picker"
+                (not (Properties_dialog.is_open ()));
+              defaults rest) 0)) 0)
+    in
+    let rec next = function
+      | [] -> defaults [
+          "checkbox",Some (Wire.Bool true),Wire.Bool true;
+          "checkbox",Some (Wire.Bool false),Wire.Bool false;
+          "checkbox",None,Wire.Bool false;
+          "default",Some (Wire.Map [Wire.kw "block/title",Wire.String "Default text"]),Wire.String "Default text";
+          "url",Some (Wire.Map [Wire.kw "block/title",Wire.String "https://example.com"]),Wire.String "https://example.com";
+          "default",None,Wire.String ""]
       | value :: rest ->
           operations := [];
           Properties_dialog.open_at ~on_close:(fun () -> incr dismissed)
@@ -2721,10 +2760,10 @@ let run_views ~registry ~profile ~finish =
           Runtime.app_flush:=previous_flush;done_ ()
       | (table_view, ident, metadata, initial, closes)::rest ->
           Properties_state.view_overlays_state:=None;
-          let chosen = ref initial in
+          let chosen = ref initial and created = ref [] in
           let prop = Wire.Map [Wire.kw "db/id",Wire.Int 100;
             Wire.kw "db/ident",Wire.kw ident;
-            Wire.kw "logseq.property/type",Wire.kw (if ident="block/tags" then "class" else "node");
+            Wire.kw "logseq.property/type",Wire.kw (if ident="block/tags" then "class" else if ident="block/alias" then "page" else "node");
             Wire.kw "db/cardinality",Wire.kw "db.cardinality/many"] in
           ignore (Fake_worker.install (fun name args -> match name with
             | "thread-api/entity" ->
@@ -2735,9 +2774,14 @@ let run_views ~registry ~profile ~finish =
                 [Wire.kw "all-classes",Wire.Array [page;audit;card];
                  Wire.kw "initial-choices",Wire.Array [page;audit;card];
                  Wire.kw "class-options",Wire.Array [audit;card]]
+            | "thread-api/get-case-page" -> entity 82 "New Alias"
             | "thread-api/apply-outliner-ops" ->
                 (match List.nth_opt args 1 with
                  | Some (Wire.Array ops) -> List.iter (function
+                     | Wire.Array [Wire.Keyword "create-page";Wire.Array [Wire.String title;opts]] ->
+                         created := [title];
+                         check "New aliases create ordinary pages rather than classes"
+                           (Wire.get opts "class?"=Some (Wire.Bool false))
                      | Wire.Array [Wire.Keyword "batch-set-property";
                          Wire.Array [Wire.List [Wire.Uuid "node-owner"];Wire.Keyword key;Wire.Int id;
                            Wire.Map [(Wire.Keyword "entity-id?",Wire.Bool true)]]] when key=ident ->
@@ -2745,9 +2789,13 @@ let run_views ~registry ~profile ~finish =
                      | Wire.Array [Wire.Keyword "delete-property-value";
                          Wire.Array [_;Wire.Keyword key;Wire.Int id]] when key=ident ->
                          chosen:=List.filter ((<>) id) !chosen
+                     | Wire.Array [Wire.Keyword "batch-set-property";
+                         Wire.Array [Wire.List [Wire.Uuid "node-owner"];Wire.Keyword "block/alias";
+                           Wire.Int id;Wire.Map []]] when ident="block/alias" -> chosen:=[id]
                      | _ -> ()) ops
                  | _ -> ());
-                Wire.Map [Wire.kw "result",Wire.Nil]
+                Wire.Map [Wire.kw "result",if !created=[] then Wire.Nil
+                  else Wire.Array [Wire.Nil;Wire.Uuid "node-82"]]
             | _ -> Wire.Nil));
           let ctx : Properties_value.ctx = {owner_key="node-lifetime";block_uuid="node-owner";
             jump_owner=Jump_state.owner ~scope:"main" ~container:"node-owner";
@@ -2806,6 +2854,37 @@ let run_views ~registry ~profile ~finish =
               && M.string_prop n "accessibility-label"=Some title) (nodes picker) in
             S.toggle picker option.M.id checked in
           ignore (Js.Global.setTimeout ~f:(fun () ->
+            if ident="block/alias" then begin
+              let input=List.find (fun n -> n.M.kind="text-field") (nodes picker) in
+              S.text_changed picker input.M.id "New Alias";
+              check "Alias search exposes a new option for a missing page"
+                (List.exists (fun n -> M.string_prop n "accessibility-label"=
+                  Some (I18n.t1 "select/new-option" "New Alias")) (nodes picker));
+              S.submit picker input.M.id;
+              ignore (Js.Global.setTimeout ~f:(fun () ->
+                check "Choosing a new alias creates its page and stores its entity reference"
+                  (!created=["New Alias"] && !chosen=[82]);
+                Properties_state.close_all_view_overlays ();
+                ignore (Lui_app.dispose picker.S.app);
+                let previous_dialog = !Properties_dialog.current in
+                let d : Properties_dialog.dlg_state =
+                  {d_target={uuid="node-owner";uuids=[];db_id=Some 79;is_tag=false;title=""};
+                   d_remove=false;d_placement=Properties_dialog.Centered;
+                   d_phase=Properties_dialog.Value_edit prop;d_phase_sig=None} in
+                chosen:=[];created:=[];
+                Properties_dialog.current:=Some d;
+                let dialog=mount (fun _ -> Properties_dialog.value_edit_view d prop) in
+                ignore (Js.Global.setTimeout ~f:(fun () ->
+                  let input=List.find (fun n -> n.M.kind="text-field") (nodes dialog) in
+                  S.text_changed dialog input.M.id "Dialog Alias";
+                  S.submit dialog input.M.id;
+                  ignore (Js.Global.setTimeout ~f:(fun () ->
+                    check "The Set property Alias picker also creates and stores a new page"
+                      (!created=["Dialog Alias"] && !chosen=[82]);
+                    ignore (Lui_app.dispose dialog.S.app);
+                    Properties_dialog.current:=previous_dialog;
+                    next rest) 0)) 0)) 0)
+            end else begin
             check "Reopening a table node picker preserves and checks its existing values"
               (!chosen=initial && List.for_all (fun (title,id) ->
                 List.exists (fun n -> n.M.kind="checkbox"
@@ -2831,12 +2910,13 @@ let run_views ~registry ~profile ~finish =
                     check "An initially plural table value does not close merely because its last visible tag is removed"
                       (!chosen=[4] && Properties_state.view_overlay_open ());
                     finish ()) 0)
-                end else finish ()) 0)) 0)) 0)
+                end else finish ()) 0)) 0) end) 0)
     in
     next [true,"block/tags",false,[4],true;true,"block/tags",false,[],true;
       true,"block/tags",false,[4;81],false;false,"block/tags",false,[4],false;
       true,"block/tags",true,[4;81],false;true,"fixture/nodes",true,[4;81],false;
-      false,"fixture/nodes",true,[4;81],false;false,"fixture/nodes",true,[],false]
+      false,"fixture/nodes",true,[4;81],false;false,"fixture/nodes",true,[],false;
+      false,"block/alias",true,[],false]
   in
   let property_picker_check done_ =
     let items =
@@ -3268,6 +3348,38 @@ let run_views ~registry ~profile ~finish =
       {owner_key="property-date-fixture";block_uuid="date-owner";block_id=Some 79;
        jump_owner=Jump_state.owner ~scope:"main" ~container:"date-owner";
        refresh=(fun () -> ());is_page=false;class_schema=false} in
+    ignore (Fake_worker.install (fun _ _ -> Wire.Nil));
+    List.iter (fun (positioned,many,icon) ->
+      let value=Wire.Map ([Wire.kw "db/id",Wire.Int 80;Wire.kw "block/title",Wire.String "High"]
+        @ if icon then [Wire.kw "logseq.property/icon",Wire.Map
+            [Wire.kw "id",Wire.String "priority-lvl-high"]] else []) in
+      let prop=Wire.Map ([Wire.kw "db/ident",Wire.kw "logseq.property/priority";
+        Wire.kw "logseq.property/type",Wire.kw "default";
+        Wire.kw "property/closed-values",Wire.Array [value]]
+        @ if many then [Wire.kw "db/cardinality",Wire.kw "db.cardinality/many"] else []) in
+      let priority=mount (fun _ -> Properties_value.view ~positioned ~hover:None ctx
+        (Wire.Map [Wire.kw "property-id",Wire.kw "logseq.property/priority";
+          Wire.kw "property",prop;Wire.kw "value",if many then Wire.Set [value] else value])) in
+      check "Positioned priority icons suppress visible labels, not accessible names"
+        ((List.exists (fun n -> M.string_prop n "text"=Some "High") (nodes priority))
+           =not (positioned && icon)
+         && List.exists (fun n -> M.string_prop n "accessibility-label"=Some "High") (nodes priority));
+      ignore (Lui_app.dispose priority.S.app))
+      [true,false,true;false,false,true;true,false,false;true,true,true;false,true,true];
+    List.iter (fun ident ->
+      List.iter (fun future ->
+        let row=Wire.Map [Wire.kw "property-id",Wire.kw ident;
+          Wire.kw "property",Wire.Map [Wire.kw "db/ident",Wire.kw ident;
+            Wire.kw "logseq.property/type",Wire.kw "datetime"];
+          Wire.kw "value",Wire.Float (Dates.make ~year:(if future then 2999 else 2000) ~month:1 ~day:1 ())] in
+        let date=mount (fun _ -> Properties_value.view ~hover:None ctx row) in
+        let link=List.find (fun n -> n.M.kind="link") (nodes date) in
+        let expected=if not future && ident<>"fixture/date" then "var(--lx-property-overdue-fg)"
+          else "var(--lx-accent-11, var(--ls-link-text-color))" in
+        check "Date links use link blue while scheduled/deadline overdue colors remain intact"
+          (M.string_prop link "foreground"=Some expected);
+        ignore (Lui_app.dispose date.S.app)) [true;false])
+      ["logseq.property/scheduled";"logseq.property/deadline";"fixture/date"];
     let many_date_check () =
       let ident = "fixture/date" in
       let selected = ref None in
@@ -4720,6 +4832,27 @@ let run_views ~registry ~profile ~finish =
   eqi "view select query filters its portable result rows" 1 (List.length (choice_rows ()));
   S.submit sorting select_input.M.id;
   check "view select submits the filtered result" (List.nth_opt (List.rev !selected_items) 0 = Some ("29",true));
+  let chosen_language = ref None in
+  Views_popup.show_code_language_picker ~anchor:(popup_anchor ())
+    ~languages:["JavaScript";"Python"] ~on_choose:(fun name -> chosen_language:=Some name);
+  S.flush sorting;
+  let language_input = List.find (fun n -> n.M.kind="input"
+    && M.string_prop n "placeholder"=Some (I18n.t "editor/code-language-placeholder")) (nodes sorting) in
+  S.text_changed sorting language_input.M.id "Java";
+  check "Code language search narrows the available modes"
+    (List.length (choice_rows ())=1);
+  S.submit sorting language_input.M.id;
+  check "Code language search submits the selected language and dismisses"
+    (!chosen_language=Some "JavaScript" && !Views_popup.open_popups=[]);
+  Views_popup.show_code_language_picker ~anchor:(popup_anchor ()) ~languages:[]
+    ~on_choose:(fun name -> chosen_language:=Some name);
+  S.flush sorting;
+  let language_input = List.find (fun n -> n.M.kind="input"
+    && M.string_prop n "placeholder"=Some (I18n.t "editor/code-language-placeholder")) (nodes sorting) in
+  S.text_changed sorting language_input.M.id "Missing language";
+  S.submit sorting language_input.M.id;
+  check "An empty code language search cannot invent a mode"
+    (!chosen_language=Some "JavaScript" && choice_rows ()=[]);
   open_choices [];
   let select_input = choice_input () in
   navigate sorting select_input (P.NavigateNext select_input.M.id);
@@ -4874,6 +5007,7 @@ let run_views ~registry ~profile ~finish =
   let handlers : Cmdk_services.handlers option ref = ref None in
   let shortcut_actions = ref 0 in
   let shortcut_dialogs = ref [] in
+  let highlight_toggles = ref 0 in
   let routed_commands = ref [] and legacy_selection = ref 0 in
   let services =
     { (Cmdk_host.services ()) with
@@ -4882,6 +5016,7 @@ let run_views ~registry ~profile ~finish =
     ; install_listeners = (fun _scope h -> handlers := Some h)
     ; toggle_left_sidebar = (fun () -> incr shortcut_actions)
     ; dialogs_open = (fun name -> shortcut_dialogs := name :: !shortcut_dialogs)
+    ; settings_toggle_recent = (fun () -> incr highlight_toggles)
     ; dialogs_is_open = (fun _ -> false)
     ; editor_command = (fun cid -> routed_commands := cid :: !routed_commands)
     ; extend_selection = (fun _ -> incr legacy_selection)
@@ -5189,6 +5324,21 @@ let run_views ~registry ~profile ~finish =
   stroke "t"; stroke "s";
   check "The Settings chord retains its named-dialog dispatch alongside Plugins"
     (!shortcut_dialogs = ["settings"; "plugins"]);
+  let highlight = List.find (fun (it : Cmdk_state.item) ->
+    it.act=Cmdk_state.Run "ui/highlight-recent-blocks") (Cmdk_state.commands_items services "") in
+  check "The recent-highlight command advertises Master's unmodified chord"
+    (highlight.isc="t h");
+  let shortcut = mount (fun _ context parent ->
+    Cmdk_view.shortcut_slot services (Signal.constant context.Lui_ui.ui_scheduler highlight)
+      context parent) in
+  check "The command palette renders t and h without Command modifiers"
+    (List.exists (fun n -> M.string_prop n "text"=Some "T") (nodes shortcut)
+     && List.exists (fun n -> M.string_prop n "text"=Some "H") (nodes shortcut)
+     && not (List.exists (fun n -> M.string_prop n "text"=Some {js|⌘|js}) (nodes shortcut)));
+  ignore (Lui_app.dispose shortcut.S.app);
+  stroke "t"; stroke "h";
+  check "The displayed recent-highlight chord dispatches its actual command once"
+    (!highlight_toggles=1);
   let previous_shortcuts = Ui_services.storage_get "ls-shortcuts" in
   Ui_services.storage_set "ls-shortcuts"
     "{:ui/toggle-left-sidebar [\"f8\"]}";

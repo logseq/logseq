@@ -684,17 +684,10 @@ let open_lang_picker uuid =
           ("#ls-block-" ^ uuid ^ " .select-language")
       with
       | Some button ->
-          Views_popup.show_menu ~anchor:button
-            ~cls_prefix:"ls-code-lang-picker "
-            (List.filter_map
-               (fun info ->
-                 match json_string info "name" with
-                 | Some name ->
-                     Some
-                       (Views_popup.MItem
-                          (name, fun () -> pick_lang uuid name))
-                 | None -> None)
-               (Array.to_list (mode_infos (cm ()))))
+          Views_popup.show_code_language_picker ~anchor:button
+            ~languages:(List.filter_map (fun info -> json_string info "name")
+              (Array.to_list (mode_infos (cm ()))))
+            ~on_choose:(pick_lang uuid)
       | None -> ());
      Js.Promise.resolve ())
 
