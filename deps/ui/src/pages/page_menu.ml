@@ -190,14 +190,31 @@ let user_item () : Lui_elements.t =
   let maskedv = (Signal.value masked) in
   (* e2e requires div[role='menuitem'] — role/tabindex ride data_attrs;
      data-menu-tail keeps it out of the open-time initial highlight *)
-  box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item"
+  box ~key:"acct-user" ~style_class:"ui__dropdown-menu-item group"
     ~data_attrs:
       [ ("style", "width:100%")
       ; ("role", "menuitem"); ("tabindex", "-1"); ("data-menu-tail", "") ]
     [ Ui_components.with_props
         [ Ui_components.Prop.position `relative ]
         (column ~key:"u-span"
-        [ text ~key:"u-name" ~value:username []
+        [ (* cljs: bold username + logout icon on the same row
+             (hover-reveal via .group) *)
+          row ~key:"u-top" ~main:`space_between ~cross:`center ~grow:1.
+            [ text ~key:"u-name" ~font_weight:700 ~value:username []
+            ; Ui_components.icon_button ~key:"u-logout" ~variant:`ghost ~size:`icon
+                ~style_class:"ui__button as-ghost"
+                ~label:(I18n.t "ui/logout") ~icon:(`app "logout")
+                ~on_press:(fun _ ->
+                  (let* () = Rtc_flows.sign_out () in
+                   Runtime.send (Action.Page_menu_set None);
+                   Runtime.flush ();
+                   Js.Promise.resolve ())
+                  |> Js.Promise.catch (fun _ ->
+                       Toast.error (I18n.t "account/sign-out-error");
+                       Js.Promise.resolve ())
+                  |> ignore)
+                []
+            ]
         ; row ~key:"u-mail" ~cross:`center
             [ text ~key:"u-addr-t"
                 ~value:(reactive (fun m -> if m then mask_email email else email) maskedv)
@@ -219,22 +236,6 @@ let user_item () : Lui_elements.t =
                      Runtime.flush ())
                    [])
             ]
-        ; (* the opacity-0/group-hover reveal and absolute right-1 top-3
-             positioning have no component equivalent — the logout
-             button renders inline until an imperative pass restyles it *)
-          Ui_components.icon_button ~key:"u-logout" ~variant:`ghost ~size:`icon
-            ~style_class:"ui__button as-ghost"
-            ~label:(I18n.t "ui/logout") ~icon:(`app "logout")
-            ~on_press:(fun _ ->
-              (let* () = Rtc_flows.sign_out () in
-               Runtime.send (Action.Page_menu_set None);
-               Runtime.flush ();
-               Js.Promise.resolve ())
-              |> Js.Promise.catch (fun _ ->
-                   Toast.error (I18n.t "account/sign-out-error");
-                   Js.Promise.resolve ())
-              |> ignore)
-            []
         ])
     ]
     ctx parent
