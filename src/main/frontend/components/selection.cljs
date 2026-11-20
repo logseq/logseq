@@ -36,6 +36,26 @@
                          :select-opts {:show-new-when-not-exact-match? false}
                          :on-dialog-close restore-action-bar}])
 
+(defn- dialog-selected-blocks
+  "Blocks to hand to the property dialog. A selection the caller owns (a table
+  or query view) is passed on. The outliner selection is left out so the dialog
+  reads it when it opens: the toolbar loads its blocks once and stays mounted
+  while the selection grows or shrinks, so those blocks can be stale."
+  [caller-selected-blocks loaded-selected-blocks]
+  (when (seq caller-selected-blocks)
+    loaded-selected-blocks))
+
+(defn- trash-button-handlers
+  "The delete confirmation opens on click, not pointer-down: the pointer-up that
+  ends the press would otherwise count as an outside click and close it. The
+  pointer-down is still stopped so the press does not clear the selection."
+  [on-cut]
+  {:on-pointer-down util/stop
+   :on-click (fn [e]
+               (util/stop e)
+               (on-cut)
+               (state/pub-event! [:editor/hide-action-bar]))})
+
 (hsx/defc action-group
   [{:keys [on-cut on-copy selected-blocks hide-dots? button-border? view-parent outliner?]
     :or {on-cut #(editor-handler/cut-selection-blocks true)
@@ -47,7 +67,8 @@
                              (state/get-selection-block-ids))
         direct-selected-blocks (when (seq selected-blocks)
                                  (mapv entity/as-block-map (remove number? selected-blocks)))
-        [loaded-selected-blocks set-loaded-selected-blocks!] (hooks/use-state nil)]
+        [loaded-selected-blocks set-loaded-selected-blocks!] (hooks/use-state nil)
+        caller-selected-blocks selected-blocks]
     (hooks/use-effect!
      (fn []
        (p/let [results (db-async/<get-blocks (state/get-current-repo) selected-block-ids)]
@@ -73,7 +94,7 @@
                 :on-pointer-down (fn [e]
                                    (util/stop e)
                                    (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
-                                                                            :selected-blocks selected-blocks
+                                                                            :selected-blocks (dialog-selected-blocks caller-selected-blocks selected-blocks)
                                                                             :property-key "Tags"
                                                                             :on-dialog-close restore-action-bar}])))
          (ui/tooltip (ui/icon "hash" {:size 13}) (t :property/set-tags)
@@ -99,7 +120,7 @@
                 :on-pointer-down (fn [e]
                                    (util/stop e)
                                    (state/pub-event! [:editor/new-property {:target (.-currentTarget e)
-                                                                            :selected-blocks selected-blocks
+                                                                            :selected-blocks (dialog-selected-blocks caller-selected-blocks selected-blocks)
                                                                             :on-dialog-close restore-action-bar}])))
          (t :property/set-property))
         (shui/toolbar-button
@@ -107,16 +128,12 @@
                 :on-pointer-down (fn [e]
                                    (util/stop e)
                                    (state/pub-event! (unset-property-event (.-target e)
-                                                                          selected-blocks
+                                                                          (dialog-selected-blocks caller-selected-blocks selected-blocks)
                                                                           view-parent))))
          (t :property/unset-property))
         (when-not (contains? #{:logseq.class/Page} (:db/ident view-parent))
           (shui/toolbar-button
-           (assoc button-opts
-                  :on-pointer-down (fn [e]
-                                     (util/stop e)
-                                     (on-cut)
-                                     (state/pub-event! [:editor/hide-action-bar])))
+           (merge button-opts (trash-button-handlers on-cut))
            (ui/icon "trash" {:size 13})))
         (when-not hide-dots?
           (shui/toolbar-button

@@ -7,7 +7,9 @@
             [frontend.modules.shortcut.utils :as shortcut-utils]
             [frontend.state :as state]
             [frontend.util :as util]
-            [lambdaisland.glogi :as log]))
+            [goog.ui.KeyboardShortcutHandler.EventType :as EventType]
+            [lambdaisland.glogi :as log])
+  (:import [goog.ui KeyboardShortcutEvent]))
 
 (declare get-group)
 
@@ -390,10 +392,28 @@
   [id]
   (get-shortcut-desc (assoc (shortcut-data-by-id id) :id id)))
 
+(defn- shortcut-fn->command-action
+  "Wrap a shortcut `:fn` so it can be a command `:action`. The shortcut handler
+  always calls `:fn` with the KeyboardShortcutEvent, so many of them have no
+  0-arity (e.g. `editor-handler/toggle-collapse!`) or read the event's target
+  (e.g. `editor-handler/select-parent`), while the command palette calls
+  `:action` with no arguments. When called without arguments, pass a shortcut
+  event targeting the document body, as if the key had been pressed with no
+  input focused; arguments from other callers (e.g. the plugin API's
+  invokeExternalCommand) are passed through."
+  [id shortcut-fn]
+  (fn [& args]
+    (if (seq args)
+      (apply shortcut-fn args)
+      (shortcut-fn (KeyboardShortcutEvent. EventType/SHORTCUT_TRIGGERED
+                                           (util/keyname id)
+                                           js/document.body)))))
+
 (defn shortcuts->commands [handler-id]
   (let [m (get @shortcut-config/*config handler-id)]
     (->> m
          (map (fn [[id _]] (-> (shortcut-data-by-id id)
                                (assoc :id id :handler-id handler-id)
+                               (update :fn #(some->> % (shortcut-fn->command-action id)))
                                (rename-keys {:binding :shortcut
                                              :fn      :action})))))))
