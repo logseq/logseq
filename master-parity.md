@@ -14,41 +14,41 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | tag-new | 11 autocomplete | Same `#ui__ac` / hint sibling structure as master | Hint appeared inside `#ui__ac` | page `tag-new`; type `#NewTagX`, Enter | low | fixed `789ca92986` |
 | tag-space-closes | 11 autocomplete | `#` popup has no Page | Included Page | page `tag-space-closes`; type `#` then space | low | fixed `f7c7e893b1` |
 | tag-duplicate | 11 autocomplete | Same `#ui__ac` / hint sibling structure as master | Hint appeared inside `#ui__ac` | page `tag-duplicate`; add `#MyTag` twice | low | fixed `789ca92986` |
-| slash-filter | 11 autocomplete | Filtering `/head` keeps group header Heading | Group headers dropped while filtering | page `slash-filter`; type `/head` | low | fixed by G5 `14bf252330` |
-| slash-nomatch | 11 autocomplete | `/zzzzqq` with no match closes popup | Stayed open with raw i18n key | page `slash-nomatch`; type `/zzzzqq` | med | fixed by G5 `14bf252330` |
-| slash-space-close | 11 autocomplete | `/` then space closes popup | Stayed open with full command list | page `slash-space-close`; type `/ ` | med | fixed by G5 `14bf252330` |
+| slash-filter | 11 autocomplete | Filtering `/head` keeps group header Heading | Group headers dropped while filtering | page `slash-filter`; type `/head` | low | fixed by G5 `0aa74f9f8c` |
+| slash-nomatch | 11 autocomplete | `/zzzzqq` with no match closes popup | Stayed open with raw i18n key | page `slash-nomatch`; type `/zzzzqq` | med | fixed by G5 `0aa74f9f8c` |
+| slash-space-close | 11 autocomplete | `/` then space closes popup | Stayed open with full command list | page `slash-space-close`; type `/ ` | med | fixed by G5 `0aa74f9f8c` |
 | slash-then-pageref | 11 autocomplete | After slash then `[[`, empty popup has 10 date items | Had 34 date items | page `slash-then-pageref`; type `/`, Backspace, `[[` | low | fixed `135989e0bb` |
 | follow-link-sidebar | 13 refs/embeds | Ctrl+Shift+O inside `[[Linked Pg2]]` opens page in right sidebar | Nothing; sidebar stayed closed | caret inside ref; mod+shift+o | high | fixed `b4f17a0497` |
 
 ## G5 — slash commands
 
 Module 12 (Block editor — slash commands). Base: `refactor/lui-parity` @ `9c3497f356` (rebased).
-Branch: `logseq/g5-slash-commands-7f98`.
+Branch: `logseq/g5-slash-commands-7f98`. UI tests after rebase: `6693` checks, `0` failures.
 
 | check | module | master | LUI (before) | severity | status |
 |-------|--------|--------|--------------|----------|--------|
-| list-tooltips | 12 | Slash items expose description via `title` attr | No `title` on slash rows | low | fixed `1750307fe1` |
+| list-tooltips | 12 | Slash items expose description via `title` attr | No `title` on slash rows | low | fixed `5863660c56` |
 | cmd-node-reference | 12 | Empty `[[` shows 10 NLP date shortcuts | 34 NLP dates | low | fixed by G3 `d65d6aa4ec` |
-| cmd-node-embed | 12 | Placeholder "Search for a block"; Escape leaves host | "Search for a node"; `/Node embed` left after Escape | med | fixed `cbc884da50` |
-| cmd-deadline | 12 | Year control in caption; Next date Empty when unset | Month only; defaulted to double-plus label | low | fixed `6b1ed13723` |
-| cmd-scheduled | 12 | Year control; Next date Empty | Same LUI gap as deadline | low | fixed `6b1ed13723` (shared calendar/repeat) |
-| cmd-date-picker | 12 | Year control in caption | Month only | low | fixed `6b1ed13723` (shared year input) |
-| cmd-add-comment | 12 | Caret moves into new empty comment | Thread created; caret stays on host | med | fixed `19550bd15a` |
-| cmd-query | 12 | Clear slash; move host title into query child; empty host; tag Query | Wrong child path / lost title | low | fixed `fb64b17721` + `0dcde1ea17` |
-| cmd-advanced-query | 12 | Keep host title; empty clojure code query child; no live all-nodes table | Title discarded; Untitled; live 28-row table | high | fixed `ab5bc208af` + `0dcde1ea17` |
-| cmd-query-function | 12 | Renders `{{function null}}` | Inline `host {{function}}` | low | fixed `9ff24731b1` |
-| cmd-upload-an-asset | 12 | Keeps `/Upload an asset` until file chosen | Cleared slash text immediately | low | fixed `0a6a0a58e0` |
-| cmd-template | 12 | Placeholder "Search for a template" | "Search for a block" | low | fixed `38365a44b3` |
-| cmd-embed-video-url | 12 | `{{video }}` on own line under host | Inline `host {{video}}` | low | fixed `501c9db0e9` |
-| cmd-embed-youtube-timestamp | 12 | No video → clear slash/block content | Kept host; nothing inserted | low | fixed `428b941dcb` |
+| cmd-node-embed | 12 | Placeholder "Search for a block"; Escape leaves host | "Search for a node"; `/Node embed` left after Escape | med | fixed `0bd4841db4` |
+| cmd-deadline | 12 | Year control in caption; Next date Empty when unset | Month only; defaulted to double-plus label | low | fixed `ff4bd1d24d` |
+| cmd-scheduled | 12 | Year control; Next date Empty | Same LUI gap as deadline | low | fixed `ff4bd1d24d` (shared calendar/repeat) |
+| cmd-date-picker | 12 | Year control in caption | Month only | low | fixed `ff4bd1d24d` (shared year input) |
+| cmd-add-comment | 12 | Caret moves into new empty comment | Thread created; caret stays on host | med | fixed `84c53c3e3d` |
+| cmd-query | 12 | Clear slash; move host title into query child; empty host; tag Query | Wrong child path / lost title | low | fixed `91fb6875f4` + `90a2be21ce` |
+| cmd-advanced-query | 12 | Keep host title; empty clojure code query child; no live all-nodes table | Title discarded; Untitled; live 28-row table | high | fixed `210c43f33a` + `90a2be21ce` |
+| cmd-query-function | 12 | Inline `{{function null}}` (master is inline, not own-line) | Empty/missing null; looked like own-line gap | low | fixed `1df1a903b7` |
+| cmd-upload-an-asset | 12 | Keeps `/Upload an asset` until file chosen | Cleared slash text immediately | low | fixed `11addbf1a0` |
+| cmd-template | 12 | Placeholder "Search for a template" | "Search for a block" | low | fixed `50864e4d1a` |
+| cmd-embed-video-url | 12 | `{{video }}` on own line under host | Inline `host {{video}}` | low | fixed `4fdb2e397d` |
+| cmd-embed-youtube-timestamp | 12 | No video → clear slash/block content | Kept host; nothing inserted | low | fixed `6756044250` |
 
 ### Extra slash-filter parity (prompt edge cases)
 
 | check | master | LUI (before) | status |
 |-------|--------|--------------|--------|
-| slash-filter `/head` | Group name searchable; Heading group title kept | Group headers dropped when filtered | fixed `14bf252330` |
-| slash-filter no-match | Close after >2 chars past last match; else "No matched commands" | Untranslated key; popup stayed open | fixed `14bf252330` + tests `5b1b0c5e06` |
-| slash-filter `/ ` | Slash+space closes popup | Full list stayed open | fixed `14bf252330` |
+| slash-filter `/head` | Group name searchable; Heading group title kept | Group headers dropped when filtered | fixed `0aa74f9f8c` |
+| slash-filter no-match | Close after >2 chars past last match; else "No matched commands" | Untranslated key; popup stayed open | fixed `0aa74f9f8c` + tests `23864be16e` |
+| slash-filter `/ ` | Slash+space closes popup | Full list stayed open | fixed `0aa74f9f8c` |
 
 ### Notes
 
