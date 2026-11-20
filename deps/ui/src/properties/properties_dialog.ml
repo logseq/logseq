@@ -763,7 +763,12 @@ let view : t =
                       [ dialog_content ~compact_width:232 ~phase d ]
                   ])
             | Centered ->
-                Ui_components.dialog ~text:(I18n.t "property/add-or-change")
+                (* Master property picker has no dialog title chrome —
+                   only the search placeholder carries "Add or change
+                   property". A ~text header was LUI-only and showed up
+                   in ctrl+alt+p / type-chooser / number flows. Same
+                   root cause as G4 shortcut checks p-t / p-d / p-p / p-i. *)
+                Ui_components.dialog
                   ~style_class:"ls-property-dialog"
                   ~on_dismiss:(fun _ -> close ())
                   [ Ui_parts.int_prop Lui_protocol.MaxWidth
