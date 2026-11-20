@@ -1091,11 +1091,14 @@ let add_new_object inst =
       let uuid = Ui_services.env_random_uuid () in
       Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:"" ~tags ~props (fun _ ->
         if same_context () then begin
+          (* Open the sidebar first — refresh can sync-fail when the
+             worker rejects get-render-snapshots (tests, offline), and
+             must not block the edit handoff. *)
+          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid;
           (* cljs class-objects view-data updates with the insert;
-             refresh immediately so + New shows the row without waiting
-             on debounced sync-db-changes. *)
-          refresh inst;
-          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid
+             refresh so + New shows the row without waiting on
+             debounced sync-db-changes. *)
+          (try refresh inst with _ -> ())
         end)
   in
   match inst.V.kind with
