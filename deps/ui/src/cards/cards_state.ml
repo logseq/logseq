@@ -266,7 +266,11 @@ let load_cards st repo =
   restart st;
   let session = !(st.session) in
   Runtime.signal_set st.cur None;
+  (* Clear both lists up front so a mid-fetch paint cannot show the
+     no-due empty state from a stale all_cards while cards is already [].
+     cljs keeps *block-ids / *all-block-ids nil until both loads finish. *)
   Runtime.signal_set st.cards [];
+  Runtime.signal_set st.all_cards [];
   (let sel_arg = sel_arg st in
    let* due_w = card_ids repo sel_arg ~due_only:true in
    let* all_w = card_ids repo sel_arg ~due_only:false in
