@@ -45,3 +45,14 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | profiler | 21 settings / 37 help | Profiler supported | Profiler not supported | open profiler | — | intentional — never fix |
 | quick-add-esc | 32 quick add | (master Esc behavior) | Quick add closes on Esc | open Quick add, Esc | — | kept by user |
 | export-graph-download | 23 export | (master export UX) | Export SQLite downloads directly | Export → SQLite | — | kept by user |
+| flashcards-s-keys | 26 flashcards | `s` / `1`–`4` rate while deck select focused | Keydown ignored when select has focus | open cards; focus deck select; press `s` | med | fixed `bb7a569d7e` |
+| journals-date-format | 04 journals | Journal titles use preferred date format (`raw-title`) | Displayed `:block/title` ignored format | set date format; open journals | med | fixed `385aad6b25` |
+| pdf-hl-copy-ref | 27 PDF | Copy ref copies `[[uuid]]` (renders as ref) | Copied `((uuid))` (raw after paste) | PDF highlight menu → Copy ref → paste | high | fixed `11fa47ca33` |
+| pdf-hl-click-ref | 27 PDF | Click highlight ref opens PDF and scrolls to hl | Only zoomed the block; PDF not opened | click `[[uuid]]` annotation page-ref | high | fixed `13a8fb5547` |
+| pdf-hl-p1-pin | 27 PDF | Ref shows `P1` prefix; bullet is colored pin | No page prefix; filled colored dot | highlight block + paste ref | low | fixed `17eec842f6` |
+| drop-file-asset-names | 10/22 assets | One label; docx shows human name | PDF/file name twice; docx showed `<uuid>.docx` | drop PDF/docx onto block | med | fixed `da2e44430d` (insert-after already `c76dd5cb2c`) |
+| dnd-nest-threshold | 10 drag and drop | Nest only after ~30px right of content | Nested after ~15px (50px from `.ls-block`) | drag block right of content | low | fixed `19ddf4e2d0` |
+| dnd-sidebar-bottom | 10 drag and drop | Bottom-edge drop in right-sidebar page → sibling | Became child (same eager nest) | drop onto bottom edge in sidebar page | low | fixed `19ddf4e2d0` (same threshold) |
+| table-title-caret | 17 views/table | Click title cell → caret at end | Caret at 0 (empty/stale wire title) | All pages / objects table → click title | low | fixed `5a77fbc091` |
+| table-page-column | 17 views/table | Page column empty on page rows | Showed the page's own name | All pages table Page column | low | fixed `5a77fbc091` |
+| header-rs-toggle-narrow | 03 header | Right-sidebar toggle visible at 500px | Hidden below 640px breakpoint | resize to 500px | low | fixed `07911eac8f` |
