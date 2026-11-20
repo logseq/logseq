@@ -2081,22 +2081,26 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
                 | Some owner -> Ops.require_refresh_success owner
                 | None -> Js.Promise.resolve ()
               in
+              (* cljs cut-blocks-and-clear-selections! / single-block
+                 menu delete: clear selection only — do not enter_edit
+                 the previous sibling (bullet Delete was leaving the
+                 neighbor in edit mode). *)
               if current ()
               then (
-                let editing = match previous, S.editing () with
-                  | Some (uuid, buffer), None when S.find uuid <> None ->
-                      Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer
-                              ~caret:(String.length buffer) ())
-                  | _, current -> current
-                in
-                S.set (fun st -> {st with S.editing = editing;
-                   selected = S.String_set.empty; anchor = None; action_bar = false});
-                match editing with
-                | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
-                | None -> Option.iter (fun uuid ->
-                    Runtime.send Action.Title_edit_start;
-                    Runtime.flush ();
-                    Editor_sink.focus_input uuid) page_title);
+                S.set (fun st ->
+                  { st with
+                    selected = S.String_set.empty
+                  ; anchor = None
+                  ; action_bar = false });
+                match previous with
+                | Some _ -> ()
+                | None ->
+                    Option.iter
+                      (fun uuid ->
+                        Runtime.send Action.Title_edit_start;
+                        Runtime.flush ();
+                        Editor_sink.focus_input uuid)
+                      page_title);
               Js.Promise.resolve ()
       in
       ignore
