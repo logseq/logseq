@@ -17,8 +17,8 @@
                 (d/entity db cards-id))
         query (when cards
                 (when-let [query (:logseq.property/query cards)]
-                  (when-not (string/blank? (:block/title query))
-                    (:block/title query))))
+                  (when-not (string/blank? (:block/raw-title query))
+                    (:block/raw-title query))))
         result (query-dsl/parse query db {})
         card-ids (db-class/card-class-ids db)
         q (cond-> '[:find [?b ...]
