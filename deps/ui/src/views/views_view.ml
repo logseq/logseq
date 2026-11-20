@@ -1090,8 +1090,13 @@ let add_new_object inst =
     if same_context () then
       let uuid = Ui_services.env_random_uuid () in
       Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:"" ~tags ~props (fun _ ->
-        if same_context () then
-          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid)
+        if same_context () then begin
+          (* cljs class-objects view-data updates with the insert;
+             refresh immediately so + New shows the row without waiting
+             on debounced sync-db-changes. *)
+          refresh inst;
+          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid
+        end)
   in
   match inst.V.kind with
   | V.KTagPage owner_uuid -> insert owner_uuid ~tags:[owner_uuid] ~props:[]
