@@ -30,9 +30,17 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | kept by user (revert `e778f33305`) |
 | favorite-click / recent | 03 left sidebar | Favorites/recents navigate to `#/page/<uuid>` | Navigated to `#/page/<name>` | click favorite or recent item | low | fixed `fe8a15537b` |
 | delete-page | 05 pages | After confirm, stay on page; show moved-to-recycle | Navigated to journals/Home | page menu → Delete → Confirm | low | fixed `51098daff9` |
-| drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `c76dd5cb2c` |
+| drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `c76dd5cb2c`; empty-target UUID reuse `dcac000a38` |
 | class-page-add-object | 16 tags and classes | Class page `+ New` opens sidebar and table shows new row | Sidebar opened; table stayed stale until later sync | Class page Objects tab → `+ New` | med | fixed `9e1644ee13` |
-| tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `cf1c12c604` |
+| tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `cf1c12c604`; caret-after-trim `8e45ef3cf5` |
+| delete-page (class/property) | 05 pages | Hard-delete shows not-found | Stale page stayed visible | delete custom class/property | med | fixed `0a012de040` |
+| delete-page undo recycle shell | 05 pages | Undo clears moved-to-recycle | `page_recycled` stuck true | delete page → Ctrl+Z | med | fixed `b5a078690b` |
+| add-text-property | 15 Properties UI | After Text type, caret in value; shows `myprop: v1`; no dialog title | Focus to BODY; renders Empty; extra header | ctrl+alt+p → myprop → Text → v1 | high | fixed header `7df071baae` + focus `d0d1c625da` (G4 p-t/p-d/p-p/p-i share header) |
+| hidden-properties-p-a | 15 Properties UI | `p a` reveals Status/Priority/Deadline/Scheduled | `p a` no-op | Task block; select; `p a` | med | fixed `c5c15c6933` |
+| set-icon-p-i | 15 Properties UI | Icon as bullet only | Also showed Icon property row | select; `p i`; pick 😀 | med | fixed `9b3d25fed9` |
+| number-property | 15 Properties UI | Property popup has no header | Extra Add or change property header | ctrl+alt+p → num → Number → 42 | low | fixed `7df071baae` (shared header) |
+| property-page | 15 Properties UI | Title, Configure, objects table | Extra Hide empty value / Enable property history / Add property | `#/page/status` | low | fixed `84bd8a6a4c` (Page column kept — master cljs `add-page-column? true`) |
+| property-type-list | 15 Properties UI | Type list without dialog title | Extra Add or change property header | ctrl+alt+p → newtype → Enter | low | fixed `7df071baae` (shared header) |
 | journals-virtualized | 04 journals | Non-virtualized / different scroll model | Virtualized flat list for journals/pages | scroll long journals | — | intentional — never fix |
 | profiler | 21 settings / 37 help | Profiler supported | Profiler not supported | open profiler | — | intentional — never fix |
 | quick-add-esc | 32 quick add | (master Esc behavior) | Quick add closes on Esc | open Quick add, Esc | — | kept by user |
