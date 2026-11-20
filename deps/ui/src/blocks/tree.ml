@@ -429,7 +429,7 @@ let control_wrap ?on_toggle ?siblings ~scope ~collapse_scope ~library uuid
                         | None -> Ui_components.block_bullet_color
                       in
                       icon ~key:("pin-" ^ uuid) ~name:(`app "pin")
-                        ~size:14. ~foreground:color
+                        ~size:`sm ~foreground:color
                         ~data_attrs:[ ("data-blockid", uuid) ] []
                   | None ->
                       Ui_parts.string_prop Lui_protocol.StyleClass
