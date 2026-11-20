@@ -78,7 +78,8 @@ let body (_ms : Model.t Signal.signal) : t =
                            in
                            Ui_components.keycap
                              ~key:("qa-k" ^ string_of_int i)
-                             ~boxed:false ~glow:false ~value:label)
+                             ~boxed:false ~glow:false ~min_slot:20
+                             ~value:label)
                          keys)
                   ; text ~value:(U.t "editor.quick-add/add-to-today") [] ]
               ] ]
