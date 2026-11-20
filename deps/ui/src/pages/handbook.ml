@@ -69,10 +69,10 @@ let rec rich_inline catalog from navigate nodes = List.concat_map (function
         | 4 -> "16px","24px",4,600
         | 5 -> "14px","20px",2,600
         | _ -> "12px","16px",2,600 in
-      let level = match level with
+      let heading_level = match level with
         | 1 -> `h1 | 2 -> `h2 | 3 -> `h3 | 4 -> `h4 | 5 -> `h5 | 6 -> `h6
         | _ -> assert false in
-      [heading ~level ~margin:0 ~padding_vertical:padding
+      [heading ~level:heading_level ~margin:0 ~padding_vertical:padding
         ~font_size:size ~line_height:line ~font_weight:weight (content ())]
     | "ul" | "ol" ->
       let ordered=tag="ol" in

@@ -1090,18 +1090,18 @@ let action_bar inst : t =
   let action ?icon ?text ?width ?(margin_left = -1) ?(corner_radius = 0) ~label
       on_press =
     let disabled (s : V.vstate) = s.V.table_action_pending <> None in
-    let on_press () = if (V.get inst).V.table_action_pending = None then on_press () in
+    let handle_press () = if (V.get inst).V.table_action_pending = None then on_press () in
     match text, icon with
       | Some text, icon ->
           Ui_components.toolbar_button ~variant:`outline ?icon ~text ?width ~label ~height:32 ~padding_vertical:0
             ~padding_horizontal:8 ~margin_left ~corner_radius
             ~style:(Slot_style.make ~font_size:"12px" ~line_height:"16px" ())
-            ~disabled:(reactive disabled isig) ~on_press []
+            ~disabled:(reactive disabled isig) ~on_press:handle_press []
       | None, Some icon ->
           Ui_components.toolbar_icon_button ~variant:`outline ~icon ?width ~label ~height:32 ~padding_vertical:0
             ~padding_horizontal:8 ~margin_left ~corner_radius
             ~style:(Slot_style.make ~font_size:"12px" ~line_height:"16px" ())
-            ~disabled:(reactive disabled isig) ~on_press []
+            ~disabled:(reactive disabled isig) ~on_press:handle_press []
       | None, None -> assert false
   in
   let property_action ~remove key =
