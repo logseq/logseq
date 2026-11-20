@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker.handler.semantic
   (:require [clojure.string :as string]
             [datascript.core :as d]
+            [lambdaisland.glogi :as log]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
@@ -403,11 +404,15 @@
               [_ page-id] (outliner-page/create! conn title {:journal? true :today-journal? true})]
           (d/entity @conn [:block/uuid page-id])))))
 
-(defn- resolve-property-ident [db value]
-  (or (when-let [entity (find-entity db value)] (:db/ident entity))
+(defn- resolve-property-ident
+  "The ident of the property `value` names (uuid, ident or title); nil when it
+  names no entity or an entity that is not a property (a class, a block)."
+  [db value]
+  (or (when-let [entity (find-entity db value)]
+        (when (property? entity) (:db/ident entity)))
       (when (string? value)
         (let [ident (keyword value)]
-          (or (when (d/entity db ident) ident)
+          (or (when (property? (d/entity db ident)) ident)
               (some->> (d/datoms db :avet :block/title value)
                        (map #(d/entity db (:e %)))
                        (filter property?)
@@ -457,7 +462,9 @@
                         [property-ident (string/lower-case value)] value)
                 value)
         entity (cond
-                 (number? value) (d/entity db value)
+                 ;; an entity id; datascript throws on any other number (-1, 1.5)
+                 (pos-int? value) (d/entity db value)
+                 (number? value) nil
                  (qualified-keyword? value) (d/entity db value)
                  (and (string? value) (common-util/uuid-string? value))
                  (d/entity db [:block/uuid (uuid value)])
@@ -987,7 +994,8 @@
                                  (p/let [_ (.delete bucket key)]
                                    (throw error)))))))
               (p/catch (fn [error]
-                         (http/error-response (or (.-message error) "asset upload failed") 500)))))))
+                         (log/error :db-sync/semantic-asset-upload-failed {:error error})
+                         (http/error-response "asset upload failed" 500)))))))
 
     :semantic/assets-get
     (if-let [asset (find-visible-entity db (:asset-block-id path-params))]
@@ -1028,7 +1036,8 @@
     :semantic/properties-update
     (p/let [body (body-clj request)
             property (resolve-property db (:property-id path-params))]
-      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body)))
+      (if (or (not (property? property)) (empty? body) (not (valid-property-schema? body))
+              (and (contains? body :title) (not (non-blank-string? (:title body)))))
         (http/bad-request "invalid property-id or update")
         (let [schema (cond-> {}
                        (:type body) (assoc :logseq.property/type (keyword (:type body)))
@@ -1143,7 +1152,17 @@
     (contains? property-and-search-handlers handler) (handle-properties-and-search context)
     :else (http/not-found)))
 
-(defn handle [{:keys [^js self route ^js url] :as context}]
+(defn- validation-error-response
+  "The outliner rejects a write the graph does not allow (a page name with
+  \"/\", a change to a built-in node, a duplicate tag...) by throwing an error
+  meant to notify the user. Such a request is the client's mistake: 400 with
+  that message, not the 500 of a server error."
+  [error]
+  (let [data (ex-data error)]
+    (when (= :notification (:type data))
+      (http/bad-request (or (get-in data [:payload :message]) (ex-message error))))))
+
+(defn- handle* [{:keys [^js self route ^js url] :as context}]
   (let [conn (ensure-conn! self)
         handler (:handler route)
         db @conn
@@ -1161,3 +1180,9 @@
           (dispatch-handle context handler)
           result))
       (dispatch-handle context handler))))
+
+(defn handle [context]
+  (-> (p/do (handle* context))
+      (p/catch (fn [error]
+                 (or (validation-error-response error)
+                     (p/rejected error))))))

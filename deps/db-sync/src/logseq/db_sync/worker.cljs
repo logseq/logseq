@@ -54,16 +54,10 @@
               (ws-handler/handle-ws this request)
               (sync-handler/handle-http this request)))
           (p/catch (fn [error]
-                     (let [message (cond
-                                     (instance? ExceptionInfo error) (str (.-message error) " | " (pr-str (ex-data error)))
-                                     (instance? js/Error error) (.-message error)
-                                     :else (pr-str error))
-                           stack (when (instance? js/Error error) (.-stack error))]
-                       (common/json-response
-                        {:error "DO internal error"
-                         :debug-message message
-                         :debug-stack stack}
-                        500))))))
+                     (log/error :db-sync/do-error {:error error})
+                     (common/json-response
+                      {:error "DO internal error"}
+                      500)))))
   (webSocketMessage [this ws message]
                     (try
                       (ws-handler/handle-ws-message! this ws message)

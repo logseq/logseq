@@ -297,13 +297,55 @@
 
 (deftest handle-http-answers-500-when-an-async-route-fails-test
   (async done
-         (let [request (js/Request. "http://localhost/sync/graph-1/tx/batch"
+         (let [request (js/Request. "http://localhost/tx/batch"
                                     #js {:method "POST" :body "not json"})]
            (-> (p/let [response (sync-handler/handle-http #js {} request)
                        body (json-body response)]
                  (is (= 500 (.-status response)))
-                 (is (= "server error" (:error body)))
-                 (is (string? (:debug-message body))))
+                 (is (= "server error" (:error body))))
+               (p/then (fn [] (done)))
+               (p/catch (fn [error]
+                          (is false (str "handle-http rejected: " error))
+                          (done)))))))
+
+(deftest semantic-write-the-graph-does-not-allow-answers-400-test
+  (async done
+         (let [self #js {:conn (sqlite-export/create-conn) :sql (test-sql/make-sql) :schema-ready true :env #js {}}]
+           (-> (p/with-redefs [ws/broadcast! (fn [& _] nil)]
+                 (p/let [slash (sync-handler/handle-http self (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "a/b"}))
+                         slash-body (json-body slash)
+                         hash (sync-handler/handle-http self (semantic-json-request "/semantic/tags?graph-id=graph-1" "POST" {:title "#tag"}))
+                         hash-body (json-body hash)]
+                   (is (= 400 (.-status slash)))
+                   (is (= "Page name can't include \"/\"." (:error slash-body)))
+                   (is (= 400 (.-status hash)))
+                   (is (= "Page name can't include \"#\"." (:error hash-body)))))
+               (p/then (fn [_]
+                         (p/let [number-title (sync-handler/handle-http self (semantic-json-request "/semantic/capture?graph-id=graph-1" "POST" {:blocks [{:title 1}]}))
+                                 nested (sync-handler/handle-http self (semantic-json-request "/semantic/capture?graph-id=graph-1" "POST" {:blocks [{:title "a" :children [{}]}]}))]
+                           (is (= 400 (.-status number-title)) "a block title that is not a string")
+                           (is (= 400 (.-status nested)) "a child block without a title"))))
+               (p/then (fn [_]
+                         (p/let [page (sync-handler/handle-http self (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "Page A"}))
+                                 page-body (json-body page)
+                                 class-as-property (sync-handler/handle-http self (semantic-json-request (str "/semantic/blocks/" (:uuid page-body) "/properties/logseq.class%2FTask?graph-id=graph-1") "PUT" {:value "x"}))
+                                 class-as-property-body (json-body class-as-property)]
+                           (is (= 400 (.-status class-as-property)) "a class named as the property")
+                           (is (= "property not found" (:error class-as-property-body))))))
+               (p/then (fn [_]
+                         (p/let [created (sync-handler/handle-http self (semantic-json-request "/semantic/properties?graph-id=graph-1" "POST" {:title "rating" :type "number"}))
+                                 created-body (json-body created)
+                                 object-title (sync-handler/handle-http self (semantic-json-request (str "/semantic/properties/" (:uuid created-body) "?graph-id=graph-1") "PATCH" {:title {}}))]
+                           (is (= 201 (.-status created)))
+                           (is (= 400 (.-status object-title)) "a property title that is not a string"))))
+               (p/then (fn [_]
+                         (p/let [page (sync-handler/handle-http self (semantic-json-request "/semantic/pages?graph-id=graph-1" "POST" {:title "Page B"}))
+                                 page-body (json-body page)
+                                 negative (sync-handler/handle-http self (semantic-json-request "/semantic/block-properties/batch-set?graph-id=graph-1" "POST"
+                                                                                             {:entries [{:block-id (:uuid page-body) :property-id "logseq.property/status" :value -1}]}))
+                                 fraction (sync-handler/handle-http self (semantic-json-request (str "/semantic/blocks/" (:uuid page-body) "/properties/logseq.property%2Fstatus?graph-id=graph-1") "PUT" {:value 1.5}))]
+                           (is (= 400 (.-status negative)) "a ref property value of -1")
+                           (is (= 400 (.-status fraction)) "a ref property value of 1.5"))))
                (p/then (fn [] (done)))
                (p/catch (fn [error]
                           (is false (str "handle-http rejected: " error))
@@ -1760,12 +1802,15 @@
                      :tx (protocol/tx->transit [{:block/uuid block-id :block/title "Snapshot content"}])}
               accepted (with-redefs [ws/broadcast! (fn [& _] nil)]
                          (sync-handler/handle-tx-batch! self nil [entry] 0))
-              {:keys [request]} (request-url)]
-          (-> (p/let [legacy-pull (sync-handler/handle-http self (js/Request. "http://localhost/sync/graph-1/pull?since=0"))
+              ;; the Durable Object routes the internal path dispatch forwards to it
+              {:keys [request]} (request-url "/snapshot/download?graph-id=graph-1")]
+          (-> (p/let [legacy-pull (sync-handler/handle-http self (js/Request. "http://localhost/pull?since=0&graph-id=graph-1"))
                       legacy-body (json-body legacy-pull)
                       response (sync-handler/handle-http self request)
                       body (json-body response)
-                      snapshot-response (sync-handler/handle-http self (js/Request. (:url body)))
+                      _ (is (= "http://localhost/sync/graph-1/snapshot/stream" (:url body))
+                            "the client fetches the stream through the public sync path")
+                      snapshot-response (sync-handler/handle-http self (js/Request. "http://localhost/snapshot/stream?graph-id=graph-1"))
                       payload (.arrayBuffer snapshot-response)
                       rows (snapshot/finalize-framed-buffer (js/Uint8Array. payload))]
                 (is (= 200 (.-status response)))
@@ -1851,7 +1896,7 @@
                          :conn conn
                          :schema-ready true
                          :sql sql}
-               {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")
+               {:keys [request]} (request-url "/snapshot/stream?graph-id=graph-1")
                original-compression-stream (.-CompressionStream js/globalThis)
                restore! #(aset js/globalThis "CompressionStream" original-compression-stream)]
            (aset js/globalThis
@@ -1897,7 +1942,7 @@
                          :conn conn
                          :schema-ready true
                          :sql sql}
-               {:keys [request]} (request-url "/sync/graph-1/snapshot/stream?graph-id=graph-1")]
+               {:keys [request]} (request-url "/snapshot/stream?graph-id=graph-1")]
            (-> (p/with-redefs [sync-handler/fetch-snapshot-kvs-rows (fn [_sql last-addr _limit]
                                                                       (if (neg? last-addr) rows []))
                                sync-handler/snapshot-row-count (fn [_sql] (count rows))]

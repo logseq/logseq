@@ -28,7 +28,15 @@ function decodedBase64Size(value) {
 }
 
 export function semanticRequestUrl(options, baseUrl) {
+  const base = new URL(baseUrl);
   const url = new URL(options.path, baseUrl);
+  // The check runs on the resolved URL: `new URL` normalizes `/..` and
+  // backslashes, and a protocol-relative path (`//evil.example/...`) changes
+  // the origin — which would send the user's bearer token elsewhere. Both the
+  // origin and the resolved pathname are checked, not the raw string.
+  if (url.origin !== base.origin || !url.pathname.startsWith("/api/v1/")) {
+    throw new Error("Only Logseq server API paths are allowed");
+  }
   for (const [key, value] of Object.entries(options.query ?? {})) {
     if (value !== undefined) url.searchParams.set(key, String(value));
   }
