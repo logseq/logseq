@@ -3742,21 +3742,31 @@ type asset_upload =
   ; upload_empty : bool
   }
 
-let capture_asset_upload () =
+let capture_asset_upload ?drop_target () =
   let model = Runtime.model () in
   let edit = S.editing () in
-  let target = match edit with
-    | Some {S.owner = S.Explicit_draft owner; _} -> Some owner#asset_target
-    | Some e -> Some e.S.uuid
-    | None -> (match model.Model.route_page, model.Model.journals with
-        | Some page, _ -> page.Model.page_uuid
-        | None, page :: _ -> page.Model.page_uuid
-        | None, [] -> None) in
+  (* cljs db-based-save-assets!: editing block wins; otherwise
+     :last-edit-block (drop target) inserts as a sibling. *)
+  let target, sibling =
+    match edit with
+    | Some {S.owner = S.Explicit_draft owner; _} ->
+        (Some owner#asset_target, false)
+    | Some e -> (Some e.S.uuid, true)
+    | None -> (
+        match drop_target with
+        | Some uuid -> (Some uuid, true)
+        | None ->
+            ( (match model.Model.route_page, model.Model.journals with
+               | Some page, _ -> page.Model.page_uuid
+               | None, page :: _ -> page.Model.page_uuid
+               | None, [] -> None)
+            , false ))
+  in
   if Ui_services.env_publishing () then None else
   Option.bind model.Model.repo (fun repo -> Option.map (fun target ->
     let persisted = Option.fold ~none:false ~some:(fun e -> not (S.is_draft e)) edit in
     {upload_repo = repo; upload_route = Runtime.route (); upload_target = target;
-     upload_edit = edit; upload_sibling = persisted;
+     upload_edit = edit; upload_sibling = sibling;
      upload_empty = persisted && Option.fold ~none:false
        ~some:(fun e -> String.trim e.S.buffer = "") edit}) target)
 

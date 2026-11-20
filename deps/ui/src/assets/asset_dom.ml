@@ -179,11 +179,13 @@ let collect_files upload files =
 
 (* cljs db-based-save-assets! — target = edit block when it exists
    (sibling? + replace-empty-target? both true, bottom? true); else the
-   current page (cljs falls back to today's journal). *)
-let upload_files ?upload (files : Js.Json.t array) =
+   drop-target block as a sibling, else the current page. *)
+let upload_files ?upload ?drop_target (files : Js.Json.t array) =
   let upload = match upload with
     | Some upload -> Some upload
-    | None -> clear_slash_text (); Editor_actions.capture_asset_upload () in
+    | None ->
+        clear_slash_text ();
+        Editor_actions.capture_asset_upload ?drop_target () in
   match upload with
   | Some upload when Array.length files > 0 && Editor_actions.asset_upload_current upload ->
       ignore ((let* blocks = collect_files upload files in
