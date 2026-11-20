@@ -183,7 +183,7 @@ let chord_el svs key groups =
           (fun gi grp ->
             (if gi > 0 then
                [ Ui_components.chord_separator
-                   ~key:(Printf.sprintf "then%d" gi) ]
+                   ~key:(Printf.sprintf "then%d" gi) () ]
              else [])
             @ [ group_el gi grp ])
           groups))

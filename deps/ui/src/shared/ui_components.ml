@@ -631,16 +631,19 @@ let shortcut_separate ~key ~glow:_ children : t =
   row ~key ~style_class:"shui-shortcut-separate" ~cross:`center ~gap:4
     children
 
-let shortcut_chord ~key children : t =
-  row ~key ~cross:`center ~gap:8
+let shortcut_chord ~key ?data_binding children : t =
+  row ~key ~style_class:"shui-shortcut-chord" ~cross:`center ~gap:8
+    ?data_attrs:(match data_binding with
+      | Some binding -> Some ["data-shortcut-binding", binding]
+      | None -> None)
     children
 
-(* "then" separator between chord groups — 10px at 45% opacity like
-   cljs shui-shortcut-chord-sep. *)
-let chord_separator ~key : t =
+(* Chord-group separator — keymap uses "->" (cljs :chord-separator);
+   cmdk/help keep the default "then". Trailing () eliminates the
+   optional so callers get a finished `t`. *)
+let chord_separator ?(value = "then") ~key () : t =
   with_props [ Prop.opacity 0.45 ]
-    (text ~key ~font_size:"0.625rem"
-       ~value:"then" [])
+    (text ~key ~font_size:"0.625rem" ~value [])
 
 (* Text-only spans for the compact header link — same typography as a
    keycap, no chrome. *)

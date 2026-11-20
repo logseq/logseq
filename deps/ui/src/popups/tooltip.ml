@@ -250,7 +250,7 @@ let tip_view (tip : tip) : t =
         Ui_components.shortcut_chord ~key:"keys"
           (List.mapi (fun index (_, keys) ->
             (if index = 0 then [] else [Ui_components.chord_separator
-              ~key:("then-" ^ string_of_int index)])
+              ~key:("then-" ^ string_of_int index) ()])
             @ [combo ("group-" ^ string_of_int index) keys]) groups
            |> List.concat)
   in
