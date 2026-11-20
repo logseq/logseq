@@ -677,20 +677,22 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
       || Option.fold ~none:false ~some:(fun group -> List.mem group groups) item.ai_group) items
 ;;
 
-(* cljs editor.cljs keeps a fallback item for slash *)
+(* cljs components/editor.cljs no-matched-commands — hardcoded English *)
 let slash_fallback () =
-  mk_item ~key:"no-matched"
-    ~label:(U.t "editor.slash/no-matched-commands") Noop
+  mk_item ~key:"no-matched" ~label:"No matched commands" Noop
 ;;
 
 (* ---- filtering ---- *)
 
+(* cljs *latest-matched-command — close when typed >2 chars past last hit *)
+let latest_matched_slash_q = ref ""
 
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
 ;;
 
-(* index + .ui__ac-group-name banners (unfiltered slash only, like cljs) *)
+(* index + .ui__ac-group-name banners — cljs auto-complete keeps group
+   headers for filtered slash results via get-group-name *)
 let with_headers show items =
   let rec go last idx = function
     | [] -> []
@@ -718,17 +720,47 @@ let editing_has_heading () =
   | None -> false
 ;;
 
-let filter_slash q items =
-  let fields = [ (fun it -> it.ai_label); (fun it -> it.ai_english) ] in
-  let fields = if U.current_lang () = "zh-CN" then
-      fields @ [fun it -> Fuzzy.hanzi_initials it.ai_label] else fields in
-  let fs =
-    if q = "" then items
-    else Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
+(* cljs get-matched-commands extract-fns include command-group-name so
+   "/head" keeps the Heading group; headers stay on filtered results *)
+let filter_slash_matches q items =
+  let fields =
+    [ (fun it -> it.ai_label)
+    ; (fun it -> it.ai_english)
+    ; (fun it -> Option.value it.ai_group ~default:"") ]
   in
+  let fields =
+    if U.current_lang () = "zh-CN" then
+      fields
+      @ [ (fun it -> Fuzzy.hanzi_initials it.ai_label)
+        ; (fun it ->
+             match it.ai_group with
+             | Some g -> Fuzzy.hanzi_initials g
+             | None -> "") ]
+    else fields
+  in
+  if q = "" then items
+  else Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
 
-  (match fs with [] -> [ slash_fallback () ] | _ -> fs)
-  |> with_headers (q = "")
+type slash_filter =
+  | Slash_items of ac_item list
+  | Slash_close
+
+let filter_slash_result q items =
+  if q <> "" && String.trim q = "" then Slash_close
+  else
+    let fs = filter_slash_matches q items in
+    match fs with
+    | [] ->
+        if S.length q - S.length !latest_matched_slash_q > 2 then Slash_close
+        else Slash_items (with_headers true [ slash_fallback () ])
+    | xs ->
+        latest_matched_slash_q := q;
+        Slash_items (with_headers true xs)
+
+let filter_slash q items =
+  match filter_slash_result q items with
+  | Slash_close -> with_headers true [ slash_fallback () ]
+  | Slash_items xs -> xs
 ;;
 
 (* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
@@ -963,6 +995,15 @@ let refresh_items t ac =
   match ac.kind with
   | Slash ->
       let graph = repo () and session = !(t.session) in
+      let slash_pool ~statuses ~priorities =
+        slash_items ~statuses ~priorities ~has_heading:(editing_has_heading ())
+      in
+      let apply_slash_filter current query statuses priorities =
+        match filter_slash_result query (slash_pool ~statuses ~priorities) with
+        | Slash_close -> close_ac t
+        | Slash_items items ->
+            set_ac t (Some { current with query; items; chosen = 0 })
+      in
       ignore (let* values = Js.Promise.all [|
         Properties_data.closed_values (Wire.Keyword "logseq.property/status");
         Properties_data.closed_values (Wire.Keyword "logseq.property/priority") |] in
@@ -970,17 +1011,14 @@ let refresh_items t ac =
          | Some current when session = !(t.session) && graph = repo ()
               && current.kind = Slash && current.auuid = ac.auuid
               && current.query = ac.query ->
-             let items = slash_items ~statuses:(Wire.elems values.(0))
-               ~priorities:(Wire.elems values.(1))
-               ~has_heading:(editing_has_heading ()) |> filter_slash current.query in
-             set_ac t (Some {current with items; chosen = 0})
+             apply_slash_filter current current.query
+               (Wire.elems values.(0)) (Wire.elems values.(1))
          | _ -> ());
         Js.Promise.resolve ());
-      { ac with
-        items =
-          filter_slash ac.query
-            (slash_items ~statuses:[] ~priorities:[]
-              ~has_heading:(editing_has_heading ())) }
+      (match filter_slash_result ac.query
+               (slash_pool ~statuses:[] ~priorities:[]) with
+       | Slash_close -> { ac with items = []; chosen = 0 }
+       | Slash_items items -> { ac with items })
   | Page_ref | Page_embed | Tag_search ->
       { ac with items = page_items_for t ac.kind ac.query }
   | Template_search -> { ac with items = template_items_for t ac.query }
@@ -1384,6 +1422,7 @@ let measure_ac ?(retries = 120) t kind =
 let open_ac ?tpos ?(autopair = true) t kind =
   if not (draft_editing ()) || draft_ac_kind kind then begin
   invalidate_ac t;
+  if kind = Slash then latest_matched_slash_q := "";
   let graph = repo () in
   if !(t.cache_repo) <> Some graph then (
     t.cache_repo := Some graph;
@@ -1439,11 +1478,23 @@ let open_ac ?tpos ?(autopair = true) t kind =
 
 let ac_update t ac q =
   incr t.gen;
-  let ac = { ac with query = q; chosen = 0 } in
-  set_ac t (Some (refresh_items t ac));
-  if ac.kind = Block_ref then run_block_search t ac
-  else if (ac.kind = Page_ref || ac.kind = Embed_ref) && String.trim q <> ""
-  then run_node_search t ac
+  if ac.kind = Slash then
+    match
+      filter_slash_result q
+        (slash_items ~statuses:[] ~priorities:[]
+           ~has_heading:(editing_has_heading ()))
+    with
+    | Slash_close -> close_ac t
+    | Slash_items items ->
+        set_ac t (Some { ac with query = q; chosen = 0; items });
+        (* async refresh with status/priority closed values *)
+        ignore (refresh_items t { ac with query = q; chosen = 0; items })
+  else (
+    let ac = { ac with query = q; chosen = 0 } in
+    set_ac t (Some (refresh_items t ac));
+    if ac.kind = Block_ref then run_block_search t ac
+    else if (ac.kind = Page_ref || ac.kind = Embed_ref) && String.trim q <> ""
+    then run_node_search t ac)
 ;;
 
 let query_closed_kind kind q =
