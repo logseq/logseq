@@ -47,7 +47,7 @@ let update_model uuid f =
                    && nm.Edit_model.caret <> e.S.model.Edit_model.caret;
           if nm.Edit_model.source <> e.S.model.Edit_model.source then begin
             (match e.S.owner with
-             | S.Persisted -> S.history_input_before := Some (S.history_editing e)
+             | S.Persisted -> S.record_history_start e
              | S.Explicit_draft owner -> changed := Some (e, owner, nm.source));
             Editor_sink.invalidate uuid
           end;
@@ -699,6 +699,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
+            S.history_input_before := None;
             arm_focus ~schedule:false
               (make_focus_request ?click ~owner:(scope, editing.S.epoch) uuid caret);
             S.set (fun st ->
@@ -893,6 +894,7 @@ let after_pending_input commit =
               clear_pending_blur ();
               cancel_pending_focus ();
               Editor_sink.invalidate e.S.uuid;
+              S.history_input_before := None;
               S.set (fun st -> { st with S.editing = None });
               commit ()
             end
@@ -1207,7 +1209,7 @@ let split_at_cursor uuid =
           else uuid, e.S.scope in
         mark "prelude";
         let opts = Ops.history_opts ~opts:(Ops.op_opts "insert-blocks")
-            ~before:(S.history_editing e)
+            ~before:(S.consume_history_before_editing e)
             ~after:(S.history_editing
               (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:insert_scope ~base:after ())) () in
         (* Capture this block's debounce now, before the next editor can
@@ -1386,7 +1388,7 @@ let merge_prev uuid =
             with_focus_after ~restore:(Some e) uuid 0
               (Ops.apply_and_refresh
                  ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                   ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops))
+                   ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ()) ops))
           else (
             (* title_for (override ?? model): prev's commit may still be
                in flight — the debounced save's delta only lands with
@@ -1416,7 +1418,7 @@ let merge_prev uuid =
               request_focus prev_uuid caret;
               Ops.apply_and_refresh
                 ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                  ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops)) in
+                  ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ()) ops)) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some prev_uuid then
                 request_focus prev_uuid (caret_of prev_uuid))))
@@ -1481,7 +1483,7 @@ let merge_next_now uuid =
               request_focus next_uuid 0;
               Ops.apply_and_refresh
                 ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                  ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops)) in
+                  ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ()) ops)) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some next_uuid then request_focus next_uuid 0))
           else (
@@ -1508,7 +1510,7 @@ let merge_next_now uuid =
               request_focus uuid caret;
               Ops.apply_parsed_and_refresh
                    ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                     ~before:(S.history_editing e) ~after:(S.history_cursor ()) ())
+                     ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ())
                    ~rest:ops [ (uuid, merged) ])) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some uuid then request_focus uuid (caret_of uuid))))
@@ -2712,14 +2714,16 @@ let paste_history_opts target_uuid =
       [ Wire.Keyword "block-uuid", Wire.Keyword "last-inserted-block"
       ; Wire.Keyword "scope", Wire.String scope
       ; Wire.Keyword "caret", Wire.Keyword "end" ] in
-  Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
+  let before, _ = S.consume_history_before () in
+  Ops.history_opts ~opts:(Ops.op_opts "paste") ~before ~after ()
 
 let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
   let context = Runtime.repo (), Runtime.route () in
   let session_current = paste_session_current () in
   let input_seq = !S.edit_input_seq in
+  let before, _ = S.consume_history_before () in
   let opts = Ops.history_opts ~opts:(Ops.op_opts "paste")
-      ~before:(S.history_cursor ()) ~after:Wire.Nil () in
+      ~before ~after:Wire.Nil () in
   let* resp = Ops.apply_and_refresh_result ~opts
       [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
   if context = (Runtime.repo (), Runtime.route ()) && session_current ()

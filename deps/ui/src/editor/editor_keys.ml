@@ -1318,6 +1318,16 @@ and apply_input ?frame uuid ev =
             A.refresh_lines e.S.model conduit
         | _ -> e.S.model
       in
+      (match ev with
+       | Edit_input.Key (kev, _) ->
+           let modified = kev.meta || kev.ctrl || kev.alt || kev.shift in
+           (match kev.Edit_model.key with
+            | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" when modified ->
+                S.record_history_start ~force:true e
+            | "Home" | "End" | "PageUp" | "PageDown" ->
+                S.record_history_start e
+            | _ -> ())
+       | _ -> ());
       let m' =
         match ev with
         | Edit_input.Key (kev, repeat) ->

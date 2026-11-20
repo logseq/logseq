@@ -1074,9 +1074,12 @@ let history_opts ?(opts = Wire.Map []) ~before ~after () =
 
 let current_history_opts opts =
   match opts with
-  | Wire.Map kvs when List.mem_assoc (Wire.Keyword "undo-redo/editor-info") kvs -> opts
-  | _ -> let cursor = S.history_cursor () in
-         history_opts ~opts ~before:cursor ~after:cursor ()
+  | Wire.Map kvs when List.mem_assoc (Wire.Keyword "undo-redo/editor-info") kvs ->
+      S.history_input_before := None;
+      opts
+  | _ ->
+      let before, after = S.consume_history_before () in
+      history_opts ~opts ~before ~after ()
 
 let clear_pending_save () =
   Ui_services.timers_clear_timeout !save_timer;
@@ -1806,10 +1809,12 @@ let schedule_save uuid title =
   let before =
     match pending_save_for uuid with
     | Some save ->
+        S.history_input_before := None;
         Option.get (Wire.map_get save.opts "undo-redo/editor-info")
-    | _ -> Option.value !S.history_input_before ~default:(S.history_cursor ())
+    | _ ->
+        let before, _ = S.consume_history_before () in
+        before
   in
-  S.history_input_before := None;
   let opts = history_opts ~before ~after:(S.history_cursor ()) () in
   (match take_pending_save () with
    | Some save when save.uuid <> uuid || save.context.repo <> context.repo ->

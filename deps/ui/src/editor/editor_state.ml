@@ -544,8 +544,44 @@ let history_cursor () =
           (match anchor () with Some u -> Wire.Uuid u | None -> Wire.Nil)
       ]
 
-(* Captured before a source mutation and consumed by its scheduled save. *)
+(* Captured before an unmatched keydown or source mutation and consumed by
+   the next outliner op (matching master's :editor/start-pos lifecycle). *)
 let history_input_before : Wire.t option ref = ref None
+
+let history_cursor_matches_editing (e : editing) cursor =
+  Wire.map_get_uuid cursor "block-uuid" = Some e.uuid
+  && Wire.map_get_string cursor "scope" = Some e.scope
+
+let record_history_start ?(force = false) (e : editing) =
+  if not (is_draft e) then
+    let valid =
+      match !history_input_before with
+      | Some prev -> history_cursor_matches_editing e prev
+      | None -> false
+    in
+    if force || not valid then
+      history_input_before := Some (history_editing e)
+
+let consume_history_before_editing (e : editing) =
+  let before =
+    match !history_input_before with
+    | Some prev when not (is_draft e) && history_cursor_matches_editing e prev ->
+        prev
+    | _ -> history_editing e
+  in
+  history_input_before := None;
+  before
+
+let consume_history_before () =
+  let current = history_cursor () in
+  let before =
+    match !history_input_before, editing () with
+    | Some prev, Some e when not (is_draft e) && history_cursor_matches_editing e prev ->
+        prev
+    | _ -> current
+  in
+  history_input_before := None;
+  before, current
 let restore_history : (Wire.t -> unit Js.Promise.t) ref =
   ref (fun _ -> Js.Promise.resolve ())
 

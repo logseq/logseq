@@ -1288,6 +1288,90 @@ let test_indent_type_double_undo_caret (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_indent_undo_restores_start_pos (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h
+    [ Test_check.block "b1" "alpha"
+    ; Test_check.block "b2" "beta"
+        ~children:[ Test_check.block "b2a" "beta-1"; Test_check.block "b2b" "beta-2" ]
+    ; Test_check.block "b3" "gamma"
+    ];
+  set_editing ~uuid:"b3" ~buffer:"gamma" ~caret:0 ~base:"gamma";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let committed = ref !Runtime.current_page
+  and history = ref []
+  and redo_stack = ref [] in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        let before = !committed in
+        let* result = worker.invoke_fn name args in
+        if before <> !Runtime.current_page then begin
+          history := (opts,before,!Runtime.current_page) :: !history;
+          redo_stack := [];
+          committed := !Runtime.current_page
+        end;
+        Js.Promise.resolve result
+    | "thread-api/undo-redo-undo",_ ->
+        (match !history with
+         | (opts,before,after) :: rest ->
+             history := rest;
+             redo_stack := (opts,before,after) :: !redo_stack;
+             committed := before;
+             Runtime.current_page := before; h.sync_page ();
+             let cursors = List.filter_map (W.get opts)
+               ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+             Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool true;
+               W.kw "editor-cursors",W.List cursors])
+         | [] -> Js.Promise.resolve (W.Map []))
+    | "thread-api/undo-redo-redo",_ ->
+        (match !redo_stack with
+         | (opts,before,after) :: rest ->
+             redo_stack := rest;
+             history := (opts,before,after) :: !history;
+             committed := after;
+             Runtime.current_page := after; h.sync_page ();
+             let cursors = List.filter_map (W.get opts)
+               ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+             Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool false;
+               W.kw "editor-cursors",W.List cursors])
+         | [] -> Js.Promise.resolve (W.Map []))
+    | _ -> worker.invoke_fn name args)};
+  (* End moves caret from 0 -> 5 while recording start-pos = 0 like master *)
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "End",false));
+  check "End moves caret to end of gamma" ((editing_now ()).model.EM.caret = 5);
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Indent undo after End restores start-pos 0 on gamma"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 0
+     && (editing_now ()).buffer = "gamma");
+  A.redo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Indent redo restores end-pos 5 on gamma"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 5);
+  (* Undo again, then plain ArrowRight x2 + Tab should keep caret at 2 on undo *)
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "ArrowRight",false));
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "ArrowRight",false));
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Plain Arrow motion before indent keeps current caret on undo"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 2);
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 (* ---------- run ---------- *)
 
 let test_exit_waits_for_save (h : host) =
@@ -3051,6 +3135,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
   let* () = test_indent_type_double_undo_caret h in
+  let* () = test_indent_undo_restores_start_pos h in
   let* () = test_exit_waits_for_save h in
   let* () = test_select_all_exit h in
   let* () = test_task_cycle h in
