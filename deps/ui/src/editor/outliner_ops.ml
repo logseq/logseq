@@ -702,9 +702,16 @@ let fetch_page_recycled repo (page : Model.page) : bool Js.Promise.t =
              Option.is_some (Wire.get info "logseq.property/deleted-at"))
 
 let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
+  (* Prefer UUID — title "Asset" collides with logseq.property/asset
+     (lower eid), which made the Asset class page show "# Property". *)
   let* w =
-    Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
-      (Wire.String page.Model.page_title)
+    match page.Model.page_uuid with
+    | Some uuid ->
+        Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+          (Wire.Uuid uuid)
+    | None ->
+        Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+          (Wire.String page.Model.page_title)
   in
   check_loader_result w;
   (* get-case-page encodes multi-ref values as a plain set of
