@@ -379,9 +379,10 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
   box ~key ~style_class:(class_ ^ act)
     [ (match href, on_shift_click with
        | Some url, _ -> (fun content ->
+           (* cljs sidebar-item always navigates via the SPA path; web
+              Link alone can paint :active without calling on_click. *)
            link ~url ~target:`self_ ~container_relative_frame:`horizontal
-             ?on_press:(if Ui_services.env_native_block_controls () then
-               Some (fun _ -> on_click ()) else None) [content])
+             ~on_press:(fun _ -> on_click ()) [content])
        | None, None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
        | None, Some shift_click -> arm_press ~on_press_detail:(function
            | d ->
