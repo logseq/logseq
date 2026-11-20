@@ -178,11 +178,16 @@ let remote_row (name, uuid, e2ee, role) : t =
                    end)) ()) ]
     else []
   in
+  let local = List.mem local_repo (Graphs_ops.repos ()) in
   let items =
-    (* cljs shows the local-delete item on a remote row too when the
-       graph is also downloaded locally (repo.cljs: root is truthy) *)
-    (if List.mem local_repo (Graphs_ops.repos ()) then
-       [ ( "delete-local-graph-menu-item"
+    (* cljs shows open-in-another-tab + local-delete when the remote
+       graph also has a local root *)
+    (if local then
+       [ ( "open-in-another-tab-menu-item"
+         , (T.t "graph/open-in-another-tab-action")
+         , false
+         , fun () -> open_in_another_tab local_repo )
+       ; ( "delete-local-graph-menu-item"
          , (T.t "graph/delete-local-action")
          , not (Graphs_ops.removable local_repo)
          , fun () -> Graphs_ops.ask_delete ~remote:false local_repo )
@@ -194,12 +199,29 @@ let remote_row (name, uuid, e2ee, role) : t =
       , fun () -> Graphs_ops.ask_delete ~remote:true local_repo )
       :: leave_item
   in
+  let last_opened =
+    if not local then []
+    else
+      match
+        (match Graphs_ops.meta_last_seen local_repo with
+         | Some _ as time -> time
+         | None -> Graphs_meta.created_at local_repo)
+      with
+      | None -> []
+      | Some ms ->
+          [ box ~min_height:24
+              [ text ~key:("rrs-" ^ uuid) ~as_:`Small ~font_size:"0.8em"
+                  ~line_height:"normal"
+                  ~foreground:"hsl(var(--muted-foreground))"
+                  ~value:(T.last_opened_at (Ui_services.time_fmt_date ms))
+                  [] ] ]
+  in
   row ~key:("rr-" ^ uuid) ~main:`space_between ~cross:`center
     ~margin_bottom:8
     ~style_class:"group"
     ~data_attrs:[ ("data-testid", "logseq_db_" ^ name) ]
     [ column ~key:("rrl-" ^ uuid)
-        [ row ~key:("rrt-" ^ uuid) ~gap:4 ~cross:`center
+        ([ row ~key:("rrt-" ^ uuid) ~gap:4 ~cross:`center
             [ text ~key:("rrn-" ^ uuid)
                 ~foreground:"var(--lx-accent-11)"
                 ~data_attrs:[ ("style", "cursor:pointer") ]
@@ -219,7 +241,7 @@ let remote_row (name, uuid, e2ee, role) : t =
                 ~name:(Icons.name_ref (if e2ee then "lock" else "cloud"))
                 ~point_size:14 []
             ]
-        ]
+        ] @ last_opened)
     ; column ~key:("rrc-" ^ uuid) ~style_class:"controls"
         [ Menu_item.dots_menu ~key:("rrm-" ^ uuid) ~compact:true items ]
     ]
