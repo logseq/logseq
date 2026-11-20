@@ -176,17 +176,17 @@ let view (_ms : Model.t Signal.signal) : t =
        Js.Promise.resolve ())
   in
   let delete_forever uuid title is_page =
+    (* cljs deleted-root-header uses window.confirm with this copy *)
     let msg =
-      if is_page then (T.t "storage.recycle/delete-page-confirm-desc")
-      else (T.t "storage.recycle/delete-block-confirm-desc")
+      if is_page then T.t "storage.recycle/delete-page-confirm-desc"
+      else T.t "storage.recycle/delete-block-confirm-desc"
     in
-    Dialogs_state.ask ~title:"" ~desc:msg
-      ~on_confirm:(fun () ->
-        ignore
-          (let* _ = outliner_op "recycle-delete-permanently" uuid in
-           Toast.success title;
-           refresh ();
-           Js.Promise.resolve ())) ()
+    if Ui_services.dom_confirm msg then
+      ignore
+        (let* _ = outliner_op "recycle-delete-permanently" uuid in
+         Toast.success title;
+         refresh ();
+         Js.Promise.resolve ())
   in
   refresh ();
   column ~key:"recycle" ~gap:32

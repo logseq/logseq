@@ -1939,10 +1939,13 @@
  :storage/sqlitedb-save-error "SQLiteDB 保存错误：{1}"
 
  :storage.recycle/block-deleted-at "块已删除 {1}"
+ :storage.recycle/delete-block-confirm-desc "从回收站永久删除此块？此操作无法撤销。"
+ :storage.recycle/delete-page-confirm-desc "从回收站永久删除此页面？此操作无法撤销。"
  :storage.recycle/empty "回收站为空。"
  :storage.recycle/page-deleted-at "页面已删除 {1}"
  :storage.recycle/readonly "回收站是只读的。"
  :storage.recycle/restore "恢复"
+ :storage.recycle/restored-feedback "已恢复 {1}"
  :storage.recycle/retention-desc "已删除的页面和块会保留在此处，直到被恢复或在 30 天后被自动垃圾回收。"
  :storage.recycle/title "回收站"
 
