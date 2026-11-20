@@ -54,10 +54,34 @@ let body (_ms : Model.t Signal.signal) : t =
               blocks_sig ]
       ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"
           ~main:`end_
-          [ Ui_components.button ~key:"qa-add" ~variant:`primary
-              ~text:(U.t "editor.quick-add/add-to-today")
+          [ (* cljs: shortcut keycaps before the label (mod+e / mod+alt+e) *)
+            let keys =
+              if Ui_services.env_is_mac () then [ "mod"; "e" ]
+              else [ "mod"; "alt"; "e" ]
+            in
+            Ui_components.button ~key:"qa-add" ~variant:`primary ~text:""
               ~on_press:(fun _ ->
-                Editor_actions.quick_add_blocks_to_today ()) [] ]
+                Editor_actions.quick_add_blocks_to_today ())
+              [ row ~key:"qa-add-inner" ~gap:6 ~cross:`center
+                  [ Ui_components.shortcut_combo ~key:"qa-sc" ~glow:true
+                      (List.mapi
+                         (fun i k ->
+                           let label =
+                             match String.lowercase_ascii k with
+                             | "mod" | "cmd" | "command" ->
+                                 if Ui_services.env_is_mac () then {js|⌘|js}
+                                 else "Ctrl"
+                             | "alt" | "option" ->
+                                 if Ui_services.env_is_mac () then {js|⌥|js}
+                                 else "Alt"
+                             | other -> String.uppercase_ascii other
+                           in
+                           Ui_components.keycap
+                             ~key:("qa-k" ^ string_of_int i)
+                             ~boxed:false ~glow:false ~value:label)
+                         keys)
+                  ; text ~value:(U.t "editor.quick-add/add-to-today") [] ]
+              ] ]
       ]
   in
   node ctx parent
