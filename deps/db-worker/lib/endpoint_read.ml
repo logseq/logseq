@@ -632,6 +632,9 @@ let get_page_route_info args =
                              (Ldb.value page "logseq.property/icon")
                              ~default:Nil) )
                     ; ( Wire.keyword "tags", tags_wire page )
+                    ; (* cljs page.cljs ldb/recycled? — soft-delete shell *)
+                      ( Wire.keyword "recycled?",
+                        Wire.Bool (Ldb.recycled page) )
                     ]
                   in
                   let base =

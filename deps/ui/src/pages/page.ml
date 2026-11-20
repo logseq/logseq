@@ -1462,7 +1462,17 @@ let page_tabs_el (m : Model.t) : t =
       object_tabs_el ~key_prefix:"ptabs" page
   | _ -> Logseq_el.nothing
 
-let page_view_ms (ms : Model.t Signal.signal) : t =
+(* cljs page.cljs recycled? branch — soft-delete keeps the route and
+   replaces the outliner with :page/moved-to-recycle *)
+let recycled_page_view () =
+  column ~key:"page-recycled" ~style_class:"page cp__page-inner-wrap" ~grow:1.
+    ~padding_horizontal:8
+    [ column ~key:"page-inner" ~gap:32 ~margin_bottom:64
+        [ box ~key:"moved" ~opacity:0.75
+            [ paragraph ~key:"moved-t" ~margin:0
+                ~value:(I18n.t "page/moved-to-recycle") [] ] ] ]
+
+let page_view_live (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let m0 = Signal.get ms in
   let outline = Outline_viewport_state.ensure ctx ms in
@@ -1519,6 +1529,21 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
       [ Flat_outliner.view ~state:outline ~library ~header
           ~section_minimum_height:(60. -. 28.) ~section_blocks_only:true ~footer ()
       ; Selection_bar.view ~model:ms () ])) ctx parent
+
+let page_view_ms (ms : Model.t Signal.signal) : t =
+  reactive
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      let recycled = function
+        | Some (p : Model.page) -> p.page_recycled
+        | None -> false
+      in
+      recycled a.route_page = recycled b.route_page
+      && page_key a.route_page = page_key b.route_page)
+    (fun (m : Model.t) ->
+      match m.route_page with
+      | Some p when p.page_recycled -> recycled_page_view ()
+      | _ -> page_view_live ms)
+    ms
 
 (* the route-root dynamic segment — page routes keep the region mounted
    across data publishes (the keyed/reactive segments inside repaint

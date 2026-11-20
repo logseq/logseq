@@ -630,6 +630,11 @@ let page_of_summary (w : Wire.t) : Model.page option =
         ; page_linked_refs = []
         ; page_parents = []
         ; page_db_collapsable = db_collapsable_of_wire w
+        ; page_recycled =
+            (match Option.bind (Wire.get w "recycled?") Wire.as_bool with
+             | Some b -> b
+             | None ->
+                 Option.is_some (Wire.get w "logseq.property/deleted-at"))
         }
   | _ -> None
 

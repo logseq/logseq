@@ -704,6 +704,7 @@ let load_block_zoom uuid =
                        ; page_db_collapsable =
                            b.Model
                              .block_db_collapsable
+                       ; page_recycled = false
                        })));
                 (match
                    Editor_actions.consume_pending_zoom ()
