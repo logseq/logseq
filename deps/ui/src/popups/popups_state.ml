@@ -2642,15 +2642,16 @@ let apply_item t ac ~meta it =
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
   | Editor_cmd "youtube-timestamp" ->
-      (* cljs :youtube/insert-timestamp — insert! the macro (nil strips
-         only the trigger) *)
+      (* cljs :youtube/insert-timestamp — insert! macro {} with default
+         last-pattern=/ ; nil macro still clears the slash trigger *)
       (match !(Runtime.video_timestamp) () with
        | Runtime.Playback_time seconds ->
-           insert_text ac (Printf.sprintf "{{youtube-timestamp %d}}" seconds) 0
+           insert_text ac
+             (Printf.sprintf "{{youtube-timestamp %d}}" seconds) 0
        | Runtime.Player_pending ->
            Toast.warning (I18n.t "youtube/player-not-ready");
-           insert_text ac "" 0
-       | Runtime.No_video -> insert_text ac "" 0);
+           erase_trigger_text ac
+       | Runtime.No_video -> erase_trigger_text ac);
       close_ac t
   | Editor_cmd c ->
       let to_ = match c with
