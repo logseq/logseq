@@ -1559,12 +1559,13 @@ let run_editor_cmd uuid command from to_ =
   | "image-link" -> open_link_form true uuid from
   | _ ->
   let caret = clear_range uuid from to_ in
+  Ops.schedule_save uuid (A.live_buffer uuid);
   match command with
   | "scheduled" ->
       open_cal (Cal_prop ("logseq.property/scheduled", "")) uuid caret
   | "deadline" ->
       open_cal (Cal_prop ("logseq.property/deadline", "")) uuid caret
-  | "quote" -> upsert_type_block ~caret uuid "quote"
+  | "quote" -> set_props ~caret uuid "logseq.property.node/display-type" (W.Keyword "quote")
   | "math-block" -> set_props ~caret uuid "logseq.property.node/display-type" (W.Keyword "math")
   | "code-block" -> upsert_type_block ~exit:true ~caret uuid "code"
   | "calculator" -> upsert_type_block ~lang:"calc" ~caret uuid "code"

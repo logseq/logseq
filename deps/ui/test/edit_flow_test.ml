@@ -1882,7 +1882,53 @@ let test_code_conversion_focus (h : host) =
         reset_editor ();
         math rest
   in
-  math ["",false;"Existing content ",false;"Existing content ",true]
+  let* () = math ["",false;"Existing content ",false;"Existing content ",true] in
+  let services = Ui_services.get () and previous_popup = !Popups_state.active in
+  let off_insert = services.dom.subscribe_document_event ~capture:true
+    "ls:editor-insert" Editor_keys.on_editor_insert in
+  let off_command = services.dom.subscribe_document_event ~capture:true
+    "ls:editor-command" Editor_commands.on_command in
+  let rec slash = function
+    | [] ->
+        off_insert (); off_command (); Popups_state.active:=previous_popup;
+        reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
+    | (command,title,query,typed,sibling)::rest ->
+        reset_editor ();
+        stage_page h [{(Test_check.block "b1" title) with Model.block_display_type=typed}];
+        let source = title ^ "/" ^ query in
+        set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
+        install_worker ~repo:h.repo h;
+        let popup = Option.get previous_popup in
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false popup Popups_state.Slash;
+        let ac = Option.get (Popups_state.get popup).ac in
+        Popups_state.ac_update popup ac query;
+        let ac = Option.get (Popups_state.get popup).ac in
+        Ops.schedule_save "b1" source;
+        A.update_model "b1" (fun model -> EM.select model ~anchor:0 ~focus:0);
+        Popups_state.apply_item popup ac ~meta:false
+          (Popups_state.mk_item ~key:"conversion" ~label:"Conversion" (Popups_state.Editor_cmd command));
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check ("Slash " ^ command ^ " removes its recorded trigger even after the caret moves")
+          (List.map String.trim (current_titles ())=
+            (if sibling then [String.trim title;""] else [String.trim title]));
+        check ("Slash " ^ command ^ " follows Master's in-place versus sibling rule")
+          (List.mem "insert-blocks" (op_names ())=sibling);
+        if command="code-block" || command="math-block" || command="quote" then
+          check ("Slash " ^ command ^ " writes display type to its intended block")
+            (List.exists (function
+              | W.Array [W.Keyword "set-block-property";
+                  W.Array [W.Uuid target;W.Keyword "logseq.property.node/display-type";_]] ->
+                    if sibling then target<>"b1" else target="b1"
+              | _ -> false) !ops);
+        slash rest
+  in
+  slash ["code-block","","",None,false;"code-block","","Code",None,false;
+    "code-block","Existing ","Code",None,true;"code-block","","Code",Some "math",true;
+    "calculator","","Calc",None,false;"quote","Existing ","Quote",None,false;
+    "quote","Existing ","Quote",Some "math",false;"math-block","Existing ","Math",None,false;
+    "heading:2","Existing ","Heading",None,false;"clear-heading","Existing ","Clear",None,false;
+    "normal-text","Existing ","Normal",None,false;"number-list","Existing ","Number",None,false]
 
 let test_calculator_exit_structure (h : host) =
   let previous_buffer = !S.code_buffer_of in

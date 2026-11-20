@@ -1797,6 +1797,94 @@ let run_views ~registry ~profile ~finish =
   Views_popup.close_all ();
   ignore (Lui_app.dispose delayed_filter.S.app);
   Views_popup.stack_st := previous_stack;
+  let reference_facet_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_stack = !Views_popup.stack_st and previous_ops = !Views_state.ops_ref in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "reference-facets"});
+    Views_state.install_ops
+      {o_refresh=(fun _ -> ()); o_refresh_src=(fun _ _ -> ()); o_create_view=(fun _ -> ());
+       o_rename_box=(fun _ _ -> Lui_elements.spacer []); o_export=(fun _ -> ());
+       o_add_object=(fun _ -> ()); o_title_of_uuid=(fun _ uuid -> uuid);
+       o_load_more=(fun _ -> ()); o_full_action_rows=(fun _ reply -> reply (Error "Full action rows are not installed"))};
+    let rec next = function
+      | [] ->
+          Runtime.worker:=previous_worker; Runtime.read_model:=previous_model;
+          Views_popup.stack_st:=previous_stack; Views_state.ops_ref:=previous_ops; done_ ()
+      | scenario::rest ->
+          Views_popup.stack_st:=None;
+          let selected = ref false and requests = ref 0 in
+          let counts = ["Page",2;"tags",2;"Ref A",1;"Ref B",1;"Zebra",1;"Alpha",1] in
+          let key = Views_db.key_ref_pages_count "facet-owner" in
+          ignore (Fake_worker.install (fun name args -> match name with
+            | "thread-api/get-render-snapshots" ->
+                let resources = Wire.get (List.nth args 1) "resources" |> Option.get |> Wire.elems in
+                let slots = List.map (fun resource ->
+                  let value = if resource=key then begin
+                    incr requests;
+                    let counts = if scenario=`Empty then [] else if !selected
+                      then ["Page",1;"Ref B",1;"tags",1] else counts in
+                    if scenario=`Error then Wire.Map [Wire.kw "error",Wire.String "facet request failed"]
+                    else Wire.Map [Wire.kw "ref-pages-count",Wire.Array
+                      (List.map (fun (title,n) -> Wire.Array [Wire.String title;Wire.Int n]) counts)]
+                  end else Wire.Int 1 in
+                  Wire.Array [Wire.kw "resource";resource],Wire.Map [Wire.kw "value",value]) resources in
+                Wire.Map [Wire.kw "slots",Wire.Map slots]
+            | "thread-api/pull" -> Wire.Map [Wire.kw "db/id",Wire.Int 12]
+            | "thread-api/apply-outliner-ops" -> selected:=true; Wire.Map []
+            | "thread-api/pull-many" -> Wire.Array [Wire.Map
+                (if !selected then [Wire.kw Views_db.includes_prop,Wire.Array [Wire.Map
+                  [Wire.kw "block/name",Wire.String "alpha";Wire.kw "block/title",Wire.String "Alpha"]]] else [])]
+            | _ -> Wire.Nil));
+          let instance = ref None and scope = ref None in
+          let popup = mount (fun _ context parent ->
+            instance:=Some (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+              ~kind:Views_state.KLinkedRefs ~feature:"linked-references" ~owner:(Wire.Uuid "facet-owner"));
+            scope:=Some context.ui_scope; popup_layer context parent) in
+          let inst = Option.get !instance in
+          let open_popup () =
+            Views_head.ref_filter_dialog ~owner_scope:(Option.get !scope) inst (popup_anchor ());
+            S.flush popup in
+          let chips () = List.filter (fun n -> class_has n "ls-ref-btn") (nodes popup) in
+          let labels () = List.filter_map button_label (chips ()) in
+          let count_labels () = nodes popup |> List.filter_map (fun n ->
+            match M.string_prop n "text" with Some (" 1"|" 2" as value) -> Some value | _ -> None)
+            |> List.sort String.compare in
+          let includes () = List.exists (fun n -> M.string_prop n "text"=
+            Some (I18n.t "reference.filter/includes")) (nodes popup) in
+          open_popup ();
+          ignore (Js.Global.setTimeout ~f:(fun () ->
+            S.flush popup;
+            let finish () = Views_popup.close_all (); ignore (Lui_app.dispose popup.S.app); next rest in
+            match scenario with
+            | `Empty -> check "Empty reference facets leave an editable search without chips"
+                (chips ()=[] && List.exists (fun n -> M.string_prop n "placeholder"=
+                  Some (I18n.t "reference.filter/search-placeholder")) (nodes popup)); finish ()
+            | `Error -> check "Failed reference facets show the existing error, not stale options"
+                (chips ()=[] && List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "view/error")) (nodes popup)); finish ()
+            | `Select ->
+                let original_counts = count_labels () in
+                check "Reference popup opens with all original facets" (labels ()=List.map fst counts);
+                let alpha = List.find (fun n -> button_label n=Some "Alpha") (chips ()) in
+                S.dispatch popup (P.PressDetail (alpha.M.id,
+                  {x=0.;y=0.;modifiers=0;button=0;target_class=""}));
+                ignore (Js.Global.setTimeout ~f:(fun () ->
+                  S.flush popup; Runtime.run_sync_subs [];
+                  ignore (Js.Global.setTimeout ~f:(fun () ->
+                    S.flush popup;
+                    check "Selecting Alpha saves the live page filter"
+                      (!selected && (Views_state.get inst).ref_includes=["alpha","Alpha"]);
+                    check "Selection and sync keep the popup's full facets and original counts"
+                      (labels ()=List.map fst counts && count_labels ()=original_counts && !requests=1);
+                    check "Includes does not appear in an already-open unfiltered snapshot" (not (includes ()));
+                    Views_popup.close_all (); S.flush popup; open_popup ();
+                    ignore (Js.Global.setTimeout ~f:(fun () ->
+                      S.flush popup;
+                      check "Reopening reflects the saved Includes section and fresh filtered counts"
+                        (includes () && labels ()=["Alpha";"Page";"Ref B";"tags"]
+                         && count_labels ()=[" 1";" 1";" 1"] && !requests=2);
+                      finish ()) 20)) 200)) 0)) 200)
+    in next [`Select;`Empty;`Error]
+  in
   let filter_value_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_stack = !Views_popup.stack_st in
@@ -5685,8 +5773,8 @@ let run_views ~registry ~profile ~finish =
       Graphs_view.remote_st_ref := remote_before;
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
-      async_selection_check (fun () -> filter_value_check (fun () ->
-        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())))))))))));
+      async_selection_check (fun () -> reference_facet_check (fun () -> filter_value_check (fun () ->
+        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))))
 
 let popup_press (ev : Ui_services.ev) =

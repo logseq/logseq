@@ -526,6 +526,48 @@ No web bundle build, `static/` writes or `:3010` access. The isolated CSS render
 is not rebuilt-application acceptance: filter order, the card and RTC highlighting
 remain pending paired browser verification.
 
+### Table85 follow-up: popup snapshots and converting slash commands
+
+Master's `reference.cljs/references-aux` passes the page entity and original
+`ref-pages-count` into a popup closure. `reference_filters.cljs/filter-dialog-aux`
+initializes its local list from that argument and searches that same list; it
+does not subscribe the open popup to new counts. `db/common/reference.cljs/get-filters`
+reads the supplied page entity. Includes/Excludes sections exist for filters
+already present when opening; selecting Alpha in an unfiltered popup does not
+replace its original facets with a new Includes section and recomputed counts.
+LUI now keeps that opening selection/count snapshot, while saving the actual
+filter and refreshing the references underneath. Reopening reads the saved
+selection and a fresh count resource. Mounted regressions exercise selection,
+sync, reopening, empty resources and failed resources.
+
+Converting slash actions now send one command with the recorded trigger/query
+range, rather than first sending a separate insertion whose end depends on the
+live caret and then a zero-width command. The command consumer removes and
+schedules the cleaned source before conversion. A regression moves the caret
+while the slash popup remains open: empty-host Code retains the host UUID with
+no slash or sibling; typed queries are removed as well. This is a reachable
+failure scenario, not a trace proving the original browser event sequence.
+
+The built-in conversion audit follows Master's `commands.cljs` and
+`handler/events.cljs/:editor/upsert-type-block`: Code/Calculator reuse an empty,
+untyped host but insert after nonempty or already typed hosts. That distinction
+is preserved. Quote, like Math, sets display type on the current block even
+when nonempty or already typed; Quote no longer uses the Code insertion rule.
+Heading, Clear heading, Normal text and numbered-list actions retain their
+existing host and share trigger cleanup. Query/Advanced Query use the existing
+`Run_query` action, which clears the trigger and updates the host's query
+property/tag in place; their empty, nonempty and rejection regressions remain.
+Existing Code/Math rejection and focus tests are retained.
+
+Verification: UI aggregate passes 6588 checks; native experimental tests and
+build pass. Worker aggregate retains the same platform cases 1, 7 and 8 as the
+preceding Table85 log: 3 failures out of 994, including `Native secrets require
+the OS keychain host`. Diff whitespace checks pass. Logs are under
+`/Users/devin/attachments/table85-followup-{ui,native-test,native-build,worker}.log`.
+Rebuilt-application Code/Quote
+conversion, reload and popup visuals remain unverified. No web bundle build,
+`static/` writes or `:3010` access.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

@@ -1642,14 +1642,14 @@ let emit ?(exit = false) auuid tpos text =
   Editor_sink.focus_input auuid
 ;;
 
-let emit_cmd ?pos command extra =
+let emit_cmd ?range command extra =
   Ui_services.dom_dispatch_json "ls:editor-command"
     (detail_obj
        (("command", Json.String command)
-        :: (match pos with
-            | Some p ->
-                [ "from", Json.Number (float_of_int p)
-                ; "to", Json.Number (float_of_int p) ]
+        :: (match range with
+            | Some (from, to_) ->
+                [ "from", Json.Number (float_of_int from)
+                ; "to", Json.Number (float_of_int to_) ]
             | None -> [])
         @ extra))
 ;;
@@ -2583,19 +2583,19 @@ let apply_item t ac ~meta it =
        | Runtime.No_video -> insert_text ac "" 0);
       close_ac t
   | Editor_cmd c ->
-      (match c with
+      let to_ = match c with
        | "date-picker" ->
            (* cljs :editor/show-date-picker keeps the typed trigger
               text — the calendar's commit replaces it *)
-           ()
+           ac.tpos
        | "link" | "image-link" ->
            (* cljs [:editor/input "/link"] — the buffer holds the literal
               command text while the form is open *)
-           insert_text ac "/link" 0
+           insert_text ac "/link" 0;
+           ac.tpos
        | _ ->
-           (* cljs strips the "/cmd" trigger text like an Emit "" insert *)
-           emit ac.auuid ac.tpos "");
-      emit_cmd ~pos:ac.tpos c [];
+           ac.tpos + ac.tlen + S.length ac.query in
+      emit_cmd ~range:(ac.tpos, to_) c [];
       close_ac t  | Plugin_slash (pid, tag) ->
       (* cljs handle-steps — strip the "/tag" trigger like an Emit ""
          insert, then run each step (editor/input inserts text;

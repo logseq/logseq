@@ -1082,7 +1082,7 @@ let load_ref_filters ?(on_done = fun () -> ()) ?(count = false) inst =
 
 (* page-handler/db-based-save-filter! — click toggles include,
    shift-click toggles exclude; clicking an active filter removes it *)
-let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
+let save_ref_filter inst ~title ~incl ~add =
   let current = V.current_view inst in
   match V.owner_uuid inst with
   | None -> ()
@@ -1098,7 +1098,7 @@ let save_ref_filter ?(on_done = fun () -> ()) inst ~title ~incl ~add =
                    else Views_db.excludes_prop)
                 ~ref_eid:eid ~add (fun () ->
                   if current () then begin
-                  load_ref_filters ~count:true ~on_done inst;
+                  load_ref_filters ~count:true inst;
                   refresh inst end)
           | None -> ())
 
@@ -1122,6 +1122,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
       let scope = context.Lui_ui.ui_scope in
       let repo = Runtime.repo () and route = Runtime.route () in
       let view_uuid = (V.get inst).V.view_uuid in
+      let selection = V.get inst in
       let current () =
         Ui_effect.alive scope && Ui_effect.alive owner_scope
         && Runtime.repo () = repo && Runtime.route () = route
@@ -1137,37 +1138,26 @@ let ref_filter_dialog ~owner_scope inst anchor =
          | Some uuid -> uuid
          | None -> invalid_arg "Linked-reference filter owner must be a UUID")
       in
-      let request = Ui_effect.request () in
-      let debounce_counts = Ui_services.timers_debounce 150 in
-      let refresh_counts () =
-        let ticket = Ui_effect.issue request in
-        let fresh () = current () && Ui_effect.is_current request ticket in
+      let load_counts () =
         if current () then begin
-          set_counts Ui_effect.Loading;
-          debounce_counts (fun () ->
-            if fresh () then
-              let fail () =
-                if fresh () then
-                  set_counts
-                    (Ui_effect.Failed (Failure "Linked-reference page counts failed"))
-              in
-              Views_db.snapshots ~on_error:fail
-                ~f:(fun snap ->
-                  if fresh () then
-                    let value = match Views_db.snapshot_value snap key with
-                      | Some value -> value
-                      | None -> invalid_arg "Missing linked-reference page count resource"
-                    in
-                    set_counts
-                      (Ui_effect.Ready (Views_wire.decode_ref_counts_resource value)))
-                [ key ])
+          let fail () =
+            if current () then
+              set_counts
+                (Ui_effect.Failed (Failure "Linked-reference page counts failed"))
+          in
+          Views_db.snapshots ~on_error:fail
+            ~f:(fun snap ->
+              if current () then
+                let value = match Views_db.snapshot_value snap key with
+                  | Some value -> value
+                  | None -> invalid_arg "Missing linked-reference page count resource"
+                in
+                set_counts
+                  (Ui_effect.Ready (Views_wire.decode_ref_counts_resource value)))
+            [ key ]
         end
       in
-      let subscription = Runtime.on_sync (fun _ -> refresh_counts ()) in
-      Signal.on_dispose scope (fun () ->
-        ignore (Ui_effect.issue request);
-        Runtime.off_sync subscription);
-      ignore (Ui_effect.timeout ~scope 0 refresh_counts);
+      ignore (Ui_effect.timeout ~scope 0 load_counts);
       let ref_button title count_opt =
         Ui_components.with_props
           [ Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px"
@@ -1190,7 +1180,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
                   property *)
                match ev with
                | Lui_protocol.PressDetail (_, d) when current () ->
-                 let s = V.get inst in
+                 let s = selection in
                  let lcr = lc title in
                  let included =
                    List.exists (fun (n, _) -> n = lcr) s.V.ref_includes
@@ -1205,7 +1195,6 @@ let ref_filter_dialog ~owner_scope inst anchor =
                         not (d.Lui_protocol.modifiers land 2 <> 0)
                       else included)
                    ~add:not_in_filters
-                   ~on_done:refresh_counts
                | _ -> ())
              ([ text ~value:title [] ]
               @
@@ -1221,25 +1210,22 @@ let ref_filter_dialog ~owner_scope inst anchor =
            :: List.map (fun (_, title) -> ref_button title None) xs)
       in
       let chip_rows =
-        reactive
-          (fun s ->
-            if s.V.ref_includes = [] && s.V.ref_excludes = [] then D.nothing
+            if selection.V.ref_includes = [] && selection.V.ref_excludes = [] then D.nothing
             else
             column ~style_class:"cp__filters" ~margin_bottom:16 ~margin_left:8
-              ((if s.V.ref_includes <> [] then
+              ((if selection.V.ref_includes <> [] then
                   [ chip_row (I.t "reference.filter/includes")
-                      s.V.ref_includes ]
+                      selection.V.ref_includes ]
                 else [])
                @
-               if s.V.ref_excludes <> [] then
+               if selection.V.ref_excludes <> [] then
                  [ chip_row (I.t "reference.filter/excludes")
-                     s.V.ref_excludes ]
-                 else []))
-          (sig_of inst)
+                     selection.V.ref_excludes ]
+                 else [])
       in
       let ref_rows =
         reactive
-          (fun q s loaded ->
+          (fun q loaded ->
             match loaded with
             | Ui_effect.Loading -> D.nothing
             | Ui_effect.Failed _ ->
@@ -1247,14 +1233,14 @@ let ref_filter_dialog ~owner_scope inst anchor =
             | Ui_effect.Ready counts ->
             let refs =
               reference_filter_options ~query:q
-                ~selected:(List.map fst (s.V.ref_includes @ s.V.ref_excludes)) counts
+                ~selected:(List.map fst (selection.V.ref_includes @ selection.V.ref_excludes)) counts
             in
             if refs = [] then D.nothing
             else
               row ~cross:`center ~gap:8 ~width:500 ~max_width:500
                 ~data_attrs:[ ("style", "flex-wrap:wrap") ]
                 (List.map (fun (t, n) -> ref_button t (Some n)) refs))
-          (Signal.value query) (sig_of inst) (Signal.value counts)
+          (Signal.value query) (Signal.value counts)
       in
       (column ~style_class:"ls-filters filters" ~padding:16
          ~width:632 ~min_width:632 ~max_width:632
