@@ -26,10 +26,14 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | --- | --- | --- | --- | --- | --- | --- |
 | nav-pages | 03 left sidebar | Click Pages navigates to All pages | Only highlighted; stayed on current route | left sidebar `.all-pages-nav` click | high | fixed `70cb570dfa` |
 | nav-flashcards | 03 left sidebar / 26 flashcards | Empty deck shows "Time to create a card!" + `#Card` hint | Showed "No cards due" from stale `all_cards` / missing loading gate | `.flashcards-nav` / `g f` on empty graph | med | fixed `98946559ee` |
-| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounted Electron back/forward (6 icons) | open graph on web | low | fixed `35aa45ed55` |
-| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also showed Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | fixed `a469fa089f` |
+| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | kept by user (revert `1606f384ef`) |
+| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | kept by user (revert `e778f33305`) |
 | favorite-click / recent | 03 left sidebar | Favorites/recents navigate to `#/page/<uuid>` | Navigated to `#/page/<name>` | click favorite or recent item | low | fixed `fe8a15537b` |
 | delete-page | 05 pages | After confirm, stay on page; show moved-to-recycle | Navigated to journals/Home | page menu → Delete → Confirm | low | fixed `51098daff9` |
 | drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `c76dd5cb2c` |
 | class-page-add-object | 16 tags and classes | Class page `+ New` opens sidebar and table shows new row | Sidebar opened; table stayed stale until later sync | Class page Objects tab → `+ New` | med | fixed `9e1644ee13` |
 | tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `cf1c12c604` |
+| journals-virtualized | 04 journals | Non-virtualized / different scroll model | Virtualized flat list for journals/pages | scroll long journals | — | intentional — never fix |
+| profiler | 21 settings / 37 help | Profiler supported | Profiler not supported | open profiler | — | intentional — never fix |
+| quick-add-esc | 32 quick add | (master Esc behavior) | Quick add closes on Esc | open Quick add, Esc | — | kept by user |
+| export-graph-download | 23 export | (master export UX) | Export SQLite downloads directly | Export → SQLite | — | kept by user |
