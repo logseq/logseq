@@ -1646,7 +1646,16 @@ let rec run_item st it =
    | Select_theme theme ->
        st.svs.Svs.select_theme theme;
        close st
-   | Run cid -> run_with_lifecycle st repo cid
+   | Run cid ->
+       (* cljs command-palette/invoke-command — history only for palette
+          picks, not for shortcut dispatch_id *)
+       (match
+          List.find_opt (fun c -> c.Svs.id = cid)
+            (st.svs.Svs.commands () @ st.svs.Svs.plugin_commands ())
+        with
+        | Some c -> record_invoke st.svs c
+        | None -> ());
+       run_with_lifecycle st repo cid
    | Open_file path ->
        close st;
        st.svs.Svs.exit_edit ();
@@ -1708,9 +1717,10 @@ and run_command st repo (cid : string) =
     goto_journal_day (st.svs.Svs.rel_journal_day delta)
   in
   let cur_day () = st.svs.Svs.route_page_journal_day () in
-  (match List.find_opt (fun c -> c.Svs.id = cid) (st.svs.Svs.commands ()) with
-   | Some c -> record_invoke st.svs c
-   | None -> ());
+  (* cljs add-history lives only in command-palette/invoke-command —
+     keyboard shortcuts call the handler :fn directly and must not
+     pollute commands-history (otherwise Alt+Shift+I / mod+shift+k
+     reorder the palette ahead of Toggle wide mode). *)
   match cid with
   | "editor/move-blocks" ->
       (* stay open in move-blocks mode; cljs go-to-search! :nodes scopes
