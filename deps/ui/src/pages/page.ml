@@ -467,19 +467,24 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     Option.map (Icon_picker.icon_el ~size:38.) (Model.page_node_icon page)
   in
   let uuid = Option.value page.page_uuid ~default:"" in
-  (* cljs db-page-title: tag/class pages render collapsed by default; the
-     fold state lives in the same collapsed/expanded sets as blocks *)
+  (* cljs db-page-title: tag/class and property pages render collapsed
+     by default; the fold state lives in the same collapsed/expanded
+     sets as blocks. Collapsing property pages hides LUI-only extras
+     (Hide empty value / Enable property history / Add property). *)
   let collapse = S.collapse_sig () in
+  let default_collapsed =
+    page.page_is_tag || page.page_is_property
+  in
   let title_collapsed (state : S.collapse_view) =
     not (S.String_set.mem uuid state.cv_expanded)
-    && (S.String_set.mem uuid state.cv_collapsed || page.page_is_tag)
+    && (S.String_set.mem uuid state.cv_collapsed || default_collapsed)
   in
   let toggle_title_collapse () =
     Editor_actions.blur_commit ();
     if S.ready () then
       S.set (fun (st : S.t) ->
           if not (S.String_set.mem uuid st.S.expanded)
-             && (S.String_set.mem uuid st.S.collapsed || page.page_is_tag) then
+             && (S.String_set.mem uuid st.S.collapsed || default_collapsed) then
             { st with
               S.collapsed = S.String_set.remove uuid st.S.collapsed
             ; S.expanded = S.String_set.add uuid st.S.expanded
@@ -494,7 +499,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     | Some _ -> Signal.value (Properties_area.page_state ctx page)
     | None -> Signal.constant ctx.Lui_ui.ui_scheduler Properties_state.empty_area_data in
   let collapsable_title (data : Properties_state.area_data) =
-    page.page_db_collapsable || page.page_is_tag || data.rows <> [] || data.hidden <> [] in
+    page.page_db_collapsable || default_collapsed
+    || data.rows <> [] || data.hidden <> [] in
   (* cljs *control-show? atom: the fold caret appears only while the
      pointer is over the title row, and only for collapsable titles *)
   let caret_hover = Signal.state (Signal.signal_owner collapse) false in

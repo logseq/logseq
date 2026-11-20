@@ -905,11 +905,13 @@ let page_area ~scope (p : Model.page) : t =
           reactive (fun (d : S.area_data) ->
             let title_collapsed =
               not (Editor_state.String_set.mem uuid collapse.cv_expanded)
-              && (Editor_state.String_set.mem uuid collapse.cv_collapsed || p.Model.page_is_tag)
+              && (Editor_state.String_set.mem uuid collapse.cv_collapsed
+                  || p.Model.page_is_tag || p.Model.page_is_property)
             in
             if title_collapsed then column ~gap:0 []
             else if
               (not p.Model.page_is_tag)
+              && (not p.Model.page_is_property)
               && d.rows = []
               && d.hidden = []
             then column ~gap:0 []
@@ -926,6 +928,10 @@ let page_area ~scope (p : Model.page) : t =
                 ; (if p.Model.page_is_tag then
                      class_section ctx ~owner_title:p.Model.page_title
                        d.class_rows
+                   else if p.Model.page_is_property then
+                     (* master property pages have Configure in the
+                        title actions only — no "Add property" row *)
+                     Logseq_el.nothing
                    else
                      new_property_btn ctx ~for_class:false
                        ~owner_title:p.Model.page_title)
