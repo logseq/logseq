@@ -72,8 +72,8 @@ jobs:
 
       - name: Set build environment flags
         run: |
-          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> $GITHUB_ENV
-          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> $GITHUB_ENV
+          echo "ENABLE_FILE_SYNC_PRODUCTION=true" >> "$GITHUB_ENV"
+          echo "ENABLE_RTC_SYNC_PRODUCTION=true" >> "$GITHUB_ENV"
 
       - name: Build web + workers
         run: |
@@ -94,11 +94,9 @@ jobs:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
 
       - name: Publish to Cloudflare Pages
-        uses: cloudflare/pages-action@1
+        uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: 2553ea8236c11ea0f88de28fce1cbfee
-          projectName: "logseq-any-branch"
-          directory: "public"
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
-          branch: ${{ inputs.branch }}
+          command: pages deploy public --project-name logseq-any-branch --branch ${{ inputs.branch }}
