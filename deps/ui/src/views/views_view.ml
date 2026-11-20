@@ -1099,6 +1099,10 @@ let add_new_object inst =
         end)
   in
   match inst.V.kind with
+  | V.KTagPage _ when (V.get inst).V.asset_class ->
+      (* cljs objects.cljs: Asset + New opens the file picker and
+         uploads; do not mint an empty untitled Asset node. *)
+      Editor_actions.trigger_asset_upload ()
   | V.KTagPage owner_uuid -> insert owner_uuid ~tags:[owner_uuid] ~props:[]
   | V.KPropertyPage owner_uuid ->
       ignore ((let* property = Runtime.invoke3 "thread-api/pull"
