@@ -74,8 +74,12 @@ let title_of_name name ext =
     else base
   in
   (* cljs asset-name->title: a file literally named "image.*" gets a
-     timestamp title (date/get-date-time-string-2) *)
-  if n = "image" then Printf.sprintf "%.0f" (Js.Date.now ()) else n
+     timestamp title (date/get-date-time-string-2 → yyyy-MM-dd-HH-mm-ss) *)
+  if n = "image" then
+    let f = Dates.fields (Dates.date_now ()) in
+    Printf.sprintf "%04d-%02d-%02d-%02d-%02d-%02d" f.year f.month f.day
+      f.hours f.minutes f.seconds
+  else n
 
 (* cljs :editor/input "" {:last-pattern "/"} — cut from the last "/" up to
    the caret so save-assets reads the cleared edit-content *)
@@ -609,6 +613,14 @@ let file_block uuid (b : Model.block) : t =
  fun context parent ->
   let ext = Option.value b.Model.block_asset_type ~default:"" in
   let file = uuid ^ "." ^ ext in
+  (* cljs shows the human title (e.g. sample.docx), not the stored
+     <uuid>.ext path *)
+  let label =
+    let t = String.trim b.Model.block_title in
+    if t = "" then file
+    else if ext <> "" && not (String.contains t '.') then t ^ "." ^ ext
+    else t
+  in
   let url =
     (Signal.value (asset_url_sig ~mime:(mime_of_ext ext) uuid file context))
   in
@@ -639,11 +651,11 @@ let file_block uuid (b : Model.block) : t =
     else
       (* cljs web: a.asset-ref[href=src][download=file-name] *)
       Logseq_el.el ~key:("afl-" ^ uuid) ~tag:"a"
-        ~text:file
+        ~text:label
         ~attrs_signal_v:
           (Logseq_el.attrs_signal url (fun u ->
-               if u = "" then [ ("download", file) ]
-               else [ ("href", u); ("download", file) ]))
+               if u = "" then [ ("download", label) ]
+               else [ ("href", u); ("download", label) ]))
         []
   in
   box ~key:("af-" ^ uuid) [ body ] context parent
@@ -674,15 +686,23 @@ let content_view uuid (b : Model.block) : t =
   | _ -> file_block uuid b
 
 (* whole asset branch — .asset-block-wrap replaces .block-content inside
-   .block-content-wrapper (cljs block.cljs asset render path) *)
+   .block-content-wrapper (cljs block.cljs asset render path). PDF and
+   generic file links already show the title once; a second
+   .block-title-wrap duplicated "doc" / the filename. *)
 let block_view uuid (b : Model.block) : t =
+  let title_row =
+    match b.Model.block_asset_type with
+    | Some "pdf" -> []
+    | Some ext when not (is_image ext) -> []
+    | _ ->
+        [ Ui_parts.pressable
+            ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0)
+            (box ~key:("abt-" ^ uuid) ~min_height:24
+               [ text ~key:("abtt-" ^ uuid) ~value:b.Model.block_title
+                   ~style_class:"block-title-wrap" [] ]) ]
+  in
   column ~key:("abw-" ^ uuid) ~style_class:"asset-block-wrap" ~grow:1.
-    [ box ~key:("abcc-" ^ uuid) ~grow:1. [ content_view uuid b ]
-    ; Ui_parts.pressable
-        ~on_press:(fun _ -> Editor_actions.enter_edit uuid 0)
-        (box ~key:("abt-" ^ uuid) ~min_height:24
-           [ text ~key:("abtt-" ^ uuid) ~value:b.Model.block_title
-               ~style_class:"block-title-wrap" [] ]) ]
+    ([ box ~key:("abcc-" ^ uuid) ~grow:1. [ content_view uuid b ] ] @ title_row)
 
 (* File-column cell for the Asset class tag page (cljs objects.cljs
    build-class-object-columns :file). The object-url resolves async —
