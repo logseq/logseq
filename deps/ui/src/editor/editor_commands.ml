@@ -573,19 +573,22 @@ let freq_input ps : t =
     []
 
 let year_input ps : t =
+  (* cljs ui/date-year-month-select year branch — number input.ls-date-year-input *)
   Logseq_el.el ~key:"yin" ~tag:"input" ~style_class:"ls-date-year-input"
-    ~events:"input"
+    ~id:"calendar-year" ~events:"input"
     ~attrs_signal_v:
       (Logseq_el.attrs_signal ps (fun po ->
+           let year =
+             match po with Some q -> string_of_int q.cy | None -> ""
+           in
            [ ("type", "number"); ("min", "1"); ("max", "9999")
+           ; ("aria-label", year)
            ; ( "style"
              , "height: 2rem; width: 3.25rem; padding: 0 0.5rem; border: \
                 1px solid var(--lx-popover-border, var(--ls-border-color, \
                 #e5e5e5)); border-radius: 0.375rem; background: \
                 transparent; font-size: 0.875rem; color: inherit" )
-           ; ( "value"
-             , match po with Some q -> string_of_int q.cy | None -> "" )
-           ]))
+           ; ("value", year) ]))
     ~on_dom_event:(fun name payload ->
       if name = "input" then
         match int_of_string_opt (Json_payload.str payload "value") with
@@ -787,7 +790,10 @@ let repeat_panel ps : t =
                ~foreground:
                  "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
                ~value:(I18n.t "property.repeat/next-date") []
-           ; repeat_sel (fun r -> choice_label_of r.rtype_choices r.rtype_id)
+           ; repeat_sel
+               (fun r ->
+                 if r.rtype_id = 0 then I18n.t "ui/empty"
+                 else choice_label_of r.rtype_choices r.rtype_id)
                (fun () ->
                  match cur_rpt () with
                  | Some r ->
@@ -1221,19 +1227,13 @@ let load_repeat p ident =
                           unit_choices))
             ; unit_choices
             ; rtype_id =
+                (* cljs property-value shows Empty until the user sets
+                   repeat-type — do not default the label to double-plus *)
                 (match
                    ref_id "logseq.property.repeat/repeat-type"
                  with
                  | Some id -> id
-                 | None ->
-                     Option.value ~default:0
-                       (List.find_map
-                          (fun (id, i, _l) ->
-                            if i
-                               = "logseq.property.repeat/repeat-type.double-plus"
-                            then Some id
-                            else None)
-                          rtype_choices))
+                 | None -> 0)
             ; rtype_choices
             ; when_id =
                 (match
