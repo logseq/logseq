@@ -217,3 +217,62 @@ let restored name = tf "storage.recycle/restored-feedback" [ name ]
 let switch_to_theme name = tf "theme/switch-to" [ name ]
 let revision_title v = tf "settings.general/revision" [ v ]
 let page_not_found_msg name = tf "settings.features/page-not-found" [ name ]
+
+(* Port of logseq.db.frontend.property/built-in-ident->i18n-key.
+   Maps built-in db/ident strings to resources/dicts keys; returns None for
+   user properties and unknown namespaces. *)
+let strip_trailing_q name =
+  let n = String.length name in
+  if n > 0 && name.[n - 1] = '?' then String.sub name 0 (n - 1) else name
+
+let built_in_ident_to_i18n_key (ident : string) : string option =
+  match String.index_opt ident '/' with
+  | None -> None
+  | Some i ->
+      let ns = String.sub ident 0 i in
+      let name = String.sub ident (i + 1) (String.length ident - i - 1) in
+      if ns = "logseq.class" then
+        Some ("class.built-in/" ^ String.lowercase_ascii name)
+      else if ns = "logseq.property" || String.starts_with ~prefix:"logseq.property." ns
+      then
+        let sub_ns =
+          if ns = "logseq.property" then None
+          else
+            Some
+              (String.sub ns
+                 (String.length "logseq.property.")
+                 (String.length ns - String.length "logseq.property."))
+        in
+        let clean = strip_trailing_q name in
+        (match String.index_opt clean '.' with
+         | Some dot ->
+             let prop_part = String.sub clean 0 dot in
+             let choice_part =
+               String.sub clean (dot + 1) (String.length clean - dot - 1)
+             in
+             let subdomain =
+               match sub_ns with
+               | Some s -> s ^ "-" ^ prop_part
+               | None -> prop_part
+             in
+             Some ("property." ^ subdomain ^ "/" ^ choice_part)
+         | None ->
+             Some
+               (match sub_ns with
+                | Some s -> "property.built-in/" ^ s ^ "-" ^ clean
+                | None -> "property.built-in/" ^ clean))
+      else if ns = "block" then
+        Some ("property.built-in/" ^ strip_trailing_q name)
+      else None
+
+let has_en_key key = Hashtbl.mem (Lazy.force en_tbl) key
+
+(* Port of built-in-display-title: translate when the ident maps to a known
+   en.edn key; otherwise keep the entity's block/title fallback. *)
+let built_in_display_title ?ident ~fallback () =
+  match ident with
+  | None -> fallback
+  | Some id -> (
+      match built_in_ident_to_i18n_key id with
+      | Some key when has_en_key key -> t key
+      | _ -> fallback)

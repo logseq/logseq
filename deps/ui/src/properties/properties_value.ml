@@ -827,16 +827,7 @@ type rep =
   }
 
 let repeat_choice_title ident title =
-  let translated prefix namespace =
-    let suffix=String.sub ident (String.length prefix) (String.length ident-String.length prefix) in
-    I18n.t (namespace ^ suffix)
-  in
-  if String.starts_with ~prefix:"logseq.property.repeat/recur-unit." ident then
-    translated "logseq.property.repeat/recur-unit." "property.repeat-recur-unit/"
-  else if String.starts_with ~prefix:"logseq.property.repeat/repeat-type." ident then
-    translated "logseq.property.repeat/repeat-type." "property.repeat-repeat-type/"
-  else if ident="logseq.property/status.done" then I18n.t "property.status/done"
-  else title
+  I18n.built_in_display_title ~ident ~fallback:title ()
 
 let repeat_done_title values =
   List.find_map (fun value ->
@@ -1952,7 +1943,7 @@ and icon_view ?(jump_target = true) ctx row : t =
   (Lui_elements.row ~gap:0 ~grow:1.0
      [ Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
          ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
-         ~label:"Icon"
+         ~label:(I18n.t "property.built-in/icon")
          ~foreground:"var(--ls-primary-text-color)"
          ~text:(match icon with Some _ -> "" | None -> I18n.t "ui/empty")
          ~data_attrs:
