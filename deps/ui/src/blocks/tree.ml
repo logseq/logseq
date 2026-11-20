@@ -561,10 +561,12 @@ let content_or_editor ?highlight ~editable uuid scope (b : Model.block) : t =
       | None -> (
           match b.Model.block_display_type with
           | Some "code" ->
-              (* fenced-code blocks keep their rendered surface while
-                 editing — the mounted CodeMirror IS the editor, so the
-                 DOM must not swap or the instance is destroyed *)
-              content_wrapper ?highlight ~scope ~editable uuid b
+              (* Esc from CodeMirror sets raw-mode (cljs :editor/raw-mode-block)
+                 and re-enters the plain editor; otherwise CM stays mounted *)
+              if editing && editable && Editor_state.is_raw_code uuid then
+                editor_el uuid scope
+              else
+                content_wrapper ?highlight ~scope ~editable uuid b
           | _ ->
               if editing && editable then
                 (* cljs styles the editor textarea uniline-block.hN —
