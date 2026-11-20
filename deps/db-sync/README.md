@@ -19,6 +19,10 @@ The Cloudflare Worker returns a presigned R2 PUT for encoded bodies over
 Smaller uploads and the self-hosted Node adapter receive a plan to PUT
 the file to the Logseq asset endpoint.
 
+Older clients can continue to PUT directly to the Logseq asset endpoint with
+their existing authorization and asset metadata headers. The Worker also
+accepts a streamed body without a Content-Length header.
+
 `R2_ASSET_UPLOAD_BUCKET` must name the bucket used by `LOGSEQ_SYNC_ASSETS`.
 Set `R2_ASSET_UPLOAD_ENDPOINT` to the account's R2 S3 API endpoint and configure
 the Worker secrets `R2_ASSET_UPLOAD_ACCESS_KEY_ID` and
