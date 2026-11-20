@@ -815,10 +815,17 @@ let page_items_for t kind q =
         (* cljs get-matched-classes → fuzzy-search (limit 20) *)
         Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
         |> List.map wrap_tag
-    | Page_ref -> Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nlp_items kind) q
+    | Page_ref ->
+        (* cljs page-search-aux: blank [[ lists the first 10 nlp date
+           pages; non-empty queries fuzzy the full nlp set (plus async
+           node search). *)
+        if q = "" then take 10 (nlp_items kind)
+        else
+          Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50
+            (nlp_items kind) q
     | Page_embed ->
         if q = "" then
-          nlp_items kind
+          take 10 (nlp_items kind)
         else
           Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
           |> List.map wrap
