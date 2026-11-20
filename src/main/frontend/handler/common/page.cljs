@@ -149,8 +149,9 @@
 
          :else
          (when-not (string/blank? title')
-           ;; With explicit tags, the worker finds an existing page by title and tags
-           (p/let [existing-page (when-not (or class? (seq (:tags options)))
+           ;; With tags (passed in options or typed in the title), the worker finds an
+           ;; existing page by title and tags, so "Apple #Fruit" does not open "Apple"
+           (p/let [existing-page (when-not (or class? (seq (:tags options)) has-tags?)
                                    (<page-for-create title'))]
              (if (and existing-page
                       (not (ldb/recycled? existing-page))
