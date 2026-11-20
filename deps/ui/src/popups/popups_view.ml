@@ -240,6 +240,8 @@ let ac_empty_placeholder (v : S.view) : t =
     | Some { kind = S.Page_ref | S.Embed_ref | S.Page_embed; _ } ->
         U.t "editor/search-for-node"
     | Some { kind = S.Tag_search; _ } -> U.t "editor/search-for-tag"
+    | Some { kind = S.Template_search; _ } ->
+        U.t "editor/search-template-placeholder"
     | _ -> U.t "editor/block-search"
   in
   text ~key:"ac-empty" ~style_class:"ls-ac-empty"
