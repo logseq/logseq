@@ -333,12 +333,8 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
             Sidebar_state.ensure_right_open ();
             List.iter (fun u -> Sidebar_state.open_uuid sst u) us))
   ; sidebar_clear =
-      (fun () ->
-        with_sidebar (fun sst ->
-            List.iter
-              (fun (i : Sidebar_state.item) ->
-                Sidebar_state.remove_item sst i.Sidebar_state.key)
-              (Runtime.signal_get sst.Sidebar_state.items)))
+      (* cljs :sidebar/clear — clear-sidebar-blocks! then hide-right-sidebar! *)
+      (fun () -> with_sidebar Sidebar_state.clear_items)
   ; sidebar_close_top =
       (fun () ->
         with_sidebar (fun sst ->
@@ -346,10 +342,18 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
             | top :: _ -> Sidebar_state.remove_item sst top.Sidebar_state.key
             | [] -> ()))
   ; sidebar_ensure_contents =
+      (* cljs toggle-contents!: remove when present, otherwise add *)
       (fun () ->
         with_sidebar (fun sst ->
-            Sidebar_state.ensure_right_open ();
-            Sidebar_state.open_sticky_item sst "contents"))
+            match
+              List.find_opt
+                (fun (it : Sidebar_state.item) -> it.key = "contents")
+                (Runtime.signal_get sst.Sidebar_state.items)
+            with
+            | Some _ -> Sidebar_state.remove_item sst "contents"
+            | None ->
+                Sidebar_state.ensure_right_open ();
+                Sidebar_state.open_sticky_item sst "contents"))
   ; sidebar_open_cards = Sidebar_state.open_cards
   ; sidebar_toggle_favorite =
       (fun () -> with_sidebar Sidebar_state.toggle_favorite)
