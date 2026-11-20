@@ -138,6 +138,43 @@ let kill_word_forward (m : Edit_model.t) =
     else if pos > first then first else pos in
   Edit_model.select updated ~anchor:(adjust lo) ~focus:(adjust hi)
 
+(* Mirror kill_word_forward's trailing-separator rule: at
+   "one two| three" (caret on the space after the word) delete "two "
+   → "one three". Edit_model.delete_word_backward stays word-only for
+   Ctrl+Backspace. *)
+let kill_word_backward (m : Edit_model.t) =
+  let lo, hi = A.sel_span_of m in
+  if lo <> hi then Edit_model.splice m lo hi ""
+  else if m.Edit_model.caret <= 0 then m
+  else
+    let first =
+      match Edit_model.atomic_ending_at m m.Edit_model.caret with
+      | Some run -> run.start_off
+      | None ->
+          let start = backward_word_position m in
+          (* backward_word_position can land on the separator before the
+             word; advance so we delete the word itself, then optionally
+             the trailing separator at the caret. *)
+          if start < String.length m.Edit_model.source
+             && word_separator m.Edit_model.source.[start]
+          then start + 1
+          else start
+    in
+    let stop = m.Edit_model.caret in
+    let stop =
+      if stop < String.length m.Edit_model.source
+         && word_separator m.Edit_model.source.[stop]
+      then stop + 1
+      else stop
+    in
+    let updated = Edit_model.splice m first stop "" in
+    let adjust pos =
+      if pos > stop then pos - (stop - first)
+      else if pos > first then first
+      else pos
+    in
+    Edit_model.select updated ~anchor:(adjust lo) ~focus:(adjust hi)
+
 (* kill from caret back to the start of the visual line *)
 let kill_line_before (m : Edit_model.t) =
   let lo, _ = Edit_model.line_bounds m in
@@ -1600,7 +1637,7 @@ let dispatch_command cid =
   | _, "editor/clear-block" -> update clear_block
   | _, "editor/kill-line-before" -> update kill_line_before
   | _, "editor/kill-line-after" -> update kill_line_after
-  | _, "editor/backward-kill-word" -> update Edit_model.delete_word_backward
+  | _, "editor/backward-kill-word" -> update kill_word_backward
   | _, "editor/forward-kill-word" -> update kill_word_forward
   | _, "editor/backward-word" ->
       update (move_shortcut_word ~backward:true)

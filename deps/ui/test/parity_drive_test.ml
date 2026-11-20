@@ -599,6 +599,14 @@ let test_editor_word_nav () =
     (match Editor_state.editing () with
      | Some e -> e.Editor_state.model.Edit_model.caret = 5
      | None -> false);
+  clear_editing ();
+  (* G4 backward-kill-word: alt+w at "one two| three" removes the word
+     and its trailing space — not a double space. *)
+  stage_main_session [ block "b1" "one two three" ];
+  set_editing "b1" "one two three" ~caret:7;
+  Editor_keys.dispatch_command "editor/backward-kill-word";
+  check "Backward kill-word eats the trailing separator with the word"
+    (Editor_actions.live_buffer "b1" = "one three");
   clear_editing ()
 
 let test_editor_link () =
