@@ -171,13 +171,18 @@ let navigate_journal repo =
 
 (* -- create -- *)
 
-(* cljs <rtc-create-graph-and-start-sync!: create-remote-graph ->
-   <get-remote-graphs -> <rtc-start! (which pushes sync-app-state +
-   db-sync config). Worker failures resolve as error transits — toast
-   the known ones and skip list/start like the cljs rejected chain
-   (the local graph itself was still created) *)
+(* cljs create-db (with creating-remote-graph?) then
+   <rtc-create-graph-and-start-sync!: open + today's journal land
+   BEFORE create-remote/start so flush-pending has a graph-id and the
+   initial page txs upload. *)
 let create_remote name e2ee =
   let* r = Graph.create_graph ~remote:true name in
+  add_repo r;
+  let* config = Graph.open_graph r in
+  let* () = Boot.ensure_today_journal r in
+  Worker_events.reset_rtc ();
+  Runtime.send (Action.Boot_graph_ready (r, config));
+  Graph.build_search_index r;
   let* _ = Rtc_ops.sync_app_state (Some r) in
   let* _ = Rtc_ops.set_sync_config () in
   let* w =

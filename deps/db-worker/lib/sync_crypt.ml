@@ -593,13 +593,21 @@ let graph_e2ee_truthy repo =
   | Some (Datascript.Bool false) | None -> false
   | Some _ -> true
 
+(* Match Sync_util.get_graph_id: display-conn uuid first, then the
+   client-ops fallback. Flush AES used only the display conn and
+   Option.get'd a missing id on LUI create-with-sync before the uuid
+   landed on the display db. *)
 let get_graph_id_impl repo : string option =
-  match !datascript_conn_fn repo with
-  | Some conn ->
-      (match !ldb_graph_rtc_uuid_fn (Datascript.db conn) with
-       | Some (Datascript.Uuid u) | Some (Datascript.String u) -> Some u
-       | _ -> None)
-  | None -> None
+  match
+    (match !datascript_conn_fn repo with
+     | Some conn -> (
+         match !ldb_graph_rtc_uuid_fn (Datascript.db conn) with
+         | Some (Datascript.Uuid u) | Some (Datascript.String u) -> Some u
+         | _ -> None)
+     | None -> None)
+  with
+  | Some _ as r -> r
+  | None -> Sync_client_op.get_graph_uuid repo
 
 let get_graph_id_fn : (string -> string option) ref = ref get_graph_id_impl
 
@@ -1320,20 +1328,26 @@ let ensure_graph_aes_key_impl repo (graph_id : string option) :
                                                error retry_err)
                                        | _ -> error err)
                                | None ->
-                                   bind (!generate_aes_key_fn ()) (fun aes_key ->
-                                       bind (!encrypt_aes_key_fn public_key aes_key)
-                                         (fun encrypted ->
-                                           let encrypted_str = transit_write encrypted in
-                                           bind
-                                             (!upsert_graph_encrypted_aes_key_fn base
-                                                (Option.get graph_id) encrypted_str)
-                                             (fun _ ->
-                                               map
-                                                 (fun () -> aes_key)
-                                                 (!set_item_fn
-                                                    (graph_encrypted_aes_key_idb_key
-                                                       (Option.get graph_id))
-                                                    encrypted)))))
+                                   (match graph_id with
+                                    | None ->
+                                        fail_fast "db-sync/missing-field"
+                                          (Wire.kw_map
+                                             [ ("field", Wire.keyword "graph-id")
+                                             ; ("repo", Wire.String repo) ])
+                                    | Some gid ->
+                                        bind (!generate_aes_key_fn ()) (fun aes_key ->
+                                            bind (!encrypt_aes_key_fn public_key aes_key)
+                                              (fun encrypted ->
+                                                let encrypted_str = transit_write encrypted in
+                                                bind
+                                                  (!upsert_graph_encrypted_aes_key_fn base
+                                                     gid encrypted_str)
+                                                  (fun _ ->
+                                                    map
+                                                      (fun () -> aes_key)
+                                                      (!set_item_fn
+                                                         (graph_encrypted_aes_key_idb_key gid)
+                                                         encrypted)))))
                               (fun aes_key ->
                                 bind
                                   (match graph_id, encrypted_aes_key, local with
