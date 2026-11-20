@@ -322,9 +322,19 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
         else [])
        @ (if can_toggle && has_hidden then [ toggle_row () ] else []))
 
+(* Re-render when `p a` flips show_hidden even if area_data is unchanged.
+   Block areas read hidden rows from render-data (show_empty always
+   false), so toggling the ref alone must invalidate the panel — a
+   refresh that republishes identical rows would otherwise no-op. *)
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
-  column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
-    (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d)
+ fun context parent ->
+  let hidden_sig = S.show_hidden_signal context in
+  (reactive
+     (fun _show ->
+       column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
+         (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d))
+     (Signal.value hidden_sig))
+    context parent
 
 (* ---------- pills (block-below) ---------- *)
 
