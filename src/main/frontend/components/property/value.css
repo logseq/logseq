@@ -13,14 +13,18 @@
   @apply min-w-[224px];
 }
 
-.ls-property-dialog {
-  .ls-property-key {
-    @apply overflow-y-hidden h-[286px];
+/* The add-property key picker uses the editor popup surface (editor.css).
+   It sits inside the popover rather than on it, because the popover goes on
+   to show the value step. The list is sized from the popover's available
+   height, like the slash menu, and `#ui__ac-inner` scrolls. */
+.ls-property-dialog .ls-property-key {
+  @apply p-1.5 w-72;
 
-    .cp__select-main {
-      .item-results-wrap {
-        @apply max-h-[250px];
-      }
+  .cp__select-main {
+    @apply w-full;
+
+    .item-results-wrap {
+      max-height: min(calc(var(--available-height, 320px) - 64px), 256px);
     }
   }
 }

@@ -768,11 +768,3 @@ a.control-link {
     @apply ml-0;
   }
 }
-
-.ls-property-key {
-  .cp__select-results {
-    .menu-link {
-      @apply py-1;
-    }
-  }
-}

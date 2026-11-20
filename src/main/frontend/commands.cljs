@@ -70,13 +70,18 @@
 
 (def *extend-slash-commands (atom []))
 
-(defn register-slash-command [cmd]
+(defn register-slash-command
+  "Adds a slash command from outside this namespace. `cmd` is a command vector
+  or a fn of `t-fn` returning one, so it is translated in each pass of
+  `commands-map` (the English pass feeds cross-language search). Give it a
+  group name as its fifth element, or it renders in an untitled section."
+  [cmd]
   (swap! *extend-slash-commands conj cmd))
 
 (defn- resolve-slash-command
-  [command]
+  [t-fn command]
   (if (fn? command)
-    (command)
+    (command t-fn)
     command))
 
 (defn ->marker
@@ -380,7 +385,7 @@
          (t-fn :editor.slash/group-advanced)]]
 
        (let [commands (->> @*extend-slash-commands
-                           (map resolve-slash-command)
+                           (map #(resolve-slash-command t-fn %))
                            (remove (fn [command]
                                      (when (map? (last command))
                                        (false? (:db-graph? (last command)))))))]
