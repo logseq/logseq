@@ -280,6 +280,10 @@ let fmt_cell_value (c : V.column) v =
 
 let cell_value blk (c : V.column) : W.t =
   match c.V.c_id with
+  | "block/page" when is_page_row blk ->
+      (* cljs page rows leave the Page column empty — LUI was showing
+         the page's own title via a self block/page ref *)
+      W.Nil
   | "block/title" | "block.temp/refs-count" | "block/created-at"
   | "block/updated-at" | "block/page" | "block/tags" ->
       Option.value (W.get blk c.V.c_id) ~default:W.Nil
@@ -406,8 +410,15 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                  ~style_class:"table-block-title"
                  [ (* Keep the caption and overlay actions as sibling hit regions. *)
                    Ui_parts.pressable ~on_press:(fun _ ->
+                     (* Prefer the displayed cell title so enter_edit
+                        lands the caret at end (master), not at 0 when
+                        the row wire's block/title is empty/stale. *)
                      Table_title_editor.show ~anchor ~column_width:(column_width (V.get inst) c)
-                       {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
+                       {(Decode.block_of_wire blk) with
+                         Model.block_uuid = Some row_uuid
+                       ; block_title =
+                           if title <> "" then title
+                           else (Decode.block_of_wire blk).Model.block_title})
                      (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
                        [ text ~white_space:`nowrap (Render_inline.parse ~self:row_uuid title) ])
                  ; Ui_parts.float_prop L.Opacity
