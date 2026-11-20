@@ -54,13 +54,14 @@
     (state/set-editor-last-input-time! repo (util/time-ms))))
 
 (defn- edit-block-aux
-  [repo block content text-range {:keys [container-id direction event pos]}]
+  [repo block content text-range {:keys [container-id direction event pos keep-whitespace?]}]
   (when block
     (let [container-id (or container-id
                            (state/get-current-editor-container-id)
                            :unknown-container)]
       (state/set-editing! (str "edit-block-" (:block/uuid block)) content block text-range
-                          {:container-id container-id :direction direction :event event :pos pos}))
+                          (cond-> {:container-id container-id :direction direction :event event :pos pos}
+                            keep-whitespace? (assoc :keep-whitespace? true))))
     (mark-last-input-time! repo)))
 
 (defn block-unique-title
@@ -78,10 +79,27 @@
      title]
     (or title (:block/title block))))
 
+(defn- edit-guard-passes?
+  "An edit guard set for this block in :editor/edit-guard (by the undo/redo
+  cursor restore) decides, once and right before the editor moves, whether the
+  edit still applies: the user may have selected or typed while the block loaded."
+  [block]
+  (let [{:keys [block-uuid ok?] :as guard} (state/get-state :editor/edit-guard)]
+    (if (and guard (= block-uuid (:block/uuid block)))
+      (do (state/set-state! :editor/edit-guard nil)
+          (boolean (ok?)))
+      true)))
+
 (defn- edit-loaded-block!
   [repo block pos {:keys [custom-content tail-len save-code-editor?] :as opts}]
-  (if (ldb/recycled? block)
+  (cond
+    (not (edit-guard-passes? block))
+    nil
+
+    (ldb/recycled? block)
     (notification/show! (t :storage.recycle/readonly) :warning)
+
+    :else
     (do
       (when save-code-editor?
         (state/pub-event! [:editor/save-code-editor]))
@@ -155,28 +173,47 @@
           {}
           (remove nil? nodes)))
 
+(defn- dom-original-block-fn
+  "A fn from a rendered block uuid to the original (linking) block that the
+  editor or a selected row renders it for, read from the DOM."
+  []
+  (let [editing-block-id (:block/uuid (state/get-edit-block))
+        input (state/get-input)
+        editing-original-block (when input
+                                 (get-original-block-by-dom input))
+        selected-original-blocks (selected-original-blocks-by-id
+                                  (state/get-selection-blocks))]
+    (fn [block-id]
+      (if (and input (= block-id editing-block-id))
+        editing-original-block
+        (get selected-original-blocks block-id)))))
+
 (defn get-top-level-blocks
   "Get only the top level blocks and their original blocks."
   [blocks]
   {:pre [(seq blocks)]}
   (let [level-blocks (outliner-core/blocks-with-level blocks)
         selected-ids (set (keep :db/id blocks))
-        editing-block-id (:block/uuid (state/get-edit-block))
-        input (state/get-input)
-        editing-original-block (when input
-                                 (get-original-block-by-dom input))
-        selected-original-blocks (selected-original-blocks-by-id
-                                  (state/get-selection-blocks))]
+        dom-original-block (dom-original-block-fn)]
     (->> (filter (fn [b] (= 1 (:block/level b))) level-blocks)
          (remove #(ldb/some-parent % (fn [parent]
                                        (contains? selected-ids (:db/id parent)))))
          (map (fn [b]
-                (let [block-id (:block/uuid b)
-                      original (or (:original-block b)
-                                   (if (and input (= block-id editing-block-id))
-                                     editing-original-block
-                                     (get selected-original-blocks block-id)))]
+                (let [original (or (:original-block b)
+                                   (dom-original-block (:block/uuid b)))]
                   (or original b)))))))
+
+(defn dom-original-block-ids
+  "Rendered block uuid -> original (linking) block uuid, for those of
+  `block-ids` that the DOM renders for an original block. The worker puts the
+  original in place of a top-level block, as `get-top-level-blocks` does."
+  [block-ids]
+  (let [dom-original-block (dom-original-block-fn)]
+    (into {}
+          (keep (fn [block-id]
+                  (when-let [original-id (:block/uuid (dom-original-block block-id))]
+                    [block-id original-id])))
+          block-ids)))
 
 (defn get-current-editing-original-block
   []

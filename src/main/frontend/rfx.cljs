@@ -80,10 +80,30 @@
   (doseq [listener (vals @!state-listeners)]
     (listener prev-db next-db)))
 
+(defn- sub-key
+  "The app-db path a subscription reads, as [root second] (second nil for the
+  whole root value), or nil when unknown. frontend.state registers every state
+  key k as a sub [k & path] with the single signal [::state-key k] whose sub-f
+  is (get-in value path), so such a sub reads (get-in db [k (first path)]);
+  [::state-key k] itself reads (get db k). Any other sub is left to its
+  declared signals, or, without signals, recomputed on every write."
+  [sub]
+  (let [id (first sub)]
+    (if (= :frontend.state/state-key id)
+      [(second sub) nil]
+      (when (= [[:frontend.state/state-key id]]
+               (get-in @(current-registry) [:sub id :signals]))
+        [id (second sub)]))))
+
+;; Lets the store index cached subscriptions by the app-db path they read, so
+;; a write only touches the subscriptions reading what changed.
+(reset! store/!sub-key-fn sub-key)
+
 (defn replace-state-paths!
-  [db _changed-paths]
+  [db changed-paths]
   (let [prev-db (snapshot)
-        next-db (store/next-state! (:store (context)) db)]
+        next-db (binding [store/*changed-paths* (seq changed-paths)]
+                  (store/next-state! (:store (context)) db))]
     (notify-state-listeners! prev-db next-db)
     next-db))
 
