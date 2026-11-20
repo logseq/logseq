@@ -1598,16 +1598,32 @@ let foldable inst ~key ~title ~(body : t) : t =
                                then V.Sset.remove key s.V.collapsed_groups
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
+                    (* cljs foldable-title: .control-hide until title
+                       hover / collapsed (.control-show). Opacity-0 hid
+                       the caret so linked-refs looked fold-less. *)
                     (Ui_components.with_props
                        [ Ui_components.Prop.cursor `pointer
+                       ; Ui_components.Prop.opacity 0.5
                        ; Ui_components.Prop.hover_opacity 1. ]
-                       (Ui_parts.float_prop L.Opacity
-                        ~value:(reactive (fun h c -> if h || c then 0.4 else 0.)
-                          (Signal.value hovered) collapsed_sig)
                        (Ui_components.foldable_control
-                          [icon ~key:"caret" ~point_size:16
-                             ~name:(reactive (fun c -> `app (if c then
-                               "rotating-arrow" else "rotating-arrow-down")) collapsed_sig) []])))
+                          [ Ui_parts.class_signal
+                              (Logseq_el.own ctx
+                                 (Signal.map2
+                                    (fun h c ->
+                                      if h || c then "control-show cursor-pointer"
+                                      else "control-hide")
+                                    (Signal.value hovered) collapsed_sig))
+                              (fun cls -> cls)
+                              (box ~key:"ch"
+                                 [ icon ~key:"caret" ~point_size:16
+                                     ~name:
+                                       (reactive
+                                          (fun c ->
+                                            `app
+                                              (if c then "rotating-arrow"
+                                               else "rotating-arrow-down"))
+                                          collapsed_sig)
+                                     [] ]) ])))
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig
