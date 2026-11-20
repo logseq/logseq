@@ -613,7 +613,17 @@
 
 (defmethod handle :system/info [^js _win _]
   {:home-dir (.homedir os)
-   :graphs-dir (common-graph/get-db-graphs-dir)})
+   :graphs-dir (common-graph/get-db-graphs-dir)
+   :graphs-dir-env-override? (and (some? js/process.env.LOGSEQ_GRAPHS_DIR)
+                                  (not= js/process.env.LOGSEQ_GRAPHS_DIR
+                                        (cfgs/get-item :graphs-dir)))})
+
+(defmethod handle :system/choose-graphs-dir [^js _win _]
+  (p/let [dir (open-dir-dialog (node-path/join (common-graph/get-db-graphs-dir) "_"))]
+    (when dir
+      (fs-extra/ensureDirSync dir)
+      (cfgs/set-item! :graphs-dir dir)
+      dir)))
 
 (defmethod handle :window/open-blank-callback [^js win [_ _type]]
   (win/setup-window-listeners! win) nil)

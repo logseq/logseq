@@ -1758,6 +1758,10 @@
  :settings.advanced/developer-mode-desc "开发者模式帮助贡献者和扩展开发者更有效地测试他们与 Logseq 的集成。"
  :settings.advanced/disable-sentry "向 Logseq 提供使用情况和诊断信息"
  :settings.advanced/disable-sentry-desc "Logseq 从来不会收集或出售你的图谱数据。"
+ :settings.advanced/graphs-dir "图谱目录"
+ :settings.advanced/graphs-dir-change "更改"
+ :settings.advanced/graphs-dir-desc "存放 DB 图谱的文件夹。修改后需要重启应用；已有图谱不会被移动。"
+ :settings.advanced/graphs-dir-env-override "图谱目录由环境变量 LOGSEQ_GRAPHS_DIR 设置。"
  :settings.advanced/network-proxy "网络代理"
 
  :settings.ai/enable-mcp-server "MCP 服务器"

@@ -870,6 +870,27 @@
         (ipc/ipc :userAppCfgs :feature/enable-automatic-chmod? (not enabled?)))
      [:span.text-sm.opacity-50 (t :settings.advanced/auto-chmod-desc)])))
 
+(hsx/defc graphs-dir-row
+  [t]
+  (let [{:keys [graphs-dir graphs-dir-env-override?]} (rfx/use-sub [:system/info])]
+    (row-with-button-action
+     {:left-label (t :settings.advanced/graphs-dir)
+      :description (if graphs-dir-env-override?
+                     (t :settings.advanced/graphs-dir-env-override)
+                     (t :settings.advanced/graphs-dir-desc))
+      :action [:div.flex.items-center.gap-2
+               [:code.text-xs graphs-dir]
+               (when-not graphs-dir-env-override?
+                 (shui/button
+                  {:size :sm
+                   :on-click (fn []
+                               (p/let [dir (ipc/ipc :system/choose-graphs-dir)]
+                                 (when (and dir (not= dir graphs-dir)
+                                            (js/confirm (t :ui/relaunch-confirm)))
+                                   (js/logseq.api.relaunch))))}
+                  (t :settings.advanced/graphs-dir-change)))]
+      :-for "graphs-dir"})))
+
 (hsx/defc native-titlebar-row
   [t]
   (let [enabled? (rfx/use-sub [:electron/user-cfgs :window/native-titlebar?])]
@@ -943,6 +964,7 @@
      (publish-server-url-row)
      (when (util/electron?) (https-user-agent-row https-agent-opts))
      (when (util/electron?) (auto-chmod-row t))
+     (when (util/electron?) (graphs-dir-row t))
      ;; (clear-cache-row t)
 
      ;; (ui/admonition

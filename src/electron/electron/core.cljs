@@ -494,7 +494,8 @@
 (defn main []
   (if-not (.requestSingleInstanceLock app)
     (.quit app)
-    (let [privileges {:standard        true
+    (let [_ (cfgs/apply-graphs-dir!)
+          privileges {:standard        true
                       :secure          true
                       :bypassCSP       true
                       :corsEnabled     true

@@ -1758,6 +1758,10 @@
  :settings.advanced/developer-mode-desc "Developer mode helps contributors and extension developers test their integrations with Logseq more efficiently."
  :settings.advanced/disable-sentry "Send usage data and diagnostics to Logseq"
  :settings.advanced/disable-sentry-desc "Logseq will never collect your local graph database or sell your data."
+ :settings.advanced/graphs-dir "Graphs directory"
+ :settings.advanced/graphs-dir-change "Change"
+ :settings.advanced/graphs-dir-desc "Folder where new and existing DB graphs are stored. Changing it requires a restart; existing graphs are not moved."
+ :settings.advanced/graphs-dir-env-override "The graphs directory is set by the LOGSEQ_GRAPHS_DIR environment variable."
  :settings.advanced/network-proxy "Network proxy"
 
  :settings.ai/enable-mcp-server "MCP Server"

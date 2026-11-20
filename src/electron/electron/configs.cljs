@@ -46,6 +46,15 @@
   []
   (ensure-cfg))
 
+(defn apply-graphs-dir!
+  "Points DB graph storage at the user-chosen `:graphs-dir`, unless the
+   `LOGSEQ_GRAPHS_DIR` env var already overrides it. Must run before any
+   graph path is resolved; spawned db-worker processes inherit the env."
+  []
+  (when-let [graphs-dir (get-item :graphs-dir)]
+    (when-not js/process.env.LOGSEQ_GRAPHS_DIR
+      (set! (.. js/process -env -LOGSEQ_GRAPHS_DIR) graphs-dir))))
+
 (defn semantic-search-enabled?
   []
   (true? (get-item :feature/enable-semantic-search?)))
