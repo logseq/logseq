@@ -652,8 +652,8 @@ let home_button ms =
             ())
     ms (Signal.value sidebar.Sidebar_state.home_page)
 
-(* cljs header.cljs: (when (util/electron?) (back-and-forward)).
-   Native always mounts the pair; browser web must not. *)
+(* cljs header.cljs back-and-forward — Electron-only there; desktop LUI
+   (web Electron + native) always mounts the pair so history matches. *)
 let back_and_forward () =
   row ~key:"nav-hist" ~cross:`center
     [ icon_btn ~key:"nav-back" ~id:"" ~shortcut_id:"go/backward"
@@ -665,10 +665,6 @@ let back_and_forward () =
         ~icon:"arrow-right" ~tip:(I18n.t "header/go-forward")
         ~on_click:(fun _ -> Ui_services.nav_forward ()) ()
     ]
-
-let back_and_forward_if_electron () =
-  if Daemon_client.is_electron () then back_and_forward ()
-  else Logseq_el.nothing
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
@@ -826,7 +822,7 @@ let header (ms : Model.t Signal.signal) =
                  contributes a toolbar item *)
               Left_sidebar_view.plugins_toolbar ms
             ; (* cljs: (when (util/electron?) (back-and-forward)) *)
-              back_and_forward_if_electron ()
+              back_and_forward ()
             ; dots_button; right_toggle_button ms ]
         ])
     ]
