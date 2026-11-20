@@ -1,6 +1,5 @@
 (ns logseq.db-sync.worker.handler.personal-access-token
-  (:require [clojure.set :as set]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.auth :as auth]
@@ -10,41 +9,12 @@
 (def ^:private one-year-ms (* 365 24 60 60 1000))
 (def ^:private one-day-ms (* 24 60 60 1000))
 (def ^:private permissions #{"read" "write" "both"})
-(def ^:private rtc-groups #{"team" "rtc_2025_07_10"})
 (def ^:private collection-path "/api/v1/personal-access-tokens")
-(def ^:private user-info-url "https://api.logseq.com/file-sync/user_info")
 
 (defn route?
   [path]
   (or (= collection-path path)
       (string/starts-with? path (str collection-path "/"))))
-
-(defn- claims-groups
-  [claims]
-  (let [groups (some-> claims (aget "cognito:groups"))]
-    (cond
-      (array? groups) (set (array-seq groups))
-      (string? groups) (->> (string/split groups #"[\[\]\s,\"]+")
-                            (remove string/blank?)
-                            set)
-      :else #{})))
-
-(defn- <rtc-user?
-  [request claims]
-  (let [claim-groups (claims-groups claims)]
-    (if (seq claim-groups)
-      (p/resolved (boolean (seq (set/intersection rtc-groups claim-groups))))
-      (-> (p/let [token (auth/token-from-request request)
-                  response (js/fetch user-info-url
-                                     #js {:method "POST"
-                                          :headers #js {"authorization" (str "Bearer " token)
-                                                        "content-type" "application/json"}
-                                          :body "{}"})
-                  user-info (when (.-ok response) (.json response))
-                  user-groups (claims-groups
-                               #js {"cognito:groups" (some-> user-info (aget "UserGroups"))})]
-            (boolean (seq (set/intersection rtc-groups user-groups))))
-          (p/catch (fn [_] false))))))
 
 (defn- random-hex
   [size]
@@ -133,7 +103,7 @@
         user-id (aget claims "sub")]
     (if-not (string? user-id)
       (http/unauthorized)
-      (p/let [rtc-user? (<rtc-user? request claims)]
+      (p/let [rtc-user? (auth/<rtc-user? request claims)]
         (cond
           (not rtc-user?)
           (http/forbidden)
