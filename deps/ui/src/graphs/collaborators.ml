@@ -268,7 +268,7 @@ let members_view ~in_settings : t =
   column ~key:"collab" ~padding:(if in_settings then 0 else 8)
     ~margin_bottom:(if in_settings then 0 else -32)
     ((if in_settings then [] else
-        [ heading ~key:"collab-h" ~level:1 ~font_size:"1.875rem"
+        [ heading ~key:"collab-h" ~level:`h1 ~font_size:"1.875rem"
             ~margin_top:(-8) ~margin_left:(-8)
             ~value:(T.t "collaboration/members") [] ])
     @ [ column ~key:"collab-w"
@@ -300,9 +300,8 @@ let members_view ~in_settings : t =
                         ~placeholder:(T.t "collaboration/email-address")
                         ~on_input:(fun ev ->
                           match ev with
-                          | Lui_protocol.TextChanged (_, v) ->
-                              Runtime.signal_set email_st v
-                          | _ -> ())
+                          | v ->
+                              Runtime.signal_set email_st v)
                         ~on_submit:(fun _ -> submit ())
                         [] ]
                 ; Ui_components.button ~key:"collab-invite-btn" ~variant:`primary
@@ -344,7 +343,7 @@ let widget (ms : Model.t Signal.signal) : t =
          (box ~key:"collab-off" ~display:`none [])
      ; if_ ~test:vis_sig
          (row ~key:"collab" ~gap:4 ~cross:`center
-            [ Ui_components.button ~variant:`ghost ~key:"collab-btn" ~size:`icon
+            [ Ui_components.icon_button ~variant:`ghost ~key:"collab-btn" ~size:`icon
                 ~style_class:"ui__button as-ghost"
                 ~icon:(`app "user-plus")
                 ~label:"rtc collaborators"

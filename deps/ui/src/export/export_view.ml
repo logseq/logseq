@@ -61,7 +61,7 @@ let select_el ctx ~key ~show ~value ~options ~on_change =
                  ~on_dismiss:(fun _ -> close ())
                  (List.map
                     (fun (v, label) ->
-                      menu_item ~key:(key ^ "-mi-" ^ v) ~text:label
+                      Ui_components.dropdown_menu_item ~key:(key ^ "-mi-" ^ v) ~text:label
                         ~selected:(v = value (S.cur (S.st ctx)))
                         ~on_press:(fun _ ->
                           on_change v;

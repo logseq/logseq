@@ -1,4 +1,4 @@
-(version 3.7)
+(version 3.8.1)
 
 (build
  (all_platforms
@@ -14,6 +14,6 @@
 (source
  (fetch
   (url
-   https://github.com/ocaml-community/sedlex/archive/refs/tags/v3.7.tar.gz)
+   https://github.com/ocaml-community/sedlex/releases/download/v3.8.1/sedlex-3.8.1.tbz)
   (checksum
-   sha512=053bceea4944309705e6b8014381711a2c4f7f0ab235cd239e2d2f5a2dbd3efe1b1c2d533631a8545dacf563cdb5b7469fe53982ef79ace270ee8a4a471f1fe2)))
+   sha512=ae6ac8282b9e899a510745d64a817d06d908bc61f29530568323eb4145b3db38cf61a82575e2b4c15825f570f2b270ab885c3d27adedbbbe7cdad12510de6d80)))

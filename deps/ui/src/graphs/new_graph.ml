@@ -71,9 +71,8 @@ let body (_ms : Model.t Signal.signal) : t =
           ~text_signal:(Signal.value name_st)
           ~on_input:(fun ev ->
             match ev with
-            | Lui_protocol.TextChanged (_, v) ->
-                Runtime.signal_set name_st v
-            | _ -> ())
+            | v ->
+                Runtime.signal_set name_st v)
           ~on_submit:(fun _ -> submit name_st cloud e2ee creating)
           []
       ; (* cljs new-db-graph-inner gates this row on rtc-group?, not login. *)

@@ -113,15 +113,15 @@ let item_menu st (it : Sidebar_state.item) =
     match anchor with
     | Sidebar_state.Item_trigger ->
         popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:128
-          ~anchor:`below ~anchor_alignment:`center ~anchor_offset:0.
-          ~anchor_alignment_offset:0.5
-          ~anchor_target:("sbi-more-icon-" ^ it.key)
+          ~target:(Anchor { side = `below; source = Target ("sbi-more-" ^ it.key);
+            align = `center; offset = 0.; align_offset = 0.5 })
           ~transition:Ui_components.popover_transition
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
           ~style_class:"ui__dropdown-menu-content" children
     | Sidebar_state.Item_rect rect ->
         popover ~key:("imenu-" ^ it.key) ~role:`menu ~min_width:128
-          ~anchor:`below ~anchor_alignment:`center ~anchor_rect:rect
+          ~target:(Anchor { side = `below; source = (let x, y, width, height = rect in Rect { x; y; width; height });
+            align = `center; offset = 0.; align_offset = 0. })
           ~transition:Ui_components.popover_transition
           ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
           ~style_class:"ui__dropdown-menu-content" children in
@@ -211,7 +211,7 @@ let item_title (it : Sidebar_state.item) =
       in
       row ~key:"pt" ~style_class:"page-title" ~cross:`center ~gap:4
         (icon_els
-        @ [ text ~text_overflow:"ellipsis" ~value:it.title []
+        @ [ text ~text_overflow:`ellipsis ~value:it.title []
           ])
   | [], "contents" ->
       (* cljs: (icon "list-details") + "Contents" *)
@@ -237,10 +237,9 @@ let item_title (it : Sidebar_state.item) =
   | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
-let close_on_middle st key = function
-  | Lui_protocol.PointerUp (_, detail) when detail.button = 1 ->
+let close_on_middle st key (detail : pointer_detail) =
+  if detail.button = 1 then
       Sidebar_state.remove_item st key
-  | _ -> ()
 
 let item_drag st (it : Sidebar_state.item) : t =
  fun context parent ->
@@ -279,22 +278,20 @@ let item_drag st (it : Sidebar_state.item) : t =
     (box ~key:("drag-" ^ key) ~accessibility_identifier:("sidebar-panel-drag-" ^ key)
       ~width:22 ~min_width:22 ~height:32 ~pointer_capture:true
       ~on_pointer_down:(function
-        | Lui_protocol.PointerDown (_, detail) when detail.button = 0 ->
+        | detail when detail.button = 0 ->
             ignore (Ui_effect.issue request);
             dragged := false;
             origin := Some (Runtime.capture_reload_origin (), keys (), detail.x, detail.y)
         | _ -> ())
       ~on_pointer_move:(function
-        | Lui_protocol.PointerMove (_, detail) ->
+        | detail ->
             (match !origin with
              | Some (_, _, x, y) when Float.abs (detail.x -. x) +. Float.abs (detail.y -. y) >= 6. ->
                  dragged := true
-             | _ -> ())
-        | _ -> ())
-      ~on_pointer_up:(fun event ->
-        close_on_middle st key event;
-        match event with
-        | Lui_protocol.PointerUp (_, detail) when detail.button = 0 ->
+             | _ -> ()))
+      ~on_pointer_up:(fun detail ->
+        close_on_middle st key detail;
+        if detail.button = 0 then begin
             let started = !origin in
             origin := None;
             (match started with
@@ -302,7 +299,7 @@ let item_drag st (it : Sidebar_state.item) : t =
                  drop ~reload ~order detail.x detail.y
              | Some _ -> Sidebar_state.toggle_collapsed st key
              | _ -> ())
-        | _ -> ())
+        end)
       ~on_pointer_cancel:(fun _ ->
         origin := None;
         ignore (Ui_effect.issue request))
@@ -327,7 +324,7 @@ let item_header st idx (it : Sidebar_state.item) =
     [ item_drag st it
     ; Ui_components.with_props
         [ Ui_components.Prop.padding_left 4; Ui_components.Prop.padding_right 8 ]
-        (Ui_components.button ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~min_width:0
+        (Ui_components.button ~text:"" ~key:("hdr-" ^ it.key) ~variant:`ghost ~grow:1. ~min_width:0
         ~height:32
         (* page/block sidebar items can carry an empty title — a button
            with neither text nor accessibility label is rejected and
@@ -336,7 +333,7 @@ let item_header st idx (it : Sidebar_state.item) =
         ~accessibility_identifier:("sidebar-panel-header-" ^ n)
         ~on_pointer_up:(close_on_middle st it.key)
         ~on_navigate:(function
-          | Lui_protocol.NavigationKey (_, key, true) ->
+          | Key { key = key; shift = true } ->
               let destination = match key with
                 | "ArrowUp" -> Some (idx - 1)
                 | "ArrowDown" -> Some (idx + 1)
@@ -351,7 +348,7 @@ let item_header st idx (it : Sidebar_state.item) =
             [ item_title it ] ])
     ; row ~key:("ia-" ^ it.key) ~cross:`center
         ~style_class:"item-actions"
-        [ Ui_components.button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon
+        [ Ui_components.icon_button ~key:("more-" ^ it.key) ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref "dots")
             ~main:`center ~cross:`center
             ~label:(t "sidebar.right/more")
             ~accessibility_identifier:("sbi-more-" ^ it.key)
@@ -360,15 +357,14 @@ let item_header st idx (it : Sidebar_state.item) =
             ~width:32 ~height:32 ~padding:0
             ~foreground:"hsl(var(--muted-foreground))"
             ~on_press:(fun _ -> Sidebar_state.toggle_item_menu st it.key)
-            [ icon ~name:(Icons.name_ref "dots") ~point_size:18
-                ~accessibility_identifier:("sbi-more-icon-" ^ it.key) [] ]
-        ; Ui_components.button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon
+            []
+        ; Ui_components.icon_button ~key:("close-" ^ it.key) ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref "x")
             ~main:`center ~cross:`center
             ~label:(t "ui/close") ~width:32 ~height:32 ~padding:0
             ~foreground:"hsl(var(--muted-foreground))"
             ~on_pointer_up:(close_on_middle st it.key)
             ~on_press:(fun _ -> Sidebar_state.remove_item st it.key)
-            [ Icons.icon ~size:18. "x" ] ]
+            [] ]
     ])
 
 (* cljs onboarding.cljs help pane: .help.cp__sidebar-help-docs is a
@@ -392,7 +388,7 @@ let help_pane st =
           [ Ui_components.Prop.font_size "16px"
           ; Ui_components.Prop.line_height "24px"
           ; Ui_components.Prop.font_weight 400 ]
-        (Ui_components.button ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
+        (Ui_components.button ~text:"" ~variant:`ghost ~label ~style_class:"ls-hp-iconrow"
           ~height:24 ~padding:0 ~main:`start ~cross:`center ~gap:4
           ~foreground:"var(--lx-accent-11, var(--ls-link-text-color))"
           ~data_attrs:[ ("style", "cursor:pointer") ]
@@ -464,7 +460,7 @@ let help_trigger ~on_press () =
      Ui_components.Prop.hover_background background;
      Ui_components.Prop.hover_foreground "hsl(var(--foreground))";
      Ui_components.Prop.pressed_opacity 1.]
-    (Ui_components.button ~key:"help" ~variant:`ghost ~label:(t "help/toggle-menu")
+    (Ui_components.button ~text:"" ~key:"help" ~variant:`ghost ~label:(t "help/toggle-menu")
       ~data_attrs:["data-tooltip", t "help.shortcuts/desc"]
       ~accessibility_identifier:"help-menu-trigger" ~style_class:"cp__sidebar-help-btn"
       ~width:32 ~height:32 ~min_width:32 ~min_height:32 ~padding:0 ~gap:0
@@ -479,7 +475,7 @@ let help_menu ~close ~open_handbook ~open_bug_report () =
       [Ui_components.Prop.font_size "16px";Ui_components.Prop.line_height "24px";
        Ui_components.Prop.font_weight 400;Ui_components.Prop.foreground "var(--ls-primary-text-color)";
        Ui_components.Prop.hover_background "var(--ls-tertiary-background-color, var(--rx-gray-05))"]
-      (Ui_components.button ~key ~variant:`ghost ~label:title
+      (Ui_components.button ~text:"" ~key ~variant:`ghost ~label:title
         ~height:32 ~min_height:32 ~corner_radius:0 ~min_width:0
         ~padding_horizontal:16 ~padding_vertical:4 ~main:`start ~cross:`center ~gap:8
         ~on_press:(fun _ -> close ();action ())
@@ -493,7 +489,8 @@ let help_menu ~close ~open_handbook ~open_bug_report () =
     (popover ~key:"help-menu" ~style_class:"cp__sidebar-help-menu-popup"
       ~accessibility_identifier:"help-menu"
       ~transition:Ui_components.popover_transition ~role:`dialog
-      ~anchor_target:"help-menu-trigger" ~anchor:`above ~anchor_alignment:`end_ ~anchor_offset:8.
+      ~target:(Anchor { side = `above; source = Target "help-menu-trigger";
+        align = `end_; offset = 8.; align_offset = 0. })
       ~width:260 ~padding:0 ~border_width:1 ~border_color:"hsl(var(--border))"
       ~corner_radius:8 ~background:"var(--ls-secondary-background-color, var(--rx-gray-03))"
       ~on_dismiss:(fun _ -> close ())
@@ -564,7 +561,7 @@ let shortcut_help () =
     text ~as_:`Pre ?style_class ?white_space ~padding:0 ~margin:0
       ~background:"transparent" ~font_family:mono ~font_size:"0.9em" ~line_height:"1.45em" children in
   let raw_block=pre [text ~value:("```clojure\n  " ^ example ^ "\n```") []] in
-  let preview_block=pre ~style_class:"code" ~white_space:"pre-wrap"
+  let preview_block=pre ~style_class:"code" ~white_space:`pre_wrap
     [text ~as_:`Code ~font_family:mono ~font_size:"0.85em" ~padding:6
       ~data_attrs:["data-lang","clojure"] ~value:example []] in
   let image_url="https://asset.logseq.com/static/img/logo.png" in

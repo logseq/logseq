@@ -272,25 +272,19 @@ let fraction_of_storage ~key ~default =
 let store_fraction key f =
   Ui_services.storage_set key (Printf.sprintf "%.4g" f)
 
-let on_left_split_resize st ev =
-  match ev with
-  | Lui_protocol.ValueChanged (_, v) ->
-      let width = clampf (float left_width_min) (float left_width_max) v in
-      Runtime.signal_set st.left_width width;
-      Ui_services.storage_set left_width_key (Printf.sprintf "%.8g" width)
-  | _ -> ()
+let on_left_split_resize st v =
+  let width = clampf (float left_width_min) (float left_width_max) v in
+  Runtime.signal_set st.left_width width;
+  Ui_services.storage_set left_width_key (Printf.sprintf "%.8g" width)
 
 (* the right dock is the split's SECOND pane — its fraction is 1 - v *)
-let on_right_split_resize st ev =
-  match ev with
-  | Lui_protocol.ValueChanged (_, v) ->
-      let viewport = Runtime.signal_get st.viewport_w in
-      let minimum = Float.max right_fraction_min (320. /. viewport) in
-      let f = clampf minimum right_fraction_max
-        (1. -. v) in
-      Runtime.signal_set st.right_fraction f;
-      store_fraction "ls-right-sidebar-width" f
-  | _ -> ()
+let on_right_split_resize st v =
+  let viewport = Runtime.signal_get st.viewport_w in
+  let minimum = Float.max right_fraction_min (320. /. viewport) in
+  let f = clampf minimum right_fraction_max
+    (1. -. v) in
+  Runtime.signal_set st.right_fraction f;
+  store_fraction "ls-right-sidebar-width" f
 
 (* below 640px the left pane leaves grid flow (position:fixed overlay),
    so the docked split fraction must collapse or the empty track would

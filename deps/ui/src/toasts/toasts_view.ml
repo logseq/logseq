@@ -63,13 +63,13 @@ let toast_item (t : Model.toast) : t =
                                     rows) ]
                          | [] -> assert false)
                     | None -> text ~key:"ti-desc" ~grow:1.
-                      ~white_space:"pre-line"
+                      ~white_space:`pre_line
                       ~foreground:"var(--ls-primary-text-color)"
                       ~value:t.toast_text []
                     | Some code ->
                         let content = scroll ~max_height:480
                             [ text ~as_:`Pre ~key:"ti-data" ~style_class:"code"
-                                ~white_space:"pre-wrap" [text ~value:t.toast_text []] ] in
+                                ~white_space:`pre_wrap [text ~value:t.toast_text []] ] in
                         let copy = Ui_components.button ~variant:`default ~size:`sm
                             ~text:(I18n.t "ui/copy-to-clipboard")
                             ~on_press:(fun _ -> Ui_services.clipboard_copy code.code_text) [] in
@@ -77,7 +77,7 @@ let toast_item (t : Model.toast) : t =
                           (if code.code_copy_first then [copy; content] else [content; copy]))
                ])
            ; align (if reserved then `top_trailing else `trailing)
-               (Ui_components.button ~key:"ti-close" ~variant:`ghost ~size:`icon
+               (Ui_components.icon_button ~key:"ti-close" ~variant:`ghost ~size:`icon
                    ~margin_top:(if reserved then -8 else 0)
                    ~margin_right:(if reserved then -6 else 0)
                    ~width:32 ~height:32 ~corner_radius:6

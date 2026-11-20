@@ -411,7 +411,7 @@ let file_input viewport ~id ~label ~desc ~accept ?(directory=false) ?(first=fals
     ; Ui_components.Prop.pressed_opacity 0.5; Ui_components.Prop.cursor `pointer
     ; Ui_components.Prop.hover_background "var(--lx-gray-06, var(--ls-quaternary-background-color, var(--rx-gray-06)))"
     ; Ui_components.Prop.hover_foreground "inherit"; Ui_components.Prop.white_space `normal ]
-    (button ~key:id ~accessibility_identifier:id ~label ~variant:`ghost ~text_alignment:`start
+    (button ~text:"" ~key:id ~accessibility_identifier:id ~label ~variant:`ghost ~text_alignment:`start
        ~on_press:(fun _ ->
        Ui_services.files_pick_files ~accept ~directory (run_files id))
          ~main:`start ~cross:`center ~gap:0 ~padding:0 ~border_width:0
@@ -453,7 +453,7 @@ let article viewport =
         ~value:(reactive (fun width -> if width>=1024. then 0 else 30) viewport)
         (column ~key:"intro" ~cross:`stretch
           [ desktop_font viewport "1.75rem" "1.625rem"
-              (heading ~key:"question" ~level:1 ~as_:`H1
+              (heading ~key:"question" ~level:`h1 ~as_:`H1
                 ~font_weight:500 ~line_height:"1.5" ~margin:0 ~text_alignment:`center
                 ~value:(T.t "onboarding.import/title") [])
           ; Ui_parts.string_prop Lui_protocol.LineHeight
@@ -461,7 +461,7 @@ let article viewport =
               (Ui_parts.int_prop Lui_protocol.PaddingVertical
                 ~value:(reactive (fun width -> if width>=1024. then 0 else 15) viewport)
                 (desktop_font viewport "1.1875rem" "0.875rem"
-                  (heading ~key:"description" ~level:2 ~as_:`H2
+                  (heading ~key:"description" ~level:`h2 ~as_:`H2
                     ~font_weight:400 ~margin:0 ~text_alignment:`center
                     ~value:(T.t "onboarding.import/desc") []))) ])
     ; column ~key:"choices" ~accessibility_identifier:"import-choices"
@@ -474,13 +474,13 @@ let view () : t =
   Ui_components.with_props [Ui_components.Prop.padding_top 55]
     (column ~key:"importer" ~accessibility_identifier:"importer" ~cross:`center
         [ desktop_font viewport "2.25rem" "1.875rem"
-            (heading ~key:"title" ~level:1 ~as_:`H1
+            (heading ~key:"title" ~level:`h1 ~as_:`H1
               ~font_weight:400 ~line_height:"1.4" ~margin:0 ~text_alignment:`start
               ~value:(T.t "import/notes") [])
         ; Ui_parts.int_prop Lui_protocol.PaddingHorizontal
             ~value:(reactive (fun width -> if width>=1024. then 0 else 30) viewport)
             (desktop_font viewport "1.25rem" "0.875rem"
-              (heading ~key:"subtitle" ~level:2 ~as_:`H2
+              (heading ~key:"subtitle" ~level:`h2 ~as_:`H2
                 ~font_weight:400 ~line_height:"1.5" ~margin_top:20 ~margin_bottom:40
                 ~text_alignment:`center ~value:(T.t "onboarding.import-option/desc") []))
         ; article viewport ]) ctx parent

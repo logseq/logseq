@@ -133,9 +133,9 @@ type popup_anchor = Target of string | Rectangle of (float * float * float * flo
 
 let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ?(padding = 4)
     ?max_height_viewport ~on_dismiss children : t =
-  let anchor_target, anchor_rect, alignment = match anchor with
-    | Target target -> Some target, None, (if align_end then `end_ else `start)
-    | Rectangle rect -> None, Some rect, `center in
+  let source, alignment = match anchor with
+    | Target target -> Lui_elements.Target target, (if align_end then `end_ else `start)
+    | Rectangle (x, y, width, height) -> Rect {x; y; width; height}, `center in
   Ui_components.with_props
     ((if card then [ Ui_components.card_shadow ] else [])
      @ (match max_height_viewport with
@@ -143,8 +143,7 @@ let anchored_popover ~key ~id ~anchor ~align_end ~cls ~card ?role ?(padding = 4)
        | None -> []))
     (popover ~key ?role ~accessibility_identifier:id
        ~transition:Ui_components.popover_transition
-       ~anchor:`below ?anchor_target ?anchor_rect ~anchor_offset:0.
-       ~anchor_alignment:alignment
+       ~target:(Anchor {side = `below; source; align = alignment; offset = 0.; align_offset = 0.})
        ?background:(if card then Some "hsl(var(--popover))" else None)
        ?foreground:(if card then Some "inherit" else None)
        ?border_color:(if card then Some "hsl(var(--border))" else None)
@@ -338,8 +337,8 @@ let rec menu_level_scoped ~scope ~cls ~register ~on_back (items : menu_item list
                        ~on_appear:(fun _ ->
                          let state = Signal.get_state mst in
                          if state.msub = fidx && state.sub_focus then focus_sub fidx)
-                       ~anchor:`right ~anchor_alignment:`start
-                       ~anchor_offset:(-4.) ~role:`menu ~min_width:128
+                       ~target:(Anchor { side = `right; source = Parent;
+                         align = `start; offset = (-4.); align_offset = 0. }) ~role:`menu ~min_width:128
                        ~padding:4 ~background:"hsl(var(--popover))"
                        ~border_color:"hsl(var(--border))" ~border_width:1
                        ~corner_radius:6
@@ -520,13 +519,12 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
                    ~background:"transparent" ~border_width:0 ~corner_radius:0
                    ~foreground:"var(--ls-secondary-text-color)"
                    ~on_input:(function
-                     | Lui_protocol.TextChanged (_, v) ->
+                     | v ->
                          Signal.set query v;
-                         Signal.set chosen 0
-                     | _ -> ())
+                         Signal.set chosen 0)
                    ~on_navigate:(function
-                     | Lui_protocol.NavigatePrevious _ -> navigate (-1)
-                     | Lui_protocol.NavigateNext _ -> navigate 1
+                     | Previous -> navigate (-1)
+                     | Next -> navigate 1
                      | _ -> ())
                    ~on_submit:(fun _ -> submit ()) [])
             ; column ~padding_vertical:4 ~cross:`stretch
@@ -607,10 +605,10 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "u
                        ~foreground:"var(--lx-red-10, hsl(var(--destructive)))"
                        [];
                    ];
-                 heading ~level:3 ~accessibility_identifier:"modal-headline"
+                 heading ~level:`h3 ~accessibility_identifier:"modal-headline"
                    ~style_class:"ls-dialog-headline" ~grow:1. ~min_width:0
                    ~font_size:"18px" ~font_weight:500 ~line_height:"24px"
-                   ~white_space:"normal" ~value:headline [];
+                   ~white_space:`normal ~value:headline [];
                ];
            ]
           @ body

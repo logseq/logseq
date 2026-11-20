@@ -1637,8 +1637,9 @@ let test_journal_splice_row_level () =
   let insert_ops = ops_now () - ops2 in
   (* Flat-row layout and occurrence metadata cost 200 patches for this
      insertion; surrounding row survival is asserted separately below. *)
+  (* Keyed ranges append the new root, then place it with one MoveChild. *)
   check "journal row-insert splice stays bounded"
-    (insert_ops > 0 && insert_ops <= 200);
+    (insert_ops > 0 && insert_ops <= 201);
   check "inserted row mounted" (find_block "j9" <> None);
   eq "surrounding rows survive insert splice"
     (block_row_ids [ "j1"; "j2"; "j2c"; "j4"; "j5"; "j6"; "j7"; "j8" ])

@@ -46,6 +46,18 @@ let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
        ~on_press:(fun _ -> on_click ())
        (before @ after)))
 
+let dropdown_el ?(cls = base_cls) ~key ?(data_attrs = []) ?icon ?label ?label_signal ?height ?(after = [])
+    ?disabled ?disabled_signal ?checked ?checked_signal ~on_click () =
+  Lui_elements.dropdown_menu_item ~key ~style_class:cls ~data_attrs
+    ?text:label ?text_signal:label_signal ?icon ?disabled ?disabled_signal
+    ?checked ?checked_signal ?height ~variant:`ghost ~main:`start
+    ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4 ~min_height:0
+    ~foreground:"inherit"
+    ~style:(Slot_style.make ~font_size:"0.875rem" ~line_height:"1.42857"
+      ~hover_background:"var(--lx-gray-05, hsl(var(--muted)))"
+      ~focus_shadow:"inset 0 0 0 999px var(--lx-gray-05, hsl(var(--muted)))" ())
+    ~on_press:(fun () -> on_click ()) after
+
 (* retained-tree separator — the old lui-core rule carried height:1px,
    margin:0.25rem -0.25rem, background:hsl(var(--muted)); ls-property-
    dropdown menus override margins to 0.5rem 0 via ~mv:~mh *)
@@ -63,22 +75,28 @@ let dots_menu ~key ?(menu_cls = "") ?(compact = false) items : t =
   let open_ = Signal.state ctx.Lui_ui.ui_scheduler false in
   let close () = Runtime.signal_set open_ false in
   let item i (cls, label, disabled, on_click) =
-    chrome (menu_item ~key:(Printf.sprintf "%s-mi-%d" key i)
+    Ui_components.dropdown_menu_item ~key:(Printf.sprintf "%s-mi-%d" key i)
       ?style_class:(if cls = "" then None else Some cls)
       ~text:label ~disabled
       ~on_press:(fun _ ->
         close ();
         on_click ())
-      [])
+      []
+  in
+  let trigger =
+    let label = I18n.t "ui/more-actions" in
+    if compact then
+      Ui_components.button ~text:"" ?text_signal:None ?icon:None ?icon_signal:None
+        ?icon_placement:None ~label ~size:`sm
+    else
+      Ui_components.icon_button ~icon:(Icons.name_ref "dots") ?icon_signal:None
+        ?icon_placement:None ~label ~size:`icon
   in
   row ~key ?gap:(if compact then Some 0 else None)
-    [ Ui_components.button ~key:(key ^ "-btn") ~variant:`ghost
-        ~size:(if compact then `sm else `icon)
+    [ trigger ~key:(key ^ "-btn") ~variant:`ghost
         ?width:(if compact then Some 23 else None)
         ?padding_horizontal:(if compact then Some 4 else None)
-        ?icon:(if compact then None else Some (Icons.name_ref "dots"))
         ~style_class:"graph-action-btn"
-        ~label:(I18n.t "ui/more-actions")
         ~data_attrs:(reactive (fun expanded ->
             [ ("aria-haspopup", "menu")
             ; ("aria-expanded", string_of_bool expanded) ]) (Signal.value open_))

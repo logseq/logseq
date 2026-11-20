@@ -147,7 +147,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
   (Lui_elements.row ~gap:4 ~cross:`center ~min_height:(if icon then 28 else 0) ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
      [ (if icon then
-          Ui_components.button ~variant:`ghost ~width:18 ~min_width:18
+          Ui_components.button ~text:"" ~variant:`ghost ~width:18 ~min_width:18
             ~height:28 ~padding:0 ~main:`center ~cross:`center
             ~style_class:"property-icon property-m"
             ~accessibility_identifier:icon_anchor_id

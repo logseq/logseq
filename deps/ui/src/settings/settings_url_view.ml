@@ -161,7 +161,7 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
   in
   let node =
     column ~key ~style_class:("cp__settings-" ^ key ^ "-cnt")
-      [ heading ~key:(key ^ "-h") ~level:1
+      [ heading ~key:(key ^ "-h") ~level:`h1
           ~style_class:"ls-dialog-title-lg" ~value:title []
       ; column ~key:(key ^ "-b") ~style_class:"ls-pad"
           [ paragraph ~key:(key ^ "-d")
@@ -176,9 +176,8 @@ let url_editor_body ~key ~storage_key ~title ~desc ~placeholder
                   ~disabled:(reactive (fun value -> value) (Signal.value saving))
                   ~on_input:(fun ev ->
                     match ev with
-                    | Lui_protocol.TextChanged (_, q) ->
-                        Runtime.signal_set url q
-                    | _ -> ())
+                    | q ->
+                        Runtime.signal_set url q)
                   []
               ]
           ; row ~key:(key ^ "-btns") ~gap:8 ~main:`start

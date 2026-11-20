@@ -336,9 +336,8 @@ and node ~model () : t =
                        (* The retained anchor owns scroll/resize positioning and
                  viewport collision handling on both hosts. *)
                        popover ~transition:Ui_components.popover_transition
-                         ~key:"sbar" ~anchor_target:("ls-block-" ^ anchor)
-                         ~anchor:`above ~anchor_alignment:`start
-                         ~anchor_offset:0. ~margin_left:(-5) ~padding:0
+                         ~key:"sbar" ~target:(Anchor { side = `above; source = Target ("ls-block-" ^ anchor);
+                                       align = `start; offset = 0.; align_offset = 0. }) ~margin_left:(-5) ~padding:0
                          ~background:"transparent" ~border_width:0 ~corner_radius:0
                          ~style_class:"selection-action-bar"
                          ~data_attrs:[ ("data-keep-selection", "true") ]
@@ -353,6 +352,10 @@ and node ~model () : t =
                            adjacent bordered cells overlap *)
                                  let snapshot = selection_context model sel in
                                  let sbtn ~key ~label ?icon ?text ~on_press () =
+                                   let text = match text, icon with
+                                     | Some text, _ -> text
+                                     | None, Some _ -> ""
+                                     | None, None -> invalid_arg "selection action requires text or an icon" in
                                    let children =
                                      match icon with
                                      | Some name -> [ Icons.icon ~size:13. name ]
@@ -363,7 +366,7 @@ and node ~model () : t =
                                      ; Ui_components.Prop.line_height "16px" ]
                                      (Ui_components.button ~key ~variant:`ghost
                                         ~accessibility_identifier:key
-                                        ~size:`sm ~label ?text ~height:32
+                                        ~size:`sm ~label ~text ~height:32
                                         ~padding_horizontal:8 ~padding_vertical:0
                                         ~background:"hsl(var(--background))"
                                         ~border_color:"hsl(var(--border))"

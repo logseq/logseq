@@ -112,11 +112,9 @@ let lang_menu ~scope ~key st mst =
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
-         Ui_components.with_props
-           [ Ui_components.Prop.font_size "0.875rem"
-           ; Ui_components.Prop.line_height "1.25rem"
-           ; Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-           (Lui_elements.menu_item
+         Lui_elements.dropdown_menu_item
+              ~style:(Slot_style.make ~font_size:"0.875rem" ~line_height:"1.25rem"
+                ~hover_background:"hsl(var(--muted))" ())
               ~key:(Printf.sprintf "lmi-%s-%d" key i)
               ~text:label ~selection_placement:`leading
               ~selected:(code = current_lang ())
@@ -131,7 +129,7 @@ let lang_menu ~scope ~key st mst =
                       Runtime.flush ()
                     end) code;
                 lang_menu_close mst)
-              []))
+              [])
        languages)
 
 (* A shared selected option card owns the thumbnail, caption and ring.
@@ -202,7 +200,7 @@ let body (_ms : Model.t Signal.signal) : t =
   in
   let node =
     column ~key:"settings" ~style_class:"cp__settings" ~gap:16
-      [ heading ~key:"st-h" ~level:2
+      [ heading ~key:"st-h" ~level:`h2
           ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1"
           ~data_attrs:[ ("style", "letter-spacing:-0.01em;margin:0") ]
           ~style_class:"ui__dialog-title" ~value:(T.t "nav/settings") []

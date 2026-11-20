@@ -58,11 +58,6 @@ let handle (w : Wire.t) =
 
 (* -- e2ee password modal (components/e2ee.cljs) -- *)
 
-let text_of ev =
-  match ev with
-  | Lui_protocol.TextChanged (_, s) -> s
-  | _ -> ""
-
 let submit r two warn pw1 pw2 =
   let pw = Lui_elements.get_state pw1 in
   if String.length pw = 0 then ()
@@ -87,7 +82,7 @@ let pw_input ?height ?label ctx ~key ~placeholder ~autofocus ~value ~on_enter =
           ~style_class:"form-input"
           ?height ?label ~placeholder ~autofocus
           ~text_signal:(Signal.value value)
-          ~on_input:(fun ev -> Signal.set value (text_of ev))
+          ~on_input:(fun text -> Signal.set value text)
           ~on_submit:(fun _ -> on_enter ())
           [])
       (Signal.value visible)
@@ -105,7 +100,7 @@ let pw_input ?height ?label ctx ~key ~placeholder ~autofocus ~value ~on_enter =
            ; Ui_components.Prop.opacity 0.6
            ; Ui_components.Prop.hover_opacity 1.
            ; Ui_components.Prop.cursor `pointer ]
-           (Ui_components.button ~key:(key ^ "-eye") ~variant:`ghost
+           (Ui_components.icon_button ~key:(key ^ "-eye") ~variant:`ghost
            ~style_class:"ls-eye-btn"
            ~label:(I18n.t "encryption/toggle-password-visibility")
            ~icon:(reactive

@@ -26,12 +26,12 @@ module D = Logseq_el
 (* non-span tag is always h1..h6 (callers pass ~tag:("h" ^ lvl)) *)
 let h_element_tag tag =
   match tag with
-  | "h1" -> (1, `H1)
-  | "h2" -> (2, `H2)
-  | "h3" -> (3, `H3)
-  | "h4" -> (4, `H4)
-  | "h5" -> (5, `H5)
-  | "h6" -> (6, `H6)
+  | "h1" -> (`h1, `H1)
+  | "h2" -> (`h2, `H2)
+  | "h3" -> (`h3, `H3)
+  | "h4" -> (`h4, `H4)
+  | "h5" -> (`h5, `H5)
+  | "h6" -> (`h6, `H6)
   | _ -> invalid_arg ("wrap: not a heading tag: " ^ tag)
 
 let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
@@ -186,7 +186,7 @@ let calc_results_el code =
            (List.map
               (fun line ->
                 text ~style_class:"extensions__code-calc-output-line"
-                  ~white_space:"nowrap" ~line_height:"1.45rem" ~min_height:23
+                  ~white_space:`nowrap ~line_height:"1.45rem" ~min_height:23
                   ~value:line [])
               lines))
 

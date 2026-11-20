@@ -18,7 +18,7 @@ opam option --global 'wrap-remove-commands=[]'
 # would leak into CI builds untested, and Melange can only run datascript
 # code free of native-only externals such as Marshal.*. Bump deliberately
 # when upstream lands wanted changes.
-DATASCRIPT_SHA=0dd20de9c2640924dcc261cc20dfc3eeb68b9b33
+DATASCRIPT_SHA=9f2e87f0498cd5bd5b7d2472642c6a91b863e238
 opam pin add -y -n datascript_ocaml.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-melange.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-native.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
@@ -32,7 +32,7 @@ opam pin add -y -n melange-transit-native git+https://github.com/logseq/melange-
 opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
 opam pin add -y -n angstrom git+https://github.com/logseq/angstrom#fork
 opam pin add -y -n xmlm git+https://github.com/logseq/xmlm#master
-opam pin add -y -n mldoc git+https://github.com/logseq/mldoc#master
+opam pin add -y -n mldoc git+https://github.com/logseq/mldoc#bc0e57e8c0ef25080b97b96174274d1dc4f5f3d4
 # Re-resolve the git-branch pins: `opam pin add` alone treats an already
 # installed .dev package as satisfied, so a moved upstream ref never
 # rebuilds and the switch silently keeps a stale checkout.

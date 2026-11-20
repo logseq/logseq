@@ -83,7 +83,7 @@ let dialog_view name (ms : Model.t Signal.signal) : t =
             [ (* cljs shui dialog title: text-lg font-semibold
                  leading-none tracking-tight (+ tailwind preflight
                  margin reset) *)
-              heading ~key:("dlg-t-" ^ name) ~level:2
+              heading ~key:("dlg-t-" ^ name) ~level:`h2
                 ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1"
                 ~data_attrs:
                   [ ("style", "letter-spacing:-0.01em;margin:0") ]
@@ -123,7 +123,7 @@ let confirm_view (c : Dialogs_state.confirm) =
                        [ paragraph ~key:"cfrm-dp" ~value:c.desc [] ] ])
            else
              [ Ui_components.alert_dialog_header ~key:"cfrm-h"
-                 ([ heading ~key:"cfrm-t" ~level:2
+                 ([ heading ~key:"cfrm-t" ~level:`h2
                      ~font_size:"1.125rem" ~font_weight:600
                      ~line_height:"1.75rem"
                      ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, hsl(var(--foreground))))"
@@ -156,7 +156,7 @@ let prompt_body (p : Dialogs_state.prompt) : t =
   let node =
     column ~key:"prmt-box"
       ( (if p.desc = "" then
-           [ heading ~key:"prmt-h" ~level:3
+           [ heading ~key:"prmt-h" ~level:`h3
                ~line_height:"1.5rem" ~font_weight:500
                ~style_class:"ls-prompt-headline" ~value:p.title
                ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
@@ -165,7 +165,7 @@ let prompt_body (p : Dialogs_state.prompt) : t =
          else
            (* cljs pdf-password-input: title + desc headline *)
            [ text ~key:"prmt-t" ~value:p.title []
-           ; heading ~key:"prmt-h" ~level:3
+           ; heading ~key:"prmt-h" ~level:`h3
                ~line_height:"1.5rem" ~font_weight:500
                ~style_class:"ls-prompt-headline" ~value:p.desc
                ~data_attrs:[ ("style", "padding-bottom:0.5rem") ]
@@ -176,7 +176,7 @@ let prompt_body (p : Dialogs_state.prompt) : t =
                ~text:(reactive (Signal.value value))
                ~placeholder:p.placeholder ~height:240 ~autofocus:true
                ~style_class:"ls-prompt-input"
-               ~on_input:(function Lui_protocol.TextChanged (_, text) -> Signal.set value text | _ -> ()) []
+               ~on_input:(function text -> Signal.set value text) []
            else Ui_components.with_props
              [Ui_components.Prop.font_size "14px"; Ui_components.Prop.line_height "20px";
               Ui_components.Prop.margin_top 4; Ui_components.Prop.margin_bottom 16]
@@ -186,9 +186,8 @@ let prompt_body (p : Dialogs_state.prompt) : t =
             ~autofocus:true
             ~on_input:(fun ev ->
               match ev with
-              | Lui_protocol.TextChanged (_, s) ->
-                  Signal.set value s
-              | _ -> ())
+              | s ->
+                  Signal.set value s)
             ~on_submit:(fun _ -> submit ())
             []))
         ; row ~gap:0 [Ui_components.button ~key:"prmt-ok" ~size:`sm

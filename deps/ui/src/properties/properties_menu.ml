@@ -93,8 +93,8 @@ let config_sub ?(padding = 4) ~icon_name ~title ?desc items : t =
      ~on_pointer_enter:(fun _ -> Runtime.signal_set open_ true)
      [ config_trailing ?desc ~chevron:true title
      ; if_ ~test:(Signal.value open_)
-         (popover ~anchor:`right ~anchor_alignment:`start
-            ~anchor_offset:(-4.) ~role:`menu ~min_width:128 ~padding
+         (popover ~target:(Anchor { side = `right; source = Parent;
+                    align = `start; offset = (-4.); align_offset = 0. }) ~role:`menu ~min_width:128 ~padding
             ~background:"hsl(var(--popover))"
             ~border_color:"hsl(var(--border))" ~border_width:1
             ~corner_radius:6 ~transition:Ui_components.popover_transition
@@ -265,15 +265,11 @@ let text_form_view ~title_v ~desc_v ~title_placeholder ~desc_placeholder
         ~text:(reactive Fun.id (Signal.value title_st))
         ~on_input:(fun ev ->
           match ev with
-          | Lui_protocol.TextChanged (_, t) -> Signal.set title_st t
-          | _ -> ())
+          | t -> Signal.set title_st t)
         []
     ; Ui_components.textarea ~placeholder:desc_placeholder
         ~text:(reactive Fun.id (Signal.value desc_st))
-        ~on_input:(fun ev ->
-          match ev with
-          | Lui_protocol.TextChanged (_, t) -> Signal.set desc_st t
-          | _ -> ())
+        ~on_input:(fun text -> Signal.set desc_st text)
         []
     ; row ~main:`end_
         [ Ui_components.button ~variant:`primary ~text:(I18n.t "ui/save")
@@ -342,14 +338,14 @@ let choices_pane_view m ~set_pane ~close : t =
       | None -> false
     in
     let scoped_elsewhere = scoped_ids <> [] && not owner_scoped in
-    [ menu_item ~text:(I18n.t "ui/edit")
+    [ dropdown_menu_item ~text:(I18n.t "ui/edit")
         ~on_press:(fun _ ->
           Runtime.signal_set set_pane (MEditChoice choice))
         []
     ]
     @ (match prop_type m, scoped_elsewhere, prop_uuid m, cid with
        | ("default" | "number"), false, Some pu, Some cid ->
-           [ menu_item ~text:(I18n.t "property/set-default-choice")
+           [ dropdown_menu_item ~text:(I18n.t "property/set-default-choice")
                ~on_press:(fun _ ->
                  ignore
                    (D.set_block_property ~block_uuid:pu
@@ -362,7 +358,7 @@ let choices_pane_view m ~set_pane ~close : t =
        | _ -> [])
     @ (match m.owner_is_tag, m.owner_id, cid with
        | true, Some owner_id, Some cid ->
-           [ menu_item
+           [ dropdown_menu_item
                ~text:(I18n.t1 "property/hide-for-tag" m.owner_title)
                ~on_press:(fun _ ->
                  ignore
@@ -374,7 +370,7 @@ let choices_pane_view m ~set_pane ~close : t =
                []
            ]
            @ (if owner_scoped then
-                [ menu_item
+                [ dropdown_menu_item
                     ~text:
                       (I18n.t1 "property/remove-scope-for-tag"
                          m.owner_title)
@@ -387,7 +383,7 @@ let choices_pane_view m ~set_pane ~close : t =
                     []
                 ]
               else if scoped_ids <> [] then
-                [ menu_item
+                [ dropdown_menu_item
                     ~text:
                       (I18n.t1 "property/use-choice-in-tag"
                          m.owner_title)
@@ -403,7 +399,7 @@ let choices_pane_view m ~set_pane ~close : t =
        | _ -> [])
     @ (match D.entity_uuid_of choice with
        | Some cu ->
-           [ menu_item ~variant:`destructive ~text:(I18n.t "ui/delete")
+           [ dropdown_menu_item ~variant:`destructive ~text:(I18n.t "ui/delete")
                ~on_press:(fun _ ->
                  ignore
                    (D.delete_closed_value ~ident:(prop_ident m)
@@ -579,8 +575,7 @@ let default_value_pane_view m ~close : t =
             ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
-              | Lui_protocol.TextChanged (_, t) -> Signal.set buffer t
-              | _ -> ())
+              | t -> Signal.set buffer t)
             ~on_submit:(fun _ ->
               match prop_uuid m with
               | Some pu ->
@@ -654,8 +649,8 @@ let checkbox_mapping_item m ~close : t =
                  Runtime.signal_set open_ (not (Runtime.signal_get open_)))
                []
            ; if_ ~test:(Signal.value open_)
-               (popover ~anchor:`below ~anchor_alignment:`start
-                  ~anchor_offset:4. ~role:`menu ~min_width:128 ~padding:4
+               (popover ~target:(Anchor { side = `below; source = Parent;
+                          align = `start; offset = 4.; align_offset = 0. }) ~role:`menu ~min_width:128 ~padding:4
                   ~background:"hsl(var(--popover))"
                   ~border_color:"hsl(var(--border))" ~border_width:1
                   ~corner_radius:6
@@ -872,8 +867,8 @@ let menu_view ~owner_uuid ~owner_id ~owner_is_tag ~owner_title ~refresh
   let m =
     { owner_uuid; owner_id; owner_is_tag; owner_title; has_owner; refresh; row }
   in
-  (popover ~anchor:`below ~anchor_alignment:`start ~role:`menu
-     ~anchor_offset:4.0 ~min_width:200
+  (popover ~target:(Anchor { side = `below; source = Parent;
+             align = `start; offset = 4.0; align_offset = 0. })  ~role:`menu ~min_width:200
      ~transition:Ui_components.popover_transition
      ~on_dismiss:(fun _ -> close ())
      [ menu_body_view ~more_options:[] ~with_title:false m ~close ])

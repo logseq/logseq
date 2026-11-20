@@ -510,14 +510,14 @@ let () =
         [Lui_elements.button ~height:32 ~text:"Menu" [];
          Ui_components.menu_card ~key:"chrome-menu" ~anchor:`below
            ~anchor_alignment:`end_ ~on_dismiss:(fun _ -> ())
-           (List.init 11 (fun i -> Menu_item.el ~key:(string_of_int i)
+           (List.init 11 (fun i -> Menu_item.dropdown_el ~key:(string_of_int i)
               ~label:(string_of_int i) ~on_click:ignore ()));
          Ui_components.menu_surface
-           (Lui_elements.popover ~key:"point-menu" ~at:(100.,40.) ~role:`menu
+           (Lui_elements.popover ~key:"point-menu" ~target:(At (100.,40.)) ~role:`menu
               ~width:256
               [Menu_item.el ~key:"point-item" ~label:"Action" ~on_click:ignore ()]);
          Ui_components.menu_surface
-           (Lui_elements.popover ~key:"check-menu" ~at:(400.,40.) ~role:`menu
+           (Lui_elements.popover ~key:"check-menu" ~target:(At (400.,40.)) ~role:`menu
               ~min_width:128
               [Views_popup.menu_level ~pid:9201 ~cls:"" ~register:ignore
                  [Views_popup.MCheck ("Page name",true,ignore)]])]) in
@@ -613,7 +613,7 @@ let () =
                   (0,Popups_state.Ci_sub (label,Popups_state.Sub_menu []))))
           in
           Ui_components.menu_surface
-            (Lui_elements.popover ~at:(100.,40.) ~role:`menu ~min_width:128
+            (Lui_elements.popover ~target:(At (100.,40.)) ~role:`menu ~min_width:128
                [contents])) in
       ignore (Lui_app.start app);ignore (Lui_app.flush app);
       ignore (Lui_host.repaint host);
@@ -1528,7 +1528,7 @@ let () = with_test_entry (fun () ->
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app = Lui_app.create backend () (fun () () -> ()) (fun _ _ _ ->
     Lui_elements.column ~foreground:"var(--icon-test-foreground)"
-      [Ui_components.button ~variant:`ghost
+      [Ui_components.button ~text:"" ~variant:`ghost
          [Lui_elements.icon ~name:(`app "menu-2") ~point_size:16 []]]) in
   ignore (Lui_app.start app);
   ignore (Lui_app.flush app);
@@ -6363,7 +6363,7 @@ let () =
                       [
                         Lui_elements.row ~main:`end_ ~margin_right:100
                           [
-                            Ui_components.button ~variant:`ghost ~size:`icon
+                            Ui_components.icon_button ~icon:(Icons.name_ref "x") ~variant:`ghost ~size:`icon
                               ~label:(I18n.t "ui/close")
                               ~accessibility_identifier:
                                 "native-date-scroll-anchor"
@@ -7435,7 +7435,7 @@ let () = with_test_entry (fun () ->
             ~label:(Lui_elements.text ~value:"Field" [])
             ~control:(Lui_elements.input ~accessibility_identifier:"responsive-input" ~height:32
               ~text_signal:(Signal.value value)
-              ~on_input:(function TextChanged (_,next) -> Signal.set value next | _ -> ()) []) ()) in
+              ~on_input:(fun next -> Signal.set value next) []) ()) in
       Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app);ignore (Lui_app.flush app);
@@ -9897,7 +9897,7 @@ let () = with_test_entry (fun () ->
     apply_batch=(fun batch -> Lui_store.apply_batch store batch;true)} in
   let app=Lui_app.create_with_extensions backend registry Model.initial (fun model () -> model)
     (fun _ _ _ -> Lui_elements.stack [Handbook.host ~loader ~controls:(fun open_ _ ->
-      Lui_elements.button ~accessibility_identifier:"handbook-test-open" ~on_press:(fun _ -> open_ ()) []) ()]) in
+      Lui_elements.button ~text:"" ~accessibility_identifier:"handbook-test-open" ~on_press:(fun _ -> open_ ()) []) ()]) in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app);
     Runtime.app_flush:=previous_flush;Host.set_window_size previous_width previous_height) (fun () ->
     Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));

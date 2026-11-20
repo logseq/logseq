@@ -10,13 +10,13 @@
 (documentation https://docs.logseq.com)
 
 (pin
- (url "git+https://github.com/logseq/datascript-ocaml.git#main")
+ (url "git+https://github.com/logseq/datascript-ocaml.git#9f2e87f0498cd5bd5b7d2472642c6a91b863e238")
  (package (name datascript_ocaml)))
 (pin
- (url "git+https://github.com/logseq/datascript-ocaml.git#main")
+ (url "git+https://github.com/logseq/datascript-ocaml.git#9f2e87f0498cd5bd5b7d2472642c6a91b863e238")
  (package (name datascript-ocaml-melange)))
 (pin
- (url "git+https://github.com/logseq/datascript-ocaml.git#main")
+ (url "git+https://github.com/logseq/datascript-ocaml.git#9f2e87f0498cd5bd5b7d2472642c6a91b863e238")
  (package (name datascript-ocaml-native)))
 (pin
  (url "git+https://github.com/logseq/persistent-sorted-set-ocaml.git#main")
@@ -49,7 +49,7 @@
  (url "git+https://github.com/logseq/xmlm#master")
  (package (name xmlm)))
 (pin
- (url "git+https://github.com/logseq/mldoc#master")
+ (url "git+https://github.com/logseq/mldoc#bc0e57e8c0ef25080b97b96174274d1dc4f5f3d4")
  (package (name mldoc)))
 
 (package
@@ -72,7 +72,7 @@
   melange-edn-melange
   melange-edn-native
   melange-fest
-  alcotest
+  (alcotest (>= 1.10.1))
   melange-fetch
   melange-webapi
   rrbvec
@@ -80,7 +80,7 @@
   uunf
   re
   yojson
-  digestif
+  (digestif (>= 1.4.2))
   decompress
   mirage-crypto
   mirage-crypto-rng
@@ -88,7 +88,7 @@
   kdf
   x509
   uucp
-  eio
+  (eio (>= 1.7))
   (eio_posix (<> :os "win32"))
   (eio_windows (= :os "win32"))
   httpun

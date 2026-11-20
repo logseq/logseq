@@ -28,7 +28,7 @@ payloads are invalid; rebuild the launcher and OCaml entry together.
 
 ## Build
 
-Use OCaml 5.5.1 and the LUI revision pinned by the repository installer.
+Use OCaml 5.5.2 and the LUI revision pinned by the repository installer.
 The opt-in build and test commands are:
 
 ```sh

@@ -137,7 +137,7 @@ let render_roots ~restore ~delete_forever roots : t =
             (fun (title, rs) ->
               column ~key:("sec-" ^ title)
                 ((if not (List.exists is_page rs) then
-                    [ heading ~key:("seh-" ^ title) ~level:2
+                    [ heading ~key:("seh-" ^ title) ~level:`h2
                         ~value:title []
                     ]
                   else [])

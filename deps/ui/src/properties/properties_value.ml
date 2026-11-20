@@ -615,8 +615,8 @@ let closed_value_popup ~on_dismiss content =
   Ui_components.with_props
     [Ui_components.card_shadow;Ui_components.Prop.max_width_viewport 1.;
      Ui_components.Prop.max_height_viewport 1.;Ui_components.Prop.overflow `auto]
-    (popover ~role:`dialog ~anchor:`below ~anchor_alignment:`start
-       ~anchor_offset:(-3.) ~min_width:226 ~padding:0
+    (popover ~role:`dialog ~target:(Anchor { side = `below; source = Parent;
+                             align = `start; offset = (-3.); align_offset = 0. }) ~min_width:226 ~padding:0
        ~background:"hsl(var(--popover))" ~foreground:"hsl(var(--popover-foreground))"
        ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
        ~style_class:"ui__popover-content ls-property-select-popup"
@@ -630,7 +630,7 @@ let value_button ~text ~on_press : t =
      accessibility label is rejected by the store and kills the mount
      batch, so keep a label plus the cljs "Empty" placeholder *)
   let text = if text = "" then I18n.t "ui/empty" else text in
-  Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start ~label:text
+  Ui_components.button ~text:"" ~variant:`ghost ~grow:1.0 ~text_alignment:`start ~label:text
     ~style_class:"pv-scalar"
     ~foreground:"var(--ls-primary-text-color)"
     ~data_attrs:
@@ -638,7 +638,7 @@ let value_button ~text ~on_press : t =
         , "height:auto;min-height:0;padding:0;line-height:20px;\
            justify-content:flex-start" )
       ]
-    ~on_press [Lui_elements.text ~value:text ~white_space:"pre-wrap" []]
+    ~on_press [Lui_elements.text ~value:text ~white_space:`pre_wrap []]
 
 (* text/number cell: ghost button <-> autofocused text_field *)
 let scalar_edit_cell ?(jump_target = true) ?(bottom_pill = false) ctx row : t =
@@ -726,10 +726,9 @@ let scalar_edit_cell ?(jump_target = true) ?(bottom_pill = false) ctx row : t =
             ~text:(reactive Fun.id (Signal.value buffer))
             ~on_input:(fun ev ->
               match ev with
-              | Lui_protocol.TextChanged (_, t) ->
+              | t ->
                   Signal.set buffer t;
-                  set_edit_buffer ctx row t
-              | _ -> ())
+                  set_edit_buffer ctx row t)
             ~on_submit:(fun _ -> commit ())
             []) edit_context edit_parent)
      ])
@@ -798,10 +797,9 @@ let checkbox_view ?(jump_target = true) ctx row : t =
     ~owner:ctx.jump_owner ~activate (Ui_components.checkbox ~checked
     ~on_toggle:(fun ev ->
       match ev with
-      | Lui_protocol.ToggleChanged (_, b) ->
+      | b ->
           let ident = D.row_ident row |> Option.value ~default:"" in
-          set_picker_value ctx ~ident ~value:(W.Bool b)
-      | _ -> ())
+          set_picker_value ctx ~ident ~value:(W.Bool b))
     [])
 
 (* ---------- repeat column (cljs repeat-setting) ----------
@@ -992,11 +990,10 @@ let rep_select ~key ~label ~selected_signal ~options ~on_pick : t =
           ~cls:"ls-select-content ls-rep-menu" ~anchor:`below ~anchor_alignment:`start
           ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
           (List.map (fun (id,title) ->
-            Ui_components.menu_item_chrome
-              (menu_item ~key:(string_of_int id) ~text:title ~selection_placement:`leading
+            Ui_components.dropdown_menu_item ~key:(string_of_int id) ~text:title ~selection_placement:`leading
                  ~selected:(reactive ((=) id) selected_signal) ~min_height:32
                  ~padding_horizontal:8 ~padding_vertical:6 ~gap:8 ~corner_radius:4
-                 ~on_press:(fun _ -> on_pick id;Runtime.signal_set open_ false) [])) options))]) context parent
+                 ~on_press:(fun _ -> on_pick id;Runtime.signal_set open_ false) []) options))]) context parent
 
 let repeat_type_picker ~selected_signal ~options ~on_pick ~on_clear : t =
  fun context parent ->
@@ -1064,13 +1061,12 @@ let repeat_column ctx ~ident ~is_datetime ~rep : t =
                         else if is_datetime then "property.repeat/datetime" else "property.repeat/date"))
                      ~checked:(reactive (fun value -> (Option.get value).repeated) (Signal.value rep))
                      ~on_toggle:(function
-                       | Lui_protocol.ToggleChanged (_,checked) ->
+                       | checked ->
                            update (fun value -> {value with repeated=checked});
                            save "logseq.property.repeat/repeated?" (W.Bool checked);
                            if checked then save "logseq.property.repeat/temporal-property" (W.Int initial.prop_dbid)
                            else (D.remove_block_property ~block_uuid:ctx.block_uuid
-                             ~ident:"logseq.property.repeat/temporal-property" |> ignore;S.refresh_all ())
-                       | _ -> ()) [];
+                             ~ident:"logseq.property.repeat/temporal-property" |> ignore;S.refresh_all ())) [];
                    text ~value:(I18n.t
                      (if List.mem ident ["logseq.property/deadline";"logseq.property/scheduled"] then "property.repeat/task"
                       else if is_datetime then "property.repeat/datetime" else "property.repeat/date")) []];
@@ -1080,7 +1076,7 @@ let repeat_column ctx ~ident ~is_datetime ~rep : t =
                      ~padding_horizontal:8 ~padding_vertical:0 ~style_class:"ls-rep-num"
                      ~label:(I18n.t "property.repeat/every") ~submit_on_blur:true
                      ~text:(reactive Fun.id (Signal.value buffer))
-                     ~on_input:(function Lui_protocol.TextChanged (_,value) -> Signal.set buffer value | _ -> ())
+                     ~on_input:(function value -> Signal.set buffer value)
                      ~on_submit:(fun _ -> commit_frequency ()) [];
                    rep_select ~key:"repeat-unit" ~label:(I18n.t "property.repeat/every")
                      ~selected:(reactive (fun value -> (Option.get value).unit_id) (Signal.value rep))
@@ -1142,13 +1138,15 @@ let date_picker_content ctx ~ident ~is_datetime ~value ~on_value ~on_clear ~on_d
 
 let date_picker_pop ~anchor_target ctx ~ident ~is_datetime ~value ~on_dismiss : t =
  fun context parent ->
-  let anchor_rect = Properties_popup.virtual_anchor_for_id anchor_target in
+  let source = match Properties_popup.virtual_anchor_for_id anchor_target with
+    | Some (x, y, width, height) -> Rect {x; y; width; height}
+    | None -> Target anchor_target in
   let alive = ref true in
   Signal.on_dispose context.Lui_ui.ui_scope (fun () -> alive := false);
   let dismiss = on_dismiss in
   let on_dismiss () = if !alive then (alive := false; dismiss ()) in
   (Ui_components.with_props [Ui_components.Prop.overflow `auto;Ui_components.card_shadow]
-  (popover ~anchor:`below ~anchor_target ?anchor_rect ~anchor_alignment:`start ~anchor_offset:0.
+  (popover ~target:(Anchor {side = `below; source; align = `start; offset = 0.; align_offset = 0.})
     ~max_height:(max 0 (int_of_float (Ui_services.dom_viewport_height ())-16))
     ~background:"hsl(var(--popover))"
     ~foreground:"hsl(var(--popover-foreground))" ~border_width:1
@@ -1270,11 +1268,11 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
           (* empty date has no journal link — keep the ghost button so
              a click opens the picker *)
           if D.row_many row then
-            Ui_components.button ~variant:`ghost ~size:`icon
+            Ui_components.icon_button ~variant:`ghost ~size:`icon
              ~icon:(`app "calendar-plus") ~label:(I18n.t "property/set-value")
               ~on_press:(fun _ -> open_picker ()) []
           else if bottom_pill && D.empty_placeholder_p raw_value then
-            Ui_components.button ~variant:`ghost ~icon:(`app "line-dashed")
+            Ui_components.icon_button ~variant:`ghost ~icon:(`app "line-dashed")
               ~height:20 ~padding:0 ~style_class:"empty-btn"
               ~label:(I18n.t "property/set-value")
               ~on_press:(fun _ -> open_picker ()) []
@@ -1315,7 +1313,7 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
         else if not bottom_pill then
           Ui_components.with_props
             [Ui_components.Prop.hover_background "transparent"]
-            (Ui_components.button ~variant:`ghost ~height:24 ~padding:0 ~grow:1.
+            (Ui_components.button ~text:"" ~variant:`ghost ~height:24 ~padding:0 ~grow:1.
                ~background:"transparent" ~label:(I18n.t "ui/edit")
                ~on_press:(fun _ -> open_picker ()) [])
         else
@@ -1323,7 +1321,7 @@ let date_view ?(jump_target = true) ?(bottom_pill = false) ?raw_value
             ~value:(reactive
                       (fun h -> if h then 1. else if bottom_pill then 0.5 else 0.)
                       (Signal.value hover))
-            (Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
+            (Ui_components.icon_button ~variant:`ghost ~size:`icon ~icon:(`app "edit")
                 ~style_class:"prop-edit-ico"
                 ~width:18 ~height:18
                 ~min_width:0 ~padding:0
@@ -1375,7 +1373,7 @@ let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
                 "var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))))" ]
             ((if bottom_pill then (fun children ->
                 Ui_components.with_props [Ui_components.Prop.height_auto]
-                (Lui_elements.button ~variant:`ghost ~style_class:"bottom-property-node-value"
+                (Lui_elements.button ~text:"" ~variant:`ghost ~style_class:"bottom-property-node-value"
                   ~min_width:0 ~min_height:20 ~padding_horizontal:0 ~padding_vertical:0
                   ~border_width:0 ~gap:0 ~main:`start ~background:"transparent"
                   ~foreground ~text_alignment:`start ~label:title ~on_press:navigate children))
@@ -1388,8 +1386,8 @@ let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
                (if bottom_pill then [text ~value:((if is_tag then "#" else "") ^ title)
                   ~min_width:0 ~font_size:"0.875rem" ~line_height:"20px"
                   ?line_clamp:(if bottom_expanded then None else Some 1)
-                  ~white_space:(if bottom_expanded then "normal" else "nowrap")
-                  ~text_overflow:"ellipsis" ~overflow:"hidden" []] else [])) in
+                  ~white_space:(if bottom_expanded then `normal else `nowrap)
+                  ~text_overflow:`ellipsis ~overflow:`hidden []] else [])) in
           if is_tag then Ui_components.tag_link_appearance chip else chip
         else if tag then
           let uuid_attrs = match D.ref_uuid r with
@@ -1523,8 +1521,8 @@ let extends_view ?(table_view = false) ~jump_target ctx row : t =
                (if not table_view && chips=[] then [text ~value:(I18n.t "ui/empty") []] else [])
            ])
      ; if_ ~test:(Signal.value open_)
-         (popover ~role:`menu ~anchor:`below ~anchor_alignment:`start
-            ~anchor_offset:4.0 ~min_width:220
+         (popover ~role:`menu ~target:(Anchor { side = `below; source = Parent;
+                                align = `start; offset = 4.0; align_offset = 0. }) ~min_width:220
             ~transition:Ui_components.popover_transition
             ~on_dismiss:(fun _ -> Runtime.signal_set open_ false)
             [ reactive
@@ -1639,7 +1637,7 @@ let closed_value_view ?(jump_target = true) ?(icon_size = 18.) ~positioned ~tabl
      [ Ui_components.with_props
          [ Ui_components.Prop.hover_background "var(--lx-gray-03)"
          ; Ui_components.Prop.hover_foreground "inherit" ]
-         (Ui_components.button ~variant:`ghost ~label
+         (Ui_components.button ~text:"" ~variant:`ghost ~label
             ~accessibility_identifier:anchor_id
             ?height:(if many then None else Some 24) ~min_height:24
             ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
@@ -1729,7 +1727,7 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
       Ui_components.with_props
         [ Ui_components.Prop.font_size "1rem"; Ui_components.Prop.line_height "1.5rem"
         ; Ui_components.Prop.font_weight 400; Ui_components.Prop.hover_background "transparent" ]
-        (Ui_components.button ~variant:`ghost ~grow:1.
+        (Ui_components.button ~text:"" ~variant:`ghost ~grow:1.
            ~accessibility_identifier:(anchor_id ^ "-picker")
            ~label:(I18n.t "property/select-property-placeholder")
            ~height:(if bottom_pill then 20 else 24) ~min_height:(if bottom_pill then 20 else 24)
@@ -1740,7 +1738,7 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
       Ui_components.with_props
         [ Ui_components.Prop.cursor `pointer
         ; Ui_components.Prop.hover_background "transparent" ]
-        (Ui_components.button ~variant:`ghost ~grow:1.0
+        (Ui_components.button ~text:"" ~variant:`ghost ~grow:1.0
            ~accessibility_identifier:(anchor_id ^ "-picker")
            ~label:(I18n.t "property/select-property-placeholder")
            ~height:table_value_height ~min_height:table_value_height ~min_width:0
@@ -1748,7 +1746,7 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
            ~style_class:"empty-text-btn"
            ~on_press:(fun _ -> activate ()) [])
     else
-      Ui_components.button ~variant:`ghost
+      Ui_components.button ~text:"" ~variant:`ghost
         ~accessibility_identifier:anchor_id
         ?icon:(if many then Some (`app "plus") else None)
         ~label:(I18n.t "property/select-property-placeholder")
