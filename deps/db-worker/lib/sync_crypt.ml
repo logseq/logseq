@@ -1347,7 +1347,7 @@ let ensure_graph_aes_key_impl repo (graph_id : string option) :
                                                       (fun () -> aes_key)
                                                       (!set_item_fn
                                                          (graph_encrypted_aes_key_idb_key gid)
-                                                         encrypted)))))
+                                                         encrypted))))))
                               (fun aes_key ->
                                 bind
                                   (match graph_id, encrypted_aes_key, local with
