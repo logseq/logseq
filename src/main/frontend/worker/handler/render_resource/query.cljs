@@ -122,8 +122,12 @@
 (defn- quoted-query-text
   [query-string]
   (when (re-matches #"^\".*\"$" query-string)
-    (let [value (common-util/safe-read-string {:log-error? false}
-                                              query-string)]
+    (let [value (or (common-util/safe-read-string {:log-error? false}
+                                                  query-string)
+                    ;; Plain text quoted by the query builder can hold
+                    ;; escapes the EDN reader rejects, e.g. `\c`. Search the
+                    ;; text between the quotes as typed.
+                    (subs query-string 1 (dec (count query-string))))]
       (when (and (string? value) (not (string/blank? value)))
         (string/trim value)))))
 
