@@ -1056,20 +1056,30 @@ let macro_video_el name arguments hint =
               (provider_iframe src)
         | None -> D.txt ""
       else
-        D.el ~tag:"span" ~style_class:"warning"
+        D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
           ~attrs:
-            [ ("title", U.t "block/invalid-url")
-            ; ("style", "margin-right:4px") ]
-          ~text:(macro_to_text "video" arguments)
-          []
+            [ ("data-video-macro-name", name)
+            ; ("data-video-macro-id", url_or_id) ]
+          [ D.el ~tag:"span" ~style_class:"warning"
+              ~attrs:
+                [ ("title", U.t "block/invalid-url")
+                ; ("style", "margin-right:4px") ]
+              ~text:(macro_to_text "video" arguments)
+              [] ]
   | [] ->
       if hint = None then
-        D.el ~tag:"span" ~style_class:"warning"
+        (* cljs video-inline-segments-cp still wraps empty {{video}} in
+           .video-embed-block so it sits on its own line under host text *)
+        D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
           ~attrs:
-            [ ("title", U.t "block/empty-url")
-            ; ("style", "margin-right:4px") ]
-          ~text:(macro_to_text "video" arguments)
-          []
+            [ ("data-video-macro-name", name)
+            ; ("data-video-macro-id", "") ]
+          [ D.el ~tag:"span" ~style_class:"warning"
+              ~attrs:
+                [ ("title", U.t "block/empty-url")
+                ; ("style", "margin-right:4px") ]
+              ~text:(macro_to_text "video" arguments)
+              [] ]
       else D.txt ""
 
 (* ---------- tweet embed (cljs ui/tweet-embed) ---------- *)
@@ -1733,6 +1743,16 @@ and macro_el ~refs ~self body =
           | Some seconds -> timestamp_el seconds
           | None -> D.txt "")
       | [] -> D.txt "")
+  | "function" ->
+      (* cljs macro-function-fallback-cp: (format "{{function %s}}"
+         (first arguments)) — nil/empty first arg becomes "null" *)
+      let arg =
+        match arguments with
+        | x :: _ when String.trim x <> "" -> x
+        | _ -> "null"
+      in
+      D.el ~tag:"span" ~style_class:"warning"
+        ~text:(Printf.sprintf "{{function %s}}" arg) []
   | "tweet" | "twitter" -> (
       match arguments with
       | arg :: _ -> (
