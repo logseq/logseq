@@ -54,8 +54,19 @@ let body (_ms : Model.t Signal.signal) : t =
               blocks_sig ]
       ; row ~key:"qa-btns" ~style_class:"ls-qa-btns"
           ~main:`end_
-          [ Ui_components.button ~key:"qa-add" ~variant:`primary
+          [ (* cljs shui/shortcut on the Add-to-today button — mod+e on
+               macOS, mod+alt+e elsewhere (keymap non-mac override) *)
+            Ui_components.button ~key:"qa-add" ~variant:`primary
               ~text:(U.t "editor.quick-add/add-to-today")
+              ~shortcut_hint:
+                (match Keymap_data.effective_shortcut "editor/quick-add" with
+                 | Keymap_data.Binds (b :: _) ->
+                     String.split_on_char '+' b
+                     |> List.map String.trim
+                     |> List.filter (( <> ) "")
+                     |> List.map Commands_data.decorate_binding
+                     |> String.concat " "
+                 | _ -> "")
               ~on_press:(fun _ ->
                 Editor_actions.quick_add_blocks_to_today ()) [] ]
       ]
