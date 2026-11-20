@@ -43,6 +43,7 @@ let parse_path (p : string) : Model.route =
           | "import" -> Model.Import
           | "settings" -> Model.Settings
           | "plugins" -> Model.Plugins
+          | "login" -> Model.Login
           | "bug-report-tool" when rest="clipboard-data-inspector" -> Model.Bug_report_clipboard
           | _ -> Model.Not_found p)
       | None -> (
@@ -53,6 +54,7 @@ let parse_path (p : string) : Model.route =
           | "import" -> Model.Import
           | "settings" -> Model.Settings
           | "plugins" -> Model.Plugins
+          | "login" -> Model.Login
           | "bug-report" -> Model.Bug_report
           | "page" | "block" | "file" -> Model.Not_found p
           | _ -> Model.Not_found p))
@@ -346,7 +348,7 @@ let reload_current_view_owned origin =
           { failure_message = "Use the page refresh path"; failure_cause = None })
     | Model.All_pages | Model.All_graphs | Model.Import
     | Model.Bug_report | Model.Bug_report_clipboard
-    | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins ->
+    | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins | Model.Login ->
         Js.Promise.resolve (Runtime.Reload_unchanged origin)
 
 let () = Runtime.reload_current_view_owned := reload_current_view_owned
@@ -773,7 +775,7 @@ let load_route (route : Model.route) =
        Runtime.journals_load_more := (fun () -> Js.Promise.resolve ())
    | Model.All_pages | Model.All_graphs | Model.Import
    | Model.Bug_report | Model.Bug_report_clipboard
-   | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins ->
+   | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins | Model.Login ->
        Runtime.reload_current_view := (fun () -> Js.Promise.resolve ());
        Runtime.journals_load_more := (fun () -> Js.Promise.resolve ()));
   match route with
@@ -803,7 +805,7 @@ let load_route (route : Model.route) =
       ignore (load_page_ref route (Wire.String "Library"))
   | Model.All_pages | Model.All_graphs | Model.Import
    | Model.Bug_report | Model.Bug_report_clipboard
-  | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins ->
+  | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins | Model.Login ->
       ()
 
 let rec resolve () =

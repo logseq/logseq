@@ -1632,6 +1632,11 @@ let region (ms : Model.t Signal.signal) : t =
           (* cljs plugins/plugins-page — reuse dialog body as full page *)
           column ~key:"plugins-route" ~grow:1. ~padding:16
             [ Plugins_view.body ms ]
+      | Model.Ready, Model.Login ->
+          (* cljs login/page wraps page-impl in pt-10 *)
+          column ~key:"login-route" ~grow:1. ~padding_top:40
+            ~main:`center ~cross:`center
+            [ Login_view.body ms ]
       | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, Model.Bug_report -> Bug_report.view ()

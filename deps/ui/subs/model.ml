@@ -13,6 +13,7 @@ type route =
   | Bug_report_clipboard
   | Settings
   | Plugins (* cljs /plugins — plugins marketplace page *)
+  | Login (* cljs /login — user login page *)
   | File of string (* cljs /file/:path — raw file editor (config.edn etc.) *)
   | Not_found of string
 

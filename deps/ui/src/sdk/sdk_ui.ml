@@ -212,6 +212,8 @@ let get_current_route _a _b _c _d =
       resolved (detail_obj [ ("to", Js.Json.string "settings") ])
   | Some Model.Plugins ->
       resolved (detail_obj [ ("to", Js.Json.string "plugins") ])
+  | Some Model.Login ->
+      resolved (detail_obj [ ("to", Js.Json.string "login") ])
   | Some (Model.Block_zoom uuid) ->
       resolved
         (detail_obj
