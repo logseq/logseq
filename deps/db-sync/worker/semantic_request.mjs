@@ -1,4 +1,4 @@
-const MAX_ASSET_SIZE = 100 * 1024 * 1024;
+const MAX_ASSET_SIZE = 200 * 1024 * 1024;
 
 function decodedBase64Size(value) {
   if (typeof value !== "string") throw new Error("base64 asset body must be a string");
@@ -41,10 +41,10 @@ export function semanticRequestUrl(options, baseUrl) {
     const encryptedBody = /^\["~b[A-Za-z0-9+/]{16}","~b/.test(header);
     if (encryptedTitle && encryptedBody) {
       if (size > 27 + 4 * Math.ceil((MAX_ASSET_SIZE + 16) / 3)) {
-        throw new Error("encrypted asset exceeds the 100MB plaintext limit");
+        throw new Error("encrypted asset exceeds the 200 MiB plaintext limit");
       }
     } else {
-      if (size > MAX_ASSET_SIZE) throw new Error("decoded asset exceeds the 100MB limit");
+      if (size > MAX_ASSET_SIZE) throw new Error("decoded asset exceeds the 200 MiB limit");
       url.searchParams.set("size", String(size));
     }
   }

@@ -16,8 +16,6 @@
    [logseq.db :as ldb]
    [promesa.core :as p]))
 
-(def max-asset-size (* 100 1024 1024))
-
 (defonce *repo->missing-asset-upload-files
   (atom {}))
 
@@ -243,7 +241,7 @@
                              :asset-type asset-type}
                             current-client-f broadcast-rtc-state!-f)
 
-            (> size max-asset-size)
+            (> size common-config/max-asset-size)
             (do
               (log/info :db-sync/asset-too-large {:repo repo
                                                   :asset-uuid asset-uuid

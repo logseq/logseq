@@ -26,7 +26,7 @@
  :account/refresh-token-warning "トークンリフレッシュ：異常ステータス"
  :account/reset-password "パスワードをリセット"
  :account/sign-up "サインアップ"
- :account/sync-assets-limit "1ファイルあたり最大100MBのアセットを同期"
+ :account/sync-assets-limit "1ファイルあたり最大200MBのアセットを同期"
  :account/synced-status "同期済み"
  :account/unlimited-unsynced-graphs "未同期グラフは無制限"
  :account/upcoming-cloud-features "Logseq Publishを含む今後のクラウドベース機能"
@@ -813,7 +813,7 @@
  :icon/tab-icons "アイコン"
 
  :import/all-tags "すべてのタグをインポート"
- :import/asset-too-large-warning "アセット {1} のコピーは、100 MB の上限を超えているためスキップされました。"
+ :import/asset-too-large-warning "アセット {1} のコピーは、200 MB の上限を超えているためスキップされました。"
  :import/assets-import-partial "{1}/{2}個のアセットをインポートしました。詳細はコンソールを確認してください。"
  :import/assets-imported "{1}個のアセットをインポートしました。"
  :import/assets-skipped "{1}個のアセットをスキップしました。詳細はコンソールを確認してください。"

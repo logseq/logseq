@@ -100,7 +100,7 @@ export function chatGptToolDescriptors() {
     {
       name: "upload_asset",
       title: "Upload Logseq asset",
-      description: "Upload the original ChatGPT attachment, unchanged and without base64 re-encoding, to a Logseq DB graph and create its Asset block. Optionally append it to a page. The file must not exceed 100MB; its original name is preserved when available. Only plain graphs are supported. Encrypted graphs require client-encrypted file bytes through the REST API.",
+      description: "Upload the original ChatGPT attachment, unchanged and without base64 re-encoding, to a Logseq DB graph and create its Asset block. Optionally append it to a page. The file must not exceed 200 MiB; its original name is preserved when available. Only plain graphs are supported. Encrypted graphs require client-encrypted file bytes through the REST API.",
       inputSchema: {
         type: "object",
         properties: {

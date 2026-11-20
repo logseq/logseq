@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Atualização do token: status excepcional"
  :account/reset-password "Redefinir palavra-passe"
  :account/sign-up "Registar"
- :account/sync-assets-limit "Sincronizar ficheiros até 100MB por ficheiro"
+ :account/sync-assets-limit "Sincronizar ficheiros até 200MB por ficheiro"
  :account/synced-status "Sincronizado"
  :account/unlimited-unsynced-graphs "Grafos não sincronizados ilimitados"
  :account/upcoming-cloud-features "Próximas funcionalidades na nuvem, incluindo o Logseq Publish"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Ícones"
 
  :import/all-tags "Importar todas as tags"
- :import/asset-too-large-warning "A cópia do recurso {1} foi ignorada porque excede o limite de 100 MB."
+ :import/asset-too-large-warning "A cópia do recurso {1} foi ignorada porque excede o limite de 200 MB."
  :import/assets-import-partial "{1}/{2} recursos importados. Detalhes no console."
  :import/assets-imported "{1} recursos importados."
  :import/assets-skipped "{1} recursos ignorados. Detalhes no console."

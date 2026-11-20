@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Aggiornamento token: stato eccezionale"
  :account/reset-password "Reimposta password"
  :account/sign-up "Registrati"
- :account/sync-assets-limit "Sincronizza risorse fino a 100MB per file"
+ :account/sync-assets-limit "Sincronizza risorse fino a 200MB per file"
  :account/synced-status "Sincronizzato"
  :account/unlimited-unsynced-graphs "Grafi non sincronizzati illimitati"
  :account/upcoming-cloud-features "Funzionalità cloud in arrivo, incluso Logseq Publish"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Icone"
 
  :import/all-tags "Importa tutti i tag"
- :import/asset-too-large-warning "La copia dell'asset {1} è stata saltata perché supera il limite di 100 MB."
+ :import/asset-too-large-warning "La copia dell'asset {1} è stata saltata perché supera il limite di 200 MB."
  :import/assets-import-partial "{1}/{2} risorse importate. Dettagli nella console."
  :import/assets-imported "{1} risorse importate."
  :import/assets-skipped "{1} risorse saltate. Dettagli nella console."

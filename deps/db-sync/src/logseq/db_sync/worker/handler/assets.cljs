@@ -1,13 +1,21 @@
 (ns logseq.db-sync.worker.handler.assets
   (:require [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [logseq.common.config :as common-config]
             [logseq.db-sync.common :as common :refer [cors-headers]]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.worker.http :as http]
             [promesa.core :as p]))
 
-(def max-asset-size (* 100 1024 1024))
-(def max-encrypted-asset-size (* 200 1024 1024))
+(def max-asset-size common-config/max-asset-size)
+
+(defn- encrypted-asset-size [size]
+  ;; Transit framing and the base64-encoded ciphertext with its AES-GCM tag.
+  (+ 27 (* 4 (js/Math.ceil (/ (+ size 16) 3)))))
+
+(defn- asset-put-options [content-type checksum asset-type]
+  #js {:httpMetadata #js {:contentType (or content-type "application/octet-stream")}
+       :customMetadata #js {:checksum checksum :type asset-type}})
 
 (def ^:private asset-type->content-type
   {"png" "image/png"
@@ -170,11 +178,10 @@
           {encrypted-body :body encrypted-promise :pipe-promise}
           (when e2ee? (encrypted-asset-body decoded-body size))
           source-body (or encrypted-body decoded-body)
-          upload-size (if e2ee? (+ 27 (* 4 (js/Math.ceil (/ (+ size 16) 3)))) size)
+          upload-size (if e2ee? (encrypted-asset-size size) size)
           {stream-body :body fixed-length-promise :pipe-promise} (fixed-length-body source-body upload-size)
           put-promise (.put bucket key (or stream-body source-body)
-                            #js {:httpMetadata #js {:contentType (or content-type "application/octet-stream")}
-                                 :customMetadata #js {:checksum checksum :type asset-type}})]
+                            (asset-put-options content-type checksum asset-type))]
       (-> (js/Promise.allSettled
            (to-array (cond-> [put-promise]
                        decode-promise (conj decode-promise)
@@ -188,6 +195,48 @@
                      (p/let [_ (when e2ee? (.delete bucket key))]
                        (if (contains? #{"invalid base64 asset body" "invalid encrypted asset body"} (.-message error))
                          (http/error-response (.-message error) 400)
+                         (throw error)))))))))
+
+(defn- <put-sync-asset! [^js request ^js bucket key asset-type size-limit]
+  (let [headers (.-headers request)
+        content-length (.get headers "content-length")
+        size (when (and content-length (re-matches #"\d+" content-length))
+               (js/Number content-length))
+        body (.-body request)]
+    (cond
+      (and content-length (nil? size))
+      (http/error-response "invalid asset size" 400)
+
+      (and size (> size size-limit))
+      (http/error-response "asset too large" 413)
+
+      ;; R2 requires a known byte length for streaming PUTs.
+      (and body (nil? size) (exists? js/FixedLengthStream))
+      (http/error-response "asset upload requires Content-Length" 411)
+
+      :else
+      (let [oversize (js/Error. "asset too large")
+            received (volatile! 0)
+            {fixed-body :body pipe-promise :pipe-promise} (fixed-length-body body size)
+            upload-body (cond
+                          fixed-body fixed-body
+                          body (.pipeThrough body
+                                             (js/TransformStream.
+                                              #js {:transform
+                                                   (fn [chunk controller]
+                                                     (when (> (vswap! received + (.-byteLength chunk)) size-limit)
+                                                       (throw oversize))
+                                                     (.enqueue controller chunk))}))
+                          :else (js/Uint8Array. 0))
+            options (asset-put-options (.get headers "content-type")
+                                       (.get headers "x-amz-meta-checksum")
+                                       asset-type)
+            store-promise (.put bucket key upload-body options)]
+        (-> (js/Promise.all (if pipe-promise #js [store-promise pipe-promise] #js [store-promise]))
+            (p/then (fn [_] (http/json-response :assets/put {:ok true} 200)))
+            (p/catch (fn [error]
+                       (if (identical? error oversize)
+                         (http/error-response "asset too large" 413)
                          (throw error)))))))))
 
 (defn- <body-with-known-length
@@ -288,19 +337,9 @@
               (handle-get-asset bucket key asset-type)
 
               "PUT"
-              (p/let [e2ee? (index/<graph-e2ee? (.-DB env) graph-id)
-                      buf (.arrayBuffer request)
-                      size-limit (if e2ee? max-encrypted-asset-size max-asset-size)]
-                (if (> (.-byteLength buf) size-limit)
-                  (http/error-response "asset too large" 413)
-                  (p/let [_ (.put bucket
-                                  key
-                                  buf
-                                  #js {:httpMetadata #js {:contentType (or (.get (.-headers request) "content-type")
-                                                                           "application/octet-stream")}
-                                       :customMetadata #js {:checksum (.get (.-headers request) "x-amz-meta-checksum")
-                                                            :type asset-type}})]
-                    (http/json-response :assets/put {:ok true} 200))))
+              (p/let [e2ee? (index/<graph-e2ee? (.-DB env) graph-id)]
+                (<put-sync-asset! request bucket key asset-type
+                                  (if e2ee? (encrypted-asset-size max-asset-size) max-asset-size)))
 
               "DELETE"
               (.then (.delete bucket key)

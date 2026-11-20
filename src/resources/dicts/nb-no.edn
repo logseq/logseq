@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Token-oppdatering: uvanlig status"
  :account/reset-password "Tilbakestill passord"
  :account/sign-up "Registrer deg"
- :account/sync-assets-limit "Synkroniser vedlegg opptil 100 MB per fil"
+ :account/sync-assets-limit "Synkroniser vedlegg opptil 200 MB per fil"
  :account/synced-status "Synkronisert"
  :account/unlimited-unsynced-graphs "Ubegrenset antall usynkroniserte grafer"
  :account/upcoming-cloud-features "Kommende skybaserte funksjoner, inkludert Logseq Publish"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Ikoner"
 
  :import/all-tags "Importer alle tagger"
- :import/asset-too-large-warning "Kopiering av ressursen {1} ble hoppet over fordi den overstiger grensen på 100 MB."
+ :import/asset-too-large-warning "Kopiering av ressursen {1} ble hoppet over fordi den overstiger grensen på 200 MB."
  :import/assets-import-partial "{1}/{2} filer importert. Detaljer i konsollen."
  :import/assets-imported "{1} filer importert."
  :import/assets-skipped "{1} filer hoppet over. Detaljer i konsollen."

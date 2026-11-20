@@ -13,9 +13,8 @@
             [promesa.core :as p]))
 
 (defn exceed-limit-size?
-  "Asset size no more than 100M"
   [^js file]
-  (> (.-size file) (* 100 1024 1024)))
+  (> (.-size file) common-config/max-asset-size))
 
 (defn alias-enabled?
   []

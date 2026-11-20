@@ -71,7 +71,7 @@
                 (notification/show! [:div (t :asset/size-too-large)]
                                     :warning
                                     false)
-                (throw (ex-info "Asset size shouldn't be larger than 100M" {:file-name file-name})))]
+                (throw (ex-info "Asset exceeds the size limit" {:file-name file-name})))]
         (p/do!
          (when file
            (let [file-path (str block-id "." ext)]

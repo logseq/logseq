@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-const MAX_ASSET_SIZE = 100 * 1024 * 1024;
+const MAX_ASSET_SIZE = 200 * 1024 * 1024;
 const MIME_TYPE_EXTENSIONS = new Map([
   ["image/png", "png"],
   ["image/jpeg", "jpg"],
@@ -19,7 +19,7 @@ function requiredFileLength(response) {
   }
   const size = Number(value);
   if (!Number.isSafeInteger(size) || size > MAX_ASSET_SIZE) {
-    throw new Error("ChatGPT file is larger than 100MB");
+    throw new Error("ChatGPT file is larger than 200 MiB");
   }
   return size;
 }
