@@ -214,9 +214,10 @@ let item_title (it : Sidebar_state.item) =
         @ [ text ~text_overflow:`ellipsis ~value:it.title []
           ])
   | [], "contents" ->
-      (* cljs: (icon "list-details") + "Contents" *)
+      (* cljs: (icon "list-details") + (t :page/contents) — not the
+         English page name, which stays "Contents" in the DB. *)
       row ~key:"pt-contents" ~cross:`center ~gap:8
-        [ icon_ "list-details"; text ~value:it.title [] ]
+        [ icon_ "list-details"; text ~value:(t "page/contents") [] ]
   | [], "help" ->
       row ~key:"pt-help" ~cross:`center ~gap:8
         [ icon_ "help"; text ~value:it.title [] ]
@@ -234,6 +235,10 @@ let item_title (it : Sidebar_state.item) =
       (* cljs :search item header: ti-search icon + the query *)
       row ~key:"pt-search" ~cross:`center ~gap:8
         [ icon_ "search"; text ~value:it.title [] ]
+  | [], "block-ref" ->
+      (* cljs :block-ref header is (t :reference/blocks), not the
+         referenced block's title. *)
+      text ~key:"pt-block-ref" ~value:(t "reference/blocks") []
   | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
