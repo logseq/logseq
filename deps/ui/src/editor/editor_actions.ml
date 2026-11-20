@@ -3168,6 +3168,7 @@ module History_ui = struct
       | Model.Bug_report_clipboard -> "bug-report-tool", []
       | Model.Settings -> "settings", []
       | Model.Plugins -> "plugins", []
+      | Model.Login -> "login", []
       | Model.File path -> "file", ["path", Wire.String path]
       | Model.Not_found path -> "not-found", ["path", Wire.String path] in
     map (("route-data", map ["to", Wire.Keyword destination;
