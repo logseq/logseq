@@ -161,6 +161,9 @@ type page =
   ; page_db_collapsable : bool
     (* cljs db-collapsable? on the page entity — drives the title-row
        fold arrow + data-db-collapsable *)
+  ; page_recycled : bool
+    (* cljs ldb/recycled? — soft-deleted pages stay on route and show
+       :page/moved-to-recycle instead of the outliner *)
   }
 
 (* Keep explicit icon ownership separate from inherited presentation. *)
