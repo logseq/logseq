@@ -37,5 +37,9 @@ Shared dictionaries: `resources/dicts/*.edn` (25 locales). LUI loads EN embedded
 | language-switch-rerender | settings | `set-preferred-language!` + re-render-root | `I18n.load` + `doc_reload` (full reload) | Switch zh-CN / ja / de; reload | high | fixed (reload parity; verified) |
 | language-persist | settings | `localStorage preferred-language` | Same storage key/EDN quote | Switch language; reload | high | fixed (already matched) |
 | missing-key-lint | CI | `bb lang:validate-translations` (opam AST) | No opam-free LUI key check | CI | med | fixed `04149588b0` (`scripts/test-lui-i18n-keys.mjs`) |
+| bare-alias-key-lint | CI | — | Bare `t`/`tf`/`t1` aliases (handbook) escaped key scan | CI | med | fixed `b7f620d24a` |
+| builtin-display-title | properties / views | `built-in-display-title` via `built-in-ident->i18n-key` | Raw `block/title` for built-in props/choices/columns | Property UI, table headers, status chips | high | fixed (OCaml port of master's mapper) |
+| icon-a11y-label | properties | `:property.built-in/icon` | Hardcoded `~label:"Icon"` | Icon property control | low | fixed |
+| hardcoded-prop-lint | CI | CLJS `.i18n-lint.toml` hardcoded scan | No LUI prop-literal check | CI | med | fixed (`scripts/test-lui-i18n-keys.mjs` + allowlist) |
 | worker-validate-english | db-worker | Hardcoded English validate notifications | Same hardcoded English in OCaml worker | (Dev) Validate | low | needs-decision — matches master worker hardcoding; dict keys exist (`graph.validation/valid`) but neither side uses them for the broadcast body |
-| a11y-english-labels | various | Mixed a11y identifiers | A few English `~label` / DnD a11y sentences remain | Screen reader / DnD | low | needs-decision — not shipped visible chrome; no matching master keys for most |
+| a11y-english-labels | various | Mixed a11y identifiers | A few English `~label` / DnD a11y sentences remain (allowlisted) | Screen reader / DnD | low | needs-decision — not shipped visible chrome; no matching master keys for most |
