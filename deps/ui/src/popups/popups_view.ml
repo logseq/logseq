@@ -1192,6 +1192,7 @@ let pv_popover (st : S.t) (p : S.pv) : t =
             ~gap:32
             ~margin_bottom:64
             [ box ~key:"pvt"
+                ~padding_vertical:(if block_preview then 0 else 2)
                 ~margin_top:(if block_preview then 8 else 0)
                 ~margin_bottom:(if block_preview then 8 else 0)
                 ~style_class:"ls-page-title content title"

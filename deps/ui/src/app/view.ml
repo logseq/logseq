@@ -26,7 +26,7 @@ let view _context model_source _send : t =
             "var(--lx-gray-12, var(--ls-primary-text-color, \
              hsl(var(--foreground))))";
           Ui_components.Prop.background
-            "var(--ls-primary-background-color, hsl(var(--background)))";
+            "var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))))";
           Ui_components.Prop.font_size "var(--ls-page-text-size)";
           Ui_components.Prop.font_weight Ui_theme.typography.weight_regular;
           Ui_components.Prop.line_height "var(--lx-line-height)";

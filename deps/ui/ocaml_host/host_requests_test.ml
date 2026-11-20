@@ -7766,8 +7766,8 @@ let () =
                     let background =
                       Option.get
                         (Theme_vars.color_of
-                           "var(--ls-primary-background-color, \
-                            hsl(var(--background)))")
+                           "var(--lx-gray-01, var(--ls-primary-background-color, \
+                            hsl(var(--background))))")
                     in
                     expect
                       ("Shared body background must resolve in every palette: "

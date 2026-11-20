@@ -1135,7 +1135,9 @@ let preview_block_spacing ~registry ~profile =
           (prop sections "gap" 32 && prop sections "margin-bottom" 64);
         check "Block preview breadcrumbs retain both my-2 margins without changing page titles"
           (prop title "margin-top" (if block_preview then 8 else 0)
-           && prop title "margin-bottom" (if block_preview then 8 else 0))))
+           && prop title "margin-bottom" (if block_preview then 8 else 0));
+        check "Page preview titles retain Master's ls-block vertical padding, unlike breadcrumbs"
+          (prop title "padding-vertical" (if block_preview then 0 else 2))))
       [Some "preview-spacing-root",true;page.Model.page_uuid,false])
 
 let run_views ~registry ~profile ~finish =

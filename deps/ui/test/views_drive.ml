@@ -983,6 +983,11 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
        && List.exists (fun n -> Shared_scenarios_views.has_tok n "title-text"
          && Hashtbl.find_opt n.M.props "grow"=Some (Lui_protocol.FloatValue 1.)) (M.all_nodes mounted.S.tree)
        && not (List.exists (fun n -> Shared_scenarios_views.has_tok n "ls-foldable") (M.all_nodes mounted.S.tree)));
+    check "Configured journal queries retain the measured top inset and full-width sections"
+      (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "today-queries"
+         && Hashtbl.find_opt n.M.props "margin-top"=Some (Lui_protocol.IntValue 4)) (M.all_nodes mounted.S.tree)
+       && List.for_all (fun n -> not (Shared_scenarios_views.has_tok n "custom-query")
+         || not (Hashtbl.mem n.M.props "margin-left")) (M.all_nodes mounted.S.tree));
     Hashtbl.replace query_rows "" [];
     subscription.Subs_state.run [];
     h.after 30 (fun () ->

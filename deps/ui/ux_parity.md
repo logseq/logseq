@@ -730,6 +730,57 @@ in a rebuilt application; emitted props are not browser acceptance, and the
 remaining pixel difference has not been measured after rebuilding. No web
 bundle build, `static/` writes or `:3010` access.
 
+## Table88: preview title inset, query offsets and canvas background
+
+Table88 accepts Hiccup titles, configured-query functionality and the compact
+full regression sweep on `703d4329`. Evidence is under
+`/Users/devin/table88/evidence/`.
+
+The exact preview retake isolates the remaining page-preview difference:
+Master's title is a 28px `.ls-block` with 2px top/bottom padding, whereas LUI's
+flattened title was 24px. `components/block.css` declares this as `py-0.5`.
+The page title now retains that padding, accounting for the remaining 4px
+without setting a fixed popup height. Block breadcrumbs do not acquire the
+padding, preserving the previously accepted block layout.
+
+The configured journal-query group receives the measured 4px top offset, so
+its three 24px headings are expected at 310/334/358 rather than 306/330/354 in
+the supplied fixture. Removing the outer custom-query 2px left margin restores
+the measured section origin and full width (463/940 rather than 465/938).
+The top adjustment is evidence-based; no claim is made that its original
+upstream ancestor-box cause has been traced. Query execution, collapse state
+and ordinary query layouts are unchanged.
+
+Master `common.css:body` chooses `--lx-gray-01` before the classic primary
+background. LUI's root background skipped it. The root now uses Master's exact
+variable chain, not a hard-coded light RGB. With light Logseq, the accent token
+resolves through `--rx-gray-01` (99% gray) to RGB(252,252,252), rather than the
+classic white. The native body-background test retains its all-palette paint
+checks and now expects the same canvas token; its previous primary-background
+expectation correctly failed in light Logseq after this intentional change.
+
+The optional 318px versus 319.625px block-preview difference is not patched.
+The retake shows identical 56px result trees and 28px add rows, with the 1.625px
+offset already present before the first result row. Master's breadcrumb uses
+nested inline-flex labels and inherited line height; no explicit source
+dimension of 1.625px was found. Its intrinsic browser baseline contribution is
+not verified. A fixture-specific fractional spacer would not be a source port.
+
+Mounted tests cover preview padding and query geometry props; the shell test
+requires the canvas token. UI aggregate: 6632 checks, zero failures. Native
+experimental tests and build pass. The worker aggregate retains Table87's same
+platform cases 1, 7 and 8: three failures out of 994, including `Native secrets
+require the OS keychain host`.
+
+Isolated Chrome rendering of the actual before/after root token and repository
+palette CSS verifies light RGB(255,255,255) to RGB(252,252,252); dark Logseq stays
+RGB(0,43,54). Screenshot:
+`/Users/devin/attachments/table88-canvas-light-isolated.png`.
+This is token verification, not full-application visual acceptance. New journal
+offsets and page-preview geometry remain rebuilt-browser unverified. No web
+bundle build, `static/` writes or `:3010` access. Logs:
+`/Users/devin/attachments/table88-*`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

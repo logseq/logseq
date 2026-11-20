@@ -976,7 +976,7 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
 let today_queries (page : Model.page) : t =
  fun ctx parent ->
   (if not (is_today_journal page) then Logseq_el.nothing else
-  column ~accessibility_identifier:"today-queries" ~gap:0
+  column ~accessibility_identifier:"today-queries" ~gap:0 ~margin_top:4
     [ reactive ~equal:(fun a b -> a.Model.graph_config=b.Model.graph_config)
         (fun model ->
           let queries = match Wire.get model.Model.graph_config "default-queries" with

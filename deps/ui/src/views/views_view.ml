@@ -728,7 +728,7 @@ let configured_query ~(page : Model.page) query : t =
   ignore (Js.Promise.(resolve () |> then_ (fun () -> refresh (); resolve ())));
   (if_ ~test:(reactive (fun s -> s.V.query_error<>None || s.V.query_rows<>[]
           || s.V.query_scalar_rows<>[]) (sig_of inst))
-        (column ~style_class:"custom-query" ~min_width:0 ~margin_left:2 ~gap:0
+        (column ~style_class:"custom-query" ~min_width:0 ~gap:0
           [ Ui_parts.pressable
               ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ())
               (row ~style_class:"custom-query-title" ~cross:`center ~gap:4 ~min_height:24 ~margin_left:(-18)

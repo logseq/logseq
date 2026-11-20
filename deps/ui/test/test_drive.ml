@@ -232,6 +232,7 @@ let test_sidebar_content_bounds () =
         [1440.,245;600.,443;320.,236;0.,0;1.,0;32.,23;63.,46;64.,46;80.,58;1280.,245])
 
 let test_shell () =
+  has "prop:background=\"var(--lx-gray-01, var(--ls-primary-background-color, hsl(var(--background))))\"";
   has "prop:accessibility-identifier=\"head\"";
   has "prop:accessibility-identifier=\"search-button\"";
   has "prop:accessibility-identifier=\"left-menu\"";
