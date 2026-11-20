@@ -641,7 +641,7 @@ let value_button ~text ~on_press : t =
     ~on_press [Lui_elements.text ~value:text ~white_space:"pre-wrap" []]
 
 (* text/number cell: ghost button <-> autofocused text_field *)
-let scalar_edit_cell ?(jump_target = true) ctx row : t =
+let scalar_edit_cell ?(jump_target = true) ?(bottom_pill = false) ctx row : t =
  fun context parent ->
   let sched = context.Lui_ui.ui_scheduler in
   let ident = D.row_ident row |> Option.value ~default:"" in
@@ -678,11 +678,15 @@ let scalar_edit_cell ?(jump_target = true) ctx row : t =
   if Runtime.signal_get editing then (
     add_active_edit ctx row;
     close_editor := commit);
+  let display = value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ()) in
+  let display = if bottom_pill then
+      Ui_components.with_props [Ui_components.Prop.height 20; Ui_components.Prop.padding 0] display
+    else display in
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
          (Jump_state.target ~enabled:jump_target ~key:("value-" ^ ctx.owner_key ^ "-" ^ ident)
             ~owner:ctx.jump_owner ~activate:(fun () -> open_editor ~steal:true ())
-            (value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ())))
+            display)
      ; if_ ~test:(Signal.value editing)
          (fun edit_context edit_parent ->
           let live = ref true in
@@ -1341,7 +1345,8 @@ let many_dates_view ~jump_target ~hover ctx row : t =
       @ [date_view ~jump_target ~hover ctx (D.row_with_value row W.Nil)])
 
 (* chips of the current refs — click navigates to the page *)
-let ref_chips ?(table_view = false) ?(plain = false) row : t list =
+let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
+    ?(bottom_expanded = false) row : t list =
   let value = D.row_value row in
   let tag = table_view && D.row_ident row = Some "block/tags" in
   let chips = List.filter_map
@@ -1359,16 +1364,21 @@ let ref_chips ?(table_view = false) ?(plain = false) row : t list =
           let foreground = if is_tag then Ui_components.tag_link_foreground
             else "var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary)/.8)))" in
           let chip = Ui_components.with_props
-            [ Ui_components.Prop.font_size (if is_tag then "0.875rem" else "1rem")
-            ; Ui_components.Prop.line_height (if is_tag then "1.25rem" else "1.5rem")
+            [ Ui_components.Prop.font_size (if is_tag || bottom_pill then "0.875rem" else "1rem")
+            ; Ui_components.Prop.line_height (if is_tag || bottom_pill then "1.25rem" else "1.5rem")
             ; Ui_components.Prop.font_weight 400
             ; Ui_components.Prop.hover_foreground
                 "var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))))" ]
             (link ~style_class:(if is_tag then "tag" else "page-ref")
-               ~foreground ~text:((if is_tag then "#" else "") ^ title) ~on_press:navigate
+               ~min_width:0
+               ~foreground ?text:(if bottom_pill then None else Some ((if is_tag then "#" else "") ^ title)) ~on_press:navigate
                ~data_attrs:(["tabindex","0";"draggable","true";
                  "data-ref",String.lowercase_ascii title]
-                 @ (match D.ref_uuid r with Some uuid -> ["data-uuid",uuid] | None -> [])) []) in
+                 @ (match D.ref_uuid r with Some uuid -> ["data-uuid",uuid] | None -> []))
+               (if bottom_pill then [text ~value:((if is_tag then "#" else "") ^ title)
+                  ~min_width:0 ~font_size:"0.875rem" ~line_height:"20px"
+                  ~white_space:(if bottom_expanded then "normal" else "nowrap")
+                  ~text_overflow:"ellipsis" ~overflow:"hidden" []] else [])) in
           if is_tag then Ui_components.tag_link_appearance chip else chip
         else if tag then
           let uuid_attrs = match D.ref_uuid r with
@@ -1638,7 +1648,8 @@ let closed_value_view ?(jump_target = true) ?(icon_size = 18.) ~positioned ~tabl
     context parent
 
 (* node/page/class/asset: ref chips + picker button *)
-let node_view ?(jump_target = true) ?(table_view = false) ctx row : t =
+let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
+    ?(bottom_expanded = false) ctx row : t =
  fun context parent ->
   let ident = D.row_ident row |> Option.value ~default:"" in
   let many = D.row_many row in
@@ -1650,7 +1661,7 @@ let node_view ?(jump_target = true) ?(table_view = false) ctx row : t =
       D.getk (D.untag value) "db/ident" <> Some "logseq.class/Page")
       (D.value_elems (D.row_value row))))
     else row in
-  let chips = ref_chips ~table_view:table_many ~plain row in
+  let chips = ref_chips ~table_view:table_many ~plain ~bottom_pill ~bottom_expanded row in
   let table_value_height = if table_tags && chips <> [] then 20 else 24 in
   let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   let activate () =
@@ -1709,7 +1720,8 @@ let node_view ?(jump_target = true) ?(table_view = false) ctx row : t =
         (Ui_components.button ~variant:`ghost ~grow:1.
            ~accessibility_identifier:(anchor_id ^ "-picker")
            ~label:(I18n.t "property/select-property-placeholder")
-           ~height:24 ~min_height:24 ~min_width:0 ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
+           ~height:(if bottom_pill then 20 else 24) ~min_height:(if bottom_pill then 20 else 24)
+           ~min_width:0 ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
            ~on_press:(fun _ -> activate ())
            (if chips=[] then [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []] else []))
     else if table_many then
@@ -1737,10 +1749,16 @@ let node_view ?(jump_target = true) ?(table_view = false) ctx row : t =
   let trigger_row =
     if plain then
       Ui_components.with_props
-        [Ui_components.Prop.font_size "1rem"; Ui_components.Prop.line_height "1.5rem";
+        [Ui_components.Prop.font_size (if bottom_pill then "0.875rem" else "1rem");
+         Ui_components.Prop.line_height (if bottom_pill then "20px" else "1.5rem");
          Ui_components.Prop.font_weight 400]
-        (Lui_elements.row ~grow:1. ~gap:4 ~cross:`center ~min_width:0 ~flex_wrap:`wrap
-           ~accessibility_identifier:anchor_id (chips @ [picker_button]))
+        (Lui_elements.row ~grow:1. ~gap:4 ~cross:`center ~min_width:0
+           ~flex_wrap:(if bottom_pill then `nowrap else `wrap)
+           ~accessibility_identifier:anchor_id
+           ((if bottom_pill && chips <> [] then
+               [Lui_elements.row ~grow:1. ~min_width:0 ~gap:4 ~cross:`center
+                 ~flex_wrap:(if bottom_expanded then `wrap else `nowrap) chips]
+             else chips) @ [picker_button]))
     else if table_many then
       Lui_elements.row ~grow:1.0 ~gap:4 ~cross:`center ~min_width:0
         ~height:table_value_height
@@ -1819,7 +1837,7 @@ let many_number_values_view ~jump_target ctx row : t =
    hover over the whole property-pair so hover-only affordances like
    the date edit pencil match the cljs row-hover rule. *)
 let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
-    ?(bottom_pill = false) ?(positioned_icon_size = 18.) ~(hover : bool Signal.state option)
+    ?(bottom_pill = false) ?(bottom_expanded = false) ?(positioned_icon_size = 18.) ~(hover : bool Signal.state option)
     ctx row : t =
   let row' = D.row_with_effective_value row in
   let ty = D.row_type row' in
@@ -1850,18 +1868,18 @@ let rec view ?(jump_target = true) ?(positioned = false) ?(table_view = false)
     | "checkbox" -> checkbox_view ~jump_target ctx row'
     | "number" ->
         if D.row_many row then many_number_values_view ~jump_target ctx row'
-        else scalar_edit_cell ~jump_target ctx row'
+        else scalar_edit_cell ~jump_target ~bottom_pill ctx row'
     | "date" | "datetime" ->
         date_view ~jump_target ~bottom_pill ~raw_value:(D.row_value row) ~hover ctx row'
     | "url" -> url_view ~jump_target ctx row'
     | "node" | "asset" | "page" | "class" | "property" ->
         if ident = "logseq.property.class/extends" then
           extends_view ~jump_target ~table_view ctx row'
-        else node_view ~jump_target ~table_view ctx row'
+        else node_view ~jump_target ~table_view ~bottom_pill ~bottom_expanded ctx row'
     | _ ->
         let cell = if ty = "default" && not (D.row_many row)
           then text_edit_cell ~jump_target ctx row
-          else scalar_edit_cell ~jump_target ctx row' in
+          else scalar_edit_cell ~jump_target ~bottom_pill ctx row' in
         (* cljs embeds every non-closed scalar value in a
            .property-block-container .ls-block row — control-wrap bullet
            + content; empty values show only .property-panel-bullet *)

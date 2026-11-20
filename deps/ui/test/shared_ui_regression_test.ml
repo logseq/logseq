@@ -1140,7 +1140,78 @@ let preview_block_spacing ~registry ~profile =
           (prop title "padding-vertical" (if block_preview then 0 else 2))))
       [Some "preview-spacing-root",true;page.Model.page_uuid,false])
 
+let bottom_pills_rows () =
+  let row ident title ty value = Wire.Map [
+    Wire.kw "property-id", Wire.kw ident;
+    Wire.kw "property", Wire.Map [Wire.kw "block/title", Wire.String title;
+      Wire.kw "block/uuid", Wire.Uuid (if ty="node" then "00000000-0000-4000-8000-000000000031" else "00000000-0000-4000-8000-000000000032");
+      Wire.kw "logseq.property/type", Wire.kw ty];
+    Wire.kw "value", value] in
+  [row "fixture/bottom-node" "Bottom Node" "node"
+     (Wire.Map [Wire.kw "block/title", Wire.String (String.concat " "
+         (List.init 16 (fun _ -> "Long node property value")));
+       Wire.kw "block/uuid", Wire.Uuid "00000000-0000-4000-8000-000000000033"]);
+   row "fixture/bottom-number" "Bottom Number" "number" (Wire.Int 42)]
+
+let bottom_pills_fixture profile initial_rows =
+  let rows = ref None in
+  let uuid = "00000000-0000-4000-8000-000000000030" in
+  let session = S.mount ~profile ~initial:Model.initial ~reducer:(fun model () -> model)
+    ~view:(fun context _ _ ->
+      let state = Properties_state.area_state context ~key:(Properties_area.block_key uuid)
+        ~fetch:(fun publish -> publish {Properties_state.empty_area_data with below=initial_rows};
+          Js.Promise.resolve ()) in
+      rows := Some state;
+      Properties_area.block_below_pills ~scope:"main" ~uuid) () in
+  Runtime.signal_set (Option.get !rows) {Properties_state.empty_area_data with below=initial_rows};
+  S.flush session;
+  session, Option.get !rows
+
+let bottom_pills ~profile =
+  let previous_flush = !Runtime.app_flush in
+  let session, rows = bottom_pills_fixture profile (bottom_pills_rows ()) in
+  Runtime.app_flush := (fun () -> S.flush session);
+  Fun.protect ~finally:(fun () ->
+    ignore (Lui_app.dispose session.S.app); Runtime.app_flush := previous_flush;
+    Hashtbl.remove Properties_state.areas (Properties_area.block_key "00000000-0000-4000-8000-000000000030")) (fun () ->
+    let find cls = List.find (fun n -> class_has n cls) (nodes session) in
+    let control () = find "bottom-property-expand-btn" in
+    let check_prop node name value = Hashtbl.find_opt node.M.props name=Some value in
+    check "Collapsed bottom properties use intrinsic fitting and retain a single 32px row"
+      (List.exists (fun n -> n.M.kind="view-that-fits") (nodes session)
+       && check_prop (find "bottom-properties-row") "max-height" (P.IntValue 32)
+       && button_label (control ())=Some (I18n.t "property/expand-bottom-pills"));
+    let ids = List.filter_map (fun n -> M.string_prop n "accessibility-identifier") (nodes session) in
+    check "Adaptive pill candidates have distinct property and value-picker targets"
+      (List.length ids=List.length (List.sort_uniq String.compare ids));
+    check "Long bottom node values truncate inside their own content instead of covering the key"
+      (List.exists (fun n -> M.string_prop n "text-overflow"=Some "ellipsis"
+        && M.string_prop n "white-space"=Some "nowrap") (nodes session)
+       && check_prop (find "bottom-property-content") "overflow" (P.StringValue "hidden"));
+    S.press session (control ()).M.id;
+    check "Expand reveals all pills with auto height and a translated Collapse control"
+      (button_label (control ())=Some (I18n.t "property/collapse-bottom-pills")
+       && not (List.exists (fun n -> n.M.kind="view-that-fits") (nodes session))
+       && List.length (List.filter (fun n -> class_has n "bottom-property-pill") (nodes session))=2
+       && List.for_all (fun n -> not (class_has n "bottom-property-pill")
+          || (not (Hashtbl.mem n.M.props "height") && check_prop n "corner-radius" (P.IntValue 8))) (nodes session));
+    check "Expanded pill keys and numeric values keep the compact 20px line box"
+      (List.for_all (fun n -> not (class_has n "property-k" || class_has n "pv-scalar")
+        || check_prop n "height" (P.IntValue 20)) (nodes session));
+    let updated = List.map (fun row -> Properties_data.row_with_value row Wire.Nil) (bottom_pills_rows ()) in
+    Runtime.signal_set rows {Properties_state.empty_area_data with below=updated}; S.flush session;
+    check "Property refresh preserves expansion and handles missing values"
+      (button_label (control ())=Some (I18n.t "property/collapse-bottom-pills"));
+    S.press session (control ()).M.id;
+    check "Collapse restores the single-line layout after a property refresh"
+      (check_prop (find "bottom-properties-row") "max-height" (P.IntValue 32)
+       && button_label (control ())=Some (I18n.t "property/expand-bottom-pills"));
+    Runtime.signal_set rows Properties_state.empty_area_data; S.flush session;
+    check "Empty bottom properties mount no fit probes or expansion controls"
+      (not (List.exists (fun n -> class_has n "bottom-properties-row" || n.M.kind="view-that-fits") (nodes session))))
+
 let run_views ~registry ~profile ~finish =
+  bottom_pills ~profile;
   preview_block_spacing ~registry ~profile;
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;

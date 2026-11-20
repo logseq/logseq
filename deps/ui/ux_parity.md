@@ -832,7 +832,7 @@ ClojureScript UI/CSS; its newly introduced unused helper/test are not retained.
 **The new bottom-property overflow UX is not ported by this ancestry merge.**
 LUI `Properties_area.pills_view` still wraps all pills, so collapsed truncation,
 expansion and hidden-pill focus behavior remain application-parity follow-up,
-not an established SDK/platform limitation.
+not an established SDK/platform limitation. The follow-up below implements it.
 
 UI aggregate: 6643 checks, zero failures. Native experimental tests and build
 pass. The worker aggregate retains Table88's same platform cases 1, 7 and 8:
@@ -843,6 +843,62 @@ host`. Logs: `/Users/devin/attachments/table89-ui-final.log`,
 
 New selection rendering and query ink remain rebuilt-browser/visually
 unverified. No web bundle build, `static/` writes or `:3010` access.
+
+### Table89 follow-up: bottom-property truncation and expansion
+
+Master `a5cf5231d8` (#12890) measures natural pill widths, truncates the first
+overflowing pill, hides subsequent pills while collapsed, and exposes translated
+Expand/Collapse controls. Its expanded strip wraps and uses auto-height pills.
+The supplied `/Users/devin/table89/evidence/master-bottom-overflow.json` records
+32px collapsed and 103.953125px expanded; the corresponding LUI JSON and
+`{master,lui}-bottom-overflow-collapsed.png` demonstrate the original two-row
+layout and the long Node link covering its property-name target.
+
+`Properties_area.pills_view` now uses typed horizontal `view_that_fits` instead
+of application DOM measurement. Its first candidate contains every natural
+pill without a control. The fallback reserves the control width and recursively
+fits a natural pill plus the remaining strip, or a shrinking final pill without
+later siblings. This keeps the number of candidates linear in the property
+count. The SDK owns resize/content remeasurement and makes unselected candidates
+hidden and inert. Candidate-specific owner keys keep property/picker identifiers
+distinct. No SDK API, dictionary, worker or schema change is needed.
+
+Expansion is retained outside the property-data reactive branch, so refreshes
+do not reset it. Expanded values wrap independently of their empty picker
+button; both property keys and numeric values keep a typed 20px line box.
+The key cannot shrink into the value, and the value clips/ellipsizes inside its
+own allocated space. Expanded pills have auto height and an 8px radius; the
+collapsed outer row remains 32px. Controls reuse the existing
+`property/expand-bottom-pills` and `property/collapse-bottom-pills` keys,
+with `aria-expanded`, a stable focus target and Master's compact pill styling.
+Superseded CSS flex sizing was removed in favor of typed layout props.
+
+Mounted regressions cover collapsed fitting, distinct targets, ellipsis and
+clipping, expansion, compact numeric/key sizing, refresh with missing values,
+collapse and an empty property area. UI aggregate: **6651 checks, zero failures**.
+Native experimental tests and build pass. Worker retains Table89's same three
+platform failures (cases 1, 7, 8), including `Native secrets require the OS
+keychain host`: 3 failures / 994 tests. CSS lint reports 10396 existing errors;
+the only changed CSS file has exactly the same 102 diagnostics as HEAD after
+normalizing line numbers. i18n lint cannot start because the cached SQLite pod
+fails with `Exec failed, error: 86 (Bad CPU type in executable)` on arm64.
+
+An isolated Chrome render of the actual recorded changed LUI tree through the
+real SDK web renderer, using the supplied long title and property names at
+922px width, measures **32px collapsed / 104px expanded**. It verifies one
+visible collapsed pill, both expanded pills, translated Expand/Collapse
+interaction, an unobscured property-key hit target, automatic control removal
+when resized wide enough, and an empty area. Screenshots:
+`/Users/devin/attachments/table89-bottom-{collapsed,expanded}-isolated.png`.
+This is not acceptance of a rebuilt application or the native visual surface.
+Live worker-driven updates, popover interaction and stateful editing across
+responsive candidate switches still need integrated acceptance. No `static/`
+build/write or `:3010` access occurred.
+
+Logs: `/Users/devin/attachments/table89-bottom-ui-final.log`,
+`table89-bottom-native-{test,build}-final.log`, `table89-bottom-worker.log`,
+`table89-bottom-visual.log`, `table89-bottom-stylelint*.log` and
+`table89-bottom-i18n.log` (all under `/Users/devin/attachments/`).
 
 ## 1. Intentional / out of scope
 
@@ -884,7 +940,6 @@ neither category claims the underlying operating system can never support them.
 
 | Area / finding | Remaining work |
 |---|---|
-| Table89 upstream bottom-property truncation | Master `a5cf5231d8` is merged, but its collapsed overflow/expand layout is not ported to LUI. `Properties_area.pills_view` still wraps all pills. This is an application implementation gap, not an established SDK restriction. |
 | Table72 persisted seed duplicates | The canonical UUID repair prevents new duplicates but does not remove incorrectly persisted entities. Master `d85d8f6a` has no repair migration for these values: `frontend/worker/db/migrate.cljs` ends at schema 65.36 (journal repair), and `ensure-built-in-data-exists!` merges canonical entities without retracting legacy duplicates. Follow Master: do not add a cleanup migration. No live graph cleanup has been performed. |
 | Editor E1 | Earlier paired browser verification (Master `35f0275b` vs LUI) passes for `/Node embed` block and page embeds: the linked entity renders as the root row (title, arrow marker, reference count) with its children directly below; blockid is the linked UUID and originalblockid the linking block; content edits target originals while delete/move/indent/split target the linking block; selection highlights every occurrence; manual collapse of either occurrence updates both immediately and persists. Table77 on `7760653a` also accepts the full-flow Tab/Shift+Tab stored round-trip, expansion of only the actual collapsed target occurrence, and Shift+Down twice including the following page-embed root. Canonical relocation retains selection and outdent follows the actual enclosing ancestor. The mounted action/refresh regression covers these transitions, empty selection and rejected moves; the selection-domain regression covers duplicate roots. A remaining Tab console error is addressed separately below and awaits rebuilt-browser verification. LUI also emits `data-embed=true`. Native host built/tested but not visually verified. |
 | Table76 E1 lifecycle follow-up | `a0388e08` covered visible embedded-root relocation, but a further collapse with no visible replacement could still leave selection pointing to a retired source and throw `Not_found` through `selection_forest`. Retired-source snapshots now preserve membership as unresolved, and Tab/Shift+Tab do not submit structural operations for an unavailable source or unresolved selection. The regression reproduces that exception before repair, including empty selection. Outdent is state-dependent, not a fixed return to host 208: following Master's `get-first-block-original`, an enclosing embedded ancestor supplies `parent-original`; without that ancestor, the worker outdents beside the actual data parent in source 207. The mounted regression covers both states and verifies successful structural completions. Table77 verifies the stored round-trip and selection flow; its complete console stack identifies the separate delta-splice recursion below. |

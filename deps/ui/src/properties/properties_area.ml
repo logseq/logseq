@@ -144,7 +144,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
           ~owner_is_tag ~owner_title ~refresh:ctx.refresh
           ~more_options:(reorder_options ctx reorder_rows row) row
     | None -> () in
-  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:28 ~min_width:0 ~grow:1.
+  (Lui_elements.row ~gap:4 ~cross:`center ~min_height:(if icon then 28 else 0) ~min_width:0 ~grow:1.
      ~style_class:"property-key-inner"
      [ (if icon then
           Ui_components.button ~variant:`ghost ~width:18 ~min_width:18
@@ -162,6 +162,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
         else Logseq_el.nothing)
      ; Jump_state.target ~key:anchor_id ~owner:ctx.jump_owner ~activate:open_key
        (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
+         ?height:(if icon then None else Some 20)
          ~min_width:0
          ~style_class:"property-k jtrigger"
          ~foreground:"var(--ls-primary-text-color)"
@@ -328,21 +329,22 @@ let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
 
 (* cljs bottom-property-pill-cp: inline-flex pill = [key + ":"] row
    then .bottom-property-content value — all on one line *)
-let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
+let pill_view ?(expanded = false) (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
  fun context parent ->
   let hover = Signal.state context.Lui_ui.ui_scheduler false in
-  let node = (Ui_components.property_pill
+  let node = (Ui_components.property_pill ~expanded
     ~key:("pp-" ^ Option.value (D.row_ident prow) ~default:"x")
-    [ Lui_elements.row ~gap:0 ~cross:`center
+    [ Lui_elements.row ~gap:0 ~cross:`center ~shrink:0.
         [ key_cell ctx ~owner_is_tag ~owner_title ~icon:false prow
         ; text ~value:":"
             ~data_attrs:[ ("style", "user-select:none") ] []
         ]
     ; Ui_components.with_props
-        [ Ui_components.Prop.font_size "0.875rem" ]
-        (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20 ~min_width:0
+        [ Ui_components.Prop.font_size "0.875rem"
+        ; Ui_components.Prop.overflow `hidden ]
+        (Lui_elements.row ~gap:4 ~cross:`center ~min_height:20 ~min_width:0 ~grow:1. ~shrink:1.
            ~style_class:"bottom-property-content property-value-container"
-           [ V.view ~bottom_pill:true ~hover:(Some hover) ctx prow ])
+           [ V.view ~bottom_pill:true ~bottom_expanded:expanded ~hover:(Some hover) ctx prow ])
     ]) context parent in
   Ui_components.Prop.set context node (Ui_components.Prop.pointer_enabled true);
   Lui_ui.on_event context node (function
@@ -351,21 +353,86 @@ let pill_view (ctx : V.ctx) ~owner_is_tag ~owner_title prow : t =
     | _ -> ());
   node
 
-let pills_view ctx ~owner_is_tag ~owner_title below_rows : t =
+let pills_view ?expanded_state ctx ~owner_is_tag ~owner_title below_rows : t =
+ if below_rows = [] then Logseq_el.nothing else
+ fun context parent ->
+  let expanded = match expanded_state with
+    | Some state -> state
+    | None -> Signal.state context.Lui_ui.ui_scheduler false in
+  let control_id = "bottom-pills-control-" ^ ctx.V.owner_key in
+  let control is_expanded =
+    Lui_elements.row ~shrink:0. ~cross:`center
+      [Ui_components.with_props
+        [Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px";
+         Ui_components.Prop.font_weight 400;
+         Ui_components.Prop.shadow "inset 0 0 0 1px var(--ls-border-color)"]
+      (Ui_components.button ~variant:`secondary ~size:`sm ~height:24 ~min_height:24
+        ~gap:8 ~padding_horizontal:8 ~padding_vertical:0 ~corner_radius:9999
+        ~background:"var(--ls-secondary-background-color)" ~foreground:"var(--ls-primary-text-color)"
+        ~style_class:"bottom-property-control-btn bottom-property-expand-btn"
+        ~accessibility_identifier:control_id
+        ~label:(I18n.t (if is_expanded then "property/collapse-bottom-pills" else "property/expand-bottom-pills"))
+        ~text:(I18n.t (if is_expanded then "property/collapse-bottom-pills" else "property/expand-bottom-pills"))
+        ~icon:(if is_expanded then `chevron_up else `chevron_down)
+        ~data_attrs:["aria-expanded", string_of_bool is_expanded; "data-bottom-row-nav", "true"]
+        ~on_press:(fun _ ->
+          Runtime.signal_set expanded (not is_expanded);
+          Runtime.flush ();
+          Option.iter (fun el -> el.Ui_services.focus ()) (Ui_services.dom_by_id control_id)) [])] in
+  let pill ~variant ~expanded prow =
+    let ctx = {ctx with V.owner_key = ctx.V.owner_key ^ ":bottom:" ^ variant} in
+    pill_view ~expanded ctx ~owner_is_tag ~owner_title prow in
+  let strip ~variant ~expanded rows =
+    Lui_elements.row ~gap:8 ~cross:`center ~min_width:0
+      ~flex_wrap:(if expanded then `wrap else `nowrap)
+      ~style_class:"bottom-properties-pills-strip"
+      (List.map (pill ~variant ~expanded) rows) in
+  let collapsed () =
+    let slot value = Ui_components.with_props [Ui_components.Prop.overflow `hidden]
+      (Lui_elements.row ~width:0 ~grow:1. ~min_width:0 [value]) in
+    let rec fitting index = function
+      | [] -> Logseq_el.nothing
+      | prow :: rest ->
+          let natural = pill ~variant:("fit-" ^ string_of_int index) ~expanded:false prow in
+          let preferred = match rest with
+            | [] -> natural
+            | _ -> Lui_elements.row ~cross:`center ~min_width:0
+                [natural; slot (column ~grow:1. ~min_width:0 ~margin_left:8
+                  [fitting (index + 1) rest])] in
+          let truncated = pill ~variant:("truncate-" ^ string_of_int index) ~expanded:false prow in
+          view_that_fits ~min_width:0 ~orientation:`horizontal
+            [preferred; Lui_elements.row ~min_width:0
+              [slot (Ui_parts.float_prop Lui_protocol.ShrinkValue ~value:1.
+                 (Ui_components.with_props [Ui_components.Prop.grow 1.] truncated))]] in
+    view_that_fits ~min_width:0 ~orientation:`horizontal
+      [ strip ~variant:"natural" ~expanded:false below_rows
+      ; Lui_elements.row ~gap:6 ~cross:`center ~min_width:0
+          [ Ui_components.with_props [Ui_components.Prop.width 0; Ui_components.Prop.grow 1.]
+              (fitting 0 below_rows)
+          ; control false ] ] in
   Ui_components.with_props
-    [ Ui_components.Prop.font_size "0.875rem" ]
+    [ Ui_components.Prop.font_size "0.875rem"; Ui_components.Prop.overflow `hidden ]
     (column ~gap:4 ~grow:1.0
        ~min_width:0 ~style_class:"positioned-properties block-below"
-    [ row ~gap:6 ~cross:`center ~grow:1.0
+    [ Ui_parts.int_prop Lui_protocol.MaxHeight
+        ~value:(reactive (fun expanded -> if expanded then 384 else 32) (Signal.value expanded))
+      (Ui_parts.string_prop Lui_protocol.DataAttrs
+        ~value:(reactive (fun expanded -> Lui_protocol.data_attrs_encode
+          ["data-expanded", string_of_bool expanded;
+           "data-bottom-properties-row", ctx.V.block_uuid]) (Signal.value expanded))
+      (row ~gap:6 ~cross:`center ~grow:1.0
         ~min_width:0 ~style_class:"bottom-properties-row"
         ~padding_vertical:4
-        [ row ~gap:8 ~cross:`center ~grow:1.0 ~flex_wrap:`wrap
-            ~min_width:0 ~style_class:"bottom-properties-pills-strip"
-            (List.map
-               (pill_view ctx ~owner_is_tag ~owner_title)
-               below_rows)
-        ]
-    ])
+        [ column ~grow:1. ~min_width:0
+            [reactive (fun expanded ->
+              if expanded then
+                Lui_elements.row ~gap:6 ~cross:`start ~min_width:0
+                  [ Ui_components.with_props [Ui_components.Prop.width 0; Ui_components.Prop.grow 1.]
+                      (strip ~variant:"expanded" ~expanded:true below_rows)
+                  ; control true ]
+              else collapsed ()) (Signal.value expanded)]
+        ]))
+    ]) context parent
 
 (* cljs new-property: .ls-new-property > secondary sm button with a
    plus icon *)
@@ -469,6 +536,7 @@ let block_below_pills ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
+  let expanded_state = Signal.state context.Lui_ui.ui_scheduler false in
   let node =
     (reactive
        (fun (d : S.area_data) ->
@@ -476,7 +544,7 @@ let block_below_pills ~scope ~uuid : t =
             Logseq_el.nothing
           else
             let ctx = block_ctx ~scope ~owner_key:(scope ^ ":below:" ^ key) uuid key in
-            pills_view ctx ~owner_is_tag:false ~owner_title:"" d.below)
+            pills_view ~expanded_state ctx ~owner_is_tag:false ~owner_title:"" d.below)
        (Signal.map (fun (d : S.area_data) -> d) (Signal.value st))
        ~equal:(fun (a : S.area_data) (b : S.area_data) -> a.below = b.below))
       context parent

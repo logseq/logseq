@@ -995,7 +995,7 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
 (* `.bottom-property-pill` — 24px rounded chip (key + ":" + value):
    gray-03 fill, inset 1px ring, nowrap. The class stays as the
    native/web hook; visuals ride typed props. *)
-let property_pill ~key children : t =
+let property_pill ?(expanded = false) ~key children : t =
   with_props
     [ ( Prop.shadow "inset 0 0 0 1px var(--lx-gray-06, var(--ls-border-color))" )
     ; Prop.font_size "0.875rem"
@@ -1003,8 +1003,10 @@ let property_pill ~key children : t =
     ; Prop.overflow `hidden
     ]
     (row ~key ~style_class:"bottom-property-pill"
-       ~cross:`center ~gap:4 ~height:24 ~padding_vertical:2
-       ~padding_horizontal:8 ~corner_radius:9999 ~min_width:0
+       ~cross:(if expanded then `start else `center) ~gap:4
+       ?height:(if expanded then None else Some 24)
+       ~shrink:(if expanded then 1. else 0.) ~padding_vertical:2
+       ~padding_horizontal:8 ~corner_radius:(if expanded then 8 else 9999) ~min_width:0
        ~background:
          "var(--lx-gray-03, var(--ls-secondary-background-color))"
        ~foreground:
