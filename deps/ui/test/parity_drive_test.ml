@@ -754,6 +754,18 @@ let test_editor_ctrl_np () =
             (Editor_state.editing_uuid () = Some "b2");
           clear_editing ()))
 
+(* cljs move-to-block-when-cross-boundary :left — the page title is an
+   .ls-block neighbour of the first content row, so ArrowLeft at caret 0
+   leaves the block editor (title focus needs a live .ls-page-title node) *)
+let test_arrow_left_first_block () =
+  stage_main_session [ block "b1" "first"; block "b2" "second" ];
+  set_editing "b1" "first" ~caret:0;
+  Editor_keys.on_keydown (key_event "ArrowLeft");
+  after 8 (fun () ->
+      check "ArrowLeft at the first block start exits block editing"
+        (Editor_state.editing () = None);
+      clear_editing ())
+
 (* ================================================================
    C. Block context menu — cljs components/content.cljs
    block-context-menu-content + ui.cljs dropdown menu
@@ -1765,6 +1777,7 @@ let run ~finish =
   test_editor_paste_link ();
   test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
+  test_arrow_left_first_block ();
   test_editor_tab ();
   test_editor_enter_split ();
   (* D. page menu *)

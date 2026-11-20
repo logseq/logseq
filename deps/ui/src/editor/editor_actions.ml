@@ -3433,7 +3433,10 @@ let arrow_nav uuid up =
 (* ArrowLeft/Right at a collapsed buffer edge crosses into the adjacent
    block — master keeps one logical caret across block boundaries:
    left at the buffer start lands at the previous block's end, right
-   at the buffer end lands at the next block's start *)
+   at the buffer end lands at the next block's start. Left with no
+   previous block (first content row) focuses the page title, matching
+   cljs where .ls-page-title is an .ls-block neighbour of the first
+   content block. *)
 let arrow_edge uuid up =
   let scope =
     match S.editing () with Some e -> e.scope | None -> "main"
@@ -3455,7 +3458,10 @@ let arrow_edge uuid up =
                Js.Promise.resolve ())
           else enter_edit ~scope nu 0
       | None -> ())
-  | None -> ()
+  | None ->
+      if up && scope = "main" then (
+        exit_edit ~select:false;
+        focus_page_title ())
 
 (* The add-button's owner can be a page or a zoomed block in any scope. *)
 let append_block ?for_page ?(scope = "main") ?(library = false) () =
