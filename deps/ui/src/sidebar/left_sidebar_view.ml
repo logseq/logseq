@@ -598,10 +598,12 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
       | Some u -> Sidebar_state.open_uuid st u
       | None -> ()
     else
+      (* cljs page-name -> redirect-to-page! prefers :block/uuid so the
+         hash is #/page/<uuid>, matching master's recent/favorite clicks. *)
       Sidebar_state.navigate_to_page
-        (match p.Model.page_title with
-         | "" -> Option.value p.Model.page_uuid ~default:""
-         | title -> title)
+        (match p.Model.page_uuid with
+         | Some u -> u
+         | None -> p.Model.page_title)
   in
   let origin = ref None and dragged = ref false in
   let drag_down (d : pointer_detail) =
