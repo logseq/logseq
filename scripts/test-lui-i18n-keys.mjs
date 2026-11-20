@@ -1,7 +1,9 @@
 /**
  * Fail if deps/ui OCaml sources reference translation keys missing from
- * resources/dicts/en.edn. Complements bb lang:validate-translations (AST)
- * with a lightweight Node scan that does not require opam.
+ * resources/dicts/en.edn, or pass hardcoded string literals to user-facing
+ * LUI text props without routing through I18n. Complements
+ * bb lang:validate-translations (AST) with a lightweight Node scan that
+ * does not require opam.
  */
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -25,6 +27,42 @@ const BARE = new RegExp(
 const MODULE_ALIAS = /\bmodule\s+([A-Za-z_][A-Za-z0-9_']*)\s*=\s*I18n\b/g;
 const KEY_SHAPE = /^[A-Za-z][A-Za-z0-9._-]*(?:\/[A-Za-z0-9._-]+)+$/;
 const EDN_KEY = /:([A-Za-z][A-Za-z0-9._-]*\/[A-Za-z0-9._/-]*)\b/g;
+/** Labelled LUI props that commonly carry user-visible copy. */
+const UI_PROP = new RegExp(
+  String.raw`~(text|label|placeholder|title|description|message|hint)\s*:\s*"(${STR})"`,
+  "g",
+);
+/**
+ * Allowlist for non-UI / master-also-hardcoded / brand / glyph literals.
+ * Keep entries exact (unescaped OCaml string contents).
+ */
+const HARDCODED_ALLOW = new Set([
+  // Glyphs / separators / keyboard
+  "#",
+  "x",
+  "/",
+  "s",
+  "-",
+  ":",
+  ",",
+  "\n",
+  "{}",
+  "~",
+  "Esc",
+  "D",
+  "404",
+  "Ag",
+  "then",
+  // Brands / formats master also leaves untranslated
+  "GitHub",
+  "SQLite",
+  "URL",
+  // a11y / technical labels without matching master dict keys
+  "rating info",
+  "rtc collaborators",
+  "rtc sync",
+  "View actions",
+]);
 
 function walkMl(dir, out = []) {
   for (const name of readdirSync(dir)) {
@@ -94,6 +132,18 @@ function extractKeys(path, text) {
   return found;
 }
 
+function extractHardcodedProps(path, text) {
+  const found = [];
+  for (const m of text.matchAll(UI_PROP)) {
+    const lit = unescapeOcaml(m[2]);
+    if (lit.length === 0) continue;
+    if (HARDCODED_ALLOW.has(lit)) continue;
+    const line = text.slice(0, m.index).split("\n").length;
+    found.push({ prop: m[1], lit, line, path });
+  }
+  return found;
+}
+
 test("LUI I18n.t/tf/t1 keys exist in resources/dicts/en.edn", () => {
   const enKeys = loadEnKeys();
   assert.ok(enKeys.size > 1000, `expected a full English dictionary, got ${enKeys.size}`);
@@ -110,5 +160,20 @@ test("LUI I18n.t/tf/t1 keys exist in resources/dicts/en.edn", () => {
     missing,
     [],
     `Missing OCaml translation keys:\n${missing.join("\n")}`,
+  );
+});
+
+test("LUI UI text props do not take hardcoded English literals", () => {
+  const hits = [];
+  for (const path of walkMl(uiSrc)) {
+    const text = readFileSync(path, "utf8");
+    for (const { prop, lit, line } of extractHardcodedProps(path, text)) {
+      hits.push(`${relative(root, path)}:${line}: ~${prop}:"${lit}"`);
+    }
+  }
+  assert.deepEqual(
+    hits,
+    [],
+    `Hardcoded UI string props (route through I18n or add to HARDCODED_ALLOW):\n${hits.join("\n")}`,
   );
 });
