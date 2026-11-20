@@ -705,8 +705,9 @@ let block_view uuid (b : Model.block) : t =
     ([ box ~key:("abcc-" ^ uuid) ~grow:1. [ content_view uuid b ] ] @ title_row)
 
 (* File-column cell for the Asset class tag page (cljs objects.cljs
-   build-class-object-columns :file). The object-url resolves async —
-   src binds through a mount-scoped signal instead of an attr poke. *)
+   build-class-object-columns :file). Image nodes reject an empty URL
+   (LUI "node properties conflict") and abort the whole patch batch —
+   wait for a real object URL before mounting image, like gallery_cover. *)
 let file_cell_el (w : W.t) : t =
  fun ctx parent ->
   let uuid = Option.value (W.map_get_uuid w "block/uuid") ~default:"" in
@@ -716,17 +717,22 @@ let file_cell_el (w : W.t) : t =
       ~default:""
   in
   let file = uuid ^ "." ^ ext in
-  let src = Signal.state ctx.Lui_ui.ui_scheduler "" in
-  (match Hashtbl.find_opt A.url_cache file with
-   | Some url -> Runtime.signal_set src url
+  let cache_key = A.cache_key (repo ()) file in
+  let ready = ready_for uuid ext ctx in
+  (match Hashtbl.find_opt A.url_cache cache_key with
+   | Some _ -> Runtime.signal_set ready true
    | None ->
-       ignore
-         ((let* url = A.object_url ~repo:(repo ()) ~name:file ~mime:(mime_of_ext ext) in
-          Runtime.signal_set src url;
-          Js.Promise.resolve ())
-          |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
+       if not (Runtime.signal_get ready) then resolve_img uuid file ext ready);
   box ~style_class:"block-content" ~max_height:30
-    [ image ~url_signal:(Signal.value (src)) ~alt:file [] ]
+    [ reactive
+        (fun ok ->
+          if not ok then spacer []
+          else
+            match Hashtbl.find_opt A.url_cache cache_key with
+            | Some url when url <> "" ->
+                image ~url ~alt:file ~loading:`lazy_ []
+            | _ -> spacer [])
+        (Signal.value ready) ]
     ctx parent
 
 let gallery_cover ~width ~height (value : W.t) : t =
