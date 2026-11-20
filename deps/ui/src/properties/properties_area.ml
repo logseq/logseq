@@ -471,7 +471,9 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
 let block_key uuid = "block:" ^ uuid
 
 (* one get-blocks render-data call supplies the positioned property
-   maps, the display-properties rows, and the block's own attrs *)
+   maps, the display-properties rows, and the block's own attrs.
+   Drop icon/query/class-properties from the panel — master shows the
+   icon as the block bullet only, never as an Icon property row. *)
 let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
   let* block_w = D.block_render_data uuid in
   (match block_w with
@@ -484,6 +486,8 @@ let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
            (W.get block_w "block.temp/display-properties")
        in
        let rows, hidden = D.split_display display in
+       let rows = List.filter is_panel_row rows in
+       let hidden = List.filter is_panel_row hidden in
        publish
          { S.empty_area_data with left; right; below; rows; hidden }
    | _ -> ());
