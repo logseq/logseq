@@ -1403,14 +1403,15 @@ let create_tag st title =
     "cmdk create-tag failed"
     (fun repo uuid -> goto_page st repo uuid)
 
+(* cljs developer/validate-db only invokes the worker; success/error
+   toasts come from the worker :notification broadcast (same English
+   copy as master). Do not duplicate hardcoded English here. *)
 let validate_graph st repo =
   ignore
     ((let* _ =
        st.svs.Svs.invoke "thread-api/validate-db" [ Wire.String repo; Wire.Map [] ]
      in
-     toast st "Your graph is valid" "success";
      Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun e ->
-            toast st "Validation failed" "error";
             st.svs.Svs.console_error "validate-db failed" e;
             Ui_task.resolve ()))
 
