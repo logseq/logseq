@@ -976,13 +976,13 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
 let today_queries (page : Model.page) : t =
  fun ctx parent ->
   (if not (is_today_journal page) then Logseq_el.nothing else
-  column ~accessibility_identifier:"today-queries" ~gap:8
+  column ~accessibility_identifier:"today-queries" ~gap:0
     [ reactive ~equal:(fun a b -> a.Model.graph_config=b.Model.graph_config)
         (fun model ->
           let queries = match Wire.get model.Model.graph_config "default-queries" with
             | Some queries -> Option.value (Wire.get queries "journals") ~default:Wire.Nil
             | None -> Wire.Nil in
-          column ~gap:8 (List.map (Views_view.configured_query ~page) (Wire.elems queries)))
+          column ~gap:0 (List.map (Views_view.configured_query ~page) (Wire.elems queries)))
         (Runtime.model_signal ()) ]) ctx parent
 
 (* cljs page-inner wrap classes — shared by the page route and each

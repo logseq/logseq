@@ -658,7 +658,7 @@ let load_view_data ?(fetch_limit = 0) ?(built_in=false) inst =
       if not (V.fetch_fresh inst gen) then Js.Promise.resolve () else
       let fields = match ctx with W.Map fields -> fields | _ -> assert false in
       let fields = List.filter_map (fun (k,v) -> match k with
-        | W.Keyword "query-row-uuids" -> None
+        | W.Keyword "query-row-uuids" | W.Keyword "group-by-property-ident" -> None
         | W.Keyword "feature-type" -> Some (W.kw "view-feature-type",v)
         | _ -> Some (k,v)) fields in
       let fields = (W.kw "render?",W.Bool true) ::
@@ -709,14 +709,14 @@ let configured_query ~(page : Model.page) query : t =
     ~kind:(V.KQuery {block_uuid=uuid}) ~feature:"query-result" ~owner:(W.Uuid uuid) in
   let inst = {inst with V.virtualize=false} in
   let collapsed = Signal.state ctx.Lui_ui.ui_scheduler true in
-  let title = match W.map_get_string query "title", W.get query "title-key" with
-    | _, Some (W.Keyword key) -> I.t key
-    | Some title, _ -> title
-    | _ -> I.t "block/untitled-query" in
+  let title = match W.get query "title", W.get query "title-key" with
+    | _, Some (W.Keyword key) -> text ~value:(I.t key) []
+    | Some (W.String title), _ -> row ~flex_wrap:`wrap (Render_inline.parse title)
+    | Some (W.Array _ as title), _ -> column ~gap:0 (hiccup_els inst title)
+    | _ -> text ~value:(I.t "block/untitled-query") [] in
   V.update inst (fun s -> {s with V.qsrc=Edn.to_string query;is_advanced=true;
     display_type=(if W.get query "table-view?"=Some (W.Bool true) then "table" else "list");
-    group_by=(if W.get query "group-by-page?"=Some (W.Bool false)
-      then None else Some "block/page")});
+    group_by=None});
   let refresh () =
     if Ui_effect.alive ctx.Lui_ui.ui_scope then
       Views_query.run ~page_title:page.page_title ~built_in:true inst
@@ -728,18 +728,20 @@ let configured_query ~(page : Model.page) query : t =
   ignore (Js.Promise.(resolve () |> then_ (fun () -> refresh (); resolve ())));
   (if_ ~test:(reactive (fun s -> s.V.query_error<>None || s.V.query_rows<>[]
           || s.V.query_scalar_rows<>[]) (sig_of inst))
-        (column ~style_class:"custom-query" ~min_width:0 ~margin_left:2 ~gap:4
-          [ row ~cross:`center ~gap:8
-              [ Ui_components.button ~variant:`ghost ~text:title
-                  ~icon:(reactive (fun c -> `app (if c then "chevron-right" else "chevron-down"))
-                    (Signal.value collapsed))
-                  ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ()) []
+        (column ~style_class:"custom-query" ~min_width:0 ~margin_left:2 ~gap:0
+          [ Ui_parts.pressable
+              ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ())
+              (row ~style_class:"custom-query-title" ~cross:`center ~gap:4 ~min_height:24 ~margin_left:(-18)
+              [ icon ~width:14 ~height:14
+                  ~name:(reactive (fun c -> `app (if c then "chevron-right" else "chevron-down"))
+                    (Signal.value collapsed)) []
+              ; column ~style_class:"title-text" ~min_width:0 ~grow:1. [title]
               ; Ui_components.with_props [Ui_components.Prop.opacity 0.6]
-                (text ~font_size:"0.875rem"
+                (text ~style_class:"results-count" ~font_size:"0.875rem" ~margin_left:8
                   ~value:(reactive (fun s -> I.result_count
-                    (List.length s.V.query_rows + List.length s.V.query_scalar_rows)) (sig_of inst)) []) ]
+                    (List.length s.V.query_rows + List.length s.V.query_scalar_rows)) (sig_of inst)) []) ])
           ; if_ ~test:(reactive not (Signal.value collapsed))
-              (column ~style_class:"custom-query-results"
+              (column ~style_class:"custom-query-results" ~margin_left:4 ~margin_top:4
                 [ reactive ~equal:body_eq (fun s ->
                     match query_content_key s with
                     | `Table -> Views_table.result_el inst s

@@ -1189,8 +1189,8 @@ let pv_popover (st : S.t) (p : S.pv) : t =
         ~min_width:200 ~padding:8
         ~margin_left:(-20) ~data_attrs:[ ("tabindex", "-1") ]
         [ column ~key:"pvp" ~style_class:"page"
-            ~gap:(if block_preview then 32 else 0)
-            ~margin_bottom:(if block_preview then 64 else 0)
+            ~gap:32
+            ~margin_bottom:64
             [ box ~key:"pvt"
                 ~margin_top:(if block_preview then 8 else 0)
                 ~margin_bottom:(if block_preview then 8 else 0)

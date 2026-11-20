@@ -1131,9 +1131,8 @@ let preview_block_spacing ~registry ~profile =
         let title=List.find (fun n -> M.string_prop n "accessibility-identifier"
           =Some "page title") (nodes session) in
         let prop n key value = Hashtbl.find_opt n.M.props key=Some (P.IntValue value) in
-        check "Block previews retain Master's section gap and page-inner bottom margin"
-          (prop sections "gap" (if block_preview then 32 else 0)
-           && prop sections "margin-bottom" (if block_preview then 64 else 0));
+        check "Page and block previews retain Master's section gap and page-inner bottom margin"
+          (prop sections "gap" 32 && prop sections "margin-bottom" 64);
         check "Block preview breadcrumbs retain both my-2 margins without changing page titles"
           (prop title "margin-top" (if block_preview then 8 else 0)
            && prop title "margin-bottom" (if block_preview then 8 else 0))))

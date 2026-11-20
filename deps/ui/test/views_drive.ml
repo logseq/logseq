@@ -938,15 +938,18 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
   Hashtbl.replace titles uuid "Journal marker";
   Hashtbl.replace query_rows "" [uuid];
   install_worker ();
-  let specs = ref [] in
+  let specs = ref [] and contexts = ref [] in
   let worker = Option.get !Runtime.worker in
   Runtime.worker:=Some {worker with Worker_client.invoke_fn=(fun name args ->
     (match name,args with
      | "thread-api/get-render-snapshots",[_;request] ->
          List.iter (function W.Array [W.Keyword "query";spec] -> specs:=spec::!specs | _ -> ())
            (W.elems (Option.value (W.get request "resources") ~default:W.Nil))
+     | "thread-api/get-view-data",[_;_;context] -> contexts:=context::!contexts
      | _ -> ()); worker.invoke_fn name args)};
-  let mount page =
+  let mount ?(query=query) page =
+    let model = {model with Model.graph_config=W.Map
+      [kw "default-queries",W.Map [kw "journals",W.Array [query]]]} in
     let mounted = S.mount ~registry:(registry ()) ~profile:Logseq_el.web_profile
       ~initial:model ~reducer:Update.update ~view:(fun _ctx source _ ->
         Runtime.read_model:=(fun () -> Signal.get source);
@@ -955,14 +958,15 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
     Runtime.app_flush:=(fun () -> S.flush mounted); mounted in
   let mounted = mount page in
   let subscription = List.hd (List.rev !Subs_state.sync_subs) in
-  let header mounted = List.find_opt (fun n -> n.M.kind="button"
-    && M.string_prop n "text"=Some "Journal default") (M.all_nodes mounted.S.tree) in
+  let header mounted = List.find_opt (fun n ->
+    Shared_scenarios_views.has_tok n "custom-query-title") (M.all_nodes mounted.S.tree) in
   let marker mounted = List.exists (fun n -> M.string_prop n "accessibility-identifier"
     =Some ("ls-block-" ^ uuid)) (M.all_nodes mounted.S.tree) in
   h.after 30 (fun () ->
     S.flush mounted;
     check "Configured journal queries load collapsed, overriding configured collapsed=false"
-      (header mounted<>None && not (marker mounted));
+      (header mounted<>None && not (marker mounted)
+       && List.exists (fun n -> M.string_prop n "text"=Some "Journal default") (M.all_nodes mounted.S.tree));
     check "Configured journal queries use datalog and the owning journal date context"
       (List.exists (fun spec -> W.get spec "kind"=Some (kw "datalog")
         && W.get spec "current-block-uuid"=None
@@ -972,6 +976,13 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
     S.press mounted (Option.get (header mounted)).M.id;
     check "Expanding a configured query renders its real result block and count"
       (marker mounted && List.exists (fun n -> M.string_prop n "text"=Some "1 result") (M.all_nodes mounted.S.tree));
+    check "Built-in journal query results request no containing-page grouping"
+      (!contexts<>[] && List.for_all (fun context -> W.get context "group-by-property-ident"=None) !contexts);
+    check "Journal query headings are plain foldable rows with an expanding title and separate count"
+      ((Option.get (header mounted)).M.kind<>"button"
+       && List.exists (fun n -> Shared_scenarios_views.has_tok n "title-text"
+         && Hashtbl.find_opt n.M.props "grow"=Some (Lui_protocol.FloatValue 1.)) (M.all_nodes mounted.S.tree)
+       && not (List.exists (fun n -> Shared_scenarios_views.has_tok n "ls-foldable") (M.all_nodes mounted.S.tree)));
     Hashtbl.replace query_rows "" [];
     subscription.Subs_state.run [];
     h.after 30 (fun () ->
@@ -995,10 +1006,28 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
           let old = mount {page with Model.page_journal_day=Some 20000101} in
           check "Configured queries are not mounted for older journals" (header old=None);
           ignore (Lui_app.dispose old.S.app);
-          Hashtbl.remove titles uuid; Hashtbl.remove query_rows "";
-          Runtime.worker:=previous_worker; Runtime.read_model:=previous_read;
-          Runtime.model_source:=previous_source; Runtime.app_flush:=previous_flush;
-          finish ()))))
+          let rec title_cases = function
+            | [] ->
+                Hashtbl.remove titles uuid; Hashtbl.remove query_rows "";
+                Runtime.worker:=previous_worker; Runtime.read_model:=previous_read;
+                Runtime.model_source:=previous_source; Runtime.app_flush:=previous_flush;
+                finish ()
+            | (title,expected)::rest ->
+                let query = match query with W.Map fields -> W.Map
+                  ((kw "title",title)::List.remove_assoc (kw "title") fields) | _ -> assert false in
+                let mounted = mount ~query page in
+                h.after 30 (fun () ->
+                  S.flush mounted;
+                  let texts = List.filter_map (fun n -> M.string_prop n "text") (M.all_nodes mounted.S.tree) in
+                  check "Configured Hiccup titles render their content, including empty vectors, without an untitled fallback"
+                    (header mounted<>None && not (List.mem "Untitled query" texts)
+                     && List.for_all (fun text -> List.mem text texts) expected);
+                  S.press mounted (Option.get (header mounted)).M.id;
+                  check "Hiccup titled journal queries retain foldable results" (marker mounted);
+                  ignore (Lui_app.dispose mounted.S.app);
+                  title_cases rest) in
+          title_cases [Edn.parse {|[:h3 "Hiccup journal default"]|},["Hiccup journal default"];
+                       W.Array [],[]]))))
 
 let short_page_spacing ~finish =
   let previous_flush = !Runtime.app_flush in

@@ -686,6 +686,50 @@ small-map encounter order remain aligned. This is an application/backend
 identity-order difference, not a LUI SDK limitation. No hash-order emulation or
 hard-coded fixture ordering was added.
 
+## Table87: configured journal query presentation and page previews
+
+Table87 accepts linked-reference editing and occurrence isolation, E40 through
+linked references, filter addition/removal, browser file links, nonempty Node
+reference, configured-query core behavior and block-preview geometry (Master
+319.6px, LUI 318px). Evidence is under `/Users/devin/table87/evidence/`.
+
+Configured query vector titles now use the existing Hiccup renderer, including
+`[:h3 "T87 Hiccup default"]` and empty vectors. String titles use inline rendering;
+localized title keys and the existing missing-title fallback remain intact.
+The heading is a plain foldable row rather than a ghost button, with a growing
+title region and a separate right-aligned result count. Adjacent configured
+queries no longer introduce extra inter-query gaps. The expanded result keeps
+Master's 4px top/left inset, without an ordinary view header or divider.
+
+Master's `components/query/result.cljs:get-group-by-page` always disables page
+grouping for DB graphs, even when the query explicitly requests it. Built-in
+query requests now omit `group-by-property-ident`, including the ordinary List
+view's implicit page grouping. This removes the extra containing-page/date
+headings without changing ordinary query/List grouping. Mounted regressions
+cover the outgoing context, plain heading/count layout, Hiccup content and empty
+vectors; existing collapsed/expanded, empty-result, rejection and remount checks
+remain in the same suite.
+
+The same-content page-reference evidence measures Master 610x306px versus LUI
+610x206px. Master `components/page.cljs` wraps both page and block previews in
+`page-inner` with desktop `gap-8` (32px) and `mb-16` (64px). The separate preview
+wrapper also has 64px bottom padding (`components/block.cljs:page-preview-content`);
+that padding was already present in LUI and is not doubled. Table86 restored
+the inner gap/margin only for block previews. Page previews now retain them too,
+restoring 96px of the observed approximately 100px deficit without a fixed
+height. Page title margins remain zero; the accepted block-only breadcrumb
+8px top/bottom margins remain unchanged. Existing web/native preview regressions
+now require the shared section spacing for both roots.
+
+Verification: UI aggregate passes 6628 checks; native experimental tests and
+native experimental build pass. The worker aggregate retains the same platform
+cases 1, 7 and 8 as Table86: 3 failures out of 994, including `Native secrets
+require the OS keychain host`. Logs: `/Users/devin/attachments/table87-*`.
+The new journal presentation and page-preview geometry remain visually unverified
+in a rebuilt application; emitted props are not browser acceptance, and the
+remaining pixel difference has not been measured after rebuilding. No web
+bundle build, `static/` writes or `:3010` access.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
@@ -747,7 +791,7 @@ neither category claims the underlying operating system can never support them.
 | Table74 calculator long output | Source repaired in both output paths: retained lines use typed nowrap/1.45rem line-height props with an empty-line minimum; live CodeMirror lines preserve whitespace without wrapping and use Master's 1.45rem height/line-height. Normal, long, empty and error results are covered, including repeated live replacement. Browser long-output height acceptance remains pending. |
 | Shell N7 | Sidebar-menu action comparison needs equivalent target classification: Master conditionally includes Open as page for page/contents or a resolved page entity. The retained pair shows different sidebar contents and LUI explicitly has a page item; unconditional removal would diverge from Master. The horizontal-origin source repair is recorded below. |
 | Reference filters | Table86 accepts initial order/counts and selection/exclusion. Larger-map ties differ because Master's Entity hash includes runtime database object identity; see the precise boundary analysis above. |
-| Reference filter updates | Table86 accepts the opening facet snapshot; removing a filter now restores at least the normal result window. The latter repair awaits rebuilt-browser acceptance. |
+| Reference filter updates | Table87 accepts filter addition/removal; removal restores at least the normal result window while the popup retains its opening facet snapshot. |
 | Linked-reference editing | Scoped snapshot sources now expose editable roots/children and mount the active editor. Source-history cause and mounted coverage are recorded above; rebuilt-browser editing remains unverified. |
 | Configured journal queries | Today's journal now renders configured collapsed default queries with datalog results; empty/error/remount cases are covered. Rebuilt-browser acceptance remains pending. |
 | Marketplace cards | Table86 accepts clamp, repository icon and geometry. Other residual title/artwork differences have not had a fresh broad audit. |
