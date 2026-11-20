@@ -70,3 +70,17 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | header-cloud-upload | 36 sync/RTC | Cloud icon after login to upload local graph | No cloud entry until remount | login on local-only graph | med | fixed `25be173beb` |
 | members-mask-email | 36 members | Emails masked when `ui/mask-email?` | Full member emails shown | Members dialog | med | fixed `682d170f7e` |
 | remote-graphs-chrome | 36 remote graphs | Last opened + Open in another tab | Missing both | Graphs → remote row that is also local | low | fixed `922d42a814` |
+| plugins-route | 30 Plugins | `#/plugins` opens plugins page | Page not found (dialog only) | navigate `#/plugins` | med | fixed `fb00dc6306` |
+| login-route | 31 Login | `#/login` opens login page | Page not found (dialog only) | navigate `#/login` | med | fixed `e716a0a285` |
+| journal-scheduled-section | 34 Dates | Today shows Scheduled and Deadline before linked refs | Section missing | open today's journal | high | fixed `4232b28f0d` |
+| library-add-page | 28 Library | Escape on Library title discards draft | Rename reject; draft stuck | edit Library title; Esc | med | fixed `197b8cb037` |
+| code-escape-exit | 35 Code | Esc → raw editor; solarized without radix-color | Esc selected; always lsradix | Esc in fenced code; theme | med | fixed `8cd260ed39` |
+| cmdk-sidebar-esc | 18 Search | Escape clears sidebar search query | Query stuck after mod-enter | mod-enter result → Esc | med | fixed `3aa102fd7c` |
+| cmdk-current-page-badge | 18 Search | Current Page badge aligned with breadcrumb | Misaligned Header_badge | CMDK block hit on current page | low | fixed `3aa102fd7c` |
+| tag-search-page-tags | 18 Search | Search Task → Task (+ exact) | Also listed Page Tags | Ctrl+K `Task` | low | fixed `d223083109` (same keep_cmdk_row) |
+| delete-template | 25 Templates | `/Template` empty: Search for a template | Search for a block | slash Template AC empty | low | fixed `7a0c54872a` |
+| mark-template | 25 Templates | Apply template to tags empty = line-dashed | Showed Empty text | Template property empty chip | low | fixed `39b67e72fa` |
+| card-in-deck | 26 Flashcards | Breadcrumb no trailing `/`; keycap `S` | Trailing `/`; lowercase `s` | review card with crumbs | low | fixed `5e724627cd` |
+| quick-add-open | 32 Quick add | Add to today shows mod+e / mod+alt+e | No shortcut hint | open Quick add | low | fixed `166da5da39` |
+| deadline-slash | 34 Dates | Unset repeat → Next date Empty | Invented Advance/double-plus | slash deadline calendar | med | fixed `e5dc951f29` |
+| picker-month-nav / slash-date-picker | 34 Dates | Month caption + year input | Year easy to lose on slash path | open date picker / slash date | med | fixed `e5dc951f29` |
