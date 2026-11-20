@@ -213,6 +213,10 @@ type t =
   ; page_exact_titles : string list ref (* parentless internal pages/journals *)
   ; tag_titles : (string * string option) list ref
     (* class/tag entities for the # popup: (title, tabler icon) *)
+  ; tag_page_class : (string * string option) list ref
+    (* cljs get-matched-classes: Page is only a # candidate while a
+       non-page block is being edited AND the query is non-empty. Empty
+       `#` uses get-all-classes with private tags excluded (no Page). *)
   ; tag_exact_titles : string list ref
     (* every class + alias title — feeds only the exact-match check that
        suppresses the "New tag" row (cljs page-exists?/class-alias?); the
@@ -234,6 +238,7 @@ let make scheduler : t =
   ; titles = ref []
   ; page_exact_titles = ref []
     ; tag_titles = ref []
+    ; tag_page_class = ref []
     ; tag_exact_titles = ref []
     ; templates = ref []  }
   in
@@ -812,9 +817,14 @@ let page_items_for t kind q =
   let matched =
     match kind with
     | Tag_search ->
-        (* cljs get-matched-classes → fuzzy-search (limit 20) *)
-        Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
-        |> List.map wrap_tag
+        (* cljs search-pages blank q: all classes (private excluded, no
+           Page). Non-empty q: get-matched-classes fuzzy (limit 20), and
+           a non-page block edit also fuzzies the Page class. *)
+        if q = "" then List.map wrap_tag !(t.tag_titles)
+        else
+          Fuzzy.fuzzy_search ~extract:fst ~limit:20
+            (!(t.tag_titles) @ !(t.tag_page_class)) q
+          |> List.map wrap_tag
     | Page_ref ->
         (* cljs page-search-aux: blank [[ lists the first 10 nlp date
            pages; non-empty queries fuzzy the full nlp set (plus async
@@ -1191,9 +1201,11 @@ let class_titles_of rows =
 
 let load_tag_titles t =
   let session = !(t.session) and graph = repo () in
+  (* cljs get-matched-classes: Page joins candidates only while editing a
+     non-page block (page-title edits are page? entities). *)
   let editing_block =
     match Editor_state.editing_uuid () with
-    | Some _ -> true
+    | Some u -> not (Editor_actions.anchor_is_page_title u)
     | None -> false
   in
   let wopts extra =
@@ -1209,43 +1221,36 @@ let load_tag_titles t =
          (Wire.String graph)
          (wopts [ ("except-private-tags?", Wire.Bool true) ])
      in
-     let rows =
-       match w with
-       | Wire.Array xs | Wire.List xs -> xs
-       | _ -> []
-     in
+     let rows = Wire.elems w in
      let* () =
        let titles = class_titles_of rows in
        (* the full class list (private tags included) feeds only
-          tag_exact_titles; Page is conjoined to the candidates just
-          when editing a non-page block *)
+          tag_exact_titles; Page is kept separately and only joins the
+          fuzzy candidates for a non-empty query on a non-page block
+          (cljs get-matched-classes / empty search-pages). *)
        let* w2 =
          Runtime.invoke2 "thread-api/get-all-classes"
            (Wire.String graph)
            (wopts [ ("except-private-tags?", Wire.Bool false) ])
        in
-       let rows2 =
-         match w2 with
-         | Wire.Array xs | Wire.List xs -> xs
-         | _ -> []
-       in
+       let rows2 = Wire.elems w2 in
        if session = !(t.session) && graph = repo () then (
        t.tag_titles := titles;
        t.tag_exact_titles :=
          List.map fst (class_titles_of rows2);
-       (if editing_block then
-          let page_class =
-            List.filter
-              (fun r ->
-                (* entity_map_wire emits db/ident as a keyword
-                   value, not a string *)
-                Wire.get r "db/ident"
-                = Some (Wire.Keyword "logseq.class/Page"))
-              rows2
-          in
-          t.tag_titles :=
-            !(t.tag_titles)
-            @ class_titles_of page_class));
+       t.tag_page_class :=
+         if editing_block then
+           let page_class =
+             List.filter
+               (fun r ->
+                 (* entity_map_wire emits db/ident as a keyword
+                    value, not a string *)
+                 Wire.get r "db/ident"
+                 = Some (Wire.Keyword "logseq.class/Page"))
+               rows2
+           in
+           class_titles_of page_class
+         else []);
        Js.Promise.resolve ()
      in
      (match (get t).ac with
@@ -1385,6 +1390,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
     t.titles := [];
     t.page_exact_titles := [];
     t.tag_titles := [];
+    t.tag_page_class := [];
     t.tag_exact_titles := [];
     t.templates := []);
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
