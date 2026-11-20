@@ -371,20 +371,27 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
 let el_opt (e : Js.Json.t) =
   if node_type e = 1. then Some (el_of e) else None
 
+let detail_string_of v =
+  match Js.Json.classify v with
+  | Js.Json.JSONString s -> Some s
+  (* primitive detail fields surface as their JS string form so
+     consumers decode numbers/booleans without a JSON escape *)
+  | Js.Json.JSONNumber _ | Js.Json.JSONTrue | Js.Json.JSONFalse ->
+      Some (Js.Json.stringify v)
+  | _ -> None
+
 let detail_field name ev =
-  match j_field ev "detail" with
-  | Some d -> (
-      match j_field d name with
-      | Some v -> (
-          match Js.Json.classify v with
-          | Js.Json.JSONString s -> Some s
-          (* primitive detail fields surface as their JS string form so
-             consumers decode numbers/booleans without a JSON escape *)
-          | Js.Json.JSONNumber _ | Js.Json.JSONTrue | Js.Json.JSONFalse ->
-              Some (Js.Json.stringify v)
-          | _ -> None)
-      | None -> None)
-  | None -> None
+  let from_obj o =
+    match j_field o name with
+    | Some v -> detail_string_of v
+    | None -> None
+  in
+  match Option.bind (j_field ev "detail") from_obj with
+  | Some _ as s -> s
+  | None ->
+      (* KeyboardEvent.code / other top-level string fields — used by
+         stroke matching when modifiers corrupt `key` (Ctrl+[ → Escape) *)
+      from_obj ev
 
 let detail_json_field name ev =
   match j_field ev "detail" with

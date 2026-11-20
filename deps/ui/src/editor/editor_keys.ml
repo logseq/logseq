@@ -724,13 +724,45 @@ let rec is_prefix xs ys =
   | x :: xt, y :: yt -> x = y && is_prefix xt yt
   | _ -> false
 
+(* cljs shortcut/core code->key-name-map — KeyboardEvent.code fallback
+   when a modifier is held (Closure/macOS Option corruption, Ctrl+[ →
+   Escape on some hosts). *)
+let code_key_name code =
+  match code with
+  | "BracketLeft" -> Some "open-square-bracket"
+  | "BracketRight" -> Some "close-square-bracket"
+  | "Space" -> Some "space"
+  | "Enter" -> Some "enter"
+  | "Tab" -> Some "tab"
+  | "Backspace" -> Some "backspace"
+  | "Delete" -> Some "delete"
+  | "Escape" -> Some "esc"
+  | "ArrowUp" -> Some "up"
+  | "ArrowDown" -> Some "down"
+  | "ArrowLeft" -> Some "left"
+  | "ArrowRight" -> Some "right"
+  | "Semicolon" -> Some "semicolon"
+  | "Equal" -> Some "equals"
+  | "Minus" -> Some "dash"
+  | "Quote" -> Some "single-quote"
+  | "Backquote" -> Some "grave-accent"
+  | "Backslash" -> Some "backslash"
+  | "Comma" -> Some "comma"
+  | "Period" -> Some "period"
+  | "Slash" -> Some "slash"
+  | c when String.length c = 4 && String.starts_with ~prefix:"Key" c ->
+      Some (String.lowercase_ascii (String.sub c 3 1))
+  | c when String.length c = 6 && String.starts_with ~prefix:"Digit" c ->
+      Some (String.sub c 5 1)
+  | _ -> None
+
 (* a keydown's canonical stroke token, matching the binding-table format
    ("mod+k", "shift+/", "g", "ctrl+space", ...) *)
 let stroke_of ev =
   match ev_key ev with
   | "Control" | "Meta" | "Alt" | "Shift" | "CapsLock" | "Dead" -> None
   | _ ->
-      let key =
+      let from_key =
         match shortcut_key ev with
         | "arrowup" -> "up"
         | "arrowdown" -> "down"
@@ -740,6 +772,28 @@ let stroke_of ev =
         | "[" -> "open-square-bracket"
         | "]" -> "close-square-bracket"
         | k -> k
+      in
+      let mods_held =
+        ev.Ui_services.ctrl || ev.Ui_services.meta || ev.Ui_services.alt
+        || shift_held ev
+      in
+      (* Prefer KeyboardEvent.code when a modifier is held — recovers
+         Ctrl+[ / Ctrl+] when the host reports key=Escape (or another
+         corrupted glyph) instead of "[" / "]". *)
+      let key =
+        if not mods_held then from_key
+        else
+          match Option.bind (ev.Ui_services.detail "code") code_key_name with
+          | Some name -> name
+          | None ->
+              (* terminal legacy: Ctrl/Meta+[ arrives as Escape with no
+                 code on some hosts — only remap when the mod key that
+                 owns go/backward is held *)
+              if (from_key = "escape" || from_key = "esc")
+                 && (ev.Ui_services.ctrl || ev.Ui_services.meta)
+                 && not ev.Ui_services.alt && not (shift_held ev)
+              then "open-square-bracket"
+              else from_key
       in
       let ms =
         (if shift_held ev then [ "shift" ] else [])

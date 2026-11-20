@@ -64,13 +64,13 @@ let rec after n f =
 
 (* same shape shared_ui_regression_test feeds Popups_view.handle_keydown *)
 let key_event ?(meta = false) ?(ctrl = false) ?(shift = false)
-    ?(composing = false) key : Ui_services.ev =
+    ?(alt = false) ?(composing = false) ?(code = None) key : Ui_services.ev =
   { Ui_services.x = 0.; y = 0.; shift; meta; ctrl
-  ; alt = false; composing; key = Some key; key_char = None
+  ; alt; composing; key = Some key; key_char = None
   ; buttons = 0; button = 0; repeat = false
   ; movement_x = 0.; movement_y = 0.; default_prevented = false
   ; target = None; touches = []
-  ; detail = (fun _ -> None)
+  ; detail = (fun name -> if name = "code" then code else None)
   ; detail_json = (fun _ -> None)
   ; clipboard_get = (fun _ -> "")
   ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
@@ -1646,6 +1646,29 @@ let test_add_comment_ctrl_space () =
   clear_editing ();
   Runtime.worker := previous_worker
 
+
+(* G4 go-back-fwd-clean: mod+[ / mod+] use KeyboardEvent.code when the
+   host reports Escape (or another corrupted key) under modifiers.
+   Use meta so the stroke folds to mod+ on every platform (ctrl only
+   folds on non-mac). *)
+let test_go_back_fwd_brackets () =
+  let fire ?(code = None) ?(ctrl = false) key =
+    let prevented = ref false in
+    Editor_keys.on_global_key
+      { (key_event ~meta:true ~ctrl ~code key) with
+        Ui_services.prevent_default = (fun () -> prevented := true)
+      ; stop_immediate = (fun () -> prevented := true) };
+    !prevented
+  in
+  check "mod+[ with BracketLeft code matches go/backward"
+    (fire ~code:(Some "BracketLeft") "[");
+  check "mod+] with BracketRight code matches go/forward"
+    (fire ~code:(Some "BracketRight") "]");
+  check "mod+Escape without code still matches go/backward"
+    (fire "Escape");
+  check "Ctrl+Escape without code still matches go/backward on non-mac"
+    (Ui_services.env_is_mac () || fire ~ctrl:true ~code:None "Escape")
+
 (* ---------- runner ---------- *)
 
 (* State_cell singletons + first-mount refs: this suite mounts the app
@@ -1845,6 +1868,7 @@ let run ~finish =
   test_editor_link ();
   test_follow_link_sidebar ();
   test_add_comment_ctrl_space ();
+  test_go_back_fwd_brackets ();
   test_editor_ac_tab st s;
   test_editor_unbound_enter ();
   test_code_editor_enter ();
