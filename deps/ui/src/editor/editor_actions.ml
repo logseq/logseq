@@ -1845,12 +1845,13 @@ let hide_action_bar () =
   S.set (fun st -> { st with S.action_bar = false })
 
 (* shift+arrow arriving during the pending-focus window replays here once
-   focus lands: exit edit into selection, then extend one visible step *)
+   focus lands: exit edit into selection without the action bar. Master
+   show-action-bar! runs before exit-editing lands, so a single-block
+   selection from editing never raises the bar; further shift+arrows go
+   through extend_selection, which does. *)
 let shift_arrow_select up =
   match S.editing () with
-  | Some _ ->
-      exit_edit ~select:true;
-      show_action_bar ()
+  | Some _ -> exit_edit ~select:true
   | None -> extend_selection up
 
 (* cljs editor/select-parent: with a selection, move it to the first
