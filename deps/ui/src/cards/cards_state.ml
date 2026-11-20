@@ -524,11 +524,21 @@ let advance_phase st =
     (next_phase (cur_has_cloze st) (Runtime.signal_get st.phase))
 
 (* cljs shortcut.handler/cards: s toggles answers, 1-4 click the
-   rating buttons (visible when next-phase = :init) *)
+   rating buttons (visible when next-phase = :init). The deck
+   combobox (.ls-cards-select) often holds focus after open — do not
+   treat it as a text field or s/1-4 never fire (master still grades). *)
 let on_keydown ev st =
-  let editing = Editor_state.editing () <> None
-    || Option.fold ~none:false ~some:(fun target -> target.Ui_services.closest
-         "input, textarea, select, [contenteditable]" <> None) ev.Ui_services.target in
+  let editing =
+    Editor_state.editing () <> None
+    || Option.fold ~none:false
+         ~some:(fun target ->
+           target.Ui_services.closest
+             "input, textarea, [contenteditable]" <> None
+           || (target.Ui_services.closest "select" <> None
+               && target.Ui_services.closest
+                    ".ls-cards-select, .ls-dialog-flashcards" = None))
+         ev.Ui_services.target
+  in
   if editing || ev.Ui_services.composing || not (Runtime.signal_get st.open_)
   then Keymap_data.reset_chord card_keys
   else if not ev.Ui_services.default_prevented then
