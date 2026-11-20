@@ -156,6 +156,15 @@
             encoded-path (string/replace pathname #"[^/]+" encode-iframe-path-segment)]
         (str "assets://" (.-host url) encoded-path (.-search url) (.-hash url))))))
 
+(defn file-url->assets-url
+  "Wraps a `file:` URL for native resolution by the Electron assets protocol."
+  [src]
+  (when (and (string? src) (re-find #"(?i)^file:" src))
+    (when-let [^js url (try (js/URL. src) (catch :default _ nil))]
+      (let [file-url (str "file://" (.-host url) (.-pathname url))]
+        (str common-config/local-file-asset-prefix "/" (js/encodeURIComponent file-url)
+             (.-search url) (.-hash url))))))
+
 (defn <make-data-url
   [path]
   (let [repo-dir (config/get-repo-dir (state/get-current-repo))]

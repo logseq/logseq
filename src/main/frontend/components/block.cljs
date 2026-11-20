@@ -227,7 +227,7 @@
 (defonce *resizing-image? (atom false))
 
 (hsx/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view? file-url]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
@@ -250,8 +250,13 @@
        (fn []))
      [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
-          image-src (when (seq src)
-                      (fs/asset-path-normalize src))
+          image-src (if file-url
+                      (js/window.apis.fileURLToPath file-url)
+                      (when (seq src) (fs/asset-path-normalize src)))
+          file-src? (and (seq image-src)
+                         (or file-url
+                             (and (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                                  (not (util/starts-with? src "//")))))
           src' (if (and (seq src)
                         (or (string/starts-with? src "/")
                             (string/starts-with? src "~")))
@@ -286,14 +291,7 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
-                  ;; image-src is a filesystem path when it has no URL
-                  ;; scheme (a Windows drive like C: is not one) and src is
-                  ;; not a protocol-relative URL — an assets:// UNC path
-                  ;; normalizes to //server/share but is still a file.
-                  (if (and (util/electron?)
-                           (seq image-src)
-                           (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
-                           (not (util/starts-with? src "//")))
+                  (if (and (util/electron?) file-src?)
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -403,14 +401,7 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   ;; http(s) opens in browser; a filesystem path reveals in
-                   ;; folder; anything else (data:, blob:, // src) supports
-                   ;; neither. src is checked for // since assets:// UNC
-                   ;; paths normalize to //server/share but are still files.
-                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))
-                         file-src? (and image-src
-                                        (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
-                                        (not (util/starts-with? src "//")))]
+                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))]
                      (when (or remote-src? file-src?)
                        (shui/dropdown-menu-item
                       {:on-click (fn [e]
@@ -457,7 +448,8 @@
                                              :positioned? positioned?
                                              :local? local?
                                              :full-text full-text
-                                             :gallery-view? (:gallery-view? config)})]
+                                             :gallery-view? (:gallery-view? config)
+                                             :file-url (:file-url config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -639,7 +631,7 @@
             :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
             :on-click (fn [e]
                         (util/stop e)
-                        (open-pdf-file e (:asset-block config) src))}
+                        (open-pdf-file e (:asset-block config) (or (:file-url config) src)))}
            title]
 
           (util/mobile?)
@@ -684,13 +676,17 @@
   (let [metadata (if (string/blank? metadata)
                    nil
                    (common-util/safe-read-map-string metadata))
-        title (second (first label))]
+        title (second (first label))
+        file-url (:file-url config)]
     (ui/catch-error
      [:span.warning full_text]
-     (if (common-config/local-relative-asset? href)
+     (if (and (nil? file-url) (common-config/local-relative-asset? href))
        (asset-link config title href metadata full_text)
        (let [local-path? (or (util/starts-with? href "/") (util/starts-with? href "~"))
              href (cond
+                    file-url
+                    (or (assets-handler/file-url->assets-url file-url) file-url)
+
                     (util/starts-with? (string/lower-case href) "http")
                     href
 
@@ -715,8 +711,7 @@
                     (assets-handler/normalize-asset-resource-url href)
 
                     ;; Graph-relative paths (`../x.png`, `./x.png`, `x.png`)
-                    ;; and file:// URLs resolve to assets:// URLs; the raw
-                    ;; path resolves against the app origin and 404s.
+                    ;; resolve through the Electron assets protocol.
                     (util/electron?)
                     (assets-handler/file-path->assets-url href)
 
@@ -1662,20 +1657,25 @@
 
       :else
       (let [href (string-of-url url)
-            [protocol _path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
-                                 (and (= "File" (first url)) ["file" (second url)]))
+            [protocol link-path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
+                                     (and (= "File" (first url)) ["file" (second url)]))
+            file-link? (= "file" (some-> protocol string/lower-case))
+            file-url (when file-link?
+                       (if (= "Complex" (first url))
+                         (str protocol "://" link-path)
+                         (when (re-find #"(?i)^file:" link-path) link-path)))
             config (cond-> config
                      (not (string/blank? protocol))
                      (assoc :link-js-url (try (js/URL. href)
                                               (catch :default _ nil))))]
         (cond
-          (= protocol "file")
+          file-link?
           (if (show-link? href full_text)
-            (media-link config url href label metadata full_text)
-            (let [file-path (file-link-path->open-path href)
-                  href* (if (util/electron?)
-                          file-path
-                          href)]
+            (media-link (cond-> config
+                          (and file-url (util/electron?))
+                          (assoc :file-url file-url))
+                        url href label metadata full_text)
+            (let [href* (or file-url href)]
               [:div.flex.flex-row.items-center
                (ui/icon "file" {:class "opacity-50"})
                (->elem
@@ -1683,9 +1683,9 @@
                 (cond-> (if (util/electron?)
                           {:on-click (fn [e]
                                        (util/stop e)
-                                       (js/window.apis.openPath file-path))
+                                       (js/window.apis.openPath (or file-url (file-link-path->open-path href))))
                            :data-href href*}
-                          {:href (path/path-join "file://" href*)
+                          {:href (or file-url (path/path-join "file://" href))
                            :data-href href*
                            :target "_blank"})
                   title (assoc :title title))
