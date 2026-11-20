@@ -208,7 +208,23 @@ external add_window_listener : string -> (Js.Json.t -> unit) -> unit
 external remove_window_listener : string -> (Js.Json.t -> unit) -> unit
   = "removeEventListener" [@@mel.scope "window"]
 
-external open_url : string -> unit = "open" [@@mel.scope "window"]
+external browser_open_url : string -> unit = "open" [@@mel.scope "window"]
+external browser_window : Js.Json.t = "window"
+external window_apis : Js.Json.t -> Js.Json.t option = "apis"
+  [@@mel.get] [@@mel.return nullable]
+external api_open_path : Js.Json.t -> string -> unit Js.Promise.t = "openPath"
+  [@@mel.send]
+
+let is_file_url s =
+  String.length s >= 5 && String.lowercase_ascii (String.sub s 0 5) = "file:"
+
+let open_url url =
+  match window_apis browser_window with
+  | Some apis when is_file_url url ->
+      ignore (api_open_path apis url |> Js.Promise.catch (fun _ ->
+        Ui_services.log_error ("open-path failed", url);
+        Js.Promise.resolve ()))
+  | _ -> browser_open_url url
 
 external qs_all_arr : string -> Js.Json.t array = "querySelectorAll"
   [@@mel.scope "document"]
@@ -299,6 +315,26 @@ let copy_to_clipboard s = ignore (clipboard_write_text s)
 external decode_uri : string -> string = "decodeURIComponent"
 
 external encode_uri_component : string -> string = "encodeURIComponent"
+
+external new_url : string -> Js.Json.t = "URL" [@@mel.new]
+external url_host : Js.Json.t -> string = "host" [@@mel.get]
+external url_pathname : Js.Json.t -> string = "pathname" [@@mel.get]
+external url_search : Js.Json.t -> string = "search" [@@mel.get]
+external url_hash : Js.Json.t -> string = "hash" [@@mel.get]
+
+let file_url_to_assets_url src =
+  if not (is_file_url src) then None
+  else try
+    let url = new_url src in
+    Some ("assets://localhost/logseq__file/"
+      ^ encode_uri_component ("file://" ^ url_host url ^ url_pathname url)
+      ^ url_search url ^ url_hash url)
+  with _ -> None
+
+let media_url src =
+  match window_apis browser_window with
+  | Some _ -> Option.value (file_url_to_assets_url src) ~default:src
+  | None -> src
 (* Import UTF-8 byte data, such as Dicts_gen.en. UI source literals use
    {js|...|js}; DOM and worker text must never pass through this decoder. *)
 let decode_utf8_bytes : string -> string =

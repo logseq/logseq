@@ -3,6 +3,11 @@ let published_state : string option = None
 let publishing () = false
 let desktop = true
 
+let is_file_url s =
+  String.length s >= 5 && String.lowercase_ascii (String.sub s 0 5) = "file:"
+
+let media_url src = src
+
 let global_config_contents () =
   let path =
     Filename.concat (Filename.concat (Daemon_client.home ()) ".logseq")

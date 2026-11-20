@@ -440,9 +440,13 @@ let name_uuid_state context name =
   st
 
 let external_link href label_els =
+  let local = Platform.is_file_url href in
   Ui_components.with_props
     [ Ui_components.Prop.text_decoration "none" ]
-    (link ~url:href ~target:`blank ~style_class:"external-link"
+    (link ~url:href ~target:`blank
+       ?icon:(if local then Some (`app "file") else None)
+       ?on_press:(if local then Some (fun _ -> Ui_services.env_open_url href) else None)
+       ~style_class:(if local then "asset-ref" else "external-link")
        label_els)
 
 (* ((uuid)) (deprecated form) / #[[uuid]] -> resolved block title via
@@ -471,6 +475,7 @@ let block_ref uuid =
    its intrinsic dimensions; the `image` kind is a fixed-frame element
    (absolute-filled span) and collapses to 0x0 without explicit dims *)
 let image_el ~src ~alt =
+  let src = Platform.media_url src in
   D.el ~tag:"div" ~style_class:"asset-container image normalize"
     [ Ui_components.with_props
         [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
@@ -1852,7 +1857,8 @@ and try_image s i =
             let el =
               if
                 Str_util.ends_with
-                  (String.lowercase_ascii src) ".pdf"
+                  (String.lowercase_ascii (src |> String.split_on_char '#' |> List.hd
+                    |> String.split_on_char '?' |> List.hd)) ".pdf"
               then pdf_link_el ~src ~alt
               else image_el ~src ~alt
             in

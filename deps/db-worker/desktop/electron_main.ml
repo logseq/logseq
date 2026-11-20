@@ -143,32 +143,9 @@ let setup_interceptor () : unit -> unit =
   Protocol.register_file_protocol Protocol.t file_assets_scheme
     (fun[@u] (request : Js.Json.t) (callback : (Js.Json.t -> unit[@u])) ->
       let url = get_index_exn request "url" in
-      let url = Electron_utils.decode_protected_assets_schema_path url in
-      (* Query and fragment belong to the document URL, not the
-          filename. *)
-      let path =
-        cut_at_query url |> fun u ->
-        str_replace_first_literal u "assets://" "" |> decode_uri_component
-      in
-      if
-        (String.length path > 0 && path.[0] = '/')
-        || Regexp.test (Regexp.compile ~caseless:true "^/[a-zA-Z]:") path
-      then callback (Cli_server.js_obj [ ("path", Js.Json.string path) ]) [@u]
-      else if Electron_state.win32 then begin
-        (* assume windows unc path *)
-        Electron_logger.debug ":resolve-assets-url %s" url;
-        callback
-          (Cli_server.js_obj [ ("path", Js.Json.string ("//" ^ path)) ]) [@u]
-      end
-      else begin
-        Electron_logger.warn_args
-          [|
-            Js.Json.string ":electron.core/resolve-assets-url";
-            Js.Json.string "Unknown assets url";
-            Js.Json.string url;
-          |];
-        callback (Cli_server.js_obj [ ("path", Js.Json.string path) ]) [@u]
-      end);
+      match Electron_utils.resolve_asset_path ~win32:Electron_state.win32 url with
+      | Ok path -> callback (Cli_server.js_obj [ ("path", Js.Json.string path) ]) [@u]
+      | Error code -> callback (Js.Json.number (float_of_int code)) [@u]);
 
   Protocol.register_file_protocol Protocol.t file_lsp_scheme
     (fun[@u] (request : Js.Json.t) (callback : (Js.Json.t -> unit[@u])) ->

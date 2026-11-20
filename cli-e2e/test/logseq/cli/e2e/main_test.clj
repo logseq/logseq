@@ -50,10 +50,12 @@
          (:jobs (cli/parse-opts [] cli-parse-config)))))
 
 (deftest cli-opts-rejects-non-integer-jobs
-  (is (thrown-with-msg?
-       clojure.lang.ExceptionInfo
-       #"Coerce failure"
-       (cli/parse-opts ["--jobs" "nope"] cli-parse-config))))
+  (let [error (try
+                (cli/parse-opts ["--jobs" "nope"] cli-parse-config)
+                nil
+                (catch clojure.lang.ExceptionInfo e e))]
+    (is (= {:type :org.babashka/cli :cause :coerce :option :jobs}
+           (select-keys (ex-data error) [:type :cause :option])))))
 
 (deftest run-rejects-jobs-less-than-one
   (is (thrown-with-msg?

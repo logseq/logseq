@@ -6,7 +6,6 @@
             [datascript.core :as d]
             [datascript.impl.entity :as de :refer [Entity]]
             [logseq.common.util :as common-util]
-            [logseq.common.util.date-time :as date-time-util]
             [logseq.common.util.page-ref :as page-ref]
             [logseq.common.uuid :as common-uuid]
             [logseq.db :as ldb]
@@ -269,26 +268,81 @@
            (seq (set/intersection (ref-tag-idents ref)
                                   #{:logseq.class/Page :logseq.class/Journal})))))
 
+(defn- journal-identity-ref
+  "Journals keep a stable stored `:block/name`. Never copy inbound or
+  entity-computed title/name onto that page."
+  [page ref]
+  (merge (select-keys page [:db/id :block/uuid :db/ident])
+         (select-keys ref [:block.temp/original-page-name])))
+
+(defn- live-journal?
+  [e]
+  (and (ldb/journal? e)
+       ;; Recycled journals still carry :block/journal-day and their tags;
+       ;; refs to them go through outliner-page/create so they get restored.
+       (not (ldb/recycled? e))))
+
+(defn- existing-journal-page
+  [db ref existing-page]
+  (when (map? ref)
+    (if existing-page
+      ;; A resolved non-journal identity must not fall back to a same-name journal.
+      (when (live-journal? existing-page) existing-page)
+      (or (when-let [day (:block/journal-day ref)]
+            (when-let [page (ldb/get-journal-page-by-day db day)]
+              (when (live-journal? page) page)))
+          (when-let [page-name (:block/name ref)]
+            (when-let [page (ldb/get-page db page-name)]
+              (when (live-journal? page) page)))))))
+
+(defn- journal-page-tx?
+  [page-uuid tx]
+  (and (map? tx)
+       (= page-uuid (:block/uuid tx))
+       (:block/journal-day tx)))
+
+(defn- resolve-created-page-ref
+  [db ref class? page-uuid tx-data]
+  (let [existing (d/entity db [:block/uuid page-uuid])]
+    (if (or (ldb/journal? existing)
+            (some #(journal-page-tx? page-uuid %) tx-data))
+      [(journal-identity-ref (or existing {:block/uuid page-uuid}) ref)
+       tx-data]
+      [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
+                      :block/uuid page-uuid)
+         class? (assoc :db/ident (or (some :db/ident tx-data)
+                                     (:db/ident existing))))
+       tx-data])))
+
 (defn- resolve-page-ref
   [db ref tag-names]
-  (if (new-page-ref? ref)
-    (let [class? (contains? tag-names (:block/name ref))]
-      (if-let [page (and (not class?) (ldb/get-page db (:block/name ref)))]
-        [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
-                (select-keys ref [:block.temp/original-page-name]))
-         nil]
-        (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
-                                                                 {:uuid (:block/uuid ref)
-                                                                  :class? class?
-                                                                  :journal? (or (= "journal" (:block/type ref))
-                                                                                (contains? (ref-tag-idents ref)
-                                                                                           :logseq.class/Journal))})]
-          [(cond-> (assoc (select-keys ref [:block/title :block/name :block.temp/original-page-name])
-                          :block/uuid page-uuid)
-             class? (assoc :db/ident (or (some :db/ident tx-data)
-                                         (:db/ident (d/entity db [:block/uuid page-uuid])))))
-           tx-data])))
-    [ref nil]))
+  (let [existing-page (when (map? ref)
+                        (or (some->> (:db/id ref) (d/entity db))
+                            (when-let [id (:block/uuid ref)]
+                              (d/entity db [:block/uuid id]))
+                            (some->> (:db/ident ref) (d/entity db))))
+        class? (and (not (ldb/journal? existing-page))
+                    (or (ldb/class? existing-page)
+                        (contains? tag-names (:block/name ref))))]
+    (if-let [journal (when-not class? (existing-journal-page db ref existing-page))]
+      [(journal-identity-ref journal ref) nil]
+      (if (new-page-ref? ref)
+        (if-let [page (and (not class?)
+                           (when-let [e (ldb/get-page db (:block/name ref))]
+                             ;; Live journals already matched via existing-journal-page;
+                             ;; one found here is recycled, so create must restore it.
+                             (when-not (ldb/journal? e) e)))]
+          [(merge (select-keys page [:db/id :block/uuid :block/title :block/name :db/ident])
+                  (select-keys ref [:block.temp/original-page-name]))
+           nil]
+          (let [{:keys [page-uuid tx-data]} (outliner-page/create db (:block/title ref)
+                                                                   {:uuid (:block/uuid ref)
+                                                                    :class? class?
+                                                                    :journal? (or (= "journal" (:block/type ref))
+                                                                                  (contains? (ref-tag-idents ref)
+                                                                                             :logseq.class/Journal))})]
+            (resolve-created-page-ref db ref class? page-uuid tx-data)))
+        [ref nil]))))
 
 (defn- resolve-refs-dedup
   "Resolve new-page refs, deduping pages created during the pass: db doesn't
@@ -510,10 +564,7 @@
                         (outliner-validate/validate-page-title (:block/title m*) {:node m*}))
                     page-name (if encrypted-title?
                                 encrypted-name
-                                (if-let [journal-day (:block/journal-day block-entity)]
-                                  (common-util/page-name-sanity-lc
-                                   (date-time-util/int->journal-title journal-day date-time-util/default-journal-title-formatter))
-                                  (common-util/page-name-sanity-lc (:block/title m*))))]
+                                (common-util/page-name-sanity-lc (:block/title m*)))]
                 (assoc m* :block/name page-name))
               m*)
           _ (when (and ;; page or object changed?
@@ -1702,32 +1753,28 @@
                     (concat-tx-fn result collapsed-tx))
                   (move-blocks conn blocks' left (merge opts {:sibling? false
                                                               :indent? true}))))))
-          (if parent-original
-            (let [blocks' (take-while (fn [b]
-                                        (not= (:db/id (:block/parent b))
-                                              (:db/id (:block/parent parent))))
-                                      top-level-blocks)]
+          (let [blocks' (take-while (fn [b]
+                                      (= (:db/id (:block/parent b))
+                                         (:db/id parent)))
+                                    top-level-blocks)]
+            (if parent-original
               (move-blocks conn blocks' parent-original (merge opts {:outliner-op :indent-outdent-blocks
                                                                      :sibling? true
-                                                                     :indent? false})))
+                                                                     :indent? false}))
 
-            (when parent
-              (let [blocks' (take-while (fn [b]
-                                          (not= (:db/id (:block/parent b))
-                                                (:db/id (:block/parent parent))))
-                                        top-level-blocks)
-                    result (move-blocks conn blocks' parent (merge opts {:sibling? true}))]
-                (if logical-outdenting?
-                  result
-                  ;; direct outdenting (default behavior)
-                  (let [last-top-block (d/entity db (:db/id (last blocks')))
-                        right-siblings (remove protected-comment-block?
-                                               (get-right-siblings last-top-block))]
-                    (if (seq right-siblings)
-                      (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
-                        (move-blocks conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
-                        (move-blocks conn right-siblings last-top-block (merge opts {:sibling? false})))
-                      result)))))))))))
+              (when parent
+                (let [result (move-blocks conn blocks' parent (merge opts {:sibling? true}))]
+                  (if logical-outdenting?
+                    result
+                    ;; direct outdenting (default behavior)
+                    (let [last-top-block (d/entity db (:db/id (last blocks')))
+                          right-siblings (remove protected-comment-block?
+                                                 (get-right-siblings last-top-block))]
+                      (if (seq right-siblings)
+                        (if-let [last-direct-child-id (ldb/get-block-last-direct-child-id db (:db/id last-top-block))]
+                          (move-blocks conn right-siblings (d/entity db last-direct-child-id) (merge opts {:sibling? true}))
+                          (move-blocks conn right-siblings last-top-block (merge opts {:sibling? false})))
+                        result))))))))))))
 
 ;;; ### write-operations have side-effects (do transactions) ;;;;;;;;;;;;;;;;
 

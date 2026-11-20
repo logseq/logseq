@@ -414,6 +414,66 @@ SQLite pod is x86_64 on this arm64 machine (`Exec failed, error: 86 (Bad CPU
 type in executable)`). The picker reuses an existing translation key; no
 dictionary text changed. UI journal diagnostics retain the 102/52 baseline.
 
+### Master refresh through `0ba402070c`
+
+The requested `35f0275b4f..0ba402070c` range contains exactly two commits:
+
+| Commit | User-visible or runtime change | LUI disposition |
+| --- | --- | --- |
+| `4f5aa5ee84` | Upgrade `@base-ui/react` to 1.9.0, fixing a React non-modal popup focus-guard recursion on Tab | Merge the manifest/lock update; installed root resolution is 1.9.0. LUI's web menus are its own OCaml implementation, not React Base UI, so the React focus-manager implementation is not copied into LUI. |
+| `0ba402070c` | Open `file:` links through native path conversion; preview local images/PDFs through Electron's assets protocol; retain encoded filename characters, Windows/UNC URLs and document suffixes | Port URL wrapping, link dispatch, image/PDF sources and the native assets resolver. Preserve the upstream preload's native path conversion APIs. |
+
+Neither commit changes database schema or worker query/storage semantics.
+The branch previously merged Master at `800398be03`, whose Master parent
+and pre-refresh merge-base is `d608268212`. The merge therefore includes
+64 upstream ancestry commits, not only the two commits in the requested
+comparison range. Resolve modify/delete conflicts by retaining the OCaml
+worker/UI/Electron implementations and removed legacy test suites, rather
+than reviving their ClojureScript predecessors. Retain both the branch's
+plugin entity type exports and Master's extracted plugin types. Reconcile
+the dependency locks without running asset-producing installation scripts.
+
+`Render_inline` retains a file link's URL and icon, dispatching activation
+through the host opener. The web platform calls Electron's `openPath` only
+when that bridge exists; browsers retain normal URL opening. Local image
+and PDF preview URLs wrap the canonical file URL beneath
+`assets://localhost/logseq__file/`, keeping query/fragment outside the
+encoded file identity. PDF detection includes URLs with those suffixes.
+`Electron_utils.resolve_asset_path` decodes the wrapper and delegates native
+path conversion to Node's `fileURLToPath`; malformed wrapped resources
+return Electron's `ERR_FILE_NOT_FOUND` code. Existing assets URLs and
+non-Electron/native preview paths remain unchanged.
+
+Mounted regressions cover file-link activation, rendered image sources,
+PDF inflation/openers, uppercase schemes, canonical drive/UNC URLs, empty
+and malformed inputs, encoded percent/hash characters and browser behavior.
+The Electron regression covers one-time decoding, suffix stripping,
+malformed/empty wrappers and legacy assets/UNC resolution. This does not
+constitute a real Electron file load or OS copy/reveal acceptance; those
+interactions remain browser/host-unverified. No `static/` writes, web bundle
+build or `:3010` access is performed while the testing agent uses the assets.
+
+Verification: UI passes 6532 checks; native experimental tests/build and
+plugin SDK typechecking pass. CLI tests pass 448 cases; sync download script
+tests pass 8 and Electron operation-simulation tests pass 6. The worker's
+Melange groups pass 100 and 154 tests, including the new local-file resolver;
+the aggregate retains exactly the preceding Table84 platform failures:
+three failures in 994 native tests, with `Native secrets require the OS
+keychain host`. Plugin SDK formatting reports the same eight failing files
+when checking their pre-merge HEAD contents. Translation validation cannot
+start because the cached go-sqlite3 pod is x86_64 despite its aarch64 cache
+directory on this arm64 host (`Exec failed, error: 86 (Bad CPU type in
+executable)`); no lint success is claimed.
+
+The legacy db-sync package test first encounters Maven Central HTTP 429.
+Using the documented command-local Central mirror completes compilation,
+but the suite reports `FAIL in (auth-claims-jwks-error-propagates-test)` and
+`Async test called done more than one time`, despite returning exit zero.
+A separate detached worktree at pre-merge `5baaceaec1` reproduces the same
+assertion and warning with the same mirror and installed Node dependencies;
+this is not counted as a passing gate or changed as part of the file-link
+port. No repository Maven configuration is modified.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

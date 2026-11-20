@@ -504,6 +504,24 @@ let backup_metadata ~(source : string option) ~(repo : string)
 (* ---------- electron.core-test -> Electron_lifecycle ---------- *)
 
 let () =
+  Fest.test "local-file-assets-resolve-once-without-url-query-or-fragment" (fun () ->
+    let prefix = Common_config.local_file_asset_prefix ^ "/" in
+    List.iter (fun (url, expected) ->
+      Fest.expect |> Fest.deep_equal
+        (Electron_utils.resolve_asset_path ~win32:false url) expected)
+      [prefix ^ "file%3A%2F%2F%2FWorkspace%2Fsample%252520%2523name.pdf?download=1#page=2",
+        Ok "/Workspace/sample%20#name.pdf";
+       prefix ^ "file%3A%2F%2F%2Ftmp%2Fsample.png", Ok "/tmp/sample.png";
+       prefix, Error (-6);
+       prefix ^ "%ZZ", Error (-6);
+       prefix ^ "https%3A%2F%2Fexample.com%2Fx", Error (-6);
+       "assets:///tmp/sample%2520.png?download=1#page=2", Ok "/tmp/sample%20.png";
+       "", Ok ""];
+    Fest.expect |> Fest.deep_equal
+      (Electron_utils.resolve_asset_path ~win32:true "assets://server/share/image.png")
+      (Ok "//server/share/image.png"))
+
+let () =
   Fest.Promise.test "start-waits-for-asynchronous-teardown" (fun () ->
       let events = ref [] in
       let teardown_done, resolve_teardown = deferred () in

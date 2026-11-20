@@ -30,6 +30,7 @@ let remove_hidden_files (files : 'a list) (config : (attr * value) list)
 
 let app_name = "logseq"
 let asset_protocol = "assets://"
+let local_file_asset_prefix = "assets://localhost/logseq__file"
 let db_version_prefix = "logseq_db_"
 
 (* cljs common-config/strip-leading-db-version-prefix: trim, strip

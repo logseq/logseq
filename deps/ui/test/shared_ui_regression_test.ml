@@ -1268,6 +1268,53 @@ let run_views ~registry ~profile ~finish =
     (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
       (nodes inline_image));
   ignore (Lui_app.dispose inline_image.S.app);
+  let install_file_host : (string -> unit Js.Promise.t) -> (unit -> unit) =
+    [%mel.raw {|function (openPath) {
+      const previous = window.apis;
+      window.apis = {openPath};
+      return () => { if (previous === undefined) delete window.apis; else window.apis = previous; };
+    }|}] in
+  let opened = ref [] in
+  let restore_host = install_file_host (fun url -> opened := url :: !opened; Js.Promise.resolve ()) in
+  let file_pdf = "FILE:///Workspace/sample%2520%23name.pdf?download=1#page=2" in
+  let expected_pdf = "assets://localhost/logseq__file/file%3A%2F%2F%2FWorkspace%2Fsample%252520%2523name.pdf?download=1#page=2" in
+  List.iter (fun (source,expected) ->
+    check "Local file previews preserve URL encoding, drives, hosts and document suffixes"
+      (Platform.file_url_to_assets_url source=expected))
+    [file_pdf,Some expected_pdf;
+     "file://C:/docs/sample.pdf",Some "assets://localhost/logseq__file/file%3A%2F%2F%2FC%3A%2Fdocs%2Fsample.pdf";
+     "file://server/share/sample.pdf",Some "assets://localhost/logseq__file/file%3A%2F%2Fserver%2Fshare%2Fsample.pdf";
+     "",None;"https://example.com/sample.pdf",None;"file://[",None];
+  let local_image = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse "![Local](file:///tmp/image%2520.png)")) in
+  check "Markdown file images load through Electron's local-file asset protocol"
+    (List.exists (fun node -> match M.string_prop node "attrs" with
+      | Some attrs -> let obj=Js.Json.decodeObject (Js.Json.parseExn attrs) in
+          Option.bind obj (fun o -> Option.bind (Js.Dict.get o "src") Js.Json.decodeString)
+            =Some "assets://localhost/logseq__file/file%3A%2F%2F%2Ftmp%2Fimage%252520.png"
+      | None -> false) (nodes local_image));
+  ignore (Lui_app.dispose local_image.S.app);
+  let local_link = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse ("[Local PDF](" ^ file_pdf ^ ")"))) in
+  let local_anchor = List.find (fun n -> n.M.kind="link"
+    && M.string_prop n "url"=Some file_pdf) (nodes local_link) in
+  S.press local_link local_anchor.M.id;
+  check "File links retain their file icon and dispatch the original URL to the host opener"
+    (!opened=[file_pdf] && M.string_prop local_anchor "icon"=Some "app:file");
+  ignore (Lui_app.dispose local_link.S.app);
+  let pdf = Pdf_assets.inflate_asset ~original_path:file_pdf ~href:file_pdf
+    ~block_uuid:None ~block_db_id:None ~block_external_url:None in
+  check "Local PDF inflation uses the preview URL without changing its original identity"
+    (Option.map (fun asset -> asset.Model.pdf_url,asset.pdf_original_path) pdf
+      =Some (expected_pdf,file_pdf));
+  let pdf_link = mount (fun _ -> Lui_elements.column
+    (Render_inline.parse ("![Local PDF](" ^ file_pdf ^ ")"))) in
+  check "PDF URLs with query and fragment still render the PDF opener"
+    (List.exists (fun n -> class_has n "is-pdf") (nodes pdf_link));
+  ignore (Lui_app.dispose pdf_link.S.app);
+  restore_host ();
+  check "Browser previews retain file URLs instead of using an Electron-only scheme"
+    (Platform.media_url file_pdf=file_pdf);
   List.iter (fun code ->
     let results = mount (fun _ -> Option.get (Render.calc_results_el code)) in
     let lines = List.filter (fun node ->

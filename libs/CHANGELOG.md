@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.6]
+
+### Fixed
+- Rebuild the SDK from the current master sources so the published bundle includes the latest SDK fixes and APIs alongside the dependency updates in 0.3.5.
+
+## [0.3.5]
+
+### Fixed
+- Update bundled DOMPurify to 3.4.18 and Lodash ES to 4.18.1, and rebuild the SDK so downstream plugins receive the updated dependencies ([#13970](https://github.com/logseq/logseq/issues/13970)).
+
 ## [0.0.16]
 ### Added
 - Support api of `logseq.UI.queryElementRect: (selector: string) => Promise<DOMRectReadOnly | null>`
