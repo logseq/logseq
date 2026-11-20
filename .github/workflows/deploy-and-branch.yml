@@ -55,9 +55,10 @@ jobs:
         working-directory: deps/db-worker
         run: sh scripts/install-opam-deps.sh
 
-      - name: Fetch db-worker pnpm deps
-        working-directory: deps/db-worker
-        run: pnpm install
+      - name: Install db-worker and UI pnpm deps
+        run: |
+          pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
+          pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
 
       - name: Fetch ui OCaml deps
         working-directory: deps/ui
@@ -78,7 +79,7 @@ jobs:
       - name: Build web + workers
         run: |
           pnpm gulp:build
-          pnpm ui:build
+          pnpm ui:build --mode production
           pnpm db-worker:build
 
           rsync -avz \
@@ -86,9 +87,8 @@ jobs:
             --exclude android \
             --exclude ios \
             --exclude mobile \
+            --exclude '*.map' \
             ./static/ ./public/
-
-          rm ./public/js/*.map
 
         env:
           LOGSEQ_POSTHOG_TOKEN: ${{ secrets.LOGSEQ_POSTHOG_TOKEN }}
