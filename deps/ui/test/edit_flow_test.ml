@@ -2053,9 +2053,19 @@ let test_query_selection_conversion (h : host) =
               W.get block "block/uuid"=Some (W.Uuid uuid)
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
-        check "Query conversion preserves the pre-command title in its query property"
+        check "Query conversion matches master Query vs Advanced Query steps"
           (if rejected then not (saves "query-source" title)
-           else saves "query-source" title && saves "b1" ""
+           else if advanced then
+             (* advanced-query-steps: keep host title, empty code query child *)
+             saves "b1" title && saves "query-source" ""
+             && List.mem (Ops.set_block_property "b1" "block/tags"
+                  (W.Keyword "logseq.class/Query")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.node/display-type" (W.Keyword "code")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.code/lang" (W.String "clojure")) batch
+           else
+             saves "query-source" title && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
