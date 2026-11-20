@@ -91,8 +91,7 @@ let controller ~repo ~path : t =
                       ~text:(Signal.get (Signal.value content_st))
                       ~on_input:(fun ev ->
                         match ev with
-                        | Lui_protocol.TextChanged (_, s) -> on_edit s
-                        | _ -> ())
+                        | s -> on_edit s)
                       [] ]
               ]
         | Ui_effect.Failed e ->
@@ -102,7 +101,7 @@ let controller ~repo ~path : t =
       (Signal.value load_st)
   in
   (column ~key:"file" ~style_class:"ls-file-page page" ~padding:16 ~grow:1.
-     [ heading ~key:"ft" ~level:1 ~value:path ~style_class:"page-title" []
+     [ heading ~key:"ft" ~level:`h1 ~value:path ~style_class:"page-title" []
      ; editor ()
      ])
     ctx parent

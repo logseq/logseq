@@ -103,7 +103,7 @@ let reaction_badges uuid reactions =
       row ~key:("rx-" ^ uuid) ~style_class:"ls-block-reactions"
         ~cross:`center ~flex_wrap:`wrap ~gap:2 ~margin_top:4
         (List.map (fun (emoji, count, selected, names) ->
-          Ui_components.button ~key:("rxb-" ^ uuid ^ "-" ^ emoji)
+          Ui_components.button ~text:"" ~key:("rxb-" ^ uuid ^ "-" ^ emoji)
             ~variant:`ghost ~height:24 ~padding_horizontal:8 ~padding_vertical:0
             ~corner_radius:999 ~selected
             ~background:(if selected then "hsl(var(--accent) / 0.1)" else "transparent")
@@ -114,7 +114,7 @@ let reaction_badges uuid reactions =
             ; typography "0.75rem" 400 (text ~value:(string_of_int count) []) ])
           reactions
          @ if Ui_services.env_publishing () then [] else
-           [ Ui_components.button ~variant:`ghost ~height:24 ~width:24 ~padding:0
+           [ Ui_components.icon_button ~variant:`ghost ~height:24 ~width:24 ~padding:0
                ~accessibility_identifier:("rx-add-" ^ uuid)
                ~label:(I.t "command.editor/add-reaction") ~icon:(`app "plus")
                ~on_press:(fun _ -> open_reaction_picker uuid ("rx-add-" ^ uuid)) [] ])
@@ -281,7 +281,7 @@ let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~current_activation ~
         ((match on_cancel with None -> [] | Some _ ->
           [ Ui_components.button ~variant:`ghost ~size:`sm ~text:(I.t "ui/cancel")
               ~on_press:(fun _ -> cancel ()) [] ])
-         @ [ Ui_components.button ~variant:`ghost ~size:`sm
+         @ [ Ui_components.icon_button ~variant:`ghost ~size:`sm
                ~style_class:"ls-comment-submit" ~icon:(`app "send") ~label:(I.t "ui/submit")
                ~disabled:(reactive (fun content saving -> String.trim content = "" || saving <> None)
                  (Signal.value draft) (Signal.value busy))
@@ -314,7 +314,7 @@ let comment_body ~scope ~area_uuid st (comment : Model.block Signal.signal) =
 let comment_actions st (comment : Model.block) =
   let uuid = Option.value comment.block_uuid ~default:"" in
   let action id icon label callback =
-    Ui_components.button ~key:id ~accessibility_identifier:id ~variant:`ghost
+    Ui_components.icon_button ~key:id ~accessibility_identifier:id ~variant:`ghost
       ~width:26 ~height:26 ~min_width:26 ~padding:0 ~corner_radius:9
       ~label ~tooltip:label ~icon ~on_press:(fun _ -> callback ()) [] in
   if Ui_services.env_publishing () then Logseq_el.nothing else

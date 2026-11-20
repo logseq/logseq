@@ -1,4 +1,4 @@
-(version 5.5.0)
+(version 5.5.2)
 
 (install
  (all_platforms
@@ -114,6 +114,6 @@
 (source
  (fetch
   (url
-   https://github.com/ocaml/ocaml/releases/download/5.5.0/ocaml-5.5.0.tar.gz)
+   https://github.com/ocaml/ocaml/releases/download/5.5.2/ocaml-5.5.2.tar.gz)
   (checksum
-   sha256=c018052c8264a3791a8f54f84179e6bcc78ed82eb889bacc2773df445259aed3)))
+   sha256=bb3ffef5e4fce4f04915b9f254f570663311e1f227fd669aa87a5ef7de9a1523)))

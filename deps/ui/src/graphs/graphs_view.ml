@@ -65,12 +65,11 @@ let selector ~remove (ms : Model.t Signal.signal) : t = fun ctx parent ->
         ~placeholder:(T.t (if remove then "select/default-prompt" else "graph.switch/select-prompt"))
         ~label:(T.t (if remove then "command.graph/remove" else "command.graph/open"))
         ~on_input:(function
-          | Lui_protocol.TextChanged (_, value) -> Signal.set query value; Signal.set chosen 0
-          | _ -> ())
+          | value -> Signal.set query value; Signal.set chosen 0)
         ~on_navigate:(fun event ->
           let count = List.length (candidates (Runtime.model ()) (Runtime.signal_get query)) in
-          let delta = match event with Lui_protocol.NavigateNext _ -> 1
-            | Lui_protocol.NavigatePrevious _ -> -1 | _ -> 0 in
+          let delta = match event with Next -> 1
+            | Previous -> -1 | _ -> 0 in
           if count > 0 then Signal.update chosen (fun value -> (value + delta + count) mod count))
         ~on_submit:(fun _ -> submit ()) []
     ; scroll ~max_height:360
@@ -227,7 +226,7 @@ let remote_row (name, uuid, e2ee, role) : t =
     ctx parent
 
 let section_heading ~key ~value =
-  heading ~key ~level:2 ~as_:`H2 ~font_size:"1.125rem"
+  heading ~key ~level:`h2 ~as_:`H2 ~font_size:"1.125rem"
     ~line_height:"1.75rem" ~font_weight:500 ~margin_bottom:16 ~value []
 
 (* cljs repos-cp remote section: hr + h2 "Remote graphs:" + refresh

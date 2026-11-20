@@ -413,10 +413,9 @@ let rec property_picker inst ~tree ~loc ~anchor ~include_builtin =
                  ~text:(I.t "query.builder/show-built-in-properties")
                  ~checked:include_builtin
                  ~on_toggle:(function
-                   | Lui_protocol.ToggleChanged (_, checked) ->
+                   | checked ->
                        P.close_all ();
-                       property_picker inst ~tree ~loc ~anchor ~include_builtin:checked
-                   | _ -> ()) [] ])
+                       property_picker inst ~tree ~loc ~anchor ~include_builtin:checked) [] ])
       in
       ignore
         (P.show_select ~anchor ~placeholder:(I.t "select/default-prompt") ~items:(P.fixed_items items)
@@ -570,8 +569,7 @@ let full_text_picker inst ~tree ~loc ~anchor =
           ~autofocus:true
           ~text:(reactive Fun.id (Signal.value value))
           ~on_input:(function
-            | Lui_protocol.TextChanged (_, s) -> Signal.set value s
-            | _ -> ())
+            | s -> Signal.set value s)
           ~on_submit:(fun _ ->
             let v = String.trim (Signal.get_state value) in
             if v <> "" then begin
@@ -766,19 +764,21 @@ and op_label_el inst ~tree ~loc kind : t =
 
 and add_filter_btn inst ~tree ~loc ~with_label : t =
   let id = add_id inst loc in
-  Ui_components.button ~variant:`outline ~key:("qba-" ^ loc_key loc) ~accessibility_identifier:id
-    ~disabled:inst.disabled
-    ~icon:(`app "plus") ~size:`sm ~height:24 ~padding_horizontal:4
-    ~foreground:"muted-foreground"
-    ~label:(I.t "view.filter/filter")
-    ?text:(if with_label then Some (I.t "view.filter/filter") else None)
-    ~min_width:0
-    ~style_class:"jtrigger"
-    ~on_press:(fun _ ->
+  let label = I.t "view.filter/filter" in
+  let on_press () =
       match Ui_services.dom_by_id id with
       | Some anchor -> picker inst ~tree ~loc ~anchor
-      | None -> ())
-    []
+      | None -> () in
+  if with_label then
+    Ui_components.button ~variant:`outline ~key:("qba-" ^ loc_key loc)
+      ~accessibility_identifier:id ~disabled:inst.disabled
+      ~text:label ~label ~icon:(`app "plus") ~size:`sm ~height:24 ~padding_horizontal:4
+      ~foreground:"muted-foreground" ~min_width:0 ~style_class:"jtrigger" ~on_press []
+  else
+    Ui_components.icon_button ~variant:`outline ~key:("qba-" ^ loc_key loc)
+      ~accessibility_identifier:id ~disabled:inst.disabled
+      ~label ~icon:(`app "plus") ~size:`sm ~height:24 ~padding_horizontal:4
+      ~foreground:"muted-foreground" ~min_width:0 ~style_class:"jtrigger" ~on_press []
 
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in

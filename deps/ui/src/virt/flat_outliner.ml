@@ -69,22 +69,19 @@ let block_row ~state ~library ~source : t =
     { right_of_block = (fun block ->
         if block.Model.block_ref_count <= 0 then None else
         let uuid = Option.get block.block_uuid in
-        let activate event =
-          let shift = match event with
-            | Lui_protocol.PressDetail (_, detail) -> detail.Lui_protocol.modifiers land 2 <> 0
-            | Lui_protocol.PressModifiers (_, modifiers) -> modifiers land 2 <> 0
-            | _ -> false in
+        let activate shift =
           if shift then Sidebar_state.open_block_references
               (Sidebar_state.ensure (Option.get !Runtime.model_source)) uuid
           else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ()) in
         Some (Ui_components.with_props
           [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
-          (button ~key:("reference-count-" ^ uuid) ~variant:`ghost ~size:`sm
+          (button ~text:"" ~key:("reference-count-" ^ uuid) ~variant:`ghost ~size:`sm
             ~style_class:"block-refs-count"
             ~label:(I18n.t "block/open-block-references")
             ~tooltip:(I18n.t "block/open-block-references")
             ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
-            ~on_press:activate ~on_press_detail:activate
+            ~on_press:(fun () -> activate false)
+            ~on_press_detail:(fun detail -> activate (detail.Lui_protocol.modifiers land 2 <> 0))
             [text ~font_size:"14px" ~value:(string_of_int block.block_ref_count) []])))
     ; below_block = (fun block ->
         if block.Model.block_ref_count <= 0 then None else
@@ -184,21 +181,25 @@ let view ~state ~library ~header ~footer ?section_minimum_height ?(section_block
         [Outline_viewport_state.row_occurrence state ~key:(P.key initial) content] in
   let list = match state.Outline_viewport_state.native with
   | Some native ->
-      virtual_list ~key:"main-outline-list" ~viewport:native.source ~item_extent:32.
+      (fun context parent ->
+      let mounted_node = ref None in
+      let node = (virtual_list ~key:"main-outline-list" ~viewport:native.source ~item_extent:32.
         ~scroll_target_signal:state.scroll_target ~track_visible_range:true
         ~scroll_token_signal:(Signal.value state.scroll_token)
-        ~on_scroll_completed:(function
-          | Lui_protocol.ScrollCompleted (_, token, outcome) as event ->
-              Issued_reveal.scroll_completed native.navigation event;
-              Issued_reveal.scroll_completed native.editing event;
-              Signal.set state.scroll_completed (Some (token, outcome))
-          | _ -> ())
+        ~on_scroll_completed:(fun {token; outcome} ->
+          let node = Lui_runtime.canonical_node context.Lui_ui.ui_application (Option.get !mounted_node) in
+          let event = Lui_protocol.ScrollCompleted (node, token, outcome) in
+          Issued_reveal.scroll_completed native.navigation event;
+          Issued_reveal.scroll_completed native.editing event;
+          Signal.set state.scroll_completed (Some (token, outcome)))
         ~on_visible_range:(function
-          | Lui_protocol.VisibleRange (_, _, last)
+          | Range {last; _}
             when Signal.get state.row_count > 0 && last >= Signal.get state.row_count - 1 -> on_end ()
           | _ -> ())
         [ virtual_rows ~source:state.rows ~key:P.key ~scroll_key:P.key
-            ~cmp:String.compare ~mount () ]
+            ~cmp:String.compare ~mount () ]) context parent in
+      mounted_node := Some node;
+      node)
   | None ->
       let windowed count = Virt_list.enabled ~virtualize:true count in
       let eager_rows : t = fun rows_ctx rows_parent ->

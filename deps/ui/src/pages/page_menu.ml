@@ -207,7 +207,8 @@ let user_item () : Lui_elements.t =
                   I18n.t
                     (if m then "account/show-email-address"
                      else "account/hide-email-address"))
-                (Ui_components.button ~key:"u-eye" ~variant:`ghost ~size:`icon
+                (Ui_components.icon_button ~key:"u-eye" ~variant:`ghost ~size:`icon
+                   ~label:(I18n.t "account/show-email-address")
                    ~style_class:"ui__button as-ghost"
                    ~icon:
                      (reactive
@@ -221,7 +222,7 @@ let user_item () : Lui_elements.t =
         ; (* the opacity-0/group-hover reveal and absolute right-1 top-3
              positioning have no component equivalent — the logout
              button renders inline until an imperative pass restyles it *)
-          Ui_components.button ~key:"u-logout" ~variant:`ghost ~size:`icon
+          Ui_components.icon_button ~key:"u-logout" ~variant:`ghost ~size:`icon
             ~style_class:"ui__button as-ghost"
             ~label:(I18n.t "ui/logout") ~icon:(`app "logout")
             ~on_press:(fun _ ->
@@ -281,17 +282,17 @@ let view (ax, atop, abot, with_app_items) (p : Model.page option) =
   let flip =
     (not with_app_items) && Popups_state.anchor_above atop abot
   in
-  let anchor_target = if with_app_items then Some "toolbar-dots-btn" else None in
-  let anchor_rect =
-    if with_app_items then None
-    else Some (Float.max 148. (Float.min ax (inner_width -. 148.)), atop, 0., abot -. atop)
+  let source =
+    if with_app_items then Target "toolbar-dots-btn"
+    else Rect {x = Float.max 148. (Float.min ax (inner_width -. 148.)); y = atop;
+      width = 0.; height = abot -. atop}
   in
   (* More owns its trigger on both hosts; pointer menus keep a frozen
      target rectangle. Typed anchors handle centering and upward placement. *)
-  Ui_components.menu_surface (popover ~key:"page-menu" ?anchor_target ?anchor_rect
-    ~anchor:(if flip then `above else `below)
-    ~anchor_alignment:(if with_app_items then `end_ else `center)
-    ~anchor_offset:0. ~anchor_alignment_offset:(if with_app_items then -33. else 0.)
+  Ui_components.menu_surface (popover ~key:"page-menu"
+    ~target:(Anchor {side = (if flip then `above else `below); source;
+      align = (if with_app_items then `end_ else `center); offset = 0.;
+      align_offset = (if with_app_items then -33. else 0.)})
     ~role:`menu ~width:(if with_app_items then 256 else 280)
     ~on_appear:(fun _ ->
       if with_app_items then
@@ -366,13 +367,13 @@ let confirm_view (c : Model.confirm) =
                       the row and wraps instead of overflowing the
                       dialog's overflow:hidden edge (taffy does not
                       model text min-content shrink) *)
-                   heading ~key:"adlg-t" ~level:2 ~as_:`H2 ~grow:1.
+                   heading ~key:"adlg-t" ~level:`h2 ~as_:`H2 ~grow:1.
                      ~min_width:0 ~font_size:"1.125rem" ~font_weight:600
                      ~line_height:"1.75rem"
                      ~style_class:"ui__alert-dialog-title" ~value:title []
                  ]
            | None ->
-               heading ~key:"adlg-t" ~level:2 ~as_:`H2
+               heading ~key:"adlg-t" ~level:`h2 ~as_:`H2
                  ~font_size:"1.125rem" ~font_weight:600 ~line_height:"1.75rem"
                  ~style_class:"ui__alert-dialog-title" ~value:title [])
         ; (* cljs dialog-confirm! sends the description as :content —

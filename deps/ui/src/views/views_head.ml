@@ -25,15 +25,25 @@ let refresh inst = (V.ops ()).V.o_refresh inst
 let icon_el = Views_table.icon_el
 
 let action_button ?(extra = "") ~label ?accessibility_identifier ~on_press children : t =
-  Ui_components.button ~variant:`ghost ~size:`sm ~label ~style_class:extra
+  Ui_components.button ~text:"" ~variant:`ghost ~size:`sm ~label ~style_class:extra
     ~data_attrs:["data-tooltip", ""]
     ~width:24 ~min_width:24 ~height:24 ~min_height:24 ~padding:0
     ~main:`center ~cross:`center ~foreground:"hsl(var(--muted-foreground))"
     ?accessibility_identifier ~on_press children
 
-let ghost_btn ?(extra = "") ~title_ icon_name ~on_click : t =
-  action_button ~extra ~label:title_ ~on_press:(fun _ -> on_click ())
+let toolbar_action_button ?(extra = "") ~label ?accessibility_identifier ~on_press children : toolbar_el =
+  Ui_components.toolbar_button ~text:"" ~variant:`ghost ~size:`sm ~label ~style_class:extra
+    ~data_attrs:["data-tooltip", ""]
+    ~width:24 ~min_width:24 ~height:24 ~min_height:24 ~padding:0
+    ~main:`center ~cross:`center ~foreground:"hsl(var(--muted-foreground))"
+    ?accessibility_identifier ~on_press children
+
+let ghost_button_with make ?(extra = "") ~title_ icon_name ~on_click =
+  make ?extra:(Some extra) ~label:title_ ?accessibility_identifier:None ~on_press:(fun _ -> on_click ())
     [ icon ~name:(Icons.name_ref icon_name) ~point_size:18 [] ]
+
+let ghost_btn = ghost_button_with action_button
+let toolbar_ghost_btn = ghost_button_with toolbar_action_button
 
 let count_of (s : V.vstate) =
   let decoded = match s.V.data with
@@ -80,7 +90,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
   Ui_parts.float_prop Lui_protocol.Opacity
     ~value:(reactive (fun cur -> if cur then 1. else 0.75) current_sig)
     (Ui_components.with_props [ Ui_components.Prop.font_size "0.875rem" ]
-    (Ui_components.button ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
+    (Ui_components.button ~text:"" ~variant:`ghost ~size:`sm ~label:(V.display_title v0)
        ~style_class:"ls-view-tab"
        ~height:24 ~min_height:24
        ~padding_horizontal:0 ~padding_vertical:0
@@ -134,7 +144,7 @@ let view_tab inst (v_sig : Wr.view_ent Signal.signal) : t =
                      | _ -> true)
                    isig))
            (row ~cross:`center ~style_class:"ls-icon-color-wrap"
-              [ icon ~point_size:15
+              [ icon ~point_size:15 ~name:(Icons.name_ref (view_type_icon v0))
                   ~style_class:("ls-icon-" ^ view_type_icon v0)
                   ~name_signal:
                     (Logseq_el.own ctx
@@ -187,7 +197,7 @@ let tabs_el inst ~op : t =
         ~cmp:String.compare
         ~mount:(view_tab inst)
     ; Ui_parts.float_prop Lui_protocol.Opacity ~value_signal:op
-        (Ui_components.button ~variant:`ghost ~size:`sm ~label:(I.t "view/add-new-view")
+        (Ui_components.button ~text:"" ~variant:`ghost ~size:`sm ~label:(I.t "view/add-new-view")
            ~style_class:"ls-add-view"
            ~transition:"opacity 300ms ease-in"
            ~height:28 ~min_height:28 ~padding_horizontal:4 ~padding_vertical:2
@@ -251,7 +261,7 @@ let sorting_popup inst anchor =
            (Ui_components.menu_card ~key:"sort-options" ~cls:"ls-sort-options"
               ~anchor:`below ~anchor_alignment:`start ~on_dismiss:(fun _ -> close ())
               (List.map (fun (value,label) ->
-                 menu_item ~style_class:"ls-sort-option" ~text:label
+                 dropdown_menu_item ~style_class:"ls-sort-option" ~text:label
                    ~selected:(reactive (fun so -> so.V.s_asc = value) so_s)
                    ~selection_placement:`leading
                    ~padding_horizontal:8 ~padding_vertical:6 ~min_height:32
@@ -266,13 +276,13 @@ let sorting_popup inst anchor =
       ~data_attrs:[ ("tabindex", "0") ]
       [ row ~cross:`center ~gap:4
           [ icon ~name:(Icons.name_ref "grip-vertical") ~point_size:14 []
-          ; text ~value:(c.V.c_name ^ ":") ~white_space:"nowrap"
+          ; text ~value:(c.V.c_name ^ ":") ~white_space:`nowrap
               ~foreground:"hsl(var(--muted-foreground))" [] ]
       ; row ~cross:`center ~gap:8
           [ order_select so_s
           ; Ui_components.with_props
               [ Ui_components.Prop.hover_background "hsl(var(--muted))" ]
-              (Ui_components.button ~variant:`ghost ~size:`sm ~height:28
+              (Ui_components.icon_button ~variant:`ghost ~size:`sm ~height:28
                  ~padding_horizontal:4 ~corner_radius:4 ~style_class:"ls-sort-x"
                  ~foreground:"hsl(var(--muted-foreground))"
                  ~label:(I.t "view.table/delete-sort") ~icon:(Icons.name_ref "x")
@@ -416,7 +426,7 @@ let filter_value_phase inst ~anchor ?index (c : V.column) =
         else
           List.map
             (fun (label, op) ->
-              Ui_components.button ~variant:`ghost ~size:`sm ~main:`start
+              Ui_components.button ~text:"" ~variant:`ghost ~size:`sm ~main:`start
                 ~label
                 ~on_press:(fun _ ->
                   if initial=None then P.close_all ();
@@ -525,7 +535,7 @@ let gallery_custom_size inst view : t = fun ctx parent ->
       [ text ~value:(I.t label) []
       ; Ui_components.input ~label:(I.t label)
           ~text:(reactive (fun text -> text) (Signal.value draft))
-          ~on_input:(function L.TextChanged (_, text) -> Signal.set draft text | _ -> ())
+          ~on_input:(function text -> Signal.set draft text)
           ~on_submit:(fun _ -> commit ()) [] ]
   in
   column ~gap:8 ~width:240 ~max_width:280 ~padding:12
@@ -665,8 +675,8 @@ and mk_group_sort inst ident label =
     , fun _ ->
         V.persist_group_sort_by_ident inst ident (fun () -> refresh inst) )
 
-let more_actions_el inst : t =
-  action_button
+let more_actions_el inst : toolbar_el =
+  toolbar_action_button
     ~label:(I.t "ui/show-more")
     ~accessibility_identifier:("vmore-" ^ string_of_int inst.V.id)
     ~on_press:(fun _ -> show_more_menu inst)
@@ -676,10 +686,9 @@ let more_actions_el inst : t =
 
 (* toolbar-legal: one ghost button whose icon follows display_type —
    the old jtrigger/select-item box stack wasn't a control kind *)
-let display_type_el inst : t =
- fun ctx parent ->
+let display_type_el inst : toolbar_el =
   let wrap_id = "vtype-" ^ string_of_int inst.V.id in
-  action_button
+  toolbar_action_button
     ~accessibility_identifier:wrap_id
     ~label:(I.t "property.built-in/view-type")
     ~on_press:(fun _ ->
@@ -706,7 +715,6 @@ let display_type_el inst : t =
           Icons.name_ref (match s.V.display_type with
             | "list" -> "list" | "gallery" -> "layout-grid" | _ -> "table"))
           (sig_of inst)) [] ]
-    ctx parent
 
 (* ---------- search ---------- *)
 
@@ -769,7 +777,7 @@ let search_items inst : t list =
              ~background:"transparent" ~padding_horizontal:12 ~padding_vertical:0
              ~on_input:(fun ev ->
                match ev with
-               | L.TextChanged (_, v) ->
+               | v ->
                    let view_uuid = (V.get inst).V.view_uuid in
                    V.update inst (fun s -> { s with V.input = v; fetch_limit = 0 });
                    deb (fun () ->
@@ -781,8 +789,7 @@ let search_items inst : t list =
                          if inst.V.kind = V.KLinkedRefs && s.V.refs_total = 0 then
                            load_ref_count inst;
                          refresh inst
-                       end)
-               | _ -> ())
+                       end))
              []))
        ctx parent)
   ; (fun ctx parent ->
@@ -796,6 +803,11 @@ let search_items inst : t list =
 
 let search_el inst : t =
   button_group ~style_class:"view-action-search" ~gap:0 ~cross:`center
+    ~background:"transparent" ~border_width:0 ~corner_radius:0
+    (search_items inst)
+
+let toolbar_search_el inst : toolbar_el =
+  toolbar_button_group ~style_class:"view-action-search" ~gap:0 ~cross:`center
     ~background:"transparent" ~border_width:0 ~corner_radius:0
     (search_items inst)
 
@@ -869,7 +881,7 @@ let filter_input inst idx entry editor : t =
             else operand_number value=input_number draft in
           if matches then draft else field_text value) entry (Signal.value draft))
         ~on_input:(function
-          | L.TextChanged (_,text) ->
+          | text ->
               Signal.set draft text;
               let _,clause=Signal.get entry in
               let value=if editor=Text then Some (W.String text)
@@ -882,8 +894,7 @@ let filter_input inst idx entry editor : t =
                   if List.for_all ((=) W.Nil) endpoints then None else Some (W.Array endpoints) in
               let state=V.get inst in
               set_filters inst (List.mapi (fun index previous ->
-                if index=idx then {previous with V.c_val=value} else previous) state.V.filters) state.filters_or
-          | _ -> ()) []) in
+                if index=idx then {previous with V.c_val=value} else previous) state.V.filters) state.filters_or) []) in
   (if editor=Range then row ~gap:0 ~cross:`center [field 0;field 1] else field 0) context parent
 
 let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) : t =
@@ -979,7 +990,7 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
         [ Ui_components.Prop.font_size "12px";Ui_components.Prop.line_height "16px" ]
       (Ui_parts.string_prop Lui_protocol.AccessibilityLabel
         ~value:(reactive (fun (_,clause) _ -> filter_value_label inst clause) entry (sig_of inst))
-      (Ui_components.button ~variant:`ghost ~min_width:0 ~padding_horizontal:8
+      (Ui_components.button ~text:"" ~variant:`ghost ~min_width:0 ~padding_horizontal:8
         ~height:28 ~min_height:28 ~padding_vertical:4 ~corner_radius:0
         ~accessibility_identifier:value_btn_id
         ~on_press:(fun _ ->
@@ -994,8 +1005,8 @@ let filter_chip inst (entry : ((string * int) * V.filter_clause) Signal.signal) 
           [ ( "style"
             , "max-width:100%;border-right:1px solid hsl(var(--border))" ) ]
         [ text ~value:(reactive (fun (_,clause) _ -> filter_value_label inst clause) entry (sig_of inst))
-            ~min_width:0 ~white_space:"nowrap" ~text_overflow:"ellipsis" [] ]))) entry
-    ; Ui_components.button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:(I.t "ui/delete")
+            ~min_width:0 ~white_space:`nowrap ~text_overflow:`ellipsis [] ]))) entry
+    ; Ui_components.icon_button ~variant:`ghost ~size:`icon ~icon:(`app "x") ~label:(I.t "ui/delete")
         ~padding_horizontal:4 ~padding_vertical:4 ~height:28 ~min_height:28 ~width:26 ~min_width:26 ~corner_radius:0
         ~foreground:"hsl(var(--muted-foreground))"
         ~on_press:(fun _ ->
@@ -1167,7 +1178,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
              [ ( Ui_components.Prop.hover_border
                    "var(--ls-secondary-text-color, \
                     hsl(var(--muted-foreground)))" ) ]
-             (Ui_components.button ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
+             (Ui_components.button ~text:"" ~variant:`ghost ~label:title ~border_width:1 ~corner_radius:6
                 ~height:24 ~min_height:24
                 ~padding_vertical:0 ~padding_horizontal:12
                 ~background:"var(--ls-primary-background-color)" ~style_class:"ls-ref-btn"
@@ -1179,7 +1190,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
                   column so delete-property-value targets the right
                   property *)
                match ev with
-               | Lui_protocol.PressDetail (_, d) when current () ->
+               | d when current () ->
                  let s = selection in
                  let lcr = lc title in
                  let included =
@@ -1257,7 +1268,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
                  [ icon ~name:(Icons.name_ref "filter") ~point_size:20
                      ~style_class:"ls-icon-filter" [] ]
              ; column
-                 [ heading ~level:3 ~font_size:"1.125rem"
+                 [ heading ~level:`h3 ~font_size:"1.125rem"
                      ~line_height:"1.5rem" ~font_weight:500
                      ~value:(I.t "reference.filter/title") []
                  ; text ~font_size:"0.75rem" ~line_height:"1.5rem"
@@ -1284,7 +1295,7 @@ let ref_filter_dialog ~owner_scope inst anchor =
                     ~placeholder:(I.t "reference.filter/search-placeholder")
                     ~autofocus:true
                     ~on_input:(function
-                      | L.TextChanged (_, v) when current () ->
+                      | v when current () ->
                           Signal.set draft v;
                           deb (fun () ->
                             if current () then begin
@@ -1415,13 +1426,13 @@ let render_head inst : t =
          ([ (* cljs (seq sorting): the button reacts to the applied
                 view entity — mount-time sorting is [] until load_views
                 lands *)
-             if_
+             if_toolbar
                ~test:
                  (Logseq_el.own ctx
                     (Signal.map
                        (fun (s : V.vstate) -> s.V.sorting <> [])
                        (sig_of inst)))
-               (action_button ~label:(I.t "view.table/sort-groups-by")
+               (toolbar_action_button ~label:(I.t "view.table/sort-groups-by")
                   ~accessibility_identifier:
                     ("vsort-" ^ string_of_int inst.V.id)
                   ~on_press:(fun _ ->
@@ -1432,7 +1443,7 @@ let render_head inst : t =
                     | Some a -> sorting_popup inst a
                     | None -> ())
                   [ icon ~name:(Icons.name_ref "arrows-up-down") ~point_size:18 [] ])
-           ; action_button ~label:(I.t "view.filter/filter")
+           ; toolbar_action_button ~label:(I.t "view.filter/filter")
                ~accessibility_identifier:
                  ("vfilter-" ^ string_of_int inst.V.id)
                ~on_press:(fun _ ->
@@ -1444,10 +1455,10 @@ let render_head inst : t =
                  | None -> ())
                [ icon ~name:(Icons.name_ref "filter") ~point_size:18 [] ]
            ]
-         @ [ search_el inst ]
+         @ [ toolbar_search_el inst ]
          @ [ display_type_el inst; more_actions_el inst ]
          @ (if has_add_object then
-              [ ghost_btn "plus" ~title_:(I.t "node/new")
+              [ toolbar_ghost_btn "plus" ~title_:(I.t "node/new")
                   ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]
             else []))) ] ])
     ctx parent

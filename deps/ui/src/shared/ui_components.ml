@@ -107,11 +107,11 @@ let textarea =
 let form_textarea = textarea ~border_color:"var(--lx-gray-07, var(--rx-gray-07))"
 
 (* Indicator borders are independent of the selected primary fill and label ink. *)
-let checkbox ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition (children : t list) : t =
+let checkbox ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition (children : t list) : t =
   with_props
     [ Prop.indicator_border_color "var(--lx-checkbox-border)"
     ; Prop.checked_indicator_border_color "hsl(var(--border))" ]
-    (Lui_elements.checkbox ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition children)
+    (Lui_elements.checkbox ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?checked ?checked_signal ?label ?disabled ?disabled_signal ?on_toggle ?on_context_menu ?transition children)
 
 (* Reference portals live outside the page-size root. Establish the body
    type scale once on overlay carriers, independently of page text sizing. *)
@@ -119,7 +119,7 @@ let overlay_typography element =
   with_props [ Prop.font_size "1rem"; Prop.line_height "1.5" ] element
 
 let page_heading ?(margin_bottom=0) ~key ~value () =
-  heading ~key ~level:1 ~as_:`H1 ~style_class:"title"
+  heading ~key ~level:`h1 ~as_:`H1 ~style_class:"title"
     ~font_size:"var(--ls-page-title-size, 32px)" ~line_height:"1.5"
     ~font_weight:500 ~margin:0 ~margin_bottom
     ~foreground:"var(--lx-gray-12, var(--ls-title-text-color, hsl(var(--foreground))))"
@@ -139,14 +139,14 @@ let faded_link ?key ~url ~text () =
 
 (* Master button appearance belongs to the shared view layer. Both hosts
    receive the same typed defaults; explicit caller properties take precedence. *)
-let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
+let button_recipe make ?style ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal
     ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left
     ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
-    ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
-    ?text_signal ~variant ?size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
+    ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave
+    ~variant ?size ?text_alignment
     ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_navigate ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
-    ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : t =
+    ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) =
   let size = Option.value size ~default:`default in
   let base, ink, hover, hover_ink, pressed = match variant with
     | `default | `primary ->
@@ -185,20 +185,44 @@ let button ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
   let corner_radius = default corner_radius 6 in
   let text_alignment = default text_alignment (if children=[] then `center else `start) in
   let transition = default transition "background-color 150ms, color 150ms" in
-  with_props
-    [ Prop.white_space `nowrap;Prop.cursor `pointer;Prop.user_select `none
-    ; Prop.font_size font;Prop.line_height line;Prop.font_weight 500
-    ; Prop.hover_background hover;Prop.hover_foreground hover_ink
-    ; Prop.disabled_opacity 0.5;Prop.pressed_opacity pressed ]
-    (Lui_elements.button
-      ?key ?gap ?main ?cross ?grow ?columns ?padding ?padding_horizontal
+  let defaults = Slot_style.make ~white_space:`nowrap ~cursor:`pointer ~user_select:`none
+    ~font_size:font ~line_height:line ~font_weight:500
+    ~hover_background:hover ~hover_foreground:hover_ink
+    ~disabled_opacity:0.5 ~pressed_opacity:pressed () in
+  let style = match style with None -> defaults | Some style -> Slot_style.merge defaults style in
+  make ?style:(Some style)
+      ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal
     ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left
     ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width
     ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal
-    ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text
-    ?text_signal ~variant ~size ?icon ?icon_signal ?icon_placement ?label ?text_alignment
+    ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave
+    ?variant:(Some variant) ?text_alignment
     ?selected ?selected_signal ?autofocus ?disabled ?disabled_signal ?on_navigate ?on_press ?on_long_press ?on_press_detail ?on_pointer_down
-    ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition children)
+    ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition children
+
+let button ~text ?text_signal ?icon ?icon_signal ?icon_placement ?label ?size =
+  let size = Option.value size ~default:`default in
+  button_recipe
+    (Lui_elements.button ~text ?text_signal ?icon ?icon_signal ?icon_placement
+       ?label ~size)
+    ~size:(size :> control_size)
+
+let icon_button ~icon ?icon_signal ?icon_placement ~label ?size =
+  let size = Option.value size ~default:`default in
+  button_recipe
+    (Lui_elements.icon_button ~icon ?icon_signal ?icon_placement ~label ~size) ~size
+
+let toolbar_button ~text ?text_signal ?icon ?icon_signal ?icon_placement ?label ?size =
+  let size = Option.value size ~default:`default in
+  button_recipe
+    (Lui_elements.toolbar_button ~text ?text_signal ?icon ?icon_signal ?icon_placement
+       ?label ~size)
+    ~size:(size :> control_size)
+
+let toolbar_icon_button ~icon ?icon_signal ?icon_placement ~label ?size =
+  let size = Option.value size ~default:`default in
+  button_recipe
+    (Lui_elements.toolbar_icon_button ~icon ?icon_signal ?icon_placement ~label ~size) ~size
 
 let chrome_button element =
   with_props [Prop.opacity 0.7; Prop.hover_opacity 1.; Prop.pressed_opacity 1.;
@@ -250,7 +274,7 @@ let native_performance ~label ~unavailable ~format_fps () : t =
     let source = Signal.value sample in
     row ~key:"native-performance" ~gap:8 ~cross:`center ~padding_horizontal:8
       [ text ~key:"fps" ~accessibility_identifier:"native-performance-fps"
-          ~font_size:"0.875rem" ~line_height:"1.25rem" ~white_space:"nowrap"
+          ~font_size:"0.875rem" ~line_height:"1.25rem" ~white_space:`nowrap
           ~value:(reactive (fun (value : Ui_services.native_performance_sample) ->
             match value.fps with
             | None -> unavailable
@@ -330,12 +354,6 @@ let cmdk_input_row ~key children =
 
 let cmdk_search_input ~key ?placeholder ?placeholder_signal
     ~text_signal:text ~on_text () =
-  (* TextChanged is decoded once here — callers take the string *)
-  let on_input ev =
-    match ev with
-    | P.TextChanged (_, q) -> on_text q
-    | _ -> ()
-  in
   with_props
     [ Prop.font_size "var(--lx-text-input)"
     ; Prop.line_height "1.75rem"
@@ -348,7 +366,7 @@ let cmdk_search_input ~key ?placeholder ?placeholder_signal
        ~foreground:
          "var(--lx-gray-12, var(--ls-primary-text-color, \
           var(--lui-c-foreground)))"
-       ?placeholder ?placeholder_signal ~text_signal:text ~on_input [])
+       ?placeholder ?placeholder_signal ~text_signal:text ~on_input:on_text [])
 
 (* Results scroller — viewport-bounded like the cljs 65dvh block; owns
    the column children stack into (scroll children share a grid cell —
@@ -489,7 +507,7 @@ let cmdk_item_body ~key children =
 
 let cmdk_main_text ~key children =
   text ~key ~as_:`Span ~style_class:"cp__cmdk-item-main-text"
-    ~font_weight:500 ~line_clamp:2 ~overflow:"hidden" ~min_width:0
+    ~font_weight:500 ~line_clamp:2 ~overflow:`hidden ~min_width:0
     ~foreground:
       "var(--lx-gray-12, var(--ls-primary-text-color, var(--lui-c-foreground)))"
     children
@@ -507,7 +525,7 @@ let cmdk_badge ?(compact=false) ~key ~value () : t =
     ?min_height:(if compact then Some 18 else None)
     ?max_height:(if compact then Some 18 else None)
     ~font_size:"var(--lx-text-header)" ~font_weight:500 ~line_height:"1"
-    ~white_space:"nowrap" ~padding_vertical:2 ~padding_horizontal:8 ~corner_radius:9999
+    ~white_space:`nowrap ~padding_vertical:2 ~padding_horizontal:8 ~corner_radius:9999
     ~border_width:1
     ~border_color:
       "var(--lx-gray-06, var(--ls-border-color, rgb(0 0 0 / 0.12)))"
@@ -628,7 +646,7 @@ let chord_separator ~key : t =
    keycap, no chrome. *)
 let compact_key ~key ~value : t =
   text ~key ~as_:`Span ~font_size:"var(--lx-text-header)" ~font_weight:400
-    ~line_height:"16px" ~letter_spacing:(-0.5) ~white_space:"nowrap"
+    ~line_height:"16px" ~letter_spacing:(-0.5) ~white_space:`nowrap
     ~foreground:"var(--lx-gray-12, var(--rx-gray-12))" ~value []
 
 let shortcut_compact ~key children : t =
@@ -696,7 +714,7 @@ let cmdk_hint_button ~key ~label ~on_press children : t =
     ; Prop.hover_opacity 0.8
     ; Prop.cursor `pointer
     ]
-    (button ~variant:`ghost ~key ~label ~on_press ~height:28 ~min_height:28
+    (button ~variant:`ghost ~key ~text:"" ~label ~on_press ~height:28 ~min_height:28
        ~padding_vertical:4 ~padding_horizontal:12
        ~style_class:"cp__cmdk-hint"
        ~foreground:"var(--lx-gray-12, var(--rx-gray-12))"
@@ -725,7 +743,7 @@ let cmdk_search_only_name ~key ~value : t =
 
 let cmdk_search_only_clear ~key ~label ~on_press : t =
   with_props [ Prop.cursor `pointer ]
-    (button ~variant:`ghost ~key ~icon:(`app "x") ~size:`icon ~label ~on_press
+    (icon_button ~variant:`ghost ~key ~icon:(`app "x") ~size:`icon ~label ~on_press
        ~padding:4 [])
 
 let cmdk_empty ~key children : t =
@@ -858,9 +876,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
     | None, true -> Some "transparent"
     | _ -> background
   in
-  let on_input ev =
-    match ev with P.TextChanged (_, q) -> on_text q | _ -> ()
-  in
+  let on_input = on_text in
   let clear =
     match clear_label with
     | None -> []
@@ -870,7 +886,7 @@ let search_row ~key ?(height = 26) ?(font_size = "0.8125rem") ?(pad_left = 28)
             ~test:(reactive (fun value -> String.trim value <> "") text)
             (with_props
                [ Prop.position `absolute; Prop.inset_right 4. ]
-               (button ~key:"clear" ~variant:`ghost ~width:20 ~height:20
+               (icon_button ~key:"clear" ~variant:`ghost ~width:20 ~height:20
                   ~min_width:0 ~min_height:0 ~padding:4 ~label ~icon:(`app "x")
                   ~on_press:(fun _ ->
                     on_text "";
@@ -976,7 +992,7 @@ let chip_toggle ~key ~radius ~pad_v ~pad_h ~font_size ?text ?text_signal
    9999 radius; the colored dot/variant glyph is a child so "none"/"-"
    variants ride the same 30px hit area. *)
 let color_swatch ~key ~size ~background ~on_press ?(selected = false)
-    ?(opacity = 1.) ?hover_opacity ?border_color ?border_width ?label
+    ?(opacity = 1.) ?hover_opacity ?border_color ?border_width ~label
     ?style_class children : t =
   with_props
     ([ Prop.cursor `pointer; Prop.opacity opacity ]
@@ -984,9 +1000,9 @@ let color_swatch ~key ~size ~background ~on_press ?(selected = false)
     match hover_opacity with
     | Some o -> [ Prop.hover_opacity o ]
     | None -> [])
-    (button ~key ~variant:`ghost ~width:size ~height:size ~min_width:size
+    (button ~key ~text:"" ~label ~variant:`ghost ~width:size ~height:size ~min_width:size
        ~min_height:size ~padding:0 ~corner_radius:9999 ~background
-       ~selected ~on_press ?border_color ?label ?style_class
+       ~selected ~on_press ?border_color ?style_class
        ?border_width:(match border_color with
                       | Some _ -> Some (Option.value ~default:1 border_width)
                       | None -> None)
@@ -1061,6 +1077,30 @@ let option_card ~key ~thumbnail ~label ?(min_height = 0)
 
 (* -- menus & overlays -------------------------------------------------- *)
 
+let dropdown_menu_item ?style ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?icon ?icon_signal ?selection_placement ?variant ?size ?selected ?checked ?selected_signal ?checked_signal ?disabled ?disabled_signal ?on_press ?on_press_detail ?on_pointer_down ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : dropdown_menu_item_el =
+  let default value fallback = Option.value value ~default:fallback in
+  let defaults = Slot_style.make ~font_size:"0.875rem" ~line_height:"1.42857"
+    ~hover_background:"var(--lx-gray-05, hsl(var(--muted)))" () in
+  let style = match style with None -> defaults | Some style -> Slot_style.merge defaults style in
+  Lui_elements.dropdown_menu_item ~style
+    ?key ?gap ~main:(default main `start) ?cross
+    ?grow ?padding ~padding_horizontal:(default padding_horizontal 8) ~padding_vertical:(default padding_vertical 6)
+    ?margin ?margin_horizontal ?margin_vertical ?margin_top
+    ?margin_right ?margin_bottom ?margin_left ?background
+    ~foreground:(default foreground "inherit") ?border_color ?border_width ~corner_radius:(default corner_radius 4)
+    ?width ?height ?min_width ?max_width
+    ~min_height:(default min_height 0) ?max_height ?container_relative_frame ?container_relative_frame_inset
+    ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal
+    ?style_class ?data_attrs ?data_attrs_signal ?on_appear
+    ?on_pointer_enter ?on_pointer_leave ?text ?text_signal
+    ?icon ?icon_signal ?selection_placement ~variant:(default variant `ghost)
+    ?size ?selected ?checked ?selected_signal
+    ?checked_signal ?disabled ?disabled_signal ?on_press
+    ?on_press_detail ?on_pointer_down ?on_pointer_up ?on_context_menu
+    ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal
+    ?transition
+    children
+
 let menu_item_chrome element =
   with_props
     [ Prop.variant `ghost
@@ -1098,11 +1138,24 @@ let menu_surface ?max_height element =
     ; Prop.overflow `auto ]
     element
 
-let menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
-    ?max_height ?(data_attrs = []) items : t =
-  menu_surface ?max_height
-    (dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
-       ~min_width:128 ~style_class:cls ~data_attrs items)
+let dropdown_menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
+    ?width ?max_height ?(data_attrs = []) items =
+  dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
+    ~min_width:128 ?width ?max_height
+    ~gap:0 ~padding:4
+    ~style:(Slot_style.make
+      ?max_height_viewport:(match max_height with None -> Some 1. | Some _ -> None)
+      ~collision_padding:5.
+      ~shadow:"0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+      ~font_size:"0.875rem" ~line_height:"1.25rem" ~overflow:`auto ())
+    ~background:"hsl(var(--popover))" ~foreground:"inherit"
+    ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
+    ~style_class:cls ~data_attrs items
+
+let menu_card ~key ?cls ~anchor ~anchor_alignment ~on_dismiss
+    ?max_height ?data_attrs items : t =
+  dropdown_menu_view (dropdown_menu_card ~key ?cls ~anchor ~anchor_alignment
+    ~on_dismiss ?max_height ?data_attrs items)
 
 (* Same chrome on a popover surface — for anchored popups whose children
    are not menu rows (dropdown_menu rejects non-menu children). *)
@@ -1112,7 +1165,8 @@ let popover_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
     [ Prop.collision_padding 5.
     ; ( Prop.shadow "0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / \
            0.1)" ) ]
-    (popover ~transition:popover_transition ~key ~anchor ~anchor_alignment ~on_dismiss
+    (popover ~transition:popover_transition ~key
+       ~target:(Anchor { side=anchor; source=Parent; align=anchor_alignment; offset=0.; align_offset=0. }) ~on_dismiss
        ~min_width:128 ~padding:4
        ~background:"hsl(var(--popover))"
        ~border_color:"hsl(var(--border))" ~border_width:1
@@ -1141,7 +1195,7 @@ let dialog_close ~key ~label ~on_press : t =
     ; Prop.inset_right 16.
     ; Prop.opacity 0.7
     ; Prop.hover_opacity 1. ]
-    (button ~key ~variant:`ghost ~size:`icon ~width:16 ~height:16
+    (icon_button ~key ~variant:`ghost ~size:`icon ~width:16 ~height:16
        ~corner_radius:4 ~icon:(`app "x") ~label ~on_press [])
 
 (* -- editor chrome (task 5) -------------------------------------------- *)
@@ -1166,7 +1220,7 @@ let action_bar_capsule ~key ?(cls = "") ?border_color ?border_width
    flex layout also avoids an inline toolbar's baseline gap on Web.
    Toolbar requires a non-empty accessibility label.
    Toolbar admits controls and control groups. Mount conditional controls
-   with [if_] and group related inputs with ButtonGroup. *)
+   with [if_toolbar] and group related inputs with ButtonGroup. *)
 let flat_toolbar ~key ?(cls = "") ?opacity_signal ~label children : t =
   row ~style_class:cls ?opacity_signal ~min_width:0 ~cross:`center
     [ toolbar ~key ~orientation:`horizontal ~label ~gap:4
@@ -1261,7 +1315,7 @@ let calendar_grid ~week_starts_on ~month_label ~day_label ~year ~month ~day ~tab
            ([ ("tabindex", if not outside && d=tab_day then "0" else "-1") ]
            @ if focused then [ ("data-focused", "true") ] else [])
          ~on_navigate:(function
-           | P.NavigationKey (_,key,shift) ->
+           | Key {key;shift} ->
                let y,m,d = Dates.calendar_navigate ~week_starts_on ~year:y ~month:m ~day:d ~key ~shift in
                on_navigate y m d
            | _ -> ())
@@ -1305,7 +1359,7 @@ let calendar_header ~clear ~previous ~next ~month ~year : t =
 let calendar_nav_button ~id ~label ~icon ~autofocus ~on_press =
   with_props
     [ Prop.hover_background "var(--lx-gray-03, hsl(var(--muted)))" ]
-    (button ~variant:`ghost ~width:36 ~height:32 ~padding:0 ~border_width:1
+    (icon_button ~variant:`ghost ~width:36 ~height:32 ~padding:0 ~border_width:1
        ~border_color:"var(--lx-popover-border, hsl(var(--border)))"
        ~corner_radius:6 ~accessibility_identifier:id ~label ~icon ~autofocus ~on_press [])
 
@@ -1421,13 +1475,12 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                            (Array.to_list
                               (Array.mapi
                                  (fun index name ->
-                                   menu_item_chrome
-                                     (menu_item ~text:name
+                                   dropdown_menu_item ~text:name
                                         ~on_press:(fun _ ->
                                           let y, _, _ = Signal.get_state date in
                                           set_month y (index + 1);
                                           Signal.set month_open false)
-                                        []))
+                                        [])
                                  (calendar_month_names translate))));
                     ])
                 ~year:(input ~accessibility_identifier:"calendar-year" ~width:52
@@ -1436,14 +1489,12 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                       (reactive
                          (fun (y, _, _) -> string_of_int y)
                          (Signal.value date))
-                    ~on_input:(function
-                      | P.TextChanged (_, value) -> (
+                    ~on_input:(fun value ->
                           match int_of_string_opt value with
                           | Some y when y >= 1000 && y <= 9999 ->
                               let _, m, _ = Signal.get_state date in
                               set_month y m
                           | _ -> ())
-                      | _ -> ())
                     []);
               reactive
                 (fun (year, month, d) focused ->
@@ -1462,7 +1513,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
                    ~label:(translate "ui.calendar/time-label") ~height:32
                    ~padding_horizontal:12 ~padding_vertical:0 ~submit_on_blur:true
                    ~text:(reactive Fun.id (Signal.value time))
-                   ~on_input:(function P.TextChanged (_,value) -> Signal.set time value | _ -> ())
+                   ~on_input:(fun value -> Signal.set time value)
                    ~on_submit:(fun _ -> commit_time ()) []);
                  button ~variant:`ghost ~size:`sm ~height:28
                    ~padding_horizontal:12 ~padding_vertical:4
@@ -1477,9 +1528,7 @@ let calendar ?initial ?(datetime=false) ?(initial_focus_day=false) ?on_clear
               input ~accessibility_identifier:"calendar-date-input" ~height:40
                 ~margin_bottom:12
                 ~placeholder:(translate "ui/date-natural-language-placeholder")
-                ~on_input:(function
-                  | P.TextChanged (_, value) -> Signal.set buffer value
-                  | _ -> ())
+                ~on_input:(fun value -> Signal.set buffer value)
                 ~on_submit:(fun _ -> submit ())
                 [];
             ]);

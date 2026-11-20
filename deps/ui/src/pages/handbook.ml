@@ -34,7 +34,7 @@ let typography size line weight child = Ui_components.with_props
   [Prop.font_size size;Prop.line_height line;Prop.font_weight weight] child
 
 let icon_button ?identifier label name action =
-  Ui_components.button ~variant:`ghost ~label:(t label) ?accessibility_identifier:identifier
+  Ui_components.button ~text:"" ~variant:`ghost ~label:(t label) ?accessibility_identifier:identifier
     ~width:18 ~height:18 ~min_width:18 ~min_height:18 ~padding:0 ~gap:0
     ~background:"transparent" ~foreground:"var(--lx-handbook-heading-fg)"
     ~on_press:(fun _ -> action ()) [Icons.icon ~size:18. name]
@@ -56,10 +56,10 @@ let rec rich_inline catalog from navigate nodes = List.concat_map (function
     match tag with
     | "p" -> [paragraph ~margin:0 ~font_size:"16px" ~line_height:"25.6px" (content ())]
     | "strong" | "b" -> [text ~font_weight:700 (content ())]
-    | "em" | "i" -> [text ~font_style:"italic" (content ())]
+    | "em" | "i" -> [text ~font_style:`italic (content ())]
     | "code" -> [text ~as_:`Code ~font_family:Bug_report.mono ~font_size:"13.6px"
         ~background:"var(--ls-secondary-background-color)" ~corner_radius:4 ~padding_horizontal:4 (content ())]
-    | "pre" -> [text ~as_:`Pre ~white_space:"pre-wrap" ~margin:0 (content ())]
+    | "pre" -> [text ~as_:`Pre ~white_space:`pre_wrap ~margin:0 (content ())]
     | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" ->
       let level=int_of_string (String.sub tag 1 1) in
       let size,line,padding,weight=match level with
@@ -69,6 +69,9 @@ let rec rich_inline catalog from navigate nodes = List.concat_map (function
         | 4 -> "16px","24px",4,600
         | 5 -> "14px","20px",2,600
         | _ -> "12px","16px",2,600 in
+      let level = match level with
+        | 1 -> `h1 | 2 -> `h2 | 3 -> `h3 | 4 -> `h4 | 5 -> `h5 | 6 -> `h6
+        | _ -> assert false in
       [heading ~level ~margin:0 ~padding_vertical:padding
         ~font_size:size ~line_height:line ~font_weight:weight (content ())]
     | "ul" | "ol" ->
@@ -82,7 +85,7 @@ let rec rich_inline catalog from navigate nodes = List.concat_map (function
           let marker=if ordered then string_of_int number ^ "." else {js|•|js} in
           let marker=Ui_components.with_props
             [Prop.position `absolute;Prop.inset_left (-19.2);Prop.inset_top 0.;Prop.width 19]
-            (text ~text_alignment:`center ~font_size:"16px" ~line_height:"24px" ~white_space:"nowrap" ~value:marker []) in
+            (text ~text_alignment:`center ~font_size:"16px" ~line_height:"24px" ~white_space:`nowrap ~value:marker []) in
           let item=Ui_components.with_props [Prop.position `relative]
             (row ~as_:`Li ~gap:0 ~margin:0 ~padding:0 ~cross:`start ~min_width:0
               [marker;column ~grow:1. ~min_width:0 (rich_flow ~compact:true catalog from navigate children)]) in
@@ -205,7 +208,7 @@ let panel ~loader ~close ~online context parent =
       Ui_components.with_props
         [Prop.hover_background "var(--lx-handbook-hover-bg)";Prop.font_size "14px";
          Prop.line_height "20px";Prop.font_weight 400;Prop.white_space `normal]
-        (button ~key:node.key ~accessibility_identifier:("handbook-topic-" ^ node.key)
+        (button ~text:"" ~key:node.key ~accessibility_identifier:("handbook-topic-" ^ node.key)
           ~label:node.title ~variant:`ghost ~main:`start ~cross:`center ~gap:0
           ~min_width:0 ~min_height:64 ~padding_horizontal:12 ~padding_vertical:10 ~margin_bottom:8 ~corner_radius:8
           ~border_width:1 ~border_color:"var(--ls-border-color)" ~text_alignment:`start
@@ -222,7 +225,7 @@ let panel ~loader ~close ~online context parent =
     let category_card ~id ~title ~subtitle ~color ~icon action =
       Ui_components.with_props [Prop.hover_background "var(--lx-handbook-hover-bg)";
         Prop.font_size "16px";Prop.line_height "24px";Prop.font_weight 400;Prop.overflow `hidden;Prop.white_space `normal]
-        (button ~accessibility_identifier:id ~label:(title ^ " " ^ subtitle) ~variant:`ghost
+        (button ~text:"" ~accessibility_identifier:id ~label:(title ^ " " ^ subtitle) ~variant:`ghost
           ~padding:0 ~min_height:72 ~min_width:0 ~main:`start ~cross:`stretch ~gap:0
           ~text_alignment:`start
           ~corner_radius:4 ~background:"var(--ls-secondary-background-color)" ~foreground
@@ -236,7 +239,7 @@ let panel ~loader ~close ~online context parent =
                  Ui_components.with_props [Prop.padding_top 4]
                    (text ~font_size:"12px" ~line_height:"16px" ~font_weight:400
                      ~foreground:"var(--ls-primary-text-color)" ~value:subtitle [])]]]) in
-    let section key=heading ~level:2 ~font_size:"16px" ~line_height:"24px" ~font_weight:500
+    let section key=heading ~level:`h2 ~font_size:"16px" ~line_height:"24px" ~font_weight:500
       ~padding_vertical:8 ~foreground:"var(--lx-handbook-section-fg)" ~value:(t key) [] in
     let dashboard () = column ~padding_vertical:4 ~padding_horizontal:16 ~min_width:0
       [section "help.handbook/popular-topics";
@@ -255,7 +258,7 @@ let panel ~loader ~close ~online context parent =
     let footer () =
       let card title description icon url extra = Ui_components.with_props [Prop.white_space `normal]
         (typography "14px" "20px" 400
-        (button ~variant:`ghost ~label:(t title) ~padding:0 ~gap:4 ~min_width:0 ~grow:1.
+        (button ~text:"" ~variant:`ghost ~label:(t title) ~padding:0 ~gap:4 ~min_width:0 ~grow:1.
           ~main:`start ~cross:`start ~text_alignment:`start ~background:"transparent" ~foreground
           ~on_press:(fun _ -> Ui_services.env_open_url url)
           [column ~min_width:0 ~gap:4 [row ~opacity:0.3 [Icons.icon ~size:26. icon];
@@ -298,15 +301,15 @@ let panel ~loader ~close ~online context parent =
                  ~placeholder:(t "help.handbook/search-placeholder") ~label:(t "help.handbook/search-placeholder")
                  ~autofocus:true ~accessibility_identifier:"handbook-search"
                  ~text:(reactive Fun.id (Signal.value query))
-                 ~on_input:(fun event -> match event with Lui_protocol.TextChanged (_,value) ->
-                   set query value;set selected None;commit () | _ -> ())
-                 ~on_navigate:(function Lui_protocol.NavigatePrevious _ -> move (-1)
-                   | Lui_protocol.NavigateNext _ -> move 1 | _ -> ())
+                 ~on_input:(fun event -> match event with value ->
+                   set query value;set selected None;commit ())
+                 ~on_navigate:(function Previous -> move (-1)
+                   | Next -> move 1 | _ -> ())
                  ~on_submit:(fun _ -> Option.iter (fun (node:Data.node) -> open_topic node.key) (chosen ())) []));
            if_ ~test:(reactive (fun value -> String.trim value<>"") (Signal.value query))
              (Ui_components.with_props [Prop.position `absolute;Prop.inset_top 7.;Prop.inset_right 6.;
                 Prop.opacity 0.5;Prop.hover_opacity 0.8]
-               (Ui_components.button ~variant:`ghost ~label:(t "help.handbook/clear-search")
+               (Ui_components.button ~text:"" ~variant:`ghost ~label:(t "help.handbook/clear-search")
                  ~width:12 ~height:24 ~min_width:0 ~min_height:0 ~padding:0 ~gap:0
                  ~background:"transparent" ~on_press:(fun _ ->
                    clear ();commit ();
@@ -331,14 +334,14 @@ let panel ~loader ~close ~online context parent =
       Ui_components.with_props [Prop.padding_top 4;Prop.padding_bottom 20]
         (column ~padding_horizontal:16 ~min_width:0
         ([Ui_components.with_props [Prop.padding_bottom 4]
-           (heading ~level:1 ~font_size:"24px" ~line_height:"32px" ~font_weight:600 ~margin:0 ~padding_vertical:0 ~value:node.title [])] @
+           (heading ~level:`h1 ~font_size:"24px" ~line_height:"32px" ~font_weight:600 ~margin:0 ~padding_vertical:0 ~value:node.title [])] @
          List.map media node.demos @
          [Ui_components.with_props [Prop.padding_top 4] (typography "16px" "24px" 400
            (column ~min_width:0 (rich_nodes catalog key navigate nodes)));
           row ~main:`space_between ~margin_top:16
             (List.map (fun (direction,label,icon) -> match Data.adjacent catalog key direction with
               | None -> spacer []
-              | Some target -> Ui_components.button ~variant:`ghost ~size:`sm ~label:(t label)
+              | Some target -> Ui_components.button ~text:"" ~variant:`ghost ~size:`sm ~label:(t label)
                   ~on_press:(fun _ -> open_topic target.key)
                   [Icons.icon ~size:16. icon;text ~value:(t label) []])
               [`Prev,"help.handbook/prev-chapter","arrow-left";`Next,"help.handbook/next-chapter","arrow-right"])])) in
@@ -378,15 +381,15 @@ let panel ~loader ~close ~online context parent =
          ~accessibility_identifier:"handbook-header"
          ~background ~foreground:"var(--lx-handbook-heading-fg)"
          [reactive (fun entry -> match entry.pane with
-            | Dashboard -> heading ~level:1 ~font_size:"20px" ~line_height:"28px" ~font_weight:700
+            | Dashboard -> heading ~level:`h1 ~font_size:"20px" ~line_height:"28px" ~font_weight:700
                 ~grow:1. ~min_width:0 ~value:entry.title []
             | _ -> typography "20px" "28px" 700
-                (button ~variant:`ghost ~accessibility_identifier:"handbook-back" ~label:entry.title
+                (button ~text:"" ~variant:`ghost ~accessibility_identifier:"handbook-back" ~label:entry.title
                   ~grow:1. ~max_width:292 ~min_width:0 ~main:`start ~padding:0 ~gap:8 ~background:"transparent"
                   ~foreground:"var(--lx-handbook-heading-fg)" ~on_press:(fun _ -> back ())
                   [Icons.icon ~size:18. "chevron-left";text ~grow:1. ~min_width:0
                     ~text_alignment:`start
-                    ~white_space:"nowrap" ~text_overflow:"ellipsis" ~value:entry.title []]))
+                    ~white_space:`nowrap ~text_overflow:`ellipsis ~value:entry.title []]))
             (Signal.value current);
           row ~gap:12 ~cross:`center
             [if_ ~test:(reactive (fun entries -> List.length entries>1) (Signal.value history))

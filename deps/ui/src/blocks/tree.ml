@@ -668,7 +668,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             (* a.tag is an inline text run on the web — it never wraps
                mid-word inside the chip; the child text gets the tag
                color itself — the anchor's accent doesn't cascade *)
-            [ text ~key:"ts" ~value:tag ~white_space:"nowrap"
+            [ text ~key:"ts" ~value:tag ~white_space:`nowrap
                 ~foreground:Ui_components.tag_link_foreground
                 ~on_pointer_enter:enter ~on_pointer_leave:leave
                 [] ]))

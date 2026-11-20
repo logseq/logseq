@@ -522,7 +522,7 @@ let line_view ~on_input (line_s : line Signal.signal) : t =
      ; Ui_components.Prop.position `relative
      ; Ui_components.Prop.z_index 1
      ; Ui_components.Prop.user_select `text ]
-     (text ~white_space:"pre-wrap" ~style_class:"ed-line"
+     (text ~white_space:`pre_wrap ~style_class:"ed-line"
         [ keyed ~source:frags_s ~key:frag_key ~cmp:Stdlib.compare
             ~mount:(frag_view ~on_input ~start_off_of) ]))
     context parent

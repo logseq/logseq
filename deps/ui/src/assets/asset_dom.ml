@@ -372,7 +372,7 @@ let menu_items uuid (b : Model.block) : Views_popup.menu_item list =
 
 let action_bar uuid b : t =
   box ~key:("aab-" ^ uuid)
-    [ Ui_components.button ~key:("aabbtn-" ^ uuid) ~variant:`ghost ~size:`icon
+    [ Ui_components.icon_button ~key:("aabbtn-" ^ uuid) ~variant:`ghost ~size:`icon
         ~label:(I18n.t "ui/show-more")
         ~accessibility_identifier:("asset-menu-btn-" ^ uuid)
         ~icon:(`app "dots-vertical")
@@ -518,9 +518,8 @@ let resize_handle ~scope ~hovered ~height uuid side : t =
        ~corner_radius:999 ~opacity:(reactive (fun h -> if h then 1. else 0.) hovered)
        ~data_attrs:[("style", "cursor:col-resize;user-select:none;touch-action:none")]
        ~on_pointer_down:(fun ev -> match ev with
-         | Lui_protocol.PointerDown (_, d) ->
-             start_drag ~scope ~side ~uuid ~start_x:d.Lui_protocol.x
-         | _ -> ()) [])
+         | d ->
+             start_drag ~scope ~side ~uuid ~start_x:d.Lui_protocol.x) [])
 
 let asset_container uuid (b : Model.block) : t =
   let ext = Option.value b.Model.block_asset_type ~default:"" in

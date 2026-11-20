@@ -389,15 +389,14 @@ let type_select_view d name : t =
                  ~anchor:`below
                  ~anchor_alignment:`start ~on_dismiss:dismiss
                  (List.map (fun (ty,label) ->
-                   Ui_components.with_props
-                     [Ui_components.Prop.hover_background "var(--lx-gray-05)";
-                      Ui_components.Prop.hover_foreground "var(--lx-gray-12)"]
-                     (menu_item ~key:ty ~text:(I18n.t label)
+                   dropdown_menu_item ~key:ty ~text:(I18n.t label)
+                       ~style:(Slot_style.make ~hover_background:"var(--lx-gray-05)"
+                         ~hover_foreground:"var(--lx-gray-12)" ())
                        ~selected:false ~selection_placement:`leading ~gap:8
                        ~height:32 ~padding_horizontal:8 ~padding_vertical:6
                        ~corner_radius:4 ~foreground:"var(--lx-gray-12)"
                        ~on_press:(fun _ -> collapse ();
-                         on_type_chosen d name ty) []))
+                         on_type_chosen d name ty) [])
                    Properties_menu.type_names)) (Signal.value expanded) ]
      ]) context parent
 
@@ -739,16 +738,18 @@ let view : t =
             match d.d_placement with
             | Trigger _ -> assert false
             | (Point _ | Anchor_rect _) as placement ->
-                let at, anchor_rect = match placement with
-                  | Point (x, y) -> Some (x, y), None
-                  | Anchor_rect rect -> None, Some (Properties_popup.virtual_anchor_rect rect)
+                let target = match placement with
+                  | Point (x, y) -> At (x, y)
+                  | Anchor_rect rect ->
+                      let x, y, width, height = Properties_popup.virtual_anchor_rect rect in
+                      Anchor {side = `below; source = Rect {x; y; width; height};
+                        align = `start; offset = 0.; align_offset = 0.}
                   | Centered | Trigger _ -> assert false in
                 Ui_components.with_props
                   [Ui_components.Prop.font_size "14px";
                    Ui_components.Prop.line_height "20px";
                    Ui_components.card_shadow]
-                (popover ~key:"prop-pop" ?at ?anchor_rect
-                  ~anchor:`below ~anchor_alignment:`start ~anchor_offset:0.
+                (popover ~key:"prop-pop" ~target
                   ~padding:0 ~border_width:1 ~corner_radius:6
                   ~background:"hsl(var(--popover))"
                   ~foreground:"hsl(var(--popover-foreground))"
@@ -828,8 +829,11 @@ let trigger ~key ?margin_left ~remove ~target make_button : t =
                     ~value:(reactive (fun p ->
                       if date_phase p || icon_phase p then max 0 (int_of_float (Ui_services.dom_viewport_height ())-16)
                       else 288) phase)
-                  (popover ~anchor:`below ~anchor_alignment:`start ~anchor_offset:0.
-                    ?anchor_rect:(Properties_popup.virtual_anchor_for_id key)
+                  (popover ~target:(Anchor {side = `below;
+                    source = (match Properties_popup.virtual_anchor_for_id key with
+                      | Some (x, y, width, height) -> Rect {x; y; width; height}
+                      | None -> Parent);
+                    align = `start; offset = 0.; align_offset = 0.})
                     ~padding:0 ~border_width:1
                     ~corner_radius:6 ~background:"hsl(var(--popover))"
                     ~foreground:"hsl(var(--popover-foreground))"

@@ -328,10 +328,8 @@ let checkbox_el ?(mixed = fun _ -> false) inst ~jtrigger ~id ~aria_label ~shown 
         ~style_class:(if jtrigger then "jtrigger" else "")
         ~checked:(reactive shown (sig_of inst))
         ~indeterminate:(reactive mixed (sig_of inst))
-        ~on_toggle_detail:(fun ev ->
-          match ev with
-          | L.ToggleChangedDetail (_, on, modifiers) -> on_toggle on (modifiers land 2 <> 0)
-          | _ -> ())
+        ~on_toggle_detail:(fun {checked; modifiers} ->
+          on_toggle checked (modifiers land 2 <> 0))
         []))
 
 (* cljs row-checkbox: label.jtrigger > shui checkbox *)
@@ -390,7 +388,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
       let anchor = Printf.sprintf "table-title-%d-%s" inst.V.id row_uuid in
       let hover on = Signal.set hovered on; Runtime.flush () in
       let ghost icon_name title_ on_press =
-        Ui_components.button ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref icon_name)
+        Ui_components.icon_button ~variant:`ghost ~size:`icon ~icon:(Icons.name_ref icon_name)
           ~width:24 ~height:24 ~padding:4
           ~foreground:"muted-foreground"
           ~background:"var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
@@ -411,7 +409,7 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                      Table_title_editor.show ~anchor ~column_width:(column_width (V.get inst) c)
                        {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
                      (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
-                       [ text ~white_space:"nowrap" (Render_inline.parse ~self:row_uuid title) ])
+                       [ text ~white_space:`nowrap (Render_inline.parse ~self:row_uuid title) ])
                  ; Ui_parts.float_prop L.Opacity
                      ~value:(reactive (fun on -> if on then 1. else 0.) (Signal.value hovered))
                      (Ui_components.with_props
@@ -523,7 +521,7 @@ let focus_cell inst row_uuid column =
     (Ui_services.dom_by_id (cell_id inst row_uuid column))
 
 let table_cell_navigation inst ~row_uuid ~column = function
-  | L.NavigationKey (_, key, _) when V.table_row_selected (V.get inst) row_uuid ->
+  | {key; _} when V.table_row_selected (V.get inst) row_uuid ->
       (match key with
        | "ArrowLeft" | "ArrowRight" as arrow ->
            let cells = List.filter (fun c -> c.V.c_id <> "select")
@@ -683,11 +681,11 @@ let header_button inst (c : V.column) : t =
            List.find_opt (fun x -> x.V.s_id = c.V.c_id) s.V.sorting)
          (Signal.value (inst.V.st)))
   in
-  Ui_components.button ~variant:`ghost ~size:`sm ~label:c.V.c_name ~grow:1.
+  Ui_components.button ~text:"" ~variant:`ghost ~size:`sm ~label:c.V.c_name ~grow:1.
     ~foreground:"hsl(var(--muted-foreground))"
     ~main:`start ~height:32 ~padding_horizontal:8
     [ row ~main:`start ~cross:`center ~gap:4
-        [ text ~value:c.V.c_name ~white_space:"nowrap" []
+        [ text ~value:c.V.c_name ~white_space:`nowrap []
         ; if_
             ~test:(Logseq_el.own ctx (Signal.map (fun o -> o <> None) sort_sig))
             (icon_dyn
@@ -804,6 +802,7 @@ let header_cell_id inst (c : V.column) =
 
 let resize_handle inst (c : V.column) : t =
  fun context parent ->
+  let mounted_node = ref None in
   let finish owner commit =
     match (V.get inst).V.table_resize with
     | Some resize when resize.V.resize_owner = owner ->
@@ -824,24 +823,21 @@ let resize_handle inst (c : V.column) : t =
         ~background:"var(--lx-accent-08, hsl(var(--accent) / 0.6))"
         ~data_attrs:["data-no-dnd", "true"]
         ~pointer_capture:true
-        ~on_pointer_down:(function
-          | L.PointerDown (owner, detail) when detail.L.button = 0 ->
+        ~on_pointer_down:(fun detail ->
+          if detail.L.button = 0 then
+              let owner = Option.get !mounted_node in
               V.update inst (fun s -> V.start_table_resize s ~owner
-                ~column:c.V.c_id ~x:detail.L.x ~width:(column_width s c))
-          | _ -> ())
-        ~on_pointer_move:(function
-          | L.PointerMove (owner, detail) ->
-              V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x)
-          | _ -> ())
-        ~on_pointer_up:(function
-          | L.PointerUp (owner, detail) ->
+                ~column:c.V.c_id ~x:detail.L.x ~width:(column_width s c)))
+        ~on_pointer_move:(fun detail ->
+              let owner = Option.get !mounted_node in
+              V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x))
+        ~on_pointer_up:(fun detail ->
+              let owner = Option.get !mounted_node in
               V.update inst (fun s -> V.move_table_resize s ~owner ~x:detail.L.x);
-              finish owner true
-          | _ -> ())
-        ~on_pointer_cancel:(function
-          | L.PointerCancel (owner, _) -> finish owner false
-          | _ -> ()) []) context parent
+              finish owner true)
+        ~on_pointer_cancel:(fun _ -> finish (Option.get !mounted_node) false) []) context parent
   in
+  mounted_node := Some node;
   Signal.on_dispose context.Lui_ui.ui_scope (fun () ->
     let s = V.get inst in
     match s.V.table_resize with
@@ -1093,21 +1089,32 @@ let action_bar inst : t =
   let isig = sig_of inst in
   let action ?icon ?text ?width ?(margin_left = -1) ?(corner_radius = 0) ~label
       on_press =
-    Ui_components.with_props
-      [
-        Ui_components.Prop.font_size "12px";
-        Ui_components.Prop.line_height "16px";
-      ]
-      (Ui_components.button ~variant:`outline ?icon ?text ?width ~label ~height:32 ~padding_vertical:0
-         ~padding_horizontal:8 ~margin_left ~corner_radius
-         ~disabled:(reactive (fun (s : V.vstate) -> s.V.table_action_pending <> None) isig)
-         ~on_press:(fun _ -> if (V.get inst).V.table_action_pending = None then on_press ())
-         [])
+    let disabled (s : V.vstate) = s.V.table_action_pending <> None in
+    let on_press () = if (V.get inst).V.table_action_pending = None then on_press () in
+    match text, icon with
+      | Some text, icon ->
+          Ui_components.toolbar_button ~variant:`outline ?icon ~text ?width ~label ~height:32 ~padding_vertical:0
+            ~padding_horizontal:8 ~margin_left ~corner_radius
+            ~style:(Slot_style.make ~font_size:"12px" ~line_height:"16px" ())
+            ~disabled:(reactive disabled isig) ~on_press []
+      | None, Some icon ->
+          Ui_components.toolbar_icon_button ~variant:`outline ~icon ?width ~label ~height:32 ~padding_vertical:0
+            ~padding_horizontal:8 ~margin_left ~corner_radius
+            ~style:(Slot_style.make ~font_size:"12px" ~line_height:"16px" ())
+            ~disabled:(reactive disabled isig) ~on_press []
+      | None, None -> assert false
   in
   let property_action ~remove key =
     let label = I.t (if remove then "property/unset-property" else "property/set-property") in
-    Properties_dialog.trigger ~key ~margin_left:(-1) ~remove ~target:(fun () -> None)
-      (fun _ -> action ~margin_left:0 ~label ~text:label (fun () ->
+    toolbar_button_group ~gap:0 ~margin_left:(-1) ~height:32
+      ~background:"transparent" ~border_width:0 ~corner_radius:0
+      [Properties_dialog.trigger ~key ~remove ~target:(fun () -> None)
+      (fun _ -> Ui_components.button ~variant:`outline ~text:label ~label
+        ~height:32 ~padding_vertical:0 ~padding_horizontal:8 ~margin_left:0 ~corner_radius:0
+        ~style:(Slot_style.make ~font_size:"12px" ~line_height:"16px" ())
+        ~disabled:(reactive (fun (s : V.vstate) -> s.V.table_action_pending <> None) isig)
+        ~on_press:(fun () ->
+        if (V.get inst).V.table_action_pending = None then
         match !(Properties_dialog.current) with
         | Some dialog when dialog.Properties_dialog.d_placement = Properties_dialog.Trigger key ->
             Properties_dialog.close ()
@@ -1116,7 +1123,7 @@ let action_bar inst : t =
             | Some target when current () ->
                 Properties_dialog.open_at ~remove ~phase:Properties_dialog.Prop_select
                   (Properties_dialog.Trigger key) target
-            | _ -> ()))) in
+            | _ -> ())) [])] in
   if_
     ~test:(reactive (fun s -> selected_row_count s > 0) isig)
     (box ~key:"tac" ~margin_left:32 ~margin_top:1
@@ -1127,8 +1134,8 @@ let action_bar inst : t =
            ~background:"var(--lx-gray-01, var(--ls-primary-background-color, var(--rx-gray-01)))"
            ~border_width:0 ~corner_radius:0
            [
-             text ~padding_horizontal:8 ~margin_right:4 ~font_size:"14px"
-               ~line_height:"20px"
+             toolbar_text ~padding_horizontal:8 ~margin_right:4
+               ~style:(Slot_style.make ~font_size:"14px" ~line_height:"20px" ())
                ~value:
                  (reactive
                     (fun (s : V.vstate) ->
@@ -1201,7 +1208,7 @@ let keyed_row_key (u, blk) =
   u ^ "|" ^ string_of_int (Hashtbl.hash blk)
 
 let table_row_navigation inst ~row_uuid ~columns = function
-  | L.NavigationKey (_, key, _) when V.table_row_selected (V.get inst) row_uuid ->
+  | {key; _} when V.table_row_selected (V.get inst) row_uuid ->
     (match key with
     | "Enter" ->
         open_row_sidebar row_uuid;

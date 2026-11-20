@@ -443,7 +443,7 @@ let auto_backup ctx =
                             | Some name -> name | None -> "")
                             folder_sig)
                           []
-                      ; Ui_components.button ~key:"ab-x" ~size:`icon ~icon:(`app "x") ~variant:`ghost
+                      ; Ui_components.icon_button ~key:"ab-x" ~size:`icon ~icon:(`app "x") ~variant:`ghost
                           ~autofocus:true
                           ~style_class:"ui__button as-ghost"
                           ~label:(T.t "export.backup/cancel")

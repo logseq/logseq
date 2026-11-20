@@ -38,17 +38,17 @@ let ghost_btn_cls ?(mid = "") ?(tail = "") () =
 (* cljs icon-btn: data-tooltip/data-tooltip-keys feed the tooltip
    reader (popups/tooltip.ml el_closest [data-tooltip],[aria-label]);
    ~label lands as aria-label *and* the tooltip text *)
-let icon_btn ?tip ?shortcut_id ?tip_side ~key ~id ~cls ~icon ~on_click () =
+let icon_btn ~tip ?shortcut_id ?tip_side ~key ~id ~cls ~icon ~on_click () =
   (* chrome 32px icon button: 8px pad, 20px glyph, radius, opacity
      states — what the deleted .cp__header/.left-sidebar-top icon-btn
      rules styled *)
   Ui_components.chrome_button
-    (Ui_components.button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
+    (Ui_components.icon_button ~key ~variant:`ghost ~size:`icon ~width:32 ~height:32
        ~padding:4 ~corner_radius:6
        ?accessibility_identifier:(if id = "" then None else Some id)
-       ?label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
+       ~label:tip ~style_class:cls ~icon:(Icons.name_ref icon)
     ~data_attrs:(
-      (match tip with Some t -> ["data-tooltip", t] | None -> [])
+      ["data-tooltip", tip]
       @ (match shortcut_id with Some id -> Keymap_data.tooltip_attrs id | None -> [])
       @ (match tip_side with Some side -> ["data-tooltip-side", side] | None -> []))
        ~on_press:(fun _ -> on_click None) [])
@@ -64,7 +64,7 @@ let search_button ?(key = "search-btn") () =
    imperative query_selector anchor for the dropdown position *)
 let dots_button : t =
  fun context parent ->
-  (Ui_components.button ~key:"dots-btn" ~variant:`ghost ~size:`icon
+  (Ui_components.icon_button ~key:"dots-btn" ~variant:`ghost ~size:`icon
     ~accessibility_identifier:"toolbar-dots-btn"
     ~style_class:(ghost_btn_cls ~tail:"toolbar-dots-btn" ())
     ~label:(I18n.t "header/more") ~icon:(`app "dots")
@@ -509,7 +509,7 @@ let rtc_indicator (ms : Model.t Signal.signal) : t =
               ~style_class:"cp__rtc-sync-indicator"
               [ Ui_components.with_props
                   [ Ui_components.Prop.position `relative ]
-                  (Ui_components.button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
+                  (Ui_components.icon_button ~key:"rtc-btn" ~variant:`ghost ~size:`icon
                      ~style_class:cls ~label:"rtc sync"
                      ~icon:(`app "cloud")
                      ~on_press:(fun _ -> toggle_rtc_details ())
@@ -571,7 +571,7 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
       if uploadable then
         (* the title attr has no typed-prop equivalent — ~label covers
            the a11y name and feeds the tooltip layer *)
-        Ui_components.button ~key:"lgs" ~variant:`ghost ~size:`icon
+        Ui_components.icon_button ~key:"lgs" ~variant:`ghost ~size:`icon
           ~style_class:(ghost_btn_cls ())
           ~label:(I18n.t "graph/use-sync-beta") ~icon:(`app "cloud")
           ~on_press:(fun _ ->
@@ -609,7 +609,7 @@ let index_progress (ms : Model.t Signal.signal) : t =
             [ ("style", "opacity:0.9;-webkit-app-region:no-drag") ]
           [ box ~key:"sip-l" 
               [ box ~key:"sip-i" ~style_class:"icon" [ loader_svg ] ]
-          ; text ~key:"sip-t" ~white_space:"nowrap"
+          ; text ~key:"sip-t" ~white_space:`nowrap
               ~font_size:"0.75rem"
               ~style_class:"search-index-progress__text"
               ~value:
@@ -711,17 +711,15 @@ let recent_slider (ms : Model.t Signal.signal) : t = fun ctx parent ->
           ~value:(reactive (fun state ->
               if state.Settings_state.recent_days = 0 then I18n.t "header/highlight-recent-blocks"
               else I18n.tf "header/highlight-recent-blocks-days-ago" [string_of_int state.recent_days]) preferences)
-        (slider ~key:"recent-days" ~grow:1.
+        (slider ~key:"recent-days" ~grow:1. ~label:(I18n.t "header/highlight-recent-blocks")
           ~data_attrs:(reactive (fun state -> ["data-tooltip",
             if state.Settings_state.recent_days = 0 then I18n.t "header/highlight-recent-blocks"
             else I18n.tf "header/highlight-recent-blocks-days-ago" [string_of_int state.recent_days]]) preferences)
           ~value:(reactive (fun state -> float_of_int state.Settings_state.recent_days /. 100.) preferences)
-          ~on_change:(function
-            | Lui_protocol.ValueChanged (_, value) ->
-                Settings_state.set_recent_days (int_of_float (Float.round (value *. 100.)));
-                refresh ()
-            | _ -> ()) [])
-      ; Ui_components.button ~key:"recent-close" ~variant:`ghost ~size:`icon
+          ~on_change:(fun value ->
+            Settings_state.set_recent_days (int_of_float (Float.round (value *. 100.)));
+            refresh ()) [])
+      ; Ui_components.icon_button ~key:"recent-close" ~variant:`ghost ~size:`icon
           ~icon:(`app "x") ~label:(I18n.t "header/quit-highlight-recent-blocks")
           ~on_press:(fun _ -> Settings_state.toggle_recent ()) [] ])) context parent)) ctx parent
 
@@ -922,13 +920,13 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       else "cp__left-split is-collapsed")
     (split ~key:"left-split" ~grow:1. ~min_height:0
        ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:0.5
-       ~first_width:
+       ~sizing:
          (reactive
             (fun (m : Model.t) width vw ->
-              if Sidebar_state.left_docked m.Model.left_sidebar_open vw then width else 0.)
+              First_width (if Sidebar_state.left_docked m.Model.left_sidebar_open vw then width else 0.))
             ms (Signal.value st.Sidebar_state.left_width)
             (Signal.value st.Sidebar_state.viewport_w))
-       ~resize_duration:300 ~resize_easing:`standard
+       ~motion:{duration_ms=300; easing=`standard; origin=None}
        ~on_resize:(Sidebar_state.on_left_split_resize st)
        (if Ui_services.env_publishing () then Logseq_el.nothing
         else left_sidebar ms st)
@@ -945,12 +943,12 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       ^ if m.right_sidebar_open then "" else " is-collapsed")
     (split ~key:"right-split" ~grow:1. ~min_height:0
        ~gap:0 ~resize_handle_width:3 ~resize_handle_offset:2.5
-       ~value:
+       ~sizing:
          (reactive
             (fun (m : Model.t) fraction ->
-              if m.Model.right_sidebar_open then 1. -. fraction else 1.)
+              Fraction (if m.Model.right_sidebar_open then 1. -. fraction else 1.))
             ms (Signal.value st.Sidebar_state.right_fraction))
-       ~resize_duration:300 ~resize_easing:`standard
+       ~motion:{duration_ms=300; easing=`standard; origin=None}
        ~on_resize:(Sidebar_state.on_right_split_resize st)
        first second)
 
@@ -1130,10 +1128,10 @@ let not_found_page : t =
     (column ~key:"nf-full" ~main:`center ~cross:`center
        ~background:"var(--ls-primary-background-color)"
        ~data_attrs:[ ("style", "min-height:100vh") ]
-    [ heading ~key:"nf-h1" ~level:1 ~font_size:"3.75rem" ~font_weight:700
+    [ heading ~key:"nf-h1" ~level:`h1 ~font_size:"3.75rem" ~font_weight:700
         ~foreground:"var(--lx-gray-12, var(--ls-primary-text-color, var(--rx-gray-12)))"
         ~margin_bottom:16 ~value:"404" []
-    ; heading ~key:"nf-h2" ~level:2 ~font_size:"1.5rem" ~font_weight:600
+    ; heading ~key:"nf-h2" ~level:`h2 ~font_size:"1.5rem" ~font_weight:600
         ~foreground:"var(--lx-gray-10, var(--ls-secondary-text-color))"
         ~margin_bottom:24
         ~value:(I18n.t "page/not-found-title") []

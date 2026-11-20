@@ -456,7 +456,7 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
  fun ctx parent ->
   if Ui_services.env_publishing () then
     column ~style_class:"ls-page-title title"
-      [ heading ~level:1 ~value:page.page_title []
+      [ heading ~level:`h1 ~value:page.page_title []
       ; Properties_area.page_area ~scope:(scope_of_route m.route) page ] ctx parent
   else
   (* title rows also render in the journals list before any block row
@@ -642,8 +642,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
                                       ; Ui_components.Prop.line_height "1" ]
                                       (row ~key:"pt-icon"
                                       ~style_class:"ls-page-icon" ~height:46
-                                      [ Ui_components.button ~key:"pt-icbtn"
-                                          ~variant:`ghost ~size:`icon
+                                      [ Ui_components.button ~text:"" ~key:"pt-icbtn"
+                                          ~variant:`ghost
                                           ~label:(I18n.t "context-menu/set-icon")
                                           ~style_class:"ui__button as-ghost ls-page-icon-btn"
                                           ~width:38 ~min_width:38 ~height:38 ~min_height:38 ~padding:0
@@ -913,7 +913,7 @@ let unlinked_head_collapsed key : t =
         ~style_class:"as-text"
         ~accessibility_identifier:("view-tab-" ^ key)
         [])
-    ; Ui_components.button ~key:"uva" ~variant:`ghost ~size:`sm
+    ; Ui_components.button ~text:"" ~key:"uva" ~variant:`ghost ~size:`sm
         ~width:24 ~height:24 ~min_width:24 ~min_height:24 ~padding:0
         ~label:(I18n.t "view/add-new-view")
         ~style_class:"as-text"
