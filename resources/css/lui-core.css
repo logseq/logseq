@@ -1387,9 +1387,37 @@ a.page-title {
 
 /* ============================ Breadcrumb ================================= */
 
-/* crumbs are ghost caption buttons (kit breadcrumb_trail) — the old
-   a-only color rules were dead; item opacity + the block-parents row
-   layout ride typed props on the emitters */
+.breadcrumb.block-parents {
+  a,
+  .lui-link {
+    color: var(--ls-primary-text-color);
+    text-decoration: none;
+
+    &:hover {
+      opacity: 1;
+    }
+  }
+}
+
+.breadcrumb__segment {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: var(--breadcrumb-segment-max-width, 28ch);
+  vertical-align: middle;
+}
+
+.breadcrumb__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+}
+
+.breadcrumb--block-page {
+  --breadcrumb-segment-max-width: 28ch;
+}
 
 /* ============================ Outliner =================================== */
 
