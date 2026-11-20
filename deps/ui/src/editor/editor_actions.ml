@@ -3742,33 +3742,42 @@ type asset_upload =
   ; upload_empty : bool
   }
 
+let block_title_empty uuid =
+  match S.find uuid with
+  | Some b -> String.trim b.Model.block_title = ""
+  | None -> false
+
 let capture_asset_upload ?drop_target () =
   let model = Runtime.model () in
   let edit = S.editing () in
   (* cljs db-based-save-assets!: editing block wins; otherwise
-     :last-edit-block (drop target) inserts as a sibling. *)
-  let target, sibling =
+     :last-edit-block (drop target) inserts as a sibling. Empty
+     targets must set upload_empty so asset_of_file reuses the
+     target UUID — otherwise the worker replaces the asset UUID
+     while the file was written under a generated id. *)
+  let target, sibling, empty =
     match edit with
     | Some {S.owner = S.Explicit_draft owner; _} ->
-        (Some owner#asset_target, false)
-    | Some e -> (Some e.S.uuid, true)
+        (Some owner#asset_target, false, false)
+    | Some e ->
+        ( Some e.S.uuid
+        , true
+        , (not (S.is_draft e)) && String.trim e.S.buffer = "" )
     | None -> (
         match drop_target with
-        | Some uuid -> (Some uuid, true)
+        | Some uuid -> (Some uuid, true, block_title_empty uuid)
         | None ->
             ( (match model.Model.route_page, model.Model.journals with
                | Some page, _ -> page.Model.page_uuid
                | None, page :: _ -> page.Model.page_uuid
                | None, [] -> None)
+            , false
             , false ))
   in
   if Ui_services.env_publishing () then None else
   Option.bind model.Model.repo (fun repo -> Option.map (fun target ->
-    let persisted = Option.fold ~none:false ~some:(fun e -> not (S.is_draft e)) edit in
     {upload_repo = repo; upload_route = Runtime.route (); upload_target = target;
-     upload_edit = edit; upload_sibling = sibling;
-     upload_empty = persisted && Option.fold ~none:false
-       ~some:(fun e -> String.trim e.S.buffer = "") edit}) target)
+     upload_edit = edit; upload_sibling = sibling; upload_empty = empty}) target)
 
 let asset_upload_current upload =
   upload.upload_repo = Runtime.repo () && upload.upload_route = Runtime.route ()
@@ -3792,7 +3801,7 @@ let commit_uploaded_assets upload blocks =
   if not (asset_upload_current upload) then Js.Promise.resolve () else
   let* () = Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
       (save_ops @ [Ops.insert_blocks ~bottom:true
-        ~replace_empty_target:upload.upload_sibling blocks upload.upload_target
+        ~replace_empty_target:upload.upload_empty blocks upload.upload_target
         ~sibling:upload.upload_sibling]) in
   if upload.upload_empty && asset_upload_current upload then Ops.resync_open_editor ()
   else Js.Promise.resolve ()
