@@ -3674,52 +3674,65 @@ let zoom_out () =
       | _ -> ())
   | None -> Ui_services.nav_back ()
 
-(* -- /query (cljs commands.cljs db-based-query -> editor.cljs
-   run-query-command!): create the logseq.property/query value block
-   (its title is the pre-slash buffer), tag the block Query, empty its
-   title, and exit editing — one transact! batch. -- *)
+(* -- /query (cljs db-based-query -> run-query-command!): move the
+   current title into logseq.property/query, tag Query, clear title.
+   /Advanced Query (advanced-query-steps): keep the title, create an
+   empty query value block with display-type=code + code/lang=clojure. -- *)
 let run_query_command ~advanced =
   match S.editing () with
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
-      (* the query command empties this block's title in the same tx —
-         pin it so the exit-edit repaint doesn't flash the old title *)
-      S.override_title e.uuid "";
-      S.set (fun st -> { st with S.editing = None });
       let quuid = Ui_services.env_random_uuid () in
-      let extra =
-        (* advanced-query-steps: display-type :code + code/lang clojure
-           on the query value block (pre-named via new-block-id) *)
-        if advanced then
-          [ Ops.set_block_property quuid "logseq.property.node/display-type"
-              (Wire.Keyword "code")
-          ; Ops.set_block_property quuid "logseq.property.code/lang"
-              (Wire.String "clojure")
-          ]
-        else []
-      in
-      let _ = () in
-      ignore
-        (let* sop = Ops.save_block_parsed e.uuid "" in
-        let* () =
-          Ops.apply_and_refresh
-            ([ Ops.op "create-property-text-block"
-                 [ Wire.Uuid e.uuid
-                 ; Wire.Keyword "logseq.property/query"
-                 ; Wire.String buf
-                 ; Wire.Map
-                     [ Ops.kw "set-block-property?" (Wire.Bool true)
-                     ; Ops.kw "new-block-id" (Wire.Uuid quuid)
-                     ]
-                 ]
-             ; Ops.set_block_property e.uuid "block/tags"
-                 (Wire.Keyword "logseq.class/Query")
-             ; sop
-             ]
-            @ extra)
-        in
-        Js.Promise.resolve ())
+      if advanced then (
+        S.set (fun st -> { st with S.editing = None });
+        ignore
+          (let* sop = Ops.save_block_parsed e.uuid buf in
+           let* () =
+             Ops.apply_and_refresh
+               [ sop
+               ; Ops.op "create-property-text-block"
+                   [ Wire.Uuid e.uuid
+                   ; Wire.Keyword "logseq.property/query"
+                   ; Wire.String ""
+                   ; Wire.Map
+                       [ Ops.kw "set-block-property?" (Wire.Bool true)
+                       ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                       ]
+                   ]
+               ; Ops.set_block_property e.uuid "block/tags"
+                   (Wire.Keyword "logseq.class/Query")
+               ; Ops.set_block_property quuid
+                   "logseq.property.node/display-type"
+                   (Wire.Keyword "code")
+               ; Ops.set_block_property quuid "logseq.property.code/lang"
+                   (Wire.String "clojure")
+               ]
+           in
+           Js.Promise.resolve ()))
+      else (
+        (* pin empty title so exit-edit does not flash the old text *)
+        S.override_title e.uuid "";
+        S.set (fun st -> { st with S.editing = None });
+        ignore
+          (let* sop = Ops.save_block_parsed e.uuid "" in
+           let* () =
+             Ops.apply_and_refresh
+               [ Ops.op "create-property-text-block"
+                   [ Wire.Uuid e.uuid
+                   ; Wire.Keyword "logseq.property/query"
+                   ; Wire.String buf
+                   ; Wire.Map
+                       [ Ops.kw "set-block-property?" (Wire.Bool true)
+                       ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                       ]
+                   ]
+               ; Ops.set_block_property e.uuid "block/tags"
+                   (Wire.Keyword "logseq.class/Query")
+               ; sop
+               ]
+           in
+           Js.Promise.resolve ()))
 
 (* -- upload asset (cljs handler/editor/assets.cljs
    db-based-save-assets!): write each file to pfs

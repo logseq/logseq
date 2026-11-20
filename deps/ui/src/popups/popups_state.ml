@@ -1910,83 +1910,16 @@ let apply_template t ac uuid =
            end else Js.Promise.resolve () in
          Js.Promise.resolve ())
          |> Views_db.catch_quiet)
-(* cljs run-query-command! / advanced-query-steps: save the current
-   block, tag it logseq.class/Query, create the hidden
-   logseq.property/query value block and copy the current title into it
-   (the query source), clear the block title, exit edit. Advanced also
-   marks the value block display-type=code + code/lang=clojure so the
-   worker's render-view-data exposes the pulled :query columns. *)
+(* cljs query-steps clear the slash then run-query-command!;
+   advanced-query-steps clear the slash then set Query tag + empty
+   code query property while keeping the host title. *)
 let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
-  | Some buuid ->
-      let title = (Option.get ac.editor).Editor_state.base in
-      Outliner_ops.cancel_pending_save ();
-      Editor_actions.sync_buffer buuid title;
+  | Some _ ->
+      erase_trigger_text ac;
       close_ac t;
-      Editor_actions.exit_edit ~select:false;
-      let repo_v = repo () in
-      ignore
-        ((let* sop = Outliner_ops.save_block_parsed buuid title in
-        let* _ =
-           Outliner_ops.apply
-             [ sop
-             ; Outliner_ops.op "create-property-text-block"
-                 [ Wire.Uuid buuid
-                 ; Wire.Keyword "logseq.property/query"
-                 ; Wire.String ""
-                 ; Wire.Map
-                     [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
-             ]
-         in
-         let* w =
-          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
-            (Wire.Array
-               [ Wire.Map
-                   [ (Wire.Keyword "id", Wire.Uuid buuid)
-                   ; ( Wire.Keyword "opts"
-                     , Wire.Map
-                         [ (Wire.Keyword "children?", Wire.Bool true)
-                         ; ( Wire.Keyword "include-property-block?"
-                           , Wire.Bool true ) ] ) ]
-               ])
-        in
-        let quuid =
-          match Wire.args_list w with
-          | res :: _ -> (
-              let b =
-                match Wire.get res "block" with
-                | Some b -> b
-                | None -> res
-              in
-              match Wire.get b "logseq.property/query" with
-              | Some v -> (
-                  match Wire.map_get_uuid v "block/uuid" with
-                  | Some u -> u
-                  | None -> (
-                      match Wire.as_uuid v with
-                      | Some u -> u
-                      | None -> ""))
-              | None -> "")
-          | [] -> ""
-        in
-        if quuid = "" then Js.Promise.resolve ()
-        else
-          let rest =
-            [ Outliner_ops.set_block_property buuid "block/tags"
-                (Wire.Keyword "logseq.class/Query") ]
-            @ if advanced then
-                [ Outliner_ops.set_block_property quuid
-                    "logseq.property.node/display-type"
-                    (Wire.Keyword "code")
-                ; Outliner_ops.set_block_property quuid
-                    "logseq.property.code/lang"
-                    (Wire.String "clojure") ]
-              else []
-          in
-          Outliner_ops.apply_parsed ~rest
-            [ (quuid, title); (buuid, "") ])
-        |> Views_db.catch_quiet)
+      Editor_actions.run_query_command ~advanced
 
 exception Unsupported_configured_input
 
