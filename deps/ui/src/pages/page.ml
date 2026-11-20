@@ -1628,6 +1628,10 @@ let region (ms : Model.t Signal.signal) : t =
           column ~key:"recycle-page" ~gap:32 ~padding_horizontal:8
             [ top_view m; box ~margin_top:(-20) [Recycle.view ms] ]
       | Model.Ready, Model.Settings -> Settings_page.view ms
+      | Model.Ready, Model.Plugins ->
+          (* cljs plugins/plugins-page — reuse dialog body as full page *)
+          column ~key:"plugins-route" ~grow:1. ~padding:16
+            [ Plugins_view.body ms ]
       | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, Model.Bug_report -> Bug_report.view ()

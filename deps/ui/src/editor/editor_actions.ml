@@ -765,6 +765,17 @@ let rec exit_edit ~select =
               (if Lazy.force perf_keys then
                  Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
               Editor_sink.invalidate e.uuid;
+              let reenter =
+                match !(S.pending_raw_reenter) with
+                | Some u when u = e.uuid && not select ->
+                    S.pending_raw_reenter := None;
+                    S.set_raw_code (Some u);
+                    Some u
+                | _ ->
+                    S.pending_raw_reenter := None;
+                    S.set_raw_code None;
+                    None
+              in
               S.set (fun st ->
                   { st with
                     S.editing = None
@@ -776,7 +787,8 @@ let rec exit_edit ~select =
                     (* Escape selects the block without raising the action bar. *)
                   ; action_bar = false
                   });
-              S.notify_edit_exit e.uuid
+              S.notify_edit_exit e.uuid;
+              Option.iter (fun u -> enter_edit ~scope:e.scope u (-1)) reenter
           | _ -> ()
         in
         (* Exit belongs to the editing session, even when its route changes
@@ -3155,6 +3167,7 @@ module History_ui = struct
       | Model.Bug_report -> "bug-report", []
       | Model.Bug_report_clipboard -> "bug-report-tool", []
       | Model.Settings -> "settings", []
+      | Model.Plugins -> "plugins", []
       | Model.File path -> "file", ["path", Wire.String path]
       | Model.Not_found path -> "not-found", ["path", Wire.String path] in
     map (("route-data", map ["to", Wire.Keyword destination;

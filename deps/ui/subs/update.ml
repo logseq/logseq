@@ -83,6 +83,8 @@ let effects (action : Action.t) : unit =
            Ui_services.doc_set_title ((!Subs_state.i18n) "mobile.tab/graphs")
        | Model.Settings ->
            Ui_services.doc_set_title ((!Subs_state.i18n) "nav/settings")
+       | Model.Plugins ->
+           Ui_services.doc_set_title ((!Subs_state.i18n) "nav/plugins")
        | Model.Import ->
            Ui_services.doc_set_title ((!Subs_state.i18n) "import/title")
        | Model.Bug_report -> Ui_services.doc_set_title ((!Subs_state.i18n) "bug-report/title")
