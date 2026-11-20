@@ -1221,6 +1221,31 @@ This checks isolated application factories, not rebuilt-app acceptance or
 native visuals. No `static/` writes/build or `:3010` access. Logs:
 `/Users/devin/attachments/table95-*.log`.
 
+### Table95 follow-up: query token text colors
+
+Master's `query/builder.css` explicitly colors `a.query-clause` with
+`var(--ls-primary-text-color)` and its hover state with
+`var(--ls-secondary-text-color)`. LUI's ghost buttons instead inherited
+the generic foreground (RGB 23/23/23 in the supplied light-theme capture)
+and used the generic secondary foreground on hover. Both operator and
+clause buttons now use Master's variables through typed foreground props,
+without changing other ghost buttons or hard-coding either theme's RGB.
+The mounted regression covers both button paths and both color roles.
+
+The real-SDK Chrome fixture loads the repository's actual classic theme
+variables and switches `data-theme` with `data-color=logseq`. Light token
+text resolves to **RGB(67,63,56)**; dark resolves to **RGB(164,181,182)**.
+Operator and Search hover resolve to **RGB(22,30,46)** in light and
+**RGB(223,223,223)** in dark. Accepted token geometry and flat/grouped
+scroll behavior remain unchanged. Gates: **6679 UI checks, zero failures**;
+native experimental tests/build pass. Worker retains the same Table95
+**[1,7,8]** platform cases: 3 failures / 994 tests
+(`Native secrets require the OS keychain host`). Screenshots:
+`/Users/devin/attachments/table95-color-{light,dark}.png`. Integrated
+application acceptance and native visuals remain unverified; no `static/`
+writes/build or `:3010` access. Logs:
+`/Users/devin/attachments/table95-color-*.log`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

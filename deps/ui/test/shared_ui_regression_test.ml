@@ -5239,6 +5239,11 @@ let run_views ~registry ~profile ~finish =
      && M.string_prop group "line-height"=Some "1.25rem");
   let clause = List.find (fun n -> Option.fold ~none:false ~some:(fun text ->
     Str_util.contains text "Wrapping clause fixture") (M.string_prop n "text")) (nodes sorting) in
+  check "Operator and clause text use Master's theme-aware primary and hover colors"
+    (List.for_all (fun node ->
+       M.string_prop node "foreground"=Some "var(--ls-primary-text-color)"
+       && M.string_prop node "hover-foreground"=Some "var(--ls-secondary-text-color)")
+       [operator;clause]);
   check "Query clause text uses normal weight and wraps without a fixed line height"
     (Hashtbl.find_opt clause.M.props "font-weight"=Some (P.IntValue 400)
      && M.string_prop clause "white-space"=Some "normal"

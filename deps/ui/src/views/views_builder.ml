@@ -726,10 +726,12 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
             ~corner_radius:4 ~min_height:22
             [ Ui_components.with_props
                 [ Ui_components.Prop.hover_background "transparent"
+                ; Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color)"
                 ; Ui_components.Prop.font_weight 400
                 ; Ui_components.Prop.white_space `normal
                 ; Ui_components.Prop.height_auto ] @@
               Ui_components.button ~variant:`ghost ~size:`sm ~height:20
+                ~foreground:"var(--ls-primary-text-color)"
                 ~padding_horizontal:0 ~padding_vertical:0 ~corner_radius:0
                 ~key:"a" ~accessibility_identifier:id ~disabled:inst.disabled
                 ~style_class:"query-clause" ~text:(clause_label inst c)
@@ -747,8 +749,10 @@ and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
   Ui_components.with_props
     [ Ui_components.Prop.font_weight 400
+    ; Ui_components.Prop.hover_foreground "var(--ls-secondary-text-color)"
     ; Ui_components.Prop.height_auto ]
   (Ui_components.button ~variant:`ghost ~size:`sm
+    ~foreground:"var(--ls-primary-text-color)"
     ~padding_horizontal:0 ~padding_vertical:0
     ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id ~disabled:inst.disabled
     ~style_class:"query-clause"
