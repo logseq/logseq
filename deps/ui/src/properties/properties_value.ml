@@ -1741,7 +1741,11 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
            ~height:(if bottom_pill then 20 else 24) ~min_height:(if bottom_pill then 20 else 24)
            ~min_width:0 ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
            ~on_press:(fun _ -> activate ())
-           (if chips=[] then [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []] else []))
+           (* cljs property-empty-btn-value uses line-dashed, not "Empty" *)
+           (if chips=[] then
+              [icon ~name:(`app "line-dashed") ~point_size:14
+                 ~foreground:"var(--lx-gray-09)" []]
+            else []))
     else if table_many then
       Ui_components.with_props
         [ Ui_components.Prop.cursor `pointer
@@ -1756,13 +1760,13 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
     else
       Ui_components.button ~text:"" ~variant:`ghost
         ~accessibility_identifier:anchor_id
-        ?icon:(if many then Some (`app "plus") else None)
+        ?icon:(if many then Some (`app "plus")
+               else if chips = [] then Some (`app "line-dashed")
+               else None)
         ~label:(I18n.t "property/select-property-placeholder")
         ~main:`start ~min_height:24 ~min_width:24
         ~on_press:(fun _ -> activate ())
-        (if many then [] else if chips = [] then
-          [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
-         else chips)
+        (if many || chips = [] then [] else chips)
   in
   let trigger_row =
     if plain then
