@@ -625,6 +625,51 @@ let test_editor_link () =
   check "Insert link without an editing target is inert"
     (Editor_state.editing () = None && !Editor_commands.active = None)
 
+(* G3/G4 follow-link-sidebar: cljs open-link-in-sidebar! resolves
+   [[title]] via get-page-route-info into the right sidebar. *)
+let test_follow_link_sidebar () =
+  let previous_worker = !Runtime.worker in
+  let previous_sidebar = !Sidebar_state.st_ref in
+  let targets = ref [] in
+  let state v = Signal.state (Signal.scheduler ()) v in
+  let sidebar : Sidebar_state.t =
+    { favorites = state []; home_page = state None
+    ; favorite_drop = state None; recents = state []
+    ; nav_checked = state []; nav_tag_titles = state []
+    ; block_sources = Hashtbl.create 4; items = state []
+    ; open_menu = state ""; groups_collapsed = state []
+    ; left_width = state 246.; right_fraction = state 0.3
+    ; viewport_w = state 1280.
+    ; restored_repo = ref None; restoring = ref true
+    ; history_repo = ref None; history_state = ref None }
+  in
+  Sidebar_state.st_ref := Some sidebar;
+  Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
+    (fun name args ->
+      (match name, args with
+       | "thread-api/get-page-route-info", [_; target] ->
+           targets := target :: !targets
+       | _ -> ());
+      match name with
+      | "thread-api/get-page-route-info" ->
+          Js.Promise.resolve
+            (W.Map
+               [ W.kw "block/title", W.String "Target"
+               ; W.kw "block/uuid",
+                 W.Uuid "00000000-0000-0000-0000-000000000099" ])
+      | "thread-api/get-page-blocks-tree"
+      | "thread-api/get-block-refs" | "thread-api/get-blocks" ->
+          Js.Promise.resolve (W.Array [])
+      | _ -> (Option.get previous_worker).Worker_client.invoke_fn name args) };
+  stage_main_session [ block "b1" "see [[Target]] here" ];
+  set_editing "b1" "see [[Target]] here" ~caret:8;
+  Editor_keys.on_keydown (key_event ~ctrl:true ~shift:true "o");
+  check "Ctrl+Shift+O looks up the page title for the right sidebar"
+    (List.mem (W.String "Target") !targets);
+  clear_editing ();
+  Sidebar_state.st_ref := previous_sidebar;
+  Runtime.worker := previous_worker
+
 let test_editor_ac_tab st s =
   stage_main_session [ block "b1" "[[Tar]]" ];
   set_editing "b1" "[[Tar]]" ~caret:5;
@@ -1763,6 +1808,7 @@ let run ~finish =
   test_editor_format_wraps ();
   test_editor_word_nav ();
   test_editor_link ();
+  test_follow_link_sidebar ();
   test_editor_ac_tab st s;
   test_editor_unbound_enter ();
   test_code_editor_enter ();
