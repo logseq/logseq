@@ -1117,10 +1117,13 @@ let submit_result ?current context opts ops : Wire.t option Js.Promise.t =
         check_loader_result r;
         (* Autosave has no immediate refresh. Only its current context
            may consume the returned delta on a later broadcast. *)
-        if current () then
+        if current () then begin
+          (* Master outliner pipeline clears :editor/start-pos after each tx. *)
+          S.clear_editor_start_pos ();
           (match Wire.get r "delta" with
            | Some d -> Page_delta.stash_deferred d
-           | None -> ());
+           | None -> ())
+        end;
         Js.Promise.resolve (if current () then Some r else None)
       in
       p |> Js.Promise.catch (fun e ->

@@ -522,13 +522,29 @@ let effective_collapsed ?(scope = "main") (b : Model.block) =
 let anchor () = (selection_state ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
+(* Master :editor/start-pos — armed by arrow movement and cleared after
+   outliner txs / exit. Undo prefers this over the live end caret. When
+   unset, record 0 so undo matches master's observed caret-at-block-start
+   restore (G2 undo-typing/outdent/status/…). *)
+let editor_start_pos : int option ref = ref None
+
+let clear_editor_start_pos () = editor_start_pos := None
+
+let note_editor_start_pos_from_arrow pos = editor_start_pos := Some pos
+
 (* History cursors travel with their transaction, including the editing scope
-   and selection. The worker keeps the before/after pair opaque. *)
+   and selection. The worker keeps the before/after pair opaque. Master's
+   get-editor-info shape uses start-pos/end-pos; caret remains for LUI
+   callers that still read it. *)
 let history_editing (e : editing) =
+  let end_pos = e.model.Edit_model.caret in
   Wire.Map
     [ Wire.Keyword "block-uuid", Wire.Uuid e.uuid
     ; Wire.Keyword "scope", Wire.String e.scope
-    ; Wire.Keyword "caret", Wire.Int e.model.Edit_model.caret
+    ; Wire.Keyword "start-pos",
+        Wire.Int (Option.value !editor_start_pos ~default:0)
+    ; Wire.Keyword "end-pos", Wire.Int end_pos
+    ; Wire.Keyword "caret", Wire.Int end_pos
     ; Wire.Keyword "anchor",
         (match e.model.Edit_model.anchor with Some a -> Wire.Int a | None -> Wire.Nil)
     ]
