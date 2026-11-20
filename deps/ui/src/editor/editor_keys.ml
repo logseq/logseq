@@ -767,6 +767,14 @@ let chord_may_run ~target ~control editing cid =
         not (S.is_draft e)
         && not (is_editable_target target && closest ".editor-wrapper" target = None)
     | None -> not editing)
+  else if cid = "editor/add-comment" then
+    (* cljs registers add-comment under both block-editing-only and
+       global-non-editing-only (selection). Keymap lists the latter;
+       allow the editing path here so ctrl+space works while editing. *)
+    not control
+    && (Option.is_some (S.editing ())
+        || not (S.String_set.is_empty (S.selected ()))
+        || editing)
   else
   match Keymap_data.command_handler cid with
   | Some "block-editing-only" -> not control && Option.is_some (S.editing ())
@@ -878,6 +886,9 @@ let on_global_key ev =
                 (match S.editing () with
                  | Some _ -> A.exit_edit ~select:true
                  | None -> A.select_parent ())
+              else if cid = "editor/add-comment" then
+                (* cljs comments-handler/add-comment-to-current-context! *)
+                Comments.add_comment ()
               else Cmdk_state.dispatch_id cid
             end
           in
@@ -962,9 +973,10 @@ let on_normal_key ev =
       ev.Ui_services.prevent_default ();
       A.delete_selection ()
   | " " when ev.Ui_services.ctrl && selected () ->
-      (* cljs ctrl+space = add-comment on the selection *)
+      (* cljs ctrl+space = add-comment on the selection — also covered by
+         the chord table; keep the selection-mode path explicit *)
       ev.Ui_services.prevent_default ();
-      Popups_state.emit_cmd "add-comment" []
+      Comments.add_comment ()
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
       ev.Ui_services.prevent_default ();

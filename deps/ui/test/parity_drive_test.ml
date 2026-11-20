@@ -1611,6 +1611,41 @@ let async_checks () =
      || (Editor_state.editing_uuid () <> Some "b1"
          && Editor_state.editing_uuid () <> None))
 
+
+(* G4 add-comment-ctrl-space: ctrl+space while editing ensures a comments
+   area for the edited block (cljs add-comment-to-current-context!). *)
+let test_add_comment_ctrl_space () =
+  let previous_worker = !Runtime.worker in
+  let ensured = ref [] in
+  Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
+    (fun name args ->
+      (match name, args with
+       | "thread-api/ensure-comments-area-for-blocks", [_; uuids] ->
+           ensured := uuids :: !ensured
+       | _ -> ());
+      match name with
+      | "thread-api/ensure-comments-area-for-blocks" ->
+          Js.Promise.resolve
+            (W.Map [ W.kw "block/uuid", W.Uuid "00000000-0000-0000-0000-0000000000c1" ])
+      | "thread-api/get-page-blocks-tree"
+      | "thread-api/get-block-refs" | "thread-api/get-blocks" ->
+          Js.Promise.resolve (W.Array [])
+      | _ -> (Option.get previous_worker).Worker_client.invoke_fn name args) };
+  stage_main_session [ block "b1" "comment host" ];
+  set_editing "b1" "comment host" ~caret:12;
+  let prevented = ref false in
+  Editor_keys.on_global_key
+    { (key_event ~ctrl:true " ") with
+      Ui_services.prevent_default = (fun () -> prevented := true)
+    ; stop_immediate = (fun () -> prevented := true) };
+  check "Ctrl+Space while editing is consumed by add-comment" !prevented;
+  check "Ctrl+Space while editing ensures a comments area"
+    (match !ensured with
+     | W.List [ W.String "b1" ] :: _ | W.Array [ W.String "b1" ] :: _ -> true
+     | _ -> false);
+  clear_editing ();
+  Runtime.worker := previous_worker
+
 (* ---------- runner ---------- *)
 
 (* State_cell singletons + first-mount refs: this suite mounts the app
@@ -1809,6 +1844,7 @@ let run ~finish =
   test_editor_word_nav ();
   test_editor_link ();
   test_follow_link_sidebar ();
+  test_add_comment_ctrl_space ();
   test_editor_ac_tab st s;
   test_editor_unbound_enter ();
   test_code_editor_enter ();

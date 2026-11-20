@@ -1468,15 +1468,10 @@ let run_add_reaction st =
                       ; Wire.Nil ])
                   uuids))))
 
-(* :editor/add-comment — ensure-comments-area-for-blocks over the block
-   selection (or the edited block); the area renders once the refresh
-   lands *)
-let run_add_comment st repo =
+(* :editor/add-comment — cljs add-comment-to-current-context! *)
+let run_add_comment st _repo =
   close st;
-  let uuids = target_uuids st in
-  match repo, uuids with
-  | Some repo, _ :: _ -> st.svs.Svs.ensure_comments ~repo ~uuids
-  | _ -> ()
+  st.svs.Svs.add_comment ()
 
 (* :editor/add-property-icon — cljs opens the property dialog on
    :logseq.property/icon, whose editing cell is the icon picker; LUI
