@@ -270,8 +270,13 @@ let cards_body st =
   let all_sig =
     Logseq_el.own ctx (Signal.value st.Cards_state.all_cards)
   in
+  let loading_sig =
+    Logseq_el.own ctx (Signal.value st.Cards_state.loading)
+  in
   (reactive
-    (fun (cards, pos, phase, cur, all) ->
+    (fun (cards, pos, phase, cur, all, loading) ->
+      if loading then spacer ~key:"loading" []
+      else
       match List.nth_opt cards pos, cur with
       | Some _, Some b ->
           column ~key:"cards" ~style_class:"ls-cards-col" ~grow:1.
@@ -309,16 +314,18 @@ let cards_body st =
                   [ practice_again_btn st ] ])
     (Logseq_el.own ctx
        (Signal.map2
-          (fun (a, b) (phase, cur, all) -> (a, b, phase, cur, all))
+          (fun (a, b) (phase, cur, all, loading) ->
+             (a, b, phase, cur, all, loading))
           cp_sig
           (Logseq_el.own ctx
              (Signal.map2
-                (fun (a, b) c -> (a, b, c))
+                (fun (a, b) (c, d) -> (a, b, c, d))
                 (Logseq_el.own ctx
                    (Signal.map2 (fun x y -> (x, y))
                       (Signal.value st.Cards_state.phase)
                       (Signal.value st.Cards_state.cur)))
-                all_sig)))))
+                (Logseq_el.own ctx
+                   (Signal.map2 (fun x y -> (x, y)) all_sig loading_sig)))))))
     ctx parent
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label
