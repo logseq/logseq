@@ -365,10 +365,10 @@ let pills_view ?expanded_state ctx ~owner_is_tag ~owner_title below_rows : t =
     Lui_elements.row ~shrink:0. ~cross:`center
       [Ui_components.with_props
         [Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "16px";
-         Ui_components.Prop.font_weight 400;
+         Ui_components.Prop.font_weight 500;
          Ui_components.Prop.shadow "inset 0 0 0 1px var(--ls-border-color)"]
       (Ui_components.button ~variant:`secondary ~size:`sm ~height:24 ~min_height:24
-        ~gap:8 ~padding_horizontal:8 ~padding_vertical:0 ~corner_radius:9999
+        ~gap:4 ~padding_horizontal:8 ~padding_vertical:0 ~corner_radius:9999
         ~background:"var(--ls-secondary-background-color)" ~foreground:"var(--ls-primary-text-color)"
         ~style_class:"bottom-property-control-btn bottom-property-expand-btn"
         ~accessibility_identifier:control_id

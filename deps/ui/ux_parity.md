@@ -975,6 +975,54 @@ This verifies fitting/widths, not full-app numeric editing or picker browser
 acceptance; native visuals are also unverified. No `static/` build/write or
 `:3010` access. Logs: `/Users/devin/attachments/table90-probes-{ui,native-test,native-build,worker,visual}.log`.
 
+### Table91: rendered Node targets, ellipsis, controls and journal minimum
+
+Table91 accepts expanded numeric Submit/reload and the 1092/1088 fit boundary.
+The remaining Node navigation was outside the previous activation assertion:
+the web renderer still emitted an `a.page-ref` around the visible text, and
+`Sidebar_state.on_doc_click` independently delegates `a.page-ref, a.tag` clicks
+to page navigation. Bottom Node values now render a labelled, zero-padding
+ghost button with a text child and the existing anchored-picker callback.
+Neither the button nor its text is a reference anchor. Ordinary/table reference
+branches retain their links. Collapsed text additionally uses typed
+`line_clamp:1`, `white_space:nowrap` and `text_overflow:ellipsis`; expanded text
+has no line clamp. Intersecting the text with its parent's clip was insufficient
+without making the text itself a single-line truncation box.
+
+Expand/Collapse now use Master's weight **500** and **4px** icon gap, retaining
+8px horizontal padding. The real SDK web renderer measures Expand at
+**78.921875px**, with unchanged natural pill widths and 760/756px fitting.
+Mounted regressions inspect the button kind, its text-child navigation selector,
+the typed clamp and control props, and retain numeric normal/invalid/empty
+Submit coverage plus picker activation without navigation.
+
+The journal discrepancy is **not an extra gap per root**: both audits measure
+28px root rows. Master `page.css` gives `.ls-page-blocks` a **60px minimum**;
+`page.cljs` includes the **28px** Add row inside that region. One 28px root
+therefore leaves a 4px remainder, whereas two roots leave none. Table88's fixed
+4px query margin matched only the one-root case. Journals now reuse the existing
+measured block-only minimum mechanism from standalone pages: the flat outliner
+supplies the remaining `max(0,32 - measured_block_height)` before the queries,
+separately from its existing 500px journal-section minimum. Empty journals keep
+the full 60px minimum; wrapped blocks require no extra remainder. Tests cover
+one/two roots, deletion/undo, empty and invalid measurements, and wrapped blocks.
+This preserves the one-root position and removes 4px with two roots without
+changing row spacing. The block-height measurement path is web-specific, like
+the existing standalone-page minimum; native journal geometry is unverified.
+
+Gates: **6663 checks, zero failures**; native experimental tests/build pass.
+Worker retains Table90's platform cases **[1,7,8]**: 3 failures / 994 tests,
+including `Native secrets require the OS keychain host`. `git diff --check`
+passes. Isolated Chrome clicks on the real text span open **Set T91BottomNode**
+in independent collapsed and expanded fixtures, with no page-ref ancestor or
+navigation. Screenshots: `/Users/devin/attachments/table91-node-{collapsed,expanded}.png`.
+At a 1088px viewport / 756px area the real renderer visibly shows the ellipsis:
+`/Users/devin/attachments/table91-node-ellipsis-756.png`. Control evidence:
+`/Users/devin/attachments/table91-expand-width.png`. These use the real SDK
+renderer and application handlers with a scripted worker, not the rebuilt app.
+Integrated journal positions and native visuals remain unverified. No `static/`
+build/write or `:3010` access. Logs: `/Users/devin/attachments/table91-*.log`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

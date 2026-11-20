@@ -976,7 +976,7 @@ let is_today_page (m : Model.t) (page : Model.page) : bool =
 let today_queries (page : Model.page) : t =
  fun ctx parent ->
   (if not (is_today_journal page) then Logseq_el.nothing else
-  column ~accessibility_identifier:"today-queries" ~gap:0 ~margin_top:4
+  column ~accessibility_identifier:"today-queries" ~gap:0
     [ reactive ~equal:(fun a b -> a.Model.graph_config=b.Model.graph_config)
         (fun model ->
           let queries = match Wire.get model.Model.graph_config "default-queries" with
@@ -996,7 +996,7 @@ let page_wrap_cls (m : Model.t) (page : Model.page) : string =
 
 (* Section chrome is ordinary row content. Every displayed block, including
    descendants, is supplied separately by the one main outline projection. *)
-let journal_section ms ~footer ?spacing ~source : t =
+let journal_section ms ~footer ?spacing ?body_spacing ~source : t =
  fun ctx parent ->
   let section = Signal.get source in
   let p0 = section.Outliner_projection.page in
@@ -1033,13 +1033,22 @@ let journal_section ms ~footer ?spacing ~source : t =
                      ~data_attrs:(reactive (fun (page : Model.page) ->
                        ("data-cid", section.scope) ::
                        (match page.page_uuid with Some uuid -> ["data-pu", uuid] | None -> [])) ps)
-                     [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
+                     [ Ui_parts.int_prop Lui_protocol.MinHeight
+                         ~value:(reactive (fun (page : Model.page) -> if page.page_blocks=[] then 60 else 0) ps)
+                         (column ~key:"journal-blocks-minimum" ~style_class:"ls-page-blocks"
+                         [ Add_button.el ?puuid:p0.page_uuid ~scope:section.scope
                          ~previous_blank:(reactive
                            (fun (page : Model.page) collapse ->
                              Add_button.previous_blank ~scope:section.scope page.page_blocks collapse)
                            ps (S.collapse_sig ()))
                          ~flags:(fun context -> Signal.own_signal context.Lui_ui.ui_scope
                            (Signal.map (fun (page : Model.page) -> page.page_blocks <> [], false) ps)) () ])
+                     ; (match body_spacing with
+                        | None -> Logseq_el.nothing
+                        | Some body_spacing ->
+                            Ui_parts.int_prop Lui_protocol.HeightValue
+                              ~value:(reactive (fun value -> int_of_float (Float.ceil value)) body_spacing)
+                              (box ~key:"journal-blocks-minimum-spacer" ~min_height:0 [])) ])
                ; column ~key:"journal-references" ~gap:32 ~margin_left:4
                    [ reactive
                        ~equal:(fun (a : Model.page) (b : Model.page) ->
@@ -1086,10 +1095,11 @@ let journals_view_ms (ms : Model.t Signal.signal) : t =
               ; box ~width:0 ~grow:1. [] ] ])
     ; Flat_outliner.view ~state:outline ~library:false ~padding_horizontal:8
         ~section_minimum_height:500.
+        ~section_body_minimum_height:(60. -. 28.)
         ~header:(fun ~source ->
-          journal_section ms ~footer:false ?spacing:None ~source)
-        ~footer:(fun ~source ~spacing ->
-          journal_section ms ~footer:true ?spacing ~source)
+          journal_section ms ~footer:false ?spacing:None ?body_spacing:None ~source)
+        ~footer:(fun ~source ~body_spacing ~spacing ->
+          journal_section ms ~footer:true ?spacing ?body_spacing ~source)
         ~on_end:(fun () -> ignore (!Runtime.journals_load_more ())) () ]) ctx parent
 
 let not_found_view name : t =
@@ -1470,7 +1480,7 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
             key a = key b)
           page_tabs_el ms ])
   in
-  let footer ~source ~spacing : t =
+  let footer ~source ~body_spacing:_ ~spacing : t =
    fun context parent ->
     let section = Signal.get source in
     let flags = Signal.own_signal context.Lui_ui.ui_scope

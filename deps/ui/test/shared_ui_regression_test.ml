@@ -1271,6 +1271,9 @@ let bottom_pills_commit ~profile ~finish =
   let expanded () = button_label (find "bottom-property-expand-btn")=Some (I18n.t "property/collapse-bottom-pills") in
   let numeric () = find "pv-scalar" in
   let field () = List.find (fun n -> n.M.kind="text-field") (nodes session) in
+  check "Collapsed Node values use typed single-line ellipsis truncation"
+    (List.exists (fun n -> Hashtbl.find_opt n.M.props "line-clamp"=Some (P.IntValue 1)
+      && M.string_prop n "text-overflow"=Some "ellipsis") (nodes session));
   let commit value = S.press session (numeric ()).M.id;
     S.text_changed session (field ()).M.id value; S.submit session (field ()).M.id in
   let done_ () =
@@ -1297,7 +1300,20 @@ let bottom_pills_commit ~profile ~finish =
       S.flush session;
       check "Empty numeric Submit removes the value without collapsing"
         (expanded () && button_label (numeric ())=Some (I18n.t "ui/empty") && List.length !operations=2);
-      let chip = List.find (fun n -> n.M.kind="link" && class_has n "page-ref") (nodes session) in
+      let chip = List.find (fun n -> class_has n "bottom-property-node-value") (nodes session) in
+      let target = Stub_dom.make_element (if chip.M.kind="link" then "a" else "button") in
+      let set_attr : string -> string -> unit = Stub_dom.get_field target "setAttribute" in
+      set_attr "class" (Option.value (M.string_prop chip "style-class") ~default:"");
+      let text_target=Stub_dom.make_element "span" in
+      let append : Js.Json.t -> unit = Stub_dom.get_field target "appendChild" in
+      append text_target;
+      let click=Ui_dom_web.ev_of (Stub_dom.make_event ~target:text_target "click") in
+      check "Bottom Node's rendered text child cannot hit the delegated reference-navigation selector"
+        (chip.M.kind="button" && M.string_prop chip "accessibility-label"<>None
+         && Sidebar_state.click_target "a.page-ref, a.tag" click=None);
+      check "Expand matches Master's medium text and four-pixel icon gap"
+        (Hashtbl.find_opt (find "bottom-property-expand-btn").M.props "font-weight"=Some (P.IntValue 500)
+         && Hashtbl.find_opt (find "bottom-property-expand-btn").M.props "gap"=Some (P.IntValue 4));
       let anchor = List.find (fun n -> Option.fold ~none:false ~some:(fun id -> Str_util.contains id "property-node-")
         (M.string_prop n "accessibility-identifier")) (nodes session) in
       let id=Option.get (M.string_prop anchor "accessibility-identifier") in

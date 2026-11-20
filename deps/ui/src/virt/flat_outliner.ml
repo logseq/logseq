@@ -137,9 +137,16 @@ let block_row ~state ~library ~source : t =
     ctx parent
 
 let view ~state ~library ~header ~footer ?section_minimum_height ?(section_blocks_only = false)
+    ?section_body_minimum_height
     ?(padding_horizontal = 0)
     ?(on_end = fun () -> ()) () : t =
  fun ctx parent ->
+  if section_body_minimum_height <> None && section_minimum_height = None then
+    invalid_arg "Section body measurements require a section measurement root";
+  let body_measurements = match state.Outline_viewport_state.native, section_body_minimum_height with
+    | None, Some minimum ->
+        Some (Virt_list.section_spacings ~blocks_only:true ctx ~minimum ~rows:state.rows)
+    | _ -> None in
   let measurements = match state.Outline_viewport_state.native, section_minimum_height with
     | None, Some minimum ->
         let root_id =
@@ -161,6 +168,8 @@ let view ~state ~library ~header ~footer ?section_minimum_height ?(section_block
     | P.Header _ -> header ~source:(reactive section_of_row source)
     | P.Footer section ->
         footer ~source:(reactive section_of_row source)
+          ~body_spacing:(Option.map (fun measured ->
+            measured.Virt_list.spacing_for (P.key (P.Header section))) body_measurements)
           ~spacing:(Option.map
             (fun (_, section_measurements) ->
               section_measurements.Virt_list.spacing_for
@@ -195,7 +204,9 @@ let view ~state ~library ~header ~footer ?section_minimum_height ?(section_block
       let eager_rows : t = fun rows_ctx rows_parent ->
         Option.iter
           (fun (root_id, section_measurements) ->
-            section_measurements.Virt_list.observe_eager rows_ctx ~root_id)
+            section_measurements.Virt_list.observe_eager rows_ctx ~root_id;
+            Option.iter (fun measured -> measured.Virt_list.observe_eager rows_ctx ~root_id)
+              body_measurements)
           measurements;
         keyed ~source:state.rows ~key:P.key ~cmp:String.compare ~mount
           rows_ctx rows_parent
@@ -206,11 +217,16 @@ let view ~state ~library ~header ~footer ?section_minimum_height ?(section_block
             Virt_list.rows_sig ~key:P.key ~cmp:String.compare ~mount
               ?on_projection_measure:
                 (Option.map (fun (_, section_measurements) ->
-                   section_measurements.Virt_list.on_row_measure)
+                   fun key section kind height ->
+                     section_measurements.Virt_list.on_row_measure key section kind height;
+                     Option.iter (fun measured ->
+                       measured.Virt_list.on_row_measure key section kind height) body_measurements)
                    measurements)
               ?on_projection_width:
                 (Option.map (fun (_, section_measurements) ->
-                   section_measurements.Virt_list.on_width_change)
+                   fun width ->
+                     section_measurements.Virt_list.on_width_change width;
+                     Option.iter (fun measured -> measured.Virt_list.on_width_change width) body_measurements)
                    measurements)
               ~estimate_size:(fun _ -> 32.) ~on_end state.rows
           else eager_rows)

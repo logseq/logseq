@@ -983,9 +983,9 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
        && List.exists (fun n -> Shared_scenarios_views.has_tok n "title-text"
          && Hashtbl.find_opt n.M.props "grow"=Some (Lui_protocol.FloatValue 1.)) (M.all_nodes mounted.S.tree)
        && not (List.exists (fun n -> Shared_scenarios_views.has_tok n "ls-foldable") (M.all_nodes mounted.S.tree)));
-    check "Configured journal queries retain the measured top inset and full-width sections"
+    check "Configured journal queries rely on the block-region minimum instead of a fixed top inset"
       (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "today-queries"
-         && Hashtbl.find_opt n.M.props "margin-top"=Some (Lui_protocol.IntValue 4)) (M.all_nodes mounted.S.tree)
+         && not (Hashtbl.mem n.M.props "margin-top")) (M.all_nodes mounted.S.tree)
        && List.for_all (fun n -> not (Shared_scenarios_views.has_tok n "custom-query")
          || not (Hashtbl.mem n.M.props "margin-left")) (M.all_nodes mounted.S.tree));
     check "Journal query title ink has a one-pixel inset and counts use Master's top-aligned text-sm line box"
@@ -1081,7 +1081,21 @@ let short_page_spacing ~finish =
         measure block "block" 56.;
         later (fun () ->
           check "Wrapped or property-bearing blocks need no extra body spacing" (value ()=0.);
-          ignore (Lui_app.dispose mounted.S.app); Runtime.app_flush := previous_flush; finish ()))))
+          let second = Outliner_projection.Block
+            {block=Test_check.block "second-short-block" "Second";scope="main";section;depth=0;ancestors=[]} in
+          change [header;block;second;footer];
+          measure block "block" 28.; measure second "block" 28.;
+          later (fun () ->
+            check "Two journal roots use their actual height without an extra four-pixel inset"
+              (value ()=0. && 28. +. 28. +. 28. +. value ()=84.);
+            change [header;block;footer];
+            check "Deleting the second journal root restores the sixty-pixel minimum"
+              (value ()=4. && 28. +. 28. +. value ()=60.);
+            change [header;block;second;footer]; measure second "block" 28.;
+            later (fun () ->
+              check "Undoing the second-root deletion removes only the minimum-height remainder"
+                (value ()=0.);
+              ignore (Lui_app.dispose mounted.S.app); Runtime.app_flush := previous_flush; finish ()))))))
 
 let run ~finish =
   query_result_replacement ();

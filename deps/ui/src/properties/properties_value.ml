@@ -1373,14 +1373,21 @@ let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
             ; Ui_components.Prop.font_weight 400
             ; Ui_components.Prop.hover_foreground
                 "var(--lx-accent-11, var(--ls-link-text-color, hsl(var(--primary))))" ]
-            (link ~style_class:(if is_tag then "tag" else "page-ref")
+            ((if bottom_pill then (fun children ->
+                Ui_components.with_props [Ui_components.Prop.height_auto]
+                (Lui_elements.button ~variant:`ghost ~style_class:"bottom-property-node-value"
+                  ~min_width:0 ~min_height:20 ~padding_horizontal:0 ~padding_vertical:0
+                  ~border_width:0 ~gap:0 ~main:`start ~background:"transparent"
+                  ~foreground ~text_alignment:`start ~label:title ~on_press:navigate children))
+              else (fun children -> link ~style_class:(if is_tag then "tag" else "page-ref")
                ~min_width:0
-               ~foreground ?text:(if bottom_pill then None else Some ((if is_tag then "#" else "") ^ title)) ~on_press:navigate
+               ~foreground ~text:((if is_tag then "#" else "") ^ title) ~on_press:navigate
                ~data_attrs:(["tabindex","0";"draggable","true";
                  "data-ref",String.lowercase_ascii title]
-                 @ (match D.ref_uuid r with Some uuid -> ["data-uuid",uuid] | None -> []))
+                 @ (match D.ref_uuid r with Some uuid -> ["data-uuid",uuid] | None -> [])) children))
                (if bottom_pill then [text ~value:((if is_tag then "#" else "") ^ title)
                   ~min_width:0 ~font_size:"0.875rem" ~line_height:"20px"
+                  ?line_clamp:(if bottom_expanded then None else Some 1)
                   ~white_space:(if bottom_expanded then "normal" else "nowrap")
                   ~text_overflow:"ellipsis" ~overflow:"hidden" []] else [])) in
           if is_tag then Ui_components.tag_link_appearance chip else chip
