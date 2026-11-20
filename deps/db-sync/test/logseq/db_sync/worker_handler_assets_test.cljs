@@ -63,6 +63,62 @@
                           (is false (str error))
                           (done)))))))
 
+(defn- <check-chunked-put [size status]
+  (let [request (put-request-with-size size nil)
+        parts (atom [])
+        stored (atom nil)
+        aborted? (atom false)
+        part-size (* 8 1024 1024)
+        bucket #js {:put (fn [_key ^js payload _opts]
+                           (reset! stored (.-byteLength payload))
+                           (p/resolved nil))
+                    :createMultipartUpload
+                    (fn [key ^js opts]
+                      (is (= "graph-1/asset-1.bin" key))
+                      (is (= "application/x-legacy-asset" (.. opts -httpMetadata -contentType)))
+                      (is (= "legacy-checksum" (.. opts -customMetadata -checksum)))
+                      (is (= "bin" (.. opts -customMetadata -type)))
+                      (p/resolved
+                       #js {:uploadPart (fn [part-number ^js payload]
+                                          (swap! parts conj (.-byteLength payload))
+                                          (p/resolved #js {:partNumber part-number :etag "part-etag"}))
+                            :complete (fn [completed-parts]
+                                        (is (= (range 1 (inc (count @parts)))
+                                               (map (fn [^js part] (.-partNumber part))
+                                                    (array-seq completed-parts))))
+                                        (reset! stored (reduce + @parts))
+                                        (p/resolved nil))
+                            :abort (fn []
+                                     (reset! aborted? true)
+                                     (p/resolved nil))}))}]
+    (.set (.-headers request) "content-type" "application/x-legacy-asset")
+    (.set (.-headers request) "x-amz-meta-checksum" "legacy-checksum")
+    (p/with-redefs [index/<graph-e2ee? (fn [_ _] (p/resolved false))]
+      (p/let [resp (assets/handle request #js {:DB #js {} :LOGSEQ_SYNC_ASSETS bucket})
+              body (.json resp)]
+        (is (= status (.-status resp)))
+        (if (= status 200)
+          (do (is (= size @stored))
+              (is (true? (aget body "ok")))
+              (is (false? @aborted?))
+              (when (>= size part-size)
+                (is (= [part-size (- size part-size)] @parts))))
+          (do (is (nil? @stored))
+              (is (seq @parts))
+              (is @aborted?)))))))
+
+(deftest legacy-chunked-put-completes-or-aborts-without-an-upload-plan
+  (async done
+         (-> (p/do!
+              (<check-chunked-put 0 200)
+              (<check-chunked-put 1024 200)
+              (<check-chunked-put (+ (* 8 1024 1024) 17) 200)
+              (<check-chunked-put (inc (* 200 1024 1024)) 413))
+             (p/then (fn [] (done)))
+             (p/catch (fn [error]
+                        (is false (str error))
+                        (done))))))
+
 (deftest direct-upload-signs-the-wire-length-and-confirms-the-stored-object
   (async done
          (let [limit (* 200 1024 1024)

@@ -27,12 +27,14 @@
    "svg" "image/svg+xml"
    "ico" "image/x-icon"
    "jxl" "image/jxl"
-   "m4a" "audio/mp4"
+   "pdf" "application/pdf"})
+
+(def ^:private direct-upload-media-types
+  {"m4a" "audio/mp4"
    "mp3" "audio/mpeg"
    "mp4" "video/mp4"
    "wav" "audio/wav"
-   "webm" "video/webm"
-   "pdf" "application/pdf"})
+   "webm" "video/webm"})
 
 (defn- response-content-type [stored-content-type asset-type]
   (or (get asset-type->content-type (string/lower-case asset-type))
@@ -50,7 +52,11 @@
   (if (stored-upload? stored upload-size size checksum asset-type)
     (http/json-response nil {:mode "present"})
     (if-let [sign-upload (.-SIGN_R2_ASSET_UPLOAD env)]
-      (let [headers (merge {"content-type" (if e2ee? "text/plain" (response-content-type nil asset-type))
+      (let [content-type (if e2ee?
+                           "text/plain"
+                           (or (get direct-upload-media-types (string/lower-case asset-type))
+                               (response-content-type nil asset-type)))
+            headers (merge {"content-type" content-type
                               "x-amz-meta-checksum" checksum
                               "x-amz-meta-size" (str size)
                               "x-amz-meta-type" asset-type}
@@ -259,12 +265,60 @@
                          (http/error-response (.-message error) 400)
                          (throw error)))))))))
 
+(def ^:private multipart-part-size (* 8 1024 1024))
+
+(defn- <put-unknown-length! [^js bucket key ^js body options size-limit]
+  ;; R2 needs a known length for each write. Keep one part in memory and
+  ;; commit the object only after the request body has arrived in full.
+  (let [reader (.getReader body)
+        buffer (js/Uint8Array. multipart-part-size)
+        upload (volatile! nil)
+        parts (volatile! [])
+        oversize (js/Error. "asset too large")
+        put-part! (fn [payload]
+                    (p/let [^js active (or @upload (.createMultipartUpload bucket key options))
+                            _ (vreset! upload active)
+                            part (.uploadPart active (inc (count @parts)) payload)]
+                      (vswap! parts conj part)))]
+    (-> (p/loop [filled 0 received 0 ^js pending nil]
+          (if pending
+            (let [amount (min (- multipart-part-size filled) (.-byteLength pending))
+                  filled' (+ filled amount)
+                  rest-of-chunk (when (< amount (.-byteLength pending)) (.subarray pending amount))]
+              (.set buffer (.subarray pending 0 amount) filled)
+              (if (= filled' multipart-part-size)
+                (p/let [_ (put-part! buffer)]
+                  (p/recur 0 received rest-of-chunk))
+                (p/recur filled' received nil)))
+            (p/let [^js result (.read reader)]
+              (if (.-done result)
+                (if-let [^js active @upload]
+                  (p/let [_ (when (pos? filled) (put-part! (.subarray buffer 0 filled)))]
+                    (.complete active (to-array @parts)))
+                  (.put bucket key (.subarray buffer 0 filled) options))
+                (let [^js chunk (.-value result)
+                      received' (+ received (.-byteLength chunk))]
+                  (when (> received' size-limit)
+                    (throw oversize))
+                  (p/recur filled received' chunk))))))
+        (p/then (fn [_] (http/json-response :assets/put {:ok true} 200)))
+        (p/catch (fn [error]
+                   (p/let [_ (js/Promise.allSettled
+                              #js [(.cancel reader) (when-let [^js active @upload] (.abort active))])]
+                     (if (identical? error oversize)
+                       (http/error-response "asset too large" 413)
+                       (throw error)))))
+        (p/finally (fn [] (.releaseLock reader))))))
+
 (defn- <put-sync-asset! [^js request ^js bucket key asset-type size-limit]
   (let [headers (.-headers request)
         content-length (.get headers "content-length")
         size (when (and content-length (re-matches #"\d+" content-length))
                (js/Number content-length))
-        body (.-body request)]
+        body (.-body request)
+        options (asset-put-options (.get headers "content-type")
+                                   (.get headers "x-amz-meta-checksum")
+                                   asset-type)]
     (cond
       (and content-length (nil? size))
       (http/error-response "invalid asset size" 400)
@@ -272,9 +326,8 @@
       (and size (> size size-limit))
       (http/error-response "asset too large" 413)
 
-      ;; R2 requires a known byte length for streaming PUTs.
-      (and body (nil? size) (exists? js/FixedLengthStream))
-      (http/error-response "asset upload requires Content-Length" 411)
+      (and body (nil? size) (fn? (.-createMultipartUpload bucket)))
+      (<put-unknown-length! bucket key body options size-limit)
 
       :else
       (let [oversize (js/Error. "asset too large")
@@ -290,9 +343,6 @@
                                                        (throw oversize))
                                                      (.enqueue controller chunk))}))
                           :else (js/Uint8Array. 0))
-            options (asset-put-options (.get headers "content-type")
-                                       (.get headers "x-amz-meta-checksum")
-                                       asset-type)
             store-promise (.put bucket key upload-body options)]
         (-> (js/Promise.all (if pipe-promise #js [store-promise pipe-promise] #js [store-promise]))
             (p/then (fn [_] (http/json-response :assets/put {:ok true} 200)))
