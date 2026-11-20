@@ -1172,6 +1172,55 @@ application factories but does not rebuild the integrated application;
 integrated journal-link activation and native visuals remain unverified.
 No `static/` writes/build or `:3010` access.
 
+### Table95: first query-builder token line
+
+Table95 accepts the AND width, nine-pixel text gap and Search x coordinate.
+The supplied ancestor rectangles disprove an extra margin/padding/border
+above the builder: both outer filter rows begin at **y=188**. LUI's clause
+group instead begins at 189 because its 22px height is vertically centered
+next to the 24px Filter button. Its token interiors then begin at 190.
+Master's clause group begins at 188 and its token interiors at 189.
+
+This difference is reachable because the intentionally retained human date
+titles fit on one line in LUI, while Master's long raw UUID dates wrap its
+group onto two lines and move Filter to another line. The matching header
+origin must not be shifted. LUI now start-aligns the outer builder row's
+children, keeping the first clause line anchored when the adjacent control
+is taller. This is an explicit LUI alignment adaptation, not a literal port
+of Master's outer `items-center`; token metrics, gaps, Filter size, wrapping
+and query-header geometry are unchanged. Blank/error builder branches are
+unchanged.
+
+The mounted regression asserts the outer row's typed start alignment.
+Real-SDK Chrome at the supplied 481px/188px origin measures token boxes at
+**y=189** and all three text ink ranges at **y=190**, retaining AND
+**30.3125px**, the **9px** text gap and Search **x=529.59375**. The existing
+narrow/grouped fixture also retains 713px scroll extent, 145px maximum,
+568px grouped row width and aligned grouped header/body Select cells.
+
+The Table95 follow-up catches a Table94 regression in flat query tables:
+removing clipping from the shared body row also made flat Select cells
+sticky. Master does not condition `.sticky-columns` itself on grouping.
+Instead, `table.css` clips indexed virtual items (`div[data-index]` and
+`div[data-item-index]`); `views.cljs` disables virtualization for groups,
+whose fragment-rendered rows have no indexed clipping wrapper. The table
+row stream now clips flat rows, with an explicit opt-out in `grouped_table`,
+for both keyed and virtualized rendering. Flat query body Select cells
+scroll away; grouped cells remain pinned; Pages retain scrolling body cells.
+Header pinning is unchanged. Mounted regressions cover all three modes;
+the scrolled Chrome fixture at 900px viewport measures flat body x=163
+(308 minus 145, clipped by the viewport), grouped body x=308 and both
+headers x=308.
+
+Gates: **6678 UI checks, zero failures**; native experimental tests/build
+pass. Worker retains Table94's **[1,7,8]** platform cases: 3 failures / 994
+tests (`Native secrets require the OS keychain host`), not a passing gate.
+
+Screenshots: `/Users/devin/attachments/table95-{wide,narrow-scrolled}.png`.
+This checks isolated application factories, not rebuilt-app acceptance or
+native visuals. No `static/` writes/build or `:3010` access. Logs:
+`/Users/devin/attachments/table95-*.log`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

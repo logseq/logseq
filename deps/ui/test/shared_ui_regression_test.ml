@@ -5143,9 +5143,21 @@ let run_views ~registry ~profile ~finish =
              ~kind:(Views_state.KQuery {block_uuid="group-query-fixture"}) ~feature:"query" ~owner:Wire.Nil in
            let state = Views_state.empty_vstate () in
            Hashtbl.replace state.Views_state.ref_titles "group-journal-fixture" "T94 Journal";
+           Hashtbl.replace state.Views_state.blocks "group-row-fixture"
+             (Wire.Map [Wire.kw "block/title", Wire.String "Grouped row"]);
+           let state = {state with Views_state.loading=false;
+             columns=[Views_table.select_column ();Views_table.created_column ()];
+             data=Views_wire.VFlat {rows=["group-row-fixture"];count=1;
+               previews=Hashtbl.create 0;qprops=[]}} in
            Signal.set grouped.Views_state.st state;
            Lui_elements.column
-             [ Views_table.table_group_heading grouped state
+             [ Lui_elements.column ~accessibility_identifier:"flat-select-fixture"
+                 [Views_table.table_el grouped state]
+             ; Lui_elements.column ~accessibility_identifier:"grouped-select-fixture"
+                 [Views_table.grouped_table grouped ~rows:["group-row-fixture"]]
+             ; Lui_elements.column ~accessibility_identifier:"pages-select-fixture"
+                 [Views_table.table_el {grouped with Views_state.kind=Views_state.KAllPages} state]
+             ; Views_table.table_group_heading grouped state
                  (Wire.Map [Wire.kw "kind", Wire.Keyword "entity"; Wire.kw "uuid", Wire.Uuid "group-journal-fixture"])
              ; Views_table.table_group_heading grouped state Wire.Nil
              ; Views_table.table_group_heading grouped state
@@ -5185,6 +5197,19 @@ let run_views ~registry ~profile ~finish =
        && Hashtbl.find_opt n.M.props "min-width"=Some (P.IntValue 0)
        && List.exists (fun child -> child.M.kind="overlay") (M.children sorting.S.tree n.M.id))
        (nodes sorting));
+  let body_of identifier =
+    let root = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some identifier) (nodes sorting) in
+    let rec find node =
+      if class_has node "ls-table-row" then Some node
+      else List.find_map find (M.children sorting.S.tree node.M.id)
+    in
+    Option.get (find root)
+  in
+  check "Flat query rows clip sticky body cells just like Master's indexed item wrappers"
+    (M.string_prop (body_of "flat-select-fixture") "overflow"=Some "hidden");
+  check "Grouped query rows preserve sticky body cells while Pages rows still scroll away"
+    (M.string_prop (body_of "grouped-select-fixture") "overflow"=None
+     && M.string_prop (body_of "pages-select-fixture") "overflow"=Some "hidden");
   let journal = List.find (fun n -> M.string_prop n "text"=Some "group-journal-fixture") (nodes sorting) in
   let attr node key = List.assoc_opt key (P.data_attrs_decode
     (Option.value (M.string_prop node "data-attrs") ~default:"")) in
@@ -5202,6 +5227,8 @@ let run_views ~registry ~profile ~finish =
   let operator = List.find (fun n -> class_has n "query-clause"
     && M.string_prop n "text"=Some "AND") (nodes sorting) in
   let group = parent operator in
+  check "The first clause line is not lowered by the taller adjacent Filter control"
+    (M.string_prop (parent group) "cross"=Some "start");
   check "Query operators have no button padding or inline-wrapper baseline gap"
     (Hashtbl.find_opt operator.M.props "padding-horizontal"=Some (P.IntValue 0)
      && Hashtbl.find_opt operator.M.props "padding-vertical"=Some (P.IntValue 0)

@@ -1292,8 +1292,13 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
    (group membership is fixed per rebuild); the item stream keeps block
    content live from the vstate. [~paginate] forces the virt-end
    listener for a reference window shorter than the 64-row threshold. *)
-let row_stream ?(paginate = false) inst cols uuids : t =
+let row_stream ?(paginate = false) ?(clip_rows = true) inst cols uuids : t =
  fun ctx parent ->
+  let render_row (u, blk) =
+    Ui_components.with_props
+      (if clip_rows then [ Ui_components.Prop.overflow `hidden ] else [])
+      (row_el inst cols ~row_uuid:u ~blk)
+  in
   let items_sig =
     Logseq_el.own ctx
       (Signal.map
@@ -1321,14 +1326,13 @@ let row_stream ?(paginate = false) inst cols uuids : t =
              (Signal.value (inst.V.st))
            |> Signal.own_signal dctx.Lui_ui.ui_scope))
       ~on_end:(fun () -> (V.ops ()).V.o_load_more inst)
-      ~render:(fun (u, blk) -> row_el inst cols ~row_uuid:u ~blk)
+      ~render:render_row
       (Array.of_list items)
       ctx parent
   else
     keyed ~source:items_sig ~key:keyed_row_key ~cmp:String.compare
       ~mount:(fun item_sig ->
-        let u, blk = Signal.get item_sig in
-        row_el inst cols ~row_uuid:u ~blk)
+        render_row (Signal.get item_sig))
       ctx parent
 
 (* the header — one static mount per body snapshot; sort arrow is a
@@ -1486,7 +1490,7 @@ let grouped_table ?(paginate = false) inst ~rows : t =
                 ; align `top_leading (action_bar inst) ]
             ; box ~accessibility_identifier:"virtuoso-item-list"
                 ~data_attrs:[ ("data-testid", "virtuoso-item-list") ]
-                [ row_stream ~paginate inst cols rows ]
+                [ row_stream ~paginate ~clip_rows:false inst cols rows ]
             ])
         ]
     )]

@@ -804,7 +804,7 @@ let editor_el inst ~tree : t =
         ; text ~value:message [] ]
   | _ ->
   column ~style_class:"cp__query-builder"
-    [ row ~key:"f" ~gap:4 ~cross:`center ~flex_wrap:`wrap
+    [ row ~key:"f" ~gap:4 ~cross:`start ~flex_wrap:`wrap
         ( (match !tree with
            | COp ("and", []) -> []
            | t ->
