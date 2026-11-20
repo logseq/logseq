@@ -1866,16 +1866,29 @@ let move_selection_focus up =
   let uuids = selected_uuids () in
   match (if up then uuids else List.rev uuids) with
   | cur :: _ -> (
+      let scope = S.selection_scope () in
       let nb =
-        (if up
-         then S.prev_visible ~scope:(S.selection_scope ())
-         else S.next_visible ~scope:(S.selection_scope ()))
-          cur
+        match selection_projection ~scope with
+        | Some rows ->
+            let matches row = row.Outliner_projection.block.Model.block_uuid = Some cur in
+            let target = match List.find_opt (fun row -> matches row && row.Outliner_projection.scope = scope) rows with
+              | Some row -> Some row
+              | None -> List.find_opt matches rows in
+            let rec scan previous = function
+              | [] -> None
+              | row :: rest when Some row = target ->
+                  if up then previous
+                  else List.nth_opt rest 0
+              | row :: rest -> scan (Some row) rest in
+            Option.map (fun row -> row.Outliner_projection.block, row.scope) (scan None rows)
+        | None ->
+            Option.map (fun block -> block, scope)
+              ((if up then S.prev_visible ~scope else S.next_visible ~scope) cur)
       in
       match nb with
-      | Some b -> (
+      | Some (b, scope) -> (
           match b.Model.block_uuid with
-          | Some u -> select_single_in ~scope:(S.selection_scope ()) u
+          | Some u -> select_single_in ~scope u
           | None -> ())
       | None -> ())
   | [] ->

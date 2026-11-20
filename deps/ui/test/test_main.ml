@@ -3998,6 +3998,49 @@ let test_scoped_keyboard_selection () =
       model_stub := {Model.initial with route_page = Some
         (page [block "h1" "Head"; linking; page_link; block "h2" "Host tail"])};
       S.extra_sources := [];
+      let register_embed embed =
+        let scope = Outliner_projection.embedded_scope ~scope:"main" embed in
+        S.extra_sources := [{S.source_scope = scope; source_kind = S.Outliner;
+          source_blocks = (fun () -> [S.rendered_block ~scope:"main" embed])}] in
+      List.iter (fun embed ->
+        model_stub := {Model.initial with route_page = Some
+          (page [block "before-embed" "Before"; embed; block "after-embed" "After"])};
+        register_embed embed;
+        S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+          selected = S.String_set.singleton "before-embed"; anchor = Some "before-embed"});
+        A.move_selection_focus false;
+        let target = (List.hd embed.Model.block_embed_children).Model.block_uuid in
+        check "ArrowDown selects the rendered linked root rather than its invisible embed owner"
+          (S.String_set.elements (S.selected ()) = [Option.get target]
+           && S.editing_uuid () = None);
+        check "Arrow-selected embedded roots retain the owner mapping used by Tab and Shift+Tab"
+          (S.original_owner_in_scope ~scope:(S.selection_scope ()) (Option.get target)
+           = (Option.get embed.Model.block_uuid, "main"));
+        A.move_selection_focus true;
+        check "ArrowUp returns from an embedded root to its preceding host row"
+          (S.selected () = S.String_set.singleton "before-embed")) [linking;page_link];
+      let empty_page_link = {page_link with Model.block_embed_children =
+        [{linked_page with Model.block_children = []}]} in
+      model_stub := {Model.initial with route_page = Some
+        (page [block "before-embed" "Before"; empty_page_link; block "after-embed" "After"])};
+      register_embed empty_page_link;
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "before-embed"; anchor = Some "before-embed"});
+      List.iter (fun expected ->
+        A.move_selection_focus false;
+        check "ArrowDown traverses an empty page embed without losing selection"
+          (S.selected () = S.String_set.singleton expected)) ["target";"after-embed"];
+      A.move_selection_focus false;
+      check "ArrowDown at the end of the projection retains its selected row"
+        (S.selected () = S.String_set.singleton "after-embed");
+      S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
+        selected = S.String_set.singleton "missing"; anchor = Some "missing"});
+      A.move_selection_focus false;
+      check "Arrow navigation leaves an unavailable selection unchanged"
+        (S.selected () = S.String_set.singleton "missing");
+      model_stub := {Model.initial with route_page = Some
+        (page [block "h1" "Head"; linking; page_link; block "h2" "Host tail"])};
+      S.extra_sources := [];
       S.st := Some (Signal.state (Signal.scheduler ()) {S.initial with
         selected = S.String_set.singleton "h1"; anchor = Some "h1"});
       check "Selection visual order projects linked identities at host depth"

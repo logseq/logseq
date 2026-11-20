@@ -732,12 +732,14 @@ let configured_query ~(page : Model.page) query : t =
           [ Ui_parts.pressable
               ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ())
               (row ~style_class:"custom-query-title" ~cross:`center ~gap:4 ~min_height:24 ~margin_left:(-18)
+                ~padding_horizontal:1
               [ icon ~width:14 ~height:14
                   ~name:(reactive (fun c -> `app (if c then "chevron-right" else "chevron-down"))
                     (Signal.value collapsed)) []
               ; column ~style_class:"title-text" ~min_width:0 ~grow:1. [title]
               ; Ui_components.with_props [Ui_components.Prop.opacity 0.6]
                 (text ~style_class:"results-count" ~font_size:"0.875rem" ~margin_left:8
+                  ~height:24 ~line_height:"20px"
                   ~value:(reactive (fun s -> I.result_count
                     (List.length s.V.query_rows + List.length s.V.query_scalar_rows)) (sig_of inst)) []) ])
           ; if_ ~test:(reactive not (Signal.value collapsed))
