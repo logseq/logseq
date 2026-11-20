@@ -45,10 +45,10 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | toggle-contents-clean | 14b shortcut behavior | same toggle close on fresh session | second press no-op | fresh; Alt+Shift+C ×2 | med | fixed `7c258adedc` (same path) |
 | backward-kill-word | 14b shortcut behavior | `alt+w` at `one two\| three` → `one three` | `one  three` (double space) | caret @7; Alt+w | low | fixed `abe658c330` |
 | bold-toggle-off | 14b shortcut behavior | `****bo****` renders as `x *bo* y` | renders as `x **bo** y` | mod+b on bold selection | low | leave — pure rich-text rendering of `****bo****`, not shortcut wiring |
-| command-palette | 14b shortcut behavior | 86 commands; starts Toggle wide mode… | 85; starts Search themes… | Control+Shift+p | low | leave — count/order driven by invoke-history / profile; static table already has 86 |
+| command-palette | 14b shortcut behavior | 86 commands; starts Toggle wide mode… | 85; starts Search themes… | Control+Shift+p | low | fixed `6eaca45c43` — only palette picks write `commands-history` (shortcuts no longer pollute order); table includes `go/graph-view` |
 | go-search-themes | 14b shortcut behavior | `Logseq Default theme — light #logseq-classic-theme`; Apply theme | name only; Trigger | Alt+Shift+i | low | fixed `605514b14f` |
 | p-d | 14b shortcut behavior | date picker without Add-or-change chrome | extra Add-or-change header | select block; `p d` | low | fixed `b3514d2015` |
-| p-i | 14b shortcut behavior | icon picker tabs at bottom | tabs at top | select block; `p i` | low | open — icon_picker layout only; not the named-property closed-values bug |
+| p-i | 14b shortcut behavior | icon picker tabs at bottom | tabs at top | select block; `p i` | low | fixed `e0f35ab1c3` |
 | p-t | 14b shortcut behavior | tag picker without Add-or-change header | extra header | select block; `p t` | low | fixed `b3514d2015` |
 | quick-add | 14b shortcut behavior | Add to today shows Ctrl Alt E | empty ZWSP / missing keycaps | Control+Alt+e | low | fixed `8a38fd900f` |
 | sidebar-clear | 14b shortcut behavior | clears items and closes right sidebar | clears items, sidebar stays open | Control+c Control+c | low | fixed `7c258adedc` (verified; same as sidebar/clear) |
