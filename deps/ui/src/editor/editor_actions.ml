@@ -2715,24 +2715,30 @@ let paste_history_opts target_uuid =
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
 let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
+  (* Master paste-blocks → edit-last-block-after-inserted!: keep editing
+     the last pasted block. Stale/failed/superseded sessions retain their
+     current editor instead. *)
   let context = Runtime.repo (), Runtime.route () in
   let session_current = paste_session_current () in
   let input_seq = !S.edit_input_seq in
-  let opts = Ops.history_opts ~opts:(Ops.op_opts "paste")
-      ~before:(S.history_cursor ()) ~after:Wire.Nil () in
+  let focus = paste_focus () in
+  let opts = paste_history_opts target_uuid in
   let* resp = Ops.apply_and_refresh_result ~opts
       [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
   if context = (Runtime.repo (), Runtime.route ()) && session_current ()
      && input_seq = !S.edit_input_seq && Option.is_some (Ops.last_inserted_uuid resp)
   then begin
-    clear_pending_blur ();
-    cancel_pending_focus ();
-    Option.iter (fun e -> Editor_sink.invalidate e.S.uuid) (S.editing ());
-    let editing = S.editing () in
-    S.set (fun st -> {st with S.editing = None});
-    Option.iter (fun e -> S.notify_edit_exit e.S.uuid) editing
-  end;
-  Js.Promise.resolve resp
+    (* replace-empty swaps the editing block's entity in place — resync
+       the live buffer first so edit_last_inserted's save_if_dirty
+       cannot commit the stale "" over the pasted title *)
+    let* () =
+      if replace_empty then Ops.resync_open_editor ()
+      else Js.Promise.resolve ()
+    in
+    focus resp;
+    Js.Promise.resolve resp
+  end
+  else Js.Promise.resolve resp
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks

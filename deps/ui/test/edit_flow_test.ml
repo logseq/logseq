@@ -2885,12 +2885,18 @@ let test_structured_paste_completion (h : host) =
         !release ();
         let* _ = operation in
         let* () = h.wait_ms 10 in
-        check ("Structured paste completes without stealing focus: " ^ outcome)
-          (if outcome = "saved" then S.editing () = None && !S.pending_focus = None
-           else Option.map (fun e -> e.S.uuid) (S.editing ()) =
+        check ("Structured paste keeps editing the last insert: " ^ outcome)
+          (Option.map (fun e -> e.S.uuid) (S.editing ()) =
              Some (if outcome = "newer editor" then "other" else "paste-target"));
         check ("Structured paste retains failure state: " ^ outcome) (!failed = (outcome = "rejected"));
-        if outcome = "saved" then check "Structured paste redo does not reopen an editor" (!after = Some W.Nil);
+        if outcome = "saved" then
+          check "Structured paste redo restores the last inserted editor"
+            (match !after with
+             | Some (W.Map kvs) ->
+                 List.assoc_opt (W.Keyword "block-uuid") kvs
+                   = Some (W.Keyword "last-inserted-block")
+                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Keyword "end")
+             | _ -> false);
         reset_editor ();
         run rest
   in
