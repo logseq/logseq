@@ -51,31 +51,42 @@ function loadEnKeys() {
 }
 
 function extractKeys(path, text) {
-  const aliases = new Set(["I18n"]);
-  for (const m of text.matchAll(MODULE_ALIAS)) aliases.add(m[1]);
-  // common short aliases used across deps/ui
+  const moduleAliases = new Set(["I18n", "Electron_i18n"]);
+  // Bare call names that are bound to I18n.t / tf / t1 in this file
+  // (e.g. `let t = I18n.t` in handbook.ml / plugins_view.ml).
+  const bareAliases = new Set();
+  const isI18nCore =
+    path.endsWith("/core/i18n.ml") || path.endsWith("\\core\\i18n.ml");
+  if (isI18nCore) {
+    bareAliases.add("t");
+    bareAliases.add("tf");
+    bareAliases.add("t1");
+  }
   for (const line of text.split("\n")) {
     const mod = line.match(/^\s*module\s+([A-Za-z_][A-Za-z0-9_']*)\s*=\s*I18n\b/);
-    if (mod) aliases.add(mod[1]);
+    if (mod) moduleAliases.add(mod[1]);
     const letAlias = line.match(
       /^\s*let\s+(t|tf|t1)\s*=\s*(?:[A-Za-z_][A-Za-z0-9_']*\.)?(?:t|tf|t1|I18n\.t|I18n\.tf|I18n\.t1)\b/,
     );
-    if (letAlias) aliases.add(letAlias[1]);
+    if (letAlias) bareAliases.add(letAlias[1]);
   }
+  for (const m of text.matchAll(MODULE_ALIAS)) moduleAliases.add(m[1]);
   const found = [];
   const add = (key, line) => {
     const k = unescapeOcaml(key);
     if (KEY_SHAPE.test(k)) found.push({ key: k, line });
   };
   for (const m of text.matchAll(QUAL)) {
-    if (aliases.has(m[1]) || m[1] === "I18n" || m[1] === "Electron_i18n") {
+    if (moduleAliases.has(m[1])) {
       const line = text.slice(0, m.index).split("\n").length;
       add(m[3], line);
     }
   }
-  // Bare t/tf/t1 only in i18n.ml helpers (avoids false positives)
-  if (path.endsWith("/core/i18n.ml") || path.endsWith("\\core\\i18n.ml")) {
+  // Scan bare t/tf/t1 only when this file aliases them to I18n helpers
+  // (or inside i18n.ml itself). Avoids false positives from other `t` binders.
+  if (bareAliases.size > 0) {
     for (const m of text.matchAll(BARE)) {
+      if (!bareAliases.has(m[1])) continue;
       const line = text.slice(0, m.index).split("\n").length;
       add(m[2], line);
     }
