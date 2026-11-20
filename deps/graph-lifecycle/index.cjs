@@ -163,7 +163,26 @@ function ownershipAvailable(ctx) {
   handle.release();
   return true;
 }
-async function createGraph(storage, repo, exclusive = false) {
+function isGraphDirectory(parent, entry) {
+  if (entry.isDirectory()) return true;
+  if (!entry.isSymbolicLink()) return false;
+  try { return fs.statSync(path.join(parent, entry.name)).isDirectory(); }
+  catch (error) { if (error.code === 'ENOENT') return false; throw error; }
+}
+// A graph stored outside graphsDir lives at <location>/<encoded name>, linked from graphsDir.
+function makeGraphDirectory(ctx, location) {
+  if (location === undefined || location === null) {
+    fs.mkdirSync(ctx.graphDir, { recursive: true });
+    return;
+  }
+  if (typeof location !== 'string' || !path.isAbsolute(location)) fail('Graph location must be an absolute path', 'invalid-graph-location');
+  const target = path.join(canonicalRoot(location), path.basename(ctx.graphDir));
+  if (target === ctx.graphDir) { fs.mkdirSync(target, { recursive: true }); return; }
+  if (fs.existsSync(target)) fail(`Graph location already contains ${path.basename(target)}`, 'graph-location-exists');
+  fs.mkdirSync(target);
+  fs.symlinkSync(target, ctx.graphDir, process.platform === 'win32' ? 'junction' : 'dir');
+}
+async function createGraph(storage, repo, exclusive = false, location = undefined) {
   const ctx = context(storage, repo);
   return withLease(ctx, 'create', async () => {
     const current = state(ctx);
@@ -176,7 +195,7 @@ async function createGraph(storage, repo, exclusive = false) {
     await stopUnderLease(ctx, current, true);
     const handle = acquireOwnership(ctx);
     try {
-      fs.mkdirSync(ctx.graphDir, { recursive: true });
+      makeGraphDirectory(ctx, location);
       const next = { generation: id(), phase: 'available', workers: [], owner: current.owner };
       writeJSON(ctx.stateFile, next);
       return next.generation;
@@ -650,7 +669,7 @@ async function upgradeGraph(ctx, revision, initialScan, registeredOnly) {
 async function stopOutdatedWorkers(storage, revision, repo) {
   if (typeof revision !== 'string' || !revision) fail('Build revision is required');
   const names = repo === undefined
-    ? fs.readdirSync(storage.graphsDir, { withFileTypes: true }).filter(entry => entry.isDirectory())
+    ? fs.readdirSync(storage.graphsDir, { withFileTypes: true }).filter(entry => isGraphDirectory(storage.graphsDir, entry))
       .map(entry => canonicalGraphDirectory(entry.name)).filter(name => name !== null)
     : [repo];
   const scan = publicationScan();

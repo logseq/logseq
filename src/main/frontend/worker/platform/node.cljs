@@ -9,6 +9,7 @@
             [clojure.string :as string]
             [cognitect.transit :as transit]
             [logseq.cli.root-dir :as root-dir]
+            [logseq.common.graph :as common-graph]
             [logseq.common.graph-dir :as graph-dir]
             [logseq.common.defkeywords :refer [defkeyword]]
             [logseq.db-worker.daemon :as daemon]
@@ -85,7 +86,7 @@
 
 (defn- list-graphs
   [data-dir]
-  (let [dir? #(and % (.isDirectory %))]
+  (let [dir? #(and % (common-graph/directory-entry? data-dir %))]
     (p/let [entries (fs/readdir data-dir #js {:withFileTypes true})
             db-dirs (->> entries
                          (filter dir?))

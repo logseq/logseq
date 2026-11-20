@@ -2107,3 +2107,23 @@
                        (state/replace-state! original-state)
                        (reset-runtime-state!)
                        (done)))))))
+
+(deftest electron-graph-creation-passes-chosen-location-test
+  (async done
+    (let [calls (atom [])]
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          ipc/ipc (fn [& args]
+                                    (swap! calls conj (vec args))
+                                    (p/resolved "created-generation"))
+                          persist-db/<ensure-remote! (fn [repo _opts]
+                                                       (p/resolved (->FakeRemote repo (fn [& _]))))
+                          persist-db/<export-db (fn [_repo _opts] (p/resolved nil))]
+            (p/let [_ (persist-db/<new "logseq_db_new" {:location "/data/graphs"})
+                    _ (persist-db/<new "logseq_db_default" {})
+                    _ (persist-db/<import-db "logseq_db_imported" (js/Uint8Array. 0) "/data/imports")]
+              (is (= [["createGraph" "logseq_db_new" false "/data/graphs"]
+                      ["createGraph" "logseq_db_default" false nil]
+                      ["createGraph" "logseq_db_imported" false "/data/imports"]]
+                     (filterv #(= "createGraph" (first %)) @calls)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))

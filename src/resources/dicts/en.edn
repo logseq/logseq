@@ -768,6 +768,8 @@
  :graph/left "Left graph."
  :graph/link-count (fn [n] (str n " " (if (= 1 n) "link" "links")))
  :graph/local-graphs "Local graphs:"
+ :graph/location-choose "Choose folder"
+ :graph/location-label "Location"
  :graph/name-placeholder "your graph name"
  :graph/no-selected-node "No graph node selected."
  :graph/node-count (fn [n] (str n " " (if (= 1 n) "node" "nodes")))

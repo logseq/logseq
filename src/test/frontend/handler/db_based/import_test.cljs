@@ -15,8 +15,8 @@
     (let [calls (atom [])
           graph (str config/db-version-prefix "imported")]
       (-> (p/with-redefs [persist-db/<import-db
-                          (fn [repo buffer]
-                            (swap! calls conj [:import-db repo buffer])
+                          (fn [repo buffer location]
+                            (swap! calls conj [:import-db repo buffer location])
                             (p/resolved nil))
                           state/add-repo!
                           (fn [repo]
@@ -41,12 +41,12 @@
                           db/transact!
                           (fn [& _]
                             (throw (js/Error. "renderer DB transact should not be used")))]
-            (import-handler/import-from-sqlite-db! "buffer" "imported" #(swap! calls conj [:finished])))
+            (import-handler/import-from-sqlite-db! "buffer" "imported" "/data/graphs" #(swap! calls conj [:finished])))
           (p/then
            (fn []
              (let [[import-call add-repo-call restore-call current-repo-call export-call worker-call finished-call] @calls
                    [api worker-repo tx-data tx-meta context] worker-call]
-               (is (= [:import-db graph "buffer"] import-call))
+               (is (= [:import-db graph "buffer" "/data/graphs"] import-call))
                (is (= [:add-repo {:url graph}] add-repo-call))
                (is (= [:restore graph {:import-type :sqlite-db}] restore-call))
                (is (= [:current-repo graph] current-repo-call))
@@ -90,6 +90,7 @@
             (import-handler/<import-existing-local-graph!
              "/tmp/not-a-graph"
              "Notes"
+             nil
              #(swap! imports conj :finished)))
           (p/then
            (fn []

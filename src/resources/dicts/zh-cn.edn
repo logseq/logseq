@@ -768,6 +768,8 @@
  :graph/left "已离开图谱。"
  :graph/link-count "{1} 条链接"
  :graph/local-graphs "本地图谱"
+ :graph/location-choose "选择文件夹"
+ :graph/location-label "存储位置"
  :graph/name-placeholder "你的知识库名称"
  :graph/no-selected-node "未选中图谱节点。"
  :graph/node-count (fn [n] (str n " 个节点"))

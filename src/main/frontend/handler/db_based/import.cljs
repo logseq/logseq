@@ -211,11 +211,11 @@
                     (p/recur (subvec remaining 1) next-copied failed)))))))))))
 
 (defn import-from-sqlite-db!
-  [buffer bare-graph-name finished-ok-handler]
+  [buffer bare-graph-name location finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
     (->
      (p/do!
-      (persist-db/<import-db graph buffer)
+      (persist-db/<import-db graph buffer location)
       (state/add-repo! {:url graph})
       (repo-handler/restore-and-setup-repo! graph {:import-type :sqlite-db})
       (state/set-current-repo! graph)
@@ -236,7 +236,7 @@
   (notification/show! (t :import/zip-import-error (.-message e)) :error))
 
 (defn <import-from-sqlite-zip-buffer
-  [zip-buffer bare-graph-name finished-ok-handler]
+  [zip-buffer bare-graph-name location finished-ok-handler]
   (p/let [^js zip (.loadAsync JSZip zip-buffer)
           entries (zip-entries zip)
           entry (sqlite-entry entries)
@@ -259,6 +259,7 @@
           (import-from-sqlite-db!
            sqlite-buffer
            bare-graph-name
+           location
            (fn []
              (p/let [repo (state/get-current-repo)
                      {:keys [copied failed]}
@@ -276,13 +277,13 @@
                (finished-ok-handler)))))))))
 
 (defn import-from-sqlite-zip!
-  [^js file bare-graph-name finished-ok-handler]
+  [^js file bare-graph-name location finished-ok-handler]
   (-> (p/let [zip-buffer (.arrayBuffer file)]
-        (<import-from-sqlite-zip-buffer zip-buffer bare-graph-name finished-ok-handler))
+        (<import-from-sqlite-zip-buffer zip-buffer bare-graph-name location finished-ok-handler))
       (p/catch handle-zip-import-error!)))
 
 (defn- <import-from-sqlite-and-assets!
-  [{:keys [sqlite-path assets-dir]} bare-graph-name finished-ok-handler]
+  [{:keys [sqlite-path assets-dir]} bare-graph-name location finished-ok-handler]
   (-> (p/let [exists? (fs/file-exists? sqlite-path)]
         (if-not exists?
           (notification/show! (t :graph.add-existing/missing-db-error) :error)
@@ -290,6 +291,7 @@
             (import-from-sqlite-db!
              buffer
              bare-graph-name
+             location
              (fn []
                (p/let [repo (state/get-current-repo)
                        result (<copy-dir-assets! repo assets-dir)]
@@ -306,27 +308,29 @@
 
 (defn <import-existing-local-graph!
   "Import a local DB graph folder, db.sqlite, or official SQLite+assets ZIP."
-  [path bare-graph-name finished-ok-handler]
+  [path bare-graph-name location finished-ok-handler]
   (let [kind (classify-existing-graph-path path)]
     (case kind
       :sqlite-zip
       (-> (p/let [buffer (fs/read-file-raw nil path)]
-            (<import-from-sqlite-zip-buffer buffer bare-graph-name finished-ok-handler))
+            (<import-from-sqlite-zip-buffer buffer bare-graph-name location finished-ok-handler))
           (p/catch handle-zip-import-error!))
 
       (:sqlite-file :graph-dir)
       (<import-from-sqlite-and-assets! (sqlite-source path kind)
                                        bare-graph-name
+                                       location
                                        finished-ok-handler)
 
       (notification/show! (t :graph.add-existing/unsupported-error) :error))))
 
 (defn import-from-debug-transit!
-  [bare-graph-name raw finished-ok-handler]
+  [bare-graph-name location raw finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
     (p/do!
      (persist-db/<new graph {:import-type :debug-transit
-                             :debug-transit-raw raw})
+                             :debug-transit-raw raw
+                             :location location})
      (state/add-repo! {:url graph})
      (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
      (<transact-import-marker! graph :debug-transit)
@@ -335,7 +339,7 @@
 
 (defn import-from-edn-file!
   "Creates a new DB graph and imports sqlite.build EDN file"
-  [bare-graph-name file-body finished-ok-handler]
+  [bare-graph-name location file-body finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)
         finished-error-handler
         #(do
@@ -355,7 +359,7 @@
           (notification/show! error :error)
           (finished-error-handler))
         (-> (p/let
-             [_ (persist-db/<new graph {:import-type :edn})
+             [_ (persist-db/<new graph {:import-type :edn :location location})
               _ (state/add-repo! {:url graph})
               _ (repo-handler/restore-and-setup-repo! graph {:import-type :edn})
               _ (state/set-current-repo! graph)

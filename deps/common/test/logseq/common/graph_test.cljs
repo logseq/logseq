@@ -48,3 +48,13 @@
   (is (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown/pages/foo.md"))
   (is (not (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown-notes/foo.md")))
   (is (not (common-graph/ignored-path? "tmp/test-graph" "tmp/test-graph/mirror/markdown2/foo.md"))))
+
+(deftest read-directories-includes-linked-graph-dirs-test
+  (fs/mkdirSync "tmp/graphs/local" #js {:recursive true})
+  (fs/mkdirSync "tmp/elsewhere/linked" #js {:recursive true})
+  (fs/mkdirSync "tmp/graphs/.hidden")
+  (fs/writeFileSync "tmp/graphs/file.txt" "")
+  (fs/symlinkSync (node-path/resolve "tmp/elsewhere/linked") "tmp/graphs/linked" "dir")
+  (fs/symlinkSync (node-path/resolve "tmp/missing") "tmp/graphs/dangling" "dir")
+  (is (= ["linked" "local"]
+         (sort (common-graph/read-directories "tmp/graphs")))))
