@@ -3133,6 +3133,14 @@ let test_popups_state () =
      && not (List.exists (fun it -> it.Popups_state.ai_key = "nlp:Last year") items));
   check "empty page-embed lists 10 nlp dates"
     (List.length (Popups_state.page_items_for popup Popups_state.Page_embed "") = 10);
+  popup.Popups_state.page_exact_titles := [ "Exist" ];
+  check "exact page title suppresses New page row"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "Exist" in
+     not (List.exists (fun it -> it.Popups_state.ai_key = "new:Exist") items));
+  popup.Popups_state.page_exact_titles := [];
+  check "unmatched page query offers New page"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "Exist" in
+     List.exists (fun it -> it.Popups_state.ai_key = "new:Exist") items);
   let now = Dates.date_now () in
   let ms_diff en = Popups_state.nlp_date_of en -. now in
   check "nlp tomorrow" (ms_diff "Tomorrow" > 86000000. && ms_diff "Tomorrow" < 87000000.);
