@@ -851,6 +851,7 @@ let fire_route_changed (route : Model.route) =
     | Model.Bug_report -> "bug-report"
     | Model.Bug_report_clipboard -> "bug-report-tools"
     | Model.Settings -> "settings"
+    | Model.Plugins -> "plugins"
     | Model.File _ -> "file"
     | Model.Not_found _ -> "not-found"
   in

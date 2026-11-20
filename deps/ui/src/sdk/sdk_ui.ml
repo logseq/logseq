@@ -210,6 +210,8 @@ let get_current_route _a _b _c _d =
         ("pathParams",detail_obj [("tool",Js.Json.string "clipboard-data-inspector")])])
   | Some Model.Settings ->
       resolved (detail_obj [ ("to", Js.Json.string "settings") ])
+  | Some Model.Plugins ->
+      resolved (detail_obj [ ("to", Js.Json.string "plugins") ])
   | Some (Model.Block_zoom uuid) ->
       resolved
         (detail_obj
