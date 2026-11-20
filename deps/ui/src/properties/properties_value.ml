@@ -680,7 +680,9 @@ let scalar_edit_cell ?(jump_target = true) ?(bottom_pill = false) ctx row : t =
     close_editor := commit);
   let display = value_button ~text:initial ~on_press:(fun _ -> open_editor ~steal:true ()) in
   let display = if bottom_pill then
-      Ui_components.with_props [Ui_components.Prop.height 20; Ui_components.Prop.padding 0] display
+      Ui_components.with_props [Ui_components.Prop.height 20;
+        Ui_components.Prop.padding_horizontal 0; Ui_components.Prop.padding_vertical 0;
+        Ui_components.Prop.font_weight 400] display
     else display in
   (column ~gap:0 ~grow:1.0
      [ if_ ~test:(Logseq_el.own context (Signal.map (fun e -> not e) (Signal.value editing)))
@@ -1346,7 +1348,7 @@ let many_dates_view ~jump_target ~hover ctx row : t =
 
 (* chips of the current refs — click navigates to the page *)
 let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
-    ?(bottom_expanded = false) row : t list =
+    ?(bottom_expanded = false) ?on_activate row : t list =
   let value = D.row_value row in
   let tag = table_view && D.row_ident row = Some "block/tags" in
   let chips = List.filter_map
@@ -1356,9 +1358,11 @@ let ref_chips ?(table_view = false) ?(plain = false) ?(bottom_pill = false)
       else
         let class_p = D.ref_is_class r in
         let navigate _ =
-          match D.ref_uuid r with
-          | Some u -> Runtime.send (Action.Navigate_to (Model.Page u))
-          | None -> () in
+          match on_activate with
+          | Some activate -> activate ()
+          | None -> (match D.ref_uuid r with
+            | Some u -> Runtime.send (Action.Navigate_to (Model.Page u))
+            | None -> ()) in
         Some (if plain then
           let is_tag = D.row_ident row = Some "block/tags" in
           let foreground = if is_tag then Ui_components.tag_link_foreground
@@ -1661,8 +1665,6 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
       D.getk (D.untag value) "db/ident" <> Some "logseq.class/Page")
       (D.value_elems (D.row_value row))))
     else row in
-  let chips = ref_chips ~table_view:table_many ~plain ~bottom_pill ~bottom_expanded row in
-  let table_value_height = if table_tags && chips <> [] then 20 else 24 in
   let anchor_id = "property-node-" ^ ctx.owner_key ^ "-" ^ ctx.block_uuid ^ "-" ^ ident in
   let activate () =
     open_value_picker ~presentation:Sel.Node_picker anchor_id
@@ -1712,6 +1714,9 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
                 Some (new_node ctx row ~close:(if many then (fun () -> ()) else close)) else None)
               ~initial ~on_search)
              context' parent') in
+  let chips = ref_chips ~table_view:table_many ~plain ~bottom_pill ~bottom_expanded
+    ?on_activate:(if bottom_pill then Some activate else None) row in
+  let table_value_height = if table_tags && chips <> [] then 20 else 24 in
   let picker_button =
     if plain then
       Ui_components.with_props
@@ -1758,7 +1763,7 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
            ((if bottom_pill && chips <> [] then
                [Lui_elements.row ~grow:1. ~min_width:0 ~gap:4 ~cross:`center
                  ~flex_wrap:(if bottom_expanded then `wrap else `nowrap) chips]
-             else chips) @ [picker_button]))
+             else chips @ [picker_button])))
     else if table_many then
       Lui_elements.row ~grow:1.0 ~gap:4 ~cross:`center ~min_width:0
         ~height:table_value_height

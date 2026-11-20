@@ -934,6 +934,47 @@ Worker retains the preceding Table89 platform cases **[1, 7, 8]**, including
 remain unverified. No `static/` build/write or `:3010` access.
 Logs: `/Users/devin/attachments/table90-bottom-{red-ui,ui,native-test,native-build,worker}.log`.
 
+### Table90 property probes: numeric Submit, intrinsic fit and Node activation
+
+The follow-up `*-property-probes.json` evidence locates expansion loss at numeric
+commit, before Escape. The mounted regression now presses the numeric value,
+enters 89 and dispatches **Submit**, exercising `set-block-property` through the
+SDK and fake worker, cache invalidation and the real property-area refresh hook.
+It checks the saved value and Collapse control without dispatching Escape.
+Invalid numeric text writes nothing; empty Submit removes the value; both keep
+expansion. The stable-row state repair remains in `73e39ad9`; no further state
+ownership change is needed for this reproduction. The page-refresh hook is
+stubbed in this unit fixture, so integrated worker/page refresh remains a
+separate acceptance boundary.
+
+Master's pill padding/gaps already match the typed 8px horizontal padding,
+4px inner gap and 8px inter-pill gap. The extra intrinsic width came from LUI's
+500-weight key/numeric buttons and a trailing 4px gap before an empty Node picker
+button. Bottom key/numeric text now uses weight 400, numeric horizontal/vertical
+padding is explicitly zero, and populated bottom Node values omit that empty
+button. Inter Regular, the supplied strings and the real SDK web renderer now
+produce **110.078125 / 525.4375 / 106.3125px**, exactly the three Master natural
+pill widths. A **760px property area fits all three without Expand**; at 756px
+Expand returns and the row remains 32px. No fixture-specific sizing was added.
+
+Master's property `show-popup!` / `page-ref-cell-click` opens the value picker
+for page-ref targets rather than supplying a redirect. Bottom Node links now
+activate their existing anchored picker instead of navigating. The regression
+presses the visible long Node text, checks the translated Set-property
+placeholder and asserts no navigation action. Ordinary/table reference chips
+retain navigation and their existing regressions. Empty Node values retain
+their picker button. No new SDK API, dictionary entry or CSS change.
+
+Gates: **6657 checks, zero failures**; native experimental tests/build pass.
+The native build first encountered another Dune instance; the later run passes.
+Worker retains the preceding Table90 platform failures **[1, 7, 8]**, including
+`Native secrets require the OS keychain host`: 3 failures / 994 tests.
+`git diff --check` passes. Isolated Chrome width verification passes; screenshots:
+`/Users/devin/attachments/table90-probes-fit-{760,756}.png`.
+This verifies fitting/widths, not full-app numeric editing or picker browser
+acceptance; native visuals are also unverified. No `static/` build/write or
+`:3010` access. Logs: `/Users/devin/attachments/table90-probes-{ui,native-test,native-build,worker,visual}.log`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

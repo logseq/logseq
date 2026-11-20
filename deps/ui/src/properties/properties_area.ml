@@ -161,6 +161,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
             [ property_icon row ]
         else Logseq_el.nothing)
      ; Jump_state.target ~key:anchor_id ~owner:ctx.jump_owner ~activate:open_key
+       (Ui_components.with_props [Ui_components.Prop.font_weight (if icon then 500 else 400)]
        (Ui_components.button ~variant:`ghost ~size:`sm ~text_alignment:`start ~grow:1.0
          ?height:(if icon then None else Some 20)
          ~min_width:0
@@ -171,7 +172,7 @@ let key_cell (ctx : V.ctx) ~owner_is_tag ~owner_title ?(icon = true)
          ~text:(D.row_title row)
          ~accessibility_identifier:anchor_id
          ~on_press:(fun _ -> open_key ())
-         [])
+         []))
      ])
     context parent
 

@@ -1153,17 +1153,20 @@ let bottom_pills_rows () =
        Wire.kw "block/uuid", Wire.Uuid "00000000-0000-4000-8000-000000000033"]);
    row "fixture/bottom-number" "Bottom Number" "number" (Wire.Int 42)]
 
-let bottom_pills_fixture profile initial_rows =
+let bottom_pills_fixture ?source ?(overlays = false) profile initial_rows =
   let rows = ref None in
+  let source = Option.value source ~default:(ref initial_rows) in
   let uuid = "00000000-0000-4000-8000-000000000030" in
   let session = S.mount ~profile ~initial:Model.initial ~reducer:(fun model () -> model)
     ~view:(fun context _ _ ->
       let state = Properties_state.area_state context ~key:(Properties_area.block_key uuid)
-        ~fetch:(fun publish -> publish {Properties_state.empty_area_data with below=initial_rows};
+        ~fetch:(fun publish -> publish {Properties_state.empty_area_data with below= !source};
           Js.Promise.resolve ()) in
       rows := Some state;
-      Tree.block_row_sig (Signal.constant context.Lui_ui.ui_scheduler
-        (Test_check.block uuid "Bottom properties owner"))) () in
+      Lui_elements.column
+        ([Tree.block_row_sig (Signal.constant context.Lui_ui.ui_scheduler
+          (Test_check.block uuid "Bottom properties owner"))]
+         @ if overlays then [Properties_view.overlays] else [])) () in
   Runtime.signal_set (Option.get !rows) {Properties_state.empty_area_data with below=initial_rows};
   S.flush session;
   session, Option.get !rows
@@ -1204,6 +1207,11 @@ let bottom_pills ~profile =
     check "Expanded pill keys and numeric values keep the compact 20px line box"
       (List.for_all (fun n -> not (class_has n "property-k" || class_has n "pv-scalar")
         || check_prop n "height" (P.IntValue 20)) (nodes session));
+    check "Bottom pill text keeps Master's regular weight and no trailing empty-picker gap"
+      (List.for_all (fun n -> not (class_has n "property-k" || class_has n "pv-scalar")
+        || check_prop n "font-weight" (P.IntValue 400)) (nodes session)
+       && not (List.exists (fun n -> n.M.kind="button"
+         && M.string_prop n "accessibility-label"=Some (I18n.t "property/select-property-placeholder")) (nodes session)));
     let numeric_refresh = List.map (fun row ->
       if Properties_data.row_type row = "number"
       then Properties_data.row_with_value row (Wire.Int 88) else row)
@@ -1228,7 +1236,88 @@ let bottom_pills ~profile =
     check "Empty bottom properties mount no fit probes or expansion controls"
       (not (List.exists (fun n -> class_has n "bottom-properties-row" || n.M.kind="view-that-fits") (nodes session))))
 
+let bottom_pills_commit ~profile ~finish =
+  let previous_flush = !Runtime.app_flush and previous_worker = !Runtime.worker
+  and previous_model = !Runtime.read_model and previous_send = !Runtime.app_send
+  and previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st and previous_overlays = !Properties_state.view_overlays_state
+  and previous_close = !Properties_value.close_editor and previous_active = !Properties_value.active_editor
+  and previous_refresh = Runtime.hooks.refresh_after_ops in
+  Editor_state.st:=None; Editor_state.field_sigs_opt:=None; Settings_state.st:=None;
+  Properties_state.view_overlays_state:=None; Properties_value.close_editor:=(fun () -> ());
+  Properties_value.active_editor:=None;
+  Runtime.read_model:=(fun () -> {Model.initial with repo=Some "bottom-commit-fixture"});
+  Runtime.hooks.refresh_after_ops<-(fun () -> Ui_task.resolve ());
+  let source = ref (bottom_pills_rows ()) and operations = ref [] and navigated = ref false in
+  ignore (Fake_worker.install (fun name args ->
+    if name="thread-api/apply-outliner-ops" then begin
+      let ops=Wire.elems (List.nth args 1) in
+      operations:= !operations @ ops;
+      List.iter (function
+        | Wire.Array [Wire.Keyword "set-block-property";Wire.Array [_;_;value]] ->
+            source:=List.map (fun row -> if Properties_data.row_type row="number"
+              then Properties_data.row_with_value row value else row) !source
+        | Wire.Array [Wire.Keyword "remove-block-property";_] ->
+            source:=List.map (fun row -> if Properties_data.row_type row="number"
+              then Properties_data.row_with_value row Wire.Nil else row) !source
+        | _ -> ()) ops;
+      Render_inline.invalidate_pull_caches (); Editor_state.bump_invalidation ();
+      Wire.Map [Wire.kw "result",Wire.Nil]
+    end else Wire.Nil));
+  Runtime.app_send:=(fun action -> (match action with Action.Navigate_to _ -> navigated:=true | _ -> ());true);
+  let session,_ = bottom_pills_fixture ~source ~overlays:true profile !source in
+  Runtime.app_flush:=(fun () -> S.flush session);
+  let find cls = List.find (fun n -> class_has n cls) (nodes session) in
+  let expanded () = button_label (find "bottom-property-expand-btn")=Some (I18n.t "property/collapse-bottom-pills") in
+  let numeric () = find "pv-scalar" in
+  let field () = List.find (fun n -> n.M.kind="text-field") (nodes session) in
+  let commit value = S.press session (numeric ()).M.id;
+    S.text_changed session (field ()).M.id value; S.submit session (field ()).M.id in
+  let done_ () =
+    Properties_state.close_all_view_overlays (); ignore (Lui_app.dispose session.S.app);
+    Hashtbl.remove Properties_state.areas (Properties_area.block_key "00000000-0000-4000-8000-000000000030");
+    Runtime.app_flush:=previous_flush;Runtime.worker:=previous_worker;Runtime.read_model:=previous_model;
+    Runtime.app_send:=previous_send;Editor_state.st:=previous_editor;Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings;Properties_state.view_overlays_state:=previous_overlays;
+    Properties_value.close_editor:=previous_close;Properties_value.active_editor:=previous_active;
+    Runtime.hooks.refresh_after_ops<-previous_refresh;finish () in
+  S.press session (find "bottom-property-expand-btn").M.id;
+  commit "89";
+  ignore (Js.Global.setTimeout ~f:(fun () ->
+    S.flush session;
+    check "Numeric Submit dispatches and refreshes the saved value without Escape or collapse"
+      (expanded () && button_label (numeric ())=Some "89"
+       && match !operations with
+       | [Wire.Array [Wire.Keyword "set-block-property";Wire.Array [_;_;Wire.Float value]]] -> value=89.
+       | _ -> false);
+    commit "not-a-number";
+    check "Rejected numeric text preserves expansion and performs no write" (expanded () && List.length !operations=1);
+    commit "";
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      S.flush session;
+      check "Empty numeric Submit removes the value without collapsing"
+        (expanded () && button_label (numeric ())=Some (I18n.t "ui/empty") && List.length !operations=2);
+      let chip = List.find (fun n -> n.M.kind="link" && class_has n "page-ref") (nodes session) in
+      let anchor = List.find (fun n -> Option.fold ~none:false ~some:(fun id -> Str_util.contains id "property-node-")
+        (M.string_prop n "accessibility-identifier")) (nodes session) in
+      let id=Option.get (M.string_prop anchor "accessibility-identifier") in
+      let document= !(Stub_dom.document_ref) in
+      let lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
+      let element=Stub_dom.make_element "div" in
+      let set : string -> string -> unit = Stub_dom.get_field element "setAttribute" in
+      set "id" id;
+      Stub_dom.set_field document "getElementById" (fun key -> if key=id then element else lookup key);
+      S.press session chip.M.id;
+      Stub_dom.set_field document "getElementById" lookup;
+      ignore (Js.Global.setTimeout ~f:(fun () ->
+        S.flush session;
+        check "Bottom Node text opens its Set value picker instead of navigating"
+          (not !navigated && Properties_state.view_overlay_open ()
+           && List.exists (fun n -> M.string_prop n "placeholder"=Some (I18n.t1 "property/set-placeholder" "Bottom Node")) (nodes session));
+        done_ ()) 0)) 0)) 0)
+
 let run_views ~registry ~profile ~finish =
+  let finish () = bottom_pills_commit ~profile ~finish in
   bottom_pills ~profile;
   preview_block_spacing ~registry ~profile;
   page_disclosure ~registry ~profile;
