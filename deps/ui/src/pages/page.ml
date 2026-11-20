@@ -214,38 +214,46 @@ let title_editor (page : Model.page) : t =
          | None -> ())
     | _ -> ()
   in
+  let discard ?(select = false) () =
+    Runtime.send Action.Title_edit_done;
+    (match page.page_uuid with
+     | Some u when select -> Editor_actions.select_single u
+     | _ -> ());
+    Runtime.flush ()
+  in
   let commit ?(select = false) () =
     let value =
       String.trim
         (Runtime.signal_get model_st).Edit_model.source
     in
-    (match page.page_uuid with
-     | Some u ->
-         ignore
-           ((if value = page.page_title then Js.Promise.resolve ()
-             else Page_ops.rename u value)
-            |> Js.Promise.then_ (fun () ->
-              Runtime.send Action.Title_edit_done;
-              if select then Editor_actions.select_single u;
-              Runtime.flush ();
-              Js.Promise.resolve ())
-            |> Js.Promise.catch (fun _ ->
-              (* rejected rename (e.g. "#" in the name): the worker
-                 notification toast already explains it; the editor
-                 stays open on the typed text like cljs *)
-              Js.Promise.resolve ()))
-     | None ->
-         Runtime.send Action.Title_edit_done;
-         Runtime.flush ())
+    (* cljs save-block-aux! skips built-ins — Escape/commit must not
+       rename Library/Contents/etc. or the reject keeps the draft open *)
+    if page.page_built_in || value = page.page_title then discard ~select ()
+    else
+      match page.page_uuid with
+      | Some u ->
+          ignore
+            (Page_ops.rename u value
+             |> Js.Promise.then_ (fun () ->
+               Runtime.send Action.Title_edit_done;
+               if select then Editor_actions.select_single u;
+               Runtime.flush ();
+               Js.Promise.resolve ())
+             |> Js.Promise.catch (fun _ ->
+               (* rejected rename (e.g. "#" in the name): the worker
+                  notification toast already explains it; the editor
+                  stays open on the typed text like cljs *)
+               Js.Promise.resolve ()))
+      | None -> discard ~select ()
   in
-  (* Enter/Escape both exit selecting the title block (cljs parity);
-     blur exits without the selection *)
+  (* Enter exits selecting the title block; Escape discards (built-in
+     or not). Blur exits without the selection. *)
   let route =
     { Edit_input.split_block = (fun () -> commit ~select:true ())
     ; merge_prev = (fun () -> ())
     ; indent = (fun () -> ())
     ; outdent = (fun () -> ())
-    ; cancel = (fun () -> commit ~select:true ())
+    ; cancel = (fun () -> discard ~select:true ())
     ; focused = (fun _ -> ())
     ; menu = (fun _ -> ()) }
   in
