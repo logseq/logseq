@@ -246,14 +246,15 @@ let title_editor (page : Model.page) : t =
                Js.Promise.resolve ()))
       | None -> discard ~select ()
   in
-  (* Enter exits selecting the title block; Escape discards (built-in
-     or not). Blur exits without the selection. *)
+  (* Enter/Escape both exit selecting the title block (cljs parity);
+     built-in pages discard via [commit] without renaming. Blur exits
+     without the selection. *)
   let route =
     { Edit_input.split_block = (fun () -> commit ~select:true ())
     ; merge_prev = (fun () -> ())
     ; indent = (fun () -> ())
     ; outdent = (fun () -> ())
-    ; cancel = (fun () -> discard ~select:true ())
+    ; cancel = (fun () -> commit ~select:true ())
     ; focused = (fun _ -> ())
     ; menu = (fun _ -> ()) }
   in
