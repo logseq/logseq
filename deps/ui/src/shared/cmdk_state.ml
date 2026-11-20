@@ -1584,7 +1584,12 @@ let shortcut_action cid : (unit -> unit) option =
   | "sidebar/clear" -> Some st.svs.Svs.sidebar_clear
   | "sidebar/close-top" -> Some st.svs.Svs.sidebar_close_top
   | "ui/toggle-contents" -> Some st.svs.Svs.sidebar_ensure_contents
-  | "ui/select-theme-color" | "ui/customize-appearance" ->
+  | "ui/select-theme-color" ->
+      Some
+        (fun () ->
+          (* cljs show-themes-modal! true → open-select-theme! *)
+          st.svs.Svs.open_themes_select ())
+  | "ui/customize-appearance" ->
       Some
         (fun () ->
           (* cljs :ui/toggle-appearance — appearance popup anchored to

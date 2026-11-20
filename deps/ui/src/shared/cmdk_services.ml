@@ -158,6 +158,7 @@ type t =
       -> on_chosen:(icon_choice -> unit) -> unit
   ; appearance_popup : unit -> unit (* anchored on the toolbar dots *)
     (* -- dialogs/settings ---------------------------------------------------- *)
+  ; open_themes_select : unit -> unit (* classic installed-themes dialog *)
   ; dialogs_open : string -> unit
   ; dialogs_close : string -> unit
   ; dialogs_is_open : string -> bool

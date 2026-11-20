@@ -1669,6 +1669,63 @@ let test_go_back_fwd_brackets () =
   check "Ctrl+Escape without code still matches go/backward on non-mac"
     (Ui_services.env_is_mac () || fire ~ctrl:true ~code:None "Escape")
 
+(* G4 select-theme-color: t i opens the classic themes-select dialog. *)
+let test_select_theme_color () =
+  let prev_dialogs = !Dialogs_state.st in
+  let state = Signal.state (Signal.scheduler ()) Dialogs_state.initial in
+  Dialogs_state.st := Some state;
+  (Cmdk_host.services ()).Cmdk_services.open_themes_select ();
+  check "t i / ui/select-theme-color opens the classic themes dialog"
+    (Dialogs_state.is_open "themes-select");
+  Dialogs_state.close_named "themes-select";
+  Dialogs_state.st := prev_dialogs
+
+(* G4 toggle-contents + sidebar-clear: second Alt+Shift+C removes Contents
+   and closes an empty right sidebar; clear hides after emptying. *)
+let test_toggle_contents_and_clear () =
+  let previous_sidebar = !Sidebar_state.st_ref in
+  let previous_model = Runtime.model () in
+  let svs = Cmdk_host.services () in
+  let state v = Signal.state (Signal.scheduler ()) v in
+  let sidebar : Sidebar_state.t =
+    { favorites = state []; home_page = state None
+    ; favorite_drop = state None; recents = state []
+    ; nav_checked = state []; nav_tag_titles = state []
+    ; block_sources = Hashtbl.create 4; items = state []
+    ; open_menu = state ""; groups_collapsed = state []
+    ; left_width = state 246.; right_fraction = state 0.3
+    ; viewport_w = state 1280.
+    ; restored_repo = ref None; restoring = ref true
+    ; history_repo = ref None; history_state = ref None }
+  in
+  Sidebar_state.st_ref := Some sidebar;
+  if not previous_model.Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar;
+  let contents : Sidebar_state.item =
+    { key = "contents"; kind = "contents"; uuid = None; title = "Contents"
+    ; icon = None; breadcrumb = []; blocks = []; linked_refs = []
+    ; page = None; props_collapsed = true; collapsed = false; page_ref = None }
+  in
+  Signal.set sidebar.items [ contents ];
+  svs.Cmdk_services.sidebar_ensure_contents ();
+  check "second Alt+Shift+C removes Contents"
+    (Runtime.signal_get sidebar.items = []);
+  check "removing the last Contents item closes the right sidebar"
+    (not (Runtime.model ()).Model.right_sidebar_open);
+  Runtime.send Action.Toggle_right_sidebar;
+  Signal.set sidebar.items
+    [ contents
+    ; { contents with key = "help"; kind = "help"; title = "Help" } ];
+  svs.Cmdk_services.sidebar_clear ();
+  check "sidebar/clear empties items"
+    (Runtime.signal_get sidebar.items = []);
+  check "sidebar/clear closes the right sidebar"
+    (not (Runtime.model ()).Model.right_sidebar_open);
+  Sidebar_state.st_ref := previous_sidebar;
+  if (Runtime.model ()).Model.right_sidebar_open
+     <> previous_model.Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar
+
 (* ---------- runner ---------- *)
 
 (* State_cell singletons + first-mount refs: this suite mounts the app
@@ -1869,6 +1926,8 @@ let run ~finish =
   test_follow_link_sidebar ();
   test_add_comment_ctrl_space ();
   test_go_back_fwd_brackets ();
+  test_select_theme_color ();
+  test_toggle_contents_and_clear ();
   test_editor_ac_tab st s;
   test_editor_unbound_enter ();
   test_code_editor_enter ();

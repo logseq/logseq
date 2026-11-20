@@ -308,6 +308,19 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
         | None -> ())
   ; appearance_popup =
       Runtime.toggle_appearance
+  ; open_themes_select =
+      (fun () ->
+        Themes_select_view.open_
+          ~select:(fun theme ->
+            Plugin_host.core_select_theme
+              (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:false theme)))
+          ~selected:!Plugin_host.selected_theme
+          ~themes:
+            (List.map
+               (fun theme -> Sdk_convert.wire_of_json (Sdk_json.of_js theme))
+               !Plugin_host.installed_themes)
+          ())
+
   ; dialogs_open = Dialogs_state.open_
   ; dialogs_close = Dialogs_state.close_named
   ; dialogs_is_open = Dialogs_state.is_open
