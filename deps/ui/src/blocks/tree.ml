@@ -826,7 +826,7 @@ let rec block_row
 
 (* The title/editor row; properties, query results and children follow
    in the block shell. *)
-and row_main ?extras ~editable ~library scope (b : Model.block) : t =
+and row_main ?extras ?bottom_expanded_state ~editable ~library scope (b : Model.block) : t =
   let uuid = Option.value b.block_uuid ~default:"" in
   let key = block_key b in
   (* data-has-heading feeds block.css selectors — rides ~data_attrs *)
@@ -890,7 +890,7 @@ and row_main ?extras ~editable ~library scope (b : Model.block) : t =
                              below the content-or-editor cell, before the
                              reactions and the .ls-block-content-indent
                              properties area *)
-                          Properties_area.block_below_pills ~scope ~uuid
+                          Properties_area.block_below_pills ?expanded_state:bottom_expanded_state ~scope ~uuid
                         ]
                     ]
                 ]
@@ -952,6 +952,7 @@ and row_sig ?extras ?depth_signal ?(flat = false) ~depth ~editable ~library ~vir
  fun ctx parent ->
   let b0 = Signal.get bs in
   let key = block_key b0 in
+  let bottom_expanded_state = Signal.state ctx.Lui_ui.ui_scheduler false in
   let depth_signal = match depth_signal with
     | Some source -> source
     | None -> Signal.constant ctx.Lui_ui.ui_scheduler depth in
@@ -999,7 +1000,7 @@ and row_sig ?extras ?depth_signal ?(flat = false) ~depth ~editable ~library ~vir
           (fun ((a : Model.block), ga, ia) ((b : Model.block), gb, ib) ->
           a == b && ga = gb && not (gen_bumped a ia ib))
         (fun ((b : Model.block), _g, _i) ->
-          row_main ?extras ~editable ~library scope b)
+          row_main ?extras ~bottom_expanded_state ~editable ~library scope b)
         (Logseq_el.own ctx
            (Signal.map2
               (fun (b : Model.block) (_tick : int) ->

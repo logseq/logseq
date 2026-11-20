@@ -900,6 +900,40 @@ Logs: `/Users/devin/attachments/table89-bottom-ui-final.log`,
 `table89-bottom-visual.log`, `table89-bottom-stylelint*.log` and
 `table89-bottom-i18n.log` (all under `/Users/devin/attachments/`).
 
+### Table90: retain bottom-pill expansion during numeric refresh
+
+Table90 accepts embed-owner arrow navigation, Tab/Shift+Tab, journal heading
+ink, bottom-property geometry, property-name activation, hidden following pills,
+Expand/Collapse, responsive fitting and saved values on `dfce716e`. Its remaining
+numeric-edit evidence is under `/Users/devin/table90/evidence/`: Master retains
+expansion while LUI changes from 104px (116px narrow) to the collapsed 32px row.
+
+The mounted reproduction exposes an outer ownership error: `Tree.row_sig`
+retains the block shell but rebuilds `row_main` on block-record or render-cache
+invalidation. Expansion allocated inside `block_below_pills` survived its own
+property-data refresh, but not that enclosing content rebuild. The old fixture
+mounted only the property area and therefore could not expose this path.
+Expansion now belongs to the stable keyed row and is passed through `row_main`
+to the property view. It remains local to each mounted occurrence rather than
+being cached globally by block UUID; standalone property views retain their
+local default. No geometry, fitting, worker, schema, SDK or translation changes.
+
+The regression mounts the actual keyed block row, publishes the numeric value
+88, and invokes the cache-invalidation/row-refresh pair used by the unknown-delta
+worker-event branch. Before repair it fails the expansion assertion and two
+subsequent refresh/collapse assertions. After repair it retains the Collapse
+control, expanded height bound and displayed value. Existing collapsed, empty,
+missing-value, key-target and collapse checks remain intact. The exact browser
+worker payload that triggered Table90's remount was not captured; this is a
+mounted reproduction of the ownership failure, not a browser event trace.
+
+Gates: **6652 checks, zero failures**; native experimental tests and build pass.
+Worker retains the preceding Table89 platform cases **[1, 7, 8]**, including
+`Native secrets require the OS keychain host`: 3 failures / 994 tests.
+`git diff --check` passes. Changed-state browser/narrow-layout and native visuals
+remain unverified. No `static/` build/write or `:3010` access.
+Logs: `/Users/devin/attachments/table90-bottom-{red-ui,ui,native-test,native-build,worker}.log`.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

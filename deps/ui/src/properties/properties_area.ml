@@ -532,11 +532,13 @@ let block_area ~scope ~uuid : t =
 
 (* below pills: .positioned-properties.block-below mounts inside the
    block-content column below the title row *)
-let block_below_pills ~scope ~uuid : t =
+let block_below_pills ?expanded_state ~scope ~uuid : t =
  fun context parent ->
   let key = block_key uuid in
   let st = block_state context uuid in
-  let expanded_state = Signal.state context.Lui_ui.ui_scheduler false in
+  let expanded_state = match expanded_state with
+    | Some state -> state
+    | None -> Signal.state context.Lui_ui.ui_scheduler false in
   let node =
     (reactive
        (fun (d : S.area_data) ->

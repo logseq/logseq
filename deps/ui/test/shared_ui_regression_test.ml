@@ -1162,17 +1162,23 @@ let bottom_pills_fixture profile initial_rows =
         ~fetch:(fun publish -> publish {Properties_state.empty_area_data with below=initial_rows};
           Js.Promise.resolve ()) in
       rows := Some state;
-      Properties_area.block_below_pills ~scope:"main" ~uuid) () in
+      Tree.block_row_sig (Signal.constant context.Lui_ui.ui_scheduler
+        (Test_check.block uuid "Bottom properties owner"))) () in
   Runtime.signal_set (Option.get !rows) {Properties_state.empty_area_data with below=initial_rows};
   S.flush session;
   session, Option.get !rows
 
 let bottom_pills ~profile =
   let previous_flush = !Runtime.app_flush in
+  let previous_editor = !Editor_state.st and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st in
+  Editor_state.st:=None; Editor_state.field_sigs_opt:=None; Settings_state.st:=None;
   let session, rows = bottom_pills_fixture profile (bottom_pills_rows ()) in
   Runtime.app_flush := (fun () -> S.flush session);
   Fun.protect ~finally:(fun () ->
     ignore (Lui_app.dispose session.S.app); Runtime.app_flush := previous_flush;
+    Editor_state.st:=previous_editor; Editor_state.field_sigs_opt:=previous_fields;
+    Settings_state.st:=previous_settings;
     Hashtbl.remove Properties_state.areas (Properties_area.block_key "00000000-0000-4000-8000-000000000030")) (fun () ->
     let find cls = List.find (fun n -> class_has n cls) (nodes session) in
     let control () = find "bottom-property-expand-btn" in
@@ -1198,6 +1204,18 @@ let bottom_pills ~profile =
     check "Expanded pill keys and numeric values keep the compact 20px line box"
       (List.for_all (fun n -> not (class_has n "property-k" || class_has n "pv-scalar")
         || check_prop n "height" (P.IntValue 20)) (nodes session));
+    let numeric_refresh = List.map (fun row ->
+      if Properties_data.row_type row = "number"
+      then Properties_data.row_with_value row (Wire.Int 88) else row)
+      (bottom_pills_rows ()) in
+    Runtime.signal_set rows {Properties_state.empty_area_data with below=numeric_refresh};
+    Render_inline.invalidate_pull_caches ();
+    Editor_state.bump_invalidation ();
+    S.flush session;
+    check "Numeric value refresh and block-content remount retain expanded bottom pills"
+      (button_label (control ())=Some (I18n.t "property/collapse-bottom-pills")
+       && check_prop (find "bottom-properties-row") "max-height" (P.IntValue 384)
+       && List.exists (fun n -> button_label n=Some "88") (nodes session));
     let updated = List.map (fun row -> Properties_data.row_with_value row Wire.Nil) (bottom_pills_rows ()) in
     Runtime.signal_set rows {Properties_state.empty_area_data with below=updated}; S.flush session;
     check "Property refresh preserves expansion and handles missing values"
