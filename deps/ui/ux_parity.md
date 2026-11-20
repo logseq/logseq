@@ -1115,6 +1115,63 @@ no worker source is changed. `git diff --check` passes.
 No `static/` writes/build or `:3010` access. Logs:
 `/Users/devin/attachments/table93-*.log`.
 
+### Table94: builder token metrics and grouped horizontal scrolling
+
+Table94 accepts Table93's table backgrounds, fixed cell widths and alignment.
+Master's `query/builder.cljs` renders the operator as an unpadded flex anchor;
+`builder.css` gives its complete clause group 14px text / 20px line height,
+with bold, half-opacity brackets. LUI's small-button defaults instead added
+12px horizontal padding, 4px vertical padding and a 24px fixed height. Its
+extra block wrapper also introduced an inline-button baseline gap, while
+brackets inherited 16px / 24px text. Operators now have zero padding and
+automatic height, sit directly in the group row, and share the group's
+typed 14px / 20px metrics. Brackets use Master's weight/opacity; ordinary
+tokens retain the accepted weight 400, wrapping and human-readable dates.
+
+The trailing scroll pixel has a clear source: Master's four-pixel resize
+handle is positioned `right:-2px` inside a header cell with a one-pixel
+right border, producing one pixel of overflow beyond that cell. LUI's
+header uses one-pixel padding plus an inset border shadow instead; its
+typed handle therefore uses width 4px and `right:-1px` for the same bounds.
+No column width or artificial scroll spacer is added.
+
+The grouped follow-up identifies two separate constraints. The body row's
+`overflow:hidden` made it a nearer scrolling ancestor than the actual
+horizontal scroller, preventing its sticky Select cells from following the
+header. Rows now allow overflow (individual cells still clip their content).
+The grouped relative column also has `min-width:0`, so its body rows match
+Master's 568px viewport-sized background/border while the header remains
+712px wide. Flat table widths remain unchanged. This supersedes Table93's
+equal-width narrow grouped-frame interpretation.
+
+Entity table group headings now reuse `Render_inline.page_link`, including
+the theme's accent-11 link color and stable `data-uuid` target. The existing
+delegated page-reference handler prevents the placeholder `#` default and
+navigates using that UUID (including journal pages). Both grouped and
+grouped-list table headings use this path. Empty, scalar and unavailable
+groups retain their text-only headings; List/gallery rendering is unchanged.
+
+Verification: **6675 UI checks, zero failures**; native experimental
+tests/build pass. Regressions cover the unpadded direct operator, shared
+group typography, handle bounds, shrinkable grouped frame and entity vs
+empty/unavailable heading targets. Real-SDK Chrome measures AND at
+**30.3125px**, text gap **9px**, and Search at **529.59375px** from a 481px
+origin; all three token ink bounds share the same y coordinate. At 568px
+available width both scrollers measure **713px / max scroll 145px**;
+header and body Select cells stay pinned at the viewport origin. Grouped
+rows measure 568px, with the accepted 712px header and 160px final cells.
+The journal heading resolves the Logseq accent color and carries its UUID.
+
+Worker retains Table93's **[1,7,8]** platform cases: 3 failures / 994 tests
+(`Native secrets require the OS keychain host`). Native tests initially
+encountered a concurrent Dune lock; the serialized rerun passes. Changed
+code uses typed props only; no SDK, CSS or worker changes. Screenshots:
+`/Users/devin/attachments/table94-{wide,narrow-scrolled}.png`; logs:
+`/Users/devin/attachments/table94-*.log`. The browser fixture mounts real
+application factories but does not rebuild the integrated application;
+integrated journal-link activation and native visuals remain unverified.
+No `static/` writes/build or `:3010` access.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |

@@ -5137,9 +5137,26 @@ let run_views ~registry ~profile ~finish =
          Views_table.with_column_width inst (Views_table.created_column ())
            (Lui_elements.column ~accessibility_identifier:"table-width-fixture" []);
          Views_table.table_el inst initial;
+         Views_table.grouped_table inst ~rows:[];
+         (fun context parent ->
+           let grouped = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+             ~kind:(Views_state.KQuery {block_uuid="group-query-fixture"}) ~feature:"query" ~owner:Wire.Nil in
+           let state = Views_state.empty_vstate () in
+           Hashtbl.replace state.Views_state.ref_titles "group-journal-fixture" "T94 Journal";
+           Signal.set grouped.Views_state.st state;
+           Lui_elements.column
+             [ Views_table.table_group_heading grouped state
+                 (Wire.Map [Wire.kw "kind", Wire.Keyword "entity"; Wire.kw "uuid", Wire.Uuid "group-journal-fixture"])
+             ; Views_table.table_group_heading grouped state Wire.Nil
+             ; Views_table.table_group_heading grouped state
+                 (Wire.Map [Wire.kw "kind", Wire.Keyword "entity"; Wire.kw "uuid", Wire.Uuid "unavailable-group-fixture"]) ]
+             context parent);
          Views_builder.clause_el (Views_builder.editor_of_inst inst ~active:(fun () -> true))
            ~tree:(ref (Views_builder.COp ("and",[]))) ~loc:[99]
            (Views_builder.CText "Wrapping clause fixture");
+         Views_builder.editor_el (Views_builder.editor_of_inst inst ~active:(fun () -> true))
+           ~tree:(ref (Views_builder.COp ("and", [Views_builder.CText "Alignment fixture";
+             Views_builder.CText "Second alignment fixture"])));
          Views_view.query_content inst {initial with loading=false;qsrc="(between [[Nov 18th, 2026]] [[Nov 20th, 2026]])"};
          popup_layer]
         context parent) in
@@ -5163,6 +5180,36 @@ let run_views ~registry ~profile ~finish =
   let parent node = List.find (fun n -> Some n.M.id=node.M.parent) (nodes sorting) in
   check "The real empty-table header overlay fills a column parent instead of shrink-to-fit"
     ((parent header).M.kind="overlay" && (parent (parent header)).M.kind="column");
+  check "Grouped table frames can shrink to the viewport without clipping sticky body cells"
+    (List.exists (fun n -> n.M.kind="column"
+       && Hashtbl.find_opt n.M.props "min-width"=Some (P.IntValue 0)
+       && List.exists (fun child -> child.M.kind="overlay") (M.children sorting.S.tree n.M.id))
+       (nodes sorting));
+  let journal = List.find (fun n -> M.string_prop n "text"=Some "group-journal-fixture") (nodes sorting) in
+  let attr node key = List.assoc_opt key (P.data_attrs_decode
+    (Option.value (M.string_prop node "data-attrs") ~default:"")) in
+  check "Entity table group headings use the navigating page-reference target and link color"
+    (class_has journal "page-ref"
+     && attr journal "data-uuid"=Some "group-journal-fixture"
+     && M.string_prop journal "foreground"=Some "var(--lx-accent-11, var(--ls-link-text-color))");
+  check "Empty and unavailable table groups do not fabricate reference links"
+    (not (List.exists (fun n -> attr n "data-uuid"=Some "unavailable-group-fixture") (nodes sorting)));
+  let handle = List.find (fun n -> class_has n "ls-table-resize-handle") (nodes sorting) in
+  check "The four-pixel resize handle extends one pixel beyond the header edge"
+    (Hashtbl.find_opt handle.M.props "width"=Some (P.IntValue 4)
+     && Hashtbl.find_opt handle.M.props "min-width"=Some (P.IntValue 4)
+     && Hashtbl.find_opt handle.M.props "inset-right"=Some (P.FloatValue (-1.)));
+  let operator = List.find (fun n -> class_has n "query-clause"
+    && M.string_prop n "text"=Some "AND") (nodes sorting) in
+  let group = parent operator in
+  check "Query operators have no button padding or inline-wrapper baseline gap"
+    (Hashtbl.find_opt operator.M.props "padding-horizontal"=Some (P.IntValue 0)
+     && Hashtbl.find_opt operator.M.props "padding-vertical"=Some (P.IntValue 0)
+     && M.string_prop operator "height"=Some "auto"
+     && group.M.kind="row");
+  check "Query groups share Master's fourteen-pixel text and twenty-pixel line height"
+    (M.string_prop group "font-size"=Some "0.875rem"
+     && M.string_prop group "line-height"=Some "1.25rem");
   let clause = List.find (fun n -> Option.fold ~none:false ~some:(fun text ->
     Str_util.contains text "Wrapping clause fixture") (M.string_prop n "text")) (nodes sorting) in
   check "Query clause text uses normal weight and wraps without a fixed line height"

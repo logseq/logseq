@@ -703,14 +703,19 @@ let clause_id inst loc = "qbc-" ^ inst.key ^ "-" ^ loc_key loc
 let op_id inst loc = "qbo-" ^ inst.key ^ "-" ^ loc_key loc
 let add_id inst loc = "qba-" ^ inst.key ^ "-" ^ loc_key loc
 
+let clause_bracket ~key value =
+  Ui_components.with_props
+    [Ui_components.Prop.font_weight 700; Ui_components.Prop.opacity 0.5]
+    (text ~key ~value [])
+
 let rec clause_el inst ~tree ~loc (c : clause) : t =
   match c with
   | COp (op, xs) ->
       box ~key:("qc-" ^ loc_key loc) ~min_width:0
         [ row ~key:"oc" ~cross:`center ~min_width:0
-            [ text ~key:"bl" ~value:"(" []
+            [ clause_bracket ~key:"bl" "("
             ; clauses_group inst ~tree ~loc:(loc @ [ 0 ]) ~kind:op ~clauses:xs
-            ; text ~key:"br" ~value:")" []
+            ; clause_bracket ~key:"br" ")"
             ]
         ]
   | _ ->
@@ -740,8 +745,11 @@ let rec clause_el inst ~tree ~loc (c : clause) : t =
 
 and op_label_el inst ~tree ~loc kind : t =
   let id = op_id inst loc in
-  Ui_components.with_props [Ui_components.Prop.font_weight 400]
-  (Ui_components.button ~variant:`ghost ~size:`sm ~height:24
+  Ui_components.with_props
+    [ Ui_components.Prop.font_weight 400
+    ; Ui_components.Prop.height_auto ]
+  (Ui_components.button ~variant:`ghost ~size:`sm
+    ~padding_horizontal:0 ~padding_vertical:0
     ~key:("qbo-" ^ loc_key loc) ~accessibility_identifier:id ~disabled:inst.disabled
     ~style_class:"query-clause"
     ~text:(String.uppercase_ascii kind) ~label:(String.uppercase_ascii kind)
@@ -769,19 +777,20 @@ and add_filter_btn inst ~tree ~loc ~with_label : t =
 
 and clauses_group inst ~tree ~loc ~kind ~clauses : t =
   let parens = loc = [ 0 ] && (kind <> "and" || List.length clauses > 1) in
-  Ui_components.with_props [ Ui_components.Prop.flex_wrap `wrap ]
+  Ui_components.with_props
+    [ Ui_components.Prop.flex_wrap `wrap
+    ; Ui_components.Prop.font_size "0.875rem"
+    ; Ui_components.Prop.line_height "1.25rem" ]
   (row ~key:("qg-" ^ loc_key loc) ~gap:4 ~cross:`center ~min_width:0
     ( (if parens then
-         [ text ~key:"pl" ~value:"(" [] ]
+         [ clause_bracket ~key:"pl" "(" ]
        else [])
     @ (if not (loc = [ 0 ] && kind = "and" && List.length clauses <= 1) then
-         [ box ~key:"opl"
-             [ op_label_el inst ~tree ~loc kind ]
-         ]
+         [ op_label_el inst ~tree ~loc kind ]
        else [])
     @ List.mapi (fun i c -> clause_el inst ~tree ~loc:(loc @ [ i + 1 ]) c) clauses
     @ (if parens then
-         [ text ~key:"pr" ~value:")" [] ]
+         [ clause_bracket ~key:"pr" ")" ]
        else [])
     @ (if loc <> [ 0 ] then
          [ add_filter_btn inst ~tree ~loc ~with_label:false ]

@@ -815,12 +815,12 @@ let resize_handle inst (c : V.column) : t =
   let node =
     Ui_components.with_props
       [Ui_components.Prop.position `absolute
-      ;Ui_components.Prop.inset_right 0.; Ui_components.Prop.inset_top 0.
+      ;Ui_components.Prop.inset_right (-1.); Ui_components.Prop.inset_top 0.
       ;Ui_components.Prop.cursor `pointer
       ;Ui_components.Prop.hover_opacity 0.7
       ;Ui_components.Prop.pressed_opacity 1.]
-      (box ~style_class:"ls-table-resize-handle" ~width:6 ~height:32
-        ~min_width:6 ~opacity:0. ~corner_radius:4
+      (box ~style_class:"ls-table-resize-handle" ~width:4 ~height:32
+        ~min_width:4 ~opacity:0. ~corner_radius:4
         ~background:"var(--lx-accent-08, hsl(var(--accent) / 0.6))"
         ~data_attrs:["data-no-dnd", "true"]
         ~pointer_capture:true
@@ -1254,8 +1254,7 @@ let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
         (fun sel ->
           "ls-table-row ls-block" ^ if sel then " selected" else "")
         (Ui_components.with_props
-              [ Ui_components.Prop.overflow `hidden
-              ; Ui_components.Prop.padding_bottom 1
+              [ Ui_components.Prop.padding_bottom 1
               ; Ui_components.Prop.shadow "inset 0 -1px 0 hsl(var(--border))" ]
               (with_row_feedback
                  ~background:(reactive (fun selected -> row_background selected) sel_sig)
@@ -1481,7 +1480,7 @@ let grouped_table ?(paginate = false) inst ~rows : t =
         [ Ui_components.with_props
             [ Ui_components.Prop.position `relative
             ; Ui_components.Prop.padding_bottom 38 ]
-            (column
+            (column ~min_width:0
             [ overlay
                 [ table_header ~rows inst cols
                 ; align `top_leading (action_bar inst) ]
@@ -1635,6 +1634,15 @@ let group_title inst s gv =
              || (s.V.group_by = None && s.V.display_type = "list") then (I.t "view.table/pages")
           else missing_group ()
       | v -> Wr.prop_text v)
+
+let table_group_heading inst s gv : t =
+ fun ctx parent ->
+  let title = group_title inst s gv in
+  match Wr.group_value_uuid gv with
+  | Some uuid when Hashtbl.mem s.V.blocks uuid || Hashtbl.mem s.V.ref_titles uuid ->
+      Render_inline.page_link ~tag:false ~label:title
+        ~uuid_sig:(Signal.constant ctx.Lui_ui.ui_scheduler uuid) title ctx parent
+  | _ -> text ~value:title [] ctx parent
 
 (* ---------- body dispatch ---------- *)
 
@@ -2107,7 +2115,7 @@ let render_table inst s : t =
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:
                  (box ~margin_top:8 ~margin_bottom:8
-                    [ text ~value:(group_title inst s g.Wr.gv) [] ])
+                    [ table_group_heading inst s g.Wr.gv ])
                ~body:
                  (grouped_table ~paginate:(more && i = last) inst
                     ~rows:g.Wr.grows))
@@ -2122,7 +2130,7 @@ let render_table inst s : t =
              foldable inst ~key:("g" ^ string_of_int i)
                ~title:
                  (box ~margin_top:8 ~margin_bottom:8
-                    [ text ~value:(group_title inst s g.Wr.glv) [] ])
+                    [ table_group_heading inst s g.Wr.glv ])
                ~body:
                  (Logseq_el.fragment
                     (List.mapi
