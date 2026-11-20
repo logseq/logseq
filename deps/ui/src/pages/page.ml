@@ -1070,7 +1070,8 @@ let journal_section ms ~footer ?spacing ?body_spacing ~source : t =
                        (fun page ->
                          column ~key:"journal-reference-content" ~gap:32
                            ((if is_today_journal page then
-                               [today_queries page]
+                               [ today_queries page
+                               ; Scheduled_deadlines.view page ]
                              else [])
                             @ [journal_references_view page])) ps ] ]) ]
          @ (match spacing with
@@ -1439,10 +1440,11 @@ let linked_refs_el (m : Model.t) : t =
       | None -> Logseq_el.nothing
       | Some uuid ->
           column ~key:"refs-wrap" ~gap:32 ~margin_left:4
-            (* cljs page-inner: #today-queries div first on today's journal,
+            (* cljs page-inner: #today-queries, then Scheduled and Deadline,
                then the linked refs section *)
             ((if is_today_page m page then
-                [ today_queries page ]
+                [ today_queries page
+                ; Scheduled_deadlines.view page ]
               else [])
             @ [ box ~key:"lrefs"
                   [ references_view ~page_uuid:uuid ~has_refs:true () ] ]))
