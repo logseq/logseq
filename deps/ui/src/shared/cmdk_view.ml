@@ -429,7 +429,8 @@ let item_row svs (st : S.t) (item_sig : S.item Signal.signal) : t =
                    (reactive
                       (fun (it : S.item) -> it.S.ibadge = S.Header_badge)
                       item_sig)
-                 (badge_el svs "hb")
+                 (* compact matches crumb line-height (cljs single-line badge) *)
+                 (badge_el ~compact:true svs "hb")
              ])
     | None -> None
   in
@@ -856,9 +857,32 @@ let sidebar_counter = ref 0
 let make_sidebar ~services ~query ctx =
   incr sidebar_counter;
   let owner = "cmdk-sidebar-" ^ string_of_int !sidebar_counter in
-  let services = services ("[data-cmdk-owner=\"" ^ owner ^ "\"]") in
+  let root = "[data-cmdk-owner=\"" ^ owner ^ "\"]" in
+  let services = services root in
   let state = S.make_sidebar ctx.Lui_ui.ui_scheduler services query in
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () -> S.cancel_requests state);
+  (* Modal keydown only covers the palette; sidebar panes need their own
+     Escape → clear_or_close (cljs attaches keydown to every cmdk ref). *)
+  let inside_sidebar () =
+    match Ui_services.dom_active_element () with
+    | Some el -> el.Ui_services.closest root <> None
+    | None -> false
+  in
+  services.Svs.install_listeners ctx.Lui_ui.ui_scope
+    { Svs.key =
+        (fun ev ->
+          let no = { Svs.prevent = false; stop = false } in
+          if (S.get state).S.open_ && inside_sidebar () then
+            match ev.Svs.key with
+            | "Escape" ->
+                if S.clear_or_close state then
+                  { Svs.prevent = true; stop = true }
+                else no
+            | _ -> no
+          else no)
+    ; click = (fun _ -> ())
+    ; mousemove = (fun _ -> ())
+    ; composition = (fun _ -> ()) };
   { owner; state }
 
 let sidebar instance : t =
