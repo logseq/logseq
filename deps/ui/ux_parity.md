@@ -1035,14 +1035,12 @@ groups. Human-readable date arguments are retained rather than lengthening
 them to Master's raw UUIDs; identical line breaks are therefore not expected
 at every width.
 
-The final visible unpinned table column now consumes remaining width, keeping
-its stored/default width as a reactive minimum. Earlier columns retain their
-fixed widths; an add-property column retains priority for remaining space.
-Header and body use the same selection and typed flex growth. Master's
-`get-column-size` supplies the ordinary width bases; its explicit
+Table92 initially made the final visible unpinned table column consume
+remaining width, using its stored/default width as a reactive minimum.
+Table93's DOM measurements disproved that interpretation: Master extends
+the row/header background, not the final ordinary cell. The Table92 growth
+path is removed by the correction below. Master's explicit
 `-webkit-fill-available` declaration belongs to the add-property column.
-The last ordinary column's growth implements the requested visual outcome,
-not a literal port of that add-property-only declaration.
 
 Master `query.cljs/custom-query-inner` enters the view/table path only when
 the raw result is a nonempty sequence of UUIDs. With no raw result, a nonblank
@@ -1077,6 +1075,45 @@ Table91's platform cases **[1,7,8]**, including
 `Native secrets require the OS keychain host`: 3 failures / 994 tests.
 No `static/` build/write or `:3010` access. Logs:
 `/Users/devin/attachments/table92-*.log`.
+
+### Table93: full-width table backgrounds, fixed-width cells
+
+Table93 accepts query token weight 400 and the empty Between result message.
+Its exact geometry clarifies that a 922px table frame at x=481 ends at 1403,
+while the final ordinary header/body cells each remain 160px wide and end
+at 1193. Table92 incorrectly grew the final body cell and left the actual
+header frame shrink-wrapped.
+
+The cause is the header's real ancestor chain: `table_el` and `grouped_table`
+mounted their header/action-bar `overlay` under a block `box`. The web SDK's
+overlay is `inline-grid`, so that parent let it shrink to its contents.
+Both relative table containers now use typed `column` layout, whose stretch
+alignment fills the overlay and header across the table frame. No CSS,
+percentage-width escape hatch or measured-width synchronization is needed.
+All ordinary cells again bind both width and minimum width to their stored
+size/resize preview. The per-last-column growth helper and its variant
+parameters are deleted; the add-property path is unchanged.
+
+The previous isolated fixture mounted `table_header` directly under a column
+and therefore missed the real overlay ancestor. The regression now mounts
+`table_el`, including its empty header and overlay, and asserts the fixed
+cell width and stretch-capable parent. Existing empty/error query coverage
+and the accepted 400-weight/wrapping assertions remain intact.
+
+Gates: **6669 UI checks, zero failures**; native experimental tests/build
+pass. Real-SDK Chrome checks use the complete flat and grouped table
+factories: at a 1600px viewport both headers and body rows measure
+**x=481, width=922, right=1403**, while their last cells remain **160px**
+wide, ending at **1193**. At a 360px available width, both header/body
+frames retain the 712px column sum for horizontal scrolling; no cell grows.
+Screenshots: `/Users/devin/attachments/table93-{wide,narrow}.png`.
+This verifies isolated application factories, not rebuilt-app acceptance or
+native visuals. Worker retains Table92's platform failures **[1,7,8]**:
+3 failures / 994 tests, including `Native secrets require the OS keychain host`.
+The worker log also reports a closed-database WAL checkpoint during teardown;
+no worker source is changed. `git diff --check` passes.
+No `static/` writes/build or `:3010` access. Logs:
+`/Users/devin/attachments/table93-*.log`.
 
 ## 1. Intentional / out of scope
 

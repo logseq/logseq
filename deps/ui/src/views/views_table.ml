@@ -120,12 +120,11 @@ let column_width (s : V.vstate) (c : V.column) =
         resize.V.resize_column = c.V.c_id -> resize.V.resize_preview
     | _ -> Option.value (V.Smap.find_opt c.V.c_id s.V.sized) ~default:(column_size c)
 
-let with_column_width ?(stretch = false) inst c elem =
-  let sized = Ui_parts.int_prop L.MinWidth
-    ~value:(reactive (fun s -> column_width s c) (sig_of inst)) elem in
-  if stretch then sized else
-    Ui_parts.int_prop L.WidthValue
-      ~value:(reactive (fun s -> column_width s c) (sig_of inst)) sized
+let with_column_width inst c elem =
+  Ui_parts.int_prop L.WidthValue
+    ~value:(reactive (fun s -> column_width s c) (sig_of inst))
+    (Ui_parts.int_prop L.MinWidth
+       ~value:(reactive (fun s -> column_width s c) (sig_of inst)) elem)
 
 let inner_cell children =
   Ui_components.with_props [ Ui_components.Prop.overflow `hidden ]
@@ -545,8 +544,8 @@ let table_cell_navigation inst ~row_uuid ~column = function
        | _ -> ())
   | _ -> ()
 
-let cell_el ?(stretch = false) inst ~row_uuid ~blk (c : V.column) : t =
-  with_column_width ~stretch inst c
+let cell_el inst ~row_uuid ~blk (c : V.column) : t =
+  with_column_width inst c
   (Ui_components.with_props
      ([ Ui_components.Prop.overflow `hidden ]
       @ (if c.V.c_id = "select" then []
@@ -852,8 +851,8 @@ let resize_handle inst (c : V.column) : t =
     | _ -> ());
   node
 
-let header_cell ?rows ?(stretch = false) inst (c : V.column) : t =
-  with_column_width ~stretch inst c
+let header_cell ?rows inst (c : V.column) : t =
+  with_column_width inst c
   (if Ui_services.env_publishing () then
     box [ text ~value:c.V.c_name [] ]
    else
@@ -1185,12 +1184,6 @@ let show_add_property inst =
   | V.KUnlinkedRefs ->
       None
 
-let stretch_column inst cols =
-  if show_add_property inst <> None then None else
-  let state = V.get inst in
-  List.fold_left (fun last column ->
-    if is_pinned state column then last else Some column.V.c_id) None cols
-
 (* rows are (uuid, block) items — the block rides along so a content
    change makes a fresh item value; `keyed` remounts on a key change and
    Virt_list bumps its per-key render version *)
@@ -1231,11 +1224,7 @@ let table_row_navigation inst ~row_uuid ~columns = function
    outline rows use). *)
 let row_el inst (cols : V.column list) ~row_uuid ~blk : t =
  fun ctx parent ->
-  let stretched = stretch_column inst cols in
-  let cell_wrap c =
-    let stretch = stretched = Some c.V.c_id in
-    column ~height:32 ~grow:(if stretch then 1. else 0.)
-      [ cell_el ~stretch inst ~row_uuid ~blk c ] in
+  let cell_wrap c = box ~height:32 [ cell_el inst ~row_uuid ~blk c ] in
   let row_background selected =
     if selected then "hsl(var(--muted))"
     else
@@ -1346,13 +1335,11 @@ let row_stream ?(paginate = false) inst cols uuids : t =
 (* the header — one static mount per body snapshot; sort arrow is a
    reactive prop off the inst signal *)
 let table_header ?rows inst cols : t =
-  let stretched = stretch_column inst cols in
   let cell_item c =
-    let stretch = stretched = Some c.V.c_id in
-    let cell = header_cell ?rows ~stretch inst c in
+    let cell = header_cell ?rows inst c in
     if c.V.c_id = "select" then
       box ~accessibility_identifier:"Select" [ cell ]
-    else column ~grow:(if stretch then 1. else 0.) [ cell ]
+    else box [ cell ]
   in
   let pinned, free =
     List.partition (fun c -> is_pinned (V.get inst) c) cols
@@ -1460,7 +1447,7 @@ let table_el ?(paginate = false) inst (s : V.vstate) : t =
         [ Ui_components.with_props
             [ Ui_components.Prop.position `relative
             ; Ui_components.Prop.padding_bottom 38 ]
-            (box
+            (column
             [ (* cljs .table-action-bar.absolute.top-0.left-8 floats over
                  the header inside the same relative box — overlay carries
                  the placement (style_class utility tokens are pruned) *)
@@ -1494,7 +1481,7 @@ let grouped_table ?(paginate = false) inst ~rows : t =
         [ Ui_components.with_props
             [ Ui_components.Prop.position `relative
             ; Ui_components.Prop.padding_bottom 38 ]
-            (box
+            (column
             [ overlay
                 [ table_header ~rows inst cols
                 ; align `top_leading (action_bar inst) ]

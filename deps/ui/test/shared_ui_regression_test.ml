@@ -5134,8 +5134,9 @@ let run_views ~registry ~profile ~finish =
            ~title:(Views_head.render_head inst)
            ~body:(Lui_elements.spacer []);
          Page.fold_arrow ~on_click:(fun () -> incr fold_presses) "page-fold-fixture";
-         Views_table.with_column_width ~stretch:true inst (Views_table.created_column ())
-           (Lui_elements.column ~accessibility_identifier:"table-stretch-fixture" []);
+         Views_table.with_column_width inst (Views_table.created_column ())
+           (Lui_elements.column ~accessibility_identifier:"table-width-fixture" []);
+         Views_table.table_el inst initial;
          Views_builder.clause_el (Views_builder.editor_of_inst inst ~active:(fun () -> true))
            ~tree:(ref (Views_builder.COp ("and",[]))) ~loc:[99]
            (Views_builder.CText "Wrapping clause fixture");
@@ -5154,14 +5155,14 @@ let run_views ~registry ~profile ~finish =
     (Views_view.query_content_key {empty_query with loading=true}=`Loading
      && Views_view.query_content_key {empty_query with qsrc=""}=`Blank
      && Views_view.query_content_key {empty_query with query_error=Some "query unavailable"}=`Error "query unavailable");
-  let stretch = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "table-stretch-fixture") (nodes sorting) in
-  check "The final table column retains its minimum without a fixed width"
-    (Hashtbl.find_opt stretch.M.props "min-width"=Some (P.IntValue 160)
-     && not (Hashtbl.mem stretch.M.props "width"));
-  check "Only the final unpinned visible table column stretches"
-    (Views_table.stretch_column inst (Views_state.get inst).columns=Some "block/created-at"
-     && Views_table.stretch_column inst []=None
-     && Views_table.stretch_column inst [Views_table.select_column ()]=None);
+  let cell = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "table-width-fixture") (nodes sorting) in
+  check "The final table column retains both its own width and minimum"
+    (Hashtbl.find_opt cell.M.props "min-width"=Some (P.IntValue 160)
+     && Hashtbl.find_opt cell.M.props "width"=Some (P.IntValue 160));
+  let header = List.find (fun n -> class_has n "ls-table-header") (nodes sorting) in
+  let parent node = List.find (fun n -> Some n.M.id=node.M.parent) (nodes sorting) in
+  check "The real empty-table header overlay fills a column parent instead of shrink-to-fit"
+    ((parent header).M.kind="overlay" && (parent (parent header)).M.kind="column");
   let clause = List.find (fun n -> Option.fold ~none:false ~some:(fun text ->
     Str_util.contains text "Wrapping clause fixture") (M.string_prop n "text")) (nodes sorting) in
   check "Query clause text uses normal weight and wraps without a fixed line height"
