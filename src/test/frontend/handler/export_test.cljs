@@ -433,6 +433,83 @@
             (is false (str error))
             (cleanup!)))))))
 
+(deftest truncate-old-versioned-files-prunes-excess-files-test
+  (async done
+    (let [removed (atom [])
+          captured-recursive (atom nil)
+          mock-files (mapv (fn [i]
+                             #js {:name (str (+ 1000 i) ".db.sqlite")})
+                           (range 15))
+          mock-dir #js {:removeEntry (fn [name]
+                                       (swap! removed conj name)
+                                       (p/resolved nil))}
+          original-get-files browser-utils/getFiles]
+      (set! browser-utils/getFiles
+            (fn [_dir recursive]
+              (reset! captured-recursive recursive)
+              (p/resolved mock-files)))
+      (letfn [(cleanup! []
+                (set! browser-utils/getFiles original-get-files)
+                (done))]
+        (-> (export/truncate-old-versioned-files! mock-dir)
+            (p/then
+             (fn [_]
+               (is (false? @captured-recursive) "Should scan directory non-recursively")
+               (is (= 3 (count @removed)) "Should remove 3 oldest files when 15 files exist")
+               (is (= #{"1000.db.sqlite" "1001.db.sqlite" "1002.db.sqlite"} (set @removed)))
+               (is (= ["1002.db.sqlite" "1001.db.sqlite" "1000.db.sqlite"] @removed)
+                   "Prunes in descending order of age after dropping latest 12")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
+(deftest truncate-old-versioned-files-no-op-when-under-limit-test
+  (async done
+    (let [removed (atom [])
+          mock-files (mapv (fn [i]
+                             #js {:name (str (+ 1000 i) ".db.sqlite")})
+                           (range 10))
+          mock-dir #js {:removeEntry (fn [name]
+                                       (swap! removed conj name)
+                                       (p/resolved nil))}
+          original-get-files browser-utils/getFiles]
+      (set! browser-utils/getFiles
+            (fn [_dir _recursive]
+              (p/resolved mock-files)))
+      (letfn [(cleanup! []
+                (set! browser-utils/getFiles original-get-files)
+                (done))]
+        (-> (export/truncate-old-versioned-files! mock-dir)
+            (p/then
+             (fn [_]
+               (is (empty? @removed) "Should not remove any files when <= 12 files exist")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
+(deftest truncate-old-versioned-files-calls-get-files-non-recursively-test
+  (async done
+    (let [captured-recursive (atom nil)
+          mock-dir #js {:removeEntry (fn [_name] (p/resolved nil))}
+          original-get-files browser-utils/getFiles]
+      (set! browser-utils/getFiles
+            (fn [_dir recursive]
+              (reset! captured-recursive recursive)
+              (p/resolved [])))
+      (letfn [(cleanup! []
+                (set! browser-utils/getFiles original-get-files)
+                (done))]
+        (-> (export/truncate-old-versioned-files! mock-dir)
+            (p/then
+             (fn [_]
+               (is (false? @captured-recursive) "getFiles must be called with recursive=false")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
 (deftest export-blocks-as-markdown-without-properties
   (async done
     (p/let [first-content (<export-blocks-as-markdown
