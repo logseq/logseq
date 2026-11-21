@@ -233,3 +233,12 @@
              (route-handler/redirect-to-page! block-uuid)
              (is (= [beta-id alpha-id] (state/get-recent-pages))))
             (p/finally #(state/replace-state! original-state)))))))
+
+(deftest add-page-to-recent-validates-db-id-number-test
+  (testing "throws assertion error when db-id is not a number"
+    (is (thrown? js/Error (db-recent-handler/add-page-to-recent! "not-a-number" false)))
+    (is (thrown? js/Error (db-recent-handler/add-page-to-recent! nil false)))
+    (is (thrown? js/Error (db-recent-handler/add-page-to-recent! :invalid-id false))))
+  (testing "accepts number db-id without throwing"
+    (with-redefs [state/get-state (constantly {:db/restoring? true})]
+      (is (nil? (db-recent-handler/add-page-to-recent! 42 false))))))
