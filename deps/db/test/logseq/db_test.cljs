@@ -257,6 +257,36 @@
         (let [new-tx (:tx (first (:tx-data (d/transact! conn [{:db/id -1 :item/name "d"}]))))]
           (is (not-any? #(= new-tx (:tx %)) (d/datoms db :eavt))))))))
 
+(deftest batch-transact-with-temp-conn-keeps-replaced-history-ref-test
+  (testing "cardinality-one history ref replacement on temp conn does not delete the history entity"
+    (let [conn (db-test/create-conn-with-blocks
+                {:pages-and-blocks
+                 [{:page {:block/title "Page"}
+                   :blocks [{:block/title "Target block"}
+                            {:block/title "Choice a"}
+                            {:block/title "Choice b"}]}]})
+          target-block (db-test/find-block-by-content @conn "Target block")
+          choice-a (db-test/find-block-by-content @conn "Choice a")
+          choice-b (db-test/find-block-by-content @conn "Choice b")
+          history-uuid (random-uuid)
+          now (js/Date.now)
+          _ (d/transact! conn [{:block/uuid history-uuid
+                                :block/created-at now
+                                :block/updated-at now
+                                :logseq.property.history/block (:db/id target-block)
+                                :logseq.property.history/property (:db/id (d/entity @conn :logseq.property/status))
+                                :logseq.property.history/ref-value (:db/id choice-a)}])
+          history-id (:db/id (d/entity @conn [:block/uuid history-uuid]))]
+      (ldb/batch-transact-with-temp-conn!
+       conn {}
+       (fn [temp-conn]
+         (ldb/transact! temp-conn [[:db/add history-id :logseq.property.history/ref-value (:db/id choice-b)]])))
+      (let [history (d/entity @conn history-id)]
+        (is (some? history)
+            "replacing a history ref must not retract the history entity")
+        (is (= (:db/id choice-b)
+               (:db/id (:logseq.property.history/ref-value history))))))))
+
 (deftest batch-transact-with-temp-conn-preserves-temp-eids-test
   (testing "entities allocated on the temp conn keep the same eids on the live conn"
     (let [conn (d/create-conn {})

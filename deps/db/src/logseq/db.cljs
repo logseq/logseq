@@ -205,7 +205,9 @@
   ([repo-or-conn tx-data]
    (transact! repo-or-conn tx-data nil))
   ([repo-or-conn tx-data tx-meta]
-   (let [tx-data (->> tx-data
+   (let [expand-tx? (and (not (string? repo-or-conn))
+                         (not (:replay-datoms? tx-meta)))
+         tx-data (->> tx-data
                       entity->db-id
                       (map (fn [m]
                              (if (map? m)
@@ -222,12 +224,13 @@
                       (remove (fn [m] (or ;; db/id
                                        (integer? m)
                                        (empty? m)))))
-         tx-data (if-not (string? repo-or-conn)
+         tx-data (if expand-tx?
                    (delete-blocks/expand-delete-blocks-tx @repo-or-conn tx-data tx-meta)
                    tx-data)
-         delete-blocks-tx (when-not (string? repo-or-conn)
+         delete-blocks-tx (when expand-tx?
                             (delete-blocks/update-refs-history @repo-or-conn tx-data tx-meta))
-         tx-data (concat tx-data delete-blocks-tx)]
+         tx-data (concat tx-data delete-blocks-tx)
+         tx-meta (dissoc tx-meta :replay-datoms?)]
 
      ;; Ensure worker can handle the request sequentially (one by one)
      ;; Because UI assumes that the in-memory db has all the data except the last one transaction
@@ -292,7 +295,8 @@
   - Defers db validation during inner batch ops (`:skip-validate-db? true`), then
     validates on the final `transact!` to `conn`.
   - Replays collected changes as add/retract ops so the final transact! stamps
-    one new tx id. Inner temp-conn tx ids are not preserved.
+    one new tx id. Inner temp-conn tx ids are not preserved. Replay skips
+    delete-blocks expansion because the collected Datoms are already expanded.
   - Supports nested usage.
 
   Notes:
@@ -322,7 +326,9 @@
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
           ;; transact tx-data to `conn` and validate db
-          (transact! conn (datoms->tx-ops tx-data) (transform-tx-meta tx-meta))))
+          (transact! conn
+                     (datoms->tx-ops tx-data)
+                     (assoc (transform-tx-meta tx-meta) :replay-datoms? true))))
       (finally
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
         (reset! temp-conn nil)
