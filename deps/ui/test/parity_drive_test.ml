@@ -293,13 +293,17 @@ let test_ac_slash_switch st (s : ('m, 'a) S.t) =
             | Some ac' ->
                 check "node-reference switches to page search"
                   (ac'.P.kind = P.Page_ref);
-                (* an empty [[ query lists the i18n nlp date pages —
-                   cljs page-search renders calendar rows *)
+                (* cljs page-search-aux: blank [[ takes the first 10
+                   nlp date pages *)
                 check "empty page query lists nlp dates"
-                  (List.length ac'.P.items = 33
+                  (List.length ac'.P.items = 10
                    && List.exists
                         (fun it -> it.P.ai_key = "nlp:Today")
-                        ac'.P.items)
+                        ac'.P.items
+                   && not
+                        (List.exists
+                           (fun it -> it.P.ai_key = "nlp:Last year")
+                           ac'.P.items))
             | None -> check "popup stays open after switch" false)
        | None -> check "slash lists a node-reference item" false)
    | None -> check "slash popup opens" false);

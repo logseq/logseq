@@ -3123,6 +3123,33 @@ let test_popups_state () =
   check "nlp names"
     (List.length Popups_state.nlp_en_names = 33
     && List.mem "Tomorrow" Popups_state.nlp_en_names);
+  (* cljs page-search-aux: blank [[ / page-embed take the first 10 nlp
+     date pages; the full set remains available once the query is typed. *)
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  check "empty page-ref lists 10 nlp dates"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "" in
+     List.length items = 10
+     && List.hd items |> fun it -> it.Popups_state.ai_key = "nlp:Today"
+     && not (List.exists (fun it -> it.Popups_state.ai_key = "nlp:Last year") items));
+  check "empty page-embed lists 10 nlp dates"
+    (List.length (Popups_state.page_items_for popup Popups_state.Page_embed "") = 10);
+  popup.Popups_state.page_exact_titles := [ "Exist" ];
+  check "exact page title suppresses New page row"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "Exist" in
+     not (List.exists (fun it -> it.Popups_state.ai_key = "new:Exist") items));
+  popup.Popups_state.page_exact_titles := [];
+  check "unmatched page query offers New page"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "Exist" in
+     List.exists (fun it -> it.Popups_state.ai_key = "new:Exist") items);
+  popup.Popups_state.tag_titles := [ ("MyTag", None); ("Task", None) ];
+  popup.Popups_state.tag_page_class := [ ("Page", None) ];
+  check "empty tag query excludes Page class"
+    (let items = Popups_state.page_items_for popup Popups_state.Tag_search "" in
+     not (List.exists (fun it -> it.Popups_state.ai_label = "Page") items)
+     && List.exists (fun it -> it.Popups_state.ai_label = "MyTag") items);
+  check "non-empty tag query can match Page class"
+    (let items = Popups_state.page_items_for popup Popups_state.Tag_search "Pag" in
+     List.exists (fun it -> it.Popups_state.ai_label = "Page") items);
   let now = Dates.date_now () in
   let ms_diff en = Popups_state.nlp_date_of en -. now in
   check "nlp tomorrow" (ms_diff "Tomorrow" > 86000000. && ms_diff "Tomorrow" < 87000000.);

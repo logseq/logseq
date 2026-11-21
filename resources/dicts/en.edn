@@ -1944,10 +1944,13 @@
  :storage/sqlitedb-save-error "SQLiteDB save error: {1}"
 
  :storage.recycle/block-deleted-at "Block deleted {1}"
+ :storage.recycle/delete-block-confirm-desc "Permanently delete this block from Recycle? This cannot be undone."
+ :storage.recycle/delete-page-confirm-desc "Permanently delete this page from Recycle? This cannot be undone."
  :storage.recycle/empty "Recycle is empty."
  :storage.recycle/page-deleted-at "Page deleted {1}"
  :storage.recycle/readonly "Recycle is read-only."
  :storage.recycle/restore "Restore"
+ :storage.recycle/restored-feedback "{1} restored"
  :storage.recycle/retention-desc "Deleted pages and blocks stay here until restored or automatically garbage collected after 30 days."
  :storage.recycle/title "Recycle"
 

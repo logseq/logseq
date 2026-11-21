@@ -719,6 +719,19 @@ let code_buffer_of : (string -> string option) ref = ref (fun _ -> None)
 let code_focus : (caret:int -> string -> bool) ref =
   ref (fun ~caret:_ _ -> false)
 
+(* cljs :editor/raw-mode-block — Esc from CodeMirror re-enters the
+   plain block editor for this uuid instead of remounting CM *)
+let raw_code_uuid : string option ref = ref None
+
+(* Queued by Code_mirror.on_escape; consumed in exit_edit finish so the
+   re-enter happens after the CM session is cleared. *)
+let pending_raw_reenter : string option ref = ref None
+
+let set_raw_code uuid = raw_code_uuid := uuid
+
+let is_raw_code uuid =
+  match !raw_code_uuid with Some u -> u = uuid | None -> false
+
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =
   match blocks with

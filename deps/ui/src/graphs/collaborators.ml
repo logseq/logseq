@@ -162,14 +162,23 @@ let avatar_of (usig : Model.rtc_user Signal.signal) : t =
 
 (* ---------- members panel (dialog body) ---------- *)
 
+(* cljs settings-rtc-members masks via :ui/mask-email? (default true) *)
+let mask_emails () =
+  match Wire.get (Runtime.model ()).Model.graph_config "ui/mask-email?" with
+  | Some (Wire.Bool false) -> false
+  | _ -> true
+
 let member_row ~manager ~uuid (m : member) ~refresh : t =
   row ~key:("mr-" ^ m.m_uuid) ~cross:`center ~gap:8
     ([ text ~key:("mrn-" ^ m.m_uuid) ~value:m.m_name [] ]
     @ (match m.m_email with
        | Some e ->
+           let shown =
+             if mask_emails () then Page_menu.mask_email e else e
+           in
            [ text ~key:("mre-" ^ m.m_uuid) ~as_:`Small
                ~foreground:"var(--ls-secondary-text-color)"
-               ~value:e []
+               ~value:shown []
            ]
        | None -> [])
     @ (if m.m_role <> "" then

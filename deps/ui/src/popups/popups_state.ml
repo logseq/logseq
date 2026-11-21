@@ -213,6 +213,10 @@ type t =
   ; page_exact_titles : string list ref (* parentless internal pages/journals *)
   ; tag_titles : (string * string option) list ref
     (* class/tag entities for the # popup: (title, tabler icon) *)
+  ; tag_page_class : (string * string option) list ref
+    (* cljs get-matched-classes: Page is only a # candidate while a
+       non-page block is being edited AND the query is non-empty. Empty
+       `#` uses get-all-classes with private tags excluded (no Page). *)
   ; tag_exact_titles : string list ref
     (* every class + alias title — feeds only the exact-match check that
        suppresses the "New tag" row (cljs page-exists?/class-alias?); the
@@ -234,6 +238,7 @@ let make scheduler : t =
   ; titles = ref []
   ; page_exact_titles = ref []
     ; tag_titles = ref []
+    ; tag_page_class = ref []
     ; tag_exact_titles = ref []
     ; templates = ref []  }
   in
@@ -812,13 +817,25 @@ let page_items_for t kind q =
   let matched =
     match kind with
     | Tag_search ->
-        (* cljs get-matched-classes → fuzzy-search (limit 20) *)
-        Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
-        |> List.map wrap_tag
-    | Page_ref -> Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nlp_items kind) q
+        (* cljs search-pages blank q: all classes (private excluded, no
+           Page). Non-empty q: get-matched-classes fuzzy (limit 20), and
+           a non-page block edit also fuzzies the Page class. *)
+        if q = "" then List.map wrap_tag !(t.tag_titles)
+        else
+          Fuzzy.fuzzy_search ~extract:fst ~limit:20
+            (!(t.tag_titles) @ !(t.tag_page_class)) q
+          |> List.map wrap_tag
+    | Page_ref ->
+        (* cljs page-search-aux: blank [[ lists the first 10 nlp date
+           pages; non-empty queries fuzzy the full nlp set (plus async
+           node search). *)
+        if q = "" then take 10 (nlp_items kind)
+        else
+          Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50
+            (nlp_items kind) q
     | Page_embed ->
         if q = "" then
-          nlp_items kind
+          take 10 (nlp_items kind)
         else
           Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
           |> List.map wrap
@@ -827,14 +844,19 @@ let page_items_for t kind q =
           (List.map wrap
              (List.filter (fun ti -> I18n.contains_ci ti q) !(t.titles)))
   in
+  (* cljs <get-block by name is case-insensitive; suppress New page/tag
+     when an exact parentless page/journal (or class/alias) exists. *)
+  let title_eq a b =
+    S.equal (S.lowercase_ascii a) (S.lowercase_ascii b)
+  in
   let exact =
     match kind with
     | Tag_search ->
         (* cljs search-pages db-tag?: the "New tag" row is suppressed when
            the query exactly names an existing class (internal ones like
            Page count) or a class alias *)
-        List.exists (fun ti -> S.equal ti q) !(t.tag_exact_titles)
-    | _ -> List.exists (fun ti -> S.equal ti q) !(t.page_exact_titles)
+        List.exists (fun ti -> title_eq ti q) !(t.tag_exact_titles)
+    | _ -> List.exists (fun ti -> title_eq ti q) !(t.page_exact_titles)
   in
   (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
      leading starts-with match, else first *)
@@ -1105,11 +1127,7 @@ let load_titles t =
        Runtime.invoke1 "thread-api/get-all-page-titles"
          (Wire.String graph)
      in
-     let rows =
-       match w with
-       | Wire.Array xs | Wire.List xs -> xs
-       | _ -> []
-     in
+     let rows = Wire.elems w in
      let titles =
        List.filter_map
          (fun row ->
@@ -1120,7 +1138,8 @@ let load_titles t =
      in
      (* get-all-page-titles intentionally returns strings, so resolve the
         suppression set separately: ordinary names need an internal page
-        or journal with no parent. Tags retain their class/alias check. *)
+        or journal with no parent. Tags retain their class/alias check.
+        thread-api/q relations decode as Set — use Wire.elems. *)
      let* exact =
        Runtime.invoke2 "thread-api/q" (Wire.String graph)
          (Wire.Array
@@ -1130,14 +1149,12 @@ let load_titles t =
      if session = !(t.session) && graph = repo () then (
      t.titles := titles;
      t.page_exact_titles :=
-       (match exact with
-        | Wire.Array xs | Wire.List xs ->
-            List.filter_map
-              (function
-                | Wire.Array [ Wire.String title ] | Wire.List [ Wire.String title ] -> Some title
-                | _ -> None)
-              xs
-        | _ -> []);
+       List.filter_map
+         (fun row ->
+           match Wire.elems row with
+           | [ Wire.String title ] -> Some title
+           | _ -> None)
+         (Wire.elems exact);
      (match (get t).ac with
       | Some ({ kind = Page_ref; query; _ } as ac) when String.trim query <> "" ->
           run_node_search t ac
@@ -1184,9 +1201,11 @@ let class_titles_of rows =
 
 let load_tag_titles t =
   let session = !(t.session) and graph = repo () in
+  (* cljs get-matched-classes: Page joins candidates only while editing a
+     non-page block (page-title edits are page? entities). *)
   let editing_block =
     match Editor_state.editing_uuid () with
-    | Some _ -> true
+    | Some u -> not (Editor_actions.anchor_is_page_title u)
     | None -> false
   in
   let wopts extra =
@@ -1202,43 +1221,36 @@ let load_tag_titles t =
          (Wire.String graph)
          (wopts [ ("except-private-tags?", Wire.Bool true) ])
      in
-     let rows =
-       match w with
-       | Wire.Array xs | Wire.List xs -> xs
-       | _ -> []
-     in
+     let rows = Wire.elems w in
      let* () =
        let titles = class_titles_of rows in
        (* the full class list (private tags included) feeds only
-          tag_exact_titles; Page is conjoined to the candidates just
-          when editing a non-page block *)
+          tag_exact_titles; Page is kept separately and only joins the
+          fuzzy candidates for a non-empty query on a non-page block
+          (cljs get-matched-classes / empty search-pages). *)
        let* w2 =
          Runtime.invoke2 "thread-api/get-all-classes"
            (Wire.String graph)
            (wopts [ ("except-private-tags?", Wire.Bool false) ])
        in
-       let rows2 =
-         match w2 with
-         | Wire.Array xs | Wire.List xs -> xs
-         | _ -> []
-       in
+       let rows2 = Wire.elems w2 in
        if session = !(t.session) && graph = repo () then (
        t.tag_titles := titles;
        t.tag_exact_titles :=
          List.map fst (class_titles_of rows2);
-       (if editing_block then
-          let page_class =
-            List.filter
-              (fun r ->
-                (* entity_map_wire emits db/ident as a keyword
-                   value, not a string *)
-                Wire.get r "db/ident"
-                = Some (Wire.Keyword "logseq.class/Page"))
-              rows2
-          in
-          t.tag_titles :=
-            !(t.tag_titles)
-            @ class_titles_of page_class));
+       t.tag_page_class :=
+         if editing_block then
+           let page_class =
+             List.filter
+               (fun r ->
+                 (* entity_map_wire emits db/ident as a keyword
+                    value, not a string *)
+                 Wire.get r "db/ident"
+                 = Some (Wire.Keyword "logseq.class/Page"))
+               rows2
+           in
+           class_titles_of page_class
+         else []);
        Js.Promise.resolve ()
      in
      (match (get t).ac with
@@ -1378,6 +1390,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
     t.titles := [];
     t.page_exact_titles := [];
     t.tag_titles := [];
+    t.tag_page_class := [];
     t.tag_exact_titles := [];
     t.templates := []);
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
@@ -1744,9 +1757,37 @@ let apply_tag t ac ~create ~inline title =
       let insert () =
         (* cljs: class items erase "#q" on enter but insert "#wrapped"
            on mod+enter (inline-tag?; the Page class is exempt) *)
-        emit ac.auuid ac.tpos
-          (if inline && title <> "Page" then inline_tag_text ac title
-           else "")
+        let text =
+          if inline && title <> "Page" then inline_tag_text ac title else ""
+        in
+        emit ac.auuid ac.tpos text;
+        (* cljs add-tag -> save-block-aux! trims; class tagging with
+           text="" otherwise leaves the space before '#'. Preserve the
+           completion caret (adjusted for leading trim) so typing after
+           `#Tag` before existing text does not jump to the block end. *)
+        if text = "" then
+          match Editor_actions.edit_model buuid with
+          | Some m ->
+              let source = m.Edit_model.source in
+              let trimmed = Outliner_ops.trim_title buuid source in
+              if trimmed <> source then begin
+                let before_caret = fst (Editor_actions.sel_span_of m) in
+                let leading =
+                  let n = String.length source in
+                  let i = ref 0 in
+                  while !i < n && Char.code source.[!i] <= 32 do incr i done;
+                  !i
+                in
+                let caret =
+                  max 0 (min (String.length trimmed) (before_caret - leading))
+                in
+                Editor_actions.update_model buuid (fun _ ->
+                    Edit_model.select
+                      (Edit_model.splice m 0 (String.length source) trimmed)
+                      ~anchor:caret ~focus:caret);
+                Outliner_ops.schedule_save buuid trimmed
+              end
+          | None -> ()
       in
       let create_and_tag () =
         insert ();

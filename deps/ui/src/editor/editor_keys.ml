@@ -285,6 +285,8 @@ let nav r =
     | Model.All_pages -> "#/all-pages"
     | Model.All_graphs -> "#/graphs"
     | Model.Settings -> "#/settings"
+    | Model.Plugins -> "#/plugins"
+    | Model.Login -> "#/login"
     | Model.Import -> "#/import"
     | Model.Bug_report -> "#/bug-report"
     | Model.Bug_report_clipboard -> "#/bug-report-tool/clipboard-data-inspector"
@@ -382,9 +384,14 @@ let link_at_caret buf pos =
 let follow_link (m : Edit_model.t) ~sidebar =
   match link_at_caret m.Edit_model.source m.Edit_model.caret with
   | Some (`Page t) ->
-      if not sidebar then ignore (nav (Model.Page t))
-      (* sidebar open needs the page uuid; the page-by-title worker
-         lookup isn't there yet — plain open only *)
+      (* cljs open-link-in-sidebar! resolves [[title]] / [[uuid]] via
+         thread-api/pull then sidebar-add-block!; open_ref covers both
+         page-name and uuid page refs. *)
+      if sidebar then (
+        match !Sidebar_state.st_ref with
+        | Some sst -> Sidebar_state.open_ref sst t
+        | None -> ())
+      else ignore (nav (Model.Page t))
   | Some (`Uuid u) ->
       if sidebar then (
         match !Sidebar_state.st_ref with

@@ -769,6 +769,17 @@ let rec exit_edit ~select =
                  Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
               Editor_sink.invalidate e.uuid;
               S.clear_editor_start_pos ();
+              let reenter =
+                match !(S.pending_raw_reenter) with
+                | Some u when u = e.uuid && not select ->
+                    S.pending_raw_reenter := None;
+                    S.set_raw_code (Some u);
+                    Some u
+                | _ ->
+                    S.pending_raw_reenter := None;
+                    S.set_raw_code None;
+                    None
+              in
               S.set (fun st ->
                   { st with
                     S.editing = None
@@ -780,7 +791,8 @@ let rec exit_edit ~select =
                     (* Escape selects the block without raising the action bar. *)
                   ; action_bar = false
                   });
-              S.notify_edit_exit e.uuid
+              S.notify_edit_exit e.uuid;
+              Option.iter (fun u -> enter_edit ~scope:e.scope u (-1)) reenter
           | _ -> ()
         in
         (* Exit belongs to the editing session, even when its route changes
@@ -2086,22 +2098,26 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
                 | Some owner -> Ops.require_refresh_success owner
                 | None -> Js.Promise.resolve ()
               in
+              (* cljs cut-blocks-and-clear-selections! / single-block
+                 menu delete: clear selection only — do not enter_edit
+                 the previous sibling (bullet Delete was leaving the
+                 neighbor in edit mode). *)
               if current ()
               then (
-                let editing = match previous, S.editing () with
-                  | Some (uuid, buffer), None when S.find uuid <> None ->
-                      Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer
-                              ~caret:(String.length buffer) ())
-                  | _, current -> current
-                in
-                S.set (fun st -> {st with S.editing = editing;
-                   selected = S.String_set.empty; anchor = None; action_bar = false});
-                match editing with
-                | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
-                | None -> Option.iter (fun uuid ->
-                    Runtime.send Action.Title_edit_start;
-                    Runtime.flush ();
-                    Editor_sink.focus_input uuid) page_title);
+                S.set (fun st ->
+                  { st with
+                    selected = S.String_set.empty
+                  ; anchor = None
+                  ; action_bar = false });
+                match previous with
+                | Some _ -> ()
+                | None ->
+                    Option.iter
+                      (fun uuid ->
+                        Runtime.send Action.Title_edit_start;
+                        Runtime.flush ();
+                        Editor_sink.focus_input uuid)
+                      page_title);
               Js.Promise.resolve ()
       in
       ignore
@@ -3162,6 +3178,8 @@ module History_ui = struct
       | Model.Bug_report -> "bug-report", []
       | Model.Bug_report_clipboard -> "bug-report-tool", []
       | Model.Settings -> "settings", []
+      | Model.Plugins -> "plugins", []
+      | Model.Login -> "login", []
       | Model.File path -> "file", ["path", Wire.String path]
       | Model.Not_found path -> "not-found", ["path", Wire.String path] in
     map (("route-data", map ["to", Wire.Keyword destination;
@@ -3761,23 +3779,42 @@ type asset_upload =
   ; upload_empty : bool
   }
 
-let capture_asset_upload () =
+let block_title_empty uuid =
+  match S.find uuid with
+  | Some b -> String.trim b.Model.block_title = ""
+  | None -> false
+
+let capture_asset_upload ?drop_target () =
   let model = Runtime.model () in
   let edit = S.editing () in
-  let target = match edit with
-    | Some {S.owner = S.Explicit_draft owner; _} -> Some owner#asset_target
-    | Some e -> Some e.S.uuid
-    | None -> (match model.Model.route_page, model.Model.journals with
-        | Some page, _ -> page.Model.page_uuid
-        | None, page :: _ -> page.Model.page_uuid
-        | None, [] -> None) in
+  (* cljs db-based-save-assets!: editing block wins; otherwise
+     :last-edit-block (drop target) inserts as a sibling. Empty
+     targets must set upload_empty so asset_of_file reuses the
+     target UUID — otherwise the worker replaces the asset UUID
+     while the file was written under a generated id. *)
+  let target, sibling, empty =
+    match edit with
+    | Some {S.owner = S.Explicit_draft owner; _} ->
+        (Some owner#asset_target, false, false)
+    | Some e ->
+        ( Some e.S.uuid
+        , true
+        , (not (S.is_draft e)) && String.trim e.S.buffer = "" )
+    | None -> (
+        match drop_target with
+        | Some uuid -> (Some uuid, true, block_title_empty uuid)
+        | None ->
+            ( (match model.Model.route_page, model.Model.journals with
+               | Some page, _ -> page.Model.page_uuid
+               | None, page :: _ -> page.Model.page_uuid
+               | None, [] -> None)
+            , false
+            , false ))
+  in
   if Ui_services.env_publishing () then None else
   Option.bind model.Model.repo (fun repo -> Option.map (fun target ->
-    let persisted = Option.fold ~none:false ~some:(fun e -> not (S.is_draft e)) edit in
     {upload_repo = repo; upload_route = Runtime.route (); upload_target = target;
-     upload_edit = edit; upload_sibling = persisted;
-     upload_empty = persisted && Option.fold ~none:false
-       ~some:(fun e -> String.trim e.S.buffer = "") edit}) target)
+     upload_edit = edit; upload_sibling = sibling; upload_empty = empty}) target)
 
 let asset_upload_current upload =
   upload.upload_repo = Runtime.repo () && upload.upload_route = Runtime.route ()
@@ -3801,7 +3838,7 @@ let commit_uploaded_assets upload blocks =
   if not (asset_upload_current upload) then Js.Promise.resolve () else
   let* () = Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
       (save_ops @ [Ops.insert_blocks ~bottom:true
-        ~replace_empty_target:upload.upload_sibling blocks upload.upload_target
+        ~replace_empty_target:upload.upload_empty blocks upload.upload_target
         ~sibling:upload.upload_sibling]) in
   if upload.upload_empty && asset_upload_current upload then Ops.resync_open_editor ()
   else Js.Promise.resolve ()
