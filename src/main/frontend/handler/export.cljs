@@ -212,13 +212,40 @@
                (.remove (.-handle file))))
            old-versioned-files)))
 
+(defn- repo->base64
+  [repo]
+  (let [payload (.encode (js/TextEncoder.) repo)]
+    (js/btoa (.join (js/Array.from payload (fn [b] (js/String.fromCharCode b))) ""))))
+
+(defn- legacy-repo-handle-key
+  [repo folder-name]
+  (try
+    (str "handle/" (js/btoa repo) "/" folder-name)
+    (catch :default _ nil)))
+
+(defn repo-handle-key
+  [repo folder-name]
+  (str "handle/" (repo->base64 repo) "/" folder-name))
+
+(defn- <get-backup-handle
+  [repo backup-folder]
+  (let [primary-key (repo-handle-key repo backup-folder)
+        legacy-key (legacy-repo-handle-key repo backup-folder)]
+    (p/let [handle (idb/get-item primary-key)]
+      (if (and (nil? handle) legacy-key)
+        (p/let [legacy-handle (idb/get-item legacy-key)]
+          (when legacy-handle
+            (idb/set-item! primary-key legacy-handle))
+          legacy-handle)
+        handle))))
+
 (defn choose-backup-folder
   [repo]
   (p/let [result (utils/openDirectory #js {:mode "readwrite"})
           handle (first result)
           folder-name (.-name handle)
           _ (idb/set-item!
-             (str "handle/" (js/btoa repo) "/" folder-name) handle)
+             (repo-handle-key repo folder-name) handle)
           _ (state/<invoke-db-worker :thread-api/transact
                                      repo
                                      [(ldb/kv graph-backup-folder-key folder-name)]
@@ -235,7 +262,7 @@
         ;; ensure file handle exists
         ;; ask user to choose a folder again when access expires
         (p/let [handle (try
-                         (idb/get-item (str "handle/" (js/btoa repo) "/" backup-folder))
+                         (<get-backup-handle repo backup-folder)
                          (catch :default _e
                            (throw (ex-info "Backup file handle no longer exists" {:repo repo}))))
                 [_folder handle] (when handle
