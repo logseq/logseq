@@ -285,6 +285,8 @@ let nav r =
     | Model.All_pages -> "#/all-pages"
     | Model.All_graphs -> "#/graphs"
     | Model.Settings -> "#/settings"
+    | Model.Plugins -> "#/plugins"
+    | Model.Login -> "#/login"
     | Model.Import -> "#/import"
     | Model.Bug_report -> "#/bug-report"
     | Model.Bug_report_clipboard -> "#/bug-report-tool/clipboard-data-inspector"

@@ -774,6 +774,14 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
     | None -> ()
   in
   let pending = take_pending_edit ~block_uuid:ctx.block_uuid ~ident ~value_uuid:uuid in
+  (* Appear can land after the next keystroke (draft surfaces mount
+     before Appear). Schedule activate immediately when the dialog
+     handed us a pending edit so the caret reaches the value cell
+     before the user types — on_appear remains as a fallback. *)
+  (if pending then
+     ignore
+       (Ui_services.timers_timeout
+          (fun () -> if alive () then activate ()) 0));
   (column ~gap:0 ~grow:1. ~min_width:0
      ~on_appear:(fun _ -> if pending then activate ())
      [ reactive (fun target ->
@@ -1724,7 +1732,11 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
            ~height:(if bottom_pill then 20 else 24) ~min_height:(if bottom_pill then 20 else 24)
            ~min_width:0 ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
            ~on_press:(fun _ -> activate ())
-           (if chips=[] then [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []] else []))
+           (* cljs property-empty-btn-value uses line-dashed, not "Empty" *)
+           (if chips=[] then
+              [icon ~name:(`app "line-dashed") ~point_size:14
+                 ~foreground:"var(--lx-gray-09)" []]
+            else []))
     else if table_many then
       Ui_components.with_props
         [ Ui_components.Prop.cursor `pointer
@@ -1739,13 +1751,13 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
     else
       Ui_components.button ~text:"" ~variant:`ghost
         ~accessibility_identifier:anchor_id
-        ?icon:(if many then Some (`app "plus") else None)
+        ?icon:(if many then Some (`app "plus")
+               else if chips = [] then Some (`app "line-dashed")
+               else None)
         ~label:(I18n.t "property/select-property-placeholder")
         ~main:`start ~min_height:24 ~min_width:24
         ~on_press:(fun _ -> activate ())
-        (if many then [] else if chips = [] then
-          [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
-         else chips)
+        (if many || chips = [] then [] else chips)
   in
   let trigger_row =
     if plain then

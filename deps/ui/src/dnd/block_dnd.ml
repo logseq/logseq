@@ -154,11 +154,18 @@ let coords_of ev op =
       | None -> (0.0, 0.0))
 
 (* cljs block-drag-over: near the top of the first block -> :top; deep
-   indent (x-offset > 50) -> :nested; else :sibling *)
+   indent (~30px past content left) -> :nested; else :sibling. Measure
+   from .block-content when present so the bullet gutter is not counted
+   as indent. *)
 let update_drop_target src tgt_el client_x client_y =
   match Web_dom.el_get_attr tgt_el "data-blockid" with
   | Some tgt when A.can_drop_dragged_block src tgt ->
       let rect = Web_dom.el_bounding_rect tgt_el in
+      let left =
+        match Web_dom.el_query tgt_el ".block-content" with
+        | Some c -> Web_dom.rect_left (Web_dom.el_bounding_rect c)
+        | None -> Web_dom.rect_left rect
+      in
       let scope = A.scope_of_el (Ui_dom_web.el_of tgt_el) in
       let first =
         match S.find_parent_in_scope ~scope tgt with
@@ -166,7 +173,7 @@ let update_drop_target src tgt_el client_x client_y =
         | None -> false
       in
       let move_to =
-        Block_drag.zone ~first ~left:(Web_dom.rect_left rect)
+        Block_drag.zone ~first ~left
           ~top:(Web_dom.rect_top rect) ~x:client_x ~y:client_y
         |> Block_drag.zone_name
       in

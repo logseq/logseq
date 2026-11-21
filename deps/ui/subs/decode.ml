@@ -560,9 +560,13 @@ let page_of_summary (w : Wire.t) : Model.page option =
   in
   match w with
   | Wire.Map _ ->
+      (* Prefer raw-title: journals format from journal-day + current
+         title-format (cljs entity-plus :block/raw-title). Stored
+         block/title lags until a rename, so date-format settings
+         would otherwise leave "Nov 21st, 2026" on screen. *)
       let title =
         Option.value
-          (str [ "block/title"; "page-title"; "block/raw-title" ])
+          (str [ "block/raw-title"; "page-title"; "block/title" ])
           ~default:""
       in
       let page_uuid =
@@ -630,6 +634,11 @@ let page_of_summary (w : Wire.t) : Model.page option =
         ; page_linked_refs = []
         ; page_parents = []
         ; page_db_collapsable = db_collapsable_of_wire w
+        ; page_recycled =
+            (match Option.bind (Wire.get w "recycled?") Wire.as_bool with
+             | Some b -> b
+             | None ->
+                 Option.is_some (Wire.get w "logseq.property/deleted-at"))
         }
   | _ -> None
 

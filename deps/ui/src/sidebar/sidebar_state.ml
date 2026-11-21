@@ -602,35 +602,66 @@ let push_page_route target =
   Ui_services.nav_set_hash (Runtime.nav_hash ("#/page/" ^ target));
   Ui_services.dom_dispatch "ls:navigate"
 
+(* cljs db-based-open-block-ref!: a page-ref to a Pdf-annotation opens
+   the PDF viewer at that highlight instead of zooming the annotation
+   block page. *)
+let try_open_pdf_annotation target : bool Js.Promise.t =
+  if not (Wire.is_uuid_string target) then Js.Promise.resolve false
+  else
+    let* w =
+      Runtime.invoke3 "thread-api/pull" (Wire.String (Runtime.repo ()))
+        (Wire.String
+           "[:block/uuid :db/id :logseq.property/ls-type \
+             :logseq.property.pdf/hl-value :logseq.property.pdf/hl-page \
+             :logseq.property.pdf/hl-type :logseq.property.pdf/hl-image \
+             {:logseq.property/asset [:db/id]} \
+             {:block/tags [:db/ident]}]")
+        (Wire.Array [ Wire.Keyword "block/uuid"; Wire.Uuid target ])
+    in
+    let b = Decode.block_of_wire w in
+    let is_annot =
+      b.Model.block_ls_type = Some "annotation"
+      || List.mem "logseq.class/Pdf-annotation" b.block_tag_idents
+    in
+    if
+      is_annot && b.block_asset_ref <> None && b.block_hl <> None
+    then (
+      Pdf_assets.open_block_ref b;
+      Js.Promise.resolve true)
+    else Js.Promise.resolve false
+
 (* cljs redirect-to-page!: route-info first — hidden and
    private-built-in pages warn instead of navigating, and alias pages
    redirect to their source page *)
 let navigate_to_page target =
   let go () = push_page_route target in
   ignore
-    ((let* info =
-       Runtime.invoke2 "thread-api/get-page-route-info"
-         (Wire.String (Runtime.repo ())) (route_ref target)
-     in
-     let flag k =
-       Option.value
-         (Option.bind (Wire.get info k) Wire.as_bool)
-         ~default:false
-     in
-     let blocked =
-       (* cljs gates this on (not config/dev?) — our bundle is
-          the dev build — and exempts the Recycle page *)
-       (not (Ui_services.env_dev_build ()))
-       && Wire.map_get_string info "block/title" <> Some "Recycle"
-       && ((flag "hidden?" && not (flag "property?"))
-           || (flag "built-in?" && flag "private-built-in?"))
-     in
-     if blocked then Toast.warning (I18n.t "nav/cannot-go-to-internal-page")
-     else
-       (match Wire.map_get_uuid info "alias-source-uuid" with
-        | Some src -> push_page_route src
-        | None -> go ());
-     Js.Promise.resolve ())
+    ((let* opened = try_open_pdf_annotation target in
+      if opened then Js.Promise.resolve ()
+      else
+        let* info =
+          Runtime.invoke2 "thread-api/get-page-route-info"
+            (Wire.String (Runtime.repo ())) (route_ref target)
+        in
+        let flag k =
+          Option.value
+            (Option.bind (Wire.get info k) Wire.as_bool)
+            ~default:false
+        in
+        let blocked =
+          (* cljs gates this on (not config/dev?) — our bundle is
+             the dev build — and exempts the Recycle page *)
+          (not (Ui_services.env_dev_build ()))
+          && Wire.map_get_string info "block/title" <> Some "Recycle"
+          && ((flag "hidden?" && not (flag "property?"))
+              || (flag "built-in?" && flag "private-built-in?"))
+        in
+        if blocked then Toast.warning (I18n.t "nav/cannot-go-to-internal-page")
+        else
+          (match Wire.map_get_uuid info "alias-source-uuid" with
+           | Some src -> push_page_route src
+           | None -> go ());
+        Js.Promise.resolve ())
      |> Js.Promise.catch (fun _ ->
             (* cljs treats a nil route-info as navigable *)
             go ();

@@ -290,6 +290,10 @@ let fmt_cell_value (c : V.column) v =
 
 let cell_value blk (c : V.column) : W.t =
   match c.V.c_id with
+  | "block/page" when is_page_row blk ->
+      (* cljs page rows leave the Page column empty — LUI was showing
+         the page's own title via a self block/page ref *)
+      W.Nil
   | "block/title" | "block.temp/refs-count" | "block/created-at"
   | "block/updated-at" | "block/page" | "block/tags" ->
       Option.value (W.get blk c.V.c_id) ~default:W.Nil
@@ -416,8 +420,15 @@ let title_cell inst ~row_uuid ~blk (c : V.column) : t =
                  ~style_class:"table-block-title"
                  [ (* Keep the caption and overlay actions as sibling hit regions. *)
                    Ui_parts.pressable ~on_press:(fun _ ->
+                     (* Prefer the displayed cell title so enter_edit
+                        lands the caret at end (master), not at 0 when
+                        the row wire's block/title is empty/stale. *)
                      Table_title_editor.show ~anchor ~column_width:(column_width (V.get inst) c)
-                       {(Decode.block_of_wire blk) with Model.block_uuid=Some row_uuid})
+                       {(Decode.block_of_wire blk) with
+                         Model.block_uuid = Some row_uuid
+                       ; block_title =
+                           if title <> "" then title
+                           else (Decode.block_of_wire blk).Model.block_title})
                      (row ~grow:1. ~min_width:0 ~height:32 ~cross:`center
                        [ text ~white_space:`nowrap (Render_inline.parse ~self:row_uuid title) ])
                  ; Ui_parts.float_prop L.Opacity
@@ -1597,16 +1608,32 @@ let foldable inst ~key ~title ~(body : t) : t =
                                then V.Sset.remove key s.V.collapsed_groups
                                else V.Sset.add key s.V.collapsed_groups)
                           }))
+                    (* cljs foldable-title: .control-hide until title
+                       hover / collapsed (.control-show). Opacity-0 hid
+                       the caret so linked-refs looked fold-less. *)
                     (Ui_components.with_props
                        [ Ui_components.Prop.cursor `pointer
+                       ; Ui_components.Prop.opacity 0.5
                        ; Ui_components.Prop.hover_opacity 1. ]
-                       (Ui_parts.float_prop L.Opacity
-                        ~value:(reactive (fun h c -> if h || c then 0.4 else 0.)
-                          (Signal.value hovered) collapsed_sig)
                        (Ui_components.foldable_control
-                          [icon ~key:"caret" ~point_size:16
-                             ~name:(reactive (fun c -> `app (if c then
-                               "rotating-arrow" else "rotating-arrow-down")) collapsed_sig) []])))
+                          [ Ui_parts.class_signal
+                              (Logseq_el.own ctx
+                                 (Signal.map2
+                                    (fun h c ->
+                                      if h || c then "control-show cursor-pointer"
+                                      else "control-hide")
+                                    (Signal.value hovered) collapsed_sig))
+                              (fun cls -> cls)
+                              (box ~key:"ch"
+                                 [ icon ~key:"caret" ~point_size:16
+                                     ~name:
+                                       (reactive
+                                          (fun c ->
+                                            `app
+                                              (if c then "rotating-arrow"
+                                               else "rotating-arrow-down"))
+                                          collapsed_sig)
+                                     [] ]) ]))
                 ; title ] ]
         ]
     ; Ui_parts.class_signal collapsed_sig

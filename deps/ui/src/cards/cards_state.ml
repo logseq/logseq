@@ -33,6 +33,8 @@ type t =
   ; due_labels : string list Signal.state (* per-rating "in <time>" hints *)
   ; info_open : bool Signal.state
   ; grading : bool Signal.state
+  ; loading : bool Signal.state
+      (* cljs *loading? — empty/no-due/finished paint only when false *)
   ; session : int ref
   }
 
@@ -265,17 +267,25 @@ let load_current st repo =
 let load_cards st repo =
   restart st;
   let session = !(st.session) in
+  Runtime.signal_set st.loading true;
   Runtime.signal_set st.cur None;
   Runtime.signal_set st.cards [];
+  Runtime.signal_set st.all_cards [];
   (let sel_arg = sel_arg st in
    let* due_w = card_ids repo sel_arg ~due_only:true in
    let* all_w = card_ids repo sel_arg ~due_only:false in
    if active st repo session then (
-     Runtime.signal_set st.all_cards (ids_of_wire all_w);
-     Runtime.signal_set st.cards (ids_of_wire due_w);
+     (* Stage both lists before painting empty/no-due — cljs sets
+        *block-ids / *all-block-ids then flips *loading? false. *)
+     let due = ids_of_wire due_w and all = ids_of_wire all_w in
+     Runtime.signal_set st.all_cards all;
+     Runtime.signal_set st.cards due;
      Runtime.signal_set st.pos 0;
      set_phase st "init";
-     load_current st repo);
+     Runtime.signal_set st.loading false;
+     load_current st repo)
+   else if !(st.session) = session then
+     Runtime.signal_set st.loading false;
    Js.Promise.resolve ())
   |> ignore
 
@@ -427,7 +437,9 @@ let add_cards_block st =
 let open_modal st eid_opt =
   restart st;
   Render_inline.cloze_reveal_all := false;
-  Runtime.signal_set st.open_ true;
+  (* Clear due/all before opening so stale all_cards cannot paint
+     flashcard.empty/no-due-title on a first open (cljs *loading?). *)
+  Runtime.signal_set st.loading true;
   Runtime.signal_set st.opts_open false;
   Runtime.signal_set st.info_open false;
   Runtime.signal_set st.cards [];
@@ -436,9 +448,10 @@ let open_modal st eid_opt =
   Runtime.signal_set st.cur None;
   Runtime.signal_set st.crumbs [];
   set_phase st "init";
+  Runtime.signal_set st.open_ true;
   !refresh_due_count ();
   let r = repo () in
-  if r = "" then ()
+  if r = "" then Runtime.signal_set st.loading false
   else (
     let session = !(st.session) in
     (let* () = load_decks st r in
@@ -457,7 +470,9 @@ let open_modal st eid_opt =
               | None -> -1
             in
             Runtime.signal_set st.sel idx;
-            load_cards st r);
+            load_cards st r)
+    else if !(st.session) = session then
+      Runtime.signal_set st.loading false;
     Js.Promise.resolve ()) |> ignore)
 
 (* due-count badge for the sidebar nav — cljs :srs/cards-due-count *)
@@ -509,11 +524,21 @@ let advance_phase st =
     (next_phase (cur_has_cloze st) (Runtime.signal_get st.phase))
 
 (* cljs shortcut.handler/cards: s toggles answers, 1-4 click the
-   rating buttons (visible when next-phase = :init) *)
+   rating buttons (visible when next-phase = :init). The deck
+   combobox (.ls-cards-select) often holds focus after open — do not
+   treat it as a text field or s/1-4 never fire (master still grades). *)
 let on_keydown ev st =
-  let editing = Editor_state.editing () <> None
-    || Option.fold ~none:false ~some:(fun target -> target.Ui_services.closest
-         "input, textarea, select, [contenteditable]" <> None) ev.Ui_services.target in
+  let editing =
+    Editor_state.editing () <> None
+    || Option.fold ~none:false
+         ~some:(fun target ->
+           target.Ui_services.closest
+             "input, textarea, [contenteditable]" <> None
+           || (target.Ui_services.closest "select" <> None
+               && target.Ui_services.closest
+                    ".ls-cards-select, .ls-dialog-flashcards" = None))
+         ev.Ui_services.target
+  in
   if editing || ev.Ui_services.composing || not (Runtime.signal_get st.open_)
   then Keymap_data.reset_chord card_keys
   else if not ev.Ui_services.default_prevented then
@@ -558,6 +583,7 @@ let init (ms : Model.t Signal.signal) : t =
         ; due_labels = Signal.state owner []
         ; info_open = Signal.state owner false
         ; grading = Signal.state owner false
+        ; loading = Signal.state owner false
         ; session = ref 0
         }
       in

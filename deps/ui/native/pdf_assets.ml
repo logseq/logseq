@@ -254,13 +254,15 @@ let del_ref_block (hl : Model.hl) =
            [ Outliner_ops.delete_blocks [ uuid ] ])
   | None -> ()
 
-(* cljs copy-hl-ref! — ensure the ref block exists, then copy ((uuid)) *)
+(* cljs copy-hl-ref! — ensure the ref block exists, then copy [[uuid]].
+   DB graphs treat Pdf-annotation entities as page refs; ((uuid)) stays
+   raw text after paste, while [[uuid]] renders as a clickable ref. *)
 let copy_hl_ref (hl : Model.hl) =
   match !Pdf_state.current, hl.hl_id with
   | Some asset, Some id ->
       ignore
         (let* () = ensure_ref_block asset hl in
-         Platform.copy_to_clipboard ("((" ^ id ^ "))");
+         Platform.copy_to_clipboard ("[[" ^ id ^ "]]");
          Js.Promise.resolve ())
   | _ -> ()
 
