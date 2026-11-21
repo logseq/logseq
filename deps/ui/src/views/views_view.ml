@@ -1090,10 +1090,22 @@ let add_new_object inst =
     if same_context () then
       let uuid = Ui_services.env_random_uuid () in
       Db.insert_object_block ~uuid ~page_uuid:owner_uuid ~title:"" ~tags ~props (fun _ ->
-        if same_context () then
-          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid)
+        if same_context () then begin
+          (* Open the sidebar first — refresh can sync-fail when the
+             worker rejects get-render-snapshots (tests, offline), and
+             must not block the edit handoff. *)
+          Sidebar_state.open_uuid ~edit:true (Option.get (Sidebar_state.current ())) uuid;
+          (* cljs class-objects view-data updates with the insert;
+             refresh so + New shows the row without waiting on
+             debounced sync-db-changes. *)
+          (try refresh inst with _ -> ())
+        end)
   in
   match inst.V.kind with
+  | V.KTagPage _ when (V.get inst).V.asset_class ->
+      (* cljs objects.cljs: Asset + New opens the file picker and
+         uploads; do not mint an empty untitled Asset node. *)
+      Editor_actions.trigger_asset_upload ()
   | V.KTagPage owner_uuid -> insert owner_uuid ~tags:[owner_uuid] ~props:[]
   | V.KPropertyPage owner_uuid ->
       ignore ((let* property = Runtime.invoke3 "thread-api/pull"

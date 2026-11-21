@@ -57,9 +57,13 @@ let consume_click state =
   let state = cancel state in
   empty, state.suppress_click
 
+(* cljs block-drag-over nests only after a clear indent (~30px past
+   the content/block left). 50px from .ls-block left was too eager
+   (~15px past the bullet), so sidebar bottom-edge drops became
+   children. *)
 let zone ~first ~left ~top ~x ~y =
   if first && Float.abs (y -. top) <= 16. then Top
-  else if x -. left > 50. then Nested
+  else if x -. left > 30. then Nested
   else Sibling
 
 let zone_name = function Top -> "top" | Nested -> "nested" | Sibling -> "sibling"

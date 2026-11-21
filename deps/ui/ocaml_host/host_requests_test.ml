@@ -5909,6 +5909,10 @@ let () = with_test_entry (fun () ->
               resolve (Wire.Array [map ["id",uuid;"block",map ["block/uuid",uuid;
                 "db/id",Wire.Int 101;"block/title",Wire.String ""];"children",Wire.Array []]]) [@u]))
         | "thread-api/get-block-parents",_ -> Js.Promise.resolve (Wire.Array [])
+        | "thread-api/get-render-snapshots",_ ->
+            Js.Promise.resolve (Wire.Map [Wire.kw "slots",Wire.Map []])
+        | "thread-api/get-class-properties",_ | "thread-api/get-all-properties",_
+        | "thread-api/pull-many",_ -> Js.Promise.resolve (Wire.Array [])
         | _ -> failwith ("Unexpected New object fixture request: " ^ method_));
         on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
       let host=Lui_host.create ~hooks:Lui_paint.default_hooks ~layout:(module Lui_layout)
@@ -5941,7 +5945,12 @@ let () = with_test_entry (fun () ->
         ignore (Lui_app.start app);ignore (Lui_app.flush app);
         Runtime.read_model:=(fun () -> !model);Runtime.app_flush:=(fun () -> ignore (Lui_app.flush app));
         let opens=ref 0 in
-        Runtime.app_send:=(function Action.Toggle_right_sidebar -> incr opens;true | _ -> false);
+        Runtime.app_send:=(function
+          | Action.Toggle_right_sidebar ->
+              incr opens;
+              model := { !model with right_sidebar_open = not (!model).right_sidebar_open };
+              true
+          | _ -> false);
         let store=Lui_host.store host in
         let ids=Lui_store.preorder store in
         let control=if header then List.find (fun id -> Lui_store.string_prop store id
@@ -11763,9 +11772,11 @@ let () = with_test_entry (fun () ->
         expect "Breadcrumb and result title start at the same position" (close label.x title.x);
         expect "Breadcrumb preserves a two-point gap before result content"
           (close ((rect main).y-.(h.y+.h.h)) (2.*.scale));
+        (* Compact Current Page badge stays on the 16px crumb line, so
+           header-badge rows match the 46px no-badge height (was 48). *)
         expect (Printf.sprintf "Result height includes the negative breadcrumb margin (path=%d badge=%b query=%S row=%.1f header=%.1f title=%.1f)"
           (String.length path) (badge=Cmdk_state.Header_badge) query ((rect row).h/.scale) (h.h/.scale) (title.h/.scale))
-          (close (rect row).h ((if badge=Cmdk_state.Header_badge then 48. else 46.)*.scale));
+          (close (rect row).h (46.*.scale));
         let rects = W.Rects.create () in
         List.iter (fun id -> Option.iter (Hashtbl.replace rects id) (Lui_layout.rect layout id)) (Lui_store.preorder store);
         let ui = W.Ui.create () in W.Ui.set_scale ui scale;
@@ -12045,8 +12056,9 @@ let () = with_test_entry (fun () ->
             let tag=Printf.sprintf "width=%.0f scale=%.0f left=%b right=%b" width scale left_open right_open in
             expect ("Diagnostics are clipped: "^tag) (bounded width (rect fps) && bounded width (rect toggle));
             expect ("More control is clipped: "^tag) (bounded width (rect more));
+            (* Master keeps rs-toggle visible from ~500px (was LUI 640). *)
             expect ("Right-toggle visibility differs across hosts: "^tag)
-              (((rect right_toggle).w>0.)=(width>=640.));
+              (((rect right_toggle).w>0.)=(width>=500.));
             expect "Metrics controls remount during shell resize" (find "native-performance-toggle"=toggle);
             let status=List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"
               =Some "native-performance-bar") (Lui_store.preorder store) in

@@ -192,15 +192,25 @@ let rec card_view st b phase =
                       row ~key:"bc" ~style_class:"breadcrumb ls-card-bc"
                         ~margin_bottom:16 ~margin_left:8
                         ~data_attrs:[ ("style", "font-size:0.875rem") ]
-                        (List.concat_map
-                           (fun c ->
-                             [ Ui_components.with_props
-                                 [ Ui_components.Prop.opacity 0.7
-                                 ; Ui_components.Prop.hover_opacity 1. ]
-                                 (text ~style_class:"breadcrumb-item"
-                                    ~value:c [])
-                             ; text ~value:"/" ~padding_horizontal:4 [] ])
-                           cs))
+                        ((* cljs render-segs: separators between crumbs only *)
+                         match cs with
+                         | [] -> []
+                         | first :: rest ->
+                             Ui_components.with_props
+                               [ Ui_components.Prop.opacity 0.7
+                               ; Ui_components.Prop.hover_opacity 1. ]
+                               (text ~style_class:"breadcrumb-item"
+                                  ~value:first [])
+                             :: List.concat_map
+                                  (fun c ->
+                                    [ text ~value:"/" ~padding_horizontal:4 []
+                                    ; Ui_components.with_props
+                                        [ Ui_components.Prop.opacity 0.7
+                                        ; Ui_components.Prop.hover_opacity 1. ]
+                                        (text ~style_class:"breadcrumb-item"
+                                           ~value:c [])
+                                    ])
+                                  rest))
                 (Signal.value st.Cards_state.crumbs)
             ; (* remount per card+phase so clozes take the right initial
                  revealed state (cloze_reveal_all is read at mount) *)
@@ -219,15 +229,16 @@ let rec card_view st b phase =
                ~variant:`secondary ~size:`sm
                ~label:(if np = "show-answer" then t_ "flashcard.review/show-answers"
                        else t_ "flashcard.review/show-clozes")
-               ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" "s")
+               ~tooltip:(I18n.t1 "flashcard/shortcut-tooltip" "S")
                ~on_press:(fun _ -> Cards_state.advance_phase st)
                [ row ~key:"inner" ~gap:4 ~cross:`center
                    [ text ~value:(if np = "show-answer"
                                   then t_ "flashcard.review/show-answers"
                                   else t_ "flashcard.review/show-clozes") []
-                   ; kbd ~style_class:"shui-shortcut-key"
+                   ; (* cljs shui/shortcut uppercases single-letter keys *)
+                     kbd ~style_class:"shui-shortcut-key"
                        ~data_attrs:[ ("style", "transform:scale(0.9)") ]
-                       ~value:"s" [] ] ]
+                       ~value:"S" [] ] ]
            else rating_buttons st)
         ]
     ]
@@ -270,8 +281,13 @@ let cards_body st =
   let all_sig =
     Logseq_el.own ctx (Signal.value st.Cards_state.all_cards)
   in
+  let loading_sig =
+    Logseq_el.own ctx (Signal.value st.Cards_state.loading)
+  in
   (reactive
-    (fun (cards, pos, phase, cur, all) ->
+    (fun (cards, pos, phase, cur, all, loading) ->
+      if loading then spacer ~key:"loading" []
+      else
       match List.nth_opt cards pos, cur with
       | Some _, Some b ->
           column ~key:"cards" ~style_class:"ls-cards-col" ~grow:1.
@@ -309,16 +325,18 @@ let cards_body st =
                   [ practice_again_btn st ] ])
     (Logseq_el.own ctx
        (Signal.map2
-          (fun (a, b) (phase, cur, all) -> (a, b, phase, cur, all))
+          (fun (a, b) (phase, cur, all, loading) ->
+             (a, b, phase, cur, all, loading))
           cp_sig
           (Logseq_el.own ctx
              (Signal.map2
-                (fun (a, b) c -> (a, b, c))
+                (fun (a, b) (c, d) -> (a, b, c, d))
                 (Logseq_el.own ctx
                    (Signal.map2 (fun x y -> (x, y))
                       (Signal.value st.Cards_state.phase)
                       (Signal.value st.Cards_state.cur)))
-                all_sig)))))
+                (Logseq_el.own ctx
+                   (Signal.map2 (fun x y -> (x, y)) all_sig loading_sig)))))))
     ctx parent
 
 (* cljs :modal/show-cards -> shui/dialog-open! {:id :srs :label

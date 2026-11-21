@@ -322,9 +322,20 @@ let panel_children (ctx : V.ctx) ~owner_is_tag ~owner_title ~can_toggle
         else [])
        @ (if can_toggle && has_hidden then [ toggle_row () ] else []))
 
+(* Re-render when `p a` flips show_hidden even if area_data is unchanged.
+   Block areas read hidden rows from render-data (show_empty always
+   false), so toggling the ref alone must invalidate the panel — a
+   refresh that republishes identical rows would otherwise no-op. *)
 let panel_view ctx ~owner_is_tag ~owner_title ~can_toggle d : t =
-  column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
-    (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d)
+ fun context parent ->
+  (* show_hidden_signal already returns a Signal.signal *)
+  let hidden_sig = S.show_hidden_signal context in
+  (reactive
+     (fun _show ->
+       column ~gap:0 ~min_width:0 ~corner_radius:6 ~style_class:"properties-panel"
+         (panel_children ctx ~owner_is_tag ~owner_title ~can_toggle d))
+     hidden_sig)
+    context parent
 
 (* ---------- pills (block-below) ---------- *)
 
@@ -461,7 +472,9 @@ let new_property_btn (ctx : V.ctx) ~for_class ~owner_title : t =
 let block_key uuid = "block:" ^ uuid
 
 (* one get-blocks render-data call supplies the positioned property
-   maps, the display-properties rows, and the block's own attrs *)
+   maps, the display-properties rows, and the block's own attrs.
+   Drop icon/query/class-properties from the panel — master shows the
+   icon as the block bullet only, never as an Icon property row. *)
 let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
   let* block_w = D.block_render_data uuid in
   (match block_w with
@@ -474,6 +487,8 @@ let block_fetch uuid (publish : S.area_data -> unit) : unit Js.Promise.t =
            (W.get block_w "block.temp/display-properties")
        in
        let rows, hidden = D.split_display display in
+       let rows = List.filter is_panel_row rows in
+       let hidden = List.filter is_panel_row hidden in
        publish
          { S.empty_area_data with left; right; below; rows; hidden }
    | _ -> ());
@@ -891,11 +906,13 @@ let page_area ~scope (p : Model.page) : t =
           reactive (fun (d : S.area_data) ->
             let title_collapsed =
               not (Editor_state.String_set.mem uuid collapse.cv_expanded)
-              && (Editor_state.String_set.mem uuid collapse.cv_collapsed || p.Model.page_is_tag)
+              && (Editor_state.String_set.mem uuid collapse.cv_collapsed
+                  || p.Model.page_is_tag || p.Model.page_is_property)
             in
             if title_collapsed then column ~gap:0 []
             else if
               (not p.Model.page_is_tag)
+              && (not p.Model.page_is_property)
               && d.rows = []
               && d.hidden = []
             then column ~gap:0 []
@@ -912,6 +929,10 @@ let page_area ~scope (p : Model.page) : t =
                 ; (if p.Model.page_is_tag then
                      class_section ctx ~owner_title:p.Model.page_title
                        d.class_rows
+                   else if p.Model.page_is_property then
+                     (* master property pages have Configure in the
+                        title actions only — no "Add property" row *)
+                     Logseq_el.nothing
                    else
                      new_property_btn ctx ~for_class:false
                        ~owner_title:p.Model.page_title)

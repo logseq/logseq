@@ -597,10 +597,6 @@ let search_rows ?page ?(code_only = false) (svs : Svs.t) repo q move_mode nodes_
   in
   Ui_task.resolve (rows, total)
 
-let run_search svs repo q move_mode limit =
-  let* rows, total = search_rows svs repo q move_mode limit in
-  Ui_task.resolve (List.mapi (fun i row -> item_of_row row i) rows, total)
-
 (* number the flat item indices left-to-right, top-to-bottom *)
 let renumber groups =
   let i = ref 0 in
@@ -626,6 +622,28 @@ let row_has_tag w ident =
           || Wire.get tag "db/ident" = Some (Wire.Keyword ident))
         tags
   | _ -> false
+
+(* Built-in properties whose titles only fuzzy-match (e.g. "Asset" →
+   Page Tags / Extends / Scheduled) clutter cmdk; keep exact title hits
+   and all non-property / non-built-in rows. *)
+let keep_cmdk_row q w =
+  let q = String.lowercase_ascii (String.trim q) in
+  if q = "" then true
+  else
+    let built_in =
+      Wire.get w "logseq.property/built-in?" = Some (Wire.Bool true)
+    in
+    let is_prop = row_has_tag w "logseq.class/Property" in
+    if built_in && is_prop then
+      match str_field w "block/title" with
+      | Some t -> String.lowercase_ascii (String.trim t) = q
+      | None -> false
+    else true
+
+let run_search svs repo q move_mode limit =
+  let* rows, total = search_rows svs repo q move_mode limit in
+  let rows = List.filter (keep_cmdk_row q) rows in
+  Ui_task.resolve (List.mapi (fun i row -> item_of_row row i) rows, total)
 
 let row_parentless w =
   match Wire.get w "block/parent" with
@@ -951,6 +969,7 @@ let refresh ?(clear = true) st =
            | Some G_codes -> search_rows ~code_only:true st.svs repo v.input false 20
            | _ -> search_rows st.svs repo v.input v.move_mode (nodes_limit v.move_mode v.expanded)
          in
+         let source_rows = List.filter (keep_cmdk_row v.input) source_rows in
          let rows = List.mapi (fun i row -> item_of_row row i) source_rows in
          if Ui_effect.is_current st.req gen && st.svs.Svs.repo () = Some repo then
            apply_results ~source_rows st v.input v.move_mode v.expanded rows total;
