@@ -12056,8 +12056,9 @@ let () = with_test_entry (fun () ->
             let tag=Printf.sprintf "width=%.0f scale=%.0f left=%b right=%b" width scale left_open right_open in
             expect ("Diagnostics are clipped: "^tag) (bounded width (rect fps) && bounded width (rect toggle));
             expect ("More control is clipped: "^tag) (bounded width (rect more));
+            (* Master keeps rs-toggle visible from ~500px (was LUI 640). *)
             expect ("Right-toggle visibility differs across hosts: "^tag)
-              (((rect right_toggle).w>0.)=(width>=640.));
+              (((rect right_toggle).w>0.)=(width>=500.));
             expect "Metrics controls remount during shell resize" (find "native-performance-toggle"=toggle);
             let status=List.find_opt (fun id -> Lui_store.string_prop store id "accessibility-identifier"
               =Some "native-performance-bar") (Lui_store.preorder store) in
