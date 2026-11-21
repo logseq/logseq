@@ -89,13 +89,7 @@
                                 (empty? others))
                          (-> (+ time (- now-ms (:block/created-at item)))
                              (quot 1000))
-                         (let [time' (if (or
-                                          (= last-status :logseq.property/status.doing)
-                                          (and
-                                           (not (contains? #{:logseq.property/status.canceled
-                                                             :logseq.property/status.backlog
-                                                             :logseq.property/status.done} last-status))
-                                           (= this-status :logseq.property/status.done)))
+                         (let [time' (if (= last-status :logseq.property/status.doing)
                                        (+ time (- (:block/created-at item) (:block/created-at last-item)))
                                        time)]
                            (recur (cons item others) time'))))

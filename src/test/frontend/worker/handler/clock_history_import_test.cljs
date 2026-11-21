@@ -5,6 +5,7 @@
             ["os" :as os]
             ["path" :as node-path]
             [cljs.test :refer [async deftest is testing]]
+            [datascript.core :as d]
             [frontend.worker.handler.query :as query-handler]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.db.test.helper :as db-test]
@@ -93,7 +94,14 @@
               (is (= 3600 (seconds "doing completed only")))
               (let [later (+ now-ms (* 10 3600 1000))]
                 (is (= 3600 (second (task-time db "doing completed only" later)))
-                    "elapsed time does not grow")))
+                    "elapsed time does not grow")
+                (let [block (db-test/find-block-by-content db "doing completed only")]
+                  (d/transact! conn [{:block/created-at later
+                                      :logseq.property.history/block (:db/id block)
+                                      :logseq.property.history/property :logseq.property/status
+                                      :logseq.property.history/ref-value :logseq.property/status.done}])
+                  (is (= 3600 (second (task-time @conn "doing completed only" later)))
+                      "completing the task later does not count the idle gap"))))
             (testing "Doing without clocks is untracked"
               (is (nil? (task-time db "doing no logbook" now-ms))))
             (testing "open final clock runs from its source start"

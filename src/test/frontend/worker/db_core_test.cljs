@@ -2288,6 +2288,8 @@
            conn (d/create-conn db-schema/schema)
            block-uuid #uuid "11111111-1111-1111-1111-111111111111"]
        (d/transact! conn [{:db/ident :logseq.property/status}
+                          {:db/ident :logseq.property/status.todo
+                           :block/title "Todo"}
                           {:db/ident :logseq.property/status.doing
                            :block/title "Doing"}
                           {:db/ident :logseq.property/status.done
@@ -2325,7 +2327,22 @@
                          :status-title (:logseq.property.history/ref-value-title item)})
                       history)))
          (is (not-any? #(contains? % :logseq.property.history/ref-value) history))
-         (is (not-any? #(contains? % :logseq.property.history/property) history))))))))
+         (is (not-any? #(contains? % :logseq.property.history/property) history)))
+       (d/transact! conn [{:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                           :block/title "todo task"}])
+       (let [todo-block-id (ffirst (d/q '[:find ?b
+                                          :where [?b :block/title "todo task"]]
+                                        @conn))]
+         (d/transact! conn [{:block/created-at 1000
+                             :logseq.property.history/block todo-block-id
+                             :logseq.property.history/property :logseq.property/status
+                             :logseq.property.history/ref-value :logseq.property/status.todo}
+                            {:block/created-at 4000
+                             :logseq.property.history/block todo-block-id
+                             :logseq.property.history/property :logseq.property/status
+                             :logseq.property.history/ref-value :logseq.property/status.done}])
+         (is (= 0 (second (spent-time! test-repo todo-block-id)))
+             "Todo to Done does not track time")))))))
 
 (deftest get-display-properties-keeps-other-position-properties-for-page-properties
   (restoring-worker-state
