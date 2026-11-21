@@ -698,7 +698,13 @@ abc
    "- plain block with logbook\n"
    "  :LOGBOOK:\n"
    "  CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00\n"
-   "  :END:\n"))
+   "  :END:\n"
+   "- DONE valid then unclosed logbook\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 07:00:00]--[2024-01-03 Wed 08:00:00] =>  01:00:00\n"
+   "  :END:\n"
+   "  :LOGBOOK:\n"
+   "  CLOCK: [2024-01-03 Wed 20:00:00]--[2024-01-03 Wed 21:00:00] =>  01:00:00\n"))
 
 (deftest-async import-og-clock-history-disabled
   (p/let [file (write-temp-graph-file "pages/clocks.md" clock-history-graph)
@@ -741,7 +747,8 @@ abc
              (history "doing open final"))
           "An open final clock ends the history with a Doing event"))
     (testing "tasks whose clocks can't be converted get no history"
-      (doseq [title ["todo open inconsistent" "adjusted overlap" "malformed clock line"]]
+      (doseq [title ["todo open inconsistent" "adjusted overlap" "malformed clock line"
+                     "valid then unclosed logbook"]]
         (is (= [] (history title)) title))
       (is (= :logseq.property/status.todo (:db/ident (block-status @conn "todo open inconsistent")))
           "Status is preserved"))
@@ -759,10 +766,10 @@ abc
       (is (empty? (task-blocks-by-title @conn "plain block with logbook")))
       (is (= [] (history "plain block with logbook"))))
     (testing "report"
-      (is (= {:tasks-imported 10 :tasks-skipped 3 :completed-sessions 13 :open-sessions 1}
+      (is (= {:tasks-imported 10 :tasks-skipped 4 :completed-sessions 13 :open-sessions 1}
              (select-keys report [:tasks-imported :tasks-skipped :completed-sessions :open-sessions])))
       (is (= #{:open-clock-inconsistent :overlapping-clocks :malformed-clock-line
-               :duration-adjusted :boundary-adjusted :zero-length-clock}
+               :malformed-logbook :duration-adjusted :boundary-adjusted :zero-length-clock}
              (set (map :type (:diagnostics report))))))
     (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
         "Imported graph validates")))

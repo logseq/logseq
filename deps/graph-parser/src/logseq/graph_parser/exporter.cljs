@@ -2362,8 +2362,7 @@
 
 (defn- unclosed-logbook?
   [ast-blocks]
-  (and (not (logbook-lines ast-blocks))
-       (boolean (re-find #"(?i):LOGBOOK:" (pr-str ast-blocks)))))
+  (boolean (re-find #"(?i):LOGBOOK:" (pr-str ast-blocks))))
 
 (defn- record-clock-history!
   [{:keys [import-state file]} block {:keys [skip? events diagnostics completed-sessions open-sessions]}]
@@ -2386,14 +2385,15 @@
     (when (and (get-in options [:user-options :import-clock-history?]) status)
       (let [lines (logbook-lines ast-blocks)
             result (cond
+                     (unclosed-logbook? ast-blocks)
+                     {:skip? true :diagnostics [{:type :malformed-logbook}]}
+
                      lines
                      (clock/build-history lines
                                           {:status status
                                            :doing? (= status :logseq.property/status.doing)}
                                           {:todo :logseq.property/status.todo
-                                           :doing :logseq.property/status.doing})
-                     (unclosed-logbook? ast-blocks)
-                     {:skip? true :diagnostics [{:type :malformed-logbook}]})]
+                                           :doing :logseq.property/status.doing}))]
         (when result
           (record-clock-history! options block result)
           (when-not (:skip? result)
