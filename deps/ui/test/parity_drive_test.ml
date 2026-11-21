@@ -240,18 +240,25 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
      them — a consumed key sets prevent_default *)
   check "popup keys are consumed" (keydown st "ArrowDown");
   ignore (keydown st "ArrowUp");
-  (* filtering hides the group banners (cljs get-matched-commands) *)
-  P.ac_update st ac "zzzzzz";
+  (* cljs: short no-match shows "No matched commands"; >2 chars past
+     the last match closes the popup. Group headers stay while filtering. *)
+  P.ac_update st ac "zz";
   (match ac_of st with
    | Some ac ->
        check "unmatched slash query falls back to 'No matched commands'"
          (List.length ac.P.items = 1
-          && (List.hd ac.P.items).P.ai_act = P.Noop);
-       check "filtered slash drops group headers"
-         (List.for_all (fun it -> it.P.ai_hdr = None) ac.P.items);
+          && (List.hd ac.P.items).P.ai_act = P.Noop
+          && (List.hd ac.P.items).P.ai_label = "No matched commands");
        ignore (keydown st "Enter");
        check "the no-match row closes the popup" (ac_of st = None)
    | None -> check "slash popup still open" false);
+  P.open_ac st P.Slash;
+  S.flush s;
+  (match ac_of st with
+   | Some ac ->
+       P.ac_update st ac "zzzzzz";
+       check "long unmatched slash query closes the popup" (ac_of st = None)
+   | None -> check "slash popup reopens" false);
   P.open_ac st P.Slash;
   S.flush s;
   (match ac_of st with
@@ -262,7 +269,9 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
             check "slash fuzzy match keeps Heading 1"
               (List.exists
                  (fun it -> it.P.ai_act = P.Editor_cmd "heading:1")
-                 ac.P.items)
+                 ac.P.items);
+            check "filtered slash keeps group headers"
+              (List.exists (fun it -> it.P.ai_hdr <> None) ac.P.items)
         | None -> check "slash popup still open" false)
    | None -> check "slash popup reopens" false);
   ignore (keydown st "Escape");
@@ -310,12 +319,14 @@ let test_ac_slash_switch st (s : ('m, 'a) S.t) =
   P.close_ac st;
   clear_editing ()
 
-(* cljs: "/" + "Node embed" switches to the page-embed search; an Embed
-   act inserts a block/link embed into the editing block *)
+(* cljs: "/" + "Node embed" clears the slash trigger (input ""), opens
+   block-search; Escape closes the picker and leaves the host text *)
 let test_ac_slash_embed st (s : ('m, 'a) S.t) =
-  stage_main_session [ block "b1" "" ];
-  set_editing "b1" "";
-  P.open_ac st P.Slash;
+  stage_main_session [ block "b1" "host" ];
+  let host = "host" in
+  let buf = host ^ "/Node embed" in
+  set_editing "b1" buf ~caret:(String.length buf);
+  P.open_ac st P.Slash ~tpos:(String.length host);
   S.flush s;
   (match ac_of st with
    | Some ac -> (
@@ -327,14 +338,20 @@ let test_ac_slash_embed st (s : ('m, 'a) S.t) =
        | Some it ->
            P.apply_item st ac ~meta:false it;
            S.flush s;
+           check "node-embed clears slash trigger text"
+             (Editor_actions.live_buffer "b1" = host);
            (match ac_of st with
             | Some ac' ->
                 check "node-embed switches to embed search"
-                  (ac'.P.kind = P.Embed_ref)
+                  (ac'.P.kind = P.Embed_ref);
+                ignore (keydown st "Escape");
+                check "Escape closes embed search and keeps host"
+                  (ac_of st = None
+                   && Editor_actions.live_buffer "b1" = host
+                   && Editor_state.editing_uuid () = Some "b1")
             | None -> check "popup stays open after embed switch" false)
        | None -> check "slash lists a node-embed item" false)
    | None -> check "slash popup opens" false);
-  P.close_ac st;
   clear_editing ()
 
 (* cljs: [[ autopairs ]] and opens the page-search popup; a fresh name
@@ -767,6 +784,34 @@ let test_editor_paste_link () =
      "Plain first block", 0, 5, "words", "words first block";
      "https://old.example", 0, 19, "https://example.com", "https://example.com";
      "[label](url)", 0, 7, "https://example.com", "https://example.com(url)"]
+
+(* G2 paste-ext-url-over-selection: Shift+Home materializes a DOM Range
+   on .ed-r runs, so the paste event targets .block-editor — not .ed-input. *)
+let test_editor_paste_url_over_visual_selection () =
+  stage_main_session [ block "b1" "label text" ];
+  set_editing "b1" "label text" ~caret:10;
+  Editor_actions.update_model "b1" (fun m ->
+    Edit_model.select m ~anchor:0 ~focus:10);
+  let base = Ui_services.dom_body () in
+  let target =
+    { base with
+      Ui_services.closest =
+        (fun selector ->
+          if Str_util.contains selector ".block-editor" then Some base
+          else if Str_util.contains selector ".ed-input" then None
+          else base.Ui_services.closest selector) }
+  in
+  let prevented = ref false in
+  Editor_keys.on_paste
+    { (key_event "") with
+      Ui_services.target = Some target
+    ; clipboard_get = (function "text/plain" -> "https://example.com" | _ -> "")
+    ; prevent_default = (fun () -> prevented := true)
+    ; stop_immediate = (fun () -> prevented := true) };
+  check "URL paste over a visual .ed-r selection becomes a markdown link"
+    (!prevented
+     && Editor_actions.live_buffer "b1" = "[label text](https://example.com)");
+  clear_editing ()
 
 (* cljs ctrl+p/ctrl+n inside editing move to the previous/next block *)
 let test_selected_clipboard_paste () =
@@ -1940,6 +1985,7 @@ let run ~finish =
   test_editor_unbound_enter ();
   test_code_editor_enter ();
   test_editor_paste_link ();
+  test_editor_paste_url_over_visual_selection ();
   test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
   test_editor_tab ();

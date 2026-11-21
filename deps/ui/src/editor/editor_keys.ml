@@ -2021,14 +2021,37 @@ let on_keydown ev =
 
   end
 
+let editing_clipboard_target uuid target =
+  match target with
+  | Some el -> (
+      match closest ".ed-input" (Some el) with
+      | Some inp -> inp.Ui_services.attr "data-block-id" = Some uuid
+      | None -> false)
+  | None -> false
+
+(* copy/cut/paste whose real DOM Range sits on the rendered .ed-r runs —
+   the event targets the selection's container inside .block-editor
+   rather than the conduit input; only one editing surface exists at a
+   time *)
+let editing_block_target target =
+  match target with
+  | Some el -> Option.is_some (closest ".block-editor" (Some el))
+  | None -> false
+
+(* Match copy/cut: a non-collapsed model selection materializes a DOM
+   Range on the rendered .ed-r runs, so the paste event targets
+   .block-editor rather than the conduit .ed-input. Without this,
+   URL-over-selection paste is a no-op and the caret stays at 0. *)
 let on_paste ev =
   if Paste_capture.dispatch ev then () else
   if Ui_services.env_publishing () then () else begin
   if S.ready () then
     let editor_target =
-      match S.editing (), closest ".ed-input" ev.Ui_services.target with
-      | Some e, Some input -> input.Ui_services.attr "data-block-id" = Some e.S.uuid
-      | _ -> false
+      match S.editing () with
+      | Some e ->
+          editing_clipboard_target e.S.uuid (ev.Ui_services.target)
+          || editing_block_target (ev.Ui_services.target)
+      | None -> false
     in
     if editor_target && ev.Ui_services.has_files then begin
       ev.Ui_services.prevent_default ();
@@ -2053,24 +2076,9 @@ let on_paste ev =
               A.paste_from_clipboard ~cached saved))
       else A.paste_from_clipboard ~cached saved
 
-(* a clipboard event aimed at the open editor's conduit input *)
+(* a clipboard event aimed at the open editor's conduit input or its
+   visual selection inside .block-editor *)
   end
-
-let editing_clipboard_target uuid target =
-  match target with
-  | Some el -> (
-      match closest ".ed-input" (Some el) with
-      | Some inp -> inp.Ui_services.attr "data-block-id" = Some uuid
-      | None -> false)
-  | None -> false
-
-(* copy/cut whose real DOM Range sits on the rendered .ed-r runs — the
-   event targets the selection's container inside .block-editor rather
-   than the conduit input; only one editing surface exists at a time *)
-let editing_block_target target =
-  match target with
-  | Some el -> Option.is_some (closest ".block-editor" (Some el))
-  | None -> false
 
 let on_copy ev =
   if S.ready () then
