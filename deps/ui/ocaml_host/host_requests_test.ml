@@ -11772,9 +11772,11 @@ let () = with_test_entry (fun () ->
         expect "Breadcrumb and result title start at the same position" (close label.x title.x);
         expect "Breadcrumb preserves a two-point gap before result content"
           (close ((rect main).y-.(h.y+.h.h)) (2.*.scale));
+        (* Compact Current Page badge stays on the 16px crumb line, so
+           header-badge rows match the 46px no-badge height (was 48). *)
         expect (Printf.sprintf "Result height includes the negative breadcrumb margin (path=%d badge=%b query=%S row=%.1f header=%.1f title=%.1f)"
           (String.length path) (badge=Cmdk_state.Header_badge) query ((rect row).h/.scale) (h.h/.scale) (title.h/.scale))
-          (close (rect row).h ((if badge=Cmdk_state.Header_badge then 48. else 46.)*.scale));
+          (close (rect row).h (46.*.scale));
         let rects = W.Rects.create () in
         List.iter (fun id -> Option.iter (Hashtbl.replace rects id) (Lui_layout.rect layout id)) (Lui_store.preorder store);
         let ui = W.Ui.create () in W.Ui.set_scale ui scale;
