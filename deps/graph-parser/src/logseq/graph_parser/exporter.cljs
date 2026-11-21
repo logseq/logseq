@@ -2366,7 +2366,10 @@
 
 (defn- record-clock-history!
   [{:keys [import-state file]} block {:keys [skip? events diagnostics completed-sessions open-sessions]}]
-  (let [entry-context {:file file :block-uuid (:block/uuid block) :title (:block/title block)}]
+  (let [entry-context {:file file
+                       :block-uuid (:block/uuid block)
+                       :title (:block/title block)
+                       :imported? (not skip?)}]
     (swap! (:clock-history import-state)
            (fn [report]
              (cond-> (update report :diagnostics into (map #(merge entry-context %) diagnostics))

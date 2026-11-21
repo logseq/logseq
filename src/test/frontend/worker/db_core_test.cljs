@@ -2833,6 +2833,31 @@
            (:ignored-properties-detail result)))
     (is (= 1 (:ignored-properties-count result)))))
 
+(deftest compact-import-result-counts-distinct-imported-clock-adjustments
+  (let [block-a (random-uuid)
+        block-b (random-uuid)
+        result (#'db-core/compact-import-result
+                {:files []
+                 :import-state
+                 {:clock-history
+                  (atom {:tasks-imported 2
+                         :tasks-skipped 1
+                         :completed-sessions 2
+                         :open-sessions 0
+                         :diagnostics [{:type :duration-adjusted :block-uuid block-a
+                                        :source-index 0 :imported? true}
+                                       {:type :boundary-adjusted :block-uuid block-a
+                                        :source-index 0 :imported? true}
+                                       {:type :invalid-duration :block-uuid block-b
+                                        :source-index 1 :imported? true}
+                                       {:type :duration-adjusted :block-uuid (random-uuid)
+                                        :source-index 0 :imported? false}]})}}
+                [] {:errors []})]
+    (is (= 2 (get-in result [:clock-history :adjusted-count]))
+        "One imported clock counts once even with multiple adjustment diagnostics")
+    (is (not-any? #(contains? % :imported?) (:clock-history-detail result)))
+    (is (not-any? #(contains? % :block-uuid) (:clock-history-detail result)))))
+
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
          (->

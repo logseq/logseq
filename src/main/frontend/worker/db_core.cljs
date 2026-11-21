@@ -268,7 +268,16 @@
 
 (def ^:private clock-history-adjusted-types
   "Diagnostics for tasks whose history was imported with a changed value"
-  [:duration-adjusted :boundary-adjusted :invalid-duration :invalid-recorded-end])
+  #{:duration-adjusted :boundary-adjusted :invalid-duration :invalid-recorded-end})
+
+(defn- adjusted-clock-count
+  [diagnostics]
+  (->> diagnostics
+       (filter #(and (:imported? %)
+                     (contains? clock-history-adjusted-types (:type %))))
+       (map (juxt :block-uuid :source-index))
+       set
+       count))
 
 (defn- clock-history-activity?
   "The exporter always keeps a clock-history record, so only report it when the
@@ -306,13 +315,11 @@
     (when (seq (:errors validation))
       (log/error :import-validation-errors {:count (count (:errors validation))}))
     {:clock-history (when (clock-history-activity? clock-history)
-                      (let [diagnostic-types (frequencies (map :type (:diagnostics clock-history)))]
-                        {:tasks-imported (:tasks-imported clock-history)
-                         :tasks-skipped (:tasks-skipped clock-history)
-                         :completed-sessions (:completed-sessions clock-history)
-                         :open-sessions (:open-sessions clock-history)
-                         :adjusted-count (transduce (map #(get diagnostic-types % 0)) + 0
-                                                    clock-history-adjusted-types)}))
+                      {:tasks-imported (:tasks-imported clock-history)
+                       :tasks-skipped (:tasks-skipped clock-history)
+                       :completed-sessions (:completed-sessions clock-history)
+                       :open-sessions (:open-sessions clock-history)
+                       :adjusted-count (adjusted-clock-count (:diagnostics clock-history))})
      :clock-history-detail (mapv compact-clock-diagnostic (:diagnostics clock-history))
      :org-file-count (count (filter org-file? files))
      :ignored-files-count (count ignored-files)
