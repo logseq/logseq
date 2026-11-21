@@ -70,6 +70,11 @@ export default defineConfig(() => {
       alias: [
         { find: new RegExp(`^(node:)?(${builtinModules.join("|")})$`),
           replacement: resolve(import.meta.dirname, "../db-worker/stubs/node-externals.mjs") },
+        // Node-only native addon; Melange secret_store only loads it under
+        // Node detection. Mirror db-worker vite so the browser UI bundle
+        // never tries to parse keytar.node.
+        { find: /^keytar$/,
+          replacement: resolve(import.meta.dirname, "../db-worker/stubs/node-externals.mjs") },
         { find: "lui-shims/publishing-db",
           replacement: resolve(import.meta.dirname,
             desktop ? "desktop/publishing_native.mjs" : "shims/publishing_db.mjs") },

@@ -1808,9 +1808,37 @@ let apply_tag t ac ~create ~inline title =
       let insert () =
         (* cljs: class items erase "#q" on enter but insert "#wrapped"
            on mod+enter (inline-tag?; the Page class is exempt) *)
-        emit ac.auuid ac.tpos
-          (if inline && title <> "Page" then inline_tag_text ac title
-           else "")
+        let text =
+          if inline && title <> "Page" then inline_tag_text ac title else ""
+        in
+        emit ac.auuid ac.tpos text;
+        (* cljs add-tag -> save-block-aux! trims; class tagging with
+           text="" otherwise leaves the space before '#'. Preserve the
+           completion caret (adjusted for leading trim) so typing after
+           `#Tag` before existing text does not jump to the block end. *)
+        if text = "" then
+          match Editor_actions.edit_model buuid with
+          | Some m ->
+              let source = m.Edit_model.source in
+              let trimmed = Outliner_ops.trim_title buuid source in
+              if trimmed <> source then begin
+                let before_caret = fst (Editor_actions.sel_span_of m) in
+                let leading =
+                  let n = String.length source in
+                  let i = ref 0 in
+                  while !i < n && Char.code source.[!i] <= 32 do incr i done;
+                  !i
+                in
+                let caret =
+                  max 0 (min (String.length trimmed) (before_caret - leading))
+                in
+                Editor_actions.update_model buuid (fun _ ->
+                    Edit_model.select
+                      (Edit_model.splice m 0 (String.length source) trimmed)
+                      ~anchor:caret ~focus:caret);
+                Outliner_ops.schedule_save buuid trimmed
+              end
+          | None -> ()
       in
       let create_and_tag () =
         insert ();

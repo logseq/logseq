@@ -534,13 +534,16 @@ let settings_date_format ~registry ~profile ~finish =
           requested := (fun () -> let value = () in resolve value [@u])) in
         Runtime.worker := Some {
           Worker_client.invoke_fn = (fun name _ ->
-            if name <> "thread-api/apply-outliner-ops" then
-              failwith ("Unexpected date format request: " ^ name);
-            Js.Promise.make (fun ~resolve ~reject ->
-              acknowledge := (fun () ->
-                if failed then reject (Failure "format persistence failed") [@u]
-                else resolve Wire.Nil [@u]);
-              !requested ()));
+            match name with
+            | "thread-api/apply-outliner-ops" ->
+                Js.Promise.make (fun ~resolve ~reject ->
+                  acknowledge := (fun () ->
+                    if failed then reject (Failure "format persistence failed") [@u]
+                    else resolve Wire.Nil [@u]);
+                  !requested ())
+            (* post-op refresh reloads journals when route_page is unset *)
+            | "thread-api/get-latest-journals" -> Js.Promise.resolve (Wire.Array [])
+            | _ -> failwith ("Unexpected date format request: " ^ name));
           on_message = (fun _ _ -> ());
           dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
         let session = S.mount ~registry ~profile ~initial:!current
@@ -2713,8 +2716,13 @@ let run_views ~registry ~profile ~finish =
           Runtime.read_model:=(fun () -> !state);
           Runtime.app_send:=(fun action -> state:=Update.update !state action;true);
           Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
-            if name<>"thread-api/transact" then failwith ("Unexpected config save: " ^ name);
-            Js.Promise.make (fun ~resolve ~reject:_ -> complete:=(fun () -> resolve Wire.Nil [@u])));
+            match name with
+            | "thread-api/transact" ->
+                Js.Promise.make (fun ~resolve ~reject:_ ->
+                  complete:=(fun () -> resolve Wire.Nil [@u]))
+            (* config save re-applies custom.css (get-file-content) *)
+            | "thread-api/get-file-content" -> Js.Promise.resolve (Wire.String "")
+            | _ -> failwith ("Unexpected config save: " ^ name));
             on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
           if file then File_view.save "calendar-save-fixture" "logseq/config.edn"
             (if invalid then "[:invalid-config]" else "{:start-of-week 5}")

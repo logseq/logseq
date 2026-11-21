@@ -88,6 +88,7 @@ let page blocks : Model.page =
   { Model.page_title = "p"
   ; page_uuid = Some "p"
   ; page_db_collapsable = false
+  ; page_recycled = false
   ; page_db_id = None
   ; page_is_tag = false
   ; page_is_property = false

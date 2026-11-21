@@ -218,8 +218,29 @@ let emit repo =
       Some (Ui_services.timers_timeout (fun () -> start repo) 50)
   end
 
+(* Header consumers (local-graph-sync-button) gate on logged_in () but
+   login only writes storage — bump this signal so they re-render. *)
+let auth_sig_cell : int Signal.state option ref = ref None
+
+let auth_signal ~scheduler =
+  match !auth_sig_cell with
+  | Some s -> Signal.value s
+  | None ->
+      let s = Signal.state scheduler 0 in
+      auth_sig_cell := Some s;
+      Signal.value s
+
+let bump_auth () =
+  match !auth_sig_cell with
+  | Some s ->
+      Signal.set s (Runtime.signal_get s + 1);
+      Runtime.flush ()
+  | None -> ()
+
 (* cljs current-login-user watch -> [:login] *)
-let notify_login () = emit None
+let notify_login () =
+  bump_auth ();
+  emit None
 
 (* cljs current-repo watch -> [:graph-switch repo], also fired by
    trigger-rtc-start callers like :graph/restored — both land on
@@ -257,6 +278,7 @@ let sign_out () =
           ; (Wire.kw "auth/access-token", Wire.String "")
           ; (Wire.kw "auth/refresh-token", Wire.String "")
           ]));
+  bump_auth ();
   notify_logout ();
   Js.Promise.resolve ()
 

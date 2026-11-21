@@ -190,6 +190,8 @@
 (rule
  (copy ../src/pages/page_ops.ml page_ops.ml))
 (rule
+ (copy ../src/pages/scheduled_deadlines.ml scheduled_deadlines.ml))
+(rule
  (copy ../src/popups/popups_state.ml popups_state.ml))
 (rule
  (copy ../src/popups/popups_view.ml popups_view.ml))

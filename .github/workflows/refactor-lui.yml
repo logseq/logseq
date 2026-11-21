@@ -2,9 +2,9 @@ name: refactor/lui CI
 
 on:
   push:
-    branches: ['refactor/lui']
+    branches: ['refactor/lui', 'refactor/lui-parity']
   pull_request:
-    branches: ['refactor/lui']
+    branches: ['refactor/lui', 'refactor/lui-parity']
   workflow_dispatch:
 
 concurrency:

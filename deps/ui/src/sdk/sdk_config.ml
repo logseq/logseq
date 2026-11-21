@@ -92,8 +92,12 @@ let note_file_saved repo path content =
     match parse_config content with
     | config ->
         Runtime.send
-          (Action.Graph_config_loaded (repo, effective_config config))
+          (Action.Graph_config_loaded (repo, effective_config config));
+        (* :custom-css-url may have changed — re-apply like cljs
+           restore-repo-config! → add-style-if-exists! *)
+        ignore (Custom_css.reset_for_repo repo)
     | exception (Edn.Parse_error _ | Invalid_argument _ as error) -> report_config_error error
+  else Custom_css.on_file_saved path content
 
 let read_repo_config repo =
   let* content = Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)

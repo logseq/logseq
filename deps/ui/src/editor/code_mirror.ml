@@ -192,11 +192,16 @@ let mode_file lang =
 
 let lisp_like mode = List.mem mode [ "scheme"; "lisp"; "clojure"; "edn" ]
 
-(* theme ("lsradix <light|dark>") follows the root .dark class the same
-   way cljs theme-name does via the ui/theme subscription *)
+(* cljs theme-name: lsradix when :ui/radix-color is set, else solarized *)
 let theme_name () =
-  if D.el_class_contains D.document_element "dark" then "lsradix dark"
-  else "lsradix light"
+  let dark = D.el_class_contains D.document_element "dark" in
+  let mode = if dark then "dark" else "light" in
+  let radix =
+    match Ui_services.storage_get "radix-color" with
+    | Some s when String.trim s <> "" && s <> "null" && s <> "\"\"" -> true
+    | _ -> false
+  in
+  (if radix then "lsradix " else "solarized ") ^ mode
 
 (* -- instances keyed by block uuid -- *)
 
@@ -330,14 +335,15 @@ let focus_block ~caret uuid =
 
 (* -- editor event handlers -- *)
 
-(* Esc (cljs extraKeys "Esc" -> save-editor!): persist + leave edit mode
-   and select the block. cljs additionally re-enters raw-mode editing;
-   the OCaml surface has no raw mode for code blocks, so Esc exits. *)
+(* Esc (cljs extraKeys "Esc" -> save-editor!): persist, arm raw-mode,
+   then re-enter the plain block editor at end (via exit_edit finish).
+   A second Esc selects. *)
 let on_escape uuid =
   match block_instance uuid with
   | Some st when st.composition = None ->
       A.sync_buffer uuid st.committed;
-      A.exit_edit ~select:true
+      Editor_state.pending_raw_reenter := Some uuid;
+      A.exit_edit ~select:false
   | _ -> ()
 
 (* Shift-Enter (cljs wrapper keydown): save + insert a sibling block *)
