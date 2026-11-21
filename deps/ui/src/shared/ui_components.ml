@@ -238,10 +238,15 @@ let tag_link_appearance ?(in_block = false) element =
     ; Prop.foreground tag_link_foreground
     ; Prop.hover_foreground tag_link_foreground ] element
 
-(* cljs keeps the right-sidebar toggle visible at narrow widths (e.g.
-   500px); do not hide it behind the sm/640 breakpoint. *)
+(* cljs keeps the right-sidebar toggle visible down to ~500px; LUI used
+   the sm/640 breakpoint which hid it too early on narrow layouts. *)
 let header_right_sidebar_toggle element : t =
-  box ~key:"header-right-sidebar-toggle" [element]
+ fun ctx parent ->
+  let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
+    ~scope:ctx.Lui_ui.ui_scope in
+  Ui_parts.string_prop P.DisplayValue
+    ~value:(reactive (fun width -> if width>=500. then "contents" else "none") viewport)
+    (box ~key:"header-right-sidebar-toggle" [element]) ctx parent
 
 (* Exactly one leading toolbar is interactive: the open sidebar owns it,
    otherwise the detail header does. Only the native host reserves traffic lights.
