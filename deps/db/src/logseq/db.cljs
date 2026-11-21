@@ -270,6 +270,17 @@
            :skip-store? true
            :skip-validate-db? true)))
 
+(defn- datoms->tx-ops
+  "Convert collected Datoms into add/retract ops without their inner tx ids.
+
+  Datascript inserts a Datom with its own :tx and increments :max-tx once per
+  transact!. Replaying inner Datoms would leave :max-tx behind those txs, so the
+  next transact! could reuse a tx id an existing datom already carries."
+  [datoms]
+  (mapv (fn [d]
+          [(if (:added d) :db/add :db/retract) (:e d) (:a d) (:v d)])
+        datoms))
+
 (defn batch-transact-with-temp-conn!
   "Run batched tx work against a temporary conn, then apply all collected tx-data
   to `conn` with a single final `transact!`.
@@ -280,6 +291,8 @@
     (`:skip-store? true`).
   - Defers db validation during inner batch ops (`:skip-validate-db? true`), then
     validates on the final `transact!` to `conn`.
+  - Replays collected changes as add/retract ops so the final transact! stamps
+    one new tx id. Inner temp-conn tx ids are not preserved.
   - Supports nested usage.
 
   Notes:
@@ -309,7 +322,7 @@
       (let [tx-data @*batch-tx-data]
         (when (and @*complete? (seq tx-data))
           ;; transact tx-data to `conn` and validate db
-          (transact! conn tx-data (transform-tx-meta tx-meta))))
+          (transact! conn (datoms->tx-ops tx-data) (transform-tx-meta tx-meta))))
       (finally
         (d/unlisten! temp-conn ::temp-conn-batch-tx)
         (reset! temp-conn nil)
