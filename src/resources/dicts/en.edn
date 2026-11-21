@@ -983,6 +983,7 @@
  :import/report-truncated (fn [shown total] (str "Showing the first " shown " of " total ". Download the report for the full list."))
  :import/report-untitled-task "(untitled task)"
  :import/report-validation-errors "Invalid blocks"
+ :import/scan-clock-history-blocked "Import cannot continue because some task clock histories cannot be converted safely. Fix the listed Logbook entries in the source graph, then scan again."
  :import/scan-empty "Nothing needs attention — the folder looks fully importable."
  :import/scan-failed "Scanning the folder failed"
  :import/scan-org-notice (fn [count] (str count " Org file(s) will be imported as Markdown"))

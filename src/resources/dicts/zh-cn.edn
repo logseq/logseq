@@ -983,6 +983,7 @@
  :import/report-truncated (fn [shown total] (str "仅显示前 " shown " / " total " 条。下载报告可查看完整列表。"))
  :import/report-untitled-task "（无标题任务）"
  :import/report-validation-errors "无效块"
+ :import/scan-clock-history-blocked "部分任务计时历史无法安全转换，因此无法继续导入。请修复源图谱中列出的 Logbook 条目，然后重新扫描。"
  :import/scan-empty "没有发现需要跳过的内容，可以全部导入。"
  :import/scan-failed "扫描文件夹失败"
  :import/scan-org-notice (fn [count] (str count " 个 Org 文件将按 Markdown 导入"))

@@ -552,11 +552,16 @@
   (state/set-state! :graph/importing-state nil)
   (shui/dialog-close! :import-scan))
 
+(defn- clock-history-scan-blocked?
+  [scan-result]
+  (pos? (or (get-in scan-result [:clock-history :tasks-skipped]) 0)))
+
 (hsx/defc import-scan-preview-dialog
   [scan-result on-import on-cancel]
   (let [{:keys [page-count journal-count block-count org-file-count
                 ignored-files-detail ignored-assets-detail ignored-properties-detail
-                validation-errors-detail notifications]} (or scan-result {})]
+                validation-errors-detail clock-history-detail notifications]} (or scan-result {})
+        clock-history-blocked? (clock-history-scan-blocked? scan-result)]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -570,8 +575,11 @@
         [:p.text-sm.mb-2 (t :import/scan-org-notice org-file-count)])
       (when (and (empty? ignored-files-detail) (empty? ignored-assets-detail)
                  (empty? ignored-properties-detail) (empty? validation-errors-detail)
+                 (empty? clock-history-detail)
                  (empty? notifications))
         [:p.text-sm.text-muted-foreground (t :import/scan-empty)])
+      (when clock-history-blocked?
+        [:p.text-sm.text-destructive.mb-2 (t :import/scan-clock-history-blocked)])
       (import-report-section (t :import/report-ignored-files)
                              ignored-files-detail
                              ignored-file-item-view)
@@ -584,12 +592,16 @@
       (import-report-section (t :import/report-validation-errors)
                              validation-errors-detail
                              validation-error-item-view)
+      (import-report-section (t :import/report-clock-history)
+                             clock-history-detail
+                             clock-history-item-view)
       (import-report-section (t :import/report-errors)
                              notifications
                              notification-item-view)]
      [:div.mt-5.sm:mt-4.flex.gap-2
-      (ui/button (t :import/title)
-                 {:on-click on-import})
+      (when-not clock-history-blocked?
+        (ui/button (t :import/title)
+                   {:on-click on-import}))
       (ui/button (t :ui/cancel)
                  {:on-click on-cancel})]]))
 

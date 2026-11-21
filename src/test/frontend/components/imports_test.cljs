@@ -97,6 +97,15 @@
     (is (= :import/loading (:label initial-ui-state))
         "Progress starts as Importing before the worker sends file names.")))
 
+(deftest import-scan-preview-blocks-skipped-clock-history-test
+  (let [blocked? (some-> (resolve 'frontend.components.imports/clock-history-scan-blocked?)
+                          deref)]
+    (is (fn? blocked?))
+    (when (fn? blocked?)
+      (is (true? (blocked? {:clock-history {:tasks-skipped 1}})))
+      (is (false? (blocked? {:clock-history {:tasks-skipped 0}})))
+      (is (false? (blocked? {}))))))
+
 (deftest file-graph-import-file-descriptors-omit-file-contents-test
   (let [file-descriptor (some-> (resolve 'frontend.components.imports/import-file-descriptor)
                                 deref)]
