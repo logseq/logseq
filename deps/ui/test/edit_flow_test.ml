@@ -1288,6 +1288,39 @@ let test_indent_type_double_undo_caret (h : host) =
   check "The double-undo workflow consumes both recorded mutations" (!undos=2 && !history=[]);
   Runtime.worker := Some worker;
   reset_editor ();
+  (* G2 undo-typing: master restore-cursor! prefers start-pos on undo. *)
+  stage_page h [Test_check.block "b1" "abc"];
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:3 ~base:"abc";
+  check "history_editing records master start-pos/end-pos"
+    (match S.history_editing (editing_now ()) with
+     | W.Map kvs ->
+         W.get (W.Map kvs) "start-pos" = Some (W.Int 0)
+         && W.get (W.Map kvs) "end-pos" = Some (W.Int 3)
+         && W.get (W.Map kvs) "caret" = Some (W.Int 3)
+     | _ -> false);
+  let cursor =
+    W.Map
+      [ W.Keyword "block-uuid", W.Uuid "b1"
+      ; W.Keyword "scope", W.String "main"
+      ; W.Keyword "start-pos", W.Int 0
+      ; W.Keyword "end-pos", W.Int 3
+      ; W.Keyword "caret", W.Int 3 ]
+  in
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:3 ~base:"abc";
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool true;
+               W.Keyword "editor-cursors", W.List [cursor] ]) in
+  check "Undo restores start-pos rather than the live end caret"
+    (S.editing_uuid () = Some "b1" && (editing_now ()).model.EM.caret = 0);
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "abc"];
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:0 ~base:"abc";
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool false;
+               W.Keyword "editor-cursors", W.List [cursor] ]) in
+  check "Redo restores end-pos / caret"
+    (S.editing_uuid () = Some "b1" && (editing_now ()).model.EM.caret = 3);
+  reset_editor ();
   Js.Promise.resolve ()
 
 (* ---------- run ---------- *)
@@ -2906,12 +2939,18 @@ let test_structured_paste_completion (h : host) =
         !release ();
         let* _ = operation in
         let* () = h.wait_ms 10 in
-        check ("Structured paste completes without stealing focus: " ^ outcome)
-          (if outcome = "saved" then S.editing () = None && !S.pending_focus = None
-           else Option.map (fun e -> e.S.uuid) (S.editing ()) =
+        check ("Structured paste keeps editing the last insert: " ^ outcome)
+          (Option.map (fun e -> e.S.uuid) (S.editing ()) =
              Some (if outcome = "newer editor" then "other" else "paste-target"));
         check ("Structured paste retains failure state: " ^ outcome) (!failed = (outcome = "rejected"));
-        if outcome = "saved" then check "Structured paste redo does not reopen an editor" (!after = Some W.Nil);
+        if outcome = "saved" then
+          check "Structured paste redo restores the last inserted editor"
+            (match !after with
+             | Some (W.Map kvs) ->
+                 List.assoc_opt (W.Keyword "block-uuid") kvs
+                   = Some (W.Keyword "last-inserted-block")
+                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Keyword "end")
+             | _ -> false);
         reset_editor ();
         run rest
   in

@@ -50,7 +50,10 @@ let update_model uuid f =
              | S.Persisted -> S.history_input_before := Some (S.history_editing e)
              | S.Explicit_draft owner -> changed := Some (e, owner, nm.source));
             Editor_sink.invalidate uuid
-          end;
+          end
+          else if nm.Edit_model.caret <> e.S.model.Edit_model.caret then
+            (* Master updates :editor/start-pos on Arrow movement. *)
+            S.note_editor_start_pos_from_arrow nm.Edit_model.caret;
           { st with S.editing = Some (S.with_model e nm) }
       | _ -> st);
   (match !changed, S.editing () with
@@ -765,6 +768,7 @@ let rec exit_edit ~select =
               (if Lazy.force perf_keys then
                  Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
               Editor_sink.invalidate e.uuid;
+              S.clear_editor_start_pos ();
               let reenter =
                 match !(S.pending_raw_reenter) with
                 | Some u when u = e.uuid && not select ->
@@ -819,6 +823,7 @@ let flush_edit () =
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       Editor_sink.invalidate e.uuid;
+      S.clear_editor_start_pos ();
       S.set (fun st -> { st with S.editing = None });
       Option.iter (fun save ->
           match !active_split_batch with
@@ -2731,24 +2736,30 @@ let paste_history_opts target_uuid =
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
 
 let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
+  (* Master paste-blocks → edit-last-block-after-inserted!: keep editing
+     the last pasted block. Stale/failed/superseded sessions retain their
+     current editor instead. *)
   let context = Runtime.repo (), Runtime.route () in
   let session_current = paste_session_current () in
   let input_seq = !S.edit_input_seq in
-  let opts = Ops.history_opts ~opts:(Ops.op_opts "paste")
-      ~before:(S.history_cursor ()) ~after:Wire.Nil () in
+  let focus = paste_focus () in
+  let opts = paste_history_opts target_uuid in
   let* resp = Ops.apply_and_refresh_result ~opts
       [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
   if context = (Runtime.repo (), Runtime.route ()) && session_current ()
      && input_seq = !S.edit_input_seq && Option.is_some (Ops.last_inserted_uuid resp)
   then begin
-    clear_pending_blur ();
-    cancel_pending_focus ();
-    Option.iter (fun e -> Editor_sink.invalidate e.S.uuid) (S.editing ());
-    let editing = S.editing () in
-    S.set (fun st -> {st with S.editing = None});
-    Option.iter (fun e -> S.notify_edit_exit e.S.uuid) editing
-  end;
-  Js.Promise.resolve resp
+    (* replace-empty swaps the editing block's entity in place — resync
+       the live buffer first so edit_last_inserted's save_if_dirty
+       cannot commit the stale "" over the pasted title *)
+    let* () =
+      if replace_empty then Ops.resync_open_editor ()
+      else Js.Promise.resolve ()
+    in
+    focus resp;
+    Js.Promise.resolve resp
+  end
+  else Js.Promise.resolve resp
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks
@@ -3266,18 +3277,26 @@ let restore_history result =
            let scope = Option.get (Wire.map_get_string cursor "scope") in
            let* title = Ops.title_for_edit (model_title uuid) in
            if not (current ()) then Js.Promise.resolve () else
-           let caret = match Wire.map_get cursor "caret" with
-             | Some (Wire.Int caret) -> caret
-             | Some (Wire.Keyword "end") -> String.length title
-             | _ -> invalid_arg "history caret must be an offset or end" in
+           (* Master restore-cursor!: undo prefers start-pos, redo end-pos. *)
+           let caret =
+             let end_pos = match Wire.map_get cursor "end-pos", Wire.map_get cursor "caret" with
+               | Some (Wire.Int p), _ | _, Some (Wire.Int p) -> p
+               | Some (Wire.Keyword "end"), _ | _, Some (Wire.Keyword "end") ->
+                   String.length title
+               | _ -> invalid_arg "history caret must be an offset or end" in
+             let start_pos = match Wire.map_get cursor "start-pos" with
+               | Some (Wire.Int p) -> Some p
+               | _ -> None in
+             if undo then Option.value start_pos ~default:0 else end_pos in
            let submit_on_enter = match S.editing () with
              | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.submit_on_enter
              | _ -> false in
            let e = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer:title ~scope ~base:title () in
            let e = match Wire.map_get cursor "anchor" with
-             | Some (Wire.Int anchor) ->
+             | Some (Wire.Int anchor) when not undo ->
                  S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
              | _ -> e in
+           S.clear_editor_start_pos ();
            S.set (fun st -> { st with S.editing = Some e;
              S.selected = S.String_set.empty; anchor = None; action_bar = false });
            request_focus uuid caret;

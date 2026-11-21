@@ -39,12 +39,19 @@ let rename uuid new_title =
       Sdk_util.apply_op "rename-page"
         [ Wire.Uuid uuid; Wire.String new_title ]
     in
-    if repo () <> graph || Runtime.route () <> route then Js.Promise.resolve ()
-    else match route with
-    | Model.Page name ->
-        ignore (Router.load_page_ref ~accept_missing:true route (Wire.page_ref name));
-        Js.Promise.resolve ()
-    | _ -> Js.Promise.resolve (reload ())
+    if repo () <> graph then Js.Promise.resolve ()
+    else begin
+      (* Master after-page-renamed!: when the current page was renamed,
+         replace-state to its uuid so the route stays resolvable. Reloading
+         the old title ref with accept_missing cleared route_page and made
+         the next undo report a false Owned_refresh_failed. *)
+      (match route with
+       | Model.Page _ ->
+           Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ uuid))
+       | _ when Runtime.route () = route -> reload ()
+       | _ -> ());
+      Js.Promise.resolve ()
+    end
 
 let delete uuid =
   (* cljs delete-page! stays on the page route; page.cljs recycled?
