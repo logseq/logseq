@@ -240,18 +240,25 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
      them — a consumed key sets prevent_default *)
   check "popup keys are consumed" (keydown st "ArrowDown");
   ignore (keydown st "ArrowUp");
-  (* filtering hides the group banners (cljs get-matched-commands) *)
-  P.ac_update st ac "zzzzzz";
+  (* cljs: short no-match shows "No matched commands"; >2 chars past
+     the last match closes the popup. Group headers stay while filtering. *)
+  P.ac_update st ac "zz";
   (match ac_of st with
    | Some ac ->
        check "unmatched slash query falls back to 'No matched commands'"
          (List.length ac.P.items = 1
-          && (List.hd ac.P.items).P.ai_act = P.Noop);
-       check "filtered slash drops group headers"
-         (List.for_all (fun it -> it.P.ai_hdr = None) ac.P.items);
+          && (List.hd ac.P.items).P.ai_act = P.Noop
+          && (List.hd ac.P.items).P.ai_label = "No matched commands");
        ignore (keydown st "Enter");
        check "the no-match row closes the popup" (ac_of st = None)
    | None -> check "slash popup still open" false);
+  P.open_ac st P.Slash;
+  S.flush s;
+  (match ac_of st with
+   | Some ac ->
+       P.ac_update st ac "zzzzzz";
+       check "long unmatched slash query closes the popup" (ac_of st = None)
+   | None -> check "slash popup reopens" false);
   P.open_ac st P.Slash;
   S.flush s;
   (match ac_of st with
@@ -262,7 +269,9 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
             check "slash fuzzy match keeps Heading 1"
               (List.exists
                  (fun it -> it.P.ai_act = P.Editor_cmd "heading:1")
-                 ac.P.items)
+                 ac.P.items);
+            check "filtered slash keeps group headers"
+              (List.exists (fun it -> it.P.ai_hdr <> None) ac.P.items)
         | None -> check "slash popup still open" false)
    | None -> check "slash popup reopens" false);
   ignore (keydown st "Escape");
@@ -310,12 +319,14 @@ let test_ac_slash_switch st (s : ('m, 'a) S.t) =
   P.close_ac st;
   clear_editing ()
 
-(* cljs: "/" + "Node embed" switches to the page-embed search; an Embed
-   act inserts a block/link embed into the editing block *)
+(* cljs: "/" + "Node embed" clears the slash trigger (input ""), opens
+   block-search; Escape closes the picker and leaves the host text *)
 let test_ac_slash_embed st (s : ('m, 'a) S.t) =
-  stage_main_session [ block "b1" "" ];
-  set_editing "b1" "";
-  P.open_ac st P.Slash;
+  stage_main_session [ block "b1" "host" ];
+  let host = "host" in
+  let buf = host ^ "/Node embed" in
+  set_editing "b1" buf ~caret:(String.length buf);
+  P.open_ac st P.Slash ~tpos:(String.length host);
   S.flush s;
   (match ac_of st with
    | Some ac -> (
@@ -327,14 +338,20 @@ let test_ac_slash_embed st (s : ('m, 'a) S.t) =
        | Some it ->
            P.apply_item st ac ~meta:false it;
            S.flush s;
+           check "node-embed clears slash trigger text"
+             (Editor_actions.live_buffer "b1" = host);
            (match ac_of st with
             | Some ac' ->
                 check "node-embed switches to embed search"
-                  (ac'.P.kind = P.Embed_ref)
+                  (ac'.P.kind = P.Embed_ref);
+                ignore (keydown st "Escape");
+                check "Escape closes embed search and keeps host"
+                  (ac_of st = None
+                   && Editor_actions.live_buffer "b1" = host
+                   && Editor_state.editing_uuid () = Some "b1")
             | None -> check "popup stays open after embed switch" false)
        | None -> check "slash lists a node-embed item" false)
    | None -> check "slash popup opens" false);
-  P.close_ac st;
   clear_editing ()
 
 (* cljs: [[ autopairs ]] and opens the page-search popup; a fresh name

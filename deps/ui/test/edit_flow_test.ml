@@ -1932,7 +1932,14 @@ let test_code_conversion_focus (h : host) =
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (command,title,query,typed,sibling)::rest ->
         reset_editor ();
-        stage_page h [{(Test_check.block "b1" title) with Model.block_display_type=typed}];
+        (* Clear heading is gated like master — only listed when the block
+           already has a heading. normal-text is not a slash label (master
+           exposes Clear heading); keep query empty so filter does not close. *)
+        let block =
+          let b = {(Test_check.block "b1" title) with Model.block_display_type=typed} in
+          if command = "clear-heading" then { b with Model.block_heading = Some 2 }
+          else b in
+        stage_page h [block];
         let source = title ^ "/" ^ query in
         set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
         install_worker ~repo:h.repo h;
@@ -1966,7 +1973,7 @@ let test_code_conversion_focus (h : host) =
     "calculator","","Calc",None,false;"quote","Existing ","Quote",None,false;
     "quote","Existing ","Quote",Some "math",false;"math-block","Existing ","Math",None,false;
     "heading:2","Existing ","Heading",None,false;"clear-heading","Existing ","Clear",None,false;
-    "normal-text","Existing ","Normal",None,false;"number-list","Existing ","Number",None,false]
+    "normal-text","Existing ","",None,false;"number-list","Existing ","Number",None,false]
 
 let test_calculator_exit_structure (h : host) =
   let previous_buffer = !S.code_buffer_of in
@@ -2023,11 +2030,13 @@ let test_query_selection_conversion (h : host) =
         let* () = settle h 40 in
         reset_editor ();
         stage_page h [Test_check.block "b1" title];
-        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:title;
-        A.update_model "b1" (fun m -> EM.select m ~anchor:0 ~focus:(String.length title));
-        Editor_keys.apply_input "b1" (EI.Insert "/");
-        Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Slash;
-        Editor_keys.apply_input "b1" (EI.Insert "Query");
+        (* Real slash flow: host text stays, then "/Query" is typed and
+           erased before Query / Advanced Query runs (master last-pattern). *)
+        let source = title ^ "/Query" in
+        set_editing ~uuid:"b1" ~buffer:source
+          ~caret:(String.length source) ~base:title;
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false
+          popup Popups_state.Slash;
         install_worker ~repo:h.repo h;
         let attempts = ref [] in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
@@ -2053,9 +2062,19 @@ let test_query_selection_conversion (h : host) =
               W.get block "block/uuid"=Some (W.Uuid uuid)
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
-        check "Query conversion preserves the pre-command title in its query property"
+        check "Query conversion matches master Query vs Advanced Query steps"
           (if rejected then not (saves "query-source" title)
-           else saves "query-source" title && saves "b1" ""
+           else if advanced then
+             (* advanced-query-steps: keep host title, empty code query child *)
+             saves "b1" title && saves "query-source" ""
+             && List.mem (Ops.set_block_property "b1" "block/tags"
+                  (W.Keyword "logseq.class/Query")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.node/display-type" (W.Keyword "code")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.code/lang" (W.String "clojure")) batch
+           else
+             saves "query-source" title && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"

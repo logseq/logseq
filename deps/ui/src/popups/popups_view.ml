@@ -198,6 +198,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
          selected background off the shared view signal *)
       Menu_item.menu_link ~key:"lnk"
         ~id:("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
+        ?title:(Signal.get item_sig).S.ai_title
         ~on_click:(fun () ->
           S.apply_index st (Signal.get item_sig).S.ai_idx)
         ~chosen_bg:Menu_item.ac_chosen_bg
@@ -237,8 +238,9 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
 let ac_empty_placeholder (v : S.view) : t =
   let label =
     match v.S.ac with
-    | Some { kind = S.Page_ref | S.Embed_ref | S.Page_embed; _ } ->
+    | Some { kind = S.Page_ref | S.Page_embed; _ } ->
         U.t "editor/search-for-node"
+    | Some { kind = S.Embed_ref; _ } -> U.t "editor/block-search"
     | Some { kind = S.Tag_search; _ } -> U.t "editor/search-for-tag"
     | Some { kind = S.Template_search; _ } ->
         U.t "editor/search-template-placeholder"
