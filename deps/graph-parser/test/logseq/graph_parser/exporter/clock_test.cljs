@@ -82,10 +82,10 @@
     (is (= [0 2] (mapv :source-index clocks)))
     (is (= [{:type :malformed-clock-line :source-index 1 :raw "  CLOCK: garbage"}] diagnostics))))
 
-(def ^:private t10 (ms 2024 1 3 10 0 0))
-(def ^:private t11 (ms 2024 1 3 11 0 0))
-(def ^:private t13 (ms 2024 1 3 13 0 0))
-(def ^:private t1430 (ms 2024 1 3 14 30 0))
+(defn- t10 [] (ms 2024 1 3 10 0 0))
+(defn- t11 [] (ms 2024 1 3 11 0 0))
+(defn- t13 [] (ms 2024 1 3 13 0 0))
+(defn- t1430 [] (ms 2024 1 3 14 30 0))
 
 (def ^:private two-clocks
   ["CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  01:00:00" "\n"
@@ -94,22 +94,22 @@
 (deftest status-history-test
   (testing "Done task: intermediate closes Todo, last closes with current status"
     (let [r (history two-clocks :done)]
-      (is (= [[t10 :doing] [t11 :todo] [t13 :doing] [t1430 :done]] (event-seq r)))
+      (is (= [[(t10) :doing] [(t11) :todo] [(t13) :doing] [(t1430) :done]] (event-seq r)))
       (is (= 2 (:completed-sessions r)))
       (is (= 0 (:open-sessions r)))
       (is (empty? (:diagnostics r)))))
   (testing "Todo task with one completed clock"
-    (is (= [[t10 :doing] [t11 :todo]]
+    (is (= [[(t10) :doing] [(t11) :todo]]
            (event-seq (history [(first two-clocks)] :todo)))))
   (testing "Doing task with completed clocks only closes the last with Todo"
-    (is (= [[t10 :doing] [t11 :todo] [t13 :doing] [t1430 :todo]]
+    (is (= [[(t10) :doing] [(t11) :todo] [(t13) :doing] [(t1430) :todo]]
            (event-seq (history two-clocks :doing)))))
   (testing "Custom status closes the last interval"
-    (is (= [[t10 :doing] [t11 :waiting]]
+    (is (= [[(t10) :doing] [(t11) :waiting]]
            (event-seq (history [(first two-clocks)] :waiting)))))
   (testing "Doing task with a final open clock"
     (let [r (history [(first two-clocks) "\n" "CLOCK: [2024-01-03 Wed 13:00:00]"] :doing)]
-      (is (= [[t10 :doing] [t11 :todo] [t13 :doing]] (event-seq r)))
+      (is (= [[(t10) :doing] [(t11) :todo] [(t13) :doing]] (event-seq r)))
       (is (= 1 (:completed-sessions r)))
       (is (= 1 (:open-sessions r)))))
   (testing "Open clock on a non-Doing task is reported and produces no history"
@@ -128,23 +128,23 @@
       (is (empty? (:diagnostics r)))))
   (testing "shorter printed duration wins and is reported"
     (let [r (history ["CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 14:00:00] =>  01:15:00"] :done)]
-      (is (= [[t10 :doing] [(ms 2024 1 3 11 15 0) :done]] (event-seq r)))
+      (is (= [[(t10) :doing] [(ms 2024 1 3 11 15 0) :done]] (event-seq r)))
       (is (= [:duration-adjusted] (diag-types r)))
-      (is (= {:recorded-start t10 :recorded-end (ms 2024 1 3 14 0 0)
+      (is (= {:recorded-start (t10) :recorded-end (ms 2024 1 3 14 0 0)
               :printed-duration "01:15:00" :effective-end (ms 2024 1 3 11 15 0)}
              (select-keys (first (:diagnostics r))
                           [:recorded-start :recorded-end :printed-duration :effective-end])))))
   (testing "longer printed duration wins"
     (let [r (history ["CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 10:30:00] =>  05:00:00"] :done)]
-      (is (= [[t10 :doing] [(ms 2024 1 3 15 0 0) :done]] (event-seq r)))
+      (is (= [[(t10) :doing] [(ms 2024 1 3 15 0 0) :done]] (event-seq r)))
       (is (= [:duration-adjusted] (diag-types r)))))
   (testing "no printed duration uses the recorded range"
-    (is (= [[t10 :doing] [t11 :done]]
+    (is (= [[(t10) :doing] [(t11) :done]]
            (event-seq (history ["CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00]"] :done)))))
   (testing "zero, negative and malformed durations fall back to a valid range"
     (doseq [d ["00:00:00" "-01:00:00" "nonsense" "09:99:00"]]
       (let [r (history [(str "CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00] =>  " d)] :done)]
-        (is (= [[t10 :doing] [t11 :done]] (event-seq r)) d)
+        (is (= [[(t10) :doing] [(t11) :done]] (event-seq r)) d)
         (is (= [:invalid-duration] (diag-types r)) d))))
   (testing "invalid duration and invalid range skips the task"
     (let [r (history ["CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 10:00:00] =>  00:00:00"] :done)]
@@ -158,7 +158,7 @@
 
 (deftest ordering-and-overlap-test
   (testing "out-of-order clocks are sorted"
-    (is (= [[t10 :doing] [t11 :todo] [t13 :doing] [t1430 :done]]
+    (is (= [[(t10) :doing] [(t11) :todo] [(t13) :doing] [(t1430) :done]]
            (event-seq (history (reverse (filter #(not= "\n" %) two-clocks)) :done)))))
   (testing "a reversed range skips the task"
     (let [r (history ["CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 10:00:00]"] :done)]
@@ -179,7 +179,7 @@
     (let [r (history ["CLOCK: [2024-01-03 Wed 10:00:00]--[2024-01-03 Wed 11:00:00]"
                       "CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 12:00:00]"] :done)
           times (mapv :ms (:events r))]
-      (is (= [[t10 :doing] [(dec t11) :todo] [t11 :doing] [(ms 2024 1 3 12 0 0) :done]]
+      (is (= [[(t10) :doing] [(dec (t11)) :todo] [(t11) :doing] [(ms 2024 1 3 12 0 0) :done]]
              (event-seq r)))
       (is (apply < times) "strictly increasing")
       (is (= [:boundary-adjusted] (diag-types r)))))
@@ -230,10 +230,10 @@
         (is (= 0 (:completed-sessions r)))
         (is (= [:zero-length-clock] (diag-types r)) "reported once, not also as an invalid duration"))))
   (testing "the task's other clocks are imported whatever the order"
-    (is (= [[t10 :doing] [t11 :done]] (event-seq (history [zero real-10-11] :done))))
-    (is (= [[t10 :doing] [t11 :done]] (event-seq (history [real-10-11 zero-no-duration] :done))))
+    (is (= [[(t10) :doing] [(t11) :done]] (event-seq (history [zero real-10-11] :done))))
+    (is (= [[(t10) :doing] [(t11) :done]] (event-seq (history [real-10-11 zero-no-duration] :done))))
     (let [r (history [real-10-11 zero real-13-14] :done)]
-      (is (= [[t10 :doing] [t11 :todo] [t13 :doing] [(ms 2024 1 3 14 0 0) :done]] (event-seq r)))
+      (is (= [[(t10) :doing] [(t11) :todo] [(t13) :doing] [(ms 2024 1 3 14 0 0) :done]] (event-seq r)))
       (is (= 2 (:completed-sessions r)))
       (is (= [:zero-length-clock] (diag-types r)))))
   (testing "a zero-length clock on a closing boundary creates no same-millisecond event"
@@ -250,10 +250,10 @@
                       "CLOCK: [2024-01-03 Wed 11:29:35]--[2024-01-03 Wed 11:29:36] =>  00:00:01"] :done)]
       (is (= [[(ms 2024 1 3 11 29 35) :doing] [(ms 2024 1 3 11 29 36) :done]] (event-seq r)))))
   (testing "a Todo task closes its real clock with Todo"
-    (is (= [[t10 :doing] [t11 :todo]] (event-seq (history [zero real-10-11] :todo)))))
+    (is (= [[(t10) :doing] [(t11) :todo]] (event-seq (history [zero real-10-11] :todo)))))
   (testing "a Doing task keeps its open clock and its completed clock"
     (let [r (history [real-10-11 zero "CLOCK: [2024-01-03 Wed 15:00:00]"] :doing)]
-      (is (= [[t10 :doing] [t11 :todo] [(ms 2024 1 3 15 0 0) :doing]] (event-seq r)))
+      (is (= [[(t10) :doing] [(t11) :todo] [(ms 2024 1 3 15 0 0) :doing]] (event-seq r)))
       (is (= 1 (:open-sessions r)))))
   (testing "equal start and end with a valid printed duration still imports the duration"
     (let [r (history ["CLOCK: [2024-01-03 Wed 14:00:00]--[2024-01-03 Wed 14:00:00] =>  00:10:00"] :done)]
@@ -273,14 +273,14 @@
                       "CLOCK: [2024-01-03 Wed 11:00:00]--[2024-01-03 Wed 13:00:00]"] :done)
           d (first (:diagnostics r))]
       (is (= :overlapping-clocks (:type d)))
-      (is (= {:start t10 :end (ms 2024 1 3 12 0 0)} (:first d)))
-      (is (= {:start t11 :end (ms 2024 1 3 13 0 0)} (:second d)))))
+      (is (= {:start (t10) :end (ms 2024 1 3 12 0 0)} (:first d)))
+      (is (= {:start (t11) :end (ms 2024 1 3 13 0 0)} (:second d)))))
   (testing "open-clock problems carry the start of the open clock"
-    (is (= [t10 t13]
+    (is (= [(t10) (t13)]
            (:starts (first (:diagnostics (history ["CLOCK: [2024-01-03 Wed 10:00:00]"
                                                    "CLOCK: [2024-01-03 Wed 13:00:00]"] :doing))))))
-    (is (= t10
+    (is (= (t10)
            (:start (first (:diagnostics (history ["CLOCK: [2024-01-03 Wed 10:00:00]"
                                                   "CLOCK: [2024-01-03 Wed 13:00:00]--[2024-01-03 Wed 14:00:00]"] :doing))))))
-    (is (= t13
+    (is (= (t13)
            (:start (first (:diagnostics (history ["CLOCK: [2024-01-03 Wed 13:00:00]"] :done))))))))
