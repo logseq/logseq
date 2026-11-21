@@ -618,9 +618,9 @@ let day_diff ~y ~m ~d =
 
 let date_label y m d =
   match day_diff ~y ~m ~d with
-  | 0 -> "Today"
-  | -1 -> "Yesterday"
-  | 1 -> "Tomorrow"
+  | 0 -> I18n.t "date.nlp/today"
+  | -1 -> I18n.t "date.nlp/yesterday"
+  | 1 -> I18n.t "date.nlp/tomorrow"
   | _ -> Dates.journal_title_ymd ~y ~m ~d
 
 (* cljs components/block.cljs timestamp: span.timestamp keeps the

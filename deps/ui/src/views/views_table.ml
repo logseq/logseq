@@ -64,10 +64,12 @@ let column_of_property (p : W.t) : V.column option =
       in
       if skip then None
       else
+        let fallback =
+          Option.value (W.map_get_string p "block/title") ~default:ident
+        in
         Some
           { V.c_id = ident
-          ; c_name =
-              Option.value (W.map_get_string p "block/title") ~default:ident
+          ; c_name = I.built_in_display_title ~ident ~fallback ()
           ; c_type = ty
           ; c_prop = Some p
           ; c_disable_hide = false
@@ -169,7 +171,11 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
           V.c_many = true }
   | "block/page" -> Some (page_column ())
   | "block/journal-day" ->
-      Some (builtin_column ident (titleize_ident ident) "datetime" ())
+      let fallback = titleize_ident ident in
+      Some
+        (builtin_column ident
+           (I.built_in_display_title ~ident ~fallback ())
+           "datetime" ())
   | "logseq.property/type" ->
       (match Hashtbl.find_opt s.V.all_props ident with
        | Some p -> column_of_property p
@@ -181,7 +187,11 @@ let column_of_ident (s : V.vstate) (ident : string) : V.column option =
       match Hashtbl.find_opt s.V.all_props ident with
       | Some p -> column_of_property p
       | None ->
-          Some (builtin_column ident (titleize_ident ident) "default" ()))
+          let fallback = titleize_ident ident in
+          Some
+            (builtin_column ident
+               (I.built_in_display_title ~ident ~fallback ())
+               "default" ()))
 
 let build_columns (inst : V.inst) (properties : W.t list) : V.column list =
   let s = V.get inst in

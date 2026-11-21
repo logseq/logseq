@@ -116,6 +116,9 @@ jobs:
       - name: Test OCaml translation validation
         run: node --test scripts/test-ui-i18n.mjs
 
+      - name: Test LUI translation keys exist in en.edn
+        run: node --test scripts/test-lui-i18n-keys.mjs
+
       - name: Install publishing test browser
         run: pnpm exec playwright install --with-deps chromium
 

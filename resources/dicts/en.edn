@@ -564,6 +564,7 @@
  :editor.slash/link-desc "Create a HTTP link"
  :editor.slash/math-block "Math block"
  :editor.slash/math-block-desc "Create a LaTeX block"
+ :editor.slash/no-matched-commands "No matched commands"
  :editor.slash/no-priority "No priority"
  :editor.slash/node-embed "Node embed"
  :editor.slash/node-embed-desc "Embed a node here"
@@ -660,6 +661,7 @@
  :export/debug-transit-desc "Exports to a .transit file to send to us for debugging. Any sensitive data will be removed in the exported file."
  :export/debug-transit-file "Export debug transit file"
  :export/edn-desc "Exports to a readable and editable .edn file. Don't rely on this as a primary backup."
+ :export/error-unexpected "An unexpected error occurred during export. See the javascript console for details."
  :export/exporting "Exporting"
  :export/finalizing "Finalizing"
  :export/format-text "Text"
@@ -1939,6 +1941,7 @@
  :sidebar.right/toggle "Toggle right sidebar"
 
  :storage/db-worker-crashed-error "The database worker stopped unexpectedly. Please reload the app."
+ :storage/invalid-data-writing "Invalid data writing to db!"
  :storage/sqlitedb-error "SQLiteDB error: {1}"
  :storage/sqlitedb-import-error "SQLiteDB import error: {1}"
  :storage/sqlitedb-save-error "SQLiteDB save error: {1}"

@@ -688,6 +688,27 @@ let test_ui_strings () =
     ({js|{{中文 café 😀}}|js}
      |> I18n.replace_all ~pat:"{{" ~rep:""
      |> I18n.replace_all ~pat:"}}" ~rep:"");
+  check "built-in property ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.property/status"
+     = Some "property.built-in/status");
+  check "built-in closed-value ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.property/status.todo"
+     = Some "property.status/todo");
+  check "built-in nested property ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.property.code/lang"
+     = Some "property.built-in/code-lang");
+  check "built-in class ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.class/Task"
+     = Some "class.built-in/task");
+  check "built-in block ident→key strips ?"
+    (I18n.built_in_ident_to_i18n_key "block/collapsed?"
+     = Some "property.built-in/collapsed");
+  check "user property ident→key is None"
+    (I18n.built_in_ident_to_i18n_key "user.property/custom" = None);
+  eqs "built-in display title uses dict" "Status"
+    (I18n.built_in_display_title ~ident:"logseq.property/status" ~fallback:"RAW" ());
+  eqs "built-in display title falls back when key missing" "RAW"
+    (I18n.built_in_display_title ~ident:"logseq.property/no-such-thing" ~fallback:"RAW" ());
   (* this runner is macOS (navigator.platform = MacIntel): mod -> ⌘ *)
   eqs "decorate mod" (Platform.decode_utf8_bytes "\xe2\x8c\x98" ^ "+enter")
     (Commands_data.decorate_binding "mod+enter");
@@ -1090,7 +1111,42 @@ let test_decode6 () =
     (Decode.toast_of_wire (Wire.Array [ Wire.String "m" ]) = None);
   check "toast non-string msg -> None"
     (Decode.toast_of_wire (Wire.Array [ Wire.Int 1; Wire.String "x" ])
-     = None)
+     = None);
+  (* cljs frontend.handler.worker prefers :i18n-key over a Nil message *)
+  check "toast i18n-key resolves via translate"
+    ((Option.get
+        (Decode.toast_of_wire
+           ~translate:(fun key args ->
+             key ^ ":" ^ String.concat "," args)
+           (Wire.Array
+              [ Wire.Nil
+              ; Wire.Keyword "error"
+              ; Wire.Nil
+              ; Wire.Nil
+              ; Wire.Nil
+              ; Wire.Map
+                  [ ( Wire.Keyword "i18n-key"
+                    , Wire.Keyword "export/error-unexpected" )
+                  ; ( Wire.Keyword "i18n-args"
+                    , Wire.Array [ Wire.String "a"; Wire.String "b" ] )
+                  ] ])))
+       .Model.toast_text
+     = "export/error-unexpected:a,b");
+  check "toast i18n-key wins over literal message"
+    ((Option.get
+        (Decode.toast_of_wire
+           ~translate:(fun key _ -> "translated:" ^ key)
+           (Wire.Array
+              [ Wire.String "literal"
+              ; Wire.Keyword "success"
+              ; Wire.Bool true
+              ; Wire.Nil
+              ; Wire.Int 1000
+              ; Wire.Map
+                  [ ( Wire.Keyword "i18n-key"
+                    , Wire.Keyword "graph.validation/valid" ) ] ])))
+       .Model.toast_text
+     = "translated:graph.validation/valid")
 
 (* ---- Editor_state pure helpers ---- *)
 
