@@ -8,7 +8,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t t-en]]
+            [frontend.context.i18n :refer [locale-format-date t t-en]]
             [frontend.db.subs :as db-subs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
@@ -349,7 +349,7 @@
 (defn- clock-ms-text
   [ms]
   (when ms
-    (.toLocaleString (js/Date. ms) js/undefined #js {:dateStyle "medium" :timeStyle "medium"})))
+    (locale-format-date (js/Date. ms) {:dateStyle "medium" :timeStyle "medium"})))
 
 (defn- clock-range-text
   [{:keys [start end]}]
