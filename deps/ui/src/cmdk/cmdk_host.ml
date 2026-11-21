@@ -308,6 +308,19 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
         | None -> ())
   ; appearance_popup =
       Runtime.toggle_appearance
+  ; open_themes_select =
+      (fun () ->
+        Themes_select_view.open_
+          ~select:(fun theme ->
+            Plugin_host.core_select_theme
+              (Sdk_json.to_js (Sdk_convert.json_of_wire ~camel:false theme)))
+          ~selected:!Plugin_host.selected_theme
+          ~themes:
+            (List.map
+               (fun theme -> Sdk_convert.wire_of_json (Sdk_json.of_js theme))
+               !Plugin_host.installed_themes)
+          ())
+
   ; dialogs_open = Dialogs_state.open_
   ; dialogs_close = Dialogs_state.close_named
   ; dialogs_is_open = Dialogs_state.is_open
@@ -329,12 +342,8 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
             Sidebar_state.ensure_right_open ();
             List.iter (fun u -> Sidebar_state.open_uuid sst u) us))
   ; sidebar_clear =
-      (fun () ->
-        with_sidebar (fun sst ->
-            List.iter
-              (fun (i : Sidebar_state.item) ->
-                Sidebar_state.remove_item sst i.Sidebar_state.key)
-              (Runtime.signal_get sst.Sidebar_state.items)))
+      (* cljs :sidebar/clear — clear-sidebar-blocks! then hide-right-sidebar! *)
+      (fun () -> with_sidebar Sidebar_state.clear_items)
   ; sidebar_close_top =
       (fun () ->
         with_sidebar (fun sst ->
@@ -342,10 +351,18 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
             | top :: _ -> Sidebar_state.remove_item sst top.Sidebar_state.key
             | [] -> ()))
   ; sidebar_ensure_contents =
+      (* cljs toggle-contents!: remove when present, otherwise add *)
       (fun () ->
         with_sidebar (fun sst ->
-            Sidebar_state.ensure_right_open ();
-            Sidebar_state.open_sticky_item sst "contents"))
+            match
+              List.find_opt
+                (fun (it : Sidebar_state.item) -> it.key = "contents")
+                (Runtime.signal_get sst.Sidebar_state.items)
+            with
+            | Some _ -> Sidebar_state.remove_item sst "contents"
+            | None ->
+                Sidebar_state.ensure_right_open ();
+                Sidebar_state.open_sticky_item sst "contents"))
   ; sidebar_open_cards = Sidebar_state.open_cards
   ; sidebar_toggle_favorite =
       (fun () -> with_sidebar Sidebar_state.toggle_favorite)
@@ -378,6 +395,7 @@ let services ?(root = ".cp__cmdk__modal") () : Svs.t =
   ; ensure_comments =
       (fun ~repo ~uuids ->
         if Runtime.repo () = repo then Comments_ops.ensure_for ~on_ready:(fun _ -> ()) uuids)
+  ; add_comment = Comments.add_comment
   ; toggle_left_sidebar = (fun () -> Runtime.send Action.Toggle_left_sidebar)
   ; toggle_right_sidebar = (fun () ->
       Runtime.send Action.Toggle_right_sidebar;

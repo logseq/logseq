@@ -994,18 +994,46 @@ let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close
   let finish () =
     if Ui_effect.is_current open_requests ticket then retire_open ()
   in
+  (* Bare entity-by-ident lacks property/closed-values; the property-page
+     configure path already merges D.closed_values — do the same so
+     status/priority shortcuts list every closed choice on a clean graph
+     instead of falling through to property_values (default Todo only /
+     empty priority). *)
   let lookup = Js.Promise.catch (fun error -> Js.Promise.resolve (Error error))
     (let* prop = D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ]) in
-     Js.Promise.resolve (Ok prop))
+     let* closed = D.closed_values (W.Keyword ident) in
+     Js.Promise.resolve (Ok (prop, closed)))
+  in
+  (* cljs :editor/new-property {:property-key _} anchors at the block;
+     Centered would show the "Add or change property" dialog title. *)
+  let placement_for_block () =
+    match placement with
+    | Centered -> (
+        match
+          Ui_services.dom_query
+            (".ls-block[data-blockid='" ^ uuid ^ "']")
+        with
+        | Some blk ->
+            let rx, ry, rw, rh = blk.Ui_services.rect () in
+            if rx <> 0. || ry <> 0. || rw <> 0. || rh <> 0. then
+              Point (rx +. 24., ry +. rh +. 4.)
+            else Centered
+        | None -> Centered)
+    | other -> other
   in
   ignore (let* result = lookup in
     let active = valid () in
     finish ();
     (match result with
-     | Ok prop when active ->
+     | Ok (prop, closed) when active ->
          (match D.untag prop with
-          | W.Map _ as p ->
-              open_at ?on_close ~remove:false ~phase:(Value_edit p) placement
+          | W.Map fields ->
+              let p =
+                W.Map
+                  ((W.Keyword "property/closed-values", closed) :: fields)
+              in
+              open_at ?on_close ~remove:false ~phase:(Value_edit p)
+                (placement_for_block ())
                 { uuid; uuids; db_id = None; is_tag = false; title = "" }
           | _ -> ())
      | Error error when active ->

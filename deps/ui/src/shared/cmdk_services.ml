@@ -158,6 +158,7 @@ type t =
       -> on_chosen:(icon_choice -> unit) -> unit
   ; appearance_popup : unit -> unit (* anchored on the toolbar dots *)
     (* -- dialogs/settings ---------------------------------------------------- *)
+  ; open_themes_select : unit -> unit (* classic installed-themes dialog *)
   ; dialogs_open : string -> unit
   ; dialogs_close : string -> unit
   ; dialogs_is_open : string -> bool
@@ -202,6 +203,7 @@ type t =
   ; redo : unit -> unit
   ; quick_add : unit -> unit
   ; toggle_own_list : string list -> unit
+  ; add_comment : unit -> unit
   ; ensure_comments : repo:string -> uuids:string list -> unit
     (* -- misc app effects -------------------------------------------------------- *)
   ; toggle_left_sidebar : unit -> unit

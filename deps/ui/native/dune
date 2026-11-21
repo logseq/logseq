@@ -106,6 +106,8 @@
 (rule
  (copy ../src/dialogs/quick_add_view.ml quick_add_view.ml))
 (rule
+ (copy ../src/dialogs/themes_select_view.ml themes_select_view.ml))
+(rule
  (copy ../src/dialogs/ui_requests.ml ui_requests.ml))
 (rule
  (copy ../src/editor/block_parse.ml block_parse.ml))
