@@ -14,6 +14,7 @@
             [datascript.storage :as storage]
             [goog.object :as gobj]
             [logseq.common.config :as common-config]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.path :as path]
             [logseq.common.util :as common-util]
             [logseq.common.util.block-ref :as block-ref]
@@ -46,6 +47,10 @@
             [logseq.graph-parser.text :as text]
             [logseq.graph-parser.utf8 :as utf8]
             [promesa.core :as p]))
+
+(defkeywords
+  :import-clock-history? {:doc "Whether an OG graph import converts CLOCK entries to task status history."}
+  :clock-history {:doc "Clock-history import counts and diagnostics shared by the exporter and its callers."})
 
 (defn- add-missing-timestamps
   "Add updated-at or created-at timestamps if they doesn't exist.
