@@ -349,10 +349,11 @@ does not redirect the newer route. Empty titles and failed writes do not navigat
 
 ## Slash Query conversion after selection replacement
 
-Simple Query takes its initial search text from the saved editing snapshot,
+Simple Query takes its initial search text from the slash popup's editing snapshot,
 matching Master's `run-query-command!`, rather than the transient slash input.
 For example, replacing `G5RegressionToken` with `/Query` and choosing Query
 creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
 to retain the slash-cleared live host title and create an empty code query.
+Autosave while the menu is open does not replace this captured search text.
 Conversion clears editing without starting a second, competing save-exit write;
 rejected conversion does not leave a transient slash-title override behind.

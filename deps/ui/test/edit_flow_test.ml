@@ -2291,6 +2291,11 @@ let test_query_selection_conversion (h : host) =
         Popups_state.open_ac ~tpos:(if replace then 0 else String.length title) ~autopair:false
           popup Popups_state.Slash;
         install_worker ~repo:h.repo h;
+        let* () =
+          if replace && title <> "" && not rejected then begin
+            Outliner_ops.schedule_save "b1" source;
+            Outliner_ops.flush_pending_save ()
+          end else Js.Promise.resolve () in
         let attempts = ref [] in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
           if name="thread-api/apply-outliner-ops" then begin

@@ -1959,11 +1959,10 @@ let query_property_uuid w =
   | [] -> ""
 
 let run_query t ac ~advanced =
-  match Editor_state.editing () with
-  | None -> ()
-  | Some editing ->
+  match ac.editor, Editor_state.editing () with
+  | Some snapshot, Some editing when ac_current ac ->
       let buuid = editing.Editor_state.uuid in
-      let query_title = editing.Editor_state.base in
+      let query_title = snapshot.Editor_state.base in
       Outliner_ops.cancel_pending_save ();
       erase_trigger_text ac;
       close_ac t;
@@ -2026,6 +2025,7 @@ let run_query t ac ~advanced =
                     (Wire.Keyword "logseq.class/Query") ]
               [ (quuid, query_title); (buuid, "") ])
         |> Views_db.catch_quiet)
+  | _ -> ()
 
 exception Unsupported_configured_input
 
