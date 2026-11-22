@@ -198,6 +198,7 @@ let breadcrumb crumbs =
 
 let item_title (it : Sidebar_state.item) =
   match it.breadcrumb, it.kind with
+  | _, "block-ref" -> text ~key:"pt-block-refs" ~value:(t "reference/blocks") []
   | [], "page" ->
       let icon =
         match it.Sidebar_state.page with
@@ -235,10 +236,6 @@ let item_title (it : Sidebar_state.item) =
       (* cljs :search item header: ti-search icon + the query *)
       row ~key:"pt-search" ~cross:`center ~gap:8
         [ icon_ "search"; text ~value:it.title [] ]
-  | [], "block-ref" ->
-      (* cljs :block-ref header is (t :reference/blocks), not the
-         referenced block's title. *)
-      text ~key:"pt-block-ref" ~value:(t "reference/blocks") []
   | [], _ -> text ~key:"pt-plain" ~value:it.title []
   | crumbs, _ -> breadcrumb crumbs
 
@@ -696,13 +693,6 @@ let item_body ?search st idx (it : Sidebar_state.item) =
         ~padding_horizontal:8
         ~data_attrs:[ ("style", "padding-top:8px") ]
         [ help_pane st ]
-  | "block-ref" ->
-      box ~key:("body-" ^ it.key)
-        ~accessibility_identifier:("sidebar-panel-content-" ^ n)
-        ~style_class:"sidebar-panel-content" ~padding:8
-        [match it.Sidebar_state.uuid with
-         | Some uuid -> Page.references_view ~page_uuid:uuid ~has_refs:true ()
-         | None -> Logseq_el.nothing]
   | _ ->
   box ~key:("body-" ^ it.key)
     ~accessibility_identifier:("sidebar-panel-content-" ^ n)
@@ -725,6 +715,7 @@ let item_body ?search st idx (it : Sidebar_state.item) =
             ~data_attrs:[ ("style", "margin-bottom:0;padding-bottom:64px") ]
             (sidebar_props_row st it
              @ object_tabs_host it
+             @ (if it.kind = "block-ref" then [breadcrumb it.breadcrumb] else [])
              @ [ box ~key:("pbi-" ^ it.key)
                  ~style_class:"ls-page-blocks"
                  ~margin_left:(-20) ~min_height:60
@@ -757,6 +748,8 @@ let item_body ?search st idx (it : Sidebar_state.item) =
              ]
             (* linked references sit inside .page-inner in cljs *)
             @ (match it.kind, it.uuid with
+               | "block-ref", Some uuid ->
+                   [ Page.references_view ~page_uuid:uuid ~has_refs:true () ]
                | "page", Some uuid when it.linked_refs <> [] ->
                    [ Page.references_view ~page_uuid:uuid
                        ~has_refs:(it.linked_refs <> []) () ]

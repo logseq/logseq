@@ -112,15 +112,12 @@ let lang_menu ~scope ~key st mst =
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
-         Lui_elements.dropdown_menu_item
-              ~style:(Slot_style.make ~font_size:"0.875rem" ~line_height:"1.25rem"
-                ~hover_background:"hsl(var(--muted))" ())
+         Ui_components.dropdown_menu_item
               ~key:(Printf.sprintf "lmi-%s-%d" key i)
               ~text:label ~selection_placement:`leading
               ~selected:(code = current_lang ())
               ~gap:8 ~padding_horizontal:8 ~padding_vertical:6
               ~corner_radius:4 ~min_height:32
-              ~foreground:"hsl(var(--popover-foreground))"
               ~on_press:(fun _ev ->
                 Signal.set st label;
                 set_language ~on_error:(fun () ->

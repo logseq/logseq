@@ -19,8 +19,6 @@ let separator_cls = "ui__dropdown-menu-separator"
    their own divs *)
 let item_attrs = [ ("role", "menuitem"); ("tabindex", "-1") ]
 
-let chrome = Ui_components.menu_item_chrome
-
 let submenu_content ~label =
   row ~key:"submenu-content" ~cross:`center ~grow:1. ~gap:0
     [ Ui_components.with_props [Ui_components.Prop.white_space `nowrap]
@@ -36,26 +34,19 @@ let el ?(cls = base_cls) ?(attrs = item_attrs) ~key ?(before = [])
     ?(after = []) ?(data_attrs = []) ?icon ?label ?label_signal
     ?disabled ?disabled_signal ?checked ?checked_signal ~on_click () =
   ignore attrs;
-  Ui_components.with_props
-    [Ui_components.Prop.focus_shadow
-      "inset 0 0 0 999px var(--lx-gray-05, hsl(var(--muted)))"]
-  (chrome
-    (menu_item ~key ~style_class:cls ~data_attrs ?text:label ?text_signal:label_signal ?icon
+  Ui_components.menu_item ~key ~style_class:cls ~data_attrs ?text:label ?text_signal:label_signal ?icon
        ?disabled ?disabled_signal ?checked ?checked_signal
        ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4
        ~on_press:(fun _ -> on_click ())
-       (before @ after)))
+       (before @ after)
 
 let dropdown_el ?(cls = base_cls) ~key ?(data_attrs = []) ?icon ?label ?label_signal ?height ?(after = [])
     ?disabled ?disabled_signal ?checked ?checked_signal ~on_click () =
-  Lui_elements.dropdown_menu_item ~key ~style_class:cls ~data_attrs
+  Ui_components.dropdown_menu_item ~key ~style_class:cls ~data_attrs
     ?text:label ?text_signal:label_signal ?icon ?disabled ?disabled_signal
     ?checked ?checked_signal ?height ~variant:`ghost ~main:`start
     ~gap:4 ~padding_horizontal:8 ~padding_vertical:6 ~corner_radius:4 ~min_height:0
     ~foreground:"inherit"
-    ~style:(Slot_style.make ~font_size:"0.875rem" ~line_height:"1.42857"
-      ~hover_background:"var(--lx-gray-05, hsl(var(--muted)))"
-      ~focus_shadow:"inset 0 0 0 999px var(--lx-gray-05, hsl(var(--muted)))" ())
     ~on_press:(fun () -> on_click ()) after
 
 (* retained-tree separator — the old lui-core rule carried height:1px,

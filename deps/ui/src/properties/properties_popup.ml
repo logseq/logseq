@@ -51,7 +51,7 @@ let virtual_anchor_for_id identifier =
    is the extra root class the e2e contract requires (e.g.
    "ui__popover-content", "ls-property-dropdown"). Returns the
    view-overlay key. *)
-let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_source
+let open_at_key ~key ?(role = `dialog) ?(cls = "") ?width ?padding ?anchor_source
     ?(anchor_alignment = `start) ?(fill_available = false)
     ?anchor_offset:anchor_offset_override
     ?anchor_alignment_offset:anchor_alignment_offset_override
@@ -77,8 +77,8 @@ let open_at_key ~key ?(role = `dialog) ?(cls = "") ?padding ?anchor_source
          cap at the available height *)
       ?max_height:(if fill_available then Some (int_of_float (Float.max avail 120.))
                    else None)
-      ?padding ~background:"hsl(var(--popover))"
-      ~foreground:"hsl(var(--popover-foreground))"
+      ?width ?padding ~background:"hsl(var(--popover))"
+      ~foreground:(if role = `menu then "inherit" else "hsl(var(--popover-foreground))")
       ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
       ~available_height:(Float.max avail 120.)
       ~transition:Ui_components.popover_transition
@@ -112,7 +112,7 @@ let measure_anchor ~is_current (anchor : Ui_services.el) f =
   in
   go 4
 
-let open_from_anchor ?role ?(cls = "") ?padding ?(freeze_anchor = false) ?anchor_offset
+let open_from_anchor ?role ?(cls = "") ?width ?padding ?(freeze_anchor = false) ?anchor_offset
     ?anchor_alignment_offset ?(anchor_alignment = `start) ?fill_available ~right
     (anchor : Ui_services.el) content =
   let key = next_key () in
@@ -145,14 +145,14 @@ let open_from_anchor ?role ?(cls = "") ?padding ?(freeze_anchor = false) ?anchor
         else
           x +. anchor_alignment_offset, y +. h +. anchor_offset
       in
-      open_at_key ~key ?role ~cls ?padding ~anchor_alignment ?fill_available
+      open_at_key ~key ?role ~cls ?width ?padding ~anchor_alignment ?fill_available
         ?anchor_source ~anchor_offset
         ~anchor_alignment_offset ~right ~x ~y content);
   key
 
-let open_anchored ?role ?cls ?padding ?freeze_anchor ?anchor_offset ?anchor_alignment_offset
+let open_anchored ?role ?cls ?width ?padding ?freeze_anchor ?anchor_offset ?anchor_alignment_offset
     ?anchor_alignment ?fill_available anchor content =
-  open_from_anchor ?role ?cls ?padding ?freeze_anchor ?anchor_offset ?anchor_alignment_offset
+  open_from_anchor ?role ?cls ?width ?padding ?freeze_anchor ?anchor_offset ?anchor_alignment_offset
     ?anchor_alignment ?fill_available
     ~right:false anchor content
 

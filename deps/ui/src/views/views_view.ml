@@ -272,7 +272,8 @@ let query_setting_el inst : t =
         ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500 [] ]
 
 let query_builder_el inst ~active (s : V.vstate) : t =
-  let current () = active () && (V.get inst).V.qsrc = s.V.qsrc in
+  let tree = Views_builder.tree_for inst in
+  let current () = active () && Views_builder.tree_for inst == tree in
   let untitled =
     Ui_components.with_props
       [ Ui_components.Prop.opacity 0.75; Ui_components.Prop.hover_opacity 1. ]
@@ -288,7 +289,7 @@ let query_builder_el inst ~active (s : V.vstate) : t =
   | Ok _ ->
       row ~key:"query-builder-header" ~style_class:"block-head-wrap"
         ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap
-        [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ~active:current ]
+        [ Views_builder.builder_el inst ~tree ~active:current ]
 
 let query_settings_el inst (s : V.vstate) : t =
   if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
@@ -726,11 +727,22 @@ let configured_query ~(page : Model.page) query : t =
     if Ui_effect.alive ctx.Lui_ui.ui_scope then
       Views_query.run ~page_title:page.page_title ~built_in:true inst
         (fun () -> load_query_results ~built_in:true inst) in
+  let refresh_pending = ref false in
+  let schedule_refresh () =
+    if not !refresh_pending then begin
+      refresh_pending := true;
+      ignore (Js.Promise.(resolve () |> then_ (fun () ->
+        refresh_pending := false; refresh (); resolve ())))
+    end in
   let sub = Runtime.on_sync (fun _ -> refresh ()) in
+  ignore (Signal.own ctx.Lui_ui.ui_scope
+    (Signal.subscribe ~emit_initial:false (Runtime.model_signal ()) (fun model ->
+      if model.Model.context_revision <> !(inst.V.data_context_revision) then
+        schedule_refresh ())));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
     Runtime.off_sync sub; incr inst.V.data_gen;
     Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ());
-  ignore (Js.Promise.(resolve () |> then_ (fun () -> refresh (); resolve ())));
+  schedule_refresh ();
   (if_ ~test:(reactive (fun s -> s.V.query_error<>None || s.V.query_rows<>[]
           || s.V.query_scalar_rows<>[]) (sig_of inst))
         (column ~style_class:"custom-query" ~min_width:0 ~gap:0
@@ -1190,6 +1202,8 @@ let query_inst ~sched ~kind ~owner block_uuid =
         };
       (inst, true)
 
+let query_title_owners : (int, int) Hashtbl.t = Hashtbl.create 8
+
 (* cljs block-title-aux: a class-Query block's title row carries the
    query builder (or "Untitled query" for advanced queries) when the
    title is blank, followed by the query-setting button *)
@@ -1200,11 +1214,20 @@ let query_title_el ~block_uuid ~(title : t option) : t =
     query_inst ~sched:ctx.Lui_ui.ui_scheduler ~kind
       ~owner:(W.Uuid block_uuid) block_uuid
   in
+  let repo = Runtime.repo () and route = Runtime.route () in
+  Hashtbl.replace query_title_owners inst.V.id
+    (1 + Option.value (Hashtbl.find_opt query_title_owners inst.V.id) ~default:0);
+  Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    let owners = Hashtbl.find query_title_owners inst.V.id in
+    if owners = 1 then Hashtbl.remove query_title_owners inst.V.id
+    else Hashtbl.replace query_title_owners inst.V.id (owners - 1));
+  let active () = Runtime.repo () = repo && Runtime.route () = route
+    && Hashtbl.mem query_title_owners inst.V.id in
   row ~key:"query-title" ~cross:`center ~gap:4 ~min_width:0
     [ (match title with
        | Some t -> t
        | None -> reactive ~equal:body_eq
-           (query_builder_el inst ~active:(fun () -> not (Signal.scope_is_disposed ctx.Lui_ui.ui_scope)))
+           (query_builder_el inst ~active)
            (sig_of inst))
     ; reactive ~equal:body_eq (query_settings_el inst) (sig_of inst)
     ] ctx parent

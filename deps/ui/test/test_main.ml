@@ -27,6 +27,8 @@ let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~
 let () = Editor_keys.install_once ()
 let () = Ui_dom_web_regression_test.run ()
 let () = Test_lui_apply.test_icon_palette_search_lifecycle ()
+let () = Test_lui_apply.test_internal_link_targets ()
+let () = Test_lui_apply.test_menu_document_keyboard ()
 let () = Theme_web_test.run ()
 
 let () =
@@ -1656,7 +1658,24 @@ let test_cmdk_view () =
   check "upsert create after first page when filtered"
     (List.length v3.groups = 1
     && List.map (fun (it : Cmdk_state.item) -> it.gid) (List.hd v3.groups).gitems
-       = [ Cmdk_state.G_nodes; Cmdk_state.G_create; Cmdk_state.G_nodes ])
+       = [ Cmdk_state.G_nodes; Cmdk_state.G_create; Cmdk_state.G_nodes ]);
+  let source_row title = wmap
+    ["block/uuid", Wire.Uuid title; "page?", Wire.Bool true;
+     "block.temp/original-title", Wire.String title] in
+  List.iter (fun (query, titles, expected) ->
+    let source_rows = List.map source_row titles in
+    let result = Cmdk_state.upsert_create ~source_rows
+      {Cmdk_state.initial_view with input = query;
+        groups = [cmdk_group Cmdk_state.G_nodes
+          (List.mapi (fun index row -> Cmdk_state.item_of_row row index) source_rows)]} in
+    check ("Master Source creation ordering: " ^ query ^ " / " ^ String.concat "," titles)
+      (List.concat_map (fun (group : Cmdk_state.group) ->
+        List.map (fun (item : Cmdk_state.item) -> item.gid) group.gitems) result.groups = expected))
+    ["Source", ["Source archive"; "Source notes"],
+        [Cmdk_state.G_nodes; Cmdk_state.G_create; Cmdk_state.G_nodes];
+     "Source", ["Source"; "Source archive"], [Cmdk_state.G_nodes; Cmdk_state.G_nodes];
+     "Source", [], [Cmdk_state.G_create];
+     "", [], []]
 
 let test_cmdk_filter_dispatch ~finish =
   let module C = Cmdk_state in
@@ -5369,7 +5388,7 @@ let () =
       Test_drive_sidebar.run ~finish:(fun () ->
       Bug_report_drive.run ~finish:(fun () ->
       Handbook_drive.run ~finish:(fun () ->
-      Views_drive.run ~finish:(fun () ->
+      Views_drive.run ~session:(Test_drive.s ()) ~finish:(fun () ->
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)

@@ -83,7 +83,7 @@ let nav_edit_menu st =
      `[role='menuitemcheckbox'][aria-checked]` hook sees them *)
   let mk (nav, label) =
     Ui_components.with_props [Ui_components.Prop.selected_background "transparent"]
-    (Menu_item.chrome (menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
+    (Ui_components.menu_item ~key:("cb-" ^ nav) ~style_class:"ui__dropdown-menu-item"
       ~text:(t label)
       ~data_attrs:
         (reactive
@@ -100,7 +100,7 @@ let nav_edit_menu st =
           (not
              (List.mem nav
                 (Runtime.signal_get st.Sidebar_state.nav_checked))))
-      []))
+      [])
   in
   box ~key:"nav-edit-menu"
     [ Ui_components.menu_surface
@@ -214,7 +214,7 @@ let lp_menu st =
              (Ui_services.dom_viewport_width () -. (w /. 2.) -. 5.))
       in
       Ui_components.menu_surface
-        (dropdown_menu_view (dropdown_menu ~key:"lp-menu" ~at:(x, if flip then atop else abot)
+        (dropdown_menu_view (Ui_components.dropdown_menu ~key:"lp-menu" ~at:(x, if flip then atop else abot)
            ~transition:Ui_components.popover_transition
            ~on_dismiss:(fun _ -> Sidebar_state.close_menu st)
            ~style_class:

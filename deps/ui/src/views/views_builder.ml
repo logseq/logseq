@@ -344,8 +344,13 @@ let value_picker inst ~tree ~loc ~anchor ~head ident =
       let items =
         if cvs <> [] then
           List.filter_map (fun cv ->
-              Option.map (fun title -> W.String title)
-                (W.map_get_string cv "block/title")) cvs
+              let content = match W.get cv "block/title" with
+                | None | Some W.Nil | Some (W.Bool false) -> W.get cv "logseq.property/value"
+                | content -> content in
+              match content with
+              | None | Some W.Nil | Some (W.Bool false) -> None
+              | Some (W.String text) -> Some (W.String text)
+              | Some value -> Some (W.String (Edn.to_string value))) cvs
         else []
       in
       let open_select its =
@@ -354,7 +359,7 @@ let value_picker inst ~tree ~loc ~anchor ~head ident =
              ~wrap_cls:"query-builder-picker"
              ~items:
                (P.fixed_items
-                ({ P.si_label = I.t "query.builder/all-values-label"
+                ({ P.si_label = I.t "view.table/select-all"
                  ; si_value = "all"; si_extra = None }
                 :: List.mapi
                   (fun index value ->
@@ -524,12 +529,12 @@ let between_picker inst ~tree ~loc ~anchor =
               if inst.active () then
                 begin Signal.set picking (Some first); Runtime.flush () end) []
         in
-        column ~padding:16 ~gap:8
+        column ~padding:16 ~gap:8 ~cross:`start
           [row ~cross:`center ~gap:8
             [field true (I.t "query.builder/between-start-label") start;
              text ~value:"~" [];
              field false (I.t "query.builder/between-end-label") finish];
-           Ui_components.button ~variant:`primary ~text:(I.t "ui/submit")
+           Ui_components.button ~variant:`primary ~size:`sm ~text:(I.t "ui/submit")
              ~on_press:(fun _ ->
                match Signal.get_state start, Signal.get_state finish with
                | Some start, Some finish when inst.active () ->
@@ -571,7 +576,7 @@ let full_text_picker inst ~tree ~loc ~anchor =
           ~on_input:(function
             | s -> Signal.set value s)
           ~on_submit:(fun _ ->
-            let v = String.trim (Signal.get_state value) in
+            let v = String.trim (Runtime.signal_get value) in
             if v <> "" then begin
               P.close_all ();
               tree := append_at !tree loc (CText v);
@@ -853,15 +858,27 @@ let builder_el inst ~tree ~active : t =
     ~tree
 
 (* per-inst clause trees, re-parsed when the query source changed *)
-let trees : (int, clause ref * string) Hashtbl.t = Hashtbl.create 8
+let trees : (int, clause ref * string * string) Hashtbl.t = Hashtbl.create 8
 
 let tree_for inst =
-  let qsrc = (V.get inst).V.qsrc in
+  let state = V.get inst in
+  let qsrc = state.V.qsrc and block_uuid = state.V.query_block_uuid in
   match Hashtbl.find_opt trees inst.V.id with
-  | Some (r, src) when src = qsrc -> r
+  | Some (r, src, previous_block) when src = qsrc ->
+      if previous_block <> block_uuid then
+        Hashtbl.replace trees inst.V.id (r, qsrc, block_uuid);
+      r
+  | Some (r, "", "") when block_uuid <> "" ->
+      let parsed = tree_of_src qsrc in
+      let r = match parsed with
+        | CInvalid _ -> ref parsed
+        | _ when state.V.is_advanced -> ref parsed
+        | _ -> r := parsed; r in
+      Hashtbl.replace trees inst.V.id (r, qsrc, block_uuid);
+      r
   | _ ->
       let r = ref (tree_of_src qsrc) in
-      Hashtbl.replace trees inst.V.id (r, qsrc);
+      Hashtbl.replace trees inst.V.id (r, qsrc, block_uuid);
       r
 
 let drop_tree inst = Hashtbl.remove trees inst.V.id

@@ -1862,11 +1862,12 @@ let ref_breadcrumb inst uuid : t =
         [el]) crumbs))))
     (Signal.value parents) (Signal.value property_seg)) ctx parent
 
-let ref_header inst ~key ~title : t =
+let ref_header inst ~key ~first ~title : t =
  fun ctx parent ->
   let collapsed = V.Sset.mem key (V.get inst).V.collapsed_groups in
   let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
   row ~key:("h-" ^ key) ~cross:`center ~gap:4
+    ~margin_top:(if first then 0 else 4)
     ~on_pointer_enter:(fun _ -> Signal.set hovered true; Runtime.flush ())
     ~on_pointer_leave:(fun _ -> Signal.set hovered false; Runtime.flush ())
     ~style_class:"ls-foldable-header"
@@ -1897,7 +1898,7 @@ let ref_grouped_lines inst (s : V.vstate) (gs : Wr.vrow_group list) : t list =
        (fun i g ->
          let key = "g" ^ string_of_int i in
          let header =
-           ref_header inst ~key
+           ref_header inst ~key ~first:(i = 0)
              ~title:(text ~value:(group_title inst s g.Wr.gv) [])
          in
          if V.Sset.mem key s.V.collapsed_groups then [ header ]
@@ -1909,7 +1910,7 @@ let ref_grouped_list_lines inst (s : V.vstate)
   List.concat (List.mapi (fun i g ->
     let key = "g" ^ string_of_int i in
     let title = group_title inst s g.Wr.glv in
-    let header = ref_header inst ~key
+    let header = ref_header inst ~key ~first:(i = 0)
         ~title:(if empty_group_value g.Wr.glv then
           text ~font_size:"14px" ~foreground:"hsl(var(--muted-foreground))" ~value:title []
         else link ~url:("#/page/" ^ Ui_services.uri_encode_component title)

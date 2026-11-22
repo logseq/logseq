@@ -2274,10 +2274,58 @@ let test_boolean_filters_preserve_clojure_truthiness () =
 
 (* ---------- suite ---------- *)
 
+let test_property_value_choices_preserve_numeric_content () =
+  let conn = topic_conn ~properties:number_prop
+    [{page={default_page with pg_title=Some "Number choice"; pg_tags=["Topic"];
+        pg_properties=["user.property/score",Int64 19]};blocks=[]}] in
+  let db = db_of conn in
+  let page = Option.get (Ldb.get_page db (String "number choice")) in
+  let value = Option.get (Ldb.ref_ent page "user.property/score") in
+  check "number fixture stores its content in a value entity without a title"
+    (Ldb.string_value value "block/title"=None
+     && Ldb.value value "logseq.property/value"=Some (Datascript.Int64 19L));
+  let choices () = Db_view.get_property_values (db_of conn) "user.property/score"
+    ~view_id:None ~query_entity_ids:None in
+  let labels () = List.map (fun item -> Wire.get "label" item) (choices ()) in
+  check "used numeric property values retain their typed choice labels"
+    (labels ()=[Some (Wire.Int 19)]);
+  let property = Option.get (Datascript.entity db (Ident "user.property/score")) in
+  ignore (Outliner_property.create_property_text_block conn
+    ~block_id:(Some (Wire.Int property.id)) "logseq.property/default-value" (Wire.String "5") ());
+  check "numeric defaults and used values both appear as typed choice labels"
+    (match labels () with
+     | [Some (Wire.Int 5);Some (Wire.Int 19)]
+     | [Some (Wire.Float 5.);Some (Wire.Int 19)] -> true
+     | _ -> false)
+
+let test_closed_numeric_property_choices () =
+  let conn = topic_conn ~properties:number_prop [] in
+  let ident = "user.property/score" in
+  let db = db_of conn in
+  let property = Option.get (entity db (Ident ident)) in
+  check "a number property without closed choices stays unrestricted"
+    (Property_maps.property_closed_values db property = Wire.Array []);
+  List.iter (fun n ->
+    Outliner_property.upsert_closed_value conn ident ~id:None
+      ~value:(Wire.String (string_of_int n)) ~description:None ~scoped_class_id:Wire.Nil)
+    [19;21];
+  let db = db_of conn in
+  let property = Option.get (entity db (Ident ident)) in
+  let choices = match Property_maps.property_closed_values db property with
+    | Wire.Array values -> values | _ -> [] in
+  check "saved numeric choices remain available through the property endpoint"
+    (List.map (Wire.get "logseq.property/value") choices
+     = [Some (Wire.Float 19.);Some (Wire.Float 21.)]);
+  check "display property snapshots retain the closed numeric choices"
+    (Wire.get "property/closed-values" (Property_maps.display_property_map db property)
+     = Some (Wire.Array choices))
+
 let () =
   Alcotest.run "db_view"
     [ ( "view_test"
-      , [ Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
+      , [ Alcotest.test_case "closed-numeric-property-choices" `Quick test_closed_numeric_property_choices
+        ; Alcotest.test_case "property-value-choices-preserve-numeric-content" `Quick test_property_value_choices_preserve_numeric_content
+        ; Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
         ; Alcotest.test_case "query-ref-set-filter-matches-raw-ref-datoms" `Quick test_query_ref_set_filter_matches_raw_ref_datoms
         ; Alcotest.test_case "text-filters-ignore-missing-ref-content" `Quick test_text_filters_ignore_missing_ref_content
         ; Alcotest.test_case "false-scalars-do-not-pass-number-or-text-filters" `Quick test_false_scalar_does_not_pass_number_or_text_filters

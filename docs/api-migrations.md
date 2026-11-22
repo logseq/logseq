@@ -1,5 +1,31 @@
 # Plugin API Migrations
 
+## Closed property choice labels
+
+The properties UI displays an untitled closed choice using its typed
+`:logseq.property/value`, matching Master's closed-value content rule. Numeric
+choices such as `{:db/id 80 :logseq.property/value 19}` display as `19` in
+Available choices and the property value picker. For recognized built-in idents,
+the existing localized built-in display title takes precedence. Otherwise,
+`:block/title` takes precedence over the typed value, then `:block/name`.
+Choice entity identities, saved values and worker wire maps are unchanged;
+no downstream migration is required.
+
+## Query-builder property value choices
+
+`thread-api/get-property-values` now preserves the content type of referenced
+property values and defaults in `:label`, matching Master. A numeric value block
+with `:logseq.property/value 19` produces `{:label 19 :value {:db/id ...}}`
+instead of a nil label. String titles and the `:value` identity map are unchanged.
+Consumers must retain typed labels when constructing query arguments rather than
+coercing them to display strings.
+
+The query builder prefers closed values, using `:block/title` or
+`:logseq.property/value` as string choices, and otherwise uses the typed labels
+of used values. Its unrestricted choice uses the existing `:view.table/select-all`
+translation; selecting it still emits a property clause without a value argument.
+No downstream call-site migration is required.
+
 ## Experimental native interaction corrections
 
 The experimental macOS host disables automatic titlebar movement before input

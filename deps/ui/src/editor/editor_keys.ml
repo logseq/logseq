@@ -36,7 +36,7 @@ let non_editor_control_target target =
             [role='button'], [role='link'], [role='checkbox'], [role='radio'], \
             [role='switch'], [role='tab'], [role='slider'], [role='spinbutton'], \
             [role='combobox'], [role='textbox'], [role='listbox'], [role='option'], \
-            [role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio']"
+            [role='menu'], [role='menuitem'], [role='menuitemcheckbox'], [role='menuitemradio']"
            target <> None)
 
 (* Master keeps the range shortcuts active when its selection toolbar has

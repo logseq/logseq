@@ -1015,7 +1015,7 @@ let open_block_references st uuid =
     (match item with
      | Some item when Runtime.repo () = repo ->
          ensure_right_open ();
-         push_item st {item with key = "block-ref-" ^ uuid; kind = "block-ref"; blocks = []}
+         push_item st {item with key = "block-ref-" ^ uuid; kind = "block-ref"}
      | _ -> ());
     Js.Promise.resolve ())
     |> Js.Promise.catch (fun error ->
@@ -1094,8 +1094,7 @@ let refresh_item repo (it : item) : item Js.Promise.t =
       | Some u ->
           (let* v = block_item_of_uuid repo u in
           match v with Some it' -> Js.Promise.resolve
-            { it' with key = it.key; kind = it.kind;
-              blocks = (if it.kind="block-ref" then [] else it'.blocks) }
+            { it' with key = it.key; kind = it.kind }
         | None -> fallback)
       | None -> fallback)
   | _ -> fallback

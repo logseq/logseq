@@ -684,15 +684,18 @@ let test_property_dialog_target () =
       open_target "editing block takes precedence" (target "editing-target"))
 
 let test_page_menu () =
+  let page_menu n =
+    has_tok n "ui__dropdown-menu-content" && has_tok n "ls-dots-menu"
+  in
   send (Action.Page_menu_set (Some (100., 40., 50., true, None)));
   let menus =
-    find_where (fun n -> has_tok n "ui__dropdown-menu-content")
+    find_where page_menu
   in
   check "page menu open" (menus <> []);
   has "text:\"Settings\"";
   send (Action.Page_menu_set None);
   check "page menu closed"
-    (find_where (fun n -> has_tok n "ui__dropdown-menu-content") = [])
+    (find_where page_menu = [])
 
 let test_confirm () =
   send

@@ -98,7 +98,8 @@ let match_attr el spec =
     let v = String.sub spec (i + 1) (String.length spec - i - 1) in
     let v =
       let n = String.length v in
-      if n >= 2 && v.[0] = '"' && v.[n - 1] = '"' then String.sub v 1 (n - 2)
+      if n >= 2 && ((v.[0] = '"' && v.[n - 1] = '"')
+                    || (v.[0] = '\'' && v.[n - 1] = '\'')) then String.sub v 1 (n - 2)
       else v
     in
     attr_value el name = Some v
@@ -213,7 +214,7 @@ let fire_listeners n ev phase =
 let chain_up el =
   let rec loop acc n =
     match (rec_r n).parent with
-    | Some p -> loop (p :: acc) p
+    | Some p -> loop (n :: acc) p
     | None -> n :: acc
   in
   loop [] el
@@ -366,6 +367,7 @@ and dispatch_event_stub el (ev : Js.Json.t) : bool =
 
 and install_methods el r =
   let set name f = set_field el name f in
+  set "isSameNode" (fun other -> el == other);
   set "addEventListener"
     (fun (n : string) (f : Js.Json.t -> unit) (cap : Js.Json.t) ->
       let capture =

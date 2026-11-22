@@ -1295,6 +1295,47 @@ do not reproduce the reference defect. This is an intentional difference,
 not an outstanding parity repair. This entry records the supplied runtime
 acceptance; no application code changes or additional visual check.
 
+### Rounds 98–104
+
+The final supplied Table104 acceptance compares Master `9af1a190` with
+LUI `bf7f0f56`: no remaining actionable LUI-only mismatch in the exercised
+surfaces. These rounds close the following follow-ups:
+
+- Reference-count click navigation; menu styling; property-menu geometry,
+  submenus and rename keyboard handling; language-menu colours; reference
+  tag alignment and sidebar context; and cmdk Create-row ordering.
+- Between menu-to-form replacement and early query-source hydration,
+  including draft ownership across title-scope replacement; linked-reference
+  group spacing; numeric filter choices resolved through typed
+  `logseq.property/value`; and the Between Submit button's small primary,
+  non-stretched size.
+- Closed numeric choice labels and pickers; Journals default-query
+  expansion across reload/pagination and result updates, including retrying
+  pending data invalidated by a context publication; and immediate full-text
+  Enter submission using the pending input rather than its last published
+  value.
+
+SDK repairs are merged as LUI
+[#405](https://github.com/logseq/lui/pull/405) (preserve authored link targets
+on URL updates), [#406](https://github.com/logseq/lui/pull/406) (role-menu
+keyboard navigation, including native Enter for plain buttons), and
+[#407](https://github.com/logseq/lui/pull/407) (keyed DOM child ordering and
+explicit-anchor precedence during popup replacement). Logseq uses their
+`bb18c67d`-compatible backport pin
+`e78fd1c26a6a009d855d8e7ec8a9f0454f237472`, not an unrelated SDK upgrade.
+
+Retain the shared-with-Master observations: closed-number exact filters
+serialize values as strings; a stale-source Between form can still open;
+and returning to Journals after a long offscreen interval collapses the
+query on both clients. These are not outstanding LUI-only defects.
+
+The final UI gate reports **6776 checks, zero failures**; native gates
+pass. Both UI and the separately bundled worker were published at
+`bf7f0f56`; worker revision and served-asset hash verifiers pass. This entry
+records the supplied acceptance, not a new browser or native visual check.
+Auth/RTC, Electron-native interactions and exhaustive menu permutations
+remain untested; the acceptance does not claim those surfaces.
+
 ## 1. Intentional / out of scope
 
 | Surface | Difference / scope |
