@@ -4541,6 +4541,10 @@ let run_views ~registry ~profile ~finish =
   check "Hovering UI position opens its submenu" (popover_count () = 2);
   S.press property_menu position_row.M.id;
   check "Pressing an already hovered UI-position parent keeps both menus open" (popover_count () = 2);
+  S.press property_menu name_row.M.id;
+  check "Activating the property-name menu's first row opens the rename form"
+    (List.exists (fun node -> node.M.kind = "text-field"
+      && M.string_prop node "text" = Some "T98MenuNumber") (nodes property_menu));
   ignore (Lui_app.dispose property_menu.S.app);
   List.iter (fun empty ->
     let shared_menu = mount (fun _ -> Lui_elements.dropdown_menu_view
