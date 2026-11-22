@@ -377,3 +377,10 @@ before its block ancestors. Empty ancestry stays empty; load failures propagate.
 Choosing the slash YouTube timestamp command without a video clears and saves
 the host block, matching Master's nil-macro insertion. An available player still
 inserts its timestamp; a loading player retains the host prefix and warns.
+
+## Quick Add submit accessibility
+
+Quick Add's composed submit button supplies the localized "Add to today"
+accessibility label. The web retained store requires a nonempty text or label
+even when a button contains labeled children; without it the entire dialog batch
+is rejected. Keyboard and command-palette entry points remain unchanged.

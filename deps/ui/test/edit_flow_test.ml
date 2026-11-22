@@ -2411,6 +2411,31 @@ let test_youtube_timestamp_selection (h : host) =
   |> Js.Promise.catch (fun _ -> Runtime.video_timestamp := previous;
     failwith "YouTube timestamp selection test failed")
 
+let test_quick_add_opening (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "Host"];
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+    match name, args with
+    | "thread-api/get-case-page", [_;W.String "Quick add"] ->
+        Js.Promise.resolve (W.Map [W.kw "block/uuid", W.Uuid "quick-page";
+          W.kw "block/title", W.String "Quick add"])
+    | "thread-api/get-page-blocks-tree", [_;W.Uuid "quick-page";_] ->
+        Js.Promise.resolve (W.List [W.Map [W.kw "block/uuid", W.Uuid "quick-note";
+          W.kw "block/title", W.String "Note"]])
+    | _ -> worker.Worker_client.invoke_fn name args)};
+  A.open_quick_add ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Quick Add opens its dialog and edits its last existing note"
+    (Dialogs_state.is_open "quick-add" && S.editing_uuid () = Some "quick-note");
+  Dialogs_state.close_named "quick-add";
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_page_icon_refresh (h : host) =
   let* () = settle h 40 in
   reset_editor ();
@@ -3486,6 +3511,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_node_reference_suggestions h in
   let* () = test_query_selection_conversion h in
   let* () = test_youtube_timestamp_selection h in
+  let* () = test_quick_add_opening h in
   let* () = test_reference_preview h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in

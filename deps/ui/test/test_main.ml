@@ -27,6 +27,7 @@ let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~
 let () = Editor_keys.install_once ()
 let () = Ui_dom_web_regression_test.run ()
 let () = Test_lui_apply.test_icon_palette_search_lifecycle ()
+let () = Test_lui_apply.test_quick_add_retained_store ()
 let () = Test_lui_apply.test_internal_link_targets ()
 let () = Test_lui_apply.test_menu_document_keyboard ()
 let () = Theme_web_test.run ()

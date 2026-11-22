@@ -704,6 +704,56 @@ let test_icon_palette_search_lifecycle () =
   | () -> cleanup ()
   | exception error -> Js.log2 "icon palette lifecycle failure" error; cleanup (); raise error
 
+let test_quick_add_retained_store () =
+  let renderer = make_renderer () in
+  let previous_schedule = !Runtime.schedule_flush
+  and previous_flush = !Runtime.app_flush
+  and previous_pending = !Runtime.flush_pending
+  and previous_quick_add = !Quick_add_state.st
+  and previous_quick_value = !Quick_add_state.latest
+  and previous_editor = !Editor_state.st
+  and previous_fields = !Editor_state.field_sigs_opt
+  and previous_settings = !Settings_state.st in
+  Quick_add_state.st := None;
+  Quick_add_state.latest := Quick_add_state.empty;
+  Editor_state.st := None;
+  let backend = { (Lui_web.backend renderer) with Wv.apply_batch = (fun batch ->
+    Store.apply_batch_with_extensions renderer.T.web_store
+      (Lui_web_nodes.platform_node renderer)
+      (Lui_web_extensions.extension_platform_node renderer)
+      renderer.T.web_extension_registry (fun _ -> true) batch) } in
+  let app = Lui_app.create_with_extensions backend renderer.T.web_extension_registry
+    Model.initial (fun model () -> model)
+    (fun _ctx ms _send -> Dialogs_view.dialog_view "quick-add" ms) in
+  Runtime.schedule_flush := (fun _ -> ());
+  Runtime.app_flush := (fun () -> ignore (Lui_app.flush app));
+  Runtime.flush_pending := false;
+  let cleanup () =
+    ignore (Lui_app.dispose app);
+    Runtime.schedule_flush := previous_schedule;
+    Runtime.app_flush := previous_flush;
+    Runtime.flush_pending := previous_pending;
+    Quick_add_state.st := previous_quick_add;
+    Quick_add_state.latest := previous_quick_value;
+    Editor_state.st := previous_editor;
+    Editor_state.field_sigs_opt := previous_fields;
+    Settings_state.st := previous_settings in
+  let exercise () =
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let contains_title () = Hashtbl.fold (fun id _ found -> found ||
+      Store.property renderer.T.web_store id Wv.TextValue =
+        Some (Wv.StringValue (I18n.t "editor.quick-add/title")))
+      renderer.T.web_store.T.retained_nodes false in
+    check "empty Quick Add dialog mounts in the real web retained store" (contains_title ());
+    Quick_add_state.set (fun _ -> {Quick_add_state.page_uuid = Some "quick-page";
+      blocks = [Test_check.block "quick-note" "Note"]});
+    ignore (Lui_app.flush app);
+    check "populated Quick Add dialog mounts in the real web retained store" (contains_title ()) in
+  match exercise () with
+  | () -> cleanup ()
+  | exception error -> Js.log2 "Quick Add retained-store failure" error; cleanup (); raise error
+
 let run () =
   test_icon_palette_search_lifecycle ();
   ignore (test_deterministic ());

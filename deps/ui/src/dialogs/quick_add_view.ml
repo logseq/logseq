@@ -60,6 +60,7 @@ let body (_ms : Model.t Signal.signal) : t =
               else [ "mod"; "alt"; "e" ]
             in
             Ui_components.button ~key:"qa-add" ~variant:`primary ~text:""
+              ~label:(U.t "editor.quick-add/add-to-today")
               ~on_press:(fun _ ->
                 Editor_actions.quick_add_blocks_to_today ())
               [ row ~key:"qa-add-inner" ~gap:6 ~cross:`center
