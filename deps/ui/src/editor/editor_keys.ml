@@ -801,6 +801,16 @@ let stroke_of ev =
   match ev_key ev with
   | "Control" | "Meta" | "Alt" | "Shift" | "CapsLock" | "Dead" -> None
   | _ ->
+      let raw_key = String.lowercase_ascii (ev_key ev) in
+      let layout_key = String.length raw_key = 1
+        && (let c = raw_key.[0] in
+            (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) in
+      let mods_held = ev.Ui_services.ctrl || ev.Ui_services.meta
+        || ev.Ui_services.alt || shift_held ev in
+      let physical_key =
+        if mods_held && not layout_key then
+          Option.bind (ev.Ui_services.detail "code") code_key_name
+        else None in
       let from_key =
         match shortcut_key ev with
         | "arrowup" -> "up"
@@ -812,20 +822,8 @@ let stroke_of ev =
         | "]" -> "close-square-bracket"
         | k -> k
       in
-      let mods_held =
-        ev.Ui_services.ctrl || ev.Ui_services.meta || ev.Ui_services.alt
-        || shift_held ev
-      in
-      (* Use KeyboardEvent.code for corrupted modifier glyphs — recovers
-         Ctrl+[ / Ctrl+] when the host reports key=Escape (or another
-         corrupted glyph) instead of "[" / "]". *)
       let key =
-        let layout_key = String.length from_key = 1
-          && (let c = from_key.[0] in
-              (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) in
-        if not mods_held || layout_key then from_key
-        else
-          match Option.bind (ev.Ui_services.detail "code") code_key_name with
+          match physical_key with
           | Some name -> name
           | None ->
               (* terminal legacy: Ctrl/Meta+[ arrives as Escape with no
@@ -1499,7 +1497,7 @@ and apply_input ?frame uuid ev =
        | _ -> ());
       if m'.Edit_model.source <> m0.source then begin
         if not (S.is_draft e) then Outliner_ops.schedule_save uuid m'.Edit_model.source;
-        Popups_state.on_model_input ~deleted:
+        Popups_state.on_model_input ~before:m0 ~deleted:
           (match ev with Edit_input.Delete _ | Edit_input.Key ({key = "Backspace"; _}, _) -> true | _ -> false)
           uuid
       end;
@@ -1567,7 +1565,7 @@ let dispatch_command cid =
          | Some current when current.S.uuid = editing.S.uuid
               && current.S.model.Edit_model.source <> before.Edit_model.source ->
              Outliner_ops.schedule_save current.S.uuid current.S.model.Edit_model.source;
-             Popups_state.on_model_input ~deleted:false current.S.uuid
+             Popups_state.on_model_input ~before ~deleted:false current.S.uuid
          | _ -> ())
     | None -> ()
   in

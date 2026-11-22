@@ -914,10 +914,11 @@ let fetch_page_blocks ?plain repo p =
 
 (* block-zoom breadcrumb chain: ancestor titles must be refetched on
    refresh too — a renamed parent shows stale text otherwise *)
-let fetch_zoom_parents repo uuid : Model.block list Js.Promise.t =
+let fetch_page_parents repo uuid : Model.block list Js.Promise.t =
   let* parents_w =
-    Runtime.invoke2 "thread-api/get-block-parents" (Wire.String repo)
+    Runtime.invoke3 "thread-api/get-block-parents" (Wire.String repo)
       (Wire.List [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
+      (Wire.Int 1000)
   in
   check_loader_result parents_w;
   Js.Promise.resolve
@@ -1008,7 +1009,7 @@ let refresh_page_then ?owner after : unit Js.Promise.t =
         let* page =
           (match context.route with
            | Model.Block_zoom uuid ->
-               let* page_parents = fetch_zoom_parents repo uuid in
+               let* page_parents = fetch_page_parents repo uuid in
                Js.Promise.resolve
                  { page with Model.page_parents }
            | _ -> resolve_page_tags repo page)

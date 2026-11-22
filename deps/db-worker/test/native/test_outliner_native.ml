@@ -587,6 +587,67 @@ let test_recycle_stores_full_deleted_at_ms () =
     (Ldb.int64_value page' "logseq.property/deleted-at"
      = Some 1783612800123L)
 
+let test_asset_insert_placement_tree () =
+  let blank_uuid = "10000000-0000-4000-8000-000000000091" in
+  let conn = create_conn_with_blocks ~pages_and_blocks:
+    [{page = {default_page with pg_title = Some "Asset placement"};
+      blocks =
+        [{default_block with b_title = Some "Before"};
+         {default_block with b_title = Some "Target";
+          b_children = [{default_block with b_title = Some "Existing child"}]};
+         {default_block with b_title = Some ""; b_uuid = Some blank_uuid};
+         {default_block with b_title = Some "Tail"}]}] () in
+  let page = Option.get (find_page conn "Asset placement") in
+  let target_uuid = uuid_of
+    (Option.get (find_block_by_content (db_of conn) "Target")) in
+  let children uuid =
+    Ldb.get_children (entity_by_uuid_exn conn uuid) |> List.map ent_title in
+  let insert ~target ~sibling ~bottom ~replace_empty uuid title =
+    let opts = Wire.Map
+      ([Wire.Keyword "sibling?", Wire.Bool sibling;
+        Wire.Keyword "keep-uuid?", Wire.Bool true;
+        Wire.Keyword "bottom?", Wire.Bool bottom;
+        Wire.Keyword "outliner-op", Wire.Keyword "insert-blocks"]
+       @ if replace_empty then
+           [Wire.Keyword "replace-empty-target?", Wire.Bool true] else []) in
+    ignore (Outliner_op.apply_ops conn
+      (Wire.Array [Wire.Array [Wire.Keyword "insert-blocks"; Wire.Array
+        [Wire.List [Wire.Map
+          [Wire.Keyword "block/uuid", Wire.Uuid uuid;
+           Wire.Keyword "block/title", Wire.String title;
+           Wire.Keyword "block/tags", Wire.Keyword "logseq.class/Asset"]];
+         Wire.Uuid target; opts]]])
+      (Wire.Map [Wire.Keyword "outliner-op", Wire.Keyword "insert-blocks"])) in
+  let first_uuid = "10000000-0000-4000-8000-000000000092" in
+  insert ~target:target_uuid ~sibling:true ~bottom:false ~replace_empty:false
+    first_uuid "First image";
+  check "uploaded asset is the next root sibling, not the target's child"
+    (children (uuid_of page) = [Some "Before"; Some "Target";
+       Some "First image"; Some ""; Some "Tail"]);
+  check "upload preserves the target's existing child tree"
+    (children target_uuid = [Some "Existing child"]);
+  let replacement_uuid = "10000000-0000-4000-8000-000000000093" in
+  let blank_id = (entity_by_uuid_exn conn blank_uuid).id in
+  insert ~target:blank_uuid ~sibling:true ~bottom:false ~replace_empty:true
+    replacement_uuid "Replacement image";
+  check "blank-block upload replaces the existing root without adding a sibling"
+    (children (uuid_of page) =
+       [Some "Before"; Some "Target"; Some "First image";
+        Some "Replacement image"; Some "Tail"]);
+  let replaced = entity_by_uuid_exn conn blank_uuid in
+  check "blank replacement keeps the original entity and UUID"
+    (replaced.id = blank_id && ent_title replaced = Some "Replacement image"
+     && entity_by_uuid conn replacement_uuid = None);
+  check "blank replacement keeps the Asset tag"
+    (List.exists (fun (tag : entity) ->
+       Ldb.value tag "db/ident" = Some (Keyword "logseq.class/Asset"))
+       (Ldb.ref_ents replaced "block/tags"));
+  insert ~target:(uuid_of page) ~sibling:false ~bottom:true ~replace_empty:false
+    "10000000-0000-4000-8000-000000000094" "Appended image";
+  check "owner upload appends after the existing root tree"
+    (children (uuid_of page) = [Some "Before"; Some "Target"; Some "First image";
+       Some "Replacement image"; Some "Tail"; Some "Appended image"])
+
 (* cljs stamps block/created-at+updated-at with (common-util/time-ms) — a
    plain number, never a js/Date — on every save *)
 let test_insert_blocks_stores_numeric_timestamps () =
@@ -2548,6 +2609,7 @@ let cases : unit Alcotest.test_case list =
     Alcotest.test_case "gc-recycled-converted-page-removes-property-value-blocks" `Quick test_gc_recycled_converted_page_removes_property_value_blocks;
     Alcotest.test_case "recycle-stores-full-deleted-at-ms" `Quick test_recycle_stores_full_deleted_at_ms;
     Alcotest.test_case "insert-blocks-stores-numeric-timestamps" `Quick test_insert_blocks_stores_numeric_timestamps;
+    Alcotest.test_case "asset-insert-placement-tree" `Quick test_asset_insert_placement_tree;
     Alcotest.test_case "gc-keeps-unexpired-recycled-page" `Quick test_gc_keeps_unexpired_recycled_page;
     Alcotest.test_case "permanently-delete-recycled-block-removes-subtree-only" `Quick test_permanently_delete_recycled_block_removes_subtree_only;
     Alcotest.test_case "permanently-delete-recycled-block-removes-corresponding-view-history" `Quick test_permanently_delete_recycled_block_removes_corresponding_view_history;

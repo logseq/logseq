@@ -321,6 +321,9 @@ instead of overriding them with the physical `code`. For example, QWERTZ
 `key="z", code="KeyY", ctrlKey=true` dispatches `ctrl+z` (Undo), not Redo.
 Modifier-corrupted glyphs still use the code fallback, including Ctrl+[ arriving
 as Escape and Option+A arriving as å. Modifier-only events remain ignored.
+Layout-key classification now precedes shifted-symbol normalization: Spanish
+`key="&", code="Digit6", shiftKey=true` dispatches `shift+6`, not `shift+7`.
+Without a physical code, shifted symbols retain the legacy normalization.
 
 ## Clearing custom stylesheets
 
@@ -343,3 +346,56 @@ hash immediately, so the router model and subsequent reloads use the UUID too.
 For example, renaming `/page/Old%20title` keeps later reloads on the renamed page
 instead of querying the removed title. A rename that finishes after navigation
 does not redirect the newer route. Empty titles and failed writes do not navigate.
+
+## Slash Query conversion after selection replacement
+
+Simple Query takes its initial search text from the live editing buffer with the
+slash trigger removed, preserving unsaved edits. A whole-buffer selection
+replacement captures the selected text before slash insertion instead.
+For example, replacing `G5RegressionToken` with `/Query` and choosing Query
+creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
+to retain the slash-cleared live host title and create an empty code query.
+Autosave while the menu is open does not replace this captured search text.
+Conversion keeps the editor and its original buffer until every conversion write
+succeeds, then clears editing without a competing save-exit write. A failed
+initial or final write retains the buffer and re-arms autosave so unsaved text
+can still be edited or retried.
+
+## Editing undo after a pending indent
+
+An Undo shortcut during an in-flight structural edit waits for that edit to
+finish before capturing its refresh owner. For example, Tab followed immediately
+by Cmd+Z while editing restores the block's previous parent and recorded caret,
+instead of discarding Undo when the indent publishes its refreshed page.
+
+## Structured paste undo caret
+
+Paste snapshots the live caret before its transaction and consumes that snapshot,
+not an older Home/End navigation cursor. Pasting at offset 4 in
+`Nonempty destination` restores offset 4 on undo; redo still edits the last
+inserted block at its end. This applies to copied subtrees and Markdown paste.
+
+## Zoom breadcrumb ancestor loading
+
+Route loads and refreshes share the ancestor loader and explicitly request depth
+1000, as Master's complete breadcrumb resource does. The worker's default depth
+3 is not a page boundary: a fourth-level leaf must include its containing page
+before its block ancestors. Empty ancestry stays empty; load failures propagate.
+
+Zoom breadcrumb links now admit shrinking with a zero minimum width. Each link
+is a block formatting context for its single-line, clipped ellipsis label;
+long labels therefore remain inside their own link at narrow window widths
+(for example, 560 px) instead of painting over the following breadcrumb.
+
+## YouTube timestamp without a video
+
+Choosing the slash YouTube timestamp command without a video clears and saves
+the host block, matching Master's nil-macro insertion. An available player still
+inserts its timestamp; a loading player retains the host prefix and warns.
+
+## Quick Add submit accessibility
+
+Quick Add's composed submit button supplies the localized "Add to today"
+accessibility label. The web retained store requires a nonempty text or label
+even when a button contains labeled children; without it the entire dialog batch
+is rejected. Keyboard and command-palette entry points remain unchanged.

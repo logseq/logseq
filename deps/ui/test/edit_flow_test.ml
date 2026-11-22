@@ -1233,6 +1233,82 @@ let test_indent_outdent (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_indent_undo_key_dispatch (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Level two"];
+  set_editing ~uuid:"b2" ~buffer:"Level two" ~caret:2 ~base:"Level two";
+  S.note_editor_start_pos_from_arrow 2;
+  S.history_input_before := None;
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let before = !Runtime.current_page in
+  let cursor = ref W.Nil and undos = ref 0 and release = ref (fun () -> ()) in
+  let acknowledgement = Js.Promise.make (fun ~resolve ~reject:_ ->
+    release := (fun () -> resolve W.Nil [@u])) in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        cursor := Option.value (W.get opts "undo-redo/editor-info") ~default:W.Nil;
+        let* result = worker.invoke_fn name args in
+        let* _ = acknowledgement in
+        Js.Promise.resolve result
+    | "thread-api/undo-redo-undo",_ ->
+        incr undos;
+        if !undos = 2 then Js.Promise.resolve (W.Map [])
+        else if !undos = 3 then h.reject_promise "undo fixture rejected"
+        else begin
+        Runtime.current_page := before; h.sync_page ();
+        Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool true;
+          W.kw "editor-cursors",W.List [!cursor]])
+        end
+    | _ -> worker.invoke_fn name args)};
+  let previous_cmdk = !Cmdk_state.latest_st in
+  Option.iter (fun state -> Cmdk_state.latest_st := Some
+    {state with Cmdk_state.svs = {state.Cmdk_state.svs with Cmdk_state.Svs.undo=A.undo}}) previous_cmdk;
+  Editor_keys.apply_input "b2" (EI.Key (EM.key_ev "Tab",false));
+  let* () = h.wait_ms 25 in
+  check "Indent is pending when the editing undo shortcut arrives" !S.structure_pending;
+  let base = Ui_services.dom_body () in
+  let input = {base with Ui_services.editable=(fun () -> true);
+    attr=(function "data-block-id" -> Some "b2" | _ -> None)} in
+  let target = {input with Ui_services.closest=(function
+    | ".ed-input" | ".ed-input, .CodeMirror, .code-editor" | ".editor-wrapper" -> Some input
+    | _ -> None)} in
+  let prevented = ref false in
+  let send_undo () = Editor_keys.on_global_key
+    { Ui_services.x=0.;y=0.;shift=false;meta=true;ctrl=false;alt=false;
+      composing=false;key=Some "z";key_char=Some "z";buttons=0;button=0;repeat=false;
+      movement_x=0.;movement_y=0.;default_prevented=false;target=Some target;touches=[];
+      detail=(fun _ -> None);detail_json=(fun _ -> None);clipboard_get=(fun _ -> "");
+      clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+      clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+      prevent_default=(fun () -> prevented:=true);stop_propagation=(fun () -> ());
+      stop_immediate=(fun () -> ()) } in
+  send_undo ();
+  check "Editing Cmd+Z dispatches and waits for the indent acknowledgement"
+    (!prevented && !undos=0 && not (Queue.is_empty S.pending_edit_actions));
+  !release ();
+  let* () = settle h 40 in
+  check "Editing Cmd+Z after Tab sends the worker undo call" (!undos=1);
+  check "Editing Cmd+Z restores the root parent and the G1 caret"
+    (match !Runtime.current_page,S.editing () with
+     | Some page,Some e -> List.map (fun b -> b.Model.block_uuid) page.page_blocks
+           = [Some "b1";Some "b2"] && e.uuid="b2" && e.model.EM.caret=2
+     | _ -> false);
+  send_undo ();
+  let* () = settle h 40 in
+  check "Editing undo with empty history keeps the restored parent and caret"
+    (!undos=2 && !Runtime.current_page=before && (editing_now ()).model.EM.caret=2);
+  send_undo ();
+  let* () = settle h 40 in
+  check "Rejected editing undo retains the restored block and caret"
+    (!undos=3 && !Runtime.current_page=before && (editing_now ()).model.EM.caret=2);
+  Cmdk_state.latest_st := previous_cmdk;
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_indent_type_double_undo_caret (h : host) =
   let* () = settle h 40 in
   reset_editor ();
@@ -2280,24 +2356,39 @@ let test_query_selection_conversion (h : host) =
   let rec run = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
-    | (title, advanced, rejected) :: rest ->
+    | (title, edited, advanced, rejected, replace) :: rest ->
         let* () = settle h 40 in
         reset_editor ();
+        Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
-        (* Real slash flow: host text stays, then "/Query" is typed and
-           erased before Query / Advanced Query runs (master last-pattern). *)
-        let source = title ^ "/Query" in
-        set_editing ~uuid:"b1" ~buffer:source
-          ~caret:(String.length source) ~base:title;
-        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false
-          popup Popups_state.Slash;
+        (* Append and selection-replacement slash input share the saved block. *)
+        if replace then begin
+          set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
+          A.update_model "b1" Edit_model.select_all;
+          Editor_keys.apply_input "b1" (EI.Insert "/");
+          Editor_keys.apply_input "b1" (EI.Insert "Query")
+        end else begin
+          let source = edited ^ "/Query" in
+          set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
+          Popups_state.open_ac ~tpos:(String.length edited) ~autopair:false popup Popups_state.Slash
+        end;
+        let source = (editing_now ()).buffer in
         install_worker ~repo:h.repo h;
-        let attempts = ref [] in
+        let* () =
+          if replace && title <> "" && rejected = 0 then begin
+            Outliner_ops.schedule_save "b1" source;
+            Outliner_ops.flush_pending_save ()
+          end else Js.Promise.resolve () in
+        let attempts = ref [] and committed = ref [] in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
           if name="thread-api/apply-outliner-ops" then begin
             (match args with [_;W.Array batch;_] -> attempts := batch :: !attempts | _ -> ());
-            if rejected then h.reject_promise "query conversion rejected"
-            else Js.Promise.resolve (worker_handler h name args)
+            if rejected > 0 && List.length !attempts = rejected then
+              h.reject_promise "query conversion rejected"
+            else begin
+              committed := List.hd !attempts :: !committed;
+              Js.Promise.resolve (worker_handler h name args)
+            end
           end else if name="thread-api/get-blocks"
             && (match args with [_;W.Array [request]] ->
                   W.get request "id"=Some (W.Uuid "b1") | _ -> false) then
@@ -2310,17 +2401,17 @@ let test_query_selection_conversion (h : host) =
         Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced;
         let* () = h.wait_ms 25 in
         let* () = settle h 40 in
-        let batch = List.concat !attempts in
+        let batch = List.concat !committed in
         let saves uuid source = List.exists (function
           | W.Array [W.Keyword "save-block";W.Array [block;_]] ->
               W.get block "block/uuid"=Some (W.Uuid uuid)
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
         check "Query conversion matches master Query vs Advanced Query steps"
-          (if rejected then not (saves "query-source" title)
+          (if rejected > 0 then not (saves "query-source" edited)
            else if advanced then
              (* advanced-query-steps: keep host title, empty code query child *)
-             saves "b1" title && saves "query-source" ""
+             saves "b1" edited && saves "query-source" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch
              && List.mem (Ops.set_block_property "query-source"
@@ -2328,16 +2419,32 @@ let test_query_selection_conversion (h : host) =
              && List.mem (Ops.set_block_property "query-source"
                   "logseq.property.code/lang" (W.String "clojure")) batch
            else
-             saves "query-source" title && saves "b1" ""
+             saves "query-source" edited && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
-          (!Ops.pending_save=None);
+          (rejected > 0 || !Ops.pending_save=None);
         check "Rejected query conversion never publishes a query title"
-          (not rejected || current_titles ()=[title]);
+          (rejected = 0 || not (saves "query-source" edited));
+        check "Rejected query conversion retains the live buffer and autosave"
+          (rejected = 0 || (
+            Option.fold ~none:false ~some:(fun e -> e.S.uuid="b1" && e.buffer=source)
+                 (S.editing ()) && Option.is_some !Ops.pending_save));
+        check "Successful query conversion exits only after its writes complete"
+          (rejected > 0 || S.editing ()=None);
         run rest in
-  run ["Search seed parity",false,false; "",false,false;
-       "Advanced seed",true,false; "Retain on rejection",false,true]
+  run ["Search seed parity","Search seed parity",false,0,false;
+       "Saved seed","Saved seed with unsaved edits ",false,0,false;
+       "", "",false,0,false;
+       "Advanced seed","Advanced seed",true,0,false;
+       "Retain on rejection","Retain on rejection",false,1,false;
+       "Saved seed","Unsaved edit on rejection ",false,1,false;
+       "Saved seed","Unsaved edit on final rejection ",false,2,false;
+       "Advanced seed","Unsaved advanced on rejection ",true,2,false;
+       "G5RegressionToken","G5RegressionToken",false,0,true;
+       "Saved seed","Unsaved replaced seed",false,0,true;
+       "", "",false,0,true;
+       "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true]
 
 let test_property_command_refresh (h : host) =
   let rec run = function
@@ -2374,6 +2481,61 @@ let test_property_command_refresh (h : host) =
   in
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
+
+let test_youtube_timestamp_selection (h : host) =
+  let previous = !Runtime.video_timestamp in
+  let popup = Option.get !Popups_state.active in
+  let rec run = function
+    | [] -> Runtime.video_timestamp := previous; reset_editor (); Js.Promise.resolve ()
+    | (prefix, playback, expected) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [Test_check.block "b1" (String.trim prefix)];
+        install_worker ~repo:h.repo h;
+        let source = prefix ^ "/Timestamp" in
+        set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:prefix;
+        Popups_state.open_ac ~tpos:(String.length prefix) ~autopair:false popup Popups_state.Slash;
+        Runtime.video_timestamp := (fun () -> playback);
+        let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+        Popups_state.apply_item popup ac ~meta:false
+          (Popups_state.mk_item ~key:"timestamp" ~label:"" (Editor_cmd "youtube-timestamp"));
+        check "YouTube timestamp selection matches the available player state"
+          (A.live_buffer "b1" = expected);
+        let* () = Ops.flush_pending_save () in
+        let* () = settle h 40 in
+        check "YouTube timestamp selection persists the resulting host text"
+          (current_titles () = [String.trim expected]);
+        run rest in
+  run ["Host ", Runtime.No_video, ""; "", Runtime.No_video, "";
+       "Host ", Runtime.Playback_time 12, "Host {{youtube-timestamp 12}}";
+       "Host ", Runtime.Player_pending, "Host "]
+  |> Js.Promise.catch (fun _ -> Runtime.video_timestamp := previous;
+    failwith "YouTube timestamp selection test failed")
+
+let test_quick_add_opening (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "Host"];
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+    match name, args with
+    | "thread-api/get-case-page", [_;W.String "Quick add"] ->
+        Js.Promise.resolve (W.Map [W.kw "block/uuid", W.Uuid "quick-page";
+          W.kw "block/title", W.String "Quick add"])
+    | "thread-api/get-page-blocks-tree", [_;W.Uuid "quick-page";_] ->
+        Js.Promise.resolve (W.List [W.Map [W.kw "block/uuid", W.Uuid "quick-note";
+          W.kw "block/title", W.String "Note"]])
+    | _ -> worker.Worker_client.invoke_fn name args)};
+  A.open_quick_add ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Quick Add opens its dialog and edits its last existing note"
+    (Dialogs_state.is_open "quick-add" && S.editing_uuid () = Some "quick-note");
+  Dialogs_state.close_named "quick-add";
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
 
 let test_page_icon_refresh (h : host) =
   let* () = settle h 40 in
@@ -3071,6 +3233,14 @@ let test_asset_insert_placement (h : host) =
   let* () = run (Some "asset-target") true false false in
   let* () = run (Some "asset-empty") true false true in
   let* () = run None false true false in
+  stage_page h [block "asset-before" "Before"; block "asset-target" "Existing";
+                block "asset-after" "After"];
+  set_editing ~uuid:"asset-target" ~buffer:"Existing" ~caret:8 ~base:"Existing";
+  let upload = Option.get (A.capture_asset_upload ()) in
+  check "Slash upload captures the editing middle block, not its following sibling"
+    (upload.A.upload_target = "asset-target");
+  let* () = run None true false false in
+  reset_editor ();
   install_worker ~repo:h.repo h;
   let upload = Option.get (A.capture_asset_upload ~drop_target:"asset-target" ()) in
   let* () = A.commit_uploaded_assets upload [] in
@@ -3081,6 +3251,39 @@ let test_asset_insert_placement (h : host) =
   check "A stale asset upload does not mutate the newly navigated context" (!ops = []);
   h.restore before;
   Js.Promise.resolve ()
+
+let test_breadcrumb_parent_loading (h : host) =
+  let previous = !Runtime.worker in
+  let worker = Option.get previous in
+  let mode = ref `Parents in
+  let titles = ["P14088 Editor"; "Alpha first"; "Long parent"; "Nearest parent"] in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+    if name <> "thread-api/get-block-parents" then worker.Worker_client.invoke_fn name args
+    else match !mode with
+      | `Reject -> h.reject_promise "parent load rejected"
+      | `Empty -> Js.Promise.resolve (W.List [])
+      | `Parents ->
+          let depth = match args with [_;_;W.Int depth] -> depth | _ -> 3 in
+          let visible = List.filteri (fun i _ -> i >= List.length titles - depth) titles in
+          Js.Promise.resolve (W.List (List.mapi (fun i title -> W.Map
+            [W.kw "block/title", W.String title;
+             W.kw "block/uuid", W.Uuid ("parent-" ^ string_of_int i)]) visible)))};
+  let task =
+    let* parents = Ops.fetch_page_parents h.repo "zoomed-leaf" in
+    check "Zoom breadcrumb loading includes the containing page above three block ancestors"
+      (List.map (fun b -> b.Model.block_title) parents = titles);
+    mode := `Empty;
+    let* parents = Ops.fetch_page_parents h.repo "root-page" in
+    check "Root pages have no placeholder breadcrumb parents" (parents = []);
+    mode := `Reject;
+    let* rejected = Ops.fetch_page_parents h.repo "zoomed-leaf"
+      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve false)
+      |> Js.Promise.catch (fun _ -> Js.Promise.resolve true) in
+    check "Breadcrumb parent failures propagate to the route loader" rejected;
+    Runtime.worker := previous;
+    Js.Promise.resolve () in
+  task |> Js.Promise.catch (fun _ -> Runtime.worker := previous;
+    failwith "Breadcrumb parent test failed")
 
 let test_append_owner (h : host) =
   let rec run = function
@@ -3156,14 +3359,14 @@ let test_authoritative_route_miss (h : host) =
     Ui_services.log_error ("Authoritative route miss test failed", error);
     failwith "Authoritative route miss test failed")
 
-let test_paste_history_cursors (h : host) =
+let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
   let* () = settle h 40 in
   reset_editor ();
-  stage_page h [Test_check.block "paste-origin" "Original"];
-  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:2 ~base:"Original";
-  S.note_editor_start_pos_from_arrow 2;
+  stage_page h [Test_check.block "paste-origin" title];
+  set_editing ~uuid:"paste-origin" ~buffer:title ~caret:history_caret ~base:title;
+  S.note_editor_start_pos_from_arrow history_caret;
   S.record_history_start ~force:true (editing_now ());
-  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:5 ~base:"Original";
+  A.update_model "paste-origin" (fun m -> EM.select m ~anchor:caret ~focus:caret);
   install_worker ~repo:h.repo h;
   let worker = Option.get !Runtime.worker and options = ref W.Nil in
   let inserted = W.Map [W.kw "block/uuid", W.Uuid "paste-result";
@@ -3173,7 +3376,7 @@ let test_paste_history_cursors (h : host) =
     else begin
       (match args with [_;_;opts] -> options:=opts | _ -> ());
       Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
-        [Test_check.block "paste-origin" "Original";
+        [Test_check.block "paste-origin" title;
          Test_check.block "paste-result" "Clipboard parent"]}) !Runtime.current_page;
       h.sync_page ();
       Js.Promise.resolve (W.Map [W.kw "result",W.Map [W.kw "blocks",W.Array [inserted]]])
@@ -3182,11 +3385,11 @@ let test_paste_history_cursors (h : host) =
       ~sibling:true ~replace_empty:false in
   let before = Option.get (W.get !options "undo-redo/editor-info")
   and after = Option.get (W.get !options "undo-redo/editor-info-after") in
-  check "Structured paste preserves its captured before-caret rather than the live caret"
+  check "Structured paste captures the pre-paste caret rather than stale navigation history"
     (W.map_get_uuid before "block-uuid"=Some "paste-origin"
      && W.map_get_string before "scope"=Some "main"
-     && W.get before "caret"=Some (W.Int 2)
-     && W.get before "start-pos"=Some (W.Int 2));
+     && W.get before "caret"=Some (W.Int caret)
+     && W.get before "start-pos"=Some (W.Int caret));
   check "Structured paste records the last inserted block at end as its after-cursor"
     (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
      && W.map_get_string after "scope"=Some "main"
@@ -3200,13 +3403,17 @@ let test_paste_history_cursors (h : host) =
   let* () = restore true in
   check "Structured paste undo restores the captured origin caret"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
-     =Some ("paste-origin",2));
+     =Some ("paste-origin",caret));
   let* () = restore false in
   check "Structured paste redo restores the last inserted block at end"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
      =Some ("paste-result",String.length "Clipboard parent"));
   reset_editor ();
   Js.Promise.resolve ()
+
+let test_paste_history_cursors (h : host) =
+  let* () = paste_history_cursors_case h ~title:"Original" ~caret:2 ~history_caret:2 in
+  paste_history_cursors_case h ~title:"Nonempty destination" ~caret:4 ~history_caret:20
 
 let test_structured_paste_completion (h : host) =
   let* () = test_paste_history_cursors h in
@@ -3287,7 +3494,7 @@ let test_template_does_not_save_search_title (h : host) =
   let ac : Popups_state.ac =
     { kind = Template_search; x = 0.; y = 0.; cy = 0.; pos_pending = false
     ; flip = None; flipx = None; query = "Audit Template"; tpos = 0; tlen = 14
-    ; items = []; chosen = 0; auuid = "b1"; editor = None } in
+    ; items = []; chosen = 0; auuid = "b1"; editor = None; replaced_source = None } in
   Popups_state.apply_template (Option.get !Popups_state.active) ac "template";
   let* () = h.wait_ms 20 in
   check "Template search text is not persisted as a content block"
@@ -3357,7 +3564,7 @@ let test_slash_cancellation_titles (h : host) =
         let ac : Popups_state.ac =
           { kind = Slash; x = 0.; y = 0.; cy = 0.; pos_pending = false;
             flip = None; flipx = None; query = ""; tpos = String.length prefix;
-            tlen = 1; items = []; chosen = 0; auuid = "b1"; editor = None } in
+            tlen = 1; items = []; chosen = 0; auuid = "b1"; editor = None; replaced_source = None } in
         Popups_state.set_ac popup (Some ac);
         Popups_state.apply_item popup ac ~meta:false
           (Popups_state.mk_item ~key:"cancel-command" ~label:""
@@ -3404,6 +3611,8 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_suggestion_selection_commits_pending_save h in
   let* () = test_node_reference_suggestions h in
   let* () = test_query_selection_conversion h in
+  let* () = test_youtube_timestamp_selection h in
+  let* () = test_quick_add_opening h in
   let* () = test_reference_preview h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in
@@ -3418,6 +3627,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_continuous_delete_xfail h in
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
+  let* () = test_indent_undo_key_dispatch h in
   let* () = test_indent_type_double_undo_caret h in
   let* () = test_indent_undo_restores_start_pos h in
   let* () = test_exit_waits_for_save h in
@@ -3450,5 +3660,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
   let* () = test_asset_insert_placement h in
+  let* () = test_breadcrumb_parent_loading h in
   h.restore saved;
   Js.Promise.resolve ()

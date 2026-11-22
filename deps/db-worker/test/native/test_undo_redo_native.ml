@@ -644,6 +644,31 @@ let apply_template_op conn ~template_root_id ~empty_target_id ~blocks_wire () =
 
 (* ---------- tests ---------- *)
 
+let test_indent_undo_survives_pending_replay () =
+  with_worker_conns (fun () ->
+      let conn = conn () in
+      let page, parent, child = seed_page_parent_child () in
+      let indent value = ignore (apply_ops_edn conn (Printf.sprintf
+        "[[:indent-outdent-blocks [[%s] %b {}]]]" (uuid_lit child) value)) in
+      let parent_uuid () =
+        Option.bind (ent_at_uuid (db_of conn) child) (fun block ->
+          Option.map ent_uuid_of (Ldb.ref_ent block "block/parent")) in
+      indent false;
+      check "outdented child starts at page level" (parent_uuid () = Some page);
+      let base = db_of conn in
+      Undo_redo.clear_history test_repo;
+      indent true;
+      check "indent moves the child under its previous sibling" (parent_uuid () = Some parent);
+      ignore (Undo_redo.undo test_repo);
+      check "undo restores the page parent" (parent_uuid () = Some page);
+      let projection = conn_from_db base in
+      Sync_replay.replay_pending_txs test_repo projection;
+      let projected_parent = Option.bind (ent_at_uuid (db_of projection) child) (fun block ->
+        Option.map ent_uuid_of (Ldb.ref_ent block "block/parent")) in
+      check "a fresh replay projection preserves the undone parent" (projected_parent = Some page);
+      ignore (Undo_redo.redo test_repo);
+      check "redo indents exactly once" (parent_uuid () = Some parent))
+
 let test_worker_ui_state_roundtrip () =
   with_worker_conns (fun () ->
       let ui_state_str =
@@ -2831,7 +2856,9 @@ let test_undo_delete_of_tag_page_with_blocks_referring_to_each_other () =
          | None -> false))
 
 let cases =
-  [ Alcotest.test_case "worker-ui-state-roundtrip-test" `Quick
+  [ Alcotest.test_case "indent-undo-survives-pending-replay" `Quick
+      test_indent_undo_survives_pending_replay
+  ; Alcotest.test_case "worker-ui-state-roundtrip-test" `Quick
       test_worker_ui_state_roundtrip
   ; Alcotest.test_case "undo-redo-selection-editor-info-roundtrip-test" `Quick
       test_undo_redo_selection_editor_info_roundtrip

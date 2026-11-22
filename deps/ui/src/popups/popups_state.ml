@@ -118,6 +118,7 @@ type ac =
   ; auuid : string (* editing uuid the popup was opened on — a remount
      swaps editing_uuid before the position check can run *)
   ; editor : Editor_state.editing option
+  ; replaced_source : string option
   }
 
 let draft_editing () = Option.fold ~none:false ~some:Editor_state.is_draft (Editor_state.editing ())
@@ -1421,7 +1422,7 @@ let measure_ac ?(retries = 120) t kind =
   measure retries
 ;;
 
-let open_ac ?tpos ?(autopair = true) t kind =
+let open_ac ?tpos ?(autopair = true) ?replaced_source t kind =
   if not (draft_editing ()) || draft_ac_kind kind then begin
   invalidate_ac t;
   if kind = Slash then latest_matched_slash_q := "";
@@ -1443,7 +1444,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
     { kind; x; y; cy; pos_pending = Option.is_none pos
     ; flip = None; flipx = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; auuid; editor = Editor_state.editing () }
+    ; items = []; chosen = 0; auuid; editor = Editor_state.editing (); replaced_source }
   in
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
@@ -1511,7 +1512,12 @@ let query_closed ac q = query_closed_kind ac.kind q
 (* after a buffer change in the open block editor — the model carries
    the new text/caret; [deleted] marks Delete events (the cljs
    delete-inputType branch that closes a wiped trigger) *)
-let on_buffer_change t ~deleted uuid =
+let on_buffer_change ?before t ~deleted uuid =
+  let replaced_source = Option.bind before (fun model ->
+    match Edit_model.selection_range model with
+    | Some (0, last) when last = S.length model.Edit_model.source -> Some model.source
+    | _ -> None) in
+  let open_ac t kind = open_ac ?replaced_source t kind in
   match Editor_actions.edit_model uuid with
   | None -> ()
   | Some m ->
@@ -1616,9 +1622,9 @@ let on_buffer_change t ~deleted uuid =
             else ()
 
 (* the event funnel in editor_keys calls through the live layer *)
-let on_model_input ~deleted uuid =
+let on_model_input ?before ~deleted uuid =
   match !active with
-  | Some t -> on_buffer_change t ~deleted uuid
+  | Some t -> on_buffer_change ?before t ~deleted uuid
   | None -> ()
 
 type page_ref_range = { start_off : int; end_off : int }
@@ -1959,15 +1965,20 @@ let query_property_uuid w =
   | [] -> ""
 
 let run_query t ac ~advanced =
-  match Editor_state.editing_uuid () with
-  | None -> ()
-  | Some buuid ->
+  match ac.editor, Editor_state.editing () with
+  | Some _, Some editing when ac_current ac ->
+      let buuid = editing.Editor_state.uuid in
       Outliner_ops.cancel_pending_save ();
-      erase_trigger_text ac;
       close_ac t;
-      let title = Editor_actions.live_buffer buuid in
-      Editor_actions.sync_buffer buuid title;
-      Editor_actions.exit_edit ~select:false;
+      let model = editing.Editor_state.model in
+      let first = max 0 (min ac.tpos (S.length model.Edit_model.source)) in
+      let last = max first (min (fst (Editor_actions.sel_span_of model))
+        (S.length model.source)) in
+      let title = (Edit_model.splice model first last "").Edit_model.source in
+      let query_title = Option.value ac.replaced_source ~default:title in
+      let editor_current () = ac_current ac && match Editor_state.editing () with
+        | Some current -> current.buffer = editing.buffer
+        | None -> false in
       let repo_v = repo () in
       let fetch_query_uuid () =
         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
@@ -2001,8 +2012,8 @@ let run_query t ac ~advanced =
           in
           let* w = fetch_query_uuid () in
           let quuid = query_property_uuid w in
-          if quuid = "" then Js.Promise.resolve ()
-          else if advanced then
+          if quuid = "" then failwith "Query property was not created";
+          let* () = if advanced then
             (* keep host title; query child stays empty code block *)
             Outliner_ops.apply_parsed
               ~rest:
@@ -2017,8 +2028,23 @@ let run_query t ac ~advanced =
               ~rest:
                 [ Outliner_ops.set_block_property buuid "block/tags"
                     (Wire.Keyword "logseq.class/Query") ]
-              [ (quuid, title); (buuid, "") ])
-        |> Views_db.catch_quiet)
+              [ (quuid, query_title); (buuid, "") ] in
+          if editor_current () then begin
+            Editor_actions.last_edit_uuid := Some buuid;
+            Editor_actions.cancel_pending_focus ();
+            Editor_sink.invalidate buuid;
+            Editor_state.clear_editor_start_pos ();
+            Editor_state.retire_title_override buuid editing.buffer;
+            Editor_state.set (fun st -> {st with Editor_state.editing = None});
+            Editor_state.notify_edit_exit buuid
+          end;
+          Js.Promise.resolve ())
+        |> Views_db.catch_quiet ~on_error:(fun () ->
+          if editor_current () then begin
+            Outliner_ops.schedule_save buuid editing.buffer;
+            Editor_sink.focus_input buuid
+          end))
+  | _ -> ()
 
 exception Unsupported_configured_input
 
@@ -2674,8 +2700,6 @@ let apply_item t ac ~meta it =
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
   | Editor_cmd "youtube-timestamp" ->
-      (* cljs :youtube/insert-timestamp — insert! macro {} with default
-         last-pattern=/ ; nil macro still clears the slash trigger *)
       (match !(Runtime.video_timestamp) () with
        | Runtime.Playback_time seconds ->
            insert_text ac
@@ -2683,7 +2707,13 @@ let apply_item t ac ~meta it =
        | Runtime.Player_pending ->
            Toast.warning (I18n.t "youtube/player-not-ready");
            erase_trigger_text ac
-       | Runtime.No_video -> erase_trigger_text ac);
+       | Runtime.No_video ->
+           Editor_actions.update_model ac.auuid (fun m ->
+               Edit_model.select
+                 (Edit_model.splice m 0 (S.length m.Edit_model.source) "")
+                 ~anchor:0 ~focus:0);
+           Outliner_ops.schedule_save ac.auuid "";
+           Editor_sink.focus_input ac.auuid);
       close_ac t
   | Editor_cmd c ->
       let to_ = match c with

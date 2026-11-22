@@ -1802,7 +1802,7 @@ let ref_breadcrumb inst uuid : t =
          | _ -> blocks);
       Ui_services.request_flush ()
     end;
-    Js.Promise.resolve ()) (Outliner_ops.fetch_zoom_parents (Runtime.repo ()) uuid)
+    Js.Promise.resolve ()) (Outliner_ops.fetch_page_parents (Runtime.repo ()) uuid)
     |> Views_db.catch_quiet);
   (* cljs block-breadcrumb appends the created-from-property entity
      (e.g. the Query property of a query's value block) *)

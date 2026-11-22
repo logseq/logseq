@@ -27,6 +27,7 @@ let () = Platform_web.install ~request_flush:Runtime.flush ~dom:Ui_dom_web.ops ~
 let () = Editor_keys.install_once ()
 let () = Ui_dom_web_regression_test.run ()
 let () = Test_lui_apply.test_icon_palette_search_lifecycle ()
+let () = Test_lui_apply.test_quick_add_retained_store ()
 let () = Test_lui_apply.test_internal_link_targets ()
 let () = Test_lui_apply.test_menu_document_keyboard ()
 let () = Theme_web_test.run ()
@@ -3078,7 +3079,7 @@ let mk_ac kind =
   { Popups_state.kind; x = 0.; y = 0.; cy = 0.; pos_pending = false
   ; flip = None; flipx = None; query = ""
   ; tpos = 0; tlen = 0
-  ; items = []; chosen = 0; auuid = ""; editor = None }
+  ; items = []; chosen = 0; auuid = ""; editor = None; replaced_source = None }
 
 let test_popups_state () =
   let base = Ui_services.dom_body () in

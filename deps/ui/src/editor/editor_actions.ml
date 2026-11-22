@@ -2738,6 +2738,11 @@ let paste_focus () =
     then edit_last_inserted ~scope resp
 
 let paste_history_opts target_uuid =
+  (match S.editing () with
+   | Some e ->
+       S.note_editor_start_pos_from_arrow e.S.model.Edit_model.caret;
+       S.record_history_start ~force:true e
+   | None -> ());
   let scope = match S.editing () with
     | Some e -> e.S.scope
     | None -> scope_of_uuid target_uuid in
@@ -3339,20 +3344,21 @@ let () = S.restore_history := restore_history
 let history_owner : Ops.refresh_owner option ref = ref None
 
 let run_history operation =
-  let context = Runtime.model () in
-  let owner =
-    match !history_owner with
-    | Some owner when Ops.refresh_current ~owner context -> Some owner
-    | _ ->
-        let owner = Ops.refresh_owner_for None in
-        history_owner := owner;
-        owner
-  in
+  let context = Runtime.repo (), Runtime.route () in
   let rec run () =
-    if not (Ops.refresh_current ?owner context) then ()
+    if context <> (Runtime.repo (), Runtime.route ()) then ()
     else if !S.structure_pending then
       S.enqueue_edit_action ~real:true run
     else begin
+      let current = Runtime.model () in
+      let owner =
+        match !history_owner with
+        | Some owner when Ops.refresh_current ~owner current -> Some owner
+        | _ ->
+            let owner = Ops.refresh_owner_for None in
+            history_owner := owner;
+            owner
+      in
       Option.iter (fun owner -> owner.Ops.outcome <- None) owner;
       run_structure ~restore:(S.editing ()) (operation ?owner ()) (fun () -> ())
     end
