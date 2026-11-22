@@ -65,9 +65,8 @@ let apply_for_repo repo =
       Js.Promise.resolve ()
 
 let reset_for_repo repo =
-  remove ();
   let* () = Js.Promise.resolve () in
-  if Runtime.repo () = repo then apply_for_repo repo
+  if Runtime.repo () = repo then (remove (); apply_for_repo repo)
   else Js.Promise.resolve ()
 
 let on_file_saved path content =

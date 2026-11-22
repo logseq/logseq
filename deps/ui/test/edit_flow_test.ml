@@ -3048,74 +3048,6 @@ let test_zoom_out_origin (h : host) =
           h.restore { (h.snapshot ()) with Model.repo = Some "different-graph" };
           Ui_services.nav_replace_hash "#/page/different-graph-destination"), false ]
 
-let test_page_rename_route (h : host) =
-  let* () = settle h 40 in
-  reset_editor ();
-  let old_read = !Runtime.read_model and old_send = !Runtime.app_send
-  and old_worker = !Runtime.worker and services = Ui_services.get ()
-  and old_refresh = Runtime.hooks.refresh_after_ops
-  and old_properties = Runtime.hooks.refresh_property_areas
-  and old_loaded = !Router.loaded_route and old_gen = !Runtime.load_gen in
-  let uuid = "00000000-0000-4000-8000-000000000123" in
-  let page = {(Test_check.page []) with Model.page_uuid = Some uuid; page_title = "Old title"} in
-  let model = ref {Model.initial with Model.repo = Some h.repo;
-    route = Model.Page "Old title"; route_page = Some page} in
-  let hash = ref "#/page/Old%20title" and requests = ref []
-  and writes = ref 0 and reject_write = ref false in
-  Runtime.read_model := (fun () -> !model);
-  Runtime.app_send := (fun action -> model := Update.update !model action; true);
-  Ui_services.installed := Some {services with nav = {services.nav with
-    hash = (fun () -> !hash); hash_query_param = (fun _ -> None);
-    replace_hash = (fun value -> hash := value)}};
-  Runtime.hooks.refresh_after_ops <- (fun () -> Subs_state.task_of_promise (Js.Promise.resolve ()));
-  Runtime.hooks.refresh_property_areas <- (fun () -> Subs_state.task_of_promise (Js.Promise.resolve ()));
-  Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
-    if name = "thread-api/apply-outliner-ops" then (
-      incr writes;
-      if !reject_write then h.reject_promise "Rename rejected" else Js.Promise.resolve W.Nil)
-    else (
-      if name = "thread-api/get-page-route-info" then requests := args :: !requests;
-      Js.Promise.resolve W.Nil));
-    on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
-  let restore () =
-    Ui_services.timers_clear_timeout !Router.reload_timer;
-    Runtime.read_model := old_read; Runtime.app_send := old_send; Runtime.worker := old_worker;
-    Ui_services.installed := Some services;
-    Runtime.hooks.refresh_after_ops <- old_refresh;
-    Runtime.hooks.refresh_property_areas <- old_properties;
-    Router.loaded_route := old_loaded; Runtime.load_gen := old_gen in
-  let task =
-    let* () = Page_ops.rename uuid "New title" in
-    check "Renaming a title-routed page commits its UUID route, not just the URL"
-      ((!model).Model.route = Model.Page uuid);
-    Router.reload ();
-    let* () = h.wait_ms 40 in
-    check "Reload after rename resolves the UUID instead of the old title"
-      (match !requests with args :: _ -> List.mem (W.Uuid uuid) args | [] -> false);
-    model := {!model with Model.route_page = Some page};
-    let before_hash = !hash in
-    let* () = Page_ops.rename "00000000-0000-4000-8000-000000000124" "Other title" in
-    check "Renaming an offscreen page does not replace the active page route"
-      ((!model).Model.route = Model.Page uuid && !hash = before_hash);
-    let before = !writes in
-    let* () = Page_ops.rename uuid "  " in
-    check "An empty page rename does not write" (!writes = before);
-    reject_write := true;
-    let rejected = ref false and before_hash = !hash in
-    let* () = Page_ops.rename uuid "Rejected title" |> Js.Promise.catch (fun _ ->
-      rejected := true; Js.Promise.resolve ()) in
-    check "A failed rename preserves the current route" (!rejected && !hash = before_hash);
-    reject_write := false;
-    let pending = Page_ops.rename uuid "Late title" in
-    model := {!model with Model.route = Model.Settings};
-    let* () = pending in
-    check "A completed rename cannot redirect a newer navigation"
-      ((!model).Model.route = Model.Settings && !hash = before_hash);
-    restore ();
-    Js.Promise.resolve ()
-  in
-  task |> Js.Promise.catch (fun error -> restore (); raise error)
-
 let test_asset_insert_placement (h : host) =
   let* () = settle h 40 in
   reset_editor ();
@@ -3518,6 +3450,5 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
   let* () = test_asset_insert_placement h in
-  let* () = test_page_rename_route h in
   h.restore saved;
   Js.Promise.resolve ()

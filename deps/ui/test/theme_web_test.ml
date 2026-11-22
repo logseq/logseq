@@ -84,6 +84,9 @@ let custom_css_graph_switch ~finish =
     let* () = pending in
     check "A previous graph's delayed CSS cannot overwrite the active graph"
       (custom_css_href () = Some "https://replacement.invalid/style.css");
+    let* () = Custom_css.reset_for_repo "superseded-css" in
+    check "A superseded graph-open hook cannot remove the active stylesheet"
+      (custom_css_href () = Some "https://replacement.invalid/style.css");
     stage "empty-css" (Wire.Map []);
     let pending = Custom_css.reset_for_repo "empty-css" in
     let* () = Js.Promise.resolve () in
