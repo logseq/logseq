@@ -112,7 +112,7 @@ let lang_menu ~scope ~key st mst =
     ~on_dismiss:(fun _ev -> lang_menu_close mst)
     (List.mapi
        (fun i (code, label) ->
-         Lui_elements.dropdown_menu_item
+         Ui_components.dropdown_menu_item
               ~style:(Slot_style.make ~font_size:"0.875rem" ~line_height:"1.25rem"
                 ~hover_background:"hsl(var(--muted))" ())
               ~key:(Printf.sprintf "lmi-%s-%d" key i)

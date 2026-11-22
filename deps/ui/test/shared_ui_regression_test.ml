@@ -4468,6 +4468,61 @@ let run_views ~registry ~profile ~finish =
       (List.length !accepted=1 && !closed=1);
     ignore (Lui_app.dispose terminal.S.app)) [false;true];
   restore_storage "ls-icons-used" previous_used;
+  let menu_row_style row =
+    Hashtbl.find_opt row.M.props "corner-radius" = Some (P.IntValue 4)
+    && M.string_prop row "font-size" = Some "0.875rem"
+    && M.string_prop row "hover-background" = Some "var(--lx-gray-05, hsl(var(--muted)))"
+    && M.string_prop row "hover-foreground" = Some
+      (if M.string_prop row "variant" = Some "destructive"
+       then "var(--color-destructive)" else "inherit")
+    && M.string_prop row "focus-within-background" = Some "var(--lx-gray-05, hsl(var(--muted)))"
+  in
+  let property_row = Wire.Map
+    [ Wire.Keyword "property-id", Wire.Keyword "user.property/T98MenuNumber"
+    ; Wire.Keyword "property", Wire.Map
+        [ Wire.Keyword "block/uuid", Wire.Uuid "menu-number-property"
+        ; Wire.Keyword "block/title", Wire.String "T98MenuNumber"
+        ; Wire.Keyword "logseq.property/type", Wire.Keyword "number" ]
+    ; Wire.Keyword "value", Wire.Int 42 ] in
+  let property_menu = mount (fun _ -> Properties_menu.menu_view
+    ~owner_uuid:"menu-number-owner" ~owner_id:None ~owner_is_tag:false
+    ~owner_title:"Menu fixture" ~refresh:(fun () -> ()) ~close:(fun () -> ()) property_row) in
+  let surface = List.find (fun n -> n.M.kind = "popover") (nodes property_menu) in
+  check "property-name menu applies its 260px width and 6px padding to the surface"
+    (Hashtbl.find_opt surface.M.props "width" = Some (P.IntValue 260)
+     && Hashtbl.find_opt surface.M.props "padding" = Some (P.IntValue 6)
+     && M.string_prop surface "foreground" = Some "inherit");
+  let property_items = List.filter (fun n -> n.M.kind = "menu-item") (nodes property_menu) in
+  check "property-name rows share rounded, non-inverted hover and keyboard styling"
+    (property_items <> [] && List.for_all menu_row_style property_items);
+  ignore (Lui_app.dispose property_menu.S.app);
+  List.iter (fun empty ->
+    let shared_menu = mount (fun _ -> Lui_elements.dropdown_menu_view
+      (Ui_components.dropdown_menu ~key:"shared-menu-style"
+         (if empty then [] else
+           [ Ui_components.dropdown_menu_item ~text:"Enabled" []
+           ; Ui_components.dropdown_menu_item ~text:"Disabled" ~disabled:true [] ]))) in
+    let surface = List.find (fun n -> n.M.kind = "dropdown-menu") (nodes shared_menu) in
+    check "shared dropdown surfaces retain typed chrome even without rows"
+      (Hashtbl.find_opt surface.M.props "padding" = Some (P.IntValue 4)
+       && M.string_prop surface "overflow" = Some "auto"
+       && M.string_prop surface "font-size" = Some "0.875rem"
+       && class_has surface "ui__dropdown-menu-content");
+    let rows = List.filter (fun n -> n.M.kind = "menu-item") (nodes shared_menu) in
+    check "enabled and disabled restricted rows receive the shared style"
+      (List.for_all menu_row_style rows);
+    ignore (Lui_app.dispose shared_menu.S.app)) [false;true];
+  let custom_menu = mount (fun _ -> Lui_elements.dropdown_menu_view
+    (Ui_components.dropdown_menu ~key:"custom-menu-style"
+      [ Ui_components.dropdown_menu_item ~text:"Custom"
+          ~style:(Lui_elements.Slot_style.make ~hover_background:"custom-background"
+            ~hover_foreground:"custom-foreground" ()) [] ])) in
+  let custom_row = List.find (fun n -> n.M.kind = "menu-item") (nodes custom_menu) in
+  check "authored menu styles override shared colors without dropping row geometry"
+    (M.string_prop custom_row "hover-background" = Some "custom-background"
+     && M.string_prop custom_row "hover-foreground" = Some "custom-foreground"
+     && Hashtbl.find_opt custom_row.M.props "corner-radius" = Some (P.IntValue 4));
+  ignore (Lui_app.dispose custom_menu.S.app);
   let actions = ref 0 in
   let menu = mount (fun _ -> Menu_item.dots_menu ~key:"parity-actions"
       [ "", "Enabled", false, (fun () -> incr actions)

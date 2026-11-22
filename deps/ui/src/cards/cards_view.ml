@@ -6,7 +6,7 @@ open Lui_elements
 let t_ = I18n.t
 
 let opt_row st i label =
-  dropdown_menu_item ~key:("opt-" ^ string_of_int i) ~text:label
+  Ui_components.dropdown_menu_item ~key:("opt-" ^ string_of_int i) ~text:label
     ~on_press:(fun _ -> Cards_state.select_deck st i)
     []
 
@@ -24,7 +24,7 @@ let opts_box st =
                (fun i d -> opt_row st i d.Cards_state.deck_label)
                decks
         in
-        dropdown_menu_view (dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
+        dropdown_menu_view (Ui_components.dropdown_menu ~key:"opts" ~anchor:`below ~anchor_alignment:`start
           ~on_dismiss:(fun _ -> Cards_state.close_opts st)
           options))
     (Logseq_el.own ctx

@@ -295,7 +295,7 @@ let dfmt_menu ~scope ~key mst options current =
     ~on_dismiss:(fun _ -> V.lang_menu_close mst)
     (List.mapi
        (fun i fmt ->
-         dropdown_menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
+         Ui_components.dropdown_menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
            ~text:fmt
            ~selected:(fmt = current)
            ~on_press:(fun _ ->
@@ -1462,7 +1462,7 @@ module Account_settings = struct
        if_ ~test:(Signal.value opened)
           (Ui_components.menu_card ~key:(key ^ "-menu") ~anchor:`below ~anchor_alignment:`start
              ~on_dismiss:(fun _ -> close ())
-             (List.map (fun (id, name) -> dropdown_menu_item ~key:id ~text:name
+             (List.map (fun (id, name) -> Ui_components.dropdown_menu_item ~key:id ~text:name
                 ~selected:(reactive ((=) id) selected)
                 ~on_press:(fun _ -> close (); on_select id) []) options))]
       ctx parent
