@@ -4533,6 +4533,14 @@ let run_views ~registry ~profile ~finish =
     (Hashtbl.find_opt name_row.M.props "min-height" = Some (P.IntValue 44)
      && List.exists (fun node -> M.string_prop node "text" = Some "T98MenuNumber")
        (nodes property_menu));
+  let position_row = List.find (fun node ->
+    M.string_prop node "accessibility-label" = Some (I18n.t "property/ui-position")) property_items in
+  let popover_count () = List.length (List.filter (fun node -> node.M.kind = "popover")
+    (nodes property_menu)) in
+  S.dispatch property_menu (P.PointerEnter position_row.M.id);
+  check "Hovering UI position opens its submenu" (popover_count () = 2);
+  S.press property_menu position_row.M.id;
+  check "Pressing an already hovered UI-position parent keeps both menus open" (popover_count () = 2);
   ignore (Lui_app.dispose property_menu.S.app);
   List.iter (fun empty ->
     let shared_menu = mount (fun _ -> Lui_elements.dropdown_menu_view
