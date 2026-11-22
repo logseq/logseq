@@ -4583,6 +4583,9 @@ let run_views ~registry ~profile ~finish =
          M.string_prop n "selection-placement" = Some "leading"
          && Hashtbl.find_opt n.M.props "padding-horizontal" = Some (P.IntValue 8)
          && Hashtbl.find_opt n.M.props "gap" = Some (P.IntValue 8)) options);
+  check "Settings language options use shared non-inverted hover colors"
+    (options <> [] && List.for_all (fun node ->
+      menu_row_style node && M.string_prop node "foreground" = Some "inherit") options);
   ignore (Lui_app.dispose language.S.app);
   let reopened = mount language_view in
   check "reopening settings starts with its language picker closed"
