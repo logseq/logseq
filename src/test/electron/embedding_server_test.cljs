@@ -550,3 +550,85 @@
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))
           (p/finally done)))))
+
+(deftest ensure-endpoint-is-available-on-cold-start
+  (async done
+    (embedding-server/stop!)
+    (let [ready-gate (p/deferred)
+          {:keys [runtime]} (fake-runtime
+                             {:existing-paths #{"/users/me/logseq/embedding-server/.venv/bin/python"
+                                                "/users/me/logseq/embedding-server/deps-v2.ok"}
+                              :allocated-port 56789
+                              :wait-ready! (fn [_endpoint] ready-gate)})
+          app (fake-app "/users/me/logseq" false)]
+      (-> (p/let [url (embedding-server/ensure-endpoint! app runtime)]
+            (is (= "http://127.0.0.1:56789/v1/embeddings" url))
+            (embedding-server/stop!)
+            (p/resolve! ready-gate nil))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (p/resolve! ready-gate nil)
+                       (done)))))))
+
+(deftest stop-during-wait-ready-allows-restart
+  (async done
+    (embedding-server/stop!)
+    (let [ready-calls (atom 0)
+          ready-gate (p/deferred)
+          {:keys [runtime spawns]}
+          (fake-runtime {:existing-paths #{"/users/me/logseq/embedding-server/.venv/bin/python"
+                                           "/users/me/logseq/embedding-server/deps-v2.ok"}
+                         :allocated-port 56789
+                         :wait-ready! (fn [_endpoint]
+                                        (if (= 1 (swap! ready-calls inc))
+                                          ready-gate
+                                          (p/resolved nil)))})
+          app (fake-app "/users/me/logseq" false)
+          start-p (embedding-server/start! app runtime)]
+      (-> (p/let [_ (p/delay 10)
+                  _ (is (= 1 (count @spawns)))
+                  _ (embedding-server/stop!)
+                  result (embedding-server/start! app runtime)]
+            (is (= :started result))
+            (is (= 2 (count @spawns)))
+            (p/resolve! ready-gate nil)
+            (p/catch start-p (fn [_] nil))
+            (embedding-server/stop!))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally (fn []
+                       (p/resolve! ready-gate nil)
+                       (done)))))))
+
+(deftest stop-during-python-validation-does-not-delete-venv
+  (async done
+    (embedding-server/stop!)
+    (let [gate (p/deferred)
+          aborted? (atom false)
+          venv-dir "/users/me/logseq/embedding-server/.venv"
+          venv-python "/users/me/logseq/embedding-server/.venv/bin/python"
+          deps-stamp "/users/me/logseq/embedding-server/deps-v2.ok"
+          {:keys [runtime removed-dirs]}
+          (fake-runtime {:existing-paths #{venv-python deps-stamp}
+                         :allocated-port 56789
+                         :run-command! (fn [_cmd args _opts]
+                                         (if (= args ["-c" "import sys"])
+                                           (p/then gate
+                                                   (fn [_]
+                                                     (when @aborted?
+                                                       (let [error (js/Error. "aborted")]
+                                                         (set! (.-name error) "AbortError")
+                                                         (throw error)))))
+                                           (p/resolved nil)))})
+          app (fake-app "/users/me/logseq" false)
+          start-p (embedding-server/start! app runtime)]
+      (-> (p/let [_ (p/delay 10)
+                  _ (reset! aborted? true)
+                  _ (embedding-server/stop!)
+                  _ (p/resolve! gate nil)
+                  _ (p/catch start-p (fn [_] nil))]
+            (is (not (some #{venv-dir} @removed-dirs))))
+          (p/catch (fn [e]
+                     (is false (str "unexpected error: " e))))
+          (p/finally done)))))

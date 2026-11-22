@@ -492,6 +492,8 @@
                                               :already-started? *quit-teardown-started?
                                               :prevent-default! (fn [^js event]
                                                                   (.preventDefault event))
+                                              :on-error! (fn [error]
+                                                           (logger/warn :electron/quit-teardown-failed error))
                                               :teardown! (fn []
                                                            (-> (handler/stop-all-db-workers!)
                                                                (p/catch

@@ -81,11 +81,33 @@
       (lifecycle/handle-before-quit! opts)
       (lifecycle/handle-before-quit! opts)
       (-> (p/let [_ (p/delay 0)]
-            (is (= [:prevent-default :teardown] @events))
+            (is (= [:prevent-default :prevent-default :teardown] @events))
             (p/resolve! teardown-done true)
             (p/delay 0))
           (p/then (fn [_]
-                    (is (= [:prevent-default :teardown :exit] @events))))
+                    (is (= [:prevent-default :prevent-default :teardown :exit] @events))))
           (p/finally (fn []
                        (p/resolve! teardown-done true)
                        (done)))))))
+
+(deftest before-quit-logs-teardown-errors-then-exits
+  (async done
+    (let [events (atom [])
+          already-started? (atom false)]
+      (lifecycle/handle-before-quit!
+       {:event #js {}
+        :already-started? already-started?
+        :prevent-default! (fn [_]
+                            (swap! events conj :prevent-default))
+        :on-error! (fn [error]
+                     (swap! events conj [:error (ex-message error)]))
+        :teardown! (fn []
+                     (swap! events conj :teardown)
+                     (throw (ex-info "teardown boom" {})))
+        :exit! (fn []
+                 (swap! events conj :exit))})
+      (-> (p/delay 0)
+          (p/then (fn [_]
+                    (is (= [:prevent-default :teardown [:error "teardown boom"] :exit]
+                           @events))))
+          (p/finally done)))))

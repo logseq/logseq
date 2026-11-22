@@ -13,18 +13,21 @@
 (defn handle-before-quit!
   "Block Electron quit until teardown finishes.
 
-  preventDefault once, run teardown (including a waiting sidecar stop),
-  then exit. A second before-quit while teardown is running is a no-op."
-  [{:keys [event already-started? prevent-default! teardown! exit!]}]
+  preventDefault on every before-quit while teardown is in flight, run
+  teardown once (including a waiting sidecar stop), then exit."
+  [{:keys [event already-started? prevent-default! teardown! exit! on-error!]}]
+  (when (and prevent-default! event)
+    (prevent-default! event))
   (when-not @already-started?
     (reset! already-started? true)
-    (when (and prevent-default! event)
-      (prevent-default! event))
     (-> (try
           (p/do (when teardown! (teardown!)))
           (catch :default error
             (p/rejected error)))
-        (p/catch (fn [_] nil))
+        (p/catch (fn [error]
+                   (when on-error!
+                     (on-error! error))
+                   nil))
         (p/finally (fn []
                      (when exit!
                        (exit!)))))))
