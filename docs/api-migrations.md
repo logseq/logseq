@@ -1,5 +1,14 @@
 # Plugin API Migrations
 
+## Closed property choice labels
+
+The properties UI displays an untitled closed choice using its typed
+`:logseq.property/value`, matching Master's closed-value content rule. Numeric
+choices such as `{:db/id 80 :logseq.property/value 19}` display as `19` in
+Available choices and the property value picker. A `:block/title` still takes
+precedence. Choice entity identities, saved values and worker wire maps are
+unchanged; no downstream migration is required.
+
 ## Query-builder property value choices
 
 `thread-api/get-property-values` now preserves the content type of referenced

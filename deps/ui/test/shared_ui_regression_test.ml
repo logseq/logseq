@@ -3555,7 +3555,44 @@ let run_views ~registry ~profile ~finish =
       false,"fixture/nodes",true,[4;81],false;false,"fixture/nodes",true,[],false;
       false,"block/alias",true,[],false]
   in
+  let numeric_choices_menu_check done_ =
+    let previous_worker = !Runtime.worker in
+    let choices = Wire.Array (List.map (fun (id, value) -> Wire.Map
+      [Wire.kw "db/id",Wire.Int id;Wire.kw "block/uuid",Wire.Uuid ("closed-" ^ string_of_int id);
+       Wire.kw "logseq.property/value",value]) [80,Wire.Int 19;81,Wire.Float 21.]) in
+    ignore (Fake_worker.install (fun name _ -> match name with
+      | "thread-api/get-property-closed-values" -> choices
+      | _ -> Wire.Nil));
+    let row = Wire.Map [Wire.kw "property-id",Wire.kw "fixture/number";
+      Wire.kw "property",Wire.Map [Wire.kw "db/ident",Wire.kw "fixture/number";
+        Wire.kw "logseq.property/type",Wire.kw "number"]] in
+    let menu_ctx : Properties_menu.menu_ctx =
+      {owner_uuid="property-owner";owner_id=Some 79;owner_is_tag=false;owner_title="";
+       has_owner=true;refresh=(fun () -> ());row} in
+    let menu = mount (fun _ context parent ->
+      let pane = Signal.state context.Lui_ui.ui_scheduler Properties_menu.MChoices in
+      Properties_menu.choices_pane_view menu_ctx ~set_pane:pane ~close:(fun () -> ()) context parent) in
+    ignore (Js.Global.setTimeout ~f:(fun () ->
+      List.iter (fun title ->
+        check ("Available choices renders the saved numeric label " ^ title)
+          (List.exists (fun n -> M.string_prop n "text"=Some title) (nodes menu))) ["19";"21"];
+      check "The numeric choice menu retains Add choice"
+        (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "property/add-choice")) (nodes menu));
+      ignore (Lui_app.dispose menu.S.app);
+      Runtime.worker:=previous_worker;
+      done_ ()) 0)
+  in
   let property_picker_check done_ =
+    List.iter (fun (value, title) ->
+      eqs "Closed property content uses its typed value when untitled" title
+        (Properties_data.ref_title value))
+      [Wire.Map [Wire.kw "logseq.property/value",Wire.Int 19],"19";
+       Wire.Map [Wire.kw "logseq.property/value",Wire.Float 21.],"21";
+       Wire.Map [Wire.kw "logseq.property/value",Wire.Bool false],"false";
+       Wire.Map [Wire.kw "block/title",Wire.String "Titled";
+         Wire.kw "logseq.property/value",Wire.Int 19],"Titled";
+       Wire.Map [Wire.kw "block/name",Wire.String "named"],"named";
+       Wire.Map [],"";Wire.Nil,""];
     let items =
       List.map
         (fun (key, title) -> Properties_select.item ~key title (fun () -> ()))
@@ -3680,13 +3717,17 @@ let run_views ~registry ~profile ~finish =
           Properties_state.view_overlays_state := previous_overlays;
           Runtime.worker := previous_worker;
           Runtime.read_model := previous_model;
-          done_ ()
+          numeric_choices_menu_check done_
       | (ty, many, closed, in_panel) :: rest ->
           let ident = "fixture/" ^ ty in
           let chosen = ref [80] in
-          let choice id title = Wire.Map [Wire.kw "db/id",Wire.Int id;
-            Wire.kw "block/uuid",Wire.Uuid ("value-" ^ string_of_int id);
-            Wire.kw "block/title",Wire.String title] in
+          let first_title, second_title =
+            if ty="number" && closed then "19","21" else "First","Second" in
+          let choice id title = Wire.Map ([Wire.kw "db/id",Wire.Int id;
+            Wire.kw "block/uuid",Wire.Uuid ("value-" ^ string_of_int id)]
+            @ (if ty="number" && closed then
+              [Wire.kw "logseq.property/value",if id=80 then Wire.Int 19 else Wire.Float 21.]
+            else [Wire.kw "block/title",Wire.String title])) in
           let first = choice 80 "First" and second = choice 81 "Second" in
           ignore (Fake_worker.install (fun name args -> match name with
             | "thread-api/get-property-values" -> Wire.Array (List.map (fun value ->
@@ -3733,11 +3774,13 @@ let run_views ~registry ~profile ~finish =
             let view = column [Properties_value.view ~hover:None ctx row;Properties_view.overlays] in
             view context parent) in
           if in_panel then begin
-            let trigger = List.find (fun n -> n.M.kind="button") (nodes picker) in
+            let trigger = List.find (fun n -> n.M.kind="button"
+              && (not closed || class_has n "pv-closed-value")) (nodes picker) in
             let document = !(Stub_dom.document_ref) in
             let lookup : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
             let anchor = Stub_dom.make_element "button" in
-            let id = "property-number-property-picker-property-owner-" ^ ident in
+            let id = (if closed then "property-closed-" else "property-number-")
+              ^ "property-picker-property-owner-" ^ ident in
             let set : string -> string -> unit = Stub_dom.get_field anchor "setAttribute" in
             set "id" id;
             Stub_dom.set_field document "getElementById" (fun key -> if key=id then anchor else lookup key);
@@ -3751,9 +3794,12 @@ let run_views ~registry ~profile ~finish =
               && M.string_prop n "name"=Some "app:check") (nodes picker)) in
             let owned () = if in_panel then Properties_state.view_overlay_open () else
               Option.fold ~none:false ~some:(fun current -> current==d) !Properties_dialog.current in
+            let rec has_label node title =
+              M.string_prop node "text"=Some title
+              || List.exists (fun child -> has_label child title) (M.children picker.S.tree node.M.id) in
             if many then check "A reopened property chooser marks its current entity" (checks ()=1);
             let option = List.find_opt (fun n -> n.M.kind="list-item"
-              && M.string_prop n "text"=Some "Second") (nodes picker) in
+              && has_label n second_title) (nodes picker) in
             check ("Property dialog reuses existing " ^ ty ^ " value entities") (Option.is_some option);
             Option.iter (fun n -> S.press picker n.M.id) option;
             ignore (Js.Global.setTimeout ~f:(fun () ->
@@ -3765,7 +3811,7 @@ let run_views ~registry ~profile ~finish =
                   ((input ()).M.id=original_input && checks ()=2
                    && owned ());
                 let first = List.find_opt (fun n -> n.M.kind="list-item"
-                  && M.string_prop n "text"=Some "First") (nodes picker) in
+                  && has_label n first_title) (nodes picker) in
                 Option.iter (fun n -> S.press picker n.M.id) first;
                 ignore (Js.Global.setTimeout ~f:(fun () ->
                   check "Toggling a selected entity removes only that entity and keeps the chooser usable"
@@ -3782,7 +3828,9 @@ let run_views ~registry ~profile ~finish =
               end) 0)) 0)
     in
     next ["number",false,false,false;"default",false,false,false;"url",false,false,false;
-      "number",true,false,false;"default",true,true,false;"number",true,false,true]
+      "number",true,false,false;"default",true,true,false;"number",true,false,true;
+      "number",false,true,false;"number",true,true,false;
+      "number",false,true,true;"number",true,true,true]
   in
   let property_text_many_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model in
