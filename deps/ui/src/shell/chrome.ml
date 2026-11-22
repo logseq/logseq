@@ -554,11 +554,14 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
    the uuid resolves — cljs has the same window) *)
 let local_graph_sync_button (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
+  let auth = Rtc_flows.auth_signal ~scheduler:ctx.Lui_ui.ui_scheduler in
   (reactive
-    (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
+    (fun (((repo : string option), (repos : string list), (_rtc : Model.rtc option)),
+          (_auth : int)) ->
       (* m.rtc joins the input so the db-sync-start broadcast after an
          upload re-renders — refresh_db_rtc_uuid then resolves the new
-         uuid and hides the button *)
+         uuid and hides the button. auth bumps on login/logout so the
+         button appears without a model change. *)
       Rtc_flows.refresh_db_rtc_uuid repo;
       let uploadable =
         match repo with
@@ -581,7 +584,9 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
           []
       else box ~key:"lgs-off" ~display:`none [])
     (Logseq_el.own ctx
-       (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)))
+       (Signal.map2
+          (fun (m : Model.t) a -> ((m.repo, m.repos, m.rtc), a))
+          ms auth)))
     ctx parent
 
 (* cljs components/svg.cljs loader-fn — the ui/loading spinner

@@ -229,19 +229,19 @@ let ev_of (e : Js.Json.t) : Ui_services.ev =
          simply never fire *)
   ; detail =
       (fun name ->
-        match jfield "detail" e with
-        | Some d -> (
-            match jfield name d with
-            | Some v -> (
-                match Js.Json.classify v with
-                | Js.Json.JSONString s -> Some s
-                (* primitive detail fields surface as their JS string
-                   form — numbers/booleans decode from the repr *)
-                | Js.Json.JSONNumber _ | Js.Json.JSONTrue | Js.Json.JSONFalse ->
-                    Some (Js.Json.stringify v)
-                | _ -> None)
-            | None -> None)
-        | None -> None)
+        let from_obj o =
+          match jfield name o with
+          | Some v -> (
+              match Js.Json.classify v with
+              | Js.Json.JSONString s -> Some s
+              | Js.Json.JSONNumber _ | Js.Json.JSONTrue | Js.Json.JSONFalse ->
+                  Some (Js.Json.stringify v)
+              | _ -> None)
+          | None -> None
+        in
+        match Option.bind (jfield "detail" e) from_obj with
+        | Some _ as s -> s
+        | None -> from_obj e)
   ; detail_json =
       (fun name ->
         match jfield "detail" e with

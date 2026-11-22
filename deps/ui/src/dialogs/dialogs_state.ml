@@ -241,7 +241,8 @@ let known name =
     [ "new-graph"; "add-graph"; "settings"; "login"; "import"; "importer"
     ; "export"; "export-graph"; "export-page"; "publish-page"; "plugins"
     ; "plugin-readme"; "plugin-settings"; "sync-server"; "publish-server"
-    ; "rtc-collaborators"; "quick-add"; "graph-open"; "graph-remove" ]
+    ; "rtc-collaborators"; "quick-add"; "graph-open"; "graph-remove"
+    ; "themes-select" ]
 
 let init () =
   if !init_done then ()

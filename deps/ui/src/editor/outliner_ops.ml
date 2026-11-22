@@ -683,10 +683,35 @@ let resolve_block_tags blocks =
   resolve_block_tags_for (Runtime.model ()).Model.repo blocks
 
 (* the page entity's own block/tags -> resolved titles (page-title chips) *)
+(* Worker ldb/recycled? including ancestor soft-deletes — used after
+   history/subscription refreshes so undo of delete-page clears the
+   recycle shell (page_recycled is otherwise sticky from route load). *)
+let fetch_page_recycled repo (page : Model.page) : bool Js.Promise.t =
+  match page.Model.page_uuid with
+  | None -> Js.Promise.resolve page.page_recycled
+  | Some u ->
+      let* info =
+        Runtime.invoke2 "thread-api/get-page-route-info" (Wire.String repo)
+          (Wire.Uuid u)
+      in
+      check_loader_result info;
+      Js.Promise.resolve
+        (match Option.bind (Wire.get info "recycled?") Wire.as_bool with
+         | Some b -> b
+         | None ->
+             Option.is_some (Wire.get info "logseq.property/deleted-at"))
+
 let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
+  (* Prefer UUID — title "Asset" collides with logseq.property/asset
+     (lower eid), which made the Asset class page show "# Property". *)
   let* w =
-    Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
-      (Wire.String page.Model.page_title)
+    match page.Model.page_uuid with
+    | Some uuid ->
+        Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+          (Wire.Uuid uuid)
+    | None ->
+        Runtime.invoke2 "thread-api/get-case-page" (Wire.String repo)
+          (Wire.String page.Model.page_title)
   in
   check_loader_result w;
   (* get-case-page encodes multi-ref values as a plain set of
@@ -712,6 +737,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
     List.mem i ids && ident <> "logseq.class/Page"
   in
   let kept = List.filter keep titles in
+  let* page_recycled = fetch_page_recycled repo page in
   Js.Promise.resolve
     { page with
       Model.page_icon = Node_icon.own w
@@ -732,6 +758,7 @@ let resolve_page_tags repo (page : Model.page) : Model.page Js.Promise.t =
             List.mem i ids
             && ident = "logseq.class/Page")
           titles
+    ; page_recycled
     }
 
 (* block zoom: the route root is a block, not a page — refetch it via
@@ -1120,10 +1147,13 @@ let submit_result ?current context opts ops : Wire.t option Js.Promise.t =
         check_loader_result r;
         (* Autosave has no immediate refresh. Only its current context
            may consume the returned delta on a later broadcast. *)
-        if current () then
+        if current () then begin
+          (* Master outliner pipeline clears :editor/start-pos after each tx. *)
+          S.clear_editor_start_pos ();
           (match Wire.get r "delta" with
            | Some d -> Page_delta.stash_deferred d
-           | None -> ());
+           | None -> ())
+        end;
         Js.Promise.resolve (if current () then Some r else None)
       in
       p |> Js.Promise.catch (fun e ->

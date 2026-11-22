@@ -706,7 +706,7 @@ let test_node_reference_suggestions (h : host) =
           (A.live_buffer "b1"=prefix ^ "[[]]"
            && match (Popups_state.get popup).Popups_state.ac with
               | Some ac -> ac.tpos=String.length prefix && ac.tlen=2 && ac.query=""
-                  && List.length ac.items=33
+                  && List.length ac.items=10
               | None -> false);
         Editor_keys.apply_input "b1" (EI.Insert "Tar");
         let* () = h.wait_ms 25 in
@@ -740,10 +740,12 @@ let test_node_reference_suggestions (h : host) =
   let before = !searches in
   open_query "[[ ]]" 3 " ";
   let* () = h.wait_ms 25 in
-  check "empty node-reference query offers all 33 NLP dates without a graph search"
+  check "empty node-reference query offers the first 10 NLP dates without a graph search"
     (match (Popups_state.get popup).Popups_state.ac with
-     | Some ac -> !searches = before && List.length ac.items = 33
+     | Some ac -> !searches = before && List.length ac.items = 10
          && List.for_all (fun item -> Str_util.starts_with_ci item.Popups_state.ai_key "nlp:") ac.items
+         && List.exists (fun item -> item.Popups_state.ai_key = "nlp:Today") ac.items
+         && not (List.exists (fun item -> item.Popups_state.ai_key = "nlp:Last year") ac.items)
      | None -> false);
   Popups_state.close_ac popup;
   Popups_state.active := previous_popup;
@@ -1285,6 +1287,39 @@ let test_indent_type_double_undo_caret (h : host) =
   let* () = undo_twice 2 in
   check "The double-undo workflow consumes both recorded mutations" (!undos=2 && !history=[]);
   Runtime.worker := Some worker;
+  reset_editor ();
+  (* G2 undo-typing: master restore-cursor! prefers start-pos on undo. *)
+  stage_page h [Test_check.block "b1" "abc"];
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:3 ~base:"abc";
+  check "history_editing records master start-pos/end-pos"
+    (match S.history_editing (editing_now ()) with
+     | W.Map kvs ->
+         W.get (W.Map kvs) "start-pos" = Some (W.Int 0)
+         && W.get (W.Map kvs) "end-pos" = Some (W.Int 3)
+         && W.get (W.Map kvs) "caret" = Some (W.Int 3)
+     | _ -> false);
+  let cursor =
+    W.Map
+      [ W.Keyword "block-uuid", W.Uuid "b1"
+      ; W.Keyword "scope", W.String "main"
+      ; W.Keyword "start-pos", W.Int 0
+      ; W.Keyword "end-pos", W.Int 3
+      ; W.Keyword "caret", W.Int 3 ]
+  in
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:3 ~base:"abc";
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool true;
+               W.Keyword "editor-cursors", W.List [cursor] ]) in
+  check "Undo restores start-pos rather than the live end caret"
+    (S.editing_uuid () = Some "b1" && (editing_now ()).model.EM.caret = 0);
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "abc"];
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:0 ~base:"abc";
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool false;
+               W.Keyword "editor-cursors", W.List [cursor] ]) in
+  check "Redo restores end-pos / caret"
+    (S.editing_uuid () = Some "b1" && (editing_now ()).model.EM.caret = 3);
   reset_editor ();
   Js.Promise.resolve ()
 
@@ -2014,7 +2049,14 @@ let test_code_conversion_focus (h : host) =
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (command,title,query,typed,sibling)::rest ->
         reset_editor ();
-        stage_page h [{(Test_check.block "b1" title) with Model.block_display_type=typed}];
+        (* Clear heading is gated like master — only listed when the block
+           already has a heading. normal-text is not a slash label (master
+           exposes Clear heading); keep query empty so filter does not close. *)
+        let block =
+          let b = {(Test_check.block "b1" title) with Model.block_display_type=typed} in
+          if command = "clear-heading" then { b with Model.block_heading = Some 2 }
+          else b in
+        stage_page h [block];
         let source = title ^ "/" ^ query in
         set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
         install_worker ~repo:h.repo h;
@@ -2048,7 +2090,7 @@ let test_code_conversion_focus (h : host) =
     "calculator","","Calc",None,false;"quote","Existing ","Quote",None,false;
     "quote","Existing ","Quote",Some "math",false;"math-block","Existing ","Math",None,false;
     "heading:2","Existing ","Heading",None,false;"clear-heading","Existing ","Clear",None,false;
-    "normal-text","Existing ","Normal",None,false;"number-list","Existing ","Number",None,false]
+    "normal-text","Existing ","",None,false;"number-list","Existing ","Number",None,false]
 
 let test_calculator_exit_structure (h : host) =
   let previous_buffer = !S.code_buffer_of in
@@ -2105,11 +2147,13 @@ let test_query_selection_conversion (h : host) =
         let* () = settle h 40 in
         reset_editor ();
         stage_page h [Test_check.block "b1" title];
-        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:title;
-        A.update_model "b1" (fun m -> EM.select m ~anchor:0 ~focus:(String.length title));
-        Editor_keys.apply_input "b1" (EI.Insert "/");
-        Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Slash;
-        Editor_keys.apply_input "b1" (EI.Insert "Query");
+        (* Real slash flow: host text stays, then "/Query" is typed and
+           erased before Query / Advanced Query runs (master last-pattern). *)
+        let source = title ^ "/Query" in
+        set_editing ~uuid:"b1" ~buffer:source
+          ~caret:(String.length source) ~base:title;
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false
+          popup Popups_state.Slash;
         install_worker ~repo:h.repo h;
         let attempts = ref [] in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
@@ -2135,9 +2179,19 @@ let test_query_selection_conversion (h : host) =
               W.get block "block/uuid"=Some (W.Uuid uuid)
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
-        check "Query conversion preserves the pre-command title in its query property"
+        check "Query conversion matches master Query vs Advanced Query steps"
           (if rejected then not (saves "query-source" title)
-           else saves "query-source" title && saves "b1" ""
+           else if advanced then
+             (* advanced-query-steps: keep host title, empty code query child *)
+             saves "b1" title && saves "query-source" ""
+             && List.mem (Ops.set_block_property "b1" "block/tags"
+                  (W.Keyword "logseq.class/Query")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.node/display-type" (W.Keyword "code")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.code/lang" (W.String "clojure")) batch
+           else
+             saves "query-source" title && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
@@ -2931,7 +2985,60 @@ let test_authoritative_route_miss (h : host) =
     Ui_services.log_error ("Authoritative route miss test failed", error);
     failwith "Authoritative route miss test failed")
 
+let test_paste_history_cursors (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "paste-origin" "Original"];
+  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:2 ~base:"Original";
+  S.note_editor_start_pos_from_arrow 2;
+  S.record_history_start ~force:true (editing_now ());
+  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:5 ~base:"Original";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker and options = ref W.Nil in
+  let inserted = W.Map [W.kw "block/uuid", W.Uuid "paste-result";
+    W.kw "block/title", W.String "Clipboard parent"] in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    if name <> "thread-api/apply-outliner-ops" then worker.Worker_client.invoke_fn name args
+    else begin
+      (match args with [_;_;opts] -> options:=opts | _ -> ());
+      Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+        [Test_check.block "paste-origin" "Original";
+         Test_check.block "paste-result" "Clipboard parent"]}) !Runtime.current_page;
+      h.sync_page ();
+      Js.Promise.resolve (W.Map [W.kw "result",W.Map [W.kw "blocks",W.Array [inserted]]])
+    end)};
+  let* _ = A.paste_copied_blocks (false,[inserted]) "paste-origin"
+      ~sibling:true ~replace_empty:false in
+  let before = Option.get (W.get !options "undo-redo/editor-info")
+  and after = Option.get (W.get !options "undo-redo/editor-info-after") in
+  check "Structured paste preserves its captured before-caret rather than the live caret"
+    (W.map_get_uuid before "block-uuid"=Some "paste-origin"
+     && W.map_get_string before "scope"=Some "main"
+     && W.get before "caret"=Some (W.Int 2)
+     && W.get before "start-pos"=Some (W.Int 2));
+  check "Structured paste records the last inserted block at end as its after-cursor"
+    (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
+     && W.map_get_string after "scope"=Some "main"
+     && W.get after "caret"=Some (W.Keyword "end"));
+  let after = match after with
+    | W.Map kvs -> W.Map (List.map (fun (key,value) ->
+        key,(if key=W.kw "block-uuid" then W.Uuid "paste-result" else value)) kvs)
+    | _ -> failwith "Paste after-cursor must be a map" in
+  let restore undo = A.restore_history (W.Map [W.kw "undo?",W.Bool undo;
+    W.kw "editor-cursors",W.List [before;after]]) in
+  let* () = restore true in
+  check "Structured paste undo restores the captured origin caret"
+    (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
+     =Some ("paste-origin",2));
+  let* () = restore false in
+  check "Structured paste redo restores the last inserted block at end"
+    (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
+     =Some ("paste-result",String.length "Clipboard parent"));
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_structured_paste_completion (h : host) =
+  let* () = test_paste_history_cursors h in
   let rec run = function
     | [] -> Js.Promise.resolve ()
     | outcome :: rest ->
@@ -2969,12 +3076,18 @@ let test_structured_paste_completion (h : host) =
         !release ();
         let* _ = operation in
         let* () = h.wait_ms 10 in
-        check ("Structured paste completes without stealing focus: " ^ outcome)
-          (if outcome = "saved" then S.editing () = None && !S.pending_focus = None
-           else Option.map (fun e -> e.S.uuid) (S.editing ()) =
+        check ("Structured paste keeps editing the last insert: " ^ outcome)
+          (Option.map (fun e -> e.S.uuid) (S.editing ()) =
              Some (if outcome = "newer editor" then "other" else "paste-target"));
         check ("Structured paste retains failure state: " ^ outcome) (!failed = (outcome = "rejected"));
-        if outcome = "saved" then check "Structured paste redo does not reopen an editor" (!after = Some W.Nil);
+        if outcome = "saved" then
+          check "Structured paste redo restores the last inserted editor"
+            (match !after with
+             | Some (W.Map kvs) ->
+                 List.assoc_opt (W.Keyword "block-uuid") kvs
+                   = Some (W.Keyword "last-inserted-block")
+                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Keyword "end")
+             | _ -> false);
         reset_editor ();
         run rest
   in

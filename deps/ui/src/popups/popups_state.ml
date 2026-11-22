@@ -213,6 +213,10 @@ type t =
   ; page_exact_titles : string list ref (* parentless internal pages/journals *)
   ; tag_titles : (string * string option) list ref
     (* class/tag entities for the # popup: (title, tabler icon) *)
+  ; tag_page_class : (string * string option) list ref
+    (* cljs get-matched-classes: Page is only a # candidate while a
+       non-page block is being edited AND the query is non-empty. Empty
+       `#` uses get-all-classes with private tags excluded (no Page). *)
   ; tag_exact_titles : string list ref
     (* every class + alias title — feeds only the exact-match check that
        suppresses the "New tag" row (cljs page-exists?/class-alias?); the
@@ -234,6 +238,7 @@ let make scheduler : t =
   ; titles = ref []
   ; page_exact_titles = ref []
     ; tag_titles = ref []
+    ; tag_page_class = ref []
     ; tag_exact_titles = ref []
     ; templates = ref []  }
   in
@@ -672,20 +677,24 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
       || Option.fold ~none:false ~some:(fun group -> List.mem group groups) item.ai_group) items
 ;;
 
-(* cljs editor.cljs keeps a fallback item for slash *)
+(* cljs hardcodes English; LUI uses the shared dict key so locales localize. *)
 let slash_fallback () =
-  mk_item ~key:"no-matched"
-    ~label:(U.t "editor.slash/no-matched-commands") Noop
+  mk_item ~key:"editor.slash/no-matched-commands"
+    ~label:(U.t "editor.slash/no-matched-commands")
+    ~english:(U.en_text "editor.slash/no-matched-commands") Noop
 ;;
 
 (* ---- filtering ---- *)
 
+(* cljs *latest-matched-command — close when typed >2 chars past last hit *)
+let latest_matched_slash_q = ref ""
 
 let rec take n xs =
   if n <= 0 then [] else match xs with [] -> [] | x :: tl -> x :: take (n - 1) tl
 ;;
 
-(* index + .ui__ac-group-name banners (unfiltered slash only, like cljs) *)
+(* index + .ui__ac-group-name banners — cljs auto-complete keeps group
+   headers for filtered slash results via get-group-name *)
 let with_headers show items =
   let rec go last idx = function
     | [] -> []
@@ -713,17 +722,47 @@ let editing_has_heading () =
   | None -> false
 ;;
 
-let filter_slash q items =
-  let fields = [ (fun it -> it.ai_label); (fun it -> it.ai_english) ] in
-  let fields = if U.current_lang () = "zh-CN" then
-      fields @ [fun it -> Fuzzy.hanzi_initials it.ai_label] else fields in
-  let fs =
-    if q = "" then items
-    else Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
+(* cljs get-matched-commands extract-fns include command-group-name so
+   "/head" keeps the Heading group; headers stay on filtered results *)
+let filter_slash_matches q items =
+  let fields =
+    [ (fun it -> it.ai_label)
+    ; (fun it -> it.ai_english)
+    ; (fun it -> Option.value it.ai_group ~default:"") ]
   in
+  let fields =
+    if U.current_lang () = "zh-CN" then
+      fields
+      @ [ (fun it -> Fuzzy.hanzi_initials it.ai_label)
+        ; (fun it ->
+             match it.ai_group with
+             | Some g -> Fuzzy.hanzi_initials g
+             | None -> "") ]
+    else fields
+  in
+  if q = "" then items
+  else Fuzzy.fuzzy_search_multi ~extract_fns:fields ~limit:50 items q
 
-  (match fs with [] -> [ slash_fallback () ] | _ -> fs)
-  |> with_headers (q = "")
+type slash_filter =
+  | Slash_items of ac_item list
+  | Slash_close
+
+let filter_slash_result q items =
+  if q <> "" && String.trim q = "" then Slash_close
+  else
+    let fs = filter_slash_matches q items in
+    match fs with
+    | [] ->
+        if S.length q - S.length !latest_matched_slash_q > 2 then Slash_close
+        else Slash_items (with_headers true [ slash_fallback () ])
+    | xs ->
+        latest_matched_slash_q := q;
+        Slash_items (with_headers true xs)
+
+let filter_slash q items =
+  match filter_slash_result q items with
+  | Slash_close -> with_headers true [ slash_fallback () ]
+  | Slash_items xs -> xs
 ;;
 
 (* cljs editor.cljs page-search: an empty [[ query lists the i18n nlp
@@ -812,13 +851,25 @@ let page_items_for t kind q =
   let matched =
     match kind with
     | Tag_search ->
-        (* cljs get-matched-classes → fuzzy-search (limit 20) *)
-        Fuzzy.fuzzy_search ~extract:fst ~limit:20 !(t.tag_titles) q
-        |> List.map wrap_tag
-    | Page_ref -> Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50 (nlp_items kind) q
+        (* cljs search-pages blank q: all classes (private excluded, no
+           Page). Non-empty q: get-matched-classes fuzzy (limit 20), and
+           a non-page block edit also fuzzies the Page class. *)
+        if q = "" then List.map wrap_tag !(t.tag_titles)
+        else
+          Fuzzy.fuzzy_search ~extract:fst ~limit:20
+            (!(t.tag_titles) @ !(t.tag_page_class)) q
+          |> List.map wrap_tag
+    | Page_ref ->
+        (* cljs page-search-aux: blank [[ lists the first 10 nlp date
+           pages; non-empty queries fuzzy the full nlp set (plus async
+           node search). *)
+        if q = "" then take 10 (nlp_items kind)
+        else
+          Fuzzy.fuzzy_search ~extract:node_search_text ~limit:50
+            (nlp_items kind) q
     | Page_embed ->
         if q = "" then
-          nlp_items kind
+          take 10 (nlp_items kind)
         else
           Fuzzy.fuzzy_search ~extract:(fun ti -> ti) ~limit:50 !(t.titles) q
           |> List.map wrap
@@ -827,14 +878,19 @@ let page_items_for t kind q =
           (List.map wrap
              (List.filter (fun ti -> I18n.contains_ci ti q) !(t.titles)))
   in
+  (* cljs <get-block by name is case-insensitive; suppress New page/tag
+     when an exact parentless page/journal (or class/alias) exists. *)
+  let title_eq a b =
+    S.equal (S.lowercase_ascii a) (S.lowercase_ascii b)
+  in
   let exact =
     match kind with
     | Tag_search ->
         (* cljs search-pages db-tag?: the "New tag" row is suppressed when
            the query exactly names an existing class (internal ones like
            Page count) or a class alias *)
-        List.exists (fun ti -> S.equal ti q) !(t.tag_exact_titles)
-    | _ -> List.exists (fun ti -> S.equal ti q) !(t.page_exact_titles)
+        List.exists (fun ti -> title_eq ti q) !(t.tag_exact_titles)
+    | _ -> List.exists (fun ti -> title_eq ti q) !(t.page_exact_titles)
   in
   (* cljs matched-pages-with-new-page: the "New tag/page" row goes after a
      leading starts-with match, else first *)
@@ -941,6 +997,15 @@ let refresh_items t ac =
   match ac.kind with
   | Slash ->
       let graph = repo () and session = !(t.session) in
+      let slash_pool ~statuses ~priorities =
+        slash_items ~statuses ~priorities ~has_heading:(editing_has_heading ())
+      in
+      let apply_slash_filter current query statuses priorities =
+        match filter_slash_result query (slash_pool ~statuses ~priorities) with
+        | Slash_close -> close_ac t
+        | Slash_items items ->
+            set_ac t (Some { current with query; items; chosen = 0 })
+      in
       ignore (let* values = Js.Promise.all [|
         Properties_data.closed_values (Wire.Keyword "logseq.property/status");
         Properties_data.closed_values (Wire.Keyword "logseq.property/priority") |] in
@@ -948,17 +1013,14 @@ let refresh_items t ac =
          | Some current when session = !(t.session) && graph = repo ()
               && current.kind = Slash && current.auuid = ac.auuid
               && current.query = ac.query ->
-             let items = slash_items ~statuses:(Wire.elems values.(0))
-               ~priorities:(Wire.elems values.(1))
-               ~has_heading:(editing_has_heading ()) |> filter_slash current.query in
-             set_ac t (Some {current with items; chosen = 0})
+             apply_slash_filter current current.query
+               (Wire.elems values.(0)) (Wire.elems values.(1))
          | _ -> ());
         Js.Promise.resolve ());
-      { ac with
-        items =
-          filter_slash ac.query
-            (slash_items ~statuses:[] ~priorities:[]
-              ~has_heading:(editing_has_heading ())) }
+      (match filter_slash_result ac.query
+               (slash_pool ~statuses:[] ~priorities:[]) with
+       | Slash_close -> { ac with items = []; chosen = 0 }
+       | Slash_items items -> { ac with items })
   | Page_ref | Page_embed | Tag_search ->
       { ac with items = page_items_for t ac.kind ac.query }
   | Template_search -> { ac with items = template_items_for t ac.query }
@@ -1105,11 +1167,7 @@ let load_titles t =
        Runtime.invoke1 "thread-api/get-all-page-titles"
          (Wire.String graph)
      in
-     let rows =
-       match w with
-       | Wire.Array xs | Wire.List xs -> xs
-       | _ -> []
-     in
+     let rows = Wire.elems w in
      let titles =
        List.filter_map
          (fun row ->
@@ -1120,7 +1178,8 @@ let load_titles t =
      in
      (* get-all-page-titles intentionally returns strings, so resolve the
         suppression set separately: ordinary names need an internal page
-        or journal with no parent. Tags retain their class/alias check. *)
+        or journal with no parent. Tags retain their class/alias check.
+        thread-api/q relations decode as Set — use Wire.elems. *)
      let* exact =
        Runtime.invoke2 "thread-api/q" (Wire.String graph)
          (Wire.Array
@@ -1130,14 +1189,12 @@ let load_titles t =
      if session = !(t.session) && graph = repo () then (
      t.titles := titles;
      t.page_exact_titles :=
-       (match exact with
-        | Wire.Array xs | Wire.List xs ->
-            List.filter_map
-              (function
-                | Wire.Array [ Wire.String title ] | Wire.List [ Wire.String title ] -> Some title
-                | _ -> None)
-              xs
-        | _ -> []);
+       List.filter_map
+         (fun row ->
+           match Wire.elems row with
+           | [ Wire.String title ] -> Some title
+           | _ -> None)
+         (Wire.elems exact);
      (match (get t).ac with
       | Some ({ kind = Page_ref; query; _ } as ac) when String.trim query <> "" ->
           run_node_search t ac
@@ -1184,9 +1241,11 @@ let class_titles_of rows =
 
 let load_tag_titles t =
   let session = !(t.session) and graph = repo () in
+  (* cljs get-matched-classes: Page joins candidates only while editing a
+     non-page block (page-title edits are page? entities). *)
   let editing_block =
     match Editor_state.editing_uuid () with
-    | Some _ -> true
+    | Some u -> not (Editor_actions.anchor_is_page_title u)
     | None -> false
   in
   let wopts extra =
@@ -1202,43 +1261,36 @@ let load_tag_titles t =
          (Wire.String graph)
          (wopts [ ("except-private-tags?", Wire.Bool true) ])
      in
-     let rows =
-       match w with
-       | Wire.Array xs | Wire.List xs -> xs
-       | _ -> []
-     in
+     let rows = Wire.elems w in
      let* () =
        let titles = class_titles_of rows in
        (* the full class list (private tags included) feeds only
-          tag_exact_titles; Page is conjoined to the candidates just
-          when editing a non-page block *)
+          tag_exact_titles; Page is kept separately and only joins the
+          fuzzy candidates for a non-empty query on a non-page block
+          (cljs get-matched-classes / empty search-pages). *)
        let* w2 =
          Runtime.invoke2 "thread-api/get-all-classes"
            (Wire.String graph)
            (wopts [ ("except-private-tags?", Wire.Bool false) ])
        in
-       let rows2 =
-         match w2 with
-         | Wire.Array xs | Wire.List xs -> xs
-         | _ -> []
-       in
+       let rows2 = Wire.elems w2 in
        if session = !(t.session) && graph = repo () then (
        t.tag_titles := titles;
        t.tag_exact_titles :=
          List.map fst (class_titles_of rows2);
-       (if editing_block then
-          let page_class =
-            List.filter
-              (fun r ->
-                (* entity_map_wire emits db/ident as a keyword
-                   value, not a string *)
-                Wire.get r "db/ident"
-                = Some (Wire.Keyword "logseq.class/Page"))
-              rows2
-          in
-          t.tag_titles :=
-            !(t.tag_titles)
-            @ class_titles_of page_class));
+       t.tag_page_class :=
+         if editing_block then
+           let page_class =
+             List.filter
+               (fun r ->
+                 (* entity_map_wire emits db/ident as a keyword
+                    value, not a string *)
+                 Wire.get r "db/ident"
+                 = Some (Wire.Keyword "logseq.class/Page"))
+               rows2
+           in
+           class_titles_of page_class
+         else []);
        Js.Promise.resolve ()
      in
      (match (get t).ac with
@@ -1372,12 +1424,14 @@ let measure_ac ?(retries = 120) t kind =
 let open_ac ?tpos ?(autopair = true) t kind =
   if not (draft_editing ()) || draft_ac_kind kind then begin
   invalidate_ac t;
+  if kind = Slash then latest_matched_slash_q := "";
   let graph = repo () in
   if !(t.cache_repo) <> Some graph then (
     t.cache_repo := Some graph;
     t.titles := [];
     t.page_exact_titles := [];
     t.tag_titles := [];
+    t.tag_page_class := [];
     t.tag_exact_titles := [];
     t.templates := []);
   let auuid = Option.value (Editor_state.editing_uuid ()) ~default:"" in
@@ -1426,11 +1480,23 @@ let open_ac ?tpos ?(autopair = true) t kind =
 
 let ac_update t ac q =
   incr t.gen;
-  let ac = { ac with query = q; chosen = 0 } in
-  set_ac t (Some (refresh_items t ac));
-  if ac.kind = Block_ref then run_block_search t ac
-  else if (ac.kind = Page_ref || ac.kind = Embed_ref) && String.trim q <> ""
-  then run_node_search t ac
+  if ac.kind = Slash then
+    match
+      filter_slash_result q
+        (slash_items ~statuses:[] ~priorities:[]
+           ~has_heading:(editing_has_heading ()))
+    with
+    | Slash_close -> close_ac t
+    | Slash_items items ->
+        set_ac t (Some { ac with query = q; chosen = 0; items });
+        (* async refresh with status/priority closed values *)
+        ignore (refresh_items t { ac with query = q; chosen = 0; items })
+  else (
+    let ac = { ac with query = q; chosen = 0 } in
+    set_ac t (Some (refresh_items t ac));
+    if ac.kind = Block_ref then run_block_search t ac
+    else if (ac.kind = Page_ref || ac.kind = Embed_ref) && String.trim q <> ""
+    then run_node_search t ac)
 ;;
 
 let query_closed_kind kind q =
@@ -1744,9 +1810,37 @@ let apply_tag t ac ~create ~inline title =
       let insert () =
         (* cljs: class items erase "#q" on enter but insert "#wrapped"
            on mod+enter (inline-tag?; the Page class is exempt) *)
-        emit ac.auuid ac.tpos
-          (if inline && title <> "Page" then inline_tag_text ac title
-           else "")
+        let text =
+          if inline && title <> "Page" then inline_tag_text ac title else ""
+        in
+        emit ac.auuid ac.tpos text;
+        (* cljs add-tag -> save-block-aux! trims; class tagging with
+           text="" otherwise leaves the space before '#'. Preserve the
+           completion caret (adjusted for leading trim) so typing after
+           `#Tag` before existing text does not jump to the block end. *)
+        if text = "" then
+          match Editor_actions.edit_model buuid with
+          | Some m ->
+              let source = m.Edit_model.source in
+              let trimmed = Outliner_ops.trim_title buuid source in
+              if trimmed <> source then begin
+                let before_caret = fst (Editor_actions.sel_span_of m) in
+                let leading =
+                  let n = String.length source in
+                  let i = ref 0 in
+                  while !i < n && Char.code source.[!i] <= 32 do incr i done;
+                  !i
+                in
+                let caret =
+                  max 0 (min (String.length trimmed) (before_caret - leading))
+                in
+                Editor_actions.update_model buuid (fun _ ->
+                    Edit_model.select
+                      (Edit_model.splice m 0 (String.length source) trimmed)
+                      ~anchor:caret ~focus:caret);
+                Outliner_ops.schedule_save buuid trimmed
+              end
+          | None -> ()
       in
       let create_and_tag () =
         insert ();
@@ -1846,82 +1940,84 @@ let apply_template t ac uuid =
            end else Js.Promise.resolve () in
          Js.Promise.resolve ())
          |> Views_db.catch_quiet)
-(* cljs run-query-command! / advanced-query-steps: save the current
-   block, tag it logseq.class/Query, create the hidden
-   logseq.property/query value block and copy the current title into it
-   (the query source), clear the block title, exit edit. Advanced also
-   marks the value block display-type=code + code/lang=clojure so the
-   worker's render-view-data exposes the pulled :query columns. *)
+(* cljs query-steps: clear slash then run-query-command! (move title into
+   logseq.property/query, tag Query, empty host). advanced-query-steps:
+   clear slash, tag Query, empty query property marked code/clojure,
+   keep host title, exit. *)
+let query_property_uuid w =
+  match Wire.args_list w with
+  | res :: _ -> (
+      let b =
+        match Wire.get res "block" with Some b -> b | None -> res
+      in
+      match Wire.get b "logseq.property/query" with
+      | Some v -> (
+          match Wire.map_get_uuid v "block/uuid" with
+          | Some u -> u
+          | None -> (match Wire.as_uuid v with Some u -> u | None -> ""))
+      | None -> "")
+  | [] -> ""
+
 let run_query t ac ~advanced =
   match Editor_state.editing_uuid () with
   | None -> ()
   | Some buuid ->
-      let title = (Option.get ac.editor).Editor_state.base in
       Outliner_ops.cancel_pending_save ();
-      Editor_actions.sync_buffer buuid title;
+      erase_trigger_text ac;
       close_ac t;
+      let title = Editor_actions.live_buffer buuid in
+      Editor_actions.sync_buffer buuid title;
       Editor_actions.exit_edit ~select:false;
       let repo_v = repo () in
+      let fetch_query_uuid () =
+        Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
+          (Wire.Array
+             [ Wire.Map
+                 [ (Wire.Keyword "id", Wire.Uuid buuid)
+                 ; ( Wire.Keyword "opts"
+                   , Wire.Map
+                       [ (Wire.Keyword "children?", Wire.Bool true)
+                       ; ( Wire.Keyword "include-property-block?"
+                         , Wire.Bool true ) ] ) ] ])
+      in
+      let ensure_query_prop () =
+        Outliner_ops.op "create-property-text-block"
+          [ Wire.Uuid buuid
+          ; Wire.Keyword "logseq.property/query"
+          ; Wire.String ""
+          ; Wire.Map
+              [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
+      in
       ignore
         ((let* sop = Outliner_ops.save_block_parsed buuid title in
-        let* _ =
-           Outliner_ops.apply
-             [ sop
-             ; Outliner_ops.op "create-property-text-block"
-                 [ Wire.Uuid buuid
-                 ; Wire.Keyword "logseq.property/query"
-                 ; Wire.String ""
-                 ; Wire.Map
-                     [ (Wire.Keyword "set-block-property?", Wire.Bool true) ] ]
-             ]
-         in
-         let* w =
-          Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
-            (Wire.Array
-               [ Wire.Map
-                   [ (Wire.Keyword "id", Wire.Uuid buuid)
-                   ; ( Wire.Keyword "opts"
-                     , Wire.Map
-                         [ (Wire.Keyword "children?", Wire.Bool true)
-                         ; ( Wire.Keyword "include-property-block?"
-                           , Wire.Bool true ) ] ) ]
-               ])
-        in
-        let quuid =
-          match Wire.args_list w with
-          | res :: _ -> (
-              let b =
-                match Wire.get res "block" with
-                | Some b -> b
-                | None -> res
-              in
-              match Wire.get b "logseq.property/query" with
-              | Some v -> (
-                  match Wire.map_get_uuid v "block/uuid" with
-                  | Some u -> u
-                  | None -> (
-                      match Wire.as_uuid v with
-                      | Some u -> u
-                      | None -> ""))
-              | None -> "")
-          | [] -> ""
-        in
-        if quuid = "" then Js.Promise.resolve ()
-        else
-          let rest =
-            [ Outliner_ops.set_block_property buuid "block/tags"
-                (Wire.Keyword "logseq.class/Query") ]
-            @ if advanced then
+          let* _ =
+            Outliner_ops.apply
+              (if advanced then
+                 [ sop
+                 ; Outliner_ops.set_block_property buuid "block/tags"
+                     (Wire.Keyword "logseq.class/Query")
+                 ; ensure_query_prop () ]
+               else [ sop; ensure_query_prop () ])
+          in
+          let* w = fetch_query_uuid () in
+          let quuid = query_property_uuid w in
+          if quuid = "" then Js.Promise.resolve ()
+          else if advanced then
+            (* keep host title; query child stays empty code block *)
+            Outliner_ops.apply_parsed
+              ~rest:
                 [ Outliner_ops.set_block_property quuid
                     "logseq.property.node/display-type"
                     (Wire.Keyword "code")
                 ; Outliner_ops.set_block_property quuid
-                    "logseq.property.code/lang"
-                    (Wire.String "clojure") ]
-              else []
-          in
-          Outliner_ops.apply_parsed ~rest
-            [ (quuid, title); (buuid, "") ])
+                    "logseq.property.code/lang" (Wire.String "clojure") ]
+              [ (quuid, "") ]
+          else
+            Outliner_ops.apply_parsed
+              ~rest:
+                [ Outliner_ops.set_block_property buuid "block/tags"
+                    (Wire.Keyword "logseq.class/Query") ]
+              [ (quuid, title); (buuid, "") ])
         |> Views_db.catch_quiet)
 
 exception Unsupported_configured_input
@@ -2551,11 +2647,15 @@ let apply_item t ac ~meta it =
            Editor_sink.focus_input ac.auuid
            with Unsupported_configured_input -> unsupported ()))
   | Switch kind ->
-      invalidate_ac t;
+      (* cljs embed-block/page-ref clear the slash trigger before the
+         follow-up search opens — mutate the buffer before invalidating
+         so insert_text's ac_current check still passes *)
       (match kind with
        | Template_search -> insert_text ac "/" 0
        | Page_ref -> insert_text ac "[[]]" 2
+       | Embed_ref -> insert_text ac "" 0
        | _ -> erase_trigger_text ac);
+      invalidate_ac t;
       (match kind with
        | Page_ref | Page_embed | Tag_search -> load_titles t
        | Template_search -> load_templates t
@@ -2574,21 +2674,26 @@ let apply_item t ac ~meta it =
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
   | Editor_cmd "youtube-timestamp" ->
-      (* cljs :youtube/insert-timestamp — insert! the macro (nil strips
-         only the trigger) *)
+      (* cljs :youtube/insert-timestamp — insert! macro {} with default
+         last-pattern=/ ; nil macro still clears the slash trigger *)
       (match !(Runtime.video_timestamp) () with
        | Runtime.Playback_time seconds ->
-           insert_text ac (Printf.sprintf "{{youtube-timestamp %d}}" seconds) 0
+           insert_text ac
+             (Printf.sprintf "{{youtube-timestamp %d}}" seconds) 0
        | Runtime.Player_pending ->
            Toast.warning (I18n.t "youtube/player-not-ready");
-           insert_text ac "" 0
-       | Runtime.No_video -> insert_text ac "" 0);
+           erase_trigger_text ac
+       | Runtime.No_video -> erase_trigger_text ac);
       close_ac t
   | Editor_cmd c ->
       let to_ = match c with
        | "date-picker" ->
            (* cljs :editor/show-date-picker keeps the typed trigger
               text — the calendar's commit replaces it *)
+           ac.tpos
+       | "upload" ->
+           (* cljs upload-asset steps are only click-hidden-file-input —
+              restore-slash? keeps "/Upload an asset" until a file is chosen *)
            ac.tpos
        | "link" | "image-link" ->
            (* cljs [:editor/input "/link"] — the buffer holds the literal

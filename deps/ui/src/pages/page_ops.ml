@@ -39,21 +39,49 @@ let rename uuid new_title =
       Sdk_util.apply_op "rename-page"
         [ Wire.Uuid uuid; Wire.String new_title ]
     in
-    if repo () <> graph || Runtime.route () <> route then Js.Promise.resolve ()
-    else match route with
-    | Model.Page name ->
-        ignore (Router.load_page_ref ~accept_missing:true route (Wire.page_ref name));
-        Js.Promise.resolve ()
-    | _ -> Js.Promise.resolve (reload ())
+    if repo () <> graph then Js.Promise.resolve ()
+    else begin
+      (* Master after-page-renamed!: when the current page was renamed,
+         replace-state to its uuid so the route stays resolvable. Reloading
+         the old title ref with accept_missing cleared route_page and made
+         the next undo report a false Owned_refresh_failed. *)
+      (match route with
+       | Model.Page _ ->
+           Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ uuid))
+       | _ when Runtime.route () = route -> reload ()
+       | _ -> ());
+      Js.Promise.resolve ()
+    end
 
 let delete uuid =
-  (* bounce to Home after deleting, but only when the route still
-     points where it did at click time — a navigation that already
-     happened (e.g. to Recycle) must not be stomped *)
-  let from = Ui_services.nav_hash () in
+  (* cljs delete-page! stays on the page route; page.cljs recycled?
+     swaps the body for :page/moved-to-recycle. Do not bounce Home.
+     Classes/properties are hard-retracted — accept_missing so the
+     stale route_page is replaced with the not-found shell. *)
+  let route_page = (Runtime.model ()).Model.route_page in
+  let title, today, permanent =
+    match route_page with
+    | Some p when p.Model.page_uuid = Some uuid ->
+        ( p.page_title
+        , (match p.page_journal_day with
+           | Some d -> d = Dates.today_journal_day ()
+           | None -> false)
+        , p.page_is_tag || p.page_is_property )
+    | _ -> ("", false, false)
+  in
+  let route = Runtime.route () in
   let* _ = Sdk_util.apply_op "delete-page" [ Wire.Uuid uuid; Wire.Map [] ] in
-  if Ui_services.nav_hash () = from then
-    Ui_services.nav_set_hash (Runtime.nav_hash "/");
+  if today then
+    Toast.success (I18n.t "page.delete/today-journal-truncate-success")
+  else if title <> "" then
+    Toast.success (I18n.t1 "page.delete/success" title);
+  if Runtime.route () = route then (
+    match permanent, route with
+    | true, Model.Page name ->
+        ignore
+          (Router.load_page_ref ~accept_missing:true route
+             (Wire.page_ref name))
+    | _ -> reload ());
   Js.Promise.resolve ()
 
 let convert_to_tag db_id =

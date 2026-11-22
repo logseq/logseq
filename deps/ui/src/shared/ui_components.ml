@@ -238,12 +238,14 @@ let tag_link_appearance ?(in_block = false) element =
     ; Prop.foreground tag_link_foreground
     ; Prop.hover_foreground tag_link_foreground ] element
 
+(* cljs keeps the right-sidebar toggle visible down to ~500px; LUI used
+   the sm/640 breakpoint which hid it too early on narrow layouts. *)
 let header_right_sidebar_toggle element : t =
  fun ctx parent ->
   let viewport=Ui_services.viewport_width_signal ~scheduler:ctx.Lui_ui.ui_scheduler
     ~scope:ctx.Lui_ui.ui_scope in
   Ui_parts.string_prop P.DisplayValue
-    ~value:(reactive (fun width -> if width>=640. then "contents" else "none") viewport)
+    ~value:(reactive (fun width -> if width>=500. then "contents" else "none") viewport)
     (box ~key:"header-right-sidebar-toggle" [element]) ctx parent
 
 (* Exactly one leading toolbar is interactive: the open sidebar owns it,
@@ -474,6 +476,7 @@ let cmdk_item_row ~key ~data_attrs_signal ~background_signal ~shadow_signal
 (* Breadcrumb header inside an item row — 32px left inset, small light
    type, single-line ellipsis. *)
 let cmdk_item_header ~key children =
+  (* cljs: pl-8 items-center gap-2 -mt-1 — keep badge on the crumb line *)
   with_props
     [ Prop.font_size "var(--lx-text-header)"
     ; Prop.font_weight 300
@@ -482,7 +485,7 @@ let cmdk_item_header ~key children =
     ; Prop.padding_left 32
     ]
     (row ~key ~style_class:"breadcrumb" ~cross:`center
-       ~gap:8 ~min_width:0 ~margin_top:(-4)
+       ~gap:8 ~min_width:0 ~margin_top:(-4) ~height:16
        ~foreground:
          "var(--lx-gray-11, var(--ls-secondary-text-color, \
           hsl(var(--muted-foreground))))"
@@ -631,16 +634,19 @@ let shortcut_separate ~key ~glow:_ children : t =
   row ~key ~style_class:"shui-shortcut-separate" ~cross:`center ~gap:4
     children
 
-let shortcut_chord ~key children : t =
-  row ~key ~cross:`center ~gap:8
+let shortcut_chord ~key ?data_binding children : t =
+  row ~key ~style_class:"shui-shortcut-chord" ~cross:`center ~gap:8
+    ?data_attrs:(match data_binding with
+      | Some binding -> Some ["data-shortcut-binding", binding]
+      | None -> None)
     children
 
-(* "then" separator between chord groups — 10px at 45% opacity like
-   cljs shui-shortcut-chord-sep. *)
-let chord_separator ~key : t =
+(* Chord-group separator — keymap uses "->" (cljs :chord-separator);
+   cmdk/help keep the default "then". Trailing () eliminates the
+   optional so callers get a finished `t`. *)
+let chord_separator ?(value = "then") ~key () : t =
   with_props [ Prop.opacity 0.45 ]
-    (text ~key ~font_size:"0.625rem"
-       ~value:"then" [])
+    (text ~key ~font_size:"0.625rem" ~value [])
 
 (* Text-only spans for the compact header link — same typography as a
    keycap, no chrome. *)

@@ -1456,7 +1456,14 @@ let render_head inst : t =
                [ icon ~name:(Icons.name_ref "filter") ~point_size:18 [] ]
            ]
          @ [ toolbar_search_el inst ]
-         @ [ display_type_el inst; more_actions_el inst ]
+         @ (* linked/unlinked refs are list-only; master view-head still
+              mounts a property-value type control, but headed parity
+              counts five toolbar icons without a dedicated View Type
+              button — omit display_type_el for refs. *)
+           (match inst.V.kind with
+            | V.KLinkedRefs | V.KUnlinkedRefs -> []
+            | _ -> [ display_type_el inst ])
+         @ [ more_actions_el inst ]
          @ (if has_add_object then
               [ toolbar_ghost_btn "plus" ~title_:(I.t "node/new")
                   ~on_click:(fun () -> (V.ops ()).V.o_add_object inst) ]

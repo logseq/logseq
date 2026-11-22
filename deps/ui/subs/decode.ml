@@ -560,9 +560,13 @@ let page_of_summary (w : Wire.t) : Model.page option =
   in
   match w with
   | Wire.Map _ ->
+      (* Prefer raw-title: journals format from journal-day + current
+         title-format (cljs entity-plus :block/raw-title). Stored
+         block/title lags until a rename, so date-format settings
+         would otherwise leave "Nov 21st, 2026" on screen. *)
       let title =
         Option.value
-          (str [ "block/title"; "page-title"; "block/raw-title" ])
+          (str [ "block/raw-title"; "page-title"; "block/title" ])
           ~default:""
       in
       let page_uuid =
@@ -630,6 +634,11 @@ let page_of_summary (w : Wire.t) : Model.page option =
         ; page_linked_refs = []
         ; page_parents = []
         ; page_db_collapsable = db_collapsable_of_wire w
+        ; page_recycled =
+            (match Option.bind (Wire.get w "recycled?") Wire.as_bool with
+             | Some b -> b
+             | None ->
+                 Option.is_some (Wire.get w "logseq.property/deleted-at"))
         }
   | _ -> None
 
@@ -646,31 +655,76 @@ let repos_of_list_db (w : Wire.t) : string list =
   | _ -> []
 
 (* worker :notification broadcast payload:
-   [message type clear? uid timeout {:i18n-key :i18n-args}] *)
-let toast_of_wire (w : Wire.t) : Model.toast option =
+   [message type clear? uid timeout {:i18n-key :i18n-args}]
+   Matches cljs frontend.handler.worker/handle :notification — when
+   :i18n-key is present it wins over a literal message. *)
+let toast_of_wire ?(translate = fun key _args -> key) (w : Wire.t)
+    : Model.toast option =
   let text_of = function
     | Wire.String s -> Some s
     | Wire.Keyword s -> Some s
     | _ -> None
   in
+  let i18n_of = function
+    | Wire.Map kvs ->
+        let key =
+          List.find_map
+            (function
+              | (Wire.Keyword "i18n-key" | Wire.String "i18n-key"),
+                (Wire.Keyword k | Wire.String k) ->
+                  Some k
+              | _ -> None)
+            kvs
+        in
+        let args =
+          match
+            List.find_map
+              (function
+                | (Wire.Keyword "i18n-args" | Wire.String "i18n-args"), v ->
+                    Some v
+                | _ -> None)
+              kvs
+          with
+          | Some (Wire.Array xs | Wire.List xs) ->
+              List.filter_map text_of xs
+          | _ -> []
+        in
+        Option.map (fun k -> (k, args)) key
+    | _ -> None
+  in
   match w with
   | Wire.Array (m :: ty :: options) | Wire.List (m :: ty :: options) -> (
-      match text_of m with
+      let kind = Option.value (text_of ty) ~default:"info" in
+      let duration =
+        Some
+          (if kind = "error" then 0
+           else
+             match options with
+             | Wire.Bool false :: _ -> 0
+             | _ :: _ :: Wire.Int timeout :: _ -> timeout
+             | _ :: _ :: Wire.Float timeout :: _ -> int_of_float timeout
+             | [] -> 1500
+             | _ -> 2000)
+      in
+      let extra =
+        match options with
+        | _ :: _ :: _ :: extra :: _ -> i18n_of extra
+        | _ -> None
+      in
+      let text =
+        match extra with
+        | Some (key, args) -> Some (translate key args)
+        | None -> text_of m
+      in
+      match text with
       | Some text ->
           Some
             { Model.toast_id = 0
             ; toast_text = text
-            ; toast_kind = Option.value (text_of ty) ~default:"info"
+            ; toast_kind = kind
             ; toast_key = None
             ; toast_code = None
-            ; toast_duration = Some (
-                if text_of ty = Some "error" then 0
-                else match options with
-                | Wire.Bool false :: _ -> 0
-                | _ :: _ :: Wire.Int timeout :: _ -> timeout
-                | _ :: _ :: Wire.Float timeout :: _ -> int_of_float timeout
-                | [] -> 1500
-                | _ -> 2000)
+            ; toast_duration = duration
             }
       | None -> None)
   | _ -> None

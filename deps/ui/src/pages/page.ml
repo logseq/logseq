@@ -203,32 +203,41 @@ let title_editor (page : Model.page) : t =
          | None -> ())
     | _ -> ()
   in
+  let discard ?(select = false) () =
+    Runtime.send Action.Title_edit_done;
+    (match page.page_uuid with
+     | Some u when select -> Editor_actions.select_single u
+     | _ -> ());
+    Runtime.flush ()
+  in
   let commit ?(select = false) () =
     let value =
       String.trim
         (Runtime.signal_get model_st).Edit_model.source
     in
-    (match page.page_uuid with
-     | Some u ->
-         ignore
-           ((if value = page.page_title then Js.Promise.resolve ()
-             else Page_ops.rename u value)
-            |> Js.Promise.then_ (fun () ->
-              Runtime.send Action.Title_edit_done;
-              if select then Editor_actions.select_single u;
-              Runtime.flush ();
-              Js.Promise.resolve ())
-            |> Js.Promise.catch (fun _ ->
-              (* rejected rename (e.g. "#" in the name): the worker
-                 notification toast already explains it; the editor
-                 stays open on the typed text like cljs *)
-              Js.Promise.resolve ()))
-     | None ->
-         Runtime.send Action.Title_edit_done;
-         Runtime.flush ())
+    (* cljs save-block-aux! skips built-ins — Escape/commit must not
+       rename Library/Contents/etc. or the reject keeps the draft open *)
+    if page.page_built_in || value = page.page_title then discard ~select ()
+    else
+      match page.page_uuid with
+      | Some u ->
+          ignore
+            (Page_ops.rename u value
+             |> Js.Promise.then_ (fun () ->
+               Runtime.send Action.Title_edit_done;
+               if select then Editor_actions.select_single u;
+               Runtime.flush ();
+               Js.Promise.resolve ())
+             |> Js.Promise.catch (fun _ ->
+               (* rejected rename (e.g. "#" in the name): the worker
+                  notification toast already explains it; the editor
+                  stays open on the typed text like cljs *)
+               Js.Promise.resolve ()))
+      | None -> discard ~select ()
   in
   (* Enter/Escape both exit selecting the title block (cljs parity);
-     blur exits without the selection *)
+     built-in pages discard via [commit] without renaming. Blur exits
+     without the selection. *)
   let route =
     { Edit_input.split_block = (fun () -> commit ~select:true ())
     ; merge_prev = (fun () -> ())
@@ -456,19 +465,24 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     Option.map (Icon_picker.icon_el ~size:38.) (Model.page_node_icon page)
   in
   let uuid = Option.value page.page_uuid ~default:"" in
-  (* cljs db-page-title: tag/class pages render collapsed by default; the
-     fold state lives in the same collapsed/expanded sets as blocks *)
+  (* cljs db-page-title: tag/class and property pages render collapsed
+     by default; the fold state lives in the same collapsed/expanded
+     sets as blocks. Collapsing property pages hides LUI-only extras
+     (Hide empty value / Enable property history / Add property). *)
   let collapse = S.collapse_sig () in
+  let default_collapsed =
+    page.page_is_tag || page.page_is_property
+  in
   let title_collapsed (state : S.collapse_view) =
     not (S.String_set.mem uuid state.cv_expanded)
-    && (S.String_set.mem uuid state.cv_collapsed || page.page_is_tag)
+    && (S.String_set.mem uuid state.cv_collapsed || default_collapsed)
   in
   let toggle_title_collapse () =
     Editor_actions.blur_commit ();
     if S.ready () then
       S.set (fun (st : S.t) ->
           if not (S.String_set.mem uuid st.S.expanded)
-             && (S.String_set.mem uuid st.S.collapsed || page.page_is_tag) then
+             && (S.String_set.mem uuid st.S.collapsed || default_collapsed) then
             { st with
               S.collapsed = S.String_set.remove uuid st.S.collapsed
             ; S.expanded = S.String_set.add uuid st.S.expanded
@@ -483,7 +497,8 @@ let page_title_el (m : Model.t) (page : Model.page) : t =
     | Some _ -> Signal.value (Properties_area.page_state ctx page)
     | None -> Signal.constant ctx.Lui_ui.ui_scheduler Properties_state.empty_area_data in
   let collapsable_title (data : Properties_state.area_data) =
-    page.page_db_collapsable || page.page_is_tag || data.rows <> [] || data.hidden <> [] in
+    page.page_db_collapsable || default_collapsed
+    || data.rows <> [] || data.hidden <> [] in
   (* cljs *control-show? atom: the fold caret appears only while the
      pointer is over the title row, and only for collapsable titles *)
   let caret_hover = Signal.state (Signal.signal_owner collapse) false in
@@ -1045,7 +1060,8 @@ let journal_section ms ~footer ?spacing ?body_spacing ~source : t =
                        (fun page ->
                          column ~key:"journal-reference-content" ~gap:32
                            ((if is_today_journal page then
-                               [today_queries page]
+                               [ today_queries page
+                               ; Scheduled_deadlines.view page ]
                              else [])
                             @ [journal_references_view page])) ps ] ]) ]
          @ (match spacing with
@@ -1414,10 +1430,11 @@ let linked_refs_el (m : Model.t) : t =
       | None -> Logseq_el.nothing
       | Some uuid ->
           column ~key:"refs-wrap" ~gap:32 ~margin_left:4
-            (* cljs page-inner: #today-queries div first on today's journal,
+            (* cljs page-inner: #today-queries, then Scheduled and Deadline,
                then the linked refs section *)
             ((if is_today_page m page then
-                [ today_queries page ]
+                [ today_queries page
+                ; Scheduled_deadlines.view page ]
               else [])
             @ [ box ~key:"lrefs"
                   [ references_view ~page_uuid:uuid ~has_refs:true () ] ]))
@@ -1451,7 +1468,17 @@ let page_tabs_el (m : Model.t) : t =
       object_tabs_el ~key_prefix:"ptabs" page
   | _ -> Logseq_el.nothing
 
-let page_view_ms (ms : Model.t Signal.signal) : t =
+(* cljs page.cljs recycled? branch — soft-delete keeps the route and
+   replaces the outliner with :page/moved-to-recycle *)
+let recycled_page_view () =
+  column ~key:"page-recycled" ~style_class:"page cp__page-inner-wrap" ~grow:1.
+    ~padding_horizontal:8
+    [ column ~key:"page-inner" ~gap:32 ~margin_bottom:64
+        [ box ~key:"moved" ~opacity:0.75
+            [ paragraph ~key:"moved-t" ~margin:0
+                ~value:(I18n.t "page/moved-to-recycle") [] ] ] ]
+
+let page_view_live (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let m0 = Signal.get ms in
   let outline = Outline_viewport_state.ensure ctx ms in
@@ -1508,6 +1535,21 @@ let page_view_ms (ms : Model.t Signal.signal) : t =
       [ Flat_outliner.view ~state:outline ~library ~header
           ~section_minimum_height:(60. -. 28.) ~section_blocks_only:true ~footer ()
       ; Selection_bar.view ~model:ms () ])) ctx parent
+
+let page_view_ms (ms : Model.t Signal.signal) : t =
+  reactive
+    ~equal:(fun (a : Model.t) (b : Model.t) ->
+      let recycled = function
+        | Some (p : Model.page) -> p.page_recycled
+        | None -> false
+      in
+      recycled a.route_page = recycled b.route_page
+      && page_key a.route_page = page_key b.route_page)
+    (fun (m : Model.t) ->
+      match m.route_page with
+      | Some p when p.page_recycled -> recycled_page_view ()
+      | _ -> page_view_live ms)
+    ms
 
 (* the route-root dynamic segment — page routes keep the region mounted
    across data publishes (the keyed/reactive segments inside repaint
@@ -1576,6 +1618,17 @@ let region (ms : Model.t Signal.signal) : t =
           column ~key:"recycle-page" ~gap:32 ~padding_horizontal:8
             [ top_view m; box ~margin_top:(-20) [Recycle.view ms] ]
       | Model.Ready, Model.Settings -> Settings_page.view ms
+      | Model.Ready, Model.Plugins ->
+          (* cljs plugins/plugins-page — reuse dialog body as full page *)
+          column ~key:"plugins-route" ~grow:1. ~padding:16
+            [ Plugins_view.body ms ]
+      | Model.Ready, Model.Login ->
+          (* cljs login/page wraps page-impl in pt-10 *)
+          (Ui_components.with_props
+             [ Ui_components.Prop.padding_top 40 ]
+             (column ~key:"login-route" ~grow:1.
+                ~main:`center ~cross:`center
+                [ Login_view.body ms ]))
       | Model.Ready, Model.File path -> File_view.view ~path ms
       | Model.Ready, Model.Import -> Importer.view ()
       | Model.Ready, Model.Bug_report -> Bug_report.view ()

@@ -2134,9 +2134,11 @@ let fail_pending_txs repo (tx_ids : string list) : unit =
 
 (* ---- flush-pending! ---- *)
 
-(* cljs <upload-aes-key *)
-let upload_aes_key repo (tx_entries : Wire.t list) : Wire.t Db_worker_effect.t
-    =
+(* cljs <upload-aes-key — passes (:graph-id client) into
+   <ensure-graph-aes-key. Prefer the live client's id when the display
+   conn / client-ops lookup still lags after create-remote. *)
+let upload_aes_key repo (client : Sync_state.client) (tx_entries : Wire.t list)
+    : Wire.t Db_worker_effect.t =
   let e2ee =
     tx_entries <> []
     &&
@@ -2146,14 +2148,23 @@ let upload_aes_key repo (tx_entries : Wire.t list) : Wire.t Db_worker_effect.t
     | None -> false
   in
   if e2ee then
-    Sync_deps.require "ensure_graph_aes_key" Sync_deps.ensure_graph_aes_key
-      repo
-    >>= fun aes_key ->
-    if aes_key = Wire.Nil then
-      Sync_util.fail_fast "db-sync/missing-field"
-        (Wire.Map
-           [ Wire.keyword "repo", Wire.String repo; Wire.keyword "field", Wire.keyword "aes-key" ]);
-    Db_worker_effect.pure aes_key
+    let prev = !Sync_crypt.get_graph_id_fn in
+    (match client.graph_id with
+     | Some gid -> Sync_crypt.get_graph_id_fn := (fun _ -> Some gid)
+     | None -> ());
+    Db_worker_effect.finally
+      (Sync_deps.require "ensure_graph_aes_key" Sync_deps.ensure_graph_aes_key
+         repo
+       >>= fun aes_key ->
+       if aes_key = Wire.Nil then
+         Sync_util.fail_fast "db-sync/missing-field"
+           (Wire.Map
+              [ Wire.keyword "repo", Wire.String repo
+              ; Wire.keyword "field", Wire.keyword "aes-key" ]);
+       Db_worker_effect.pure aes_key)
+      (fun () ->
+        Sync_crypt.get_graph_id_fn := prev;
+        Db_worker_effect.pure ())
   else Db_worker_effect.pure Wire.Nil
 
 (* cljs <encrypt-tx-entry *)
@@ -2306,15 +2317,21 @@ let upload_pending_batch repo (client : Sync_state.client) (conn : conn)
           !rebuild_display_fn repo
       end;
       Db_worker_effect.catch
-        (upload_aes_key repo tx_entries >>= fun aes_key ->
+        (upload_aes_key repo client tx_entries >>= fun aes_key ->
          Db_worker_effect.all
            (List.map (encrypt_tx_entry repo client aes_key) tx_entries)
          >>= fun tx_entries' ->
          match tx_entries with
          | [] -> Db_worker_effect.pure ()
          | _ ->
-             send_tx_batch client (Option.get client.ws) local_tx tx_entries
-               tx_entries')
+             (match client.ws with
+              | None ->
+                  Sync_util.fail_fast "db-sync/missing-field"
+                    (Wire.Map
+                       [ Wire.keyword "repo", Wire.String repo
+                       ; Wire.keyword "field", Wire.keyword "ws" ])
+              | Some ws ->
+                  send_tx_batch client ws local_tx tx_entries tx_entries'))
         (fun error ->
            Sync_util.set_last_sync_error client error;
            Worker_log.error "db-sync/flush-pending-failed"

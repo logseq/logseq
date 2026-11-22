@@ -36,6 +36,7 @@ let body_of name (ms : Model.t Signal.signal) : t =
   | "quick-add" -> Quick_add_view.body ms
   | "graph-open" -> Graphs_view.selector ~remove:false ms
   | "graph-remove" -> Graphs_view.selector ~remove:true ms
+  | "themes-select" -> Themes_select_view.body ms
   | _ -> box ~key:("empty-" ^ name) []
 
 (* Named dialogs specialize the shared card recipe with typed constraints. *)

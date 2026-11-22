@@ -146,9 +146,10 @@ let is_many prop =
   || ident_of prop = "block/tags"
 
 (* after "Text"/"URL" is chosen the cljs flow creates the empty value
-   block and lands the caret in it — refresh as soon as the write lands
-   so the pending editor mounts before the user's next click; entering
-   that editor exits the outliner edit (single editing surface) *)
+   block and lands the caret in it — await the area refresh so the
+   pending editor mounts (and steals focus) before the next keystroke;
+   fire-and-forget refresh left focus on the block body and the value
+   row stuck on "Empty" after the typed title was already persisted *)
 let add_empty_text_block d prop =
   let ident = ident_of prop in
   !(Editor_state.close_block_editor) ();
@@ -161,8 +162,11 @@ let add_empty_text_block d prop =
     D.create_property_text_block ~block_uuid ~ident
       ~title ~new_block_id:(if block_uuid=owner then value_uuid else Ui_services.env_random_uuid ()) ())
   in
-  S.refresh_now ();
+  (* dismiss first so dialog focus-restore cannot race the pending
+     editor; then await refresh_all_now so on_appear → enter_edit runs
+     against the new value row before the user types *)
   close_current d;
+  let* _ = S.refresh_all_now () in
   Js.Promise.resolve ())
   |> ignore
 
@@ -763,7 +767,12 @@ let view : t =
                       [ dialog_content ~compact_width:232 ~phase d ]
                   ])
             | Centered ->
-                Ui_components.dialog ~text:(I18n.t "property/add-or-change")
+                (* Master property picker has no dialog title chrome —
+                   only the search placeholder carries "Add or change
+                   property". A ~text header was LUI-only and showed up
+                   in ctrl+alt+p / type-chooser / number flows. Same
+                   root cause as G4 shortcut checks p-t / p-d / p-p / p-i. *)
+                Ui_components.dialog
                   ~style_class:"ls-property-dialog"
                   ~on_dismiss:(fun _ -> close ())
                   [ Ui_parts.int_prop Lui_protocol.MaxWidth
@@ -985,18 +994,46 @@ let open_for_block_with_property ?context_revision ?scope ?view_parent ?on_close
   let finish () =
     if Ui_effect.is_current open_requests ticket then retire_open ()
   in
+  (* Bare entity-by-ident lacks property/closed-values; the property-page
+     configure path already merges D.closed_values — do the same so
+     status/priority shortcuts list every closed choice on a clean graph
+     instead of falling through to property_values (default Todo only /
+     empty priority). *)
   let lookup = Js.Promise.catch (fun error -> Js.Promise.resolve (Error error))
     (let* prop = D.entity (W.List [ W.Keyword "db/ident"; W.Keyword ident ]) in
-     Js.Promise.resolve (Ok prop))
+     let* closed = D.closed_values (W.Keyword ident) in
+     Js.Promise.resolve (Ok (prop, closed)))
+  in
+  (* cljs :editor/new-property {:property-key _} anchors at the block;
+     Centered would show the "Add or change property" dialog title. *)
+  let placement_for_block () =
+    match placement with
+    | Centered -> (
+        match
+          Ui_services.dom_query
+            (".ls-block[data-blockid='" ^ uuid ^ "']")
+        with
+        | Some blk ->
+            let rx, ry, rw, rh = blk.Ui_services.rect () in
+            if rx <> 0. || ry <> 0. || rw <> 0. || rh <> 0. then
+              Point (rx +. 24., ry +. rh +. 4.)
+            else Centered
+        | None -> Centered)
+    | other -> other
   in
   ignore (let* result = lookup in
     let active = valid () in
     finish ();
     (match result with
-     | Ok prop when active ->
+     | Ok (prop, closed) when active ->
          (match D.untag prop with
-          | W.Map _ as p ->
-              open_at ?on_close ~remove:false ~phase:(Value_edit p) placement
+          | W.Map fields ->
+              let p =
+                W.Map
+                  ((W.Keyword "property/closed-values", closed) :: fields)
+              in
+              open_at ?on_close ~remove:false ~phase:(Value_edit p)
+                (placement_for_block ())
                 { uuid; uuids; db_id = None; is_tag = false; title = "" }
           | _ -> ())
      | Error error when active ->
