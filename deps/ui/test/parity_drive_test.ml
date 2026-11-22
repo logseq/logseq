@@ -945,22 +945,18 @@ let test_modifier_select_preserves_sidebar_scope () =
     ; stop_immediate = (fun () -> ())
     }
   in
-  let assert_scope label =
-    check (label ^ " keeps sidebar scope and selected UUID")
-      (E.selection_scope () = scope
-       && E.String_set.equal (E.selected ())
-            (E.String_set.singleton "side-only")
-       && E.editing () = None);
+  let assert_resolved label =
     check (label ^ " resolves selected UUID in the preserved scope")
       (List.exists
          (fun b -> b.Model.block_uuid = Some "side-only")
          (A.selection_forest ()))
   in
+  let prev_last = !Editor_actions.last_edit_uuid in
   let run ~dirty label =
     (* Dirty: buffer mirrors Edit_model.source; base stays the saved
        title so exit_edit takes the save path. Fake_worker cannot finish
-       save_committed, so after routing we complete the same finish_exit
-       selection preserve by clearing editing with select:false semantics. *)
+       save_committed — assert the selection/scope already written before
+       finish_exit. Clean exit exercises finish_exit itself. *)
     let buffer = if dirty then "main dirty" else "main" in
     set_editing "main-a" buffer ~caret:0;
     (match E.editing () with
@@ -979,17 +975,26 @@ let test_modifier_select_preserves_sidebar_scope () =
       (Block_selection.modifier_select pointer_ev "side-only");
     check (label ^ " routes exit_edit")
       (!Editor_actions.last_edit_uuid = Some "main-a");
-    if dirty && E.editing () <> None then
-      (* Mirror finish_exit ~select:false: drop editing, keep scope/selection. *)
-      E.set (fun st ->
-          { st with
-            E.editing = None
-          ; selected_footer = None
-          });
-    assert_scope label;
+    if dirty then (
+      check (label ^ " keeps sidebar scope and selected UUID while save pending")
+        (E.selection_scope () = scope
+         && E.String_set.equal (E.selected ())
+              (E.String_set.singleton "side-only"));
+      assert_resolved label)
+    else (
+      check (label ^ " keeps sidebar scope and selected UUID")
+        (E.selection_scope () = scope
+         && E.String_set.equal (E.selected ())
+              (E.String_set.singleton "side-only")
+         && E.editing () = None);
+      assert_resolved label);
     clear_editing ()
   in
-  Fun.protect ~finally:unregister (fun () ->
+  Fun.protect
+    ~finally:(fun () ->
+      unregister ();
+      Editor_actions.last_edit_uuid := prev_last)
+    (fun () ->
       run ~dirty:false "clean exit";
       run ~dirty:true "save exit")
 
@@ -997,6 +1002,7 @@ let test_modifier_select_preserves_sidebar_scope () =
    still range-select from the editing block. *)
 let test_shift_click_from_edit () =
   let module E = Editor_state in
+  let prev_last = !Editor_actions.last_edit_uuid in
   stage_main_session [ block "a" "A"; block "b" "B"; block "c" "C" ];
   staged_model := { !staged_model with Model.route = Model.Page "p" };
   set_editing "a" "A" ~caret:0;
@@ -1045,7 +1051,8 @@ let test_shift_click_from_edit () =
      && E.anchor () = Some "a"
      && E.editing () = None
      && (E.read ()).E.action_bar);
-  clear_editing ()
+  clear_editing ();
+  Editor_actions.last_edit_uuid := prev_last
 
 (* ================================================================
    C. Block context menu — cljs components/content.cljs
