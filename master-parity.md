@@ -4,6 +4,8 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 
 ## G1 — editor core, selection, cursor
 
+**Scope:** modules 06 / 07 / 08 only. Modules 01, 03, 05, 10, 16 and other non-editor modules are owned by **G6** (agent `bc-af341623`).
+
 | Item | Status | Notes |
 |------|--------|-------|
 | Indent undo caret position | done | Captures `:editor/start-pos` on End/arrows; undo restores caret (`1e87a84d81`). |
@@ -16,32 +18,16 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | `editor/open-link-in-sidebar` for `[[page]]` | done | `follow_link ~sidebar` uses `Sidebar_state.open_ref` (`c3e24b9b53`). |
 | Shift+Up typed-char leak | n/a | Probes did not reproduce a typed char landing in block text; dropped. |
 
-### G1 — modules 01 / 03 / 05 (sidebar, onboarding, pages)
+### G1 handoff — non-editor items already committed (G6: skip)
 
-Forwarded batch (9 reviewed findings). Shared causes fixed once; each check verified against current branch content.
+Before the scope change, G1 landed two code fixes on PR #14076 (`logseq/lui-ux-parity-53a5`). G6 should **skip** redoing these:
 
-| check | module | severity | status | notes |
-|-------|--------|----------|--------|-------|
-| nav-pages | 03 | high | verified fixed `ffa4ccb71e` | Pages link wires `on_press` → `nav_set_hash` + `ls:navigate` to `#/all-pages` (finding predates fix). |
-| nav-flashcards | 03 | med | verified fixed `c86ab14da8` | Loading gate + clear `all_cards` before open; empty deck shows `flashcard.empty/title`. Overlaps G4 go-flashcards / go-flashcards-tc. |
-| create-dialog | 01 | low | fixed `afc8812d25` | Sync checkbox gated on `rtc_group?` only (same root as create-graph-empty-name). |
-| create-graph-empty-name | 01 | low | fixed `afc8812d25` | Same Sync-row gate; empty name still refuses submit. |
-| first-load | 01 | low | fixed `ad773195f2` | Same as header-buttons: hide back/forward on non-Electron web. |
-| header-buttons | 01 | low | fixed `ad773195f2` | Match cljs `(when (util/electron?) (back-and-forward))` → 4 buttons on browser web. |
-| favorite-click | 03 | low | verified fixed `79819583d4` | Favorites navigate via `#/page/<uuid>` when uuid present (real product match to master). |
-| recent | 03 | low | verified fixed `79819583d4` | Same UUID route preference as favorites. |
-| delete-page | 05 | low | verified fixed `a2bc4f8b64` | Delete stays on route; page body shows moved-to-recycle (`page_ops.delete` + `page_recycled`). |
+| check | module | commit | notes |
+|-------|--------|--------|-------|
+| create-dialog / create-graph-empty-name | 01 | `afc8812d25` | Sync checkbox gated on `rtc_group?` only |
+| first-load / header-buttons | 01 | `ad773195f2` | Hide back/forward on non-Electron web |
 
-### G1 — modules 10 / 16 (dnd, tags and classes)
-
-Forwarded batch (4 reviewed findings). Findings timestamp predates G6 fixes already on this branch; verified current source still carries them.
-
-| check | module | severity | status | notes |
-|-------|--------|----------|--------|-------|
-| drop-file-image | 10 | med | verified fixed `55f6019f6d` (+ empty-target `fa0fcdccd4`) | Drop resolves `.ls-block` under pointer → sibling insert after target (not page end). |
-| class-page-add-object | 16 | med | verified fixed `583badf716` | `+ New` opens sidebar then `refresh` so the objects table shows the new row immediately. |
-| tag-chip | 16 | low | verified fixed `95fe078837` (+ caret `ce88cd542c`) | Class-tag completion trims trailing space after erasing `#query` (shared with untag). |
-| untag | 16 | low | verified fixed `95fe078837` (+ caret `ce88cd542c`) | Same trim path; stored title has no trailing space after re-edit. |
+Dropped (no G1 code commit; already fixed earlier on branch / now G6-owned): nav-pages, nav-flashcards, favorite-click, recent, delete-page, drop-file-image, class-page-add-object, tag-chip, untag.
 
 ## G2 — copy/paste/undo/redo
 
@@ -164,12 +150,14 @@ Branch: `logseq/g5-slash-commands-7f98`.
 
 ## G6 — chrome / sidebar / pages / assets / tags / views
 
+Owns modules 01, 03, 05, 10, 16 and other non-editor modules (agent `bc-af341623`). **Skip** G1 commits already on #14076: `afc8812d25` (create-dialog Sync gate), `ad773195f2` (header-buttons Electron-only).
+
 | check | module | master behavior | LUI behavior | repro | severity | status |
 | --- | --- | --- | --- | --- | --- | --- |
 | nav-pages | 03 left sidebar | Click Pages navigates to All pages | Only highlighted; stayed on current route | left sidebar `.all-pages-nav` click | high | fixed `70cb570dfa` |
 | nav-flashcards | 03 left sidebar / 26 flashcards | Empty deck shows "Time to create a card!" + `#Card` hint | Showed "No cards due" from stale `all_cards` / missing loading gate | `.flashcards-nav` / `g f` on empty graph | med | fixed `98946559ee` |
-| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | re-fixed by G1 `ad773195f2` (was kept-by-user revert `1606f384ef`) |
-| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | re-fixed by G1 `afc8812d25` (was kept-by-user revert `e778f33305`) |
+| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | done on G1 PR — skip (`ad773195f2`) |
+| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | done on G1 PR — skip (`afc8812d25`) |
 | favorite-click / recent | 03 left sidebar | Favorites/recents navigate to `#/page/<uuid>` | Navigated to `#/page/<name>` | click favorite or recent item | low | fixed `fe8a15537b` |
 | delete-page | 05 pages | After confirm, stay on page; show moved-to-recycle | Navigated to journals/Home | page menu → Delete → Confirm | low | fixed `51098daff9` |
 | drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `55f6019f6d`; empty-target UUID reuse `fa0fcdccd4` (G1 verified) |
