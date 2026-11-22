@@ -955,8 +955,9 @@ let test_modifier_select_preserves_sidebar_scope () =
   let run ~dirty label =
     (* Dirty: buffer mirrors Edit_model.source; base stays the saved
        title so exit_edit takes the save path. Fake_worker cannot finish
-       save_committed — assert the selection/scope already written before
-       finish_exit. Clean exit exercises finish_exit itself. *)
+       save_committed — assert the selection/scope already written and
+       that editing remains mounted (exit waiting on save). Clean exit
+       exercises finish_exit itself. *)
     let buffer = if dirty then "main dirty" else "main" in
     set_editing "main-a" buffer ~caret:0;
     (match E.editing () with
@@ -971,6 +972,8 @@ let test_modifier_select_preserves_sidebar_scope () =
         ; anchor = None
         ; action_bar = false
         });
+    (* Clear so a prior clean-exit UUID cannot satisfy the route check. *)
+    Editor_actions.last_edit_uuid := None;
     check (label ^ " is a modifier gesture")
       (Block_selection.modifier_select pointer_ev "side-only");
     check (label ^ " routes exit_edit")
@@ -979,7 +982,8 @@ let test_modifier_select_preserves_sidebar_scope () =
       check (label ^ " keeps sidebar scope and selected UUID while save pending")
         (E.selection_scope () = scope
          && E.String_set.equal (E.selected ())
-              (E.String_set.singleton "side-only"));
+              (E.String_set.singleton "side-only")
+         && E.editing_uuid () = Some "main-a");
       assert_resolved label)
     else (
       check (label ^ " keeps sidebar scope and selected UUID")
