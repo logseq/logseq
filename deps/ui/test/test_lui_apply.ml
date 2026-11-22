@@ -537,6 +537,42 @@ let test_property ?(verbose = false) seed =
             renderer.T.web_store.T.retained_nodes)))
   done
 
+let test_internal_link_targets () =
+  let renderer = make_renderer () in
+  let app = Lui_app.create (Lui_web.backend renderer) "#/all-pages"
+      (fun _ url -> url)
+      (fun context urls _ -> Lui_elements.column
+        [ Left_sidebar_view.nav_route ~sched:context.Lui_ui.ui_scheduler
+            ~class_:"all-pages-nav" ~active:false ~title:"Pages"
+            ~icon_name:"files" "#/all-pages"
+        ; Lui_elements.link ~accessibility_identifier:"updated-route" ~url_signal:urls ~target:`self_ []
+        ; Lui_elements.link ~key:"default-target" ~url_signal:urls [] ]) in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let links = Hashtbl.fold (fun id node links ->
+      if Store.standard_kind node = Some Wv.Link then (id, node) :: links else links)
+        renderer.T.web_store.T.retained_nodes [] in
+    let explicit = List.filter (fun (id, _) ->
+      Store.property renderer.T.web_store id Wv.TargetValue = Some (Wv.StringValue "_self")) links in
+    check "The Pages route and internal links render same-tab DOM targets"
+      (List.length explicit = 2 && List.for_all (fun (_, node) ->
+        Stub_dom.attr_value (of_json (platform node)) "target" = Some "_self") explicit);
+    let updated = List.find (fun (id, _) ->
+      Store.property renderer.T.web_store id Wv.AccessibilityIdentifier = Some (Wv.StringValue "updated-route")) links in
+    let default = List.find (fun (id, _) ->
+      Store.property renderer.T.web_store id Wv.TargetValue = None) links in
+    List.iter (fun url ->
+      ignore (Lui_app.send app url);
+      ignore (Lui_app.flush app);
+      List.iter (fun ((id, node), target) ->
+        check "URL changes retain the actual DOM anchor and its navigation target"
+          (of_json (platform (Option.get (Store.node renderer.T.web_store id))) == of_json (platform node)
+           && Stub_dom.attr_value (of_json (platform node)) "href" = Some url
+           && Stub_dom.attr_value (of_json (platform node)) "target" = Some target))
+        [updated, "_self"; default, "_blank"])
+      ["#/all-pages?graph-id=fixture"; ""; "#/page/updated"])
+
 let test_icon_palette_search_lifecycle () =
   let renderer = make_renderer () in
   let () = [%mel.raw "window.__emojiData = require('@emoji-mart/data')"] in
