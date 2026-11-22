@@ -36,3 +36,56 @@
             (is (= [:teardown :setup] @events)))
           (p/finally (fn []
                        (done)))))))
+
+(deftest before-quit-prevents-default-and-waits-for-teardown-before-exit
+  (async done
+    (let [events (atom [])
+          teardown-done (p/deferred)
+          already-started? (atom false)
+          event #js {:defaultPrevented false}]
+      (lifecycle/handle-before-quit!
+       {:event event
+        :already-started? already-started?
+        :prevent-default! (fn [_]
+                            (swap! events conj :prevent-default))
+        :teardown! (fn []
+                     (swap! events conj :teardown-start)
+                     teardown-done)
+        :exit! (fn []
+                 (swap! events conj :exit))})
+      (-> (p/let [_ (p/delay 0)]
+            (is (= [:prevent-default :teardown-start] @events))
+            (is (true? @already-started?))
+            (p/resolve! teardown-done true)
+            (p/delay 0))
+          (p/then (fn [_]
+                    (is (= [:prevent-default :teardown-start :exit] @events))))
+          (p/finally (fn []
+                       (p/resolve! teardown-done true)
+                       (done)))))))
+
+(deftest before-quit-is-idempotent-while-teardown-runs
+  (async done
+    (let [events (atom [])
+          teardown-done (p/deferred)
+          already-started? (atom false)
+          opts {:event #js {}
+                :already-started? already-started?
+                :prevent-default! (fn [_]
+                                    (swap! events conj :prevent-default))
+                :teardown! (fn []
+                             (swap! events conj :teardown)
+                             teardown-done)
+                :exit! (fn []
+                         (swap! events conj :exit))}]
+      (lifecycle/handle-before-quit! opts)
+      (lifecycle/handle-before-quit! opts)
+      (-> (p/let [_ (p/delay 0)]
+            (is (= [:prevent-default :teardown] @events))
+            (p/resolve! teardown-done true)
+            (p/delay 0))
+          (p/then (fn [_]
+                    (is (= [:prevent-default :teardown :exit] @events))))
+          (p/finally (fn []
+                       (p/resolve! teardown-done true)
+                       (done)))))))

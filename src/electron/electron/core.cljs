@@ -49,6 +49,7 @@
 (defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
 (defonce *pending-open-urls (atom []))
+(defonce *quit-teardown-started? (atom false))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -448,10 +449,15 @@
 
                                (vreset! *teardown-fn
                                         #(-> (handler/stop-all-db-workers!)
-                                             (p/finally
-                                               (fn []
-                                                 (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
-                                                   (and f (f))))))))))
+                                             (p/catch
+                                              (fn [error]
+                                                (logger/warn :electron/teardown-stop-workers-failed error)
+                                                nil))
+                                             (p/then
+                                              (fn [_]
+                                                (p/all (mapv (fn [f]
+                                                               (p/do (when f (f))))
+                                                             [t0 t1 t2 t3 t4 t5 tt])))))))))
 
                   ;; setup effects
                   (@*setup-fn)
@@ -479,12 +485,23 @@
                                                  (.hide win)))
                                            :else
                                            nil)))))
-                  (.on app' "before-quit" (fn [_e]
+                  (.on app' "before-quit" (fn [e]
                                             (reset! win/*quitting? true)
-                                            (-> (handler/stop-all-db-workers!)
-                                                (p/finally
-                                                  (fn []
-                                                    (embedding-server/stop!))))))
+                                            (lifecycle/handle-before-quit!
+                                             {:event e
+                                              :already-started? *quit-teardown-started?
+                                              :prevent-default! (fn [^js event]
+                                                                  (.preventDefault event))
+                                              :teardown! (fn []
+                                                           (-> (handler/stop-all-db-workers!)
+                                                               (p/catch
+                                                                (fn [error]
+                                                                  (logger/warn :electron/quit-stop-workers-failed error)
+                                                                  nil))
+                                                               (p/then (fn [_]
+                                                                         (embedding-server/stop!)))))
+                                              :exit! (fn []
+                                                       (.exit app' 0))})))
 
                   (.on app' "activate" #(when @*win (.show win))))))
              (p/catch (fn [error]
@@ -526,11 +543,7 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
-                                     (-> (handler/stop-all-db-workers!)
-                                         (p/finally
-                                           (fn []
-                                             (embedding-server/stop!)
-                                             (.quit app))))))
+                                     (.quit app)))
       (on-app-ready! app))))
 
 (defn- <run-current-teardown!

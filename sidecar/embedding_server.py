@@ -3,6 +3,8 @@ import argparse
 import json
 import logging
 import os
+import signal
+import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from sentence_transformers import SentenceTransformer
@@ -132,9 +134,20 @@ def main():
     args = parser.parse_args()
 
     configure_logging(args.log_file)
+    server = None
     try:
         warm_model(args.model)
         server = EmbeddingServer((args.host, args.port), EmbeddingHandler, args.model)
+        shutdown_requested = {"value": False}
+
+        def request_shutdown(signum, _frame):
+            logging.info("Embedding server shutting down (signal %s)", signum)
+            if not shutdown_requested["value"]:
+                shutdown_requested["value"] = True
+                threading.Thread(target=server.shutdown, daemon=True).start()
+
+        signal.signal(signal.SIGTERM, request_shutdown)
+        signal.signal(signal.SIGINT, request_shutdown)
         logging.info(
             "Embedding server listening on http://%s:%s/v1/embeddings",
             args.host,
@@ -148,6 +161,10 @@ def main():
     except Exception:
         logging.exception("Embedding server failed")
         raise
+    finally:
+        logging.info("Embedding server stopped")
+        if server is not None:
+            server.server_close()
 
 
 if __name__ == "__main__":
