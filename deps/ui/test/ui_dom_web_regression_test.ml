@@ -104,6 +104,19 @@ let test_calc_output () =
     ["1+1"; "2^256"; ""; "bad("]
 
 let run () =
+  List.iter (fun (key, code, ctrl, alt, expected) ->
+    let raw = Js.Json.object_ (Js.Dict.fromList
+      ["key", Js.Json.string key; "code", Js.Json.string code;
+       "ctrlKey", Js.Json.boolean ctrl; "altKey", Js.Json.boolean alt]) in
+    check ("Shortcut key respects layout and modifier recovery: " ^ key ^ "/" ^ code)
+      (Editor_keys.stroke_of (Ui_dom_web.ev_of raw) = expected))
+    ["z", "KeyY", true, false, Some "ctrl+z";
+     "y", "KeyZ", true, false, Some "ctrl+y";
+     "a", "KeyQ", true, false, Some "ctrl+a";
+     "Escape", "BracketLeft", true, false, Some "ctrl+open-square-bracket";
+     "å", "KeyA", false, true, Some "alt+a";
+     "z", "", true, false, Some "ctrl+z";
+     "Control", "ControlLeft", true, false, None];
   test_calc_output ();
   test_video_player ();
   let raw=clipboard_event () in

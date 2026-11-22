@@ -313,3 +313,11 @@ because bottom placement overrides sibling placement. Empty-block uploads still
 replace their target; for example, dropping an image onto a text block inserts
 the image after that block, while uploading without a block target appends it
 to the page. The wire shape is unchanged.
+
+## Keyboard-layout shortcut names
+
+Shortcut dispatch preserves valid letter/digit names from `KeyboardEvent.key`
+instead of overriding them with the physical `code`. For example, QWERTZ
+`key="z", code="KeyY", ctrlKey=true` dispatches `ctrl+z` (Undo), not Redo.
+Modifier-corrupted glyphs still use the code fallback, including Ctrl+[ arriving
+as Escape and Option+A arriving as å. Modifier-only events remain ignored.

@@ -816,11 +816,14 @@ let stroke_of ev =
         ev.Ui_services.ctrl || ev.Ui_services.meta || ev.Ui_services.alt
         || shift_held ev
       in
-      (* Prefer KeyboardEvent.code when a modifier is held — recovers
+      (* Use KeyboardEvent.code for corrupted modifier glyphs — recovers
          Ctrl+[ / Ctrl+] when the host reports key=Escape (or another
          corrupted glyph) instead of "[" / "]". *)
       let key =
-        if not mods_held then from_key
+        let layout_key = String.length from_key = 1
+          && (let c = from_key.[0] in
+              (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) in
+        if not mods_held || layout_key then from_key
         else
           match Option.bind (ev.Ui_services.detail "code") code_key_name with
           | Some name -> name
