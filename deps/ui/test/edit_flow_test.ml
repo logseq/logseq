@@ -3077,6 +3077,14 @@ let test_asset_insert_placement (h : host) =
   let* () = run (Some "asset-target") true false false in
   let* () = run (Some "asset-empty") true false true in
   let* () = run None false true false in
+  stage_page h [block "asset-before" "Before"; block "asset-target" "Existing";
+                block "asset-after" "After"];
+  set_editing ~uuid:"asset-target" ~buffer:"Existing" ~caret:8 ~base:"Existing";
+  let upload = Option.get (A.capture_asset_upload ()) in
+  check "Slash upload captures the editing middle block, not its following sibling"
+    (upload.A.upload_target = "asset-target");
+  let* () = run None true false false in
+  reset_editor ();
   install_worker ~repo:h.repo h;
   let upload = Option.get (A.capture_asset_upload ~drop_target:"asset-target" ()) in
   let* () = A.commit_uploaded_assets upload [] in

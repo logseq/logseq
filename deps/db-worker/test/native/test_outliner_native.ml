@@ -592,7 +592,8 @@ let test_asset_insert_placement_tree () =
   let conn = create_conn_with_blocks ~pages_and_blocks:
     [{page = {default_page with pg_title = Some "Asset placement"};
       blocks =
-        [{default_block with b_title = Some "Target";
+        [{default_block with b_title = Some "Before"};
+         {default_block with b_title = Some "Target";
           b_children = [{default_block with b_title = Some "Existing child"}]};
          {default_block with b_title = Some ""; b_uuid = Some blank_uuid};
          {default_block with b_title = Some "Tail"}]}] () in
@@ -621,7 +622,8 @@ let test_asset_insert_placement_tree () =
   insert ~target:target_uuid ~sibling:true ~bottom:false ~replace_empty:false
     first_uuid "First image";
   check "uploaded asset is the next root sibling, not the target's child"
-    (children (uuid_of page) = [Some "Target"; Some "First image"; Some ""; Some "Tail"]);
+    (children (uuid_of page) = [Some "Before"; Some "Target";
+       Some "First image"; Some ""; Some "Tail"]);
   check "upload preserves the target's existing child tree"
     (children target_uuid = [Some "Existing child"]);
   let replacement_uuid = "10000000-0000-4000-8000-000000000093" in
@@ -630,7 +632,8 @@ let test_asset_insert_placement_tree () =
     replacement_uuid "Replacement image";
   check "blank-block upload replaces the existing root without adding a sibling"
     (children (uuid_of page) =
-       [Some "Target"; Some "First image"; Some "Replacement image"; Some "Tail"]);
+       [Some "Before"; Some "Target"; Some "First image";
+        Some "Replacement image"; Some "Tail"]);
   let replaced = entity_by_uuid_exn conn blank_uuid in
   check "blank replacement keeps the original entity and UUID"
     (replaced.id = blank_id && ent_title replaced = Some "Replacement image"
@@ -642,7 +645,7 @@ let test_asset_insert_placement_tree () =
   insert ~target:(uuid_of page) ~sibling:false ~bottom:true ~replace_empty:false
     "10000000-0000-4000-8000-000000000094" "Appended image";
   check "owner upload appends after the existing root tree"
-    (children (uuid_of page) = [Some "Target"; Some "First image";
+    (children (uuid_of page) = [Some "Before"; Some "Target"; Some "First image";
        Some "Replacement image"; Some "Tail"; Some "Appended image"])
 
 (* cljs stamps block/created-at+updated-at with (common-util/time-ms) — a
