@@ -321,3 +321,9 @@ instead of overriding them with the physical `code`. For example, QWERTZ
 `key="z", code="KeyY", ctrlKey=true` dispatches `ctrl+z` (Undo), not Redo.
 Modifier-corrupted glyphs still use the code fallback, including Ctrl+[ arriving
 as Escape and Option+A arriving as å. Modifier-only events remain ignored.
+
+## Clearing custom stylesheets
+
+Saving an empty or whitespace-only `logseq/custom.css` now removes the active
+custom stylesheet immediately. Previously its old rules remained active until
+reload. Saving unrelated files does not change the stylesheet.

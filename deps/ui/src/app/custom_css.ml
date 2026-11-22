@@ -17,7 +17,7 @@ let starts_with_http s = String.starts_with ~prefix:"http" (String.trim s)
 
 let add_style = function
   | None -> ()
-  | Some s when String.trim s = "" -> ()
+  | Some s when String.trim s = "" -> remove ()
   | Some s ->
       remove ();
       let href =
