@@ -988,6 +988,27 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                            (:title result) (assoc :title (:title result))
                            (:vector-title result) (assoc :vector-title (:vector-title result))))))))))))
 
+(defn- page-name-prefix-results
+  [db q limit]
+  (let [prefix (common-util/page-name-sanity-lc q)]
+    (when-not (string/blank? prefix)
+      (->> (d/seek-datoms db :avet :block/name prefix)
+           (eduction
+            (take-while (fn [{:keys [a v]}]
+                          (and (= :block/name a) (string/starts-with? v prefix))))
+            (keep (fn [{:keys [e]}]
+                    (let [page (d/entity db e)]
+                      (when (and (ldb/page? page)
+                                 (not (hidden-entity? page)))
+                        (let [id (str (:block/uuid page))
+                              title (:block/title page)]
+                          {:id id
+                           :page id
+                           :title title
+                           :keyword-score (fuzzy/score q title)})))))
+            (take limit))
+           (sort-by :keyword-score >)))))
+
 (defn search-blocks
   "Options:
    * :page - the page to specifically search on
@@ -1005,12 +1026,17 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
    (let [tag-title? (boolean (tag-title-query q))
          q (or (tag-title-query q) q)]
      (when-not (string/blank? q)
-       (let [option (assoc option :enable-snippet? enable-snippet?)
+       (let [db @conn
+             option (assoc option :enable-snippet? enable-snippet?)
              match-input (get-match-input q)
              non-match-input (when (<= (count q) 2)
                                (str "%" (string/replace q #"\s+" "%") "%"))
              limit (or limit 100)
              limit-p (or search-limit limit)
+             ;; Index titles include parent paths and aliases. Seek by page name
+             ;; so title prefixes can rank before capped full-text matches.
+             page-prefix-result (when-not (or page tag-title? code-only?)
+                                  (page-name-prefix-results db q limit-p))
              exact-title-result (when (and (not page-only?)
                                            (exact-title-query? q))
                                   (search-blocks-exact-title-aux search-db q page limit-p))
@@ -1044,12 +1070,13 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
              ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
              ;;  _ (doseq [item (concat fuzzy-result matched-result)]
              ;;      (prn :debug :keyword-search-result item))
-             combined-result (combine-results @conn
-                                              (concat exact-title-result fuzzy-result matched-result non-match-result)
+             combined-result (combine-results db
+                                              (concat page-prefix-result exact-title-result fuzzy-result
+                                                      matched-result non-match-result)
                                               vector-result
                                               q)
              code-class (when code-only?
-                          (d/entity @conn :logseq.class/Code-block))
+                          (d/entity db :logseq.class/Code-block))
              matched-count (when include-matched-count?
                              (count (filter #(search-result-visible? conn code-class option %) combined-result)))
              result (->> combined-result
