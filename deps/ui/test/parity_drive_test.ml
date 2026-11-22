@@ -866,13 +866,40 @@ let test_arrow_left_first_block () =
   stage_main_session [ block "b1" "first"; block "b2" "second" ];
   set_editing "b1" "first" ~caret:0;
   Editor_actions.last_edit_uuid := None;
+  (* Ordinary page with a mounted title — ArrowLeft exits into title. *)
+  let document = Stub_dom.document () in
+  let title = Stub_dom.make_element "div" in
+  Stub_dom.set_field title "className" "ls-page-title";
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") title);
   check "first content block has no previous visible neighbour"
     (Editor_state.prev_visible "b1" = None);
+  check "ordinary page title is focusable"
+    (Editor_actions.page_title_focusable ());
   Editor_actions.arrow_edge "b1" true;
   after 8 (fun () ->
       check "ArrowLeft at the first block start routes to exit_edit"
         (!Editor_actions.last_edit_uuid = Some "b1");
-      clear_editing ())
+      (* Journal/Home: title is not editable — Left must not exit. *)
+      staged_model :=
+        { !staged_model with
+          Model.route = Model.Home
+        ; route_page =
+            Some
+              { (Option.get !staged_model.Model.route_page) with
+                Model.page_journal_day = Some 20261122
+              }
+        };
+      set_editing "b1" "first" ~caret:0;
+      Editor_actions.last_edit_uuid := None;
+      check "journal page title is not focusable"
+        (not (Editor_actions.page_title_focusable ()));
+      Editor_actions.arrow_edge "b1" true;
+      after 8 (fun () ->
+          check "ArrowLeft on journal first block keeps editing"
+            (!Editor_actions.last_edit_uuid = None
+             && Editor_state.editing_uuid () = Some "b1");
+          Stub_dom.detach title;
+          clear_editing ()))
 
 (* Enter_edit clears the press anchor; Shift-click another block must
    still range-select from the editing block. *)

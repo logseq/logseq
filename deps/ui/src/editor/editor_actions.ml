@@ -3429,9 +3429,11 @@ let wrap_selection uuid marker =
 (* arrow up/down inside editor -> move edit focus to neighbor block *)
 (* ArrowUp past the first block lands in the page title — cljs
    move-cross-boundary-up-down treats .ls-page-title as a block *)
-let focus_page_title () =
-  (* cljs journal titles aren't editable (protected attrs — a save tx
-     throws journal-page-protected-attr-updated) *)
+
+(* cljs journal titles aren't editable (protected attrs — a save tx
+   throws journal-page-protected-attr-updated). Shared by arrow_edge so
+   Left at the first journal block does not exit into nowhere. *)
+let page_title_focusable () =
   let journal_title =
     match Runtime.route () with
     | Model.Journals | Model.Home -> true
@@ -3440,9 +3442,11 @@ let focus_page_title () =
         | Some p -> p.Model.page_journal_day <> None
         | None -> false)
   in
-  match journal_title, Ui_services.dom_query ".ls-page-title" with
-  | true, _ | _, None -> ()
-  | false, Some _ -> (
+  (not journal_title) && Option.is_some (Ui_services.dom_query ".ls-page-title")
+
+let focus_page_title () =
+  if not (page_title_focusable ()) then ()
+  else (
       Runtime.send Action.Title_edit_start;
       Runtime.flush ();
       match (Runtime.model ()).Model.route_page with
@@ -3469,7 +3473,10 @@ let arrow_nav uuid up =
           save_if_dirty uuid;
           enter_edit ~scope nu (caret_of uuid)
       | None -> ())
-  | None -> if up && scope = "main" then (exit_edit ~select:false; focus_page_title ())
+  | None ->
+      if up && scope = "main" && page_title_focusable () then (
+        exit_edit ~select:false;
+        focus_page_title ())
 
 (* ArrowLeft/Right at a collapsed buffer edge crosses into the adjacent
    block — master keeps one logical caret across block boundaries:
@@ -3500,7 +3507,7 @@ let arrow_edge uuid up =
           else enter_edit ~scope nu 0
       | None -> ())
   | None ->
-      if up && scope = "main" then (
+      if up && scope = "main" && page_title_focusable () then (
         exit_edit ~select:false;
         focus_page_title ())
 
