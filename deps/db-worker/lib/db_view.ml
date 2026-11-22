@@ -877,8 +877,8 @@ let get_property_values_impl db (property_ident : attr) ~view_id
                       | Some e when Ldb.recycled e -> None
                       | Some e ->
                           let label =
-                            match Ldb.property_value_content e with
-                            | Some s -> Wire.String s
+                            match Db_property.property_value_content e with
+                            | Some value -> Ds_wire.transit_of_value value
                             | None -> Wire.Nil
                           in
                           Some
@@ -913,8 +913,8 @@ let get_property_values_impl db (property_ident : attr) ~view_id
     | Some dv when not (Ldb.recycled dv) ->
         Wire.Map
           [ ( Wire.Keyword "label",
-              (match Ldb.property_value_content dv with
-               | Some s -> Wire.String s
+              (match Db_property.property_value_content dv with
+               | Some value -> Ds_wire.transit_of_value value
                | None -> Wire.Nil) )
           ; (Wire.Keyword "value", id_uuid_map_wire dv) ]
         :: values

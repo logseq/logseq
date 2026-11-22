@@ -1,5 +1,20 @@
 # Plugin API Migrations
 
+## Query-builder property value choices
+
+`thread-api/get-property-values` now preserves the content type of referenced
+property values and defaults in `:label`, matching Master. A numeric value block
+with `:logseq.property/value 19` produces `{:label 19 :value {:db/id ...}}`
+instead of a nil label. String titles and the `:value` identity map are unchanged.
+Consumers must retain typed labels when constructing query arguments rather than
+coercing them to display strings.
+
+The query builder prefers closed values, using `:block/title` or
+`:logseq.property/value` as string choices, and otherwise uses the typed labels
+of used values. Its unrestricted choice uses the existing `:view.table/select-all`
+translation; selecting it still emits a property clause without a value argument.
+No downstream call-site migration is required.
+
 ## Experimental native interaction corrections
 
 The experimental macOS host disables automatic titlebar movement before input
