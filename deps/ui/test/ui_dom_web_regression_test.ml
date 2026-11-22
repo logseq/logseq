@@ -115,6 +115,8 @@ let rename_nav_fixture : unit -> (unit -> unit) = [%mel.raw {|
 
 let page_rename_route ~finish =
   let open Promise_ext in
+  let old_editor = !Editor_state.st in
+  Editor_state.st := Some (Signal.state (Signal.scheduler ()) Editor_state.initial);
   Edit_flow_test.reset_editor ();
   let restore_nav = rename_nav_fixture () in
   let wait_ms ms = Js.Promise.make (fun ~resolve ~reject:_ ->
@@ -144,6 +146,7 @@ let page_rename_route ~finish =
     on_message = (fun _ _ -> ()); dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
   let restore () =
     Ui_services.timers_clear_timeout !Router.reload_timer;
+    Editor_state.st := old_editor;
     Runtime.read_model := old_read; Runtime.app_send := old_send; Runtime.worker := old_worker;
     restore_nav ();
     Runtime.hooks.refresh_after_ops <- old_refresh;
