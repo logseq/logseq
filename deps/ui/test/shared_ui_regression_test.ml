@@ -406,6 +406,24 @@ let flashcards_config ~registry ~profile =
         && M.string_prop node "target"=Some "_self") (nodes session));
     ignore (Lui_app.dispose session.S.app))
 
+let reference_group_spacing ~registry ~profile =
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+      ~reducer:(fun model () -> model)
+      ~view:(fun context _ _ ->
+        let inst = Views_state.make ~sched:context.Lui_ui.ui_scheduler
+            ~kind:Views_state.KLinkedRefs ~feature:"linked-references" ~owner:Wire.Nil in
+        let state = Views_state.get inst in
+        let grouped = Views_table.ref_grouped_lines inst state
+            Views_wire.[{gv=Wire.Nil;grows=[]};{gv=Wire.Nil;grows=[]}] in
+        let partitions = Views_table.ref_grouped_list_lines inst state
+            Views_wire.[{glv=Wire.Nil;glparts=[]};{glv=Wire.Nil;glparts=[]}] in
+        Lui_elements.column (grouped @ partitions)) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+    let headers = List.filter (fun node -> class_has node "ls-foldable-header") (nodes session) in
+    let margins = List.map (fun node -> Hashtbl.find_opt node.M.props "margin-top") headers in
+    check "Reference groups retain the first header position and add Master's inter-group spacing"
+      (margins=List.map (fun value -> Some (P.IntValue value)) [0;4;0;4]))
+
 let grouped_table_selection ~registry ~profile =
   let module V = Views_state in
   let instance = ref None in
@@ -1367,6 +1385,7 @@ let run_views ~registry ~profile ~finish =
   table_resize_transaction ();
   table_range_selection ();
   grouped_table_selection ~registry ~profile;
+  reference_group_spacing ~registry ~profile;
   settings_config ~registry ~profile ~finish:(fun () ->
   settings_date_format ~registry ~profile ~finish:(fun () ->
   flashcards_config ~registry ~profile;
