@@ -5748,8 +5748,22 @@ let run_views ~registry ~profile ~finish =
       let press label =
         let node = List.find (fun n -> button_label n=Some label) (nodes owner) in
         S.press owner node.M.id in
+      let early_query = Hashtbl.find Views_view.query_insts cache_key in
+      Views_state.update early_query (fun s ->
+        {s with loading=true});
       press (I18n.t "view.filter/filter");
+      let filter = List.find (fun n -> button_label n=Some (I18n.t "view.filter/filter")) (nodes owner) in
+      List.iter (fun (rows,error) ->
+        Views_state.update early_query (fun s ->
+          {s with query_block_uuid="00000000-0000-0000-0000-000000000092";
+            qsrc="\"Between88Marker\"";loading=false;query_rows=rows;query_error=error});
+        S.flush owner;
+        check "Initial query completion preserves the open Filter menu's live anchor"
+          (List.exists (fun n -> n.M.id=filter.M.id) (nodes owner)))
+        [["initial-result"],None;[],None;[],Some "Query fixture error"];
       press (Views_builder.item_label "between");
+      check "A Filter opened before query source hydration can open Between after results arrive"
+        (List.exists (fun n -> button_label n=Some (I18n.t "query.builder/between-start-label")) (nodes owner));
       press (I18n.t "query.builder/between-start-label");
       let input = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes owner) in
       let query = Hashtbl.find Views_view.query_insts cache_key in

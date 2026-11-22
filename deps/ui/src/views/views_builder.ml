@@ -848,15 +848,27 @@ let builder_el inst ~tree ~active : t =
     ~tree
 
 (* per-inst clause trees, re-parsed when the query source changed *)
-let trees : (int, clause ref * string) Hashtbl.t = Hashtbl.create 8
+let trees : (int, clause ref * string * string) Hashtbl.t = Hashtbl.create 8
 
 let tree_for inst =
-  let qsrc = (V.get inst).V.qsrc in
+  let state = V.get inst in
+  let qsrc = state.V.qsrc and block_uuid = state.V.query_block_uuid in
   match Hashtbl.find_opt trees inst.V.id with
-  | Some (r, src) when src = qsrc -> r
+  | Some (r, src, previous_block) when src = qsrc ->
+      if previous_block <> block_uuid then
+        Hashtbl.replace trees inst.V.id (r, qsrc, block_uuid);
+      r
+  | Some (r, "", "") when block_uuid <> "" ->
+      let parsed = tree_of_src qsrc in
+      let r = match parsed with
+        | CInvalid _ -> ref parsed
+        | _ when state.V.is_advanced -> ref parsed
+        | _ -> r := parsed; r in
+      Hashtbl.replace trees inst.V.id (r, qsrc, block_uuid);
+      r
   | _ ->
       let r = ref (tree_of_src qsrc) in
-      Hashtbl.replace trees inst.V.id (r, qsrc);
+      Hashtbl.replace trees inst.V.id (r, qsrc, block_uuid);
       r
 
 let drop_tree inst = Hashtbl.remove trees inst.V.id

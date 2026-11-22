@@ -272,7 +272,8 @@ let query_setting_el inst : t =
         ~anchor_alignment:`center ~anchor_offset:8. ~tooltip_delay:500 [] ]
 
 let query_builder_el inst ~active (s : V.vstate) : t =
-  let current () = active () && (V.get inst).V.qsrc = s.V.qsrc in
+  let tree = Views_builder.tree_for inst in
+  let current () = active () && Views_builder.tree_for inst == tree in
   let untitled =
     Ui_components.with_props
       [ Ui_components.Prop.opacity 0.75; Ui_components.Prop.hover_opacity 1. ]
@@ -288,7 +289,7 @@ let query_builder_el inst ~active (s : V.vstate) : t =
   | Ok _ ->
       row ~key:"query-builder-header" ~style_class:"block-head-wrap"
         ~cross:`center ~gap:4 ~min_width:0 ~flex_wrap:`wrap
-        [ Views_builder.builder_el inst ~tree:(Views_builder.tree_for inst) ~active:current ]
+        [ Views_builder.builder_el inst ~tree ~active:current ]
 
 let query_settings_el inst (s : V.vstate) : t =
   if s.V.query_has_settings && not (Ui_services.env_publishing ()) then
