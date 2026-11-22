@@ -40,15 +40,16 @@ let closed_values m = D.row_closed_values m.row
 
 (* cljs dropdown-editor-menuitem .inner-wrap: title (opacity .9) on the
    left; desc (text-xs, opacity .5) or a sm switch on the right *)
-let config_trailing ?desc ?toggle ?(chevron = false) ?(forbid = false) title
+let config_trailing ?desc ?desc_el ?toggle ?(chevron = false) ?(forbid = false) title
     : t =
   row ~grow:1. ~main:`space_between ~cross:`center ~gap:4
     ([ Ui_components.with_props
          [ Ui_components.Prop.white_space `nowrap
          ; Ui_components.Prop.opacity 0.9 ]
          (text ~value:title []) ]
-     @ (match desc with
-        | Some d when d <> "" ->
+     @ (match desc_el, desc with
+        | Some element, _ -> [element]
+        | None, Some d when d <> "" ->
             [ Ui_components.with_props
                 [ Ui_components.Prop.font_size "0.75rem"
                 ; Ui_components.Prop.line_height "1rem"
@@ -74,11 +75,11 @@ let config_trailing ?desc ?toggle ?(chevron = false) ?(forbid = false) title
            (icon ~name:(`app "chevron-right") ~point_size:16 []) ]
      else [])
 
-let config_item ~icon_name ~title ?desc ?toggle ?chevron ~on_press () : t =
+let config_item ~icon_name ~title ?desc ?desc_el ?toggle ?chevron ?min_height ~on_press () : t =
   (* a menu_item without text needs an accessibility label *)
   Ui_components.with_props [ Ui_components.Prop.accessibility_label title ]
-    (Ui_components.menu_item ~icon:(Icons.name_ref icon_name) ~on_press
-       [ config_trailing ?desc ?toggle ?chevron title ])
+    (Ui_components.menu_item ~icon:(Icons.name_ref icon_name) ?min_height ~on_press
+       [ config_trailing ?desc ?desc_el ?toggle ?chevron title ])
 
 (* dropdown-menu-sub: trigger row with desc + chevron, items in a
    popover at the trigger's right edge *)
@@ -740,8 +741,15 @@ let main_items context m ~set_pane ~close =
       [ config_trailing ~toggle:current label ]
   in
   let sep k = Menu_item.separator ~key:("cfg-sep-" ^ k) ~mv:8 ~mh:0 in
+  let name_description = Ui_components.with_props
+    [Ui_components.Prop.font_size "0.75rem"; Ui_components.Prop.line_height "1rem";
+     Ui_components.Prop.opacity 0.5]
+    (row ~cross:`center ~gap:4
+      (Option.fold ~none:[] ~some:(fun icon -> [Icon_picker.icon_el ~size:15. icon])
+         (Node_icon.own (prop_entity m))
+       @ [text ~value:(prop_title m) []])) in
   [ config_item ~icon_name:"pencil" ~title:(I18n.t "property/name")
-      ~desc:(prop_title m) ~chevron:true
+      ~desc_el:name_description ~chevron:true ~min_height:44
       ~on_press:(fun _ -> Runtime.signal_set set_pane MName) ()
     ; type_submenu m ~close
     ]

@@ -4527,6 +4527,12 @@ let run_views ~registry ~profile ~finish =
   let property_items = List.filter (fun n -> n.M.kind = "menu-item") (nodes property_menu) in
   check "property-name rows share rounded, non-inverted hover and keyboard styling"
     (property_items <> [] && List.for_all menu_row_style property_items);
+  let name_row = List.find (fun node ->
+    M.string_prop node "accessibility-label" = Some (I18n.t "property/name")) property_items in
+  check "The property-name row keeps Master's taller description layout"
+    (Hashtbl.find_opt name_row.M.props "min-height" = Some (P.IntValue 44)
+     && List.exists (fun node -> M.string_prop node "text" = Some "T98MenuNumber")
+       (nodes property_menu));
   ignore (Lui_app.dispose property_menu.S.app);
   List.iter (fun empty ->
     let shared_menu = mount (fun _ -> Lui_elements.dropdown_menu_view
