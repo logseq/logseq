@@ -335,3 +335,11 @@ Custom CSS reset waits for the graph-open model publication before reading
 B's `logseq/custom.css`, rather than reusing A's URL. Delayed file reads from an
 old graph or configuration are discarded. Missing CSS clears the stylesheet;
 read failures still reject instead of silently substituting another graph's CSS.
+
+## Rename route synchronization
+
+Renaming the active title-routed page now resolves its quietly replaced UUID
+hash immediately, so the router model and subsequent reloads use the UUID too.
+For example, renaming `/page/Old%20title` keeps later reloads on the renamed page
+instead of querying the removed title. A rename that finishes after navigation
+does not redirect the newer route. Empty titles and failed writes do not navigate.

@@ -35,19 +35,23 @@ let rename uuid new_title =
   if String.trim new_title = "" then Js.Promise.resolve ()
   else
     let graph = repo () and route = Runtime.route () in
+    let current_page = match (Runtime.model ()).Model.route_page with
+      | Some page -> page.Model.page_uuid = Some uuid
+      | None -> false in
     let* _ =
       Sdk_util.apply_op "rename-page"
         [ Wire.Uuid uuid; Wire.String new_title ]
     in
-    if repo () <> graph then Js.Promise.resolve ()
+    if repo () <> graph || Runtime.route () <> route then Js.Promise.resolve ()
     else begin
       (* Master after-page-renamed!: when the current page was renamed,
          replace-state to its uuid so the route stays resolvable. Reloading
          the old title ref with accept_missing cleared route_page and made
          the next undo report a false Owned_refresh_failed. *)
       (match route with
-       | Model.Page _ ->
-           Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ uuid))
+       | Model.Page _ when current_page ->
+           Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ uuid));
+           reload ()
        | _ when Runtime.route () = route -> reload ()
        | _ -> ());
       Js.Promise.resolve ()
