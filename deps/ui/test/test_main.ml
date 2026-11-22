@@ -5276,7 +5276,7 @@ let () =
       Test_drive_sidebar.run ~finish:(fun () ->
       Bug_report_drive.run ~finish:(fun () ->
       Handbook_drive.run ~finish:(fun () ->
-      Views_drive.run ~finish:(fun () ->
+      Views_drive.run ~session:(Test_drive.s ()) ~finish:(fun () ->
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)

@@ -926,7 +926,7 @@ let reference_filter_removal (h : (_, _) Shared_scenarios_views.host) ~finish =
             Runtime.worker:=previous_worker; Runtime.read_model:=previous_model;
             Runtime.app_flush:=previous_flush; finish ())))))
 
-let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish =
+let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~before_worker_restore ~finish =
   let previous_worker = !Runtime.worker and previous_read = !Runtime.read_model
   and previous_source = !Runtime.model_source and previous_flush = !Runtime.app_flush in
   let uuid = "configured-journal-marker" in
@@ -1019,9 +1019,9 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
           let rec title_cases = function
             | [] ->
                 Hashtbl.remove titles uuid; Hashtbl.remove query_rows "";
-                Runtime.worker:=previous_worker; Runtime.read_model:=previous_read;
+                Runtime.read_model:=previous_read;
                 Runtime.model_source:=previous_source; Runtime.app_flush:=previous_flush;
-                finish ()
+                before_worker_restore (fun () -> Runtime.worker:=previous_worker; finish ())
             | (title,expected)::rest ->
                 let query = match query with W.Map fields -> W.Map
                   ((kw "title",title)::List.remove_assoc (kw "title") fields) | _ -> assert false in
@@ -1038,6 +1038,75 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~finish 
                   title_cases rest) in
           title_cases [Edn.parse {|[:h3 "Hiccup journal default"]|},["Hiccup journal default"];
                        W.Array [],[]]))))
+
+let configured_journal_reload (h : (_, _) Shared_scenarios_views.host) ~mounted ~finish =
+  let previous_model = Lui_app.model mounted.S.app in
+  let send action = ignore (Lui_app.send mounted.S.app action); S.flush mounted in
+  let rows = ["journal-reload-21"; "journal-reload-19"] in
+  List.iter2 (Hashtbl.replace titles) rows ["21"; "19"];
+  Hashtbl.replace query_rows "" rows;
+  let today = {(Test_check.page []) with Model.page_uuid=Some "journal-reload-owner";
+    page_title="Today's journal"; page_journal_day=Some (Dates.today_journal_day ())} in
+  let older day = {today with Model.page_uuid=Some ("journal-reload-" ^ string_of_int day);
+    page_title=string_of_int day; page_journal_day=Some day} in
+  let days = [today; older 20000103; older 20000102; older 20000101] in
+  let query = Edn.parse {|{:title "Journal numbers" :query [:find (pull ?b [*]) :where [?b :block/title ?title]] :table-view? true}|} in
+  let repo = Option.get previous_model.Model.repo in
+  send (Action.Graph_config_loaded (repo,
+    W.Map [kw "default-queries",W.Map [kw "journals",W.Array [query]]]));
+  send (Action.Navigate_to Model.Journals);
+  let subscriptions = !Subs_state.sync_subs in
+  send (Action.Journals_loaded days);
+  let later f = h.after 30 (fun () -> S.flush mounted; f ()) in
+  let nodes () = M.all_nodes mounted.S.tree in
+  let header () = List.find_opt (fun n ->
+    Shared_scenarios_views.has_tok n "custom-query-title") (nodes ()) in
+  let visible_rows () = List.filter (fun n -> Shared_scenarios_views.has_tok n "ls-table-row") (nodes ()) in
+  let publish days = send (Action.Journals_loaded days) in
+  let refresh () = List.iter (fun sub -> sub.Subs_state.run [])
+    (List.filter (fun sub -> not (List.exists ((==) sub) subscriptions)) !Subs_state.sync_subs) in
+  later (fun () ->
+    check "Journal route queries start collapsed" (header ()<>None && visible_rows ()=[]);
+    S.press mounted (Option.get (header ())).M.id;
+    let header_id = (Option.get (header ())).M.id in
+    check "Expanding the Journals default table renders both rows" (List.length (visible_rows ())=2);
+    Hashtbl.replace titles (List.hd rows) "39";
+    publish (List.filteri (fun i _ -> i<3) days);
+    refresh ();
+    later (fun () ->
+      check "A numeric-save reload keeps the default query expanded while older days are removed"
+        (Option.map (fun n -> n.M.id) (header ())=Some header_id && List.length (visible_rows ())=2
+         && List.exists (fun n -> M.string_prop n "text"=Some "39") (nodes ()));
+      publish days;
+      later (fun () ->
+        check "Pagination restores older days without remounting the expanded query"
+          (Option.map (fun n -> n.M.id) (header ())=Some header_id && List.length (visible_rows ())=2);
+        Hashtbl.replace query_rows "" [];
+        refresh ();
+        later (fun () ->
+          check "Empty refreshed journal queries remove their previous rows" (header ()=None && visible_rows ()=[]);
+          Hashtbl.replace query_err "" "Journal reload failed";
+          refresh ();
+          later (fun () ->
+            check "Failed journal result refreshes expose the error without stale rows"
+              (visible_rows ()=[] && List.exists (fun n -> M.string_prop n "text"=Some "Journal reload failed") (nodes ()));
+            Hashtbl.remove query_err "";
+            Hashtbl.replace query_rows "" rows;
+            refresh ();
+            later (fun () ->
+              check "Recovered journal results retain the user's expanded state" (List.length (visible_rows ())=2);
+              publish [];
+              check "An empty Journals route removes configured query rows" (header ()=None && visible_rows ()=[]);
+              publish days;
+              later (fun () ->
+                check "Reloading an empty Journals route starts a fresh collapsed query" (header ()<>None && visible_rows ()=[]);
+                send (Action.Graph_config_loaded (repo,previous_model.graph_config));
+                send (Action.Navigate_to previous_model.route);
+                publish previous_model.journals;
+                Option.iter (fun page -> send (Action.Page_loaded page)) previous_model.route_page;
+                List.iter (Hashtbl.remove titles) rows;
+                Hashtbl.remove query_rows "";
+                finish ())))))))
 
 let short_page_spacing ~finish =
   let previous_flush = !Runtime.app_flush in
@@ -1097,9 +1166,11 @@ let short_page_spacing ~finish =
                 (value ()=0.);
               ignore (Lui_app.dispose mounted.S.app); Runtime.app_flush := previous_flush; finish ()))))))
 
-let run ~finish =
+let run ~session ~finish =
   query_result_replacement ();
   let h = host () in
-  plain_text_queries h ~finish:(fun () -> positive_query_views h ~finish:(fun () -> reference_filter_removal h ~finish:(fun () -> configured_journal_queries h ~finish:(fun () -> short_page_spacing ~finish:(fun () ->
+  plain_text_queries h ~finish:(fun () -> positive_query_views h ~finish:(fun () -> reference_filter_removal h ~finish:(fun () -> configured_journal_queries h
+    ~before_worker_restore:(fun finish -> configured_journal_reload h ~mounted:session ~finish)
+    ~finish:(fun () -> short_page_spacing ~finish:(fun () ->
     grouped_entity_headers h ~finish:(fun () ->
       Shared_scenarios_views.run h ~finish))))))
