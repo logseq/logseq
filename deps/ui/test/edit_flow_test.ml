@@ -2381,6 +2381,36 @@ let test_property_command_refresh (h : host) =
   run [ "status:Todo", "/todo keep typing";
         "heading:2", "/head keep typing" ]
 
+let test_youtube_timestamp_selection (h : host) =
+  let previous = !Runtime.video_timestamp in
+  let popup = Option.get !Popups_state.active in
+  let rec run = function
+    | [] -> Runtime.video_timestamp := previous; reset_editor (); Js.Promise.resolve ()
+    | (prefix, playback, expected) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        stage_page h [Test_check.block "b1" (String.trim prefix)];
+        install_worker ~repo:h.repo h;
+        let source = prefix ^ "/Timestamp" in
+        set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:prefix;
+        Popups_state.open_ac ~tpos:(String.length prefix) ~autopair:false popup Popups_state.Slash;
+        Runtime.video_timestamp := (fun () -> playback);
+        let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+        Popups_state.apply_item popup ac ~meta:false
+          (Popups_state.mk_item ~key:"timestamp" ~label:"" (Editor_cmd "youtube-timestamp"));
+        check "YouTube timestamp selection matches the available player state"
+          (A.live_buffer "b1" = expected);
+        let* () = Ops.flush_pending_save () in
+        let* () = settle h 40 in
+        check "YouTube timestamp selection persists the resulting host text"
+          (current_titles () = [String.trim expected]);
+        run rest in
+  run ["Host ", Runtime.No_video, ""; "", Runtime.No_video, "";
+       "Host ", Runtime.Playback_time 12, "Host {{youtube-timestamp 12}}";
+       "Host ", Runtime.Player_pending, "Host "]
+  |> Js.Promise.catch (fun _ -> Runtime.video_timestamp := previous;
+    failwith "YouTube timestamp selection test failed")
+
 let test_page_icon_refresh (h : host) =
   let* () = settle h 40 in
   reset_editor ();
@@ -3455,6 +3485,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_suggestion_selection_commits_pending_save h in
   let* () = test_node_reference_suggestions h in
   let* () = test_query_selection_conversion h in
+  let* () = test_youtube_timestamp_selection h in
   let* () = test_reference_preview h in
   let* () = test_autocomplete_dismiss_resumes_pending_save h in
   let* () = test_autocomplete_explicit_flush h in

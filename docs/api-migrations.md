@@ -371,3 +371,9 @@ Route loads and refreshes share the ancestor loader and explicitly request depth
 1000, as Master's complete breadcrumb resource does. The worker's default depth
 3 is not a page boundary: a fourth-level leaf must include its containing page
 before its block ancestors. Empty ancestry stays empty; load failures propagate.
+
+## YouTube timestamp without a video
+
+Choosing the slash YouTube timestamp command without a video clears and saves
+the host block, matching Master's nil-macro insertion. An available player still
+inserts its timestamp; a loading player retains the host prefix and warns.

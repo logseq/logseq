@@ -2681,8 +2681,6 @@ let apply_item t ac ~meta it =
   | Emit (text, back) -> insert_text ac text back; close_ac t
   | Emit_exit text -> emit ~exit:true ac.auuid ac.tpos text; close_ac t
   | Editor_cmd "youtube-timestamp" ->
-      (* cljs :youtube/insert-timestamp — insert! macro {} with default
-         last-pattern=/ ; nil macro still clears the slash trigger *)
       (match !(Runtime.video_timestamp) () with
        | Runtime.Playback_time seconds ->
            insert_text ac
@@ -2690,7 +2688,13 @@ let apply_item t ac ~meta it =
        | Runtime.Player_pending ->
            Toast.warning (I18n.t "youtube/player-not-ready");
            erase_trigger_text ac
-       | Runtime.No_video -> erase_trigger_text ac);
+       | Runtime.No_video ->
+           Editor_actions.update_model ac.auuid (fun m ->
+               Edit_model.select
+                 (Edit_model.splice m 0 (S.length m.Edit_model.source) "")
+                 ~anchor:0 ~focus:0);
+           Outliner_ops.schedule_save ac.auuid "";
+           Editor_sink.focus_input ac.auuid);
       close_ac t
   | Editor_cmd c ->
       let to_ = match c with
