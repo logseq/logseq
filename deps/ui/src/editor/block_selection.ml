@@ -62,17 +62,31 @@ let set_anchor uuid =
    instead of arming the range drag or starting an edit; returns true
    when a modifier handled the press (the follow-up click must be
    suppressed so the row never opens its editor) *)
+(* enter_edit clears the press anchor; Shift-range from an open editor
+   must fall back to the editing block when it shares this outliner. *)
+let shift_range_anchor uuid =
+  match S.anchor () with
+  | Some anchor when anchor <> uuid -> Some anchor
+  | _ -> (
+      match S.editing () with
+      | Some e
+        when e.S.uuid <> uuid
+             && S.selection_owner_scope e.S.scope
+                = S.selection_owner_scope (S.selection_scope ()) ->
+          Some e.S.uuid
+      | _ -> None)
+
 let modifier_select ev uuid =
   let shift = ev.Ui_services.shift in
   let meta = ev.Ui_services.meta || ev.Ui_services.ctrl in
   if not (shift || meta) then false
   else (
-    S.set (fun st -> {st with S.selected_footer = None});
-    suppress_click := true;
-    ev.Ui_services.prevent_default ();
+    (* Resolve the intended selection before exit_edit so finish_exit
+       preserves anchor/range (and selection_scope) instead of racing
+       an empty post-exit write. *)
+    let shift_anchor = if shift then shift_range_anchor uuid else None in
     (if shift && meta then
-       (* meta+shift: append the anchor..clicked range *)
-       match S.anchor () with
+       match shift_anchor with
        | Some anchor ->
            let range = Editor_actions.range_between anchor uuid in
            if range <> [] then
@@ -83,9 +97,10 @@ let modifier_select ev uuid =
                      List.fold_left
                        (fun s u -> S.String_set.add u s)
                        st.S.selected range;
+                   selected_footer = None;
                    action_bar = true;
                  })
-       | None -> ()
+       | None -> S.set (fun st -> { st with S.selected_footer = None })
      else if meta then
        (* meta: toggle the clicked block in the selection *)
        S.set (fun st ->
@@ -97,26 +112,41 @@ let modifier_select ev uuid =
            {
              st with
              S.selected = sel;
+             selected_footer = None;
              anchor = (if S.String_set.is_empty sel then None else Some uuid);
              action_bar = not (S.String_set.is_empty sel);
            })
      else
-       (* shift: range-select anchor..clicked; with no stored anchor the
-         press only records one, like a plain click *)
-       match S.anchor () with
-       | Some anchor when anchor <> uuid ->
+       (* shift: range-select anchor..clicked; editing block is the
+          fallback when enter_edit cleared the press anchor *)
+       match shift_anchor with
+       | Some anchor ->
            let range = Editor_actions.range_between anchor uuid in
            if range <> [] then
              S.set (fun st ->
                  {
                    st with
                    S.selected = S.String_set.of_list range;
+                   selected_footer = None;
+                   anchor = Some anchor;
                    action_bar = true;
                  })
            (* a stale/off-screen anchor yields no range — fall back to
               recording the clicked block as the new anchor *)
-             else set_anchor uuid
-       | _ -> set_anchor uuid);
+           else (
+             S.set (fun st -> { st with S.selected_footer = None });
+             set_anchor uuid)
+       | None ->
+           S.set (fun st -> { st with S.selected_footer = None });
+           set_anchor uuid);
+    (* cljs block-content-on-pointer-down saves the other editing block,
+       then highlight-selection-area! exits edit into the range. Staying
+       in edit lets a later enter/clear wipe the selection. *)
+    (match S.editing () with
+     | Some _ -> Editor_actions.exit_edit ~select:false
+     | None -> ());
+    suppress_click := true;
+    ev.Ui_services.prevent_default ();
     true)
 
 let pointerdown ev =

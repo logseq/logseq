@@ -2,6 +2,35 @@
 
 Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each group owns only its section.
 
+## G1 — editor core, selection, cursor
+
+**Scope:** modules 06 / 07 / 08 only. Modules 01, 03, 05, 10, 16 and other non-editor modules are owned by **G6** (agent `bc-af341623`).
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Indent undo caret position | done | Captures `:editor/start-pos` on End/arrows; undo restores caret (`1e87a84d81`). |
+| Zoom breadcrumb separator + link styling | done | Kit → semantic `/` + links (`de3b00d1fd`); typed layout props `a28c7880a5`. |
+| ArrowLeft at first block → page title | done | `arrow_edge` → `focus_page_title` (`459b2a5028`); journal gate via `page_title_focusable` (`3a03022c3b`). |
+| Shift+Click range select while editing | done | Exits edit before range (`e090c6f6af`); editing-block fallback when enter_edit cleared anchor (`a750ce212e`). |
+| No action bar on Shift+arrow exit from edit | done | Removed LUI-only `show_action_bar` after exit; matches master timing where selection is empty when `show-action-bar!` runs (`3c04615938`). |
+| Context menu mod shortcut labels (Ctrl vs ⌘) | done | Shared `mod_cap` with tag menus (`79bca8bdb3`). |
+| Hide selection action bar when context menu opens | done | `open_cm` calls `hide_action_bar` like cljs `shui/popup-hide!` before dots dropdown (`0d523eebd3`). |
+| `editor/open-link-in-sidebar` for `[[page]]` | done | `follow_link ~sidebar` uses `Sidebar_state.open_ref` (`c3e24b9b53`). |
+| Shift+Up typed-char leak | n/a | Probes did not reproduce a typed char landing in block text; dropped. |
+| Indent undo after End mid-block (post-autosave) | done | Home/End/Page* capture live pre-key caret as start-pos (`abdc9534f8`). |
+| Ctrl-click sidebar while editing main | done | `exit_edit ~select:false` preserves `selection_scope` (`d38d908767`). |
+
+### G1 handoff — non-editor items already committed (G6: skip)
+
+Before the scope change, G1 landed two code fixes on PR #14076 (`logseq/lui-ux-parity-53a5`). G6 should **skip** redoing these:
+
+| check | module | commit | notes |
+|-------|--------|--------|-------|
+| create-dialog / create-graph-empty-name | 01 | `afc8812d25` | Sync checkbox gated on `rtc_group?` only |
+| first-load / header-buttons | 01 | `ad773195f2` | Hide back/forward on non-Electron web |
+
+Dropped (no G1 code commit; already fixed earlier on branch / now G6-owned): nav-pages, nav-flashcards, favorite-click, recent, delete-page, drop-file-image, class-page-add-object, tag-chip, untag.
+
 ## G2 — copy/paste/undo/redo
 
 Module 09. G1 owns indent-undo caret (module 06); general undo caret restoration is fixed here — G1 can skip if covered.
@@ -123,17 +152,19 @@ Branch: `logseq/g5-slash-commands-7f98`.
 
 ## G6 — chrome / sidebar / pages / assets / tags / views
 
+Owns modules 01, 03, 05, 10, 16 and other non-editor modules (agent `bc-af341623`). **Skip** G1 commits already on #14076: `afc8812d25` (create-dialog Sync gate), `ad773195f2` (header-buttons Electron-only).
+
 | check | module | master behavior | LUI behavior | repro | severity | status |
 | --- | --- | --- | --- | --- | --- | --- |
 | nav-pages | 03 left sidebar | Click Pages navigates to All pages | Only highlighted; stayed on current route | left sidebar `.all-pages-nav` click | high | fixed `70cb570dfa` |
 | nav-flashcards | 03 left sidebar / 26 flashcards | Empty deck shows "Time to create a card!" + `#Card` hint | Showed "No cards due" from stale `all_cards` / missing loading gate | `.flashcards-nav` / `g f` on empty graph | med | fixed `98946559ee` |
-| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | kept by user (revert `1606f384ef`) |
-| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | kept by user (revert `e778f33305`) |
+| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | done on G1 PR — skip (`ad773195f2`) |
+| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | done on G1 PR — skip (`afc8812d25`) |
 | favorite-click / recent | 03 left sidebar | Favorites/recents navigate to `#/page/<uuid>` | Navigated to `#/page/<name>` | click favorite or recent item | low | fixed `fe8a15537b` |
 | delete-page | 05 pages | After confirm, stay on page; show moved-to-recycle | Navigated to journals/Home | page menu → Delete → Confirm | low | fixed `51098daff9` |
-| drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `c76dd5cb2c`; empty-target UUID reuse `dcac000a38` |
-| class-page-add-object | 16 tags and classes | Class page `+ New` opens sidebar and table shows new row | Sidebar opened; table stayed stale until later sync | Class page Objects tab → `+ New` | med | fixed `9e1644ee13` |
-| tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `cf1c12c604`; caret-after-trim `8e45ef3cf5` |
+| drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `55f6019f6d`; empty-target UUID reuse `fa0fcdccd4` (G1 verified) |
+| class-page-add-object | 16 tags and classes | Class page `+ New` opens sidebar and table shows new row | Sidebar opened; table stayed stale until later sync | Class page Objects tab → `+ New` | med | fixed `583badf716` (G1 verified) |
+| tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `95fe078837`; caret-after-trim `ce88cd542c` (G1 verified) |
 | delete-page (class/property) | 05 pages | Hard-delete shows not-found | Stale page stayed visible | delete custom class/property | med | fixed `0a012de040` |
 | delete-page undo recycle shell | 05 pages | Undo clears moved-to-recycle | `page_recycled` stuck true | delete page → Ctrl+Z | med | fixed `b5a078690b` |
 | add-text-property | 15 Properties UI | After Text type, caret in value; shows `myprop: v1`; no dialog title | Focus to BODY; renders Empty; extra header | ctrl+alt+p → myprop → Text → v1 | high | fixed header `7df071baae` + focus `d0d1c625da` (G4 p-t/p-d/p-p/p-i share header) |

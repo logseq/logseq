@@ -1181,6 +1181,34 @@ let preview_block_spacing ~registry ~profile =
           (prop title "padding-vertical" (if block_preview then 0 else 2))))
       [Some "preview-spacing-root",true;page.Model.page_uuid,false])
 
+let zoom_breadcrumb_links ~registry ~profile =
+  let page =
+    { (Test_check.page [ Test_check.block "b-beta-1" "beta-1" ]) with
+      Model.page_uuid = Some "b-beta-1"
+    ; page_title = "beta-1"
+    ; page_parents =
+        [ Test_check.block "p-zoom-bc" "zoom-bc"
+        ; Test_check.block "b-beta" "beta"
+        ]
+    }
+  in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+    ~reducer:(fun model () -> model)
+    ~view:(fun _ _ _ context parent ->
+      Lui_elements.column (Page.zoom_breadcrumbs page) context parent) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+    let all = nodes session in
+    let links = List.filter (fun n -> n.M.kind = "link" && class_has n "breadcrumb__segment") all in
+    let seps = List.filter (fun n -> n.M.kind = "text" && M.string_prop n "text" = Some "/") all in
+    let buttons = List.filter (fun n -> n.M.kind = "button") all in
+    check "Zoom breadcrumb renders semantic links instead of ghost buttons"
+      (List.length links = 2 && buttons = []);
+    check "Zoom breadcrumb renders '/' separator between ancestor links"
+      (List.length seps = 1);
+    check "Zoom breadcrumb links carry in-app page hash URLs"
+      (List.map (fun n -> M.string_prop n "url") links
+       = [ Some "#/page/p-zoom-bc"; Some "#/page/b-beta" ]))
+
 let bottom_pills_rows () =
   let row ident title ty value = Wire.Map [
     Wire.kw "property-id", Wire.kw ident;
@@ -1377,6 +1405,7 @@ let run_views ~registry ~profile ~finish =
   let finish () = bottom_pills_commit ~profile ~finish in
   bottom_pills ~profile;
   preview_block_spacing ~registry ~profile;
+  zoom_breadcrumb_links ~registry ~profile;
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;
   preview_reference_disclosure ~registry ~profile;
@@ -1412,7 +1441,7 @@ let run_views ~registry ~profile ~finish =
     let set key = function Some value -> Ui_services.storage_set key value | None -> Ui_services.storage_remove key in
     let check_sync server =
       set "sync-server-url" server;
-      let expected = Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () in
+      let expected = Rtc_flows.rtc_group () in
       let graph = mount New_graph.body in
       check "Signed-out Create graph follows Master's RTC group eligibility"
         (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")

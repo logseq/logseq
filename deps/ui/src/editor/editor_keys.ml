@@ -1430,6 +1430,25 @@ and apply_input ?frame uuid ev =
             A.refresh_lines e.S.model conduit
         | _ -> e.S.model
       in
+      (match ev with
+       | Edit_input.Key (kev, _) ->
+           let modified = kev.meta || kev.ctrl || kev.alt || kev.shift in
+           (* Capture the live pre-key caret as :editor/start-pos before
+              navigation moves it. Autosave clears start-pos; without this,
+              End/Home would record default 0 and indent-undo would jump
+              to the block start. Leave the unset fallback for txs with
+              no recorded navigation. *)
+           let capture_nav_start () =
+             S.note_editor_start_pos_from_arrow e.S.model.Edit_model.caret;
+             S.record_history_start ~force:true e
+           in
+           (match kev.Edit_model.key with
+            | "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown" when modified ->
+                capture_nav_start ()
+            | "Home" | "End" | "PageUp" | "PageDown" ->
+                capture_nav_start ()
+            | _ -> ())
+       | _ -> ());
       let m' =
         match ev with
         | Edit_input.Key (kev, repeat) ->
