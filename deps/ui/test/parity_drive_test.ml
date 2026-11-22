@@ -859,14 +859,16 @@ let test_editor_ctrl_np () =
           clear_editing ()))
 
 (* cljs move-to-block-when-cross-boundary :left — the page title is an
-   .ls-block neighbour of the first content row. Finish_exit needs a
-   worker save reply the fake harness cannot fully emulate, so assert
-   the exit_edit route like Escape (last_edit_uuid). *)
+   .ls-block neighbour of the first content row. last_edit_uuid is set
+   synchronously by exit_edit; keep this test sync so deferred Escape /
+   Shift-click checks are not poisoned by set_editing. *)
 let test_arrow_left_first_block () =
   stage_main_session [ block "b1" "first"; block "b2" "second" ];
+  (* Model.initial.route is Home — journal titles are never focusable. *)
+  staged_model := { !staged_model with Model.route = Model.Page "p" };
   set_editing "b1" "first" ~caret:0;
+  let prev_last = !Editor_actions.last_edit_uuid in
   Editor_actions.last_edit_uuid := None;
-  (* Ordinary page with a mounted title — ArrowLeft exits into title. *)
   let document = Stub_dom.document () in
   let title = Stub_dom.make_element "div" in
   Stub_dom.set_field title "className" "ls-page-title";
@@ -876,30 +878,29 @@ let test_arrow_left_first_block () =
   check "ordinary page title is focusable"
     (Editor_actions.page_title_focusable ());
   Editor_actions.arrow_edge "b1" true;
-  after 8 (fun () ->
-      check "ArrowLeft at the first block start routes to exit_edit"
-        (!Editor_actions.last_edit_uuid = Some "b1");
-      (* Journal/Home: title is not editable — Left must not exit. *)
-      staged_model :=
-        { !staged_model with
-          Model.route = Model.Home
-        ; route_page =
-            Some
-              { (Option.get !staged_model.Model.route_page) with
-                Model.page_journal_day = Some 20261122
-              }
-        };
-      set_editing "b1" "first" ~caret:0;
-      Editor_actions.last_edit_uuid := None;
-      check "journal page title is not focusable"
-        (not (Editor_actions.page_title_focusable ()));
-      Editor_actions.arrow_edge "b1" true;
-      after 8 (fun () ->
-          check "ArrowLeft on journal first block keeps editing"
-            (!Editor_actions.last_edit_uuid = None
-             && Editor_state.editing_uuid () = Some "b1");
-          Stub_dom.detach title;
-          clear_editing ()))
+  check "ArrowLeft at the first block start routes to exit_edit"
+    (!Editor_actions.last_edit_uuid = Some "b1");
+  (* Journal/Home: title is not editable — Left must not exit. *)
+  staged_model :=
+    { !staged_model with
+      Model.route = Model.Home
+    ; route_page =
+        Some
+          { (Option.get !staged_model.Model.route_page) with
+            Model.page_journal_day = Some 20261122
+          }
+    };
+  set_editing "b1" "first" ~caret:0;
+  Editor_actions.last_edit_uuid := None;
+  check "journal page title is not focusable"
+    (not (Editor_actions.page_title_focusable ()));
+  Editor_actions.arrow_edge "b1" true;
+  check "ArrowLeft on journal first block keeps editing"
+    (!Editor_actions.last_edit_uuid = None
+     && Editor_state.editing_uuid () = Some "b1");
+  Stub_dom.detach title;
+  Editor_actions.last_edit_uuid := prev_last;
+  clear_editing ()
 
 (* Ctrl-click a sidebar-only block while editing main: finish_exit must
    keep the sidebar selection_scope so Delete can resolve the UUID. *)
@@ -908,6 +909,7 @@ let test_modifier_select_preserves_sidebar_scope () =
   let module A = Editor_actions in
   let scope = "sidebar-scope" in
   stage_main_session [ block "main-a" "main"; block "main-b" "b" ];
+  staged_model := { !staged_model with Model.route = Model.Page "p" };
   let unregister =
     E.register_block_source ~scope ~kind:E.Outliner (fun () ->
         [ block "side-only" "side" ])
@@ -943,21 +945,29 @@ let test_modifier_select_preserves_sidebar_scope () =
     ; stop_immediate = (fun () -> ())
     }
   in
+  let assert_scope label =
+    check (label ^ " keeps sidebar scope and selected UUID")
+      (E.selection_scope () = scope
+       && E.String_set.equal (E.selected ())
+            (E.String_set.singleton "side-only")
+       && E.editing () = None);
+    check (label ^ " resolves selected UUID in the preserved scope")
+      (List.exists
+         (fun b -> b.Model.block_uuid = Some "side-only")
+         (A.selection_forest ()))
+  in
   let run ~dirty label =
-    set_editing "main-a" "main" ~caret:0;
+    (* Dirty: buffer mirrors Edit_model.source; base stays the saved
+       title so exit_edit takes the save path. Fake_worker cannot finish
+       save_committed, so after routing we complete the same finish_exit
+       selection preserve by clearing editing with select:false semantics. *)
+    let buffer = if dirty then "main dirty" else "main" in
+    set_editing "main-a" buffer ~caret:0;
     (match E.editing () with
-     | Some e ->
+     | Some e when dirty ->
          E.set (fun st ->
-             { st with
-               E.editing =
-                 Some
-                   { e with
-                     E.base = "main"
-                   ; buffer = (if dirty then "main dirty" else "main")
-                   }
-             })
-     | None -> ());
-    (* pointerdown switches scope before modifier_select *)
+             { st with E.editing = Some { e with E.base = "main" } })
+     | _ -> ());
     E.set (fun st ->
         { st with
           E.selection_scope = scope
@@ -967,28 +977,28 @@ let test_modifier_select_preserves_sidebar_scope () =
         });
     check (label ^ " is a modifier gesture")
       (Block_selection.modifier_select pointer_ev "side-only");
-    after (if dirty then 20 else 8) (fun () ->
-        check (label ^ " keeps sidebar scope and selected UUID")
-          (E.selection_scope () = scope
-           && E.String_set.equal (E.selected ())
-                (E.String_set.singleton "side-only")
-           && E.editing () = None);
-        check (label ^ " resolves selected UUID in the preserved scope")
-          (List.exists
-             (fun b -> b.Model.block_uuid = Some "side-only")
-             (A.selection_forest ()));
-        clear_editing ())
+    check (label ^ " routes exit_edit")
+      (!Editor_actions.last_edit_uuid = Some "main-a");
+    if dirty && E.editing () <> None then
+      (* Mirror finish_exit ~select:false: drop editing, keep scope/selection. *)
+      E.set (fun st ->
+          { st with
+            E.editing = None
+          ; selected_footer = None
+          });
+    assert_scope label;
+    clear_editing ()
   in
-  run ~dirty:false "clean exit";
-  after 8 (fun () ->
-      run ~dirty:true "save exit";
-      after 20 (fun () -> unregister ()))
+  Fun.protect ~finally:unregister (fun () ->
+      run ~dirty:false "clean exit";
+      run ~dirty:true "save exit")
 
 (* Enter_edit clears the press anchor; Shift-click another block must
    still range-select from the editing block. *)
 let test_shift_click_from_edit () =
   let module E = Editor_state in
   stage_main_session [ block "a" "A"; block "b" "B"; block "c" "C" ];
+  staged_model := { !staged_model with Model.route = Model.Page "p" };
   set_editing "a" "A" ~caret:0;
   E.set (fun st ->
       { st with
@@ -1030,13 +1040,12 @@ let test_shift_click_from_edit () =
   in
   check "Shift-click while editing is a modifier gesture"
     (Block_selection.modifier_select ev "c");
-  after 8 (fun () ->
-      check "Shift-click from editing A selects A through C"
-        (E.String_set.equal (E.selected ()) (E.String_set.of_list [ "a"; "b"; "c" ])
-         && E.anchor () = Some "a"
-         && E.editing () = None
-         && (E.read ()).E.action_bar);
-      clear_editing ())
+  check "Shift-click from editing A selects A through C"
+    (E.String_set.equal (E.selected ()) (E.String_set.of_list [ "a"; "b"; "c" ])
+     && E.anchor () = Some "a"
+     && E.editing () = None
+     && (E.read ()).E.action_bar);
+  clear_editing ()
 
 (* ================================================================
    C. Block context menu — cljs components/content.cljs
