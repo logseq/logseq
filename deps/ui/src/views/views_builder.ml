@@ -576,7 +576,7 @@ let full_text_picker inst ~tree ~loc ~anchor =
           ~on_input:(function
             | s -> Signal.set value s)
           ~on_submit:(fun _ ->
-            let v = String.trim (Signal.get_state value) in
+            let v = String.trim (Runtime.signal_get value) in
             if v <> "" then begin
               P.close_all ();
               tree := append_at !tree loc (CText v);
