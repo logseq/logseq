@@ -1412,7 +1412,7 @@ let run_views ~registry ~profile ~finish =
     let set key = function Some value -> Ui_services.storage_set key value | None -> Ui_services.storage_remove key in
     let check_sync server =
       set "sync-server-url" server;
-      let expected = Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () in
+      let expected = Rtc_flows.rtc_group () in
       let graph = mount New_graph.body in
       check "Signed-out Create graph follows Master's RTC group eligibility"
         (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")
