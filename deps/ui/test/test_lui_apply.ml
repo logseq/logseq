@@ -741,15 +741,22 @@ let test_quick_add_retained_store () =
   let exercise () =
     ignore (Lui_app.start app);
     ignore (Lui_app.flush app);
-    let contains_title () = Hashtbl.fold (fun id _ found -> found ||
+    let contains_text text = Hashtbl.fold (fun id _ found -> found ||
       Store.property renderer.T.web_store id Wv.TextValue =
-        Some (Wv.StringValue (I18n.t "editor.quick-add/title")))
+        Some (Wv.StringValue text))
       renderer.T.web_store.T.retained_nodes false in
+    let contains_title () = contains_text (I18n.t "editor.quick-add/title") in
     check "empty Quick Add dialog mounts in the real web retained store" (contains_title ());
+    check "empty Quick Add dialog has no note" (not (contains_text "Note"));
     Quick_add_state.set (fun _ -> {Quick_add_state.page_uuid = Some "quick-page";
       blocks = [Test_check.block "quick-note" "Note"]});
     ignore (Lui_app.flush app);
-    check "populated Quick Add dialog mounts in the real web retained store" (contains_title ()) in
+    check "populated Quick Add dialog mounts in the real web retained store" (contains_title ());
+    check "populated Quick Add dialog renders its note" (contains_text "Note");
+    Quick_add_state.set (fun state -> {state with Quick_add_state.blocks = []});
+    ignore (Lui_app.flush app);
+    check "clearing Quick Add removes the note without unmounting its dialog"
+      (contains_title () && not (contains_text "Note")) in
   match exercise () with
   | () -> cleanup ()
   | exception error -> Js.log2 "Quick Add retained-store failure" error; cleanup (); raise error
