@@ -346,3 +346,13 @@ hash immediately, so the router model and subsequent reloads use the UUID too.
 For example, renaming `/page/Old%20title` keeps later reloads on the renamed page
 instead of querying the removed title. A rename that finishes after navigation
 does not redirect the newer route. Empty titles and failed writes do not navigate.
+
+## Slash Query conversion after selection replacement
+
+Simple Query takes its initial search text from the saved editing snapshot,
+matching Master's `run-query-command!`, rather than the transient slash input.
+For example, replacing `G5RegressionToken` with `/Query` and choosing Query
+creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
+to retain the slash-cleared live host title and create an empty code query.
+Conversion clears editing without starting a second, competing save-exit write;
+rejected conversion does not leave a transient slash-title override behind.

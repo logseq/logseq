@@ -2280,16 +2280,15 @@ let test_query_selection_conversion (h : host) =
   let rec run = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
-    | (title, advanced, rejected) :: rest ->
+    | (title, advanced, rejected, replace) :: rest ->
         let* () = settle h 40 in
         reset_editor ();
         stage_page h [Test_check.block "b1" title];
-        (* Real slash flow: host text stays, then "/Query" is typed and
-           erased before Query / Advanced Query runs (master last-pattern). *)
-        let source = title ^ "/Query" in
+        (* Append and selection-replacement slash input share the saved block. *)
+        let source = if replace then "/Query/" else title ^ "/Query" in
         set_editing ~uuid:"b1" ~buffer:source
-          ~caret:(String.length source) ~base:title;
-        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false
+          ~caret:(if replace then 6 else String.length source) ~base:title;
+        Popups_state.open_ac ~tpos:(if replace then 0 else String.length title) ~autopair:false
           popup Popups_state.Slash;
         install_worker ~repo:h.repo h;
         let attempts = ref [] in
@@ -2336,8 +2335,10 @@ let test_query_selection_conversion (h : host) =
         check "Rejected query conversion never publishes a query title"
           (not rejected || current_titles ()=[title]);
         run rest in
-  run ["Search seed parity",false,false; "",false,false;
-       "Advanced seed",true,false; "Retain on rejection",false,true]
+  run ["Search seed parity",false,false,false; "",false,false,false;
+       "Advanced seed",true,false,false; "Retain on rejection",false,true,false;
+       "G5RegressionToken",false,false,true; "",false,false,true;
+       "Retain replaced query on rejection",false,true,true]
 
 let test_property_command_refresh (h : host) =
   let rec run = function

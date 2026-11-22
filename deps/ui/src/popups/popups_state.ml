@@ -1959,15 +1959,22 @@ let query_property_uuid w =
   | [] -> ""
 
 let run_query t ac ~advanced =
-  match Editor_state.editing_uuid () with
+  match Editor_state.editing () with
   | None -> ()
-  | Some buuid ->
+  | Some editing ->
+      let buuid = editing.Editor_state.uuid in
+      let query_title = editing.Editor_state.base in
       Outliner_ops.cancel_pending_save ();
       erase_trigger_text ac;
       close_ac t;
       let title = Editor_actions.live_buffer buuid in
       Editor_actions.sync_buffer buuid title;
-      Editor_actions.exit_edit ~select:false;
+      Editor_actions.last_edit_uuid := Some buuid;
+      Editor_actions.cancel_pending_focus ();
+      Editor_sink.invalidate buuid;
+      Editor_state.clear_editor_start_pos ();
+      Editor_state.set (fun st -> {st with Editor_state.editing = None});
+      Editor_state.notify_edit_exit buuid;
       let repo_v = repo () in
       let fetch_query_uuid () =
         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
@@ -2017,7 +2024,7 @@ let run_query t ac ~advanced =
               ~rest:
                 [ Outliner_ops.set_block_property buuid "block/tags"
                     (Wire.Keyword "logseq.class/Query") ]
-              [ (quuid, title); (buuid, "") ])
+              [ (quuid, query_title); (buuid, "") ])
         |> Views_db.catch_quiet)
 
 exception Unsupported_configured_input
