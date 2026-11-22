@@ -304,3 +304,12 @@ This is a new return-program API, not compatibility for imperative legacy
 writes. There is no DOM, CSS, WebView or executable UI-source fallback.
 Native QuickJS is the implemented host; Web/WASM and mobile hosts remain future
 work, as do automatic installation/discovery and DB evaluator cancellation.
+
+## Asset upload placement
+
+Uploads into nonempty blocks now insert siblings, not children. The worker's
+`bottom?` option is used only for page/owner insertion (`sibling? = false`),
+because bottom placement overrides sibling placement. Empty-block uploads still
+replace their target; for example, dropping an image onto a text block inserts
+the image after that block, while uploading without a block target appends it
+to the page. The wire shape is unchanged.

@@ -3876,7 +3876,7 @@ let commit_uploaded_assets upload blocks =
     | _ -> Js.Promise.resolve [] in
   if not (asset_upload_current upload) then Js.Promise.resolve () else
   let* () = Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-      (save_ops @ [Ops.insert_blocks ~bottom:true
+      (save_ops @ [Ops.insert_blocks ~bottom:(not upload.upload_sibling)
         ~replace_empty_target:upload.upload_empty blocks upload.upload_target
         ~sibling:upload.upload_sibling]) in
   if upload.upload_empty && asset_upload_current upload then Ops.resync_open_editor ()

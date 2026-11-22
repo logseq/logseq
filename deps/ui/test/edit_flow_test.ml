@@ -3048,6 +3048,39 @@ let test_zoom_out_origin (h : host) =
           h.restore { (h.snapshot ()) with Model.repo = Some "different-graph" };
           Ui_services.nav_replace_hash "#/page/different-graph-destination"), false ]
 
+let test_asset_insert_placement (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [ block "asset-target" "Existing"; block "asset-empty" "" ];
+  let asset = W.Map [W.kw "block/uuid", W.Uuid "inserted-asset";
+    W.kw "block/title", W.String "![asset](assets/image.png)"] in
+  let run drop_target sibling bottom replace_empty =
+    install_worker ~repo:h.repo h;
+    let upload = Option.get (A.capture_asset_upload ?drop_target ()) in
+    let* () = A.commit_uploaded_assets upload [asset] in
+    check "Asset insertion distinguishes siblings, empty replacements and page children"
+      (List.exists (function
+         | W.Array [W.Keyword "insert-blocks"; W.Array [_; _; opts]] ->
+             W.map_get opts "sibling?" = Some (W.Bool sibling)
+             && W.map_get opts "bottom?" = Some (W.Bool bottom)
+             && W.map_get opts "replace-empty-target?" = Some (W.Bool replace_empty)
+         | _ -> false) !ops);
+    Js.Promise.resolve ()
+  in
+  let* () = run (Some "asset-target") true false false in
+  let* () = run (Some "asset-empty") true false true in
+  let* () = run None false true false in
+  install_worker ~repo:h.repo h;
+  let upload = Option.get (A.capture_asset_upload ~drop_target:"asset-target" ()) in
+  let* () = A.commit_uploaded_assets upload [] in
+  check "An empty asset upload does not insert blocks" (!ops = []);
+  let before = h.snapshot () in
+  h.restore {before with Model.route = Model.Settings};
+  let* () = A.commit_uploaded_assets upload [asset] in
+  check "A stale asset upload does not mutate the newly navigated context" (!ops = []);
+  h.restore before;
+  Js.Promise.resolve ()
+
 let test_append_owner (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -3415,5 +3448,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
+  let* () = test_asset_insert_placement h in
   h.restore saved;
   Js.Promise.resolve ()
