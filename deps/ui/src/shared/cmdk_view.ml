@@ -183,7 +183,7 @@ let chord_el svs key groups =
           (fun gi grp ->
             (if gi > 0 then
                [ Ui_components.chord_separator
-                   ~key:(Printf.sprintf "then%d" gi) ]
+                   ~key:(Printf.sprintf "then%d" gi) () ]
              else [])
             @ [ group_el gi grp ])
           groups))
@@ -762,7 +762,7 @@ let hint_action_of (it : S.item) =
   | S.Open_page _ -> (`open_, true)
   | S.Open_block _ -> (`open_, true)
   | S.Open_file _ -> (`open_, false)
-  | S.Select_theme _ -> (`trigger, false)
+  | S.Select_theme _ -> (`theme, false)
 
 let hint_variant (it : S.item option) : int =
   match it with
@@ -772,7 +772,8 @@ let hint_variant (it : S.item option) : int =
       | `open_, has_ref -> if has_ref then 1 else 2
       | `create, _ -> 3
       | `filter, _ -> 4
-      | `trigger, _ -> 5)
+      | `trigger, _ -> 5
+      | `theme, _ -> 6)
 
 let action_hints svs st (it : S.item option) =
   let primary label =
@@ -802,6 +803,8 @@ let action_hints svs st (it : S.item option) =
             [ primary "cmdk.action/filter" ]
         | `trigger, _ ->
             [ primary "cmdk.action/trigger" ]
+        | `theme, _ ->
+            [ primary "cmdk.action/apply-theme" ]
         )
   in
   Ui_components.cmdk_hints_group ~key:"actions" btns

@@ -573,7 +573,8 @@ let freq_input ps : t =
     []
 
 (* Remount when cy changes so the number input keeps a visible year —
-   Logseq_el value attrs alone can miss DOM updates on the slash path. *)
+   Logseq_el value attrs alone can miss DOM updates on the slash path.
+   cljs ui/date-year-month-select year branch — .ls-date-year-input *)
 let year_input ps : t =
   reactive
     (fun po ->
@@ -791,7 +792,10 @@ let repeat_panel ps : t =
                ~foreground:
                  "var(--lx-gray-09, var(--ls-secondary-text-color, #777))"
                ~value:(I18n.t "property.repeat/next-date") []
-           ; repeat_sel (fun r -> choice_label_of r.rtype_choices r.rtype_id)
+           ; repeat_sel
+               (fun r ->
+                 if r.rtype_id = 0 then I18n.t "ui/empty"
+                 else choice_label_of r.rtype_choices r.rtype_id)
                (fun () ->
                  match cur_rpt () with
                  | Some r ->
@@ -1224,8 +1228,8 @@ let load_repeat p ident =
                             else None)
                           unit_choices))
             ; unit_choices
-            ; (* unset → Empty (id 0), matching property-panel fetch_repeat;
-                 do not invent double-plus like a prior slash default *)
+            ; (* unset → Empty (id 0): cljs property-value / property-panel
+                 fetch_repeat — do not invent double-plus *)
               rtype_id =
                 (match
                    ref_id "logseq.property.repeat/repeat-type"
@@ -1549,6 +1553,11 @@ let run_editor_cmd uuid command from to_ =
   | "date-picker" -> open_cal (Cal_insert "") uuid from
   | "link" -> open_link_form false uuid from
   | "image-link" -> open_link_form true uuid from
+  | "upload" ->
+      (* cljs keeps "/Upload an asset" until a file is chosen *)
+      ignore
+        (Editor_cmds.run ~scope:(S.interaction_scope ()) ~command
+           ~block:(Some uuid) ~value:None)
   | _ ->
   let caret = clear_range uuid from to_ in
   Ops.schedule_save uuid (A.live_buffer uuid);

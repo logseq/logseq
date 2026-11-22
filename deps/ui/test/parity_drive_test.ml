@@ -64,13 +64,13 @@ let rec after n f =
 
 (* same shape shared_ui_regression_test feeds Popups_view.handle_keydown *)
 let key_event ?(meta = false) ?(ctrl = false) ?(shift = false)
-    ?(composing = false) key : Ui_services.ev =
+    ?(alt = false) ?(composing = false) ?(code = None) key : Ui_services.ev =
   { Ui_services.x = 0.; y = 0.; shift; meta; ctrl
-  ; alt = false; composing; key = Some key; key_char = None
+  ; alt; composing; key = Some key; key_char = None
   ; buttons = 0; button = 0; repeat = false
   ; movement_x = 0.; movement_y = 0.; default_prevented = false
   ; target = None; touches = []
-  ; detail = (fun _ -> None)
+  ; detail = (fun name -> if name = "code" then code else None)
   ; detail_json = (fun _ -> None)
   ; clipboard_get = (fun _ -> "")
   ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
@@ -240,18 +240,25 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
      them — a consumed key sets prevent_default *)
   check "popup keys are consumed" (keydown st "ArrowDown");
   ignore (keydown st "ArrowUp");
-  (* filtering hides the group banners (cljs get-matched-commands) *)
-  P.ac_update st ac "zzzzzz";
+  (* cljs: short no-match shows "No matched commands"; >2 chars past
+     the last match closes the popup. Group headers stay while filtering. *)
+  P.ac_update st ac "zz";
   (match ac_of st with
    | Some ac ->
        check "unmatched slash query falls back to 'No matched commands'"
          (List.length ac.P.items = 1
-          && (List.hd ac.P.items).P.ai_act = P.Noop);
-       check "filtered slash drops group headers"
-         (List.for_all (fun it -> it.P.ai_hdr = None) ac.P.items);
+          && (List.hd ac.P.items).P.ai_act = P.Noop
+          && (List.hd ac.P.items).P.ai_label = "No matched commands");
        ignore (keydown st "Enter");
        check "the no-match row closes the popup" (ac_of st = None)
    | None -> check "slash popup still open" false);
+  P.open_ac st P.Slash;
+  S.flush s;
+  (match ac_of st with
+   | Some ac ->
+       P.ac_update st ac "zzzzzz";
+       check "long unmatched slash query closes the popup" (ac_of st = None)
+   | None -> check "slash popup reopens" false);
   P.open_ac st P.Slash;
   S.flush s;
   (match ac_of st with
@@ -262,7 +269,9 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
             check "slash fuzzy match keeps Heading 1"
               (List.exists
                  (fun it -> it.P.ai_act = P.Editor_cmd "heading:1")
-                 ac.P.items)
+                 ac.P.items);
+            check "filtered slash keeps group headers"
+              (List.exists (fun it -> it.P.ai_hdr <> None) ac.P.items)
         | None -> check "slash popup still open" false)
    | None -> check "slash popup reopens" false);
   ignore (keydown st "Escape");
@@ -310,12 +319,14 @@ let test_ac_slash_switch st (s : ('m, 'a) S.t) =
   P.close_ac st;
   clear_editing ()
 
-(* cljs: "/" + "Node embed" switches to the page-embed search; an Embed
-   act inserts a block/link embed into the editing block *)
+(* cljs: "/" + "Node embed" clears the slash trigger (input ""), opens
+   block-search; Escape closes the picker and leaves the host text *)
 let test_ac_slash_embed st (s : ('m, 'a) S.t) =
-  stage_main_session [ block "b1" "" ];
-  set_editing "b1" "";
-  P.open_ac st P.Slash;
+  stage_main_session [ block "b1" "host" ];
+  let host = "host" in
+  let buf = host ^ "/Node embed" in
+  set_editing "b1" buf ~caret:(String.length buf);
+  P.open_ac st P.Slash ~tpos:(String.length host);
   S.flush s;
   (match ac_of st with
    | Some ac -> (
@@ -327,14 +338,20 @@ let test_ac_slash_embed st (s : ('m, 'a) S.t) =
        | Some it ->
            P.apply_item st ac ~meta:false it;
            S.flush s;
+           check "node-embed clears slash trigger text"
+             (Editor_actions.live_buffer "b1" = host);
            (match ac_of st with
             | Some ac' ->
                 check "node-embed switches to embed search"
-                  (ac'.P.kind = P.Embed_ref)
+                  (ac'.P.kind = P.Embed_ref);
+                ignore (keydown st "Escape");
+                check "Escape closes embed search and keeps host"
+                  (ac_of st = None
+                   && Editor_actions.live_buffer "b1" = host
+                   && Editor_state.editing_uuid () = Some "b1")
             | None -> check "popup stays open after embed switch" false)
        | None -> check "slash lists a node-embed item" false)
    | None -> check "slash popup opens" false);
-  P.close_ac st;
   clear_editing ()
 
 (* cljs: [[ autopairs ]] and opens the page-search popup; a fresh name
@@ -599,6 +616,14 @@ let test_editor_word_nav () =
     (match Editor_state.editing () with
      | Some e -> e.Editor_state.model.Edit_model.caret = 5
      | None -> false);
+  clear_editing ();
+  (* G4 backward-kill-word: alt+w at "one two| three" removes the word
+     and its trailing space — not a double space. *)
+  stage_main_session [ block "b1" "one two three" ];
+  set_editing "b1" "one two three" ~caret:7;
+  Editor_keys.dispatch_command "editor/backward-kill-word";
+  check "Backward kill-word eats the trailing separator with the word"
+    (Editor_actions.live_buffer "b1" = "one three");
   clear_editing ()
 
 let test_editor_link () =
@@ -624,6 +649,51 @@ let test_editor_link () =
   Editor_keys.dispatch_command "editor/insert-link";
   check "Insert link without an editing target is inert"
     (Editor_state.editing () = None && !Editor_commands.active = None)
+
+(* G3/G4 follow-link-sidebar: cljs open-link-in-sidebar! resolves
+   [[title]] via get-page-route-info into the right sidebar. *)
+let test_follow_link_sidebar () =
+  let previous_worker = !Runtime.worker in
+  let previous_sidebar = !Sidebar_state.st_ref in
+  let targets = ref [] in
+  let state v = Signal.state (Signal.scheduler ()) v in
+  let sidebar : Sidebar_state.t =
+    { favorites = state []; home_page = state None
+    ; favorite_drop = state None; recents = state []
+    ; nav_checked = state []; nav_tag_titles = state []
+    ; block_sources = Hashtbl.create 4; items = state []
+    ; open_menu = state ""; groups_collapsed = state []
+    ; left_width = state 246.; right_fraction = state 0.3
+    ; viewport_w = state 1280.
+    ; restored_repo = ref None; restoring = ref true
+    ; history_repo = ref None; history_state = ref None }
+  in
+  Sidebar_state.st_ref := Some sidebar;
+  Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
+    (fun name args ->
+      (match name, args with
+       | "thread-api/get-page-route-info", [_; target] ->
+           targets := target :: !targets
+       | _ -> ());
+      match name with
+      | "thread-api/get-page-route-info" ->
+          Js.Promise.resolve
+            (W.Map
+               [ W.kw "block/title", W.String "Target"
+               ; W.kw "block/uuid",
+                 W.Uuid "00000000-0000-0000-0000-000000000099" ])
+      | "thread-api/get-page-blocks-tree"
+      | "thread-api/get-block-refs" | "thread-api/get-blocks" ->
+          Js.Promise.resolve (W.Array [])
+      | _ -> (Option.get previous_worker).Worker_client.invoke_fn name args) };
+  stage_main_session [ block "b1" "see [[Target]] here" ];
+  set_editing "b1" "see [[Target]] here" ~caret:8;
+  Editor_keys.on_keydown (key_event ~ctrl:true ~shift:true "o");
+  check "Ctrl+Shift+O looks up the page title for the right sidebar"
+    (List.mem (W.String "Target") !targets);
+  clear_editing ();
+  Sidebar_state.st_ref := previous_sidebar;
+  Runtime.worker := previous_worker
 
 let test_editor_ac_tab st s =
   stage_main_session [ block "b1" "[[Tar]]" ];
@@ -714,6 +784,34 @@ let test_editor_paste_link () =
      "Plain first block", 0, 5, "words", "words first block";
      "https://old.example", 0, 19, "https://example.com", "https://example.com";
      "[label](url)", 0, 7, "https://example.com", "https://example.com(url)"]
+
+(* G2 paste-ext-url-over-selection: Shift+Home materializes a DOM Range
+   on .ed-r runs, so the paste event targets .block-editor — not .ed-input. *)
+let test_editor_paste_url_over_visual_selection () =
+  stage_main_session [ block "b1" "label text" ];
+  set_editing "b1" "label text" ~caret:10;
+  Editor_actions.update_model "b1" (fun m ->
+    Edit_model.select m ~anchor:0 ~focus:10);
+  let base = Ui_services.dom_body () in
+  let target =
+    { base with
+      Ui_services.closest =
+        (fun selector ->
+          if Str_util.contains selector ".block-editor" then Some base
+          else if Str_util.contains selector ".ed-input" then None
+          else base.Ui_services.closest selector) }
+  in
+  let prevented = ref false in
+  Editor_keys.on_paste
+    { (key_event "") with
+      Ui_services.target = Some target
+    ; clipboard_get = (function "text/plain" -> "https://example.com" | _ -> "")
+    ; prevent_default = (fun () -> prevented := true)
+    ; stop_immediate = (fun () -> prevented := true) };
+  check "URL paste over a visual .ed-r selection becomes a markdown link"
+    (!prevented
+     && Editor_actions.live_buffer "b1" = "[label text](https://example.com)");
+  clear_editing ()
 
 (* cljs ctrl+p/ctrl+n inside editing move to the previous/next block *)
 let test_selected_clipboard_paste () =
@@ -1566,6 +1664,121 @@ let async_checks () =
      || (Editor_state.editing_uuid () <> Some "b1"
          && Editor_state.editing_uuid () <> None))
 
+
+(* G4 add-comment-ctrl-space: ctrl+space while editing ensures a comments
+   area for the edited block (cljs add-comment-to-current-context!). *)
+let test_add_comment_ctrl_space () =
+  let previous_worker = !Runtime.worker in
+  let ensured = ref [] in
+  Runtime.worker := Some { (Option.get previous_worker) with Worker_client.invoke_fn =
+    (fun name args ->
+      (match name, args with
+       | "thread-api/ensure-comments-area-for-blocks", [_; uuids] ->
+           ensured := uuids :: !ensured
+       | _ -> ());
+      match name with
+      | "thread-api/ensure-comments-area-for-blocks" ->
+          Js.Promise.resolve
+            (W.Map [ W.kw "block/uuid", W.Uuid "00000000-0000-0000-0000-0000000000c1" ])
+      | "thread-api/get-page-blocks-tree"
+      | "thread-api/get-block-refs" | "thread-api/get-blocks" ->
+          Js.Promise.resolve (W.Array [])
+      | _ -> (Option.get previous_worker).Worker_client.invoke_fn name args) };
+  stage_main_session [ block "b1" "comment host" ];
+  set_editing "b1" "comment host" ~caret:12;
+  let prevented = ref false in
+  Editor_keys.on_global_key
+    { (key_event ~ctrl:true " ") with
+      Ui_services.prevent_default = (fun () -> prevented := true)
+    ; stop_immediate = (fun () -> prevented := true) };
+  check "Ctrl+Space while editing is consumed by add-comment" !prevented;
+  check "Ctrl+Space while editing ensures a comments area"
+    (match !ensured with
+     | W.List [ W.String "b1" ] :: _ | W.Array [ W.String "b1" ] :: _ -> true
+     | _ -> false);
+  clear_editing ();
+  Runtime.worker := previous_worker
+
+
+(* G4 go-back-fwd-clean: mod+[ / mod+] use KeyboardEvent.code when the
+   host reports Escape (or another corrupted key) under modifiers.
+   Use meta so the stroke folds to mod+ on every platform (ctrl only
+   folds on non-mac). *)
+let test_go_back_fwd_brackets () =
+  let fire ?(code = None) ?(ctrl = false) key =
+    let prevented = ref false in
+    Editor_keys.on_global_key
+      { (key_event ~meta:true ~ctrl ~code key) with
+        Ui_services.prevent_default = (fun () -> prevented := true)
+      ; stop_immediate = (fun () -> prevented := true) };
+    !prevented
+  in
+  check "mod+[ with BracketLeft code matches go/backward"
+    (fire ~code:(Some "BracketLeft") "[");
+  check "mod+] with BracketRight code matches go/forward"
+    (fire ~code:(Some "BracketRight") "]");
+  check "mod+Escape without code still matches go/backward"
+    (fire "Escape");
+  check "Ctrl+Escape without code still matches go/backward on non-mac"
+    (Ui_services.env_is_mac () || fire ~ctrl:true ~code:None "Escape")
+
+(* G4 select-theme-color: t i opens the classic themes-select dialog. *)
+let test_select_theme_color () =
+  let prev_dialogs = !Dialogs_state.st in
+  let state = Signal.state (Signal.scheduler ()) Dialogs_state.initial in
+  Dialogs_state.st := Some state;
+  (Cmdk_host.services ()).Cmdk_services.open_themes_select ();
+  check "t i / ui/select-theme-color opens the classic themes dialog"
+    (Dialogs_state.is_open "themes-select");
+  Dialogs_state.close_named "themes-select";
+  Dialogs_state.st := prev_dialogs
+
+(* G4 toggle-contents + sidebar-clear: second Alt+Shift+C removes Contents
+   and closes an empty right sidebar; clear hides after emptying. *)
+let test_toggle_contents_and_clear () =
+  let previous_sidebar = !Sidebar_state.st_ref in
+  let previous_model = Runtime.model () in
+  let svs = Cmdk_host.services () in
+  let state v = Signal.state (Signal.scheduler ()) v in
+  let sidebar : Sidebar_state.t =
+    { favorites = state []; home_page = state None
+    ; favorite_drop = state None; recents = state []
+    ; nav_checked = state []; nav_tag_titles = state []
+    ; block_sources = Hashtbl.create 4; items = state []
+    ; open_menu = state ""; groups_collapsed = state []
+    ; left_width = state 246.; right_fraction = state 0.3
+    ; viewport_w = state 1280.
+    ; restored_repo = ref None; restoring = ref true
+    ; history_repo = ref None; history_state = ref None }
+  in
+  Sidebar_state.st_ref := Some sidebar;
+  if not previous_model.Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar;
+  let contents : Sidebar_state.item =
+    { key = "contents"; kind = "contents"; uuid = None; title = "Contents"
+    ; icon = None; breadcrumb = []; blocks = []; linked_refs = []
+    ; page = None; props_collapsed = true; collapsed = false; page_ref = None }
+  in
+  Signal.set sidebar.items [ contents ];
+  svs.Cmdk_services.sidebar_ensure_contents ();
+  check "second Alt+Shift+C removes Contents"
+    (Runtime.signal_get sidebar.items = []);
+  check "removing the last Contents item closes the right sidebar"
+    (not (Runtime.model ()).Model.right_sidebar_open);
+  Runtime.send Action.Toggle_right_sidebar;
+  Signal.set sidebar.items
+    [ contents
+    ; { contents with key = "help"; kind = "help"; title = "Help" } ];
+  svs.Cmdk_services.sidebar_clear ();
+  check "sidebar/clear empties items"
+    (Runtime.signal_get sidebar.items = []);
+  check "sidebar/clear closes the right sidebar"
+    (not (Runtime.model ()).Model.right_sidebar_open);
+  Sidebar_state.st_ref := previous_sidebar;
+  if (Runtime.model ()).Model.right_sidebar_open
+     <> previous_model.Model.right_sidebar_open then
+    Runtime.send Action.Toggle_right_sidebar
+
 (* ---------- runner ---------- *)
 
 (* State_cell singletons + first-mount refs: this suite mounts the app
@@ -1763,10 +1976,16 @@ let run ~finish =
   test_editor_format_wraps ();
   test_editor_word_nav ();
   test_editor_link ();
+  test_follow_link_sidebar ();
+  test_add_comment_ctrl_space ();
+  test_go_back_fwd_brackets ();
+  test_select_theme_color ();
+  test_toggle_contents_and_clear ();
   test_editor_ac_tab st s;
   test_editor_unbound_enter ();
   test_code_editor_enter ();
   test_editor_paste_link ();
+  test_editor_paste_url_over_visual_selection ();
   test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
   test_editor_tab ();

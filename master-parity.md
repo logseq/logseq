@@ -2,6 +2,29 @@
 
 Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each group owns only its section.
 
+## G2 — copy/paste/undo/redo
+
+Module 09. G1 owns indent-undo caret (module 06); general undo caret restoration is fixed here — G1 can skip if covered.
+
+| check | module | severity | status | master | LUI (before) | repro |
+|-------|--------|----------|--------|--------|--------------|-------|
+| copy-block-paste-into-empty | 09 | med | fixed `e569cc2e01` | stays editing last pasted @ end | exits edit | copy gamma → empty block → paste |
+| copy-subtree | 09 | med | fixed `e569cc2e01` | caret in last pasted (beta-2 @ end) | exits edit | copy beta subtree → paste |
+| copy-subtree-into-nonempty | 09 | med | fixed `e569cc2e01` | caret in last pasted | exits edit | paste subtree into non-empty |
+| cut-block-selection | 09 | med | fixed `e569cc2e01` | caret in pasted block | exits edit | cut gamma → paste |
+| paste-ext-url-over-selection | 09 | high | fixed `b75ecc9b97` | `[label](url)` markdown link | no-op, caret → 0 | Shift+Home → paste URL |
+| undo-typing | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | type → Ctrl+Z |
+| undo-new-block | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | Enter → type → undo×2 |
+| undo-outdent | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | Shift+Tab → undo |
+| redo-cleared-by-edit | 09 | low | fixed `0620e7b14d` | undo → caret 0 → type at start | caret stays end | undo → type → redo no-op |
+| undo-not-editing | 09 | low | fixed `0620e7b14d` | re-opens @ caret 0 | re-opens @ end | type → Esc → undo |
+| undo-status | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | Ctrl+Enter → undo |
+| undo-page-rename | 09 | med | fixed `5bdff1fa4d` | rename undo silent | false “Undo failed.” + `Owned_refresh_failed` | title rename → Ctrl+Z |
+| paste-across-pages | 09 | med | fixed `e569cc2e01` | caret in pasted block | exits edit | copy on A → paste on B |
+| copy-block-ref-paste | 09 | med | fixed `e569cc2e01` | inserts sibling, keeps editing | exits edit | copy block → paste into non-empty |
+
+Intentional differences (out of scope for G2): graph view; rich-text inline formatting while editing.
+
 ## G3 — autocomplete & refs
 
 | check | module | master behavior | LUI behavior | repro | severity | status |
@@ -14,11 +37,89 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | tag-new | 11 autocomplete | Same `#ui__ac` / hint sibling structure as master | Hint appeared inside `#ui__ac` | page `tag-new`; type `#NewTagX`, Enter | low | fixed `789ca92986` |
 | tag-space-closes | 11 autocomplete | `#` popup has no Page | Included Page | page `tag-space-closes`; type `#` then space | low | fixed `f7c7e893b1` |
 | tag-duplicate | 11 autocomplete | Same `#ui__ac` / hint sibling structure as master | Hint appeared inside `#ui__ac` | page `tag-duplicate`; add `#MyTag` twice | low | fixed `789ca92986` |
-| slash-filter | 11 autocomplete | Filtering `/head` keeps group header Heading | Group headers dropped while filtering | page `slash-filter`; type `/head` | low | open — owned by G5 (slash popup) |
-| slash-nomatch | 11 autocomplete | `/zzzzqq` with no match closes popup | Stayed open; raw key fixed by G7 (`editor.slash/no-matched-commands`) | page `slash-nomatch`; type `/zzzzqq` | med | open — owned by G5 (slash popup); raw-key fixed `4e9897330d` |
-| slash-space-close | 11 autocomplete | `/` then space closes slash popup | Stayed open with full command list | page `slash-space-close`; type `/ ` | med | open — owned by G5 (slash popup) |
+| slash-filter | 11 autocomplete | Filtering `/head` keeps group header Heading | Group headers dropped while filtering | page `slash-filter`; type `/head` | low | fixed by G5 `0aa74f9f8c` |
+| slash-nomatch | 11 autocomplete | `/zzzzqq` with no match closes popup | Stayed open with raw i18n key | page `slash-nomatch`; type `/zzzzqq` | med | fixed by G5 `0aa74f9f8c` (dict key by G7 `4e9897330d`) |
+| slash-space-close | 11 autocomplete | `/` then space closes popup | Stayed open with full command list | page `slash-space-close`; type `/ ` | med | fixed by G5 `0aa74f9f8c` |
 | slash-then-pageref | 11 autocomplete | After slash then `[[`, empty popup has 10 date items | Had 34 date items | page `slash-then-pageref`; type `/`, Backspace, `[[` | low | fixed `135989e0bb` |
 | follow-link-sidebar | 13 refs/embeds | Ctrl+Shift+O inside `[[Linked Pg2]]` opens page in right sidebar | Nothing; sidebar stayed closed | caret inside ref; mod+shift+o | high | fixed `b4f17a0497` |
+
+## G4 — keyboard shortcuts
+
+| check | module | master | LUI (before) | repro | severity | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| keymap-counts | 14 Keymap listing | All · 116 | All · 117 | Settings → Keymap; read filter chips | low | fixed `ae9c91a9a0` |
+| keymap-extra-in-lui | 14 Keymap listing | includes `:go/graph-view`; no `:ui/toggle-document-mode` / `:ui/goto-plugins` | listed `t d` / `t p`; omitted graph view | compare Keymap id sets | low | fixed `ae9c91a9a0` |
+| row-ui-toggle-document-mode | 14 Keymap listing | not listed (handler still `t d`) | listed Toggle document mode | Settings → Keymap | low | fixed `ae9c91a9a0` |
+| row-ui-goto-plugins | 14 Keymap listing | not listed (handler still `t p`) | listed Go to plugins | Settings → Keymap | low | fixed `ae9c91a9a0` |
+| row-search-re-index | 14 Keymap listing | one chord `Ctrl C → Ctrl S` | read as two alternative bindings | Settings → Keymap → Rebuild search index | med | fixed `6222b04510` |
+| row-sidebar-clear | 14 Keymap listing | one chord `Ctrl C → Ctrl C` | read as two alternative bindings | Settings → Keymap → Clear all in the right sidebar | med | fixed `6222b04510` |
+| follow-link-sidebar | 14 shortcut behavior | `mod+shift+o` opens `[[page]]` in right sidebar | page-title refs were a no-op | caret inside `[[Page]]`; Ctrl+Shift+O | high | fixed on base by G3 (`c98878612c` / `b4f17a0497`); G4 regression `7cd0754717` |
+| ui/toggle-contents | 14 shortcut behavior | `alt+shift+c` toggles Contents; `global-prevent-default` | ensure-only open; wrong handler gate | Alt+Shift+C with Contents already open | med | fixed `7c258adedc` |
+| sidebar/clear | 14 shortcut behavior | clears items and hides right sidebar | cleared items but left sidebar open | `mod+c mod+c` | med | fixed `7c258adedc` |
+| go/graph-view listing | 14 Keymap listing | lists Go to graph view (`g g`) | omitted | Settings → Keymap | low | fixed `ae9c91a9a0` — listing only; Graph View UI itself is an intentional LUI exclusion |
+| add-comment-ctrl-space | 14b shortcut behavior | `ctrl+space` while editing adds a comment thread | no-op | block “comment host”; caret @end; Control+Space | high | fixed `1740e37849` |
+| go-back-fwd-clean | 14b shortcut behavior | after A→B, `mod+[` / `mod+]` walk history | `Ctrl+[` no-op | Nav A then Nav B; Ctrl+[ / Ctrl+] | high | fixed `eea57aab11` |
+| select-theme-color | 14b shortcut behavior | `t i` opens Themes \| Logseq • Default Light Theme | no-op | Shortcut Page; not editing; `t i` | med | fixed `68c114c5d3` |
+| go-flashcards | 14b shortcut behavior | empty deck “Time to create a card!” | “No cards due … Practice again” | Shortcut Page; `g f` | med | fixed via G6 `nav-flashcards` (`98946559ee`); G4 also cleared stale `all_cards` mid-reload (`8efe347dbe`) |
+| go-flashcards-tc | 14b shortcut behavior | `t c` same create-card empty copy | same wrong no-due copy | Shortcut Page; `t c` | med | fixed via G6 `nav-flashcards` (`98946559ee`); same path as go-flashcards |
+| p-p | 14b shortcut behavior | priority picker Low \| Medium \| High \| Urgent | header + input, no choices | select block; `p p` | med | fixed `b3514d2015` (shared named-property open) |
+| p-s-clean | 14b shortcut behavior | status picker lists 6 statuses | only Todo | fresh graph; select block; `p s` | med | fixed `b3514d2015` |
+| toggle-contents | 14b shortcut behavior | Alt+Shift+C twice opens then closes Contents | second press leaves sidebar open | Shortcut Page; Alt+Shift+C ×2 | med | fixed `7c258adedc` (verified) |
+| toggle-contents-clean | 14b shortcut behavior | same toggle close on fresh session | second press no-op | fresh; Alt+Shift+C ×2 | med | fixed `7c258adedc` (same path) |
+| backward-kill-word | 14b shortcut behavior | `alt+w` at `one two\| three` → `one three` | `one  three` (double space) | caret @7; Alt+w | low | fixed `abe658c330` |
+| bold-toggle-off | 14b shortcut behavior | `****bo****` renders as `x *bo* y` | renders as `x **bo** y` | mod+b on bold selection | low | leave — pure rich-text rendering of `****bo****`, not shortcut wiring |
+| command-palette | 14b shortcut behavior | 86 commands; starts Toggle wide mode… | 85; starts Search themes… | Control+Shift+p | low | fixed `6eaca45c43` — only palette picks write `commands-history` (shortcuts no longer pollute order); table includes `go/graph-view` |
+| go-search-themes | 14b shortcut behavior | `Logseq Default theme — light #logseq-classic-theme`; Apply theme | name only; Trigger | Alt+Shift+i | low | fixed `605514b14f` |
+| p-d | 14b shortcut behavior | date picker without Add-or-change chrome | extra Add-or-change header | select block; `p d` | low | fixed `b3514d2015` |
+| p-i | 14b shortcut behavior | icon picker tabs at bottom | tabs at top | select block; `p i` | low | fixed `e0f35ab1c3` |
+| p-t | 14b shortcut behavior | tag picker without Add-or-change header | extra header | select block; `p t` | low | fixed `b3514d2015` |
+| quick-add | 14b shortcut behavior | Add to today shows Ctrl Alt E | empty ZWSP / missing keycaps | Control+Alt+e | low | fixed `166da5da39` (G6 `quick-add-open` keycaps; supersedes G4 `8a38fd900f` shortcut_hint) |
+| sidebar-clear | 14b shortcut behavior | clears items and closes right sidebar | clears items, sidebar stays open | Control+c Control+c | low | fixed `7c258adedc` (verified; same as sidebar/clear) |
+
+Notes:
+
+- Master keeps `:ui/toggle-document-mode`, `:ui/goto-plugins`, and `:ui/select-theme-color` as live `global-non-editing-only` handlers without Keymap category rows. LUI mirrors that via `Keymap_data.hidden_handler_rows` / `dispatch_items` so `t d` / `t p` / `t i` still dispatch while Settings → Keymap stays at 116.
+- Chord chips use one outer `shui-shortcut-chord` with a single `data-shortcut-binding` and `->` separators, matching cljs `chord-sequence-keys`.
+- G1 also has a follow-link sidebar change on its branch; G3 already merged the same `open_ref` path into `refactor/lui-parity`, so G4 does not duplicate it.
+- Module 14b `p-p` / `p-s-clean` / `p-d` / `p-t` share one root: `Properties_dialog.open_for_block_with_property` now merges `closed-values` and anchors at the block.
+- Module 14b flashcards empty copy is an empty-state / load lifecycle issue (also module 03 nav-flashcards for G1), not shortcut binding. G6 fixed the shared empty-state root as `nav-flashcards` (`98946559ee`).
+
+## G5 — slash commands
+
+Module 12 (Block editor — slash commands). Base: `refactor/lui-parity` (merged through G6).
+Branch: `logseq/g5-slash-commands-7f98`.
+
+| check | module | master | LUI (before) | severity | status |
+|-------|--------|--------|--------------|----------|--------|
+| list-tooltips | 12 | Slash items expose description via `title` attr | No `title` on slash rows | low | fixed `5863660c56` |
+| cmd-node-reference | 12 | Empty `[[` shows 10 NLP date shortcuts | 34 NLP dates | low | fixed by G3 `d65d6aa4ec` |
+| cmd-node-embed | 12 | Placeholder "Search for a block"; Escape leaves host | "Search for a node"; `/Node embed` left after Escape | med | fixed `0bd4841db4` |
+| cmd-deadline | 12 | Year control in caption; Next date Empty when unset | Month only; defaulted to double-plus label | low | fixed `ff4bd1d24d` (+ G6 remount `3bfba68608`) |
+| cmd-scheduled | 12 | Year control; Next date Empty | Same LUI gap as deadline | low | fixed `ff4bd1d24d` (shared calendar/repeat) |
+| cmd-date-picker | 12 | Year control in caption | Month only | low | fixed `ff4bd1d24d` (+ G6 remount `3bfba68608`) |
+| cmd-add-comment | 12 | Caret moves into new empty comment | Thread created; caret stays on host | med | fixed `84c53c3e3d` |
+| cmd-query | 12 | Clear slash; move host title into query child; empty host; tag Query | Wrong child path / lost title | low | fixed `91fb6875f4` + `90a2be21ce` |
+| cmd-advanced-query | 12 | Keep host title; empty clojure code query child; no live all-nodes table | Title discarded; Untitled; live 28-row table | high | fixed `210c43f33a` + `90a2be21ce` |
+| cmd-query-function | 12 | Inline `{{function null}}` (master is inline, not own-line) | Empty/missing null; looked like own-line gap | low | fixed `1df1a903b7` |
+| cmd-upload-an-asset | 12 | Keeps `/Upload an asset` until file chosen | Cleared slash text immediately | low | fixed `11addbf1a0` |
+| cmd-template | 12 | Placeholder "Search for a template" | "Search for a block" | low | fixed `50864e4d1a` |
+| cmd-embed-video-url | 12 | `{{video }}` on own line under host | Inline `host {{video}}` | low | fixed `4fdb2e397d` |
+| cmd-embed-youtube-timestamp | 12 | No video → clear slash/block content | Kept host; nothing inserted | low | fixed `6756044250` |
+
+### Extra slash-filter parity (prompt edge cases)
+
+| check | master | LUI (before) | status |
+|-------|--------|--------------|--------|
+| slash-filter `/head` | Group name searchable; Heading group title kept | Group headers dropped when filtered | fixed `0aa74f9f8c` |
+| slash-filter no-match | Close after >2 chars past last match; else "No matched commands" | Untranslated key; popup stayed open | fixed `0aa74f9f8c` + tests `23864be16e` |
+| slash-filter `/ ` | Slash+space closes popup | Full list stayed open | fixed `0aa74f9f8c` |
+
+### Notes
+
+- Intentional differences excluded by charter: graph view; rich-text editor formatting while editing.
+- NLP take-10 for empty `[[` was fixed on `refactor/lui-parity` by G3 (`d65d6aa4ec`); G5 does not re-land that change.
+- Date-picker year remount + unset repeat Empty also landed via G6 (`3bfba68608`); merge keeps that remount path.
+- No `needs decision` items: every G5 gap had a clear master behavior to copy.
 
 ## G6 — chrome / sidebar / pages / assets / tags / views
 
@@ -96,7 +197,7 @@ Shared dictionaries: `resources/dicts/*.edn` (25 locales). LUI loads EN embedded
 | export-error-unexpected | export / worker | Dict key `:export/error-unexpected` | Key missing from LUI dicts; toast path ignored `:i18n-key` | Export EDN failure | high | fixed `720ba5c8c2` + `1f3cb98848` |
 | storage-invalid-data-writing | worker notify | Dict key `:storage/invalid-data-writing` via `:i18n-key` | Key missing; Nil-message + i18n-key dropped | Invalid DB write notification | high | fixed `720ba5c8c2` + `1f3cb98848` |
 | import-unsupported-key | i18n helper | `:graph.add-existing/unsupported-error` | Helper used missing `import/unsupported-error` | Latent helper | low | fixed `16ef4a073f` |
-| slash-no-matched-key | slash popup | Hardcoded `"No matched commands"` | Raw `editor.slash/no-matched-commands` | `/zzzzqq` | med | fixed `4e9897330d` (popup-close still G5) |
+| slash-no-matched-key | slash popup | Hardcoded `"No matched commands"` | Raw `editor.slash/no-matched-commands` | `/zzzzqq` | med | fixed `4e9897330d` (popup-close by G5 `0aa74f9f8c`) |
 | validate-db-cmdk-toasts | cmdk / (Dev) | Handler only invokes worker; worker notifies | Hardcoded `"Your graph is valid"` / `"Validation failed"` | Command palette → Validate | low | fixed `3bdd9242c4` |
 | language-menu-options | settings | 25 locales from `dicts/languages` | Same 25 codes/labels | Settings → Language | high | fixed (already matched; verified) |
 | language-switch-rerender | settings | `set-preferred-language!` + re-render-root | `I18n.load` + `doc_reload` (full reload) | Switch zh-CN / ja / de; reload | high | fixed (reload parity; verified) |

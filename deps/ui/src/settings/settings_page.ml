@@ -385,24 +385,50 @@ let editor_pane ctx =
 
 (* ---- keymap pane (components/shortcut.cljs page) ---- *)
 
-let rec keymap_binding ~key (b : Keymap_data.binding) =
+(* One binding chip. Chords keep a single data-shortcut-binding on the
+   outer shui-shortcut-chord (cljs chord-sequence-keys); stroke groups
+   are visual only so they are not read as alternative bindings. *)
+let keymap_stroke_combo ~key stroke =
+  let keys = Keymap_record.keycaps stroke in
+  Ui_components.shortcut_combo ~key:(key ^ "sc") ~glow:true
+    (List.concat
+       (List.mapi
+          (fun i k ->
+            (if i > 0 then
+               [ Ui_components.keycap_separator
+                   ~key:(key ^ "s" ^ string_of_int i) ]
+             else [])
+            @ [
+                Ui_components.keycap
+                  ~key:(key ^ "k" ^ string_of_int i)
+                  ~boxed:false ~glow:true ~min_slot:20
+                  ~value:
+                    (if k = Cmdk_view.g_opt () then
+                       Cmdk_view.print_shortcut_key (Cmdk_host.services ()) k
+                     else k);
+              ])
+          keys))
+
+let keymap_binding ~key (b : Keymap_data.binding) =
   let open Keymap_data in
   if b.kind = "chord" then
-    row ~key ~cross:`center ~gap:4
-      (String.split_on_char ' ' b.data
-      |> List.mapi (fun i stroke ->
-          row ~key:(string_of_int i) ~cross:`center ~gap:4
-            ((if i = 0 then []
-              else [ text ~value:("->") [] ])
-            @ [
-                keymap_binding
-                  ~key:(key ^ string_of_int i)
-                  {
-                    kind = "combo";
-                    data = stroke;
-                    keys = Keymap_record.keycaps stroke;
-                  };
-              ])))
+    box ~key ~style_class:"ls-dc" ~display:`contents
+      [
+        box ~key:(key ^ "w") ~style_class:"shui-shortcut-wrap"
+          ~display:`inline_flex
+          [
+            Ui_components.shortcut_chord ~key:(key ^ "chord")
+              ~data_binding:b.data
+              (String.split_on_char ' ' b.data
+              |> List.mapi (fun i stroke ->
+                   (if i = 0 then []
+                    else
+                      [ Ui_components.chord_separator ~value:"->"
+                          ~key:(key ^ "sep" ^ string_of_int i) () ])
+                   @ [ keymap_stroke_combo ~key:(key ^ string_of_int i) stroke ])
+              |> List.concat);
+          ];
+      ]
   else
     (* ls-dc is display:contents — the box is transparent on web, so the
      shortcut cells flow as direct children of the action wrap *)

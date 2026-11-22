@@ -138,6 +138,43 @@ let kill_word_forward (m : Edit_model.t) =
     else if pos > first then first else pos in
   Edit_model.select updated ~anchor:(adjust lo) ~focus:(adjust hi)
 
+(* Mirror kill_word_forward's trailing-separator rule: at
+   "one two| three" (caret on the space after the word) delete "two "
+   → "one three". Edit_model.delete_word_backward stays word-only for
+   Ctrl+Backspace. *)
+let kill_word_backward (m : Edit_model.t) =
+  let lo, hi = A.sel_span_of m in
+  if lo <> hi then Edit_model.splice m lo hi ""
+  else if m.Edit_model.caret <= 0 then m
+  else
+    let first =
+      match Edit_model.atomic_ending_at m m.Edit_model.caret with
+      | Some run -> run.start_off
+      | None ->
+          let start = backward_word_position m in
+          (* backward_word_position can land on the separator before the
+             word; advance so we delete the word itself, then optionally
+             the trailing separator at the caret. *)
+          if start < String.length m.Edit_model.source
+             && word_separator m.Edit_model.source.[start]
+          then start + 1
+          else start
+    in
+    let stop = m.Edit_model.caret in
+    let stop =
+      if stop < String.length m.Edit_model.source
+         && word_separator m.Edit_model.source.[stop]
+      then stop + 1
+      else stop
+    in
+    let updated = Edit_model.splice m first stop "" in
+    let adjust pos =
+      if pos > stop then pos - (stop - first)
+      else if pos > first then first
+      else pos
+    in
+    Edit_model.select updated ~anchor:(adjust lo) ~focus:(adjust hi)
+
 (* kill from caret back to the start of the visual line *)
 let kill_line_before (m : Edit_model.t) =
   let lo, _ = Edit_model.line_bounds m in
@@ -685,9 +722,11 @@ let canonical_binding b =
       String.concat "+" (List.sort compare (fold_ctrl_to_mod ms) @ [ key ])
   | [] -> b
 
-(* (binding stroke sequence, command id) — one row per binding *)
+(* (binding stroke sequence, command id) — one row per binding.
+   Uses dispatch_items so handler-only shortcuts (master registers them
+   outside Keymap categories) still participate in chord matching. *)
 let chord_table () =
-    Keymap_data.current_items () |> Keymap_data.unique_rows
+    Keymap_data.dispatch_items () |> Keymap_data.unique_rows
     |> List.concat_map
        (fun (row : Keymap_data.row) ->
           let cid = Keymap_data.command_id row.title in
@@ -724,13 +763,45 @@ let rec is_prefix xs ys =
   | x :: xt, y :: yt -> x = y && is_prefix xt yt
   | _ -> false
 
+(* cljs shortcut/core code->key-name-map — KeyboardEvent.code fallback
+   when a modifier is held (Closure/macOS Option corruption, Ctrl+[ →
+   Escape on some hosts). *)
+let code_key_name code =
+  match code with
+  | "BracketLeft" -> Some "open-square-bracket"
+  | "BracketRight" -> Some "close-square-bracket"
+  | "Space" -> Some "space"
+  | "Enter" -> Some "enter"
+  | "Tab" -> Some "tab"
+  | "Backspace" -> Some "backspace"
+  | "Delete" -> Some "delete"
+  | "Escape" -> Some "esc"
+  | "ArrowUp" -> Some "up"
+  | "ArrowDown" -> Some "down"
+  | "ArrowLeft" -> Some "left"
+  | "ArrowRight" -> Some "right"
+  | "Semicolon" -> Some "semicolon"
+  | "Equal" -> Some "equals"
+  | "Minus" -> Some "dash"
+  | "Quote" -> Some "single-quote"
+  | "Backquote" -> Some "grave-accent"
+  | "Backslash" -> Some "backslash"
+  | "Comma" -> Some "comma"
+  | "Period" -> Some "period"
+  | "Slash" -> Some "slash"
+  | c when String.length c = 4 && String.starts_with ~prefix:"Key" c ->
+      Some (String.lowercase_ascii (String.sub c 3 1))
+  | c when String.length c = 6 && String.starts_with ~prefix:"Digit" c ->
+      Some (String.sub c 5 1)
+  | _ -> None
+
 (* a keydown's canonical stroke token, matching the binding-table format
    ("mod+k", "shift+/", "g", "ctrl+space", ...) *)
 let stroke_of ev =
   match ev_key ev with
   | "Control" | "Meta" | "Alt" | "Shift" | "CapsLock" | "Dead" -> None
   | _ ->
-      let key =
+      let from_key =
         match shortcut_key ev with
         | "arrowup" -> "up"
         | "arrowdown" -> "down"
@@ -740,6 +811,28 @@ let stroke_of ev =
         | "[" -> "open-square-bracket"
         | "]" -> "close-square-bracket"
         | k -> k
+      in
+      let mods_held =
+        ev.Ui_services.ctrl || ev.Ui_services.meta || ev.Ui_services.alt
+        || shift_held ev
+      in
+      (* Prefer KeyboardEvent.code when a modifier is held — recovers
+         Ctrl+[ / Ctrl+] when the host reports key=Escape (or another
+         corrupted glyph) instead of "[" / "]". *)
+      let key =
+        if not mods_held then from_key
+        else
+          match Option.bind (ev.Ui_services.detail "code") code_key_name with
+          | Some name -> name
+          | None ->
+              (* terminal legacy: Ctrl/Meta+[ arrives as Escape with no
+                 code on some hosts — only remap when the mod key that
+                 owns go/backward is held *)
+              if (from_key = "escape" || from_key = "esc")
+                 && (ev.Ui_services.ctrl || ev.Ui_services.meta)
+                 && not ev.Ui_services.alt && not (shift_held ev)
+              then "open-square-bracket"
+              else from_key
       in
       let ms =
         (if shift_held ev then [ "shift" ] else [])
@@ -767,6 +860,14 @@ let chord_may_run ~target ~control editing cid =
         not (S.is_draft e)
         && not (is_editable_target target && closest ".editor-wrapper" target = None)
     | None -> not editing)
+  else if cid = "editor/add-comment" then
+    (* cljs registers add-comment under both block-editing-only and
+       global-non-editing-only (selection). Keymap lists the latter;
+       allow the editing path here so ctrl+space works while editing. *)
+    not control
+    && (Option.is_some (S.editing ())
+        || not (S.String_set.is_empty (S.selected ()))
+        || editing)
   else
   match Keymap_data.command_handler cid with
   | Some "block-editing-only" -> not control && Option.is_some (S.editing ())
@@ -878,6 +979,9 @@ let on_global_key ev =
                 (match S.editing () with
                  | Some _ -> A.exit_edit ~select:true
                  | None -> A.select_parent ())
+              else if cid = "editor/add-comment" then
+                (* cljs comments-handler/add-comment-to-current-context! *)
+                Comments.add_comment ()
               else Cmdk_state.dispatch_id cid
             end
           in
@@ -962,9 +1066,10 @@ let on_normal_key ev =
       ev.Ui_services.prevent_default ();
       A.delete_selection ()
   | " " when ev.Ui_services.ctrl && selected () ->
-      (* cljs ctrl+space = add-comment on the selection *)
+      (* cljs ctrl+space = add-comment on the selection — also covered by
+         the chord table; keep the selection-mode path explicit *)
       ev.Ui_services.prevent_default ();
-      Popups_state.emit_cmd "add-comment" []
+      Comments.add_comment ()
   | "ArrowUp" when alt && not shift ->
       (* editor/select-block-up *)
       ev.Ui_services.prevent_default ();
@@ -1534,7 +1639,7 @@ let dispatch_command cid =
   | _, "editor/clear-block" -> update clear_block
   | _, "editor/kill-line-before" -> update kill_line_before
   | _, "editor/kill-line-after" -> update kill_line_after
-  | _, "editor/backward-kill-word" -> update Edit_model.delete_word_backward
+  | _, "editor/backward-kill-word" -> update kill_word_backward
   | _, "editor/forward-kill-word" -> update kill_word_forward
   | _, "editor/backward-word" ->
       update (move_shortcut_word ~backward:true)
@@ -1916,14 +2021,37 @@ let on_keydown ev =
 
   end
 
+let editing_clipboard_target uuid target =
+  match target with
+  | Some el -> (
+      match closest ".ed-input" (Some el) with
+      | Some inp -> inp.Ui_services.attr "data-block-id" = Some uuid
+      | None -> false)
+  | None -> false
+
+(* copy/cut/paste whose real DOM Range sits on the rendered .ed-r runs —
+   the event targets the selection's container inside .block-editor
+   rather than the conduit input; only one editing surface exists at a
+   time *)
+let editing_block_target target =
+  match target with
+  | Some el -> Option.is_some (closest ".block-editor" (Some el))
+  | None -> false
+
+(* Match copy/cut: a non-collapsed model selection materializes a DOM
+   Range on the rendered .ed-r runs, so the paste event targets
+   .block-editor rather than the conduit .ed-input. Without this,
+   URL-over-selection paste is a no-op and the caret stays at 0. *)
 let on_paste ev =
   if Paste_capture.dispatch ev then () else
   if Ui_services.env_publishing () then () else begin
   if S.ready () then
     let editor_target =
-      match S.editing (), closest ".ed-input" ev.Ui_services.target with
-      | Some e, Some input -> input.Ui_services.attr "data-block-id" = Some e.S.uuid
-      | _ -> false
+      match S.editing () with
+      | Some e ->
+          editing_clipboard_target e.S.uuid (ev.Ui_services.target)
+          || editing_block_target (ev.Ui_services.target)
+      | None -> false
     in
     if editor_target && ev.Ui_services.has_files then begin
       ev.Ui_services.prevent_default ();
@@ -1948,24 +2076,9 @@ let on_paste ev =
               A.paste_from_clipboard ~cached saved))
       else A.paste_from_clipboard ~cached saved
 
-(* a clipboard event aimed at the open editor's conduit input *)
+(* a clipboard event aimed at the open editor's conduit input or its
+   visual selection inside .block-editor *)
   end
-
-let editing_clipboard_target uuid target =
-  match target with
-  | Some el -> (
-      match closest ".ed-input" (Some el) with
-      | Some inp -> inp.Ui_services.attr "data-block-id" = Some uuid
-      | None -> false)
-  | None -> false
-
-(* copy/cut whose real DOM Range sits on the rendered .ed-r runs — the
-   event targets the selection's container inside .block-editor rather
-   than the conduit input; only one editing surface exists at a time *)
-let editing_block_target target =
-  match target with
-  | Some el -> Option.is_some (closest ".block-editor" (Some el))
-  | None -> false
 
 let on_copy ev =
   if S.ready () then

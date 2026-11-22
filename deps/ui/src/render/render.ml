@@ -43,13 +43,66 @@ let wrap ?(cls = "block-title-wrap") ?(tag = "span") ?(self = "")
   in
   if tag = "div" then
     (* cljs uses div.block-title-wrap.has-video-embed for video titles —
-       a div host so the .video-embed-block children are legal *)
+       video-inline-segments-cp wraps leading text in .video-inline-text
+       and each video macro in .video-embed-block *)
+    let children =
+      match plain_text s with
+      | Some v -> [ D.txt v ]
+      | None ->
+          let names = [ "video"; "youtube"; "vimeo"; "bilibili"; "loom" ] in
+          let n = String.length s in
+          let is_video_at j =
+            List.exists
+              (fun name ->
+                let nl = String.length name in
+                j + nl <= n
+                && Str_util.starts_with_ci (String.sub s j nl) name
+                && (j + nl = n
+                    || s.[j + nl] = ' '
+                    || s.[j + nl] = '}'))
+              names
+          in
+          let rec go i acc_text segs =
+            match Render_inline.find_sub s i "{{" with
+            | k when k >= 0 && is_video_at (k + 2) -> (
+                match Render_inline.find_sub s (k + 2) "}}" with
+                | j when j > k + 2 ->
+                    let before = String.sub s i (k - i) in
+                    let body = String.sub s (k + 2) (j - k - 2) in
+                    let segs =
+                      if String.trim before = "" then segs
+                      else
+                        D.el ~tag:"div" ~style_class:"video-inline-text"
+                          (Render_inline.parse ~self ?highlight before)
+                        :: segs
+                    in
+                    let segs =
+                      Render_inline.macro_el ~refs:[] ~self body :: segs
+                    in
+                    go (j + 2) "" segs
+                | _ ->
+                    let rest = String.sub s i (n - i) in
+                    if rest = "" && acc_text = "" then List.rev segs
+                    else
+                      List.rev
+                        (D.el ~tag:"div" ~style_class:"video-inline-text"
+                           (Render_inline.parse ~self ?highlight
+                              (acc_text ^ rest))
+                         :: segs))
+            | _ ->
+                let rest = String.sub s i (n - i) in
+                if rest = "" && acc_text = "" then List.rev segs
+                else
+                  List.rev
+                    (D.el ~tag:"div" ~style_class:"video-inline-text"
+                       (Render_inline.parse ~self ?highlight
+                          (acc_text ^ rest))
+                     :: segs)
+          in
+          go 0 "" []
+    in
     D.el ~key:("btw-d-" ^ tag) ~tag ~style_class:cls ~attrs:wrap_attrs
-      ((match prefix with Some p -> [ p ] | None -> [])
-       @
-       match plain_text s with
-       | Some v -> [ D.txt v ]
-       | None -> Render_inline.parse ~self ?highlight s)
+      ((match prefix with Some p -> [ p ] | None -> []) @ children)
   else if tag <> "span" then
     (* h1..h6.block-title-wrap are e2e contract *)
     match plain_text s, prefix with

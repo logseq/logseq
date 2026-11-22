@@ -1877,7 +1877,28 @@ let test_cmdk_groups () =
   check "commands_matched fuzzy"
     (List.exists
        (fun (c : Cmdk_services.cmd) -> c.id = "editor/move-blocks")
-       (Cmdk_state.commands_matched "move blocks"))
+       (Cmdk_state.commands_matched "move blocks"));
+  (* G4 command-palette: empty history starts with Toggle wide mode;
+     keyboard dispatch must not write commands-history (cljs only
+     records palette invoke-command). *)
+  Ui_services.storage_remove "commands-history";
+  let fresh = Cmdk_state.command_table () in
+  check "empty history starts with ui/toggle-wide-mode"
+    (match fresh with
+     | c :: _ -> c.Cmdk_services.id = "ui/toggle-wide-mode"
+     | [] -> false);
+  check "palette lists go/graph-view"
+    (List.exists
+       (fun (c : Cmdk_services.cmd) -> c.id = "go/graph-view")
+       fresh);
+  Cmdk_state.dispatch_id "go/search-themes";
+  Cmdk_state.dispatch_id "go/search-in-page";
+  let after_shortcuts = Cmdk_state.command_table () in
+  check "shortcut dispatch does not reorder the command palette"
+    (match after_shortcuts with
+     | c :: _ -> c.Cmdk_services.id = "ui/toggle-wide-mode"
+     | [] -> false);
+  Ui_services.storage_remove "commands-history"
 
 (* ---- Model.indent_blocks / outdent_blocks ---- *)
 
@@ -3152,16 +3173,24 @@ let test_popups_state () =
     (List.for_all
        (fun (i : Popups_state.ac_item) -> i.ai_hdr = None)
        (Popups_state.with_headers false items));
-  (* filter_slash: fuzzy on label, headers only for empty query *)
+  (* filter_slash: fuzzy on label+group; cljs keeps group headers when filtered *)
   let f0 = Popups_state.filter_slash "" items in
   check "filter_slash empty keeps all" (List.length f0 = 4);
   let f1 = Popups_state.filter_slash "alp" items in
   check "filter_slash fuzzy" (List.length f1 = 1);
-  check "filter_slash hides headers"
-    ((List.hd f1).Popups_state.ai_hdr = None);
+  check "filter_slash keeps headers"
+    ((List.hd f1).Popups_state.ai_hdr = Some "g1");
+  let f_head = Popups_state.filter_slash "g2" items in
+  check "filter_slash matches group name" (List.length f_head = 1
+    && (List.hd f_head).Popups_state.ai_label = "Gamma");
   (match Popups_state.filter_slash "zzzzz" items with
-   | [ f ] -> check "filter_slash fallback" (f.Popups_state.ai_key = "no-matched")
+   | [ f ] ->
+       check "filter_slash fallback"
+         (f.Popups_state.ai_key = "no-matched"
+          && f.Popups_state.ai_label = "No matched commands")
    | _ -> check "filter_slash fallback" false);
+  check "filter_slash whitespace closes"
+    (Popups_state.filter_slash_result " " items = Popups_state.Slash_close);
   (* query_closed per kind *)
   let closed kind q = Popups_state.query_closed (mk_ac kind) q in
   check "qc page_ref"

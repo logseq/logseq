@@ -344,8 +344,14 @@ let reload_current_view_owned origin =
     match origin.Runtime.reload_route with
     | Model.Home | Model.Journals -> load_journals_owned origin
     | Model.Page _ | Model.Block_zoom _ | Model.Library ->
-        Js.Promise.resolve (Runtime.Reload_failed
-          { failure_message = "Use the page refresh path"; failure_cause = None })
+        (* Page refreshes normally go through refresh_page_then when
+           route_page is present. When it is missing (rename cleared the
+           title route), reload the installed view hook instead of failing
+           — master restores rename undo silently. *)
+        let* () = !Runtime.reload_current_view () in
+        if Runtime.reload_origin_current origin then
+          Js.Promise.resolve (Runtime.Reload_unchanged origin)
+        else Js.Promise.resolve Runtime.Reload_superseded
     | Model.All_pages | Model.All_graphs | Model.Import
     | Model.Bug_report | Model.Bug_report_clipboard
     | Model.File _ | Model.Not_found _ | Model.Settings | Model.Plugins | Model.Login ->
