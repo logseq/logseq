@@ -361,6 +361,12 @@ succeeds, then clears editing without a competing save-exit write. A failed
 initial or final write retains the buffer and re-arms autosave so unsaved text
 can still be edited or retried.
 
+Advanced Query removes the trigger from the live editor before starting its
+asynchronous writes, as Master's command steps do. Clicking another block while
+conversion is pending saves the cleaned host title, never `/Advanced Query`.
+If conversion fails while that editor is still owned, its original buffer and
+caret are restored for retry; completion never replaces a newer editor.
+
 ## Editing undo after a pending indent
 
 An Undo shortcut during an in-flight structural edit waits for that edit to

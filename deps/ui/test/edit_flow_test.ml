@@ -2446,6 +2446,50 @@ let test_query_selection_conversion (h : host) =
        "", "",false,0,true;
        "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true]
 
+let test_query_navigation_conversion (h : host) =
+  let popup = Option.get !Popups_state.active in
+  let rec run = function
+    | [] -> reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
+    | (title, rejected) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        Popups_state.close_ac popup;
+        stage_page h [Test_check.block "b1" title; Test_check.block "b2" "Other block"];
+        let source = title ^ "/Advanced Query" in
+        set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false popup Popups_state.Slash;
+        install_worker ~repo:h.repo h;
+        let release = ref (fun () -> ()) and fetching = ref false and writes = ref 0 in
+        let gate = Js.Promise.make (fun ~resolve ~reject:_ ->
+          release := (fun () -> resolve (W.Array [W.Map [W.kw "block", W.Map
+            [W.kw "block/uuid",W.Uuid "b1";
+             W.kw "logseq.property/query",W.Uuid "query-source"]]]) [@u])) in
+        Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+          if name="thread-api/get-blocks" && (match args with
+            | [_;W.Array [request]] -> W.get request "id"=Some (W.Uuid "b1")
+            | _ -> false) then begin fetching:=true; gate end
+          else if name="thread-api/apply-outliner-ops" then begin
+            incr writes;
+            if rejected && !writes=2 then h.reject_promise "conversion final write rejected"
+            else Js.Promise.resolve (worker_handler h name args)
+          end else Js.Promise.resolve
+            (if owned_call name then worker_handler h name args else h.base_handler name args));
+          on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced:true;
+        let* () = settle h 40 in
+        check "Advanced Query waits with a slash-cleared editor after saving its host"
+          (!fetching && (editing_now ()).buffer=title && current_titles ()=[title;"Other block"]);
+        A.enter_edit "b2" 0;
+        let* () = settle h 40 in
+        check "Entering another block cannot recommit the pending Advanced Query trigger"
+          ((editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
+        !release ();
+        let* () = settle h 40 in
+        check "Advanced Query completion or rejection preserves the newer editor and clean host"
+          ((editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
+        run rest in
+  run ["Advanced seed",false;"",false;"Retain cleaned host",true]
+
 let test_property_command_refresh (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -3611,6 +3655,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_suggestion_selection_commits_pending_save h in
   let* () = test_node_reference_suggestions h in
   let* () = test_query_selection_conversion h in
+  let* () = test_query_navigation_conversion h in
   let* () = test_youtube_timestamp_selection h in
   let* () = test_quick_add_opening h in
   let* () = test_reference_preview h in

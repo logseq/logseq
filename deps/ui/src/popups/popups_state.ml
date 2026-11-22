@@ -1976,9 +1976,14 @@ let run_query t ac ~advanced =
         (S.length model.source)) in
       let title = (Edit_model.splice model first last "").Edit_model.source in
       let query_title = Option.value ac.replaced_source ~default:title in
+      let conversion_buffer = ref editing.buffer in
       let editor_current () = ac_current ac && match Editor_state.editing () with
-        | Some current -> current.buffer = editing.buffer
+        | Some current -> current.buffer = !conversion_buffer
         | None -> false in
+      if advanced then begin
+        Editor_actions.update_model buuid (fun _ -> Edit_model.splice model first last "");
+        conversion_buffer := title
+      end;
       let repo_v = repo () in
       let fetch_query_uuid () =
         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
@@ -2034,13 +2039,15 @@ let run_query t ac ~advanced =
             Editor_actions.cancel_pending_focus ();
             Editor_sink.invalidate buuid;
             Editor_state.clear_editor_start_pos ();
-            Editor_state.retire_title_override buuid editing.buffer;
+            Editor_state.retire_title_override buuid !conversion_buffer;
             Editor_state.set (fun st -> {st with Editor_state.editing = None});
             Editor_state.notify_edit_exit buuid
           end;
           Js.Promise.resolve ())
         |> Views_db.catch_quiet ~on_error:(fun () ->
           if editor_current () then begin
+            if advanced then
+              Editor_actions.update_model buuid (fun _ -> model);
             Outliner_ops.schedule_save buuid editing.buffer;
             Editor_sink.focus_input buuid
           end))
