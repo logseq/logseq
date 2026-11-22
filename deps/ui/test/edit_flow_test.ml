@@ -2349,8 +2349,10 @@ let test_query_selection_conversion (h : host) =
         check "Query conversion does not leave a slash-trigger autosave pending"
           (rejected > 0 || !Ops.pending_save=None);
         check "Rejected query conversion never publishes a query title"
-          (rejected = 0 || (current_titles ()=[source]
-            && Option.fold ~none:false ~some:(fun e -> e.S.uuid="b1" && e.buffer=source)
+          (rejected = 0 || not (saves "query-source" edited));
+        check "Rejected query conversion retains the live buffer and autosave"
+          (rejected = 0 || (
+            Option.fold ~none:false ~some:(fun e -> e.S.uuid="b1" && e.buffer=source)
                  (S.editing ()) && Option.is_some !Ops.pending_save));
         check "Successful query conversion exits only after its writes complete"
           (rejected > 0 || S.editing ()=None);
@@ -3416,7 +3418,7 @@ let test_template_does_not_save_search_title (h : host) =
   let ac : Popups_state.ac =
     { kind = Template_search; x = 0.; y = 0.; cy = 0.; pos_pending = false
     ; flip = None; flipx = None; query = "Audit Template"; tpos = 0; tlen = 14
-    ; items = []; chosen = 0; auuid = "b1"; editor = None } in
+    ; items = []; chosen = 0; auuid = "b1"; editor = None; replaced_source = None } in
   Popups_state.apply_template (Option.get !Popups_state.active) ac "template";
   let* () = h.wait_ms 20 in
   check "Template search text is not persisted as a content block"
@@ -3486,7 +3488,7 @@ let test_slash_cancellation_titles (h : host) =
         let ac : Popups_state.ac =
           { kind = Slash; x = 0.; y = 0.; cy = 0.; pos_pending = false;
             flip = None; flipx = None; query = ""; tpos = String.length prefix;
-            tlen = 1; items = []; chosen = 0; auuid = "b1"; editor = None } in
+            tlen = 1; items = []; chosen = 0; auuid = "b1"; editor = None; replaced_source = None } in
         Popups_state.set_ac popup (Some ac);
         Popups_state.apply_item popup ac ~meta:false
           (Popups_state.mk_item ~key:"cancel-command" ~label:""

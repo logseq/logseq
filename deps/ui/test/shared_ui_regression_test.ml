@@ -635,7 +635,7 @@ let configured_continuations finish =
         let ac : Popups_state.ac =
           {kind = Slash; x = 0.; y = 0.; cy = 0.; pos_pending = false;
            flip = None; flipx = None; query = ""; tpos = 0; tlen = 0;
-           items = []; chosen = 0; auuid = uuid; editor = Some editor} in
+           items = []; chosen = 0; auuid = uuid; editor = Some editor; replaced_source = None} in
         let release = ref (fun () -> ()) in
         let requested = ref (fun () -> ()) in
         let dispatched = Js.Promise.make (fun ~resolve ~reject:_ ->

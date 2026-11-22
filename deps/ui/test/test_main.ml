@@ -3079,7 +3079,7 @@ let mk_ac kind =
   { Popups_state.kind; x = 0.; y = 0.; cy = 0.; pos_pending = false
   ; flip = None; flipx = None; query = ""
   ; tpos = 0; tlen = 0
-  ; items = []; chosen = 0; auuid = ""; editor = None }
+  ; items = []; chosen = 0; auuid = ""; editor = None; replaced_source = None }
 
 let test_popups_state () =
   let base = Ui_services.dom_body () in
