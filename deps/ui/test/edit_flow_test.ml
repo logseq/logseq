@@ -815,9 +815,10 @@ let test_reference_preview (h : host) =
   let saved_item = { (Option.get (Sidebar_state.static_item
     ("block-ref-" ^ target) "block-ref" "Old title")) with Sidebar_state.uuid=Some target } in
   let* restored = Sidebar_state.refresh_item h.repo saved_item in
-  check "Restored block-reference panes retain their kind and refresh their title without an invisible outliner root"
+  check "Restored block-reference panes retain their kind and their visible target block"
     (restored.kind="block-ref" && restored.title="Target block"
-     && restored.key=saved_item.key && restored.blocks=[]);
+     && restored.key=saved_item.key
+     && List.map (fun block -> block.Model.block_uuid) restored.blocks=[Some target]);
   empty := true;
   let batches = List.length !requested_counts in
   let* blank = Popups_state.fetch_preview h.repo "Containing Page" in
