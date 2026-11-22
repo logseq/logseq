@@ -5852,8 +5852,14 @@ let run_views ~registry ~profile ~finish =
     let cache_key = Runtime.repo (),uuid in
     let previous_stack = !Views_popup.stack_st in
     Views_popup.stack_st:=None;
-    let owner = mount (fun _ -> Lui_elements.column
-      [Views_view.query_title_el ~block_uuid:uuid ~title:None;popup_layer]) in
+    let title_revision = ref None in
+    let owner = mount (fun _ -> fun context parent ->
+      let open Lui_elements in
+      let revision = Signal.state context.Lui_ui.ui_scheduler [0] in
+      title_revision:=Some revision;
+      (column [keyed ~source:(Signal.value revision) ~key:Fun.id ~cmp:Int.compare
+        ~mount:(fun _ -> Views_view.query_title_el ~block_uuid:uuid ~title:None);
+        popup_layer]) context parent) in
     let previous_id : string -> Js.Json.t = Stub_dom.get_field document "getElementById" in
     let trigger = Stub_dom.make_element "button" in
     let attr : string -> string -> unit = Stub_dom.get_field trigger "setAttribute" in
@@ -5905,7 +5911,25 @@ let run_views ~registry ~profile ~finish =
         (List.exists (fun n -> M.string_prop n "text"=Some (I18n.t "query.builder/between-end-label")) (nodes owner));
       press (I18n.t "ui/submit");
       check "A stale Between form cannot overwrite a newer query source"
-        ((Views_state.get query).qsrc="\"replacement\""))
+        ((Views_state.get query).qsrc="\"replacement\"");
+      Views_popup.close_all ();
+      press (I18n.t "view.filter/filter");
+      Signal.set (Option.get !title_revision) [1];
+      S.flush owner;
+      press (Views_builder.item_label "between");
+      check "A reattached query title keeps its open Filter draft usable"
+        (List.exists (fun n -> button_label n=Some (I18n.t "query.builder/between-start-label")) (nodes owner));
+      (match List.find_opt (fun n -> button_label n=Some (I18n.t "query.builder/between-start-label")) (nodes owner) with
+       | None -> check "Removing the last query title owner retires its pending calendar" false
+       | Some start ->
+           S.press owner start.M.id;
+           let input = List.find (fun n -> M.string_prop n "accessibility-identifier"=Some "calendar-date-input") (nodes owner) in
+           Signal.set (Option.get !title_revision) [];
+           S.flush owner;
+           S.text_changed owner input.M.id "2026-11-21";
+           S.submit owner input.M.id;
+           check "Removing the last query title owner retires its pending calendar"
+             (List.exists (fun n -> button_label n=Some (I18n.t "query.builder/between-start-label")) (nodes owner))))
   in
   ignore (Lui_app.dispose sorting.S.app);
   Views_popup.stack_st := previous_popup_stack;
