@@ -20,7 +20,7 @@
 
 (defn- empty-search-conn
   []
-  (d/create-conn {:block/name {:db/index true}}))
+  (d/create-conn {:block/uuid {:db/unique :db.unique/identity}}))
 
 (defn- checking-db
   []
@@ -1770,9 +1770,9 @@
                 [{:page {:block/title "Long parent page name"}
                   :blocks (mapv (fn [n] {:block/title (str "Policy public reference " n)})
                                 (range 105))}
-                 {:page {:block/title "Policy public"}}])
+                 {:page {:block/title "Pólicy públic"}}])
           parent (ldb/get-page @conn "Long parent page name")
-          target (ldb/get-page @conn "Policy public")]
+          target (ldb/get-page @conn "Pólicy públic")]
       (d/transact! conn [[:db/add (:db/id target) :block/parent (:db/id parent)]
                          [:db/add (:db/id target) :block/order "a"]])
       (-> (p/let [db (<open-search-db)
@@ -1785,8 +1785,52 @@
                                 (:block/uuid (first (search/search-blocks conn db query opts))))]
               (is (= (:block/uuid target) (first-match "policy" opts)))
               (is (= (:block/uuid target) (first-match "policy pu" opts)))
+              (is (= (:block/uuid target) (first-match "po" opts)))
               (is (= (:block/uuid target) (first-match "policy pu" (assoc opts :page-only? true))))
-              (is (not= (:block/uuid target) (first-match "policy pu" (assoc opts :page (str (:block/uuid parent)))))))
+              (is (not= (:block/uuid target) (first-match "policy pu" (assoc opts :page (str (:block/uuid parent))))))
+              (is (empty? (#'search/page-name-prefix-results @conn db "policy pu" 100 false)))
+              (is (= (str (:block/uuid target))
+                     (:id (first (#'search/page-name-prefix-results @conn db "pólicy pú" 100 false))))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
+(deftest search-blocks-ranks-page-prefixes-before-applying-candidate-limit
+  (async done
+    (let [titles (conj (mapv #(str "Project Archive " %) (range 105)) "Project Z")
+          conn (db-test/create-conn-with-blocks (mapv (fn [title] {:page {:block/title title}}) titles))
+          pages (mapv #(ldb/get-page @conn %) titles)]
+      (-> (p/let [db (<open-search-db)]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (clj->js (mapv search/block->index pages)))
+            (is (= "Project Z"
+                   (:block/title (first (search/search-blocks conn db "project"
+                                                             {:limit 10
+                                                              :search-limit 100
+                                                              :enable-snippet? false})))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
+(deftest search-blocks-counts-a-keyword-candidate-once-in-hybrid-ranking
+  (async done
+    (let [titles ["Policy public reference" "Reference: policy publicity"
+                  "Policy public" "Unrelated semantic hit"]
+          conn (db-test/create-conn-with-blocks (mapv (fn [title] {:page {:block/title title}}) titles))
+          pages (mapv #(ldb/get-page @conn %) titles)
+          vector-index {:query (fn [& _]
+                                 [{:id (str (:block/uuid (last pages)))
+                                   :vector-score 0.8}])}]
+      (-> (p/let [db (<open-search-db)]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (clj->js (mapv search/block->index pages)))
+            (is (= "Policy public"
+                   (:block/title (first (search/search-blocks conn db vector-index "policy pu"
+                                                             {:limit 10
+                                                              :search-limit 2
+                                                              :enable-snippet? false
+                                                              :feature/enable-semantic-search? true
+                                                              :query-embedding [0.1]})))))
             (.close db))
           (p/catch (fn [e] (is false (str e))))
           (p/finally done)))))

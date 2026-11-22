@@ -21,10 +21,12 @@
 (defn block-search
   [repo q option]
   (when-let [engine (get-engine repo)]
-    (let [q (fuzzy/search-normalize q (state/enable-search-remove-accents?))]
+    (let [remove-accents? (state/enable-search-remove-accents?)
+          q (fuzzy/search-normalize q remove-accents?)]
       (when-not (string/blank? q)
-        (protocol/query engine q (assoc option :feature/enable-semantic-search?
-                                        (state/enable-semantic-search?)))))))
+        (protocol/query engine q (assoc option
+                                        :feature/enable-search-remove-accents? remove-accents?
+                                        :feature/enable-semantic-search? (state/enable-semantic-search?)))))))
 
 (defn file-search
   ([q]
