@@ -1198,7 +1198,7 @@ let zoom_breadcrumb_links ~registry ~profile =
       Lui_elements.column (Page.zoom_breadcrumbs page) context parent) () in
   Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
     let all = nodes session in
-    let links = List.filter (fun n -> n.M.kind = "link" && class_has n "breadcrumb__segment") all in
+    let links = List.filter (fun n -> n.M.kind = "link") all in
     let seps = List.filter (fun n -> n.M.kind = "text" && M.string_prop n "text" = Some "/") all in
     let buttons = List.filter (fun n -> n.M.kind = "button") all in
     check "Zoom breadcrumb renders semantic links instead of ghost buttons"
@@ -1207,7 +1207,35 @@ let zoom_breadcrumb_links ~registry ~profile =
       (List.length seps = 1);
     check "Zoom breadcrumb links carry in-app page hash URLs"
       (List.map (fun n -> M.string_prop n "url") links
-       = [ Some "#/page/p-zoom-bc"; Some "#/page/b-beta" ]))
+       = [ Some "#/page/p-zoom-bc"; Some "#/page/b-beta" ]));
+  let long_label = String.concat " " (List.init 20 (fun _ -> "Long ancestor label")) in
+  let narrow = S.mount ~registry ~profile ~initial:Model.initial
+    ~reducer:(fun model () -> model)
+    ~view:(fun _ _ _ -> Lui_elements.column ~width:560
+      (Page.breadcrumb_row ["root",long_label,"#/page/root";
+        "parent",long_label,"#/page/parent";"child",long_label,"#/page/child"])) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose narrow.S.app)) (fun () ->
+    let all = nodes narrow in
+    let links = List.filter (fun n -> n.M.kind="link") all in
+    let segments = List.filter (fun n -> class_has n "breadcrumb__segment") all in
+    let labels = List.filter (fun n -> class_has n "breadcrumb__label") all in
+    check "Narrow breadcrumbs allow every semantic link to shrink as a block formatting context"
+      (List.length links=3 && List.length segments=3
+       && List.for_all (fun n -> Hashtbl.find_opt n.M.props "min-width"=Some (P.IntValue 0)) links
+       && List.for_all (fun n -> Hashtbl.find_opt n.M.props "min-width"=Some (P.IntValue 0)
+         && Hashtbl.find_opt n.M.props "shrink"=Some (P.FloatValue 1.)) segments);
+    check "Narrow breadcrumb labels own a single clipped ellipsis line instead of overlapping"
+      (List.length labels=3 && List.for_all (fun n ->
+        M.string_prop n "white-space"=Some "nowrap"
+        && M.string_prop n "overflow"=Some "hidden"
+        && M.string_prop n "text-overflow"=Some "ellipsis"
+        && Hashtbl.find_opt n.M.props "line-clamp"=Some (P.IntValue 1)
+        && Hashtbl.find_opt n.M.props "min-width"=Some (P.IntValue 0)) labels);
+    check "Narrow breadcrumb clipping remains on the row, not a wrapping text prop"
+      (List.exists (fun n -> class_has n "block-parents"
+        && M.string_prop n "overflow"=Some "hidden"
+        && not (Hashtbl.mem n.M.props "white-space")) all);
+    check "Empty breadcrumbs do not mount an ellipsis row" (Page.breadcrumb_row []=[]))
 
 let bottom_pills_rows () =
   let row ident title ty value = Wire.Map [

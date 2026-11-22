@@ -38,14 +38,14 @@ let breadcrumb_row (items : (string * string * string) list) : t list =
       (text ~key:("bcsep-" ^ key_id) ~style_class:"breadcrumb__separator"
          ~padding_horizontal:4 ~value:"/" [])
   and crumb key_id label hash =
-    link ~key:("bcseg-" ^ key_id)
+    row ~key:("bcseg-" ^ key_id) ~min_width:0 ~shrink:1.
       ~style_class:"breadcrumb__segment"
+      [link ~key:("bclink-" ^ key_id) ~min_width:0 ~grow:1.
       ~url:(Runtime.nav_hash hash) ~target:`self_
       ~foreground:"var(--ls-primary-text-color)"
       ~on_press:(nav_crumb hash)
-      (* white-space is a text prop — row rejects it at runtime. *)
       [ text ~style_class:"breadcrumb__label"
-          ~white_space:`nowrap ~text_overflow:`ellipsis ~value:label [] ]
+          ~truncate:true ~value:label [] ]]
   in
   match items with
   | [] -> []

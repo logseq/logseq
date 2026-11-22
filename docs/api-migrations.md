@@ -382,6 +382,11 @@ Route loads and refreshes share the ancestor loader and explicitly request depth
 3 is not a page boundary: a fourth-level leaf must include its containing page
 before its block ancestors. Empty ancestry stays empty; load failures propagate.
 
+Zoom breadcrumb links now admit shrinking with a zero minimum width. Each link
+is a block formatting context for its single-line, clipped ellipsis label;
+long labels therefore remain inside their own link at narrow window widths
+(for example, 560 px) instead of painting over the following breadcrumb.
+
 ## YouTube timestamp without a video
 
 Choosing the slash YouTube timestamp command without a video clears and saves
