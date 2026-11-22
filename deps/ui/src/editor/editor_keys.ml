@@ -801,6 +801,16 @@ let stroke_of ev =
   match ev_key ev with
   | "Control" | "Meta" | "Alt" | "Shift" | "CapsLock" | "Dead" -> None
   | _ ->
+      let raw_key = String.lowercase_ascii (ev_key ev) in
+      let layout_key = String.length raw_key = 1
+        && (let c = raw_key.[0] in
+            (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) in
+      let mods_held = ev.Ui_services.ctrl || ev.Ui_services.meta
+        || ev.Ui_services.alt || shift_held ev in
+      let physical_key =
+        if mods_held && not layout_key then
+          Option.bind (ev.Ui_services.detail "code") code_key_name
+        else None in
       let from_key =
         match shortcut_key ev with
         | "arrowup" -> "up"
@@ -812,20 +822,8 @@ let stroke_of ev =
         | "]" -> "close-square-bracket"
         | k -> k
       in
-      let mods_held =
-        ev.Ui_services.ctrl || ev.Ui_services.meta || ev.Ui_services.alt
-        || shift_held ev
-      in
-      (* Use KeyboardEvent.code for corrupted modifier glyphs — recovers
-         Ctrl+[ / Ctrl+] when the host reports key=Escape (or another
-         corrupted glyph) instead of "[" / "]". *)
       let key =
-        let layout_key = String.length from_key = 1
-          && (let c = from_key.[0] in
-              (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) in
-        if not mods_held || layout_key then from_key
-        else
-          match Option.bind (ev.Ui_services.detail "code") code_key_name with
+          match physical_key with
           | Some name -> name
           | None ->
               (* terminal legacy: Ctrl/Meta+[ arrives as Escape with no

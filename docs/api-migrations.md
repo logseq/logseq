@@ -321,6 +321,9 @@ instead of overriding them with the physical `code`. For example, QWERTZ
 `key="z", code="KeyY", ctrlKey=true` dispatches `ctrl+z` (Undo), not Redo.
 Modifier-corrupted glyphs still use the code fallback, including Ctrl+[ arriving
 as Escape and Option+A arriving as å. Modifier-only events remain ignored.
+Layout-key classification now precedes shifted-symbol normalization: Spanish
+`key="&", code="Digit6", shiftKey=true` dispatches `shift+6`, not `shift+7`.
+Without a physical code, shifted symbols retain the legacy normalization.
 
 ## Clearing custom stylesheets
 

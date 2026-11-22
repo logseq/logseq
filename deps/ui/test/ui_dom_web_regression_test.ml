@@ -188,19 +188,22 @@ let page_rename_route ~finish =
     Js.Promise.resolve ()) |> Js.Promise.then_ (fun () -> finish (); Js.Promise.resolve ()))
 
 let run () =
-  List.iter (fun (key, code, ctrl, alt, expected) ->
+  List.iter (fun (key, code, ctrl, alt, shift, expected) ->
     let raw = Js.Json.object_ (Js.Dict.fromList
       ["key", Js.Json.string key; "code", Js.Json.string code;
-       "ctrlKey", Js.Json.boolean ctrl; "altKey", Js.Json.boolean alt]) in
+       "ctrlKey", Js.Json.boolean ctrl; "altKey", Js.Json.boolean alt;
+       "shiftKey", Js.Json.boolean shift]) in
     check ("Shortcut key respects layout and modifier recovery: " ^ key ^ "/" ^ code)
       (Editor_keys.stroke_of (Ui_dom_web.ev_of raw) = expected))
-    ["z", "KeyY", true, false, Some "ctrl+z";
-     "y", "KeyZ", true, false, Some "ctrl+y";
-     "a", "KeyQ", true, false, Some "ctrl+a";
-     "Escape", "BracketLeft", true, false, Some "ctrl+open-square-bracket";
-     "å", "KeyA", false, true, Some "alt+a";
-     "z", "", true, false, Some "ctrl+z";
-     "Control", "ControlLeft", true, false, None];
+    ["z", "KeyY", true, false, false, Some "ctrl+z";
+     "y", "KeyZ", true, false, false, Some "ctrl+y";
+     "a", "KeyQ", true, false, false, Some "ctrl+a";
+     "&", "Digit6", false, false, true, Some "shift+6";
+     "/", "Digit7", false, false, true, Some "shift+7";
+     "Escape", "BracketLeft", true, false, false, Some "ctrl+open-square-bracket";
+     "å", "KeyA", false, true, false, Some "alt+a";
+     "z", "", true, false, false, Some "ctrl+z";
+     "Control", "ControlLeft", true, false, false, None];
   test_calc_output ();
   test_video_player ();
   let raw=clipboard_event () in
