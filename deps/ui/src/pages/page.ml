@@ -1151,16 +1151,6 @@ let page_route (r : Model.route) =
       true
   | _ -> false
 
-(* day identity only — a block splice keeps the same uuids and must
-   not remount the region (row-level repaint). An empty list becoming
-   the loaded days, or the reverse, does remount: the keyed collection
-   mounted against [] has missed publishes on the native host. *)
-let journal_keys (js : Model.page list) =
-  List.map
-    (fun (p : Model.page) ->
-      Option.value p.Model.page_uuid ~default:p.Model.page_title)
-    js
-
 let page_cls (m : Model.t) =
   let base = "page cp__page-inner-wrap" in
   match m.route_page with
@@ -1536,33 +1526,20 @@ let region (ms : Model.t Signal.signal) : t =
         && a.page_missing = b.page_missing
         && page_key a.route_page = page_key b.route_page
       in
-      let r =
-        if page_route a.route && page_route b.route then
+      if page_route a.route && page_route b.route then
           shell
           &&
           (match a.route, b.route with
            | (Model.Journals | Model.Home), (Model.Journals | Model.Home) ->
-               journal_keys a.journals = journal_keys b.journals
+               (* Keyed day rows reconcile reloads and pagination without
+                  retiring the surviving days' query expansion state. *)
+               (a.journals = []) = (b.journals = [])
            | _ -> true)
         else
           shell
           && a.data_gen = b.data_gen
           && a.editing_title = b.editing_title
-          && a.unlinked_open = b.unlinked_open
-      in
-      (* journals keep repaint-on-publish semantics only for the
-         placeholder<->list structural transition — day-record splices
-         repaint through journals_sig without a region remount *)
-      let r =
-        if not r then r
-        else
-          match a.route, b.route with
-          | (Model.Journals | Model.Home), (Model.Journals | Model.Home)
-            when a.data_gen <> b.data_gen ->
-              a.journals = [] = (b.journals = [])
-          | _ -> r
-      in
-      r)
+          && a.unlinked_open = b.unlinked_open)
     (fun (m : Model.t) ->
       match m.phase, m.route with
       | Model.Failed message, _ ->
