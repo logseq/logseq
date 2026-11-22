@@ -1233,6 +1233,82 @@ let test_indent_outdent (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_indent_undo_key_dispatch (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Level two"];
+  set_editing ~uuid:"b2" ~buffer:"Level two" ~caret:2 ~base:"Level two";
+  S.note_editor_start_pos_from_arrow 2;
+  S.history_input_before := None;
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let before = !Runtime.current_page in
+  let cursor = ref W.Nil and undos = ref 0 and release = ref (fun () -> ()) in
+  let acknowledgement = Js.Promise.make (fun ~resolve ~reject:_ ->
+    release := (fun () -> resolve W.Nil [@u])) in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        cursor := Option.value (W.get opts "undo-redo/editor-info") ~default:W.Nil;
+        let* result = worker.invoke_fn name args in
+        let* _ = acknowledgement in
+        Js.Promise.resolve result
+    | "thread-api/undo-redo-undo",_ ->
+        incr undos;
+        if !undos = 2 then Js.Promise.resolve (W.Map [])
+        else if !undos = 3 then h.reject_promise "undo fixture rejected"
+        else begin
+        Runtime.current_page := before; h.sync_page ();
+        Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool true;
+          W.kw "editor-cursors",W.List [!cursor]])
+        end
+    | _ -> worker.invoke_fn name args)};
+  let previous_cmdk = !Cmdk_state.latest_st in
+  Option.iter (fun state -> Cmdk_state.latest_st := Some
+    {state with Cmdk_state.svs = {state.Cmdk_state.svs with Cmdk_state.Svs.undo=A.undo}}) previous_cmdk;
+  Editor_keys.apply_input "b2" (EI.Key (EM.key_ev "Tab",false));
+  let* () = h.wait_ms 25 in
+  check "Indent is pending when the editing undo shortcut arrives" !S.structure_pending;
+  let base = Ui_services.dom_body () in
+  let input = {base with Ui_services.editable=(fun () -> true);
+    attr=(function "data-block-id" -> Some "b2" | _ -> None)} in
+  let target = {input with Ui_services.closest=(function
+    | ".ed-input" | ".ed-input, .CodeMirror, .code-editor" | ".editor-wrapper" -> Some input
+    | _ -> None)} in
+  let prevented = ref false in
+  let send_undo () = Editor_keys.on_global_key
+    { Ui_services.x=0.;y=0.;shift=false;meta=true;ctrl=false;alt=false;
+      composing=false;key=Some "z";key_char=Some "z";buttons=0;button=0;repeat=false;
+      movement_x=0.;movement_y=0.;default_prevented=false;target=Some target;touches=[];
+      detail=(fun _ -> None);detail_json=(fun _ -> None);clipboard_get=(fun _ -> "");
+      clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+      clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+      prevent_default=(fun () -> prevented:=true);stop_propagation=(fun () -> ());
+      stop_immediate=(fun () -> ()) } in
+  send_undo ();
+  check "Editing Cmd+Z dispatches and waits for the indent acknowledgement"
+    (!prevented && !undos=0 && not (Queue.is_empty S.pending_edit_actions));
+  !release ();
+  let* () = settle h 40 in
+  check "Editing Cmd+Z after Tab sends the worker undo call" (!undos=1);
+  check "Editing Cmd+Z restores the root parent and the G1 caret"
+    (match !Runtime.current_page,S.editing () with
+     | Some page,Some e -> List.map (fun b -> b.Model.block_uuid) page.page_blocks
+           = [Some "b1";Some "b2"] && e.uuid="b2" && e.model.EM.caret=2
+     | _ -> false);
+  send_undo ();
+  let* () = settle h 40 in
+  check "Editing undo with empty history keeps the restored parent and caret"
+    (!undos=2 && !Runtime.current_page=before && (editing_now ()).model.EM.caret=2);
+  send_undo ();
+  let* () = settle h 40 in
+  check "Rejected editing undo retains the restored block and caret"
+    (!undos=3 && !Runtime.current_page=before && (editing_now ()).model.EM.caret=2);
+  Cmdk_state.latest_st := previous_cmdk;
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_indent_type_double_undo_caret (h : host) =
   let* () = settle h 40 in
   reset_editor ();
@@ -3551,6 +3627,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_continuous_delete_xfail h in
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
+  let* () = test_indent_undo_key_dispatch h in
   let* () = test_indent_type_double_undo_caret h in
   let* () = test_indent_undo_restores_start_pos h in
   let* () = test_exit_waits_for_save h in

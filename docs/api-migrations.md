@@ -361,6 +361,13 @@ succeeds, then clears editing without a competing save-exit write. A failed
 initial or final write retains the buffer and re-arms autosave so unsaved text
 can still be edited or retried.
 
+## Editing undo after a pending indent
+
+An Undo shortcut during an in-flight structural edit waits for that edit to
+finish before capturing its refresh owner. For example, Tab followed immediately
+by Cmd+Z while editing restores the block's previous parent and recorded caret,
+instead of discarding Undo when the indent publishes its refreshed page.
+
 ## Structured paste undo caret
 
 Paste snapshots the live caret before its transaction and consumes that snapshot,

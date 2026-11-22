@@ -3344,20 +3344,21 @@ let () = S.restore_history := restore_history
 let history_owner : Ops.refresh_owner option ref = ref None
 
 let run_history operation =
-  let context = Runtime.model () in
-  let owner =
-    match !history_owner with
-    | Some owner when Ops.refresh_current ~owner context -> Some owner
-    | _ ->
-        let owner = Ops.refresh_owner_for None in
-        history_owner := owner;
-        owner
-  in
+  let context = Runtime.repo (), Runtime.route () in
   let rec run () =
-    if not (Ops.refresh_current ?owner context) then ()
+    if context <> (Runtime.repo (), Runtime.route ()) then ()
     else if !S.structure_pending then
       S.enqueue_edit_action ~real:true run
     else begin
+      let current = Runtime.model () in
+      let owner =
+        match !history_owner with
+        | Some owner when Ops.refresh_current ~owner current -> Some owner
+        | _ ->
+            let owner = Ops.refresh_owner_for None in
+            history_owner := owner;
+            owner
+      in
       Option.iter (fun owner -> owner.Ops.outcome <- None) owner;
       run_structure ~restore:(S.editing ()) (operation ?owner ()) (fun () -> ())
     end
