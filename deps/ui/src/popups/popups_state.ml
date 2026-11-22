@@ -118,6 +118,7 @@ type ac =
   ; auuid : string (* editing uuid the popup was opened on — a remount
      swaps editing_uuid before the position check can run *)
   ; editor : Editor_state.editing option
+  ; replaced_source : string option
   }
 
 let draft_editing () = Option.fold ~none:false ~some:Editor_state.is_draft (Editor_state.editing ())
@@ -1421,7 +1422,7 @@ let measure_ac ?(retries = 120) t kind =
   measure retries
 ;;
 
-let open_ac ?tpos ?(autopair = true) t kind =
+let open_ac ?tpos ?(autopair = true) ?replaced_source t kind =
   if not (draft_editing ()) || draft_ac_kind kind then begin
   invalidate_ac t;
   if kind = Slash then latest_matched_slash_q := "";
@@ -1443,7 +1444,7 @@ let open_ac ?tpos ?(autopair = true) t kind =
     { kind; x; y; cy; pos_pending = Option.is_none pos
     ; flip = None; flipx = None; query = ""
     ; tpos; tlen
-    ; items = []; chosen = 0; auuid; editor = Editor_state.editing () }
+    ; items = []; chosen = 0; auuid; editor = Editor_state.editing (); replaced_source }
   in
   (* cljs autopair: typing [[ inputs ]] immediately with the caret kept
      inside the brackets; insert_text consumes the ghost pair on choice *)
@@ -1511,7 +1512,12 @@ let query_closed ac q = query_closed_kind ac.kind q
 (* after a buffer change in the open block editor — the model carries
    the new text/caret; [deleted] marks Delete events (the cljs
    delete-inputType branch that closes a wiped trigger) *)
-let on_buffer_change t ~deleted uuid =
+let on_buffer_change ?before t ~deleted uuid =
+  let replaced_source = Option.bind before (fun model ->
+    match Edit_model.selection_range model with
+    | Some (0, last) when last = S.length model.Edit_model.source -> Some model.source
+    | _ -> None) in
+  let open_ac t kind = open_ac ?replaced_source t kind in
   match Editor_actions.edit_model uuid with
   | None -> ()
   | Some m ->
@@ -1616,9 +1622,9 @@ let on_buffer_change t ~deleted uuid =
             else ()
 
 (* the event funnel in editor_keys calls through the live layer *)
-let on_model_input ~deleted uuid =
+let on_model_input ?before ~deleted uuid =
   match !active with
-  | Some t -> on_buffer_change t ~deleted uuid
+  | Some t -> on_buffer_change ?before t ~deleted uuid
   | None -> ()
 
 type page_ref_range = { start_off : int; end_off : int }
@@ -1960,13 +1966,13 @@ let query_property_uuid w =
 
 let run_query t ac ~advanced =
   match ac.editor, Editor_state.editing () with
-  | Some snapshot, Some editing when ac_current ac ->
+  | Some _, Some editing when ac_current ac ->
       let buuid = editing.Editor_state.uuid in
-      let query_title = snapshot.Editor_state.base in
       Outliner_ops.cancel_pending_save ();
       erase_trigger_text ac;
       close_ac t;
       let title = Editor_actions.live_buffer buuid in
+      let query_title = Option.value ac.replaced_source ~default:title in
       Editor_actions.sync_buffer buuid title;
       Editor_actions.last_edit_uuid := Some buuid;
       Editor_actions.cancel_pending_focus ();

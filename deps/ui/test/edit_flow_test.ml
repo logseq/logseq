@@ -2280,16 +2280,23 @@ let test_query_selection_conversion (h : host) =
   let rec run = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
-    | (title, advanced, rejected, replace) :: rest ->
+    | (title, edited, advanced, rejected, replace) :: rest ->
         let* () = settle h 40 in
         reset_editor ();
+        Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
         (* Append and selection-replacement slash input share the saved block. *)
-        let source = if replace then "/Query/" else title ^ "/Query" in
-        set_editing ~uuid:"b1" ~buffer:source
-          ~caret:(if replace then 6 else String.length source) ~base:title;
-        Popups_state.open_ac ~tpos:(if replace then 0 else String.length title) ~autopair:false
-          popup Popups_state.Slash;
+        if replace then begin
+          set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
+          A.update_model "b1" Edit_model.select_all;
+          Editor_keys.apply_input "b1" (EI.Insert "/");
+          Editor_keys.apply_input "b1" (EI.Insert "Query")
+        end else begin
+          let source = edited ^ "/Query" in
+          set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
+          Popups_state.open_ac ~tpos:(String.length edited) ~autopair:false popup Popups_state.Slash
+        end;
+        let source = (editing_now ()).buffer in
         install_worker ~repo:h.repo h;
         let* () =
           if replace && title <> "" && not rejected then begin
@@ -2324,7 +2331,7 @@ let test_query_selection_conversion (h : host) =
           (if rejected then not (saves "query-source" title)
            else if advanced then
              (* advanced-query-steps: keep host title, empty code query child *)
-             saves "b1" title && saves "query-source" ""
+             saves "b1" edited && saves "query-source" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch
              && List.mem (Ops.set_block_property "query-source"
@@ -2332,7 +2339,7 @@ let test_query_selection_conversion (h : host) =
              && List.mem (Ops.set_block_property "query-source"
                   "logseq.property.code/lang" (W.String "clojure")) batch
            else
-             saves "query-source" title && saves "b1" ""
+             saves "query-source" edited && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
@@ -2340,10 +2347,15 @@ let test_query_selection_conversion (h : host) =
         check "Rejected query conversion never publishes a query title"
           (not rejected || current_titles ()=[title]);
         run rest in
-  run ["Search seed parity",false,false,false; "",false,false,false;
-       "Advanced seed",true,false,false; "Retain on rejection",false,true,false;
-       "G5RegressionToken",false,false,true; "",false,false,true;
-       "Retain replaced query on rejection",false,true,true]
+  run ["Search seed parity","Search seed parity",false,false,false;
+       "Saved seed","Saved seed with unsaved edits ",false,false,false;
+       "", "",false,false,false;
+       "Advanced seed","Advanced seed",true,false,false;
+       "Retain on rejection","Retain on rejection",false,true,false;
+       "G5RegressionToken","G5RegressionToken",false,false,true;
+       "Saved seed","Unsaved replaced seed",false,false,true;
+       "", "",false,false,true;
+       "Retain replaced query on rejection","Retain replaced query on rejection",false,true,true]
 
 let test_property_command_refresh (h : host) =
   let rec run = function

@@ -1497,7 +1497,7 @@ and apply_input ?frame uuid ev =
        | _ -> ());
       if m'.Edit_model.source <> m0.source then begin
         if not (S.is_draft e) then Outliner_ops.schedule_save uuid m'.Edit_model.source;
-        Popups_state.on_model_input ~deleted:
+        Popups_state.on_model_input ~before:m0 ~deleted:
           (match ev with Edit_input.Delete _ | Edit_input.Key ({key = "Backspace"; _}, _) -> true | _ -> false)
           uuid
       end;
@@ -1565,7 +1565,7 @@ let dispatch_command cid =
          | Some current when current.S.uuid = editing.S.uuid
               && current.S.model.Edit_model.source <> before.Edit_model.source ->
              Outliner_ops.schedule_save current.S.uuid current.S.model.Edit_model.source;
-             Popups_state.on_model_input ~deleted:false current.S.uuid
+             Popups_state.on_model_input ~before ~deleted:false current.S.uuid
          | _ -> ())
     | None -> ()
   in
