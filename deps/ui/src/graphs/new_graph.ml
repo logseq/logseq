@@ -75,9 +75,9 @@ let body (_ms : Model.t Signal.signal) : t =
                 Runtime.signal_set name_st v)
           ~on_submit:(fun _ -> submit name_st cloud e2ee creating)
           []
-      ; (* cljs new-db-graph-inner gates this row on rtc-group?, not login. *)
-        (if Ui_services.env_rtc_test_mode ()
-            || Rtc_flows.rtc_group () then
+      ; (* cljs new-db-graph-inner gates this row on rtc-group? only —
+           rtc-test mode must not invent a Sync checkbox master hides. *)
+        (if Rtc_flows.rtc_group () then
            column ~key:"ng-rtc"
              [ row ~key:"ng-rtc-row" ~cross:`center ~gap:4
                  [ checkbox ~key:"rtc" ~id:"rtc-sync"

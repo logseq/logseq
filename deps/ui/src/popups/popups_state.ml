@@ -267,10 +267,10 @@ let popup_signal () =
            (Signal.value (t.vs)))
   | None -> None
 
-(* signal of whether a popover layer other than the context menu is open —
-   cljs keeps the selection action-bar rendered while the block context
-   menu that spawned from it is open, so the bar only hides under the
-   other layers *)
+(* signal of whether a popover layer other than the context menu is open.
+   The dots menu path hides the action bar via open_cm (matching cljs
+   shui/popup-hide! before the dropdown); other layers still drive the
+   bar's reactive hide through this signal. *)
 let non_cm_popup_signal () =
   match !active with
   | Some t ->
@@ -2871,9 +2871,15 @@ let color_hex = function
   | "purple" -> "#a855f7"
   | _ -> "#6b7280"
 
+(* mod keycap: ⌘ on macOS, Ctrl elsewhere — mirrors tag_entries and
+   cljs decorate-binding/print-shortcut-key *)
+let mod_cap () =
+  if Ui_services.env_is_mac () then {js|⌘|js} else "Ctrl"
+
 (* mirrors content.cljs block-context-menu-content. Shortcut caps match
-   shortcut utils decorate-binding/print-shortcut-key output on macOS *)
+   shortcut utils decorate-binding/print-shortcut-key output *)
 let block_entries () =
+  let mod_ = mod_cap () in
   [ Ci_colors; Ci_headings; Ci_sep
   ; Ci_item (U.t "sidebar.right/open", Some ("shift+click", [ {js|⇧|js}; "Click" ]), "open-in-sidebar")
   ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
@@ -2882,14 +2888,14 @@ let block_entries () =
   ; Ci_sep
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
-  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "cut")
+  ; Ci_item (U.t "editor/cut", Some ("meta+x", [ mod_; "X" ]), "cut")
   ; Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete")
   ; Ci_sep
   ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
   ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ {js|⌘|js}; {js|↓|js} ]), "expand-children")
-  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ {js|⌘|js}; {js|↑|js} ]), "collapse-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ mod_; {js|↓|js} ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ mod_; {js|↑|js} ]), "collapse-children")
   ]
   (* cljs block-context-menu-item simple commands append below *)
   @ (match
@@ -2909,26 +2915,27 @@ let block_entries () =
 
 (* mirrors content.cljs custom-context-menu-content (multi-select) *)
 let multi_entries ?(allow_cut = true) ?(allow_delete = true) () =
+  let mod_ = mod_cap () in
   [ Ci_colors; Ci_headings
   ; Ci_sub (U.t "context-menu/set-icon", Sub_picker Picker_icon)
   ; Ci_sep
   ]
   @ (if allow_cut then
-       [ Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "cut") ]
+       [ Ci_item (U.t "editor/cut", Some ("meta+x", [ mod_; "X" ]), "cut") ]
      else [])
   @ (if allow_delete then
        [ Ci_item (U.t "editor/delete-selection", Some ("delete", [ "Delete" ]), "delete") ]
      else [])
-  @ [ Ci_item (U.t "ui/copy", Some ("meta+c", [ {js|⌘|js}; "C" ]), "copy")
+  @ [ Ci_item (U.t "ui/copy", Some ("meta+c", [ mod_; "C" ]), "copy")
   ; Ci_item (U.t "export/copy-or-export-as", None, "copy-export-as")
   ; Ci_item (U.t "block/copy-ref", None, "copy-ref")  ; Ci_sep
   ; Ci_item (U.t "context-menu/make-a-flashcard", None, "make-flashcard")
   ; Ci_item (U.t "block.comments/add-comment", None, "add-comment")
   ; Ci_item (U.t "context-menu/toggle-number-list", None, "toggle-numbered-list")
-  ; Ci_item (U.t "editor/cycle-todo", Some ("meta+enter", [ {js|⌘|js}; {js|↵|js} ]), "cycle-todo")
+  ; Ci_item (U.t "editor/cycle-todo", Some ("meta+enter", [ mod_; {js|↵|js} ]), "cycle-todo")
   ; Ci_sep
-  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ {js|⌘|js}; {js|↓|js} ]), "expand-children")
-  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ {js|⌘|js}; {js|↑|js} ]), "collapse-children")
+  ; Ci_item (U.t "editor/expand-block-children", Some ("meta+down", [ mod_; {js|↓|js} ]), "expand-children")
+  ; Ci_item (U.t "editor/collapse-block-children", Some ("meta+up", [ mod_; {js|↑|js} ]), "collapse-children")
   ]
 ;;
 
@@ -2937,11 +2944,12 @@ let multi_entries ?(allow_cut = true) ?(allow_delete = true) () =
    per-browser native menus, the native host gets the same edit
    commands *)
 let edit_entries () =
-  [ Ci_item (U.t "editor/cut", Some ("meta+x", [ {js|⌘|js}; "X" ]), "edit-cut")
-  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ {js|⌘|js}; "C" ]), "edit-copy")
-  ; Ci_item (U.t "editor/paste", Some ("meta+v", [ {js|⌘|js}; "V" ]), "edit-paste")
+  let mod_ = mod_cap () in
+  [ Ci_item (U.t "editor/cut", Some ("meta+x", [ mod_; "X" ]), "edit-cut")
+  ; Ci_item (U.t "ui/copy", Some ("meta+c", [ mod_; "C" ]), "edit-copy")
+  ; Ci_item (U.t "editor/paste", Some ("meta+v", [ mod_; "V" ]), "edit-paste")
   ; Ci_sep
-  ; Ci_item (U.t "editor/select-all", Some ("meta+a", [ {js|⌘|js}; "A" ]), "edit-select-all") ]
+  ; Ci_item (U.t "editor/select-all", Some ("meta+a", [ mod_; "A" ]), "edit-select-all") ]
 ;;
 
 (* cljs state/developer-mode? — storage holds raw "true" (ours) or a
@@ -3059,6 +3067,9 @@ let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
         available
   in
   close_ac t;
+  (* cljs selection dots: shui/popup-hide! before popup-show! dismisses
+     the :selection-action-bar popup while the context menu is open *)
+  Editor_actions.hide_action_bar ();
   let flip = anchor_above atop abot in
   let cm =
     { epoch = next_cm_epoch t
@@ -3088,8 +3099,7 @@ let tag_entries ~title ~priv =
       ( "Go to #" ^ title
       , Some
           ( "mod+click"
-          , [ (if Ui_services.env_is_mac () then {js|⌘|js} else "Ctrl")
-            ; "Click" ] )
+          , [ mod_cap (); "Click" ] )
       , "go-to-tag" )
   ; Ci_item
       ( U.t "sidebar.right/open"
