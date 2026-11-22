@@ -5799,6 +5799,39 @@ let run_views ~registry ~profile ~finish =
     let saved = ref [] and active = ref true in
     let editor = { (Views_builder.editor_of_inst inst ~active:(fun () -> !active)) with
       save=(fun clause -> saved := Views_builder.tree_to_dsl clause :: !saved) } in
+    let submit ?(before="") value =
+      saved:=[];
+      Views_builder.full_text_picker editor
+        ~tree:(ref (Views_builder.COp ("and",[Views_builder.CText "Between88Marker"])))
+        ~loc:[0] ~anchor:(popup_anchor ());
+      S.flush sorting;
+      let input = List.find (fun n ->
+        M.string_prop n "accessibility-identifier"=Some "query-builder-search") (nodes sorting) in
+      if before<>"" then S.text_changed sorting input.M.id before;
+      ignore (Lui_app.dispatch_event sorting.S.app (P.TextChanged (input.M.id,value)));
+      ignore (Lui_app.dispatch_event sorting.S.app (P.Submit input.M.id));
+      S.flush sorting;
+      let result = !saved in
+      Views_popup.close_all ();
+      result
+    in
+    let expected = ["(and \"Between88Marker\" \"19\")"] in
+    check "Immediate full-text Enter commits the pending input alongside the original clause"
+      (submit "19"=expected);
+    check "Immediate full-text Enter uses the last edit rather than the published input"
+      (submit ~before:"old" "19"=expected);
+    check "Clearing full-text input immediately before Enter does not submit stale text"
+      (submit ~before:"19" ""=[]);
+    check "Immediate whitespace-only full-text Enter does not add a clause"
+      (submit "   "=[]);
+    active:=false;
+    check "A retired full-text draft cannot save on immediate Enter"
+      (submit "19"=[])
+  in
+  let () =
+    let saved = ref [] and active = ref true in
+    let editor = { (Views_builder.editor_of_inst inst ~active:(fun () -> !active)) with
+      save=(fun clause -> saved := Views_builder.tree_to_dsl clause :: !saved) } in
     let open_range () =
       Views_builder.between_picker editor ~tree:(ref (Views_builder.COp ("and",[])))
         ~loc:[0] ~anchor:(popup_anchor ()); S.flush sorting
