@@ -1517,7 +1517,7 @@ let on_buffer_change ?before t ~deleted uuid =
     match Edit_model.selection_range model with
     | Some (0, last) when last = S.length model.Edit_model.source -> Some model.source
     | _ -> None) in
-  let open_ac t kind = open_ac ?replaced_source t kind in
+  let open_for_change kind = open_ac ?replaced_source t kind in
   match Editor_actions.edit_model uuid with
   | None -> ()
   | Some m ->
@@ -1548,17 +1548,17 @@ let on_buffer_change ?before t ~deleted uuid =
               match c with
               | Some '/' when bounded ->
                   close_ac t;
-                  open_ac t Slash;
+                  open_for_change Slash;
                   true
               | Some '[' when two '[' ->
                   close_ac t;
-                  open_ac t Page_ref;
+                  open_for_change Page_ref;
                   true
               (* cljs autopairs "(" -> "()" and warns to use [[ instead —
                  "((" never opens block-ref search; the typed char just
                  joins the open popup's query below *)
               | Some '#' when bounded || two '#' ->
-                  if bounded && not (two '#') then open_ac t Tag_search
+                  if bounded && not (two '#') then open_for_change Tag_search
                   else close_ac t;
                   true
               | _ -> false
@@ -1613,12 +1613,12 @@ let on_buffer_change ?before t ~deleted uuid =
               pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']'
             in
             if c = '/' && (line_starts_with '/' || word_before) then
-              open_ac t Slash
-            else if c = '[' && two then open_ac t Page_ref
+              open_for_change Slash
+            else if c = '[' && two then open_for_change Page_ref
             else if
               c = '#' && (line_starts_with '#' || word_before || ref_before)
               && not (pos < S.length v && S.get v pos = '+')
-            then open_ac t Tag_search
+            then open_for_change Tag_search
             else ()
 
 (* the event funnel in editor_keys calls through the live layer *)
