@@ -367,6 +367,10 @@ An Undo shortcut during an in-flight structural edit waits for that edit to
 finish before capturing its refresh owner. For example, Tab followed immediately
 by Cmd+Z while editing restores the block's previous parent and recorded caret,
 instead of discarding Undo when the indent publishes its refreshed page.
+When no earlier navigation position is recorded, indent/outdent captures the
+current caret before writing history. A clean `Indent child` block at offset 2
+therefore returns to offset 2 after Tab then Cmd+Z. Existing Home/End start
+positions remain authoritative.
 
 ## Structured paste undo caret
 

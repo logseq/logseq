@@ -1236,9 +1236,9 @@ let test_indent_outdent (h : host) =
 let test_indent_undo_key_dispatch (h : host) =
   let* () = settle h 40 in
   reset_editor ();
-  stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Level two"];
-  set_editing ~uuid:"b2" ~buffer:"Level two" ~caret:2 ~base:"Level two";
-  S.note_editor_start_pos_from_arrow 2;
+  stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Indent child"];
+  set_editing ~uuid:"b2" ~buffer:"Indent child" ~caret:2 ~base:"Indent child";
+  S.clear_editor_start_pos ();
   S.history_input_before := None;
   install_worker ~repo:h.repo h;
   let worker = Option.get !Runtime.worker in

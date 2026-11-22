@@ -1031,6 +1031,9 @@ let within_focused_root ~outdent uuid =
   | _ -> true
 
 let apply_indent_outdent ?parent_original uuids indent =
+  (match S.editing (), !S.editor_start_pos with
+   | Some e, None -> S.note_editor_start_pos_from_arrow e.S.model.Edit_model.caret
+   | _ -> ());
   let opts = Ops.current_history_opts (Wire.Map []) in
   let* cfg = Sdk_config.read_config (Runtime.repo ()) in
   let logical =
