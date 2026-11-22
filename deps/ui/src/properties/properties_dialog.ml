@@ -389,7 +389,7 @@ let type_select_view d name : t =
                  ~anchor:`below
                  ~anchor_alignment:`start ~on_dismiss:dismiss
                  (List.map (fun (ty,label) ->
-                   dropdown_menu_item ~key:ty ~text:(I18n.t label)
+                   Ui_components.dropdown_menu_item ~key:ty ~text:(I18n.t label)
                        ~style:(Slot_style.make ~hover_background:"var(--lx-gray-05)"
                          ~hover_foreground:"var(--lx-gray-12)" ())
                        ~selected:false ~selection_placement:`leading ~gap:8

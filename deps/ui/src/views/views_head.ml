@@ -261,7 +261,7 @@ let sorting_popup inst anchor =
            (Ui_components.menu_card ~key:"sort-options" ~cls:"ls-sort-options"
               ~anchor:`below ~anchor_alignment:`start ~on_dismiss:(fun _ -> close ())
               (List.map (fun (value,label) ->
-                 dropdown_menu_item ~style_class:"ls-sort-option" ~text:label
+                 Ui_components.dropdown_menu_item ~style_class:"ls-sort-option" ~text:label
                    ~selected:(reactive (fun so -> so.V.s_asc = value) so_s)
                    ~selection_placement:`leading
                    ~padding_horizontal:8 ~padding_vertical:6 ~min_height:32

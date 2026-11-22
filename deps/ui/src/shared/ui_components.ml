@@ -1077,23 +1077,34 @@ let option_card ~key ~thumbnail ~label ?(min_height = 0)
 
 (* -- menus & overlays -------------------------------------------------- *)
 
-let dropdown_menu_item ?style ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?icon ?icon_signal ?selection_placement ?variant ?size ?selected ?checked ?selected_signal ?checked_signal ?disabled ?disabled_signal ?on_press ?on_press_detail ?on_pointer_down ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) : dropdown_menu_item_el =
+let menu_item_style =
+  Slot_style.make ~font_size:"0.875rem" ~line_height:"1.42857"
+    ~hover_background:"var(--lx-gray-05, hsl(var(--muted)))" ~hover_foreground:"inherit"
+    ~focus_within_background:"var(--lx-gray-05, hsl(var(--muted)))" ()
+
+let destructive_menu_item_style =
+  Slot_style.merge menu_item_style
+    (Slot_style.make ~hover_foreground:"var(--color-destructive)" ())
+
+let property_menu_width = 260
+let property_menu_padding = 6
+
+let styled_menu_item make ?style ?key ?gap ?main ?cross ?grow ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?text ?text_signal ?icon ?icon_signal ?selection_placement ?variant ?size ?selected ?checked ?selected_signal ?checked_signal ?disabled ?disabled_signal ?on_press ?on_press_detail ?on_pointer_down ?on_pointer_up ?on_context_menu ?tooltip ?tooltip_signal ?shortcut_hint ?shortcut_hint_signal ?transition (children : t list) =
   let default value fallback = Option.value value ~default:fallback in
-  let defaults = Slot_style.make ~font_size:"0.875rem" ~line_height:"1.42857"
-    ~hover_background:"var(--lx-gray-05, hsl(var(--muted)))" () in
+  let defaults = if variant = Some `destructive then destructive_menu_item_style else menu_item_style in
   let style = match style with None -> defaults | Some style -> Slot_style.merge defaults style in
-  Lui_elements.dropdown_menu_item ~style
-    ?key ?gap ~main:(default main `start) ?cross
-    ?grow ?padding ~padding_horizontal:(default padding_horizontal 8) ~padding_vertical:(default padding_vertical 6)
+  make ?style:(Some style)
+    ?key ?gap ?main:(Some (default main `start)) ?cross
+    ?grow ?padding ?padding_horizontal:(Some (default padding_horizontal 8)) ?padding_vertical:(Some (default padding_vertical 6))
     ?margin ?margin_horizontal ?margin_vertical ?margin_top
     ?margin_right ?margin_bottom ?margin_left ?background
-    ~foreground:(default foreground "inherit") ?border_color ?border_width ~corner_radius:(default corner_radius 4)
+    ?foreground:(Some (default foreground "inherit")) ?border_color ?border_width ?corner_radius:(Some (default corner_radius 4))
     ?width ?height ?min_width ?max_width
-    ~min_height:(default min_height 0) ?max_height ?container_relative_frame ?container_relative_frame_inset
+    ?min_height:(Some (default min_height 0)) ?max_height ?container_relative_frame ?container_relative_frame_inset
     ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal
     ?style_class ?data_attrs ?data_attrs_signal ?on_appear
     ?on_pointer_enter ?on_pointer_leave ?text ?text_signal
-    ?icon ?icon_signal ?selection_placement ~variant:(default variant `ghost)
+    ?icon ?icon_signal ?selection_placement ?variant:(Some (default variant `ghost))
     ?size ?selected ?checked ?selected_signal
     ?checked_signal ?disabled ?disabled_signal ?on_press
     ?on_press_detail ?on_pointer_down ?on_pointer_up ?on_context_menu
@@ -1101,19 +1112,31 @@ let dropdown_menu_item ?style ?key ?gap ?main ?cross ?grow ?padding ?padding_hor
     ?transition
     children
 
-let menu_item_chrome element =
-  with_props
-    [ Prop.variant `ghost
-    ; Prop.main `start
-    ; Prop.padding_horizontal 8
-    ; Prop.padding_vertical 6
-    ; Prop.corner_radius 4
-    ; Prop.min_height 0
-    ; Prop.font_size "0.875rem"
-    ; Prop.line_height "1.42857"
-    ; Prop.foreground "inherit"
-    ; Prop.hover_background "var(--lx-gray-05, hsl(var(--muted)))" ]
-    element
+let menu_item = styled_menu_item Lui_elements.menu_item
+let dropdown_menu_item = styled_menu_item Lui_elements.dropdown_menu_item
+
+let menu_surface_style ?max_height () =
+  Slot_style.make
+    ?max_height_viewport:(match max_height with None -> Some 1. | Some _ -> None)
+    ~collision_padding:5.
+    ~shadow:"0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
+    ~font_size:"0.875rem" ~line_height:"1.25rem" ~overflow:`auto ()
+
+let dropdown_menu ?style ?key ?gap ?grow ?padding ?padding_horizontal ?padding_vertical ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left ?background ?foreground ?border_color ?border_width ?corner_radius ?width ?height ?min_width ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal ?style_class ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave ?at ?at_signal ?anchor ?anchor_alignment ?anchor_offset ?on_dismiss ?transition children =
+  let default value fallback = Option.value value ~default:fallback in
+  let defaults = menu_surface_style ?max_height () in
+  let style = match style with None -> defaults | Some style -> Slot_style.merge defaults style in
+  Lui_elements.dropdown_menu ~style ?key ~gap:(default gap 0) ?grow
+    ~padding:(default padding 4) ?padding_horizontal ?padding_vertical
+    ?margin ?margin_horizontal ?margin_vertical ?margin_top ?margin_right ?margin_bottom ?margin_left
+    ~background:(default background "hsl(var(--popover))") ~foreground:(default foreground "inherit")
+    ~border_color:(default border_color "hsl(var(--border))") ~border_width:(default border_width 1)
+    ~corner_radius:(default corner_radius 6) ?width ?height ~min_width:(default min_width 128)
+    ?max_width ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset
+    ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal
+    ~style_class:("ui__dropdown-menu-content " ^ default style_class "")
+    ?data_attrs ?data_attrs_signal ?on_appear ?on_pointer_enter ?on_pointer_leave
+    ?at ?at_signal ?anchor ?anchor_alignment ?anchor_offset ?on_dismiss ?transition children
 
 (* The lui-overlay .ui__dropdown-menu-content/.ui__select-content card
    spec as props — migrated dropdown/select popups carry this chrome so
@@ -1143,14 +1166,13 @@ let dropdown_menu_card ~key ?(cls = "") ~anchor ~anchor_alignment ~on_dismiss
   dropdown_menu ~key ~anchor ~anchor_alignment ~on_dismiss
     ~min_width:128 ?width ?max_height
     ~gap:0 ~padding:4
-    ~style:(Slot_style.make
-      ?max_height_viewport:(match max_height with None -> Some 1. | Some _ -> None)
-      ~collision_padding:5.
-      ~shadow:"0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)"
-      ~font_size:"0.875rem" ~line_height:"1.25rem" ~overflow:`auto ())
     ~background:"hsl(var(--popover))" ~foreground:"inherit"
     ~border_color:"hsl(var(--border))" ~border_width:1 ~corner_radius:6
     ~style_class:cls ~data_attrs items
+
+let submenu ?key ?text ?icon ?label ?disabled ?disabled_signal ?on_dismiss items =
+  menu_trigger ?key ?text ?icon ?label ?disabled ?disabled_signal
+    (dropdown_menu ?on_dismiss items)
 
 let menu_card ~key ?cls ~anchor ~anchor_alignment ~on_dismiss
     ?max_height ?data_attrs items : t =

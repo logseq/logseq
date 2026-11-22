@@ -700,7 +700,7 @@ let cm_item_cls = "ui__dropdown-menu-item"
 
 let cm_item_chrome element =
   Ui_components.with_props [Ui_components.Prop.line_height "20px"]
-    (Menu_item.chrome element)
+    element
 ;;
 
 let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
@@ -725,7 +725,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
              it the row is hit-transparent and hover can never fire *)
           cm_item_chrome
             (Ui_components.with_props [Ui_components.Prop.accessibility_label label]
-            (menu_item ~key:"sub"
+            (Ui_components.menu_item ~key:"sub"
             ~style_class:"ui__dropdown-menu-sub-trigger"
             ~accessibility_identifier:("cm-sub-" ^ string_of_int idx)
             ~background:(reactive (cm_item_background (S.Main_item idx)) vs)
@@ -746,7 +746,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
                   | None -> ()))
             [ Menu_item.submenu_content ~label ]))
       | S.Ci_item (label, scut, cmd) ->
-          cm_item_chrome (menu_item ~key:"item" ~style_class:cm_item_cls
+          cm_item_chrome (Ui_components.menu_item ~key:"item" ~style_class:cm_item_cls
             ~gap:cm_menu_item_gap
             ~accessibility_identifier:("cm-item-" ^ string_of_int idx)
             ~background:(reactive (cm_item_background (S.Main_item idx)) vs)
@@ -764,7 +764,7 @@ let cm_item_el (st : S.t) (entry_sig : (int * S.cm_item) Signal.signal) : t =
 let cm_sub_item_el (st : S.t) idx (it : S.cm_item) : t =
   match it with
   | S.Ci_item (label, scut, cmd) ->
-      cm_item_chrome (menu_item ~key:"sub-item" ~style_class:cm_item_cls
+      cm_item_chrome (Ui_components.menu_item ~key:"sub-item" ~style_class:cm_item_cls
         ~gap:cm_menu_item_gap
         ~accessibility_identifier:("cm-sub-item-" ^ string_of_int idx)
         ~background:(reactive (cm_item_background (S.Sub_item idx)) (Signal.value st.S.vs))
@@ -860,7 +860,7 @@ let cm_component_menu (st : S.t) : t =
   in
   let submenu key label children =
     dropdown_menu_trigger ~key ~text:label
-      (dropdown_menu ~key:"submenu" children)
+      (Ui_components.dropdown_menu ~key:"submenu" children)
   in
   let rec entries items =
     List.mapi (fun i entry ->
@@ -869,36 +869,36 @@ let cm_component_menu (st : S.t) : t =
       | S.Ci_sep -> dropdown_menu_divider ~key []
       | S.Ci_item (label, shortcut, command) ->
           let icon = S.icon_of_cmd command in
-          dropdown_menu_item ~key ~text:label
+          Ui_components.dropdown_menu_item ~key ~text:label
             ?icon:(if icon = "" then None else Some (Icons.name_ref icon))
             ?shortcut_hint:(Option.map (fun (_, caps) -> String.concat " " caps) shortcut)
             ~on_press:(fun _ -> run_cm_item st command) []
       | S.Ci_sub (label, S.Sub_menu children) ->
           submenu key label (entries children)
       | S.Ci_sub (label, S.Sub_picker picker) ->
-          dropdown_menu_item ~key ~text:label
+          Ui_components.dropdown_menu_item ~key ~text:label
             ~icon:(Icons.name_ref (if picker = S.Picker_emoji then "mood-smile" else "palette"))
             ~on_press:(fun _ -> choose_picker picker) []
       | S.Ci_colors ->
           submenu key (U.t "property.built-in/background-color")
             (List.map (fun color ->
-               dropdown_menu_item ~key:color ~text:(U.t ("color/" ^ color))
+               Ui_components.dropdown_menu_item ~key:color ~text:(U.t ("color/" ^ color))
                  ~on_press:(fun _ -> run_cm_color st color) []) S.colors
-             @ [ dropdown_menu_item ~key:"remove" ~text:(U.t "ui/remove-background")
+             @ [ Ui_components.dropdown_menu_item ~key:"remove" ~text:(U.t "ui/remove-background")
                    ~on_press:(fun _ -> run_cm_color st "") [] ])
       | S.Ci_headings ->
           submenu key (U.t "property.built-in/heading")
             (List.init 6 (fun i ->
                let heading = string_of_int (i + 1) in
-               dropdown_menu_item ~key:heading ~text:(U.tf "editor/heading" [heading])
+               Ui_components.dropdown_menu_item ~key:heading ~text:(U.tf "editor/heading" [heading])
                  ~on_press:(fun _ -> run_cm_heading st heading) [])
-             @ [ dropdown_menu_item ~key:"auto" ~text:(U.t "editor/auto-heading")
+             @ [ Ui_components.dropdown_menu_item ~key:"auto" ~text:(U.t "editor/auto-heading")
                    ~on_press:(fun _ -> run_cm_heading st "auto") []
-               ; dropdown_menu_item ~key:"remove" ~text:(U.t "editor/remove-heading")
+               ; Ui_components.dropdown_menu_item ~key:"remove" ~text:(U.t "editor/remove-heading")
                    ~on_press:(fun _ -> run_cm_heading st "none") [] ]))
       items
   in
-  dropdown_menu_view (dropdown_menu ~key:"cm" ~at:(cm.S.cx, cm.S.cy)
+  dropdown_menu_view (Ui_components.dropdown_menu ~key:"cm" ~at:(cm.S.cx, cm.S.cy)
     ~anchor:(if cm.S.flip then `above else `below)
     ~min_width:240 ~accessibility_identifier:"block-context-menu"
     ~on_dismiss:(fun _ -> close_cm st) (entries cm.S.entries))
