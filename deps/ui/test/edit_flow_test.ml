@@ -3092,6 +3092,11 @@ let test_page_rename_route (h : host) =
     let* () = h.wait_ms 40 in
     check "Reload after rename resolves the UUID instead of the old title"
       (match !requests with args :: _ -> List.mem (W.Uuid uuid) args | [] -> false);
+    model := {!model with Model.route_page = Some page};
+    let before_hash = !hash in
+    let* () = Page_ops.rename "00000000-0000-4000-8000-000000000124" "Other title" in
+    check "Renaming an offscreen page does not replace the active page route"
+      ((!model).Model.route = Model.Page uuid && !hash = before_hash);
     let before = !writes in
     let* () = Page_ops.rename uuid "  " in
     check "An empty page rename does not write" (!writes = before);
@@ -3126,7 +3131,8 @@ let test_asset_insert_placement (h : host) =
          | W.Array [W.Keyword "insert-blocks"; W.Array [_; _; opts]] ->
              W.map_get opts "sibling?" = Some (W.Bool sibling)
              && W.map_get opts "bottom?" = Some (W.Bool bottom)
-             && W.map_get opts "replace-empty-target?" = Some (W.Bool replace_empty)
+             && W.map_get opts "replace-empty-target?" =
+                (if replace_empty then Some (W.Bool true) else None)
          | _ -> false) !ops);
     Js.Promise.resolve ()
   in

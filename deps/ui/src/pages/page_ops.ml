@@ -52,8 +52,7 @@ let rename uuid new_title =
        | Model.Page _ when current_page ->
            Ui_services.nav_replace_hash (Runtime.nav_hash ("#/page/" ^ uuid));
            reload ()
-       | _ when Runtime.route () = route -> reload ()
-       | _ -> ());
+       | _ -> reload ());
       Js.Promise.resolve ()
     end
 
