@@ -1403,6 +1403,22 @@ let test_indent_undo_restores_start_pos (h : host) =
   let* () = settle h 40 in
   check "Plain Arrow motion before indent keeps current caret on undo"
     (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 2);
+  (* After autosave clears start-pos, End from a nonzero caret must
+     capture that caret — not default 0 — as indent undo start-pos. *)
+  S.clear_editor_start_pos ();
+  S.history_input_before := None;
+  set_editing ~uuid:"b3" ~buffer:"gamma" ~caret:2 ~base:"gamma";
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "End",false));
+  check "End from mid-block after autosave moves caret to end"
+    ((editing_now ()).model.EM.caret = 5);
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Indent undo after End from mid-block restores pre-End caret 2"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 2
+     && (editing_now ()).buffer = "gamma");
   Runtime.worker := Some worker;
   reset_editor ();
   Js.Promise.resolve ()
