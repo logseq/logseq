@@ -198,6 +198,7 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
          selected background off the shared view signal *)
       Menu_item.menu_link ~key:"lnk"
         ~id:("ac-" ^ string_of_int (Signal.get item_sig).S.ai_idx)
+        ?title:(Signal.get item_sig).S.ai_title
         ~on_click:(fun () ->
           S.apply_index st (Signal.get item_sig).S.ai_idx)
         ~chosen_bg:Menu_item.ac_chosen_bg
@@ -237,9 +238,12 @@ let ac_item_el ~key (st : S.t) (item_sig : S.ac_item Signal.signal) : t =
 let ac_empty_placeholder (v : S.view) : t =
   let label =
     match v.S.ac with
-    | Some { kind = S.Page_ref | S.Embed_ref | S.Page_embed; _ } ->
+    | Some { kind = S.Page_ref | S.Page_embed; _ } ->
         U.t "editor/search-for-node"
+    | Some { kind = S.Embed_ref; _ } -> U.t "editor/block-search"
     | Some { kind = S.Tag_search; _ } -> U.t "editor/search-for-tag"
+    | Some { kind = S.Template_search; _ } ->
+        U.t "editor/search-template-placeholder"
     | _ -> U.t "editor/block-search"
   in
   text ~key:"ac-empty" ~style_class:"ls-ac-empty"
@@ -408,13 +412,13 @@ let ac_popover (st : S.t) : t =
     | None -> ()) in
   Signal.on_dispose context.Lui_ui.ui_scope stop_resize;
   (* cljs PopoverContent: ui__popover-content + card + transition
-     classes. #ui__ac (imperative queries) sits on the positioner via
-     ~accessibility_identifier; the .ui__popover-content content node is
-     an inner box because the overlay CSS keys
-     [data-editor-popup-ref]/[data-side] on that class, and ~data_attrs
-     land on the positioner *)
+     classes. Master mounts #ui__ac around the autocomplete list only;
+     the tag inline-hint is a sibling of #ui__ac (not a child), so probes
+     of #ui__ac do not see the hint text. The .ui__popover-content content
+     node is an inner box because the overlay CSS keys
+     [data-editor-popup-ref]/[data-side] on that class. *)
   (Ui_components.with_props [ Ui_components.card_shadow ]
-   (popover ~transition:Ui_components.popover_transition ~key:"ac-pop" ~accessibility_identifier:"ui__ac"
+   (popover ~transition:Ui_components.popover_transition ~key:"ac-pop"
      ~background:"transparent" ~border_width:0 ~padding:0 ~corner_radius:6
      ~target:(reactive
              (fun (v : S.view) ->
@@ -487,8 +491,11 @@ let ac_popover (st : S.t) : t =
                     vs))
             ~padding:6 ~border_width:1 ~border_color:"hsl(var(--border))"
             ~background:"hsl(var(--popover))" ~corner_radius:6
-            [ ac_inner st
-            ; (* cljs page-search-aux: mod+enter hint under the tag list *)
+            [ (* cljs: #ui__ac wraps only the autocomplete list *)
+              box ~key:"ac-root" ~accessibility_identifier:"ui__ac"
+                [ ac_inner st ]
+            ; (* cljs page-search-aux: mod+enter hint under the tag list,
+                 sibling of #ui__ac — not inside it *)
               if_
                 ~test:
                   (Logseq_el.own context

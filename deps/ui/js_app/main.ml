@@ -260,7 +260,8 @@ let main root =
   Editor_keys.install_once ();
   (* OS file drops produce raw DataTransfer File objects that
      Asset_dom.upload_files consumes — web-only (native drops arrive
-     through platform_event "file-drop" -> Asset_dom.upload_paths) *)
+     through platform_event "file-drop" -> Asset_dom.upload_paths).
+     Resolve .ls-block under the pointer like cljs block-drop. *)
   Web_dom.add_document_listener "drop"
     (fun ev ->
       if Ui_services.env_publishing () then ()
@@ -272,7 +273,18 @@ let main root =
             | 0 -> ()
             | _ ->
                 Web_dom.ev_prevent_default ev;
-                Asset_dom.upload_files files)
+                let drop_target =
+                  match
+                    Web_dom.element_at (Web_dom.ev_client_x ev)
+                      (Web_dom.ev_client_y ev)
+                  with
+                  | Some el ->
+                      Option.bind
+                        (Web_dom.el_closest el ".ls-block[data-blockid]")
+                        (fun b -> Web_dom.el_get_attr b "data-blockid")
+                  | None -> None
+                in
+                Asset_dom.upload_files ?drop_target files)
         | None -> ())
     true;
   (* views mount declaratively at their host sites — no

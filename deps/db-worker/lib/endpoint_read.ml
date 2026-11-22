@@ -600,9 +600,15 @@ let get_page_route_info args =
                     ; ( Wire.keyword "page-uuid",
                         Ds_wire.transit_of_value
                           (Option.value (Ldb.value page "block/uuid") ~default:Nil) )
-                    ; ( Wire.keyword "page-title",
+                    ; (* journals: raw-title follows title-format; plain
+                         pages fall back to block/title inside raw_title *)
+                      ( Wire.keyword "page-title",
                         Ds_wire.transit_of_value
-                          (Option.value (Ldb.value page "block/title") ~default:Nil) )
+                          (Option.value
+                             (match Ldb.raw_title db page with
+                              | Some _ as t -> t
+                              | None -> Ldb.value page "block/title")
+                             ~default:Nil) )
                     ; ( Wire.keyword "hidden?", Wire.Bool (Ldb.hidden page) )
                     ; ( Wire.keyword "internal?",
                         Wire.Bool (Ldb.internal_page page) )
@@ -632,6 +638,9 @@ let get_page_route_info args =
                              (Ldb.value page "logseq.property/icon")
                              ~default:Nil) )
                     ; ( Wire.keyword "tags", tags_wire page )
+                    ; (* cljs page.cljs ldb/recycled? — soft-delete shell *)
+                      ( Wire.keyword "recycled?",
+                        Wire.Bool (Ldb.recycled page) )
                     ]
                   in
                   let base =

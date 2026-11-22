@@ -597,10 +597,6 @@ let search_rows ?page ?(code_only = false) (svs : Svs.t) repo q move_mode nodes_
   in
   Ui_task.resolve (rows, total)
 
-let run_search svs repo q move_mode limit =
-  let* rows, total = search_rows svs repo q move_mode limit in
-  Ui_task.resolve (List.mapi (fun i row -> item_of_row row i) rows, total)
-
 (* number the flat item indices left-to-right, top-to-bottom *)
 let renumber groups =
   let i = ref 0 in
@@ -626,6 +622,28 @@ let row_has_tag w ident =
           || Wire.get tag "db/ident" = Some (Wire.Keyword ident))
         tags
   | _ -> false
+
+(* Built-in properties whose titles only fuzzy-match (e.g. "Asset" →
+   Page Tags / Extends / Scheduled) clutter cmdk; keep exact title hits
+   and all non-property / non-built-in rows. *)
+let keep_cmdk_row q w =
+  let q = String.lowercase_ascii (String.trim q) in
+  if q = "" then true
+  else
+    let built_in =
+      Wire.get w "logseq.property/built-in?" = Some (Wire.Bool true)
+    in
+    let is_prop = row_has_tag w "logseq.class/Property" in
+    if built_in && is_prop then
+      match str_field w "block/title" with
+      | Some t -> String.lowercase_ascii (String.trim t) = q
+      | None -> false
+    else true
+
+let run_search svs repo q move_mode limit =
+  let* rows, total = search_rows svs repo q move_mode limit in
+  let rows = List.filter (keep_cmdk_row q) rows in
+  Ui_task.resolve (List.mapi (fun i row -> item_of_row row i) rows, total)
 
 let row_parentless w =
   match Wire.get w "block/parent" with
@@ -746,8 +764,14 @@ let theme_items (svs : Svs.t) q =
     "mode", Wire.String mode; "url", Wire.Nil] in
   List.map (fun theme ->
     let field key = Option.value (Wire.map_get_string theme key) ~default:"" in
+    (* cljs load-results :themes — info is "mode #pid" *)
+    let info =
+      let mode = field "mode" and pid = field "pid" in
+      if mode = "" && pid = "" then None
+      else Some (String.concat " #" [ mode; pid ])
+    in
     { ikey = String.concat "\000" ["theme"; field "pid"; field "url"; name theme; field "mode"]
-    ; idx = -1; gid = G_themes; ititle = name theme; info = None; header = None
+    ; idx = -1; gid = G_themes; ititle = name theme; info; header = None
     ; iicon = Some (Node_icon.tabler
         (if Wire.map_get_string theme "url" = svs.Svs.selected_theme_url () then "check" else "palette"))
     ; inline_icon = None; isc = ""; ibadge = No_badge; act = Select_theme theme
@@ -945,6 +969,7 @@ let refresh ?(clear = true) st =
            | Some G_codes -> search_rows ~code_only:true st.svs repo v.input false 20
            | _ -> search_rows st.svs repo v.input v.move_mode (nodes_limit v.move_mode v.expanded)
          in
+         let source_rows = List.filter (keep_cmdk_row v.input) source_rows in
          let rows = List.mapi (fun i row -> item_of_row row i) source_rows in
          if Ui_effect.is_current st.req gen && st.svs.Svs.repo () = Some repo then
            apply_results ~source_rows st v.input v.move_mode v.expanded rows total;
@@ -1403,14 +1428,15 @@ let create_tag st title =
     "cmdk create-tag failed"
     (fun repo uuid -> goto_page st repo uuid)
 
+(* cljs developer/validate-db only invokes the worker; success/error
+   toasts come from the worker :notification broadcast (same English
+   copy as master). Do not duplicate hardcoded English here. *)
 let validate_graph st repo =
   ignore
     ((let* _ =
        st.svs.Svs.invoke "thread-api/validate-db" [ Wire.String repo; Wire.Map [] ]
      in
-     toast st "Your graph is valid" "success";
      Ui_task.resolve ())  |> fun t -> Ui_task.catch t (fun e ->
-            toast st "Validation failed" "error";
             st.svs.Svs.console_error "validate-db failed" e;
             Ui_task.resolve ()))
 
@@ -1468,15 +1494,10 @@ let run_add_reaction st =
                       ; Wire.Nil ])
                   uuids))))
 
-(* :editor/add-comment — ensure-comments-area-for-blocks over the block
-   selection (or the edited block); the area renders once the refresh
-   lands *)
-let run_add_comment st repo =
+(* :editor/add-comment — cljs add-comment-to-current-context! *)
+let run_add_comment st _repo =
   close st;
-  let uuids = target_uuids st in
-  match repo, uuids with
-  | Some repo, _ :: _ -> st.svs.Svs.ensure_comments ~repo ~uuids
-  | _ -> ()
+  st.svs.Svs.add_comment ()
 
 (* :editor/add-property-icon — cljs opens the property dialog on
    :logseq.property/icon, whose editing cell is the icon picker; LUI
@@ -1589,7 +1610,12 @@ let shortcut_action cid : (unit -> unit) option =
   | "sidebar/clear" -> Some st.svs.Svs.sidebar_clear
   | "sidebar/close-top" -> Some st.svs.Svs.sidebar_close_top
   | "ui/toggle-contents" -> Some st.svs.Svs.sidebar_ensure_contents
-  | "ui/select-theme-color" | "ui/customize-appearance" ->
+  | "ui/select-theme-color" ->
+      Some
+        (fun () ->
+          (* cljs show-themes-modal! true → open-select-theme! *)
+          st.svs.Svs.open_themes_select ())
+  | "ui/customize-appearance" ->
       Some
         (fun () ->
           (* cljs :ui/toggle-appearance — appearance popup anchored to
@@ -1640,7 +1666,16 @@ let rec run_item st it =
    | Select_theme theme ->
        st.svs.Svs.select_theme theme;
        close st
-   | Run cid -> run_with_lifecycle st repo cid
+   | Run cid ->
+       (* cljs command-palette/invoke-command — history only for palette
+          picks, not for shortcut dispatch_id *)
+       (match
+          List.find_opt (fun c -> c.Svs.id = cid)
+            (st.svs.Svs.commands () @ st.svs.Svs.plugin_commands ())
+        with
+        | Some c -> record_invoke st.svs c
+        | None -> ());
+       run_with_lifecycle st repo cid
    | Open_file path ->
        close st;
        st.svs.Svs.exit_edit ();
@@ -1702,9 +1737,10 @@ and run_command st repo (cid : string) =
     goto_journal_day (st.svs.Svs.rel_journal_day delta)
   in
   let cur_day () = st.svs.Svs.route_page_journal_day () in
-  (match List.find_opt (fun c -> c.Svs.id = cid) (st.svs.Svs.commands ()) with
-   | Some c -> record_invoke st.svs c
-   | None -> ());
+  (* cljs add-history lives only in command-palette/invoke-command —
+     keyboard shortcuts call the handler :fn directly and must not
+     pollute commands-history (otherwise Alt+Shift+I / mod+shift+k
+     reorder the palette ahead of Toggle wide mode). *)
   match cid with
   | "editor/move-blocks" ->
       (* stay open in move-blocks mode; cljs go-to-search! :nodes scopes

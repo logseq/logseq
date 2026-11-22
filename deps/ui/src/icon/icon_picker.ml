@@ -1,9 +1,9 @@
-(* Icon picker popup — mirrors cljs icon.cljs icon-search:
+(* Icon picker popup — mirrors cljs icon.cljs icon-search (bottom-footer
+   layout used by master parity / pre-top-tab icon.css):
    .cp__emoji-icon-picker[data-keep-selection]
-     > .hd.bg-popover > .search-input > tabler "search" + input + a.x
-     > .bd.bd-scroll.<tab> > .content-pane > (.all-pane | .flex sections)
-     > .ft  (icon.css positions it at the top) > tab buttons + color picker
-       + del.
+     > .hd  (absolute top) search + clear
+     > .bd  scroll body
+     > .ft  (absolute bottom) All | Emojis | Icons + color picker + del
 
    All tab = "Frequently used" (when storage has items) + "Emojis (N)"
    first-32 + "Icons (M)" first-48 pane-sections. Tabler icon names are
@@ -387,8 +387,9 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       ~mount:(fun row -> box ~height:44 ~padding_vertical:4
                         [reactive (fun (_, items) -> render_row (`Cells items)) row]) ()]])
     in
+    (* Search band on top (~pt-14) + footer band (~40px) at bottom. *)
     Ui_components.with_props
-      [Ui_components.Prop.padding_top 96; Ui_components.Prop.padding_bottom 4;
+      [Ui_components.Prop.padding_top 56; Ui_components.Prop.padding_bottom 44;
        Ui_components.Prop.padding_horizontal 0]
       (column ~key:("bd-" ^ tab_name s.tab ^ "-" ^ s.q)
          ~style_class:("bd " ^ tab_name s.tab) ~grow:1. ~min_height:0
@@ -427,81 +428,13 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
       ; (Tab_icon, I.t "icon/tab-icons") ]
   in
 
-  (Ui_parts.int_prop Lui_protocol.HeightValue
-     ~value:(reactive (fun s -> if s.tab = Tab_all || emoji_only then 408 else 400) sv)
-   (Ui_components.with_props
-     [ Ui_components.Prop.position `relative
-     ; Ui_components.Prop.max_width_viewport 1.
-     ; Ui_components.Prop.max_height_viewport 1.
-     ; Ui_components.Prop.overflow `hidden ]
-    (column ~style_class:"cp__emoji-icon-picker"
-        ~width:380
-        ~data_attrs:[ ("data-keep-selection", "true") ]
-        [ Ui_components.with_props
-            [Ui_components.Prop.position `absolute; Ui_components.Prop.inset_top (-1.);
-             Ui_components.Prop.inset_left 0.; Ui_components.Prop.inset_right 0.]
-          (row ~key:"ft" ~cross:`center ~padding:12 ~height:40
-            ~background:
-              "var(--lx-gray-02, var(--ls-secondary-background-color, \
-                var(--rx-gray-02)))"
-            ~data_attrs:
-              [ ( "style"
-                , "box-sizing: border-box; border-top: 1px solid \
-                   var(--lx-gray-05, var(--ls-border-color, \
-                   hsl(var(--border))))" ) ]
-            ([ row ~key:"tabs" ~grow:1. ~cross:`center ~gap:8
-                        (List.map
-                           (fun (t, label) ->
-                             Ui_parts.class_signal sv (fun s ->
-                               if s.tab = t then "active tab-item" else "tab-item")
-                               (Ui_components.with_props
-                                  [ Ui_components.Prop.opacity 1.
-                                  ; Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)"
-                                  ; Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" ]
-                                  (Ui_components.button ~key:("tab-" ^ tab_name t)
-                                     ~variant:`ghost ~size:`sm ~corner_radius:4
-                                     ~text:label ~label ~on_press:(fun _ -> set_tab t) [])))
-                           tabs) ]
-          (* cljs hides the color picker on the emoji tab *)
-          @
-          [ if_
-              ~test:(reactive (fun s -> s.tab <> Tab_emoji) sv)
-              (box ~key:"pal"
-                 [ Ui_components.with_props
-                     [ Ui_components.Prop.position `relative
-                     ; Ui_components.Prop.overflow `hidden ]
-                     (Ui_components.icon_button ~variant:`outline ~style_class:(btn_outline_sm ^ " color-picker")
-                        ~height:24 ~width:24 ~min_width:0 ~min_height:0
-                        ~padding:0 ~main:`center ~cross:`center ~corner_radius:6
-                        ~label:(I.t "icon/select-color") ~icon:(`app "palette")
-                     ~foreground:(reactive (fun s ->
-                       Option.value s.preset ~default:"inherit") sv)
-                        ~on_press:(fun _ ->
-                          update (fun s -> { s with pal_open = not s.pal_open }))
-                        [])
-                 ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
-                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~target:(Anchor { side = `below; source = Parent;
-                                                                                            align = `start; offset = 4.; align_offset = 0. })
-                        ~on_dismiss:(fun _ ->
-                          update (fun s -> { s with pal_open = false }))
-                        [ row ~style_class:"color-picker-presets" ~gap:2
-                            (List.map preset_btn preset_colors) ])
-                 ]) ]
-          @
-          (if del then
-             [ Ui_components.button ~text:"" ~variant:`outline ~key:"del" ~style_class:btn_outline_sm ~height:28
-                 ~padding_vertical:4 ~padding_horizontal:12 ~corner_radius:4
-                 ~data_attrs:[ ("data-action", "del") ]
-                 ~tooltip:(I.t "ui/delete")
-                 ~label:(I.t "ui/delete")
-                 ~on_press:(fun _ -> choose Remove)
-                 [ icon_el ~size:17. (Node_icon.tabler "trash") ] ]
-           else [])))
-     ; Ui_components.with_props
-         [Ui_components.Prop.position `absolute; Ui_components.Prop.inset_top 38.;
-          Ui_components.Prop.inset_left 0.; Ui_components.Prop.inset_right 0.;
-          Ui_components.Prop.padding_top 10]
-       (box ~key:"hd" ~background:"hsl(var(--popover))"
+  let hd =
+    Ui_components.with_props
+      [ Ui_components.Prop.position `absolute
+      ; Ui_components.Prop.inset_top 0.
+      ; Ui_components.Prop.inset_left 0.
+      ; Ui_components.Prop.inset_right 0. ]
+      (box ~key:"hd" ~background:"hsl(var(--popover))"
          ~padding_horizontal:12 ~padding_vertical:4
          [ reactive
              ~equal:(fun (a : pstate) b ->
@@ -527,11 +460,91 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                   ~trailing:[ clear_search ]
                   ())
              sv ])
-     ; reactive
-         ~equal:(fun (a : pstate) b ->
-           a.q = b.q && a.tab = b.tab && a.preset = b.preset
-           && a.emoji_results = b.emoji_results)
-         content_view sv ])))
+  in
+
+  let ft =
+    Ui_components.with_props
+      [ Ui_components.Prop.position `absolute
+      ; Ui_components.Prop.inset_bottom 0.
+      ; Ui_components.Prop.inset_left 0.
+      ; Ui_components.Prop.inset_right 0. ]
+      (row ~key:"ft" ~cross:`center ~padding:12 ~height:40
+         ~background:
+           "var(--lx-gray-02, var(--ls-secondary-background-color, \
+             var(--rx-gray-02)))"
+         ~data_attrs:
+           [ ( "style"
+             , "box-sizing: border-box; border-top: 1px solid \
+                var(--lx-gray-05, var(--ls-border-color, \
+                hsl(var(--border))))" ) ]
+         ([ row ~key:"tabs" ~grow:1. ~cross:`center ~gap:8
+             (List.map
+                (fun (t, label) ->
+                  Ui_parts.class_signal sv (fun s ->
+                    if s.tab = t then "active tab-item" else "tab-item")
+                    (Ui_components.with_props
+                       [ Ui_components.Prop.opacity 1.
+                       ; Ui_components.Prop.hover_background "hsl(var(--secondary) / 0.7)"
+                       ; Ui_components.Prop.hover_foreground "hsl(var(--secondary-foreground))" ]
+                       (Ui_components.button ~key:("tab-" ^ tab_name t)
+                          ~variant:`ghost ~size:`sm ~corner_radius:4
+                          ~text:label ~label ~on_press:(fun _ -> set_tab t) [])))
+                tabs) ]
+          (* cljs hides the color picker on the emoji tab; open upward
+             from the bottom footer so the menu stays on-screen *)
+          @
+          [ if_
+              ~test:(reactive (fun s -> s.tab <> Tab_emoji) sv)
+              (box ~key:"pal"
+                 [ Ui_components.with_props
+                     [ Ui_components.Prop.position `relative
+                     ; Ui_components.Prop.overflow `hidden ]
+                     (Ui_components.icon_button ~variant:`outline ~style_class:(btn_outline_sm ^ " color-picker")
+                        ~height:24 ~width:24 ~min_width:0 ~min_height:0
+                        ~padding:0 ~main:`center ~cross:`center ~corner_radius:6
+                        ~label:(I.t "icon/select-color") ~icon:(`app "palette")
+                     ~foreground:(reactive (fun s ->
+                       Option.value s.preset ~default:"inherit") sv)
+                        ~on_press:(fun _ ->
+                          update (fun s -> { s with pal_open = not s.pal_open }))
+                        [])
+                 ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
+                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~target:(Anchor { side = `above; source = Parent;
+                                                                                            align = `start; offset = 4.; align_offset = 0. })
+                        ~on_dismiss:(fun _ ->
+                          update (fun s -> { s with pal_open = false }))
+                        [ row ~style_class:"color-picker-presets" ~gap:2
+                            (List.map preset_btn preset_colors) ])
+                 ]) ]
+          @
+          (if del then
+             [ Ui_components.button ~text:"" ~variant:`outline ~key:"del" ~style_class:btn_outline_sm ~height:28
+                 ~padding_vertical:4 ~padding_horizontal:12 ~corner_radius:4
+                 ~data_attrs:[ ("data-action", "del") ]
+                 ~tooltip:(I.t "ui/delete")
+                 ~label:(I.t "ui/delete")
+                 ~on_press:(fun _ -> choose Remove)
+                 [ icon_el ~size:17. (Node_icon.tabler "trash") ] ]
+           else [])))
+  in
+
+  (Ui_parts.int_prop Lui_protocol.HeightValue
+     ~value:(reactive (fun s -> if s.tab = Tab_all || emoji_only then 408 else 400) sv)
+   (Ui_components.with_props
+     [ Ui_components.Prop.position `relative
+     ; Ui_components.Prop.max_width_viewport 1.
+     ; Ui_components.Prop.max_height_viewport 1.
+     ; Ui_components.Prop.overflow `hidden ]
+    (column ~style_class:"cp__emoji-icon-picker"
+        ~width:380
+        ~data_attrs:[ ("data-keep-selection", "true") ]
+        [ hd
+        ; reactive
+            ~equal:(fun (a : pstate) b ->
+              a.q = b.q && a.tab = b.tab && a.preset = b.preset
+              && a.emoji_results = b.emoji_results)
+            content_view sv
+        ; ft ])))
     context parent
 ;;
 

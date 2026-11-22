@@ -706,7 +706,7 @@ let test_node_reference_suggestions (h : host) =
           (A.live_buffer "b1"=prefix ^ "[[]]"
            && match (Popups_state.get popup).Popups_state.ac with
               | Some ac -> ac.tpos=String.length prefix && ac.tlen=2 && ac.query=""
-                  && List.length ac.items=33
+                  && List.length ac.items=10
               | None -> false);
         Editor_keys.apply_input "b1" (EI.Insert "Tar");
         let* () = h.wait_ms 25 in
@@ -740,10 +740,12 @@ let test_node_reference_suggestions (h : host) =
   let before = !searches in
   open_query "[[ ]]" 3 " ";
   let* () = h.wait_ms 25 in
-  check "empty node-reference query offers all 33 NLP dates without a graph search"
+  check "empty node-reference query offers the first 10 NLP dates without a graph search"
     (match (Popups_state.get popup).Popups_state.ac with
-     | Some ac -> !searches = before && List.length ac.items = 33
+     | Some ac -> !searches = before && List.length ac.items = 10
          && List.for_all (fun item -> Str_util.starts_with_ci item.Popups_state.ai_key "nlp:") ac.items
+         && List.exists (fun item -> item.Popups_state.ai_key = "nlp:Today") ac.items
+         && not (List.exists (fun item -> item.Popups_state.ai_key = "nlp:Last year") ac.items)
      | None -> false);
   Popups_state.close_ac popup;
   Popups_state.active := previous_popup;
@@ -1287,6 +1289,139 @@ let test_indent_type_double_undo_caret (h : host) =
   check "The double-undo workflow consumes both recorded mutations" (!undos=2 && !history=[]);
   Runtime.worker := Some worker;
   reset_editor ();
+  (* G2 undo-typing: master restore-cursor! prefers start-pos on undo. *)
+  stage_page h [Test_check.block "b1" "abc"];
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:3 ~base:"abc";
+  check "history_editing records master start-pos/end-pos"
+    (match S.history_editing (editing_now ()) with
+     | W.Map kvs ->
+         W.get (W.Map kvs) "start-pos" = Some (W.Int 0)
+         && W.get (W.Map kvs) "end-pos" = Some (W.Int 3)
+         && W.get (W.Map kvs) "caret" = Some (W.Int 3)
+     | _ -> false);
+  let cursor =
+    W.Map
+      [ W.Keyword "block-uuid", W.Uuid "b1"
+      ; W.Keyword "scope", W.String "main"
+      ; W.Keyword "start-pos", W.Int 0
+      ; W.Keyword "end-pos", W.Int 3
+      ; W.Keyword "caret", W.Int 3 ]
+  in
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:3 ~base:"abc";
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool true;
+               W.Keyword "editor-cursors", W.List [cursor] ]) in
+  check "Undo restores start-pos rather than the live end caret"
+    (S.editing_uuid () = Some "b1" && (editing_now ()).model.EM.caret = 0);
+  reset_editor ();
+  stage_page h [Test_check.block "b1" "abc"];
+  set_editing ~uuid:"b1" ~buffer:"abc" ~caret:0 ~base:"abc";
+  let* () = A.restore_history
+      (W.Map [ W.Keyword "undo?", W.Bool false;
+               W.Keyword "editor-cursors", W.List [cursor] ]) in
+  check "Redo restores end-pos / caret"
+    (S.editing_uuid () = Some "b1" && (editing_now ()).model.EM.caret = 3);
+  reset_editor ();
+  Js.Promise.resolve ()
+
+let test_indent_undo_restores_start_pos (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h
+    [ Test_check.block "b1" "alpha"
+    ; Test_check.block "b2" "beta"
+        ~children:[ Test_check.block "b2a" "beta-1"; Test_check.block "b2b" "beta-2" ]
+    ; Test_check.block "b3" "gamma"
+    ];
+  set_editing ~uuid:"b3" ~buffer:"gamma" ~caret:0 ~base:"gamma";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker in
+  let committed = ref !Runtime.current_page
+  and history = ref []
+  and redo_stack = ref [] in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        let before = !committed in
+        let* result = worker.invoke_fn name args in
+        if before <> !Runtime.current_page then begin
+          history := (opts,before,!Runtime.current_page) :: !history;
+          redo_stack := [];
+          committed := !Runtime.current_page
+        end;
+        Js.Promise.resolve result
+    | "thread-api/undo-redo-undo",_ ->
+        (match !history with
+         | (opts,before,after) :: rest ->
+             history := rest;
+             redo_stack := (opts,before,after) :: !redo_stack;
+             committed := before;
+             Runtime.current_page := before; h.sync_page ();
+             let cursors = List.filter_map (W.get opts)
+               ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+             Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool true;
+               W.kw "editor-cursors",W.List cursors])
+         | [] -> Js.Promise.resolve (W.Map []))
+    | "thread-api/undo-redo-redo",_ ->
+        (match !redo_stack with
+         | (opts,before,after) :: rest ->
+             redo_stack := rest;
+             history := (opts,before,after) :: !history;
+             committed := after;
+             Runtime.current_page := after; h.sync_page ();
+             let cursors = List.filter_map (W.get opts)
+               ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+             Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool false;
+               W.kw "editor-cursors",W.List cursors])
+         | [] -> Js.Promise.resolve (W.Map []))
+    | _ -> worker.invoke_fn name args)};
+  (* End moves caret from 0 -> 5 while recording start-pos = 0 like master *)
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "End",false));
+  check "End moves caret to end of gamma" ((editing_now ()).model.EM.caret = 5);
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Indent undo after End restores start-pos 0 on gamma"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 0
+     && (editing_now ()).buffer = "gamma");
+  A.redo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Indent redo restores end-pos 5 on gamma"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 5);
+  (* Undo again, then plain ArrowRight x2 + Tab should keep caret at 2 on undo *)
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "ArrowRight",false));
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "ArrowRight",false));
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Plain Arrow motion before indent keeps current caret on undo"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 2);
+  (* After autosave clears start-pos, End from a nonzero caret must
+     capture that caret — not default 0 — as indent undo start-pos. *)
+  S.clear_editor_start_pos ();
+  S.history_input_before := None;
+  set_editing ~uuid:"b3" ~buffer:"gamma" ~caret:2 ~base:"gamma";
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "End",false));
+  check "End from mid-block after autosave moves caret to end"
+    ((editing_now ()).model.EM.caret = 5);
+  Editor_keys.apply_input "b3" (EI.Key (EM.key_ev "Tab",false));
+  let* () = settle h 40 in
+  A.undo ();
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Indent undo after End from mid-block restores pre-End caret 2"
+    (S.editing_uuid () = Some "b3" && (editing_now ()).model.EM.caret = 2
+     && (editing_now ()).buffer = "gamma");
+  Runtime.worker := Some worker;
+  reset_editor ();
   Js.Promise.resolve ()
 
 (* ---------- run ---------- *)
@@ -1317,6 +1452,126 @@ let test_exit_waits_for_save (h : host) =
   check "saved text survives exit" (current_titles () = [ "saved before exit" ]);
   reset_editor ();
   Js.Promise.resolve ()
+
+let test_modifier_select_preserves_sidebar_scope (h : host) =
+  let module E = Editor_state in
+  let prev_last = !A.last_edit_uuid in
+  let scope = "sidebar-scope" in
+  let unregister =
+    E.register_block_source ~scope ~kind:E.Outliner (fun () ->
+        [ block "side-only" "side" ])
+  in
+  let pointer_ev =
+    { Ui_services.x = 0.
+    ; y = 0.
+    ; shift = false
+    ; meta = false
+    ; ctrl = true
+    ; alt = false
+    ; composing = false
+    ; key = None
+    ; key_char = None
+    ; buttons = 1
+    ; button = 0
+    ; repeat = false
+    ; movement_x = 0.
+    ; movement_y = 0.
+    ; default_prevented = false
+    ; target = None
+    ; touches = []
+    ; detail = (fun _ -> None)
+    ; detail_json = (fun _ -> None)
+    ; clipboard_get = (fun _ -> "")
+    ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
+    ; clipboard_set = (fun _ _ -> ())
+    ; data_transfer_get = (fun _ -> "")
+    ; files = []
+    ; has_files = false
+    ; prevent_default = (fun () -> ())
+    ; stop_propagation = (fun () -> ())
+    ; stop_immediate = (fun () -> ())
+    }
+  in
+  let run ~dirty label =
+    let* () = settle h 40 in
+    reset_editor ();
+    stage_page h [ block "main-a" "main"; block "main-b" "b" ];
+    install_worker ~repo:h.repo h;
+    set_editing ~uuid:"main-a" ~buffer:(if dirty then "main dirty" else "main")
+      ~caret:0 ~base:"main";
+    E.set (fun st ->
+        { st with
+          E.selection_scope = scope
+        ; selected = E.String_set.empty
+        ; anchor = None
+        ; action_bar = false
+        });
+    A.last_edit_uuid := None;
+    check (label ^ " is a modifier gesture")
+      (Block_selection.modifier_select pointer_ev "side-only");
+    check (label ^ " routes exit_edit")
+      (!A.last_edit_uuid = Some "main-a");
+    if dirty then
+      check (label ^ " keeps sidebar scope and selected UUID while save pending")
+        (E.selection_scope () = scope
+         && E.String_set.equal (E.selected ())
+              (E.String_set.singleton "side-only")
+         && E.editing_uuid () = Some "main-a");
+    let* () = settle h 40 in
+    if dirty then
+      check (label ^ " saves the dirty block through the worker")
+        (List.exists (wire_has "main dirty") (save_ops ()));
+    check (label ^ " keeps sidebar scope and selected UUID")
+      (E.selection_scope () = scope
+       && E.String_set.equal (E.selected ())
+            (E.String_set.singleton "side-only")
+       && E.editing () = None);
+    check (label ^ " resolves selected UUID in the preserved scope")
+      (List.exists
+         (fun b -> b.Model.block_uuid = Some "side-only")
+         (A.selection_forest ()));
+    reset_editor ();
+    Js.Promise.resolve ()
+  in
+  let* () = run ~dirty:false "clean exit" in
+  let* () = run ~dirty:true "save exit" in
+  unregister ();
+  A.last_edit_uuid := prev_last;
+  Js.Promise.resolve ()
+
+let test_sidebar_escape_selection (h : host) =
+  let scope = "escape-sidebar" in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | dirty :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ block "b1" "side" ];
+        install_worker ~repo:h.repo h;
+        let unregister =
+          S.register_block_source ~scope ~kind:S.Outliner (fun () ->
+              (Option.get !Runtime.current_page).Model.page_blocks)
+        in
+        set_editing ~uuid:"b1" ~buffer:(if dirty then "side dirty" else "side")
+          ~caret:0 ~base:"side";
+        S.set (fun st ->
+            { st with
+              S.editing = Some { (editing_now ()) with S.scope }
+            ; selection_scope = scope
+            ; selected = S.String_set.empty
+            });
+        A.exit_edit ~select:true;
+        let* () = settle h 40 in
+        check "Escape selects the edited sidebar block in its own scope"
+          (S.editing () = None && S.selection_scope () = scope
+           && S.String_set.equal (S.selected ()) (S.String_set.singleton "b1"));
+        check "Escape retains the sidebar block source"
+          (List.exists (fun b -> b.Model.block_uuid = Some "b1")
+             (A.selection_forest ()));
+        unregister ();
+        reset_editor ();
+        run rest
+  in
+  run [ false; true ]
 
 let test_select_all_exit (h : host) =
   let* () = settle h 40 in
@@ -1931,7 +2186,14 @@ let test_code_conversion_focus (h : host) =
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (command,title,query,typed,sibling)::rest ->
         reset_editor ();
-        stage_page h [{(Test_check.block "b1" title) with Model.block_display_type=typed}];
+        (* Clear heading is gated like master — only listed when the block
+           already has a heading. normal-text is not a slash label (master
+           exposes Clear heading); keep query empty so filter does not close. *)
+        let block =
+          let b = {(Test_check.block "b1" title) with Model.block_display_type=typed} in
+          if command = "clear-heading" then { b with Model.block_heading = Some 2 }
+          else b in
+        stage_page h [block];
         let source = title ^ "/" ^ query in
         set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
         install_worker ~repo:h.repo h;
@@ -1965,7 +2227,7 @@ let test_code_conversion_focus (h : host) =
     "calculator","","Calc",None,false;"quote","Existing ","Quote",None,false;
     "quote","Existing ","Quote",Some "math",false;"math-block","Existing ","Math",None,false;
     "heading:2","Existing ","Heading",None,false;"clear-heading","Existing ","Clear",None,false;
-    "normal-text","Existing ","Normal",None,false;"number-list","Existing ","Number",None,false]
+    "normal-text","Existing ","",None,false;"number-list","Existing ","Number",None,false]
 
 let test_calculator_exit_structure (h : host) =
   let previous_buffer = !S.code_buffer_of in
@@ -2022,11 +2284,13 @@ let test_query_selection_conversion (h : host) =
         let* () = settle h 40 in
         reset_editor ();
         stage_page h [Test_check.block "b1" title];
-        set_editing ~uuid:"b1" ~buffer:title ~caret:(String.length title) ~base:title;
-        A.update_model "b1" (fun m -> EM.select m ~anchor:0 ~focus:(String.length title));
-        Editor_keys.apply_input "b1" (EI.Insert "/");
-        Popups_state.open_ac ~tpos:0 ~autopair:false popup Popups_state.Slash;
-        Editor_keys.apply_input "b1" (EI.Insert "Query");
+        (* Real slash flow: host text stays, then "/Query" is typed and
+           erased before Query / Advanced Query runs (master last-pattern). *)
+        let source = title ^ "/Query" in
+        set_editing ~uuid:"b1" ~buffer:source
+          ~caret:(String.length source) ~base:title;
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false
+          popup Popups_state.Slash;
         install_worker ~repo:h.repo h;
         let attempts = ref [] in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
@@ -2052,9 +2316,19 @@ let test_query_selection_conversion (h : host) =
               W.get block "block/uuid"=Some (W.Uuid uuid)
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
-        check "Query conversion preserves the pre-command title in its query property"
+        check "Query conversion matches master Query vs Advanced Query steps"
           (if rejected then not (saves "query-source" title)
-           else saves "query-source" title && saves "b1" ""
+           else if advanced then
+             (* advanced-query-steps: keep host title, empty code query child *)
+             saves "b1" title && saves "query-source" ""
+             && List.mem (Ops.set_block_property "b1" "block/tags"
+                  (W.Keyword "logseq.class/Query")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.node/display-type" (W.Keyword "code")) batch
+             && List.mem (Ops.set_block_property "query-source"
+                  "logseq.property.code/lang" (W.String "clojure")) batch
+           else
+             saves "query-source" title && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
@@ -2774,6 +3048,40 @@ let test_zoom_out_origin (h : host) =
           h.restore { (h.snapshot ()) with Model.repo = Some "different-graph" };
           Ui_services.nav_replace_hash "#/page/different-graph-destination"), false ]
 
+let test_asset_insert_placement (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [ block "asset-target" "Existing"; block "asset-empty" "" ];
+  let asset = W.Map [W.kw "block/uuid", W.Uuid "inserted-asset";
+    W.kw "block/title", W.String "![asset](assets/image.png)"] in
+  let run drop_target sibling bottom replace_empty =
+    install_worker ~repo:h.repo h;
+    let upload = Option.get (A.capture_asset_upload ?drop_target ()) in
+    let* () = A.commit_uploaded_assets upload [asset] in
+    check "Asset insertion distinguishes siblings, empty replacements and page children"
+      (List.exists (function
+         | W.Array [W.Keyword "insert-blocks"; W.Array [_; _; opts]] ->
+             W.map_get opts "sibling?" = Some (W.Bool sibling)
+             && W.map_get opts "bottom?" = Some (W.Bool bottom)
+             && W.map_get opts "replace-empty-target?" =
+                (if replace_empty then Some (W.Bool true) else None)
+         | _ -> false) !ops);
+    Js.Promise.resolve ()
+  in
+  let* () = run (Some "asset-target") true false false in
+  let* () = run (Some "asset-empty") true false true in
+  let* () = run None false true false in
+  install_worker ~repo:h.repo h;
+  let upload = Option.get (A.capture_asset_upload ~drop_target:"asset-target" ()) in
+  let* () = A.commit_uploaded_assets upload [] in
+  check "An empty asset upload does not insert blocks" (!ops = []);
+  let before = h.snapshot () in
+  h.restore {before with Model.route = Model.Settings};
+  let* () = A.commit_uploaded_assets upload [asset] in
+  check "A stale asset upload does not mutate the newly navigated context" (!ops = []);
+  h.restore before;
+  Js.Promise.resolve ()
+
 let test_append_owner (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -2848,7 +3156,60 @@ let test_authoritative_route_miss (h : host) =
     Ui_services.log_error ("Authoritative route miss test failed", error);
     failwith "Authoritative route miss test failed")
 
+let test_paste_history_cursors (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "paste-origin" "Original"];
+  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:2 ~base:"Original";
+  S.note_editor_start_pos_from_arrow 2;
+  S.record_history_start ~force:true (editing_now ());
+  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:5 ~base:"Original";
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker and options = ref W.Nil in
+  let inserted = W.Map [W.kw "block/uuid", W.Uuid "paste-result";
+    W.kw "block/title", W.String "Clipboard parent"] in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    if name <> "thread-api/apply-outliner-ops" then worker.Worker_client.invoke_fn name args
+    else begin
+      (match args with [_;_;opts] -> options:=opts | _ -> ());
+      Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+        [Test_check.block "paste-origin" "Original";
+         Test_check.block "paste-result" "Clipboard parent"]}) !Runtime.current_page;
+      h.sync_page ();
+      Js.Promise.resolve (W.Map [W.kw "result",W.Map [W.kw "blocks",W.Array [inserted]]])
+    end)};
+  let* _ = A.paste_copied_blocks (false,[inserted]) "paste-origin"
+      ~sibling:true ~replace_empty:false in
+  let before = Option.get (W.get !options "undo-redo/editor-info")
+  and after = Option.get (W.get !options "undo-redo/editor-info-after") in
+  check "Structured paste preserves its captured before-caret rather than the live caret"
+    (W.map_get_uuid before "block-uuid"=Some "paste-origin"
+     && W.map_get_string before "scope"=Some "main"
+     && W.get before "caret"=Some (W.Int 2)
+     && W.get before "start-pos"=Some (W.Int 2));
+  check "Structured paste records the last inserted block at end as its after-cursor"
+    (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
+     && W.map_get_string after "scope"=Some "main"
+     && W.get after "caret"=Some (W.Keyword "end"));
+  let after = match after with
+    | W.Map kvs -> W.Map (List.map (fun (key,value) ->
+        key,(if key=W.kw "block-uuid" then W.Uuid "paste-result" else value)) kvs)
+    | _ -> failwith "Paste after-cursor must be a map" in
+  let restore undo = A.restore_history (W.Map [W.kw "undo?",W.Bool undo;
+    W.kw "editor-cursors",W.List [before;after]]) in
+  let* () = restore true in
+  check "Structured paste undo restores the captured origin caret"
+    (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
+     =Some ("paste-origin",2));
+  let* () = restore false in
+  check "Structured paste redo restores the last inserted block at end"
+    (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
+     =Some ("paste-result",String.length "Clipboard parent"));
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_structured_paste_completion (h : host) =
+  let* () = test_paste_history_cursors h in
   let rec run = function
     | [] -> Js.Promise.resolve ()
     | outcome :: rest ->
@@ -2886,12 +3247,18 @@ let test_structured_paste_completion (h : host) =
         !release ();
         let* _ = operation in
         let* () = h.wait_ms 10 in
-        check ("Structured paste completes without stealing focus: " ^ outcome)
-          (if outcome = "saved" then S.editing () = None && !S.pending_focus = None
-           else Option.map (fun e -> e.S.uuid) (S.editing ()) =
+        check ("Structured paste keeps editing the last insert: " ^ outcome)
+          (Option.map (fun e -> e.S.uuid) (S.editing ()) =
              Some (if outcome = "newer editor" then "other" else "paste-target"));
         check ("Structured paste retains failure state: " ^ outcome) (!failed = (outcome = "rejected"));
-        if outcome = "saved" then check "Structured paste redo does not reopen an editor" (!after = Some W.Nil);
+        if outcome = "saved" then
+          check "Structured paste redo restores the last inserted editor"
+            (match !after with
+             | Some (W.Map kvs) ->
+                 List.assoc_opt (W.Keyword "block-uuid") kvs
+                   = Some (W.Keyword "last-inserted-block")
+                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Keyword "end")
+             | _ -> false);
         reset_editor ();
         run rest
   in
@@ -3052,7 +3419,10 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_backspace_merge_prev h in
   let* () = test_indent_outdent h in
   let* () = test_indent_type_double_undo_caret h in
+  let* () = test_indent_undo_restores_start_pos h in
   let* () = test_exit_waits_for_save h in
+  let* () = test_modifier_select_preserves_sidebar_scope h in
+  let* () = test_sidebar_escape_selection h in
   let* () = test_select_all_exit h in
   let* () = test_task_cycle h in
   let* () = test_enter_edit_origin h in
@@ -3079,5 +3449,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_drop_top_owner h in
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
+  let* () = test_asset_insert_placement h in
   h.restore saved;
   Js.Promise.resolve ()

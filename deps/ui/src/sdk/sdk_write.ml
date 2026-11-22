@@ -1524,6 +1524,7 @@ let set_file_content a b _c _d =
             ; Wire.Nil
             ; Wire.Nil ]
         in
+        Custom_css.on_file_saved path content;
         resolved (Js.Json.boolean true)
   | _, _ -> resolved_nil
 

@@ -64,9 +64,15 @@ let dispatch kind payload =
       | [ Wire.String repo; progress ] -> on_index_progress repo progress
       | _ -> ())
   | "notification" -> (
-      match Decode.toast_of_wire payload with
+      match
+        Decode.toast_of_wire
+          ~translate:(fun key args ->
+            match args with [] -> I18n.t key | xs -> I18n.tf key xs)
+          payload
+      with
       | Some t ->
-          Toast.show ?key:t.Model.toast_key ?duration:t.toast_duration ~kind:t.toast_kind t.toast_text
+          Toast.show ?key:t.Model.toast_key ?duration:t.toast_duration ~kind:t.toast_kind
+            t.toast_text
       | None -> ())
   | "sync-db-changes" -> Subs.on_db_changes payload
   | "rtc-sync-state" -> (

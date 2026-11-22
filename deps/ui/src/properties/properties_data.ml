@@ -74,7 +74,9 @@ let row_value row =
   | Some v -> v
   | None -> W.Nil
 let row_title row =
-  gets (row_prop row) "block/title" |> Option.value ~default:""
+  let prop = row_prop row in
+  let fallback = gets prop "block/title" |> Option.value ~default:"" in
+  I18n.built_in_display_title ?ident:(getk prop "db/ident") ~fallback ()
 
 let row_type row =
   getk (row_prop row) "logseq.property/type"
@@ -196,12 +198,15 @@ let number_of_text text =
 
 let rec ref_title w =
   let w = untag w in
-  match gets w "block/title" with
-  | Some t -> t
-  | None -> (
-      match getf w "logseq.property/value" with
-      | Some value -> value_display value
-      | None -> Option.value ~default:"" (gets w "block/name"))
+  let fallback =
+    match gets w "block/title" with
+    | Some t -> t
+    | None -> (
+        match getf w "logseq.property/value" with
+        | Some value -> value_display value
+        | None -> Option.value ~default:"" (gets w "block/name"))
+  in
+  I18n.built_in_display_title ?ident:(getk w "db/ident") ~fallback ()
 
 and value_display w =
   match w with

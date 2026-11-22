@@ -522,13 +522,29 @@ let effective_collapsed ?(scope = "main") (b : Model.block) =
 let anchor () = (selection_state ()).anchor
 let selection_active () = not (String_set.is_empty (selected ()))
 
+(* Master :editor/start-pos — armed by arrow movement and cleared after
+   outliner txs / exit. Undo prefers this over the live end caret. When
+   unset, record 0 so undo matches master's observed caret-at-block-start
+   restore (G2 undo-typing/outdent/status/…). *)
+let editor_start_pos : int option ref = ref None
+
+let clear_editor_start_pos () = editor_start_pos := None
+
+let note_editor_start_pos_from_arrow pos = editor_start_pos := Some pos
+
 (* History cursors travel with their transaction, including the editing scope
-   and selection. The worker keeps the before/after pair opaque. *)
+   and selection. The worker keeps the before/after pair opaque. Master's
+   get-editor-info shape uses start-pos/end-pos; caret remains for LUI
+   callers that still read it. *)
 let history_editing (e : editing) =
+  let end_pos = e.model.Edit_model.caret in
   Wire.Map
     [ Wire.Keyword "block-uuid", Wire.Uuid e.uuid
     ; Wire.Keyword "scope", Wire.String e.scope
-    ; Wire.Keyword "caret", Wire.Int e.model.Edit_model.caret
+    ; Wire.Keyword "start-pos",
+        Wire.Int (Option.value !editor_start_pos ~default:0)
+    ; Wire.Keyword "end-pos", Wire.Int end_pos
+    ; Wire.Keyword "caret", Wire.Int end_pos
     ; Wire.Keyword "anchor",
         (match e.model.Edit_model.anchor with Some a -> Wire.Int a | None -> Wire.Nil)
     ]
@@ -544,8 +560,44 @@ let history_cursor () =
           (match anchor () with Some u -> Wire.Uuid u | None -> Wire.Nil)
       ]
 
-(* Captured before a source mutation and consumed by its scheduled save. *)
+(* Captured before an unmatched keydown or source mutation and consumed by
+   the next outliner op (matching master's :editor/start-pos lifecycle). *)
 let history_input_before : Wire.t option ref = ref None
+
+let history_cursor_matches_editing (e : editing) cursor =
+  Wire.map_get_uuid cursor "block-uuid" = Some e.uuid
+  && Wire.map_get_string cursor "scope" = Some e.scope
+
+let record_history_start ?(force = false) (e : editing) =
+  if not (is_draft e) then
+    let valid =
+      match !history_input_before with
+      | Some prev -> history_cursor_matches_editing e prev
+      | None -> false
+    in
+    if force || not valid then
+      history_input_before := Some (history_editing e)
+
+let consume_history_before_editing (e : editing) =
+  let before =
+    match !history_input_before with
+    | Some prev when not (is_draft e) && history_cursor_matches_editing e prev ->
+        prev
+    | _ -> history_editing e
+  in
+  history_input_before := None;
+  before
+
+let consume_history_before () =
+  let current = history_cursor () in
+  let before =
+    match !history_input_before, editing () with
+    | Some prev, Some e when not (is_draft e) && history_cursor_matches_editing e prev ->
+        prev
+    | _ -> current
+  in
+  history_input_before := None;
+  before, current
 let restore_history : (Wire.t -> unit Js.Promise.t) ref =
   ref (fun _ -> Js.Promise.resolve ())
 
@@ -702,6 +754,19 @@ let code_buffer_of : (string -> string option) ref = ref (fun _ -> None)
 
 let code_focus : (caret:int -> string -> bool) ref =
   ref (fun ~caret:_ _ -> false)
+
+(* cljs :editor/raw-mode-block — Esc from CodeMirror re-enters the
+   plain block editor for this uuid instead of remounting CM *)
+let raw_code_uuid : string option ref = ref None
+
+(* Queued by Code_mirror.on_escape; consumed in exit_edit finish so the
+   re-enter happens after the CM session is cleared. *)
+let pending_raw_reenter : string option ref = ref None
+
+let set_raw_code uuid = raw_code_uuid := uuid
+
+let is_raw_code uuid =
+  match !raw_code_uuid with Some u -> u = uuid | None -> false
 
 (* returns (parent, index) of uuid among its siblings *)
 let rec find_parent_in blocks uuid =

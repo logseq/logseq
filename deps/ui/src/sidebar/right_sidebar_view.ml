@@ -215,9 +215,10 @@ let item_title (it : Sidebar_state.item) =
         @ [ text ~text_overflow:`ellipsis ~value:it.title []
           ])
   | [], "contents" ->
-      (* cljs: (icon "list-details") + "Contents" *)
+      (* cljs: (icon "list-details") + (t :page/contents) — not the
+         English page name, which stays "Contents" in the DB. *)
       row ~key:"pt-contents" ~cross:`center ~gap:8
-        [ icon_ "list-details"; text ~value:it.title [] ]
+        [ icon_ "list-details"; text ~value:(t "page/contents") [] ]
   | [], "help" ->
       row ~key:"pt-help" ~cross:`center ~gap:8
         [ icon_ "help"; text ~value:it.title [] ]

@@ -554,11 +554,14 @@ let transfer_detail_widget ~downloading (ms : Model.t Signal.signal) : t
    the uuid resolves — cljs has the same window) *)
 let local_graph_sync_button (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
+  let auth = Rtc_flows.auth_signal ~scheduler:ctx.Lui_ui.ui_scheduler in
   (reactive
-    (fun ((repo : string option), (repos : string list), (_rtc : Model.rtc option)) ->
+    (fun (((repo : string option), (repos : string list), (_rtc : Model.rtc option)),
+          (_auth : int)) ->
       (* m.rtc joins the input so the db-sync-start broadcast after an
          upload re-renders — refresh_db_rtc_uuid then resolves the new
-         uuid and hides the button *)
+         uuid and hides the button. auth bumps on login/logout so the
+         button appears without a model change. *)
       Rtc_flows.refresh_db_rtc_uuid repo;
       let uploadable =
         match repo with
@@ -581,7 +584,9 @@ let local_graph_sync_button (ms : Model.t Signal.signal) : t =
           []
       else box ~key:"lgs-off" ~display:`none [])
     (Logseq_el.own ctx
-       (Signal.map (fun (m : Model.t) -> (m.repo, m.repos, m.rtc)) ms)))
+       (Signal.map2
+          (fun (m : Model.t) a -> ((m.repo, m.repos, m.rtc), a))
+          ms auth)))
     ctx parent
 
 (* cljs components/svg.cljs loader-fn — the ui/loading spinner
@@ -652,8 +657,8 @@ let home_button ms =
             ())
     ms (Signal.value sidebar.Sidebar_state.home_page)
 
-(* cljs header.cljs back-and-forward — Electron-only there; desktop LUI
-   (web Electron + native) always mounts the pair so history matches. *)
+(* cljs header.cljs: (when (util/electron?) (back-and-forward)).
+   Native always mounts the pair; browser web must not. *)
 let back_and_forward () =
   row ~key:"nav-hist" ~cross:`center
     [ icon_btn ~key:"nav-back" ~id:"" ~shortcut_id:"go/backward"
@@ -665,6 +670,10 @@ let back_and_forward () =
         ~icon:"arrow-right" ~tip:(I18n.t "header/go-forward")
         ~on_click:(fun _ -> Ui_services.nav_forward ()) ()
     ]
+
+let back_and_forward_if_electron () =
+  if Daemon_client.is_electron () then back_and_forward ()
+  else Logseq_el.nothing
 
 (* cljs open-right-sidebar! seeds a "contents" item when the sidebar
    is empty (state/sidebar-add-content-when-open!) *)
@@ -822,7 +831,7 @@ let header (ms : Model.t Signal.signal) =
                  contributes a toolbar item *)
               Left_sidebar_view.plugins_toolbar ms
             ; (* cljs: (when (util/electron?) (back-and-forward)) *)
-              back_and_forward ()
+              back_and_forward_if_electron ()
             ; dots_button; right_toggle_button ms ]
         ])
     ]

@@ -280,7 +280,8 @@ let body (_ms : Model.t Signal.signal) : t =
               ~on_press:(fun _ -> submit ctx)
               ~text:(reactive
                    (fun (s : pst) ->
-                     if s.publishing then "Publishing..." else "Publish")
+                     if s.publishing then I18n.t "publish/publishing"
+                     else I18n.t "publish/action")
                    (Signal.value st))
               [] ] ]
       ctx parent

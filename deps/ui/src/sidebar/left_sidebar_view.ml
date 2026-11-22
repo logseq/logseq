@@ -379,9 +379,10 @@ let nav_link ~sched ~key ~class_ ~active ~title ~icon_name ?shortcut ?on_shift_c
   box ~key ~style_class:(class_ ^ act)
     [ (match href, on_shift_click with
        | Some url, _ -> (fun content ->
+           (* cljs sidebar-item always navigates via the SPA path; web
+              Link alone can paint :active without calling on_click. *)
            link ~url ~target:`self_ ~container_relative_frame:`horizontal
-             ?on_press:(if Ui_services.env_native_block_controls () then
-               Some (fun _ -> on_click ()) else None) [content])
+             ~on_press:(fun _ -> on_click ()) [content])
        | None, None -> Ui_parts.pressable ~on_press:(fun _ -> on_click ())
        | None, Some shift_click -> arm_press ~on_press_detail:(function
            | d ->
@@ -597,10 +598,12 @@ let page_item_el st (p : Model.page) ~li_class ~recent ~key =
       | Some u -> Sidebar_state.open_uuid st u
       | None -> ()
     else
+      (* cljs page-name -> redirect-to-page! prefers :block/uuid so the
+         hash is #/page/<uuid>, matching master's recent/favorite clicks. *)
       Sidebar_state.navigate_to_page
-        (match p.Model.page_title with
-         | "" -> Option.value p.Model.page_uuid ~default:""
-         | title -> title)
+        (match p.Model.page_uuid with
+         | Some u -> u
+         | None -> p.Model.page_title)
   in
   let origin = ref None and dragged = ref false in
   let drag_down (d : pointer_detail) =

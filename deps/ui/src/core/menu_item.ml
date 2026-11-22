@@ -118,7 +118,10 @@ let ac_chosen_bg =
   "var(--lx-gray-04, var(--ls-menu-hover-color, hsl(var(--secondary))))"
 
 let menu_link ~key ~id ~on_click ?(transition = true) ?(plain_bg = false)
-    ?(chosen = false) ?chosen_bg ?chosen_signal children : t =
+    ?(chosen = false) ?chosen_bg ?chosen_signal ?title children : t =
+  let title_attrs =
+    match title with Some t when t <> "" -> [ ("title", t) ] | _ -> []
+  in
   let style_of c =
     menu_link_base_style
     ^ (if transition then ";transition:opacity 0.15s" else
@@ -142,13 +145,13 @@ let menu_link ~key ~id ~on_click ?(transition = true) ?(plain_bg = false)
          chosen_signal)
     ~attrs:
       (match chosen_signal with
-       | Some _ -> []
-       | None -> [ ("tabindex", "0"); ("style", style_of chosen) ])
+       | Some _ -> title_attrs
+       | None -> ("tabindex", "0") :: ("style", style_of chosen) :: title_attrs)
     ?attrs_signal_v:
       (Option.map
          (fun s ->
             Logseq_el.attrs_signal s (fun c ->
-                [ ("tabindex", "0"); ("style", style_of c) ]))
+                ("tabindex", "0") :: ("style", style_of c) :: title_attrs))
          chosen_signal)
     (* single source for menu-link layout on both twins *)
     ~ext_props:

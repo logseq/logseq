@@ -552,13 +552,16 @@ let settings_date_format ~registry ~profile ~finish =
           requested := (fun () -> let value = () in resolve value [@u])) in
         Runtime.worker := Some {
           Worker_client.invoke_fn = (fun name _ ->
-            if name <> "thread-api/apply-outliner-ops" then
-              failwith ("Unexpected date format request: " ^ name);
-            Js.Promise.make (fun ~resolve ~reject ->
-              acknowledge := (fun () ->
-                if failed then reject (Failure "format persistence failed") [@u]
-                else resolve Wire.Nil [@u]);
-              !requested ()));
+            match name with
+            | "thread-api/apply-outliner-ops" ->
+                Js.Promise.make (fun ~resolve ~reject ->
+                  acknowledge := (fun () ->
+                    if failed then reject (Failure "format persistence failed") [@u]
+                    else resolve Wire.Nil [@u]);
+                  !requested ())
+            (* post-op refresh reloads journals when route_page is unset *)
+            | "thread-api/get-latest-journals" -> Js.Promise.resolve (Wire.Array [])
+            | _ -> failwith ("Unexpected date format request: " ^ name));
           on_message = (fun _ _ -> ());
           dead = Js.Promise.make (fun ~resolve:_ ~reject:_ -> ()) };
         let session = S.mount ~registry ~profile ~initial:!current
@@ -1178,6 +1181,34 @@ let preview_block_spacing ~registry ~profile =
           (prop title "padding-vertical" (if block_preview then 0 else 2))))
       [Some "preview-spacing-root",true;page.Model.page_uuid,false])
 
+let zoom_breadcrumb_links ~registry ~profile =
+  let page =
+    { (Test_check.page [ Test_check.block "b-beta-1" "beta-1" ]) with
+      Model.page_uuid = Some "b-beta-1"
+    ; page_title = "beta-1"
+    ; page_parents =
+        [ Test_check.block "p-zoom-bc" "zoom-bc"
+        ; Test_check.block "b-beta" "beta"
+        ]
+    }
+  in
+  let session = S.mount ~registry ~profile ~initial:Model.initial
+    ~reducer:(fun model () -> model)
+    ~view:(fun _ _ _ context parent ->
+      Lui_elements.column (Page.zoom_breadcrumbs page) context parent) () in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose session.S.app)) (fun () ->
+    let all = nodes session in
+    let links = List.filter (fun n -> n.M.kind = "link" && class_has n "breadcrumb__segment") all in
+    let seps = List.filter (fun n -> n.M.kind = "text" && M.string_prop n "text" = Some "/") all in
+    let buttons = List.filter (fun n -> n.M.kind = "button") all in
+    check "Zoom breadcrumb renders semantic links instead of ghost buttons"
+      (List.length links = 2 && buttons = []);
+    check "Zoom breadcrumb renders '/' separator between ancestor links"
+      (List.length seps = 1);
+    check "Zoom breadcrumb links carry in-app page hash URLs"
+      (List.map (fun n -> M.string_prop n "url") links
+       = [ Some "#/page/p-zoom-bc"; Some "#/page/b-beta" ]))
+
 let bottom_pills_rows () =
   let row ident title ty value = Wire.Map [
     Wire.kw "property-id", Wire.kw ident;
@@ -1374,6 +1405,7 @@ let run_views ~registry ~profile ~finish =
   let finish () = bottom_pills_commit ~profile ~finish in
   bottom_pills ~profile;
   preview_block_spacing ~registry ~profile;
+  zoom_breadcrumb_links ~registry ~profile;
   page_disclosure ~registry ~profile;
   reference_disclosure ~registry ~profile;
   preview_reference_disclosure ~registry ~profile;
@@ -1409,7 +1441,7 @@ let run_views ~registry ~profile ~finish =
     let set key = function Some value -> Ui_services.storage_set key value | None -> Ui_services.storage_remove key in
     let check_sync server =
       set "sync-server-url" server;
-      let expected = Ui_services.env_rtc_test_mode () || Rtc_flows.rtc_group () in
+      let expected = Rtc_flows.rtc_group () in
       let graph = mount New_graph.body in
       check "Signed-out Create graph follows Master's RTC group eligibility"
         (List.exists (fun n -> M.string_prop n "accessibility-identifier" = Some "rtc-sync")
@@ -2815,8 +2847,13 @@ let run_views ~registry ~profile ~finish =
           Runtime.read_model:=(fun () -> !state);
           Runtime.app_send:=(fun action -> state:=Update.update !state action;true);
           Runtime.worker:=Some {Worker_client.invoke_fn=(fun name _ ->
-            if name<>"thread-api/transact" then failwith ("Unexpected config save: " ^ name);
-            Js.Promise.make (fun ~resolve ~reject:_ -> complete:=(fun () -> resolve Wire.Nil [@u])));
+            match name with
+            | "thread-api/transact" ->
+                Js.Promise.make (fun ~resolve ~reject:_ ->
+                  complete:=(fun () -> resolve Wire.Nil [@u]))
+            (* config save re-applies custom.css (get-file-content) *)
+            | "thread-api/get-file-content" -> Js.Promise.resolve (Wire.String "")
+            | _ -> failwith ("Unexpected config save: " ^ name));
             on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
           if file then File_view.save "calendar-save-fixture" "logseq/config.edn"
             (if invalid then "[:invalid-config]" else "{:start-of-week 5}")
@@ -3593,6 +3630,15 @@ let run_views ~registry ~profile ~finish =
          Wire.kw "logseq.property/value",Wire.Int 19],"Titled";
        Wire.Map [Wire.kw "block/name",Wire.String "named"],"named";
        Wire.Map [],"";Wire.Nil,""];
+    eqs "Closed numeric choices retain typed labels for user-defined idents" "19"
+      (Properties_data.ref_title (Wire.Map
+        [Wire.kw "db/ident",Wire.kw "fixture/number";
+         Wire.kw "logseq.property/value",Wire.Int 19]));
+    eqs "Closed built-in choices retain localized labels over typed fallback content"
+      (I18n.t "property.status/todo")
+      (Properties_data.ref_title (Wire.Map
+        [Wire.kw "db/ident",Wire.kw "logseq.property/status.todo";
+         Wire.kw "logseq.property/value",Wire.Int 19]));
     let items =
       List.map
         (fun (key, title) -> Properties_select.item ~key title (fun () -> ()))
@@ -4952,6 +4998,43 @@ let run_views ~registry ~profile ~finish =
   let dynamic_key = {js|é|js} in
   check "keycaps preserve runtime Unicode key names"
     (Keymap_record.keycaps dynamic_key=[dynamic_key]);
+  (* G4 keymap catalog parity with master Settings → Keymap (web). *)
+  let catalog_ids =
+    Keymap_data.items
+    |> List.filter_map (function
+         | Keymap_data.Shortcut row -> Some (Keymap_data.command_id row.title)
+         | Keymap_data.Category _ -> None)
+  in
+  check "Keymap catalog omits toggle-document-mode (master has no category row)"
+    (not (List.mem "ui/toggle-document-mode" catalog_ids));
+  check "Keymap catalog omits goto-plugins (master has no category row)"
+    (not (List.mem "ui/goto-plugins" catalog_ids));
+  check "Keymap catalog lists go/graph-view with master"
+    (List.mem "go/graph-view" catalog_ids);
+  eqi "Keymap All filter matches master's web catalog count" 116
+    (Keymap_data.count Keymap_data.All);
+  let chord_binding id =
+    match Keymap_data.default_shortcut id with
+    | Keymap_data.Binds [binding] ->
+        Keymap_data.binding_of_data ~mac:false binding
+    | _ -> failwith ("expected one default binding for " ^ id)
+  in
+  check "search/re-index default is one mod+c mod+s chord, not alternatives"
+    (let b = chord_binding "search/re-index" in
+     b.Keymap_data.kind = "chord" && b.data = "ctrl+c ctrl+s");
+  check "sidebar/clear default is one mod+c mod+c chord, not alternatives"
+    (let b = chord_binding "sidebar/clear" in
+     b.Keymap_data.kind = "chord" && b.data = "ctrl+c ctrl+c");
+  check "toggle-contents stays on global-prevent-default like master"
+    (Keymap_data.command_handler "ui/toggle-contents"
+     = Some "global-prevent-default");
+  check "unlisted master handlers stay in chord dispatch"
+    (Keymap_data.command_handler "ui/toggle-document-mode"
+     = Some "global-non-editing-only"
+     && Keymap_data.command_handler "ui/goto-plugins"
+       = Some "global-non-editing-only"
+     && Keymap_data.command_handler "ui/select-theme-color"
+       = Some "global-non-editing-only");
   let header_keys () =
     let header = mount (fun _ -> Chrome.search_button ()) in
     let keys = nodes header |> List.find_map (fun n ->
@@ -5029,7 +5112,8 @@ let run_views ~registry ~profile ~finish =
   eqi "global category toggle collapses a partly collapsed list" 0
     (List.length (keymap_rows ()));
   S.text_changed keymap input.M.id "Undo";
-  eqi "search ignores category collapse" 15 (List.length (keymap_rows ()));
+  (* Catalog rows that fuzzy-match "Undo" after G4 Keymap parity (116). *)
+  eqi "search ignores category collapse" 13 (List.length (keymap_rows ()));
   eqi "query results hide category actions" 0 (List.length (category_tools ()));
   S.text_changed keymap input.M.id "";
   eqi "clearing search retains category collapse" 0
@@ -5055,7 +5139,7 @@ let run_views ~registry ~profile ~finish =
   check "keymap search uses fuzzy command identifiers and descriptions"
     (List.length (keymap_rows ()) > 1);
   check "query results flatten categories" (category_headers () = []);
-  eqi "query results retain matches in their original categories" 15
+  eqi "query results retain matches in their original categories" 13
     (List.length (keymap_rows ()));
   check "query counts follow matching commands"
     (M.string_prop (pill "All") "accessibility-label"
@@ -5068,7 +5152,7 @@ let run_views ~registry ~profile ~finish =
   S.press keymap (pill "Disabled").M.id;
   eqi "filter applies to fuzzy query results" 1 (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
-  eqi "pressing the active filter restores all query results" 15
+  eqi "pressing the active filter restores all query results" 13
     (List.length (keymap_rows ()));
   S.press keymap (pill "Disabled").M.id;
   (match clear_buttons () with

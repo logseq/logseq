@@ -304,15 +304,10 @@ let run ~scope ~command ~block ~value : outcome =
                  Outliner_ops.apply_and_refresh_deferred [ sop ]);
               Handled
           | "add-comment" ->
-              (* cljs add-comment over the block selection — the comments
-                 area mounts once the refresh lands *)
-              ignore
-                (let* _ =
-                   Runtime.invoke2
-                     "thread-api/ensure-comments-area-for-blocks"
-                     (W.String (repo ()))
-                     (W.Array [ W.Uuid uuid ])
-                 in Outliner_ops.refresh_page ());
+              (* cljs add-comment-to-current-context! /
+                 reveal-comments-area! {:focus-editor? true} — create the
+                 thread then focus the new empty comment editor *)
+              Comments_ops.ensure_for ~on_ready:(fun _ -> ()) [ uuid ];
               Handled
           | "copy-export-as" ->
               (* cljs export-blocks: block ctx menu -> [block] :block; the

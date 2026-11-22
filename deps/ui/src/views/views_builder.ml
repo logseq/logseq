@@ -835,8 +835,13 @@ let editor_of_inst inst ~active =
     ; active
     ; ref_title = (fun uuid -> Hashtbl.find_opt (V.get inst).V.ref_titles uuid)
     ; property_title = (fun ident ->
-        Option.bind (Hashtbl.find_opt (V.get inst).V.all_props ident)
-          (fun p -> W.map_get_string p "block/title"))
+        Option.map
+          (fun p ->
+            let fallback =
+              Option.value (W.map_get_string p "block/title") ~default:ident
+            in
+            I.built_in_display_title ~ident ~fallback ())
+          (Hashtbl.find_opt (V.get inst).V.all_props ident))
     ; remember_ref = (fun uuid title ->
         let refs = Hashtbl.copy (V.get inst).V.ref_titles in
         Hashtbl.replace refs uuid title;

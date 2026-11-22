@@ -690,6 +690,27 @@ let test_ui_strings () =
     ({js|{{中文 café 😀}}|js}
      |> I18n.replace_all ~pat:"{{" ~rep:""
      |> I18n.replace_all ~pat:"}}" ~rep:"");
+  check "built-in property ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.property/status"
+     = Some "property.built-in/status");
+  check "built-in closed-value ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.property/status.todo"
+     = Some "property.status/todo");
+  check "built-in nested property ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.property.code/lang"
+     = Some "property.built-in/code-lang");
+  check "built-in class ident→key"
+    (I18n.built_in_ident_to_i18n_key "logseq.class/Task"
+     = Some "class.built-in/task");
+  check "built-in block ident→key strips ?"
+    (I18n.built_in_ident_to_i18n_key "block/collapsed?"
+     = Some "property.built-in/collapsed");
+  check "user property ident→key is None"
+    (I18n.built_in_ident_to_i18n_key "user.property/custom" = None);
+  eqs "built-in display title uses dict" "Status"
+    (I18n.built_in_display_title ~ident:"logseq.property/status" ~fallback:"RAW" ());
+  eqs "built-in display title falls back when key missing" "RAW"
+    (I18n.built_in_display_title ~ident:"logseq.property/no-such-thing" ~fallback:"RAW" ());
   (* this runner is macOS (navigator.platform = MacIntel): mod -> ⌘ *)
   eqs "decorate mod" (Platform.decode_utf8_bytes "\xe2\x8c\x98" ^ "+enter")
     (Commands_data.decorate_binding "mod+enter");
@@ -1092,7 +1113,42 @@ let test_decode6 () =
     (Decode.toast_of_wire (Wire.Array [ Wire.String "m" ]) = None);
   check "toast non-string msg -> None"
     (Decode.toast_of_wire (Wire.Array [ Wire.Int 1; Wire.String "x" ])
-     = None)
+     = None);
+  (* cljs frontend.handler.worker prefers :i18n-key over a Nil message *)
+  check "toast i18n-key resolves via translate"
+    ((Option.get
+        (Decode.toast_of_wire
+           ~translate:(fun key args ->
+             key ^ ":" ^ String.concat "," args)
+           (Wire.Array
+              [ Wire.Nil
+              ; Wire.Keyword "error"
+              ; Wire.Nil
+              ; Wire.Nil
+              ; Wire.Nil
+              ; Wire.Map
+                  [ ( Wire.Keyword "i18n-key"
+                    , Wire.Keyword "export/error-unexpected" )
+                  ; ( Wire.Keyword "i18n-args"
+                    , Wire.Array [ Wire.String "a"; Wire.String "b" ] )
+                  ] ])))
+       .Model.toast_text
+     = "export/error-unexpected:a,b");
+  check "toast i18n-key wins over literal message"
+    ((Option.get
+        (Decode.toast_of_wire
+           ~translate:(fun key _ -> "translated:" ^ key)
+           (Wire.Array
+              [ Wire.String "literal"
+              ; Wire.Keyword "success"
+              ; Wire.Bool true
+              ; Wire.Nil
+              ; Wire.Int 1000
+              ; Wire.Map
+                  [ ( Wire.Keyword "i18n-key"
+                    , Wire.Keyword "graph.validation/valid" ) ] ])))
+       .Model.toast_text
+     = "translated:graph.validation/valid")
 
 (* ---- Editor_state pure helpers ---- *)
 
@@ -1840,7 +1896,28 @@ let test_cmdk_groups () =
   check "commands_matched fuzzy"
     (List.exists
        (fun (c : Cmdk_services.cmd) -> c.id = "editor/move-blocks")
-       (Cmdk_state.commands_matched "move blocks"))
+       (Cmdk_state.commands_matched "move blocks"));
+  (* G4 command-palette: empty history starts with Toggle wide mode;
+     keyboard dispatch must not write commands-history (cljs only
+     records palette invoke-command). *)
+  Ui_services.storage_remove "commands-history";
+  let fresh = Cmdk_state.command_table () in
+  check "empty history starts with ui/toggle-wide-mode"
+    (match fresh with
+     | c :: _ -> c.Cmdk_services.id = "ui/toggle-wide-mode"
+     | [] -> false);
+  check "palette lists go/graph-view"
+    (List.exists
+       (fun (c : Cmdk_services.cmd) -> c.id = "go/graph-view")
+       fresh);
+  Cmdk_state.dispatch_id "go/search-themes";
+  Cmdk_state.dispatch_id "go/search-in-page";
+  let after_shortcuts = Cmdk_state.command_table () in
+  check "shortcut dispatch does not reorder the command palette"
+    (match after_shortcuts with
+     | c :: _ -> c.Cmdk_services.id = "ui/toggle-wide-mode"
+     | [] -> false);
+  Ui_services.storage_remove "commands-history"
 
 (* ---- Model.indent_blocks / outdent_blocks ---- *)
 
@@ -3115,16 +3192,24 @@ let test_popups_state () =
     (List.for_all
        (fun (i : Popups_state.ac_item) -> i.ai_hdr = None)
        (Popups_state.with_headers false items));
-  (* filter_slash: fuzzy on label, headers only for empty query *)
+  (* filter_slash: fuzzy on label+group; cljs keeps group headers when filtered *)
   let f0 = Popups_state.filter_slash "" items in
   check "filter_slash empty keeps all" (List.length f0 = 4);
   let f1 = Popups_state.filter_slash "alp" items in
   check "filter_slash fuzzy" (List.length f1 = 1);
-  check "filter_slash hides headers"
-    ((List.hd f1).Popups_state.ai_hdr = None);
+  check "filter_slash keeps headers"
+    ((List.hd f1).Popups_state.ai_hdr = Some "g1");
+  let f_head = Popups_state.filter_slash "g2" items in
+  check "filter_slash matches group name" (List.length f_head = 1
+    && (List.hd f_head).Popups_state.ai_label = "Gamma");
   (match Popups_state.filter_slash "zzzzz" items with
-   | [ f ] -> check "filter_slash fallback" (f.Popups_state.ai_key = "no-matched")
+   | [ f ] ->
+       check "filter_slash fallback"
+         (f.Popups_state.ai_key = "editor.slash/no-matched-commands"
+          && f.Popups_state.ai_label = I18n.t "editor.slash/no-matched-commands")
    | _ -> check "filter_slash fallback" false);
+  check "filter_slash whitespace closes"
+    (Popups_state.filter_slash_result " " items = Popups_state.Slash_close);
   (* query_closed per kind *)
   let closed kind q = Popups_state.query_closed (mk_ac kind) q in
   check "qc page_ref"
@@ -3142,6 +3227,33 @@ let test_popups_state () =
   check "nlp names"
     (List.length Popups_state.nlp_en_names = 33
     && List.mem "Tomorrow" Popups_state.nlp_en_names);
+  (* cljs page-search-aux: blank [[ / page-embed take the first 10 nlp
+     date pages; the full set remains available once the query is typed. *)
+  let popup = Popups_state.make (Signal.scheduler ()) in
+  check "empty page-ref lists 10 nlp dates"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "" in
+     List.length items = 10
+     && List.hd items |> fun it -> it.Popups_state.ai_key = "nlp:Today"
+     && not (List.exists (fun it -> it.Popups_state.ai_key = "nlp:Last year") items));
+  check "empty page-embed lists 10 nlp dates"
+    (List.length (Popups_state.page_items_for popup Popups_state.Page_embed "") = 10);
+  popup.Popups_state.page_exact_titles := [ "Exist" ];
+  check "exact page title suppresses New page row"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "Exist" in
+     not (List.exists (fun it -> it.Popups_state.ai_key = "new:Exist") items));
+  popup.Popups_state.page_exact_titles := [];
+  check "unmatched page query offers New page"
+    (let items = Popups_state.page_items_for popup Popups_state.Page_ref "Exist" in
+     List.exists (fun it -> it.Popups_state.ai_key = "new:Exist") items);
+  popup.Popups_state.tag_titles := [ ("MyTag", None); ("Task", None) ];
+  popup.Popups_state.tag_page_class := [ ("Page", None) ];
+  check "empty tag query excludes Page class"
+    (let items = Popups_state.page_items_for popup Popups_state.Tag_search "" in
+     not (List.exists (fun it -> it.Popups_state.ai_label = "Page") items)
+     && List.exists (fun it -> it.Popups_state.ai_label = "MyTag") items);
+  check "non-empty tag query can match Page class"
+    (let items = Popups_state.page_items_for popup Popups_state.Tag_search "Pag" in
+     List.exists (fun it -> it.Popups_state.ai_label = "Page") items);
   let now = Dates.date_now () in
   let ms_diff en = Popups_state.nlp_date_of en -. now in
   check "nlp tomorrow" (ms_diff "Tomorrow" > 86000000. && ms_diff "Tomorrow" < 87000000.);
@@ -5268,6 +5380,8 @@ let () =
      the summary + exit must wait for that stage. The parity suite runs
      first: it mounts its own app session and cleans up on its own drain
      stage, so it does not depend on the shared drive mount. *)
+  Ui_dom_web_regression_test.page_rename_route ~finish:(fun () ->
+  Theme_web_test.custom_css_graph_switch ~finish:(fun () ->
   test_cmdk_filter_dispatch ~finish:(fun () ->
   test_cmdk_block_reveal ~finish:(fun () ->
   Parity_drive_test.run ~finish:(fun () ->
@@ -5280,4 +5394,4 @@ let () =
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)
-          test_editor_cmds ()))))))))
+          test_editor_cmds ()))))))))))

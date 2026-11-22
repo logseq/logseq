@@ -5,9 +5,11 @@
 The properties UI displays an untitled closed choice using its typed
 `:logseq.property/value`, matching Master's closed-value content rule. Numeric
 choices such as `{:db/id 80 :logseq.property/value 19}` display as `19` in
-Available choices and the property value picker. A `:block/title` still takes
-precedence. Choice entity identities, saved values and worker wire maps are
-unchanged; no downstream migration is required.
+Available choices and the property value picker. For recognized built-in idents,
+the existing localized built-in display title takes precedence. Otherwise,
+`:block/title` takes precedence over the typed value, then `:block/name`.
+Choice entity identities, saved values and worker wire maps are unchanged;
+no downstream migration is required.
 
 ## Query-builder property value choices
 
@@ -302,3 +304,42 @@ This is a new return-program API, not compatibility for imperative legacy
 writes. There is no DOM, CSS, WebView or executable UI-source fallback.
 Native QuickJS is the implemented host; Web/WASM and mobile hosts remain future
 work, as do automatic installation/discovery and DB evaluator cancellation.
+
+## Asset upload placement
+
+Uploads into nonempty blocks now insert siblings, not children. The worker's
+`bottom?` option is used only for page/owner insertion (`sibling? = false`),
+because bottom placement overrides sibling placement. Empty-block uploads still
+replace their target; for example, dropping an image onto a text block inserts
+the image after that block, while uploading without a block target appends it
+to the page. The wire shape is unchanged.
+
+## Keyboard-layout shortcut names
+
+Shortcut dispatch preserves valid letter/digit names from `KeyboardEvent.key`
+instead of overriding them with the physical `code`. For example, QWERTZ
+`key="z", code="KeyY", ctrlKey=true` dispatches `ctrl+z` (Undo), not Redo.
+Modifier-corrupted glyphs still use the code fallback, including Ctrl+[ arriving
+as Escape and Option+A arriving as å. Modifier-only events remain ignored.
+
+## Clearing custom stylesheets
+
+Saving an empty or whitespace-only `logseq/custom.css` now removes the active
+custom stylesheet immediately. Previously its old rules remained active until
+reload. Saving unrelated files does not change the stylesheet.
+
+## Graph-open custom stylesheet ownership
+
+Custom CSS reset waits for the graph-open model publication before reading
+`custom-css-url`. Switching from graph A with a URL to graph B without one reads
+B's `logseq/custom.css`, rather than reusing A's URL. Delayed file reads from an
+old graph or configuration are discarded. Missing CSS clears the stylesheet;
+read failures still reject instead of silently substituting another graph's CSS.
+
+## Rename route synchronization
+
+Renaming the active title-routed page now resolves its quietly replaced UUID
+hash immediately, so the router model and subsequent reloads use the UUID too.
+For example, renaming `/page/Old%20title` keeps later reloads on the renamed page
+instead of querying the removed title. A rename that finishes after navigation
+does not redirect the newer route. Empty titles and failed writes do not navigate.

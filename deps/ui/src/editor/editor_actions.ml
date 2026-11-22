@@ -47,10 +47,13 @@ let update_model uuid f =
                    && nm.Edit_model.caret <> e.S.model.Edit_model.caret;
           if nm.Edit_model.source <> e.S.model.Edit_model.source then begin
             (match e.S.owner with
-             | S.Persisted -> S.history_input_before := Some (S.history_editing e)
+             | S.Persisted -> S.record_history_start e
              | S.Explicit_draft owner -> changed := Some (e, owner, nm.source));
             Editor_sink.invalidate uuid
-          end;
+          end
+          else if nm.Edit_model.caret <> e.S.model.Edit_model.caret then
+            (* Master updates :editor/start-pos on Arrow movement. *)
+            S.note_editor_start_pos_from_arrow nm.Edit_model.caret;
           { st with S.editing = Some (S.with_model e nm) }
       | _ -> st);
   (match !changed, S.editing () with
@@ -699,6 +702,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
+            S.history_input_before := None;
             arm_focus ~schedule:false
               (make_focus_request ?click ~owner:(scope, editing.S.epoch) uuid caret);
             S.set (fun st ->
@@ -765,18 +769,40 @@ let rec exit_edit ~select =
               (if Lazy.force perf_keys then
                  Printf.eprintf "PERF editing-clear src=exit_edit uuid=%s\n%!" e.uuid);
               Editor_sink.invalidate e.uuid;
+              S.clear_editor_start_pos ();
+              let reenter =
+                match !(S.pending_raw_reenter) with
+                | Some u when u = e.uuid && not select ->
+                    S.pending_raw_reenter := None;
+                    S.set_raw_code (Some u);
+                    Some u
+                | _ ->
+                    S.pending_raw_reenter := None;
+                    S.set_raw_code None;
+                    None
+              in
               S.set (fun st ->
                   { st with
                     S.editing = None
-                  ; selection_scope = e.scope
+                    (* Escape selects in the editing outliner. Modifier
+                       selection (Ctrl/Shift on another container) already
+                       switched selection_scope — keep that scope so
+                       Delete / range ops resolve the selected UUIDs. *)
+                  ; selection_scope =
+                      (if select then e.scope else st.selection_scope)
                   ; selected_footer = None
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
                   ; anchor = (if select then Some e.uuid else st.anchor)
-                    (* Escape selects the block without raising the action bar. *)
-                  ; action_bar = false
+                    (* Escape / shift+arrow-from-edit select without the
+                       action bar (master show-action-bar! checks selection
+                       before exit lands). Non-select exits preserve any
+                       bar the caller already set (shift-click range). *)
+                  ; action_bar =
+                      (if select then false else st.action_bar)
                   });
-              S.notify_edit_exit e.uuid
+              S.notify_edit_exit e.uuid;
+              Option.iter (fun u -> enter_edit ~scope:e.scope u (-1)) reenter
           | _ -> ()
         in
         (* Exit belongs to the editing session, even when its route changes
@@ -807,6 +833,7 @@ let flush_edit () =
       (if Lazy.force perf_keys then
          Printf.eprintf "PERF editing-clear src=flush uuid=%s\n%!" e.uuid);
       Editor_sink.invalidate e.uuid;
+      S.clear_editor_start_pos ();
       S.set (fun st -> { st with S.editing = None });
       Option.iter (fun save ->
           match !active_split_batch with
@@ -893,6 +920,7 @@ let after_pending_input commit =
               clear_pending_blur ();
               cancel_pending_focus ();
               Editor_sink.invalidate e.S.uuid;
+              S.history_input_before := None;
               S.set (fun st -> { st with S.editing = None });
               commit ()
             end
@@ -1207,7 +1235,7 @@ let split_at_cursor uuid =
           else uuid, e.S.scope in
         mark "prelude";
         let opts = Ops.history_opts ~opts:(Ops.op_opts "insert-blocks")
-            ~before:(S.history_editing e)
+            ~before:(S.consume_history_before_editing e)
             ~after:(S.history_editing
               (S.mk_editing ~uuid:new_uuid ~buffer:after ~scope:insert_scope ~base:after ())) () in
         (* Capture this block's debounce now, before the next editor can
@@ -1386,7 +1414,7 @@ let merge_prev uuid =
             with_focus_after ~restore:(Some e) uuid 0
               (Ops.apply_and_refresh
                  ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                   ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops))
+                   ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ()) ops))
           else (
             (* title_for (override ?? model): prev's commit may still be
                in flight — the debounced save's delta only lands with
@@ -1416,7 +1444,7 @@ let merge_prev uuid =
               request_focus prev_uuid caret;
               Ops.apply_and_refresh
                 ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                  ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops)) in
+                  ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ()) ops)) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some prev_uuid then
                 request_focus prev_uuid (caret_of prev_uuid))))
@@ -1481,7 +1509,7 @@ let merge_next_now uuid =
               request_focus next_uuid 0;
               Ops.apply_and_refresh
                 ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                  ~before:(S.history_editing e) ~after:(S.history_cursor ()) ()) ops)) in
+                  ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ()) ops)) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some next_uuid then request_focus next_uuid 0))
           else (
@@ -1508,7 +1536,7 @@ let merge_next_now uuid =
               request_focus uuid caret;
               Ops.apply_parsed_and_refresh
                    ~opts:(Ops.history_opts ~opts:(Ops.op_opts "delete-blocks")
-                     ~before:(S.history_editing e) ~after:(S.history_cursor ()) ())
+                     ~before:(S.consume_history_before_editing e) ~after:(S.history_cursor ()) ())
                    ~rest:ops [ (uuid, merged) ])) in
             run_structure ~restore:(Some e) p (fun () ->
               if S.editing_uuid () = Some uuid then request_focus uuid (caret_of uuid))))
@@ -1839,12 +1867,13 @@ let hide_action_bar () =
   S.set (fun st -> { st with S.action_bar = false })
 
 (* shift+arrow arriving during the pending-focus window replays here once
-   focus lands: exit edit into selection, then extend one visible step *)
+   focus lands: exit edit into selection without the action bar. Master
+   show-action-bar! runs before exit-editing lands, so a single-block
+   selection from editing never raises the bar; further shift+arrows go
+   through extend_selection, which does. *)
 let shift_arrow_select up =
   match S.editing () with
-  | Some _ ->
-      exit_edit ~select:true;
-      show_action_bar ()
+  | Some _ -> exit_edit ~select:true
   | None -> extend_selection up
 
 (* cljs editor/select-parent: with a selection, move it to the first
@@ -2081,22 +2110,26 @@ let delete_selected_uuids ~selected ~scope ~before uuids =
                 | Some owner -> Ops.require_refresh_success owner
                 | None -> Js.Promise.resolve ()
               in
+              (* cljs cut-blocks-and-clear-selections! / single-block
+                 menu delete: clear selection only — do not enter_edit
+                 the previous sibling (bullet Delete was leaving the
+                 neighbor in edit mode). *)
               if current ()
               then (
-                let editing = match previous, S.editing () with
-                  | Some (uuid, buffer), None when S.find uuid <> None ->
-                      Some (S.mk_editing ~uuid ~buffer ~scope ~base:buffer
-                              ~caret:(String.length buffer) ())
-                  | _, current -> current
-                in
-                S.set (fun st -> {st with S.editing = editing;
-                   selected = S.String_set.empty; anchor = None; action_bar = false});
-                match editing with
-                | Some e -> request_focus e.S.uuid e.S.model.Edit_model.caret
-                | None -> Option.iter (fun uuid ->
-                    Runtime.send Action.Title_edit_start;
-                    Runtime.flush ();
-                    Editor_sink.focus_input uuid) page_title);
+                S.set (fun st ->
+                  { st with
+                    selected = S.String_set.empty
+                  ; anchor = None
+                  ; action_bar = false });
+                match previous with
+                | Some _ -> ()
+                | None ->
+                    Option.iter
+                      (fun uuid ->
+                        Runtime.send Action.Title_edit_start;
+                        Runtime.flush ();
+                        Editor_sink.focus_input uuid)
+                      page_title);
               Js.Promise.resolve ()
       in
       ignore
@@ -2712,27 +2745,34 @@ let paste_history_opts target_uuid =
       [ Wire.Keyword "block-uuid", Wire.Keyword "last-inserted-block"
       ; Wire.Keyword "scope", Wire.String scope
       ; Wire.Keyword "caret", Wire.Keyword "end" ] in
-  Ops.history_opts ~opts:(Ops.op_opts "paste") ~before:(S.history_cursor ()) ~after ()
+  let before, _ = S.consume_history_before () in
+  Ops.history_opts ~opts:(Ops.op_opts "paste") ~before ~after ()
 
 let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
+  (* Master paste-blocks → edit-last-block-after-inserted!: keep editing
+     the last pasted block. Stale/failed/superseded sessions retain their
+     current editor instead. *)
   let context = Runtime.repo (), Runtime.route () in
   let session_current = paste_session_current () in
   let input_seq = !S.edit_input_seq in
-  let opts = Ops.history_opts ~opts:(Ops.op_opts "paste")
-      ~before:(S.history_cursor ()) ~after:Wire.Nil () in
+  let focus = paste_focus () in
+  let opts = paste_history_opts target_uuid in
   let* resp = Ops.apply_and_refresh_result ~opts
       [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
   if context = (Runtime.repo (), Runtime.route ()) && session_current ()
      && input_seq = !S.edit_input_seq && Option.is_some (Ops.last_inserted_uuid resp)
   then begin
-    clear_pending_blur ();
-    cancel_pending_focus ();
-    Option.iter (fun e -> Editor_sink.invalidate e.S.uuid) (S.editing ());
-    let editing = S.editing () in
-    S.set (fun st -> {st with S.editing = None});
-    Option.iter (fun e -> S.notify_edit_exit e.S.uuid) editing
-  end;
-  Js.Promise.resolve resp
+    (* replace-empty swaps the editing block's entity in place — resync
+       the live buffer first so edit_last_inserted's save_if_dirty
+       cannot commit the stale "" over the pasted title *)
+    let* () =
+      if replace_empty then Ops.resync_open_editor ()
+      else Js.Promise.resolve ()
+    in
+    focus resp;
+    Js.Promise.resolve resp
+  end
+  else Js.Promise.resolve resp
 
 (* thread-api/paste-extract-blocks + insert-blocks — the worker turns
    markdown clipboard text into preorder block maps which insert-blocks
@@ -3151,6 +3191,8 @@ module History_ui = struct
       | Model.Bug_report -> "bug-report", []
       | Model.Bug_report_clipboard -> "bug-report-tool", []
       | Model.Settings -> "settings", []
+      | Model.Plugins -> "plugins", []
+      | Model.Login -> "login", []
       | Model.File path -> "file", ["path", Wire.String path]
       | Model.Not_found path -> "not-found", ["path", Wire.String path] in
     map (("route-data", map ["to", Wire.Keyword destination;
@@ -3248,18 +3290,26 @@ let restore_history result =
            let scope = Option.get (Wire.map_get_string cursor "scope") in
            let* title = Ops.title_for_edit (model_title uuid) in
            if not (current ()) then Js.Promise.resolve () else
-           let caret = match Wire.map_get cursor "caret" with
-             | Some (Wire.Int caret) -> caret
-             | Some (Wire.Keyword "end") -> String.length title
-             | _ -> invalid_arg "history caret must be an offset or end" in
+           (* Master restore-cursor!: undo prefers start-pos, redo end-pos. *)
+           let caret =
+             let end_pos = match Wire.map_get cursor "end-pos", Wire.map_get cursor "caret" with
+               | Some (Wire.Int p), _ | _, Some (Wire.Int p) -> p
+               | Some (Wire.Keyword "end"), _ | _, Some (Wire.Keyword "end") ->
+                   String.length title
+               | _ -> invalid_arg "history caret must be an offset or end" in
+             let start_pos = match Wire.map_get cursor "start-pos" with
+               | Some (Wire.Int p) -> Some p
+               | _ -> None in
+             if undo then Option.value start_pos ~default:0 else end_pos in
            let submit_on_enter = match S.editing () with
              | Some e when e.S.uuid = uuid && e.S.scope = scope -> e.S.submit_on_enter
              | _ -> false in
            let e = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer:title ~scope ~base:title () in
            let e = match Wire.map_get cursor "anchor" with
-             | Some (Wire.Int anchor) ->
+             | Some (Wire.Int anchor) when not undo ->
                  S.with_model e (Edit_model.select e.S.model ~anchor ~focus:caret)
              | _ -> e in
+           S.clear_editor_start_pos ();
            S.set (fun st -> { st with S.editing = Some e;
              S.selected = S.String_set.empty; anchor = None; action_bar = false });
            request_focus uuid caret;
@@ -3384,9 +3434,11 @@ let wrap_selection uuid marker =
 (* arrow up/down inside editor -> move edit focus to neighbor block *)
 (* ArrowUp past the first block lands in the page title — cljs
    move-cross-boundary-up-down treats .ls-page-title as a block *)
-let focus_page_title () =
-  (* cljs journal titles aren't editable (protected attrs — a save tx
-     throws journal-page-protected-attr-updated) *)
+
+(* cljs journal titles aren't editable (protected attrs — a save tx
+   throws journal-page-protected-attr-updated). Shared by arrow_edge so
+   Left at the first journal block does not exit into nowhere. *)
+let page_title_focusable () =
   let journal_title =
     match Runtime.route () with
     | Model.Journals | Model.Home -> true
@@ -3395,9 +3447,11 @@ let focus_page_title () =
         | Some p -> p.Model.page_journal_day <> None
         | None -> false)
   in
-  match journal_title, Ui_services.dom_query ".ls-page-title" with
-  | true, _ | _, None -> ()
-  | false, Some _ -> (
+  (not journal_title) && Option.is_some (Ui_services.dom_query ".ls-page-title")
+
+let focus_page_title () =
+  if not (page_title_focusable ()) then ()
+  else (
       Runtime.send Action.Title_edit_start;
       Runtime.flush ();
       match (Runtime.model ()).Model.route_page with
@@ -3424,12 +3478,18 @@ let arrow_nav uuid up =
           save_if_dirty uuid;
           enter_edit ~scope nu (caret_of uuid)
       | None -> ())
-  | None -> if up && scope = "main" then (exit_edit ~select:false; focus_page_title ())
+  | None ->
+      if up && scope = "main" && page_title_focusable () then (
+        exit_edit ~select:false;
+        focus_page_title ())
 
 (* ArrowLeft/Right at a collapsed buffer edge crosses into the adjacent
    block — master keeps one logical caret across block boundaries:
    left at the buffer start lands at the previous block's end, right
-   at the buffer end lands at the next block's start *)
+   at the buffer end lands at the next block's start. Left with no
+   previous block (first content row) focuses the page title, matching
+   cljs where .ls-page-title is an .ls-block neighbour of the first
+   content block. *)
 let arrow_edge uuid up =
   let scope =
     match S.editing () with Some e -> e.scope | None -> "main"
@@ -3451,7 +3511,10 @@ let arrow_edge uuid up =
                Js.Promise.resolve ())
           else enter_edit ~scope nu 0
       | None -> ())
-  | None -> ()
+  | None ->
+      if up && scope = "main" && page_title_focusable () then (
+        exit_edit ~select:false;
+        focus_page_title ())
 
 (* The add-button's owner can be a page or a zoomed block in any scope. *)
 let append_block ?for_page ?(scope = "main") ?(library = false) () =
@@ -3674,52 +3737,65 @@ let zoom_out () =
       | _ -> ())
   | None -> Ui_services.nav_back ()
 
-(* -- /query (cljs commands.cljs db-based-query -> editor.cljs
-   run-query-command!): create the logseq.property/query value block
-   (its title is the pre-slash buffer), tag the block Query, empty its
-   title, and exit editing — one transact! batch. -- *)
+(* -- /query (cljs db-based-query -> run-query-command!): move the
+   current title into logseq.property/query, tag Query, clear title.
+   /Advanced Query (advanced-query-steps): keep the title, create an
+   empty query value block with display-type=code + code/lang=clojure. -- *)
 let run_query_command ~advanced =
   match S.editing () with
   | None -> ()
   | Some e ->
       let buf = live_buffer e.uuid in
-      (* the query command empties this block's title in the same tx —
-         pin it so the exit-edit repaint doesn't flash the old title *)
-      S.override_title e.uuid "";
-      S.set (fun st -> { st with S.editing = None });
       let quuid = Ui_services.env_random_uuid () in
-      let extra =
-        (* advanced-query-steps: display-type :code + code/lang clojure
-           on the query value block (pre-named via new-block-id) *)
-        if advanced then
-          [ Ops.set_block_property quuid "logseq.property.node/display-type"
-              (Wire.Keyword "code")
-          ; Ops.set_block_property quuid "logseq.property.code/lang"
-              (Wire.String "clojure")
-          ]
-        else []
-      in
-      let _ = () in
-      ignore
-        (let* sop = Ops.save_block_parsed e.uuid "" in
-        let* () =
-          Ops.apply_and_refresh
-            ([ Ops.op "create-property-text-block"
-                 [ Wire.Uuid e.uuid
-                 ; Wire.Keyword "logseq.property/query"
-                 ; Wire.String buf
-                 ; Wire.Map
-                     [ Ops.kw "set-block-property?" (Wire.Bool true)
-                     ; Ops.kw "new-block-id" (Wire.Uuid quuid)
-                     ]
-                 ]
-             ; Ops.set_block_property e.uuid "block/tags"
-                 (Wire.Keyword "logseq.class/Query")
-             ; sop
-             ]
-            @ extra)
-        in
-        Js.Promise.resolve ())
+      if advanced then (
+        S.set (fun st -> { st with S.editing = None });
+        ignore
+          (let* sop = Ops.save_block_parsed e.uuid buf in
+           let* () =
+             Ops.apply_and_refresh
+               [ sop
+               ; Ops.op "create-property-text-block"
+                   [ Wire.Uuid e.uuid
+                   ; Wire.Keyword "logseq.property/query"
+                   ; Wire.String ""
+                   ; Wire.Map
+                       [ Ops.kw "set-block-property?" (Wire.Bool true)
+                       ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                       ]
+                   ]
+               ; Ops.set_block_property e.uuid "block/tags"
+                   (Wire.Keyword "logseq.class/Query")
+               ; Ops.set_block_property quuid
+                   "logseq.property.node/display-type"
+                   (Wire.Keyword "code")
+               ; Ops.set_block_property quuid "logseq.property.code/lang"
+                   (Wire.String "clojure")
+               ]
+           in
+           Js.Promise.resolve ()))
+      else (
+        (* pin empty title so exit-edit does not flash the old text *)
+        S.override_title e.uuid "";
+        S.set (fun st -> { st with S.editing = None });
+        ignore
+          (let* sop = Ops.save_block_parsed e.uuid "" in
+           let* () =
+             Ops.apply_and_refresh
+               [ Ops.op "create-property-text-block"
+                   [ Wire.Uuid e.uuid
+                   ; Wire.Keyword "logseq.property/query"
+                   ; Wire.String buf
+                   ; Wire.Map
+                       [ Ops.kw "set-block-property?" (Wire.Bool true)
+                       ; Ops.kw "new-block-id" (Wire.Uuid quuid)
+                       ]
+                   ]
+               ; Ops.set_block_property e.uuid "block/tags"
+                   (Wire.Keyword "logseq.class/Query")
+               ; sop
+               ]
+           in
+           Js.Promise.resolve ()))
 
 (* -- upload asset (cljs handler/editor/assets.cljs
    db-based-save-assets!): write each file to pfs
@@ -3742,23 +3818,42 @@ type asset_upload =
   ; upload_empty : bool
   }
 
-let capture_asset_upload () =
+let block_title_empty uuid =
+  match S.find uuid with
+  | Some b -> String.trim b.Model.block_title = ""
+  | None -> false
+
+let capture_asset_upload ?drop_target () =
   let model = Runtime.model () in
   let edit = S.editing () in
-  let target = match edit with
-    | Some {S.owner = S.Explicit_draft owner; _} -> Some owner#asset_target
-    | Some e -> Some e.S.uuid
-    | None -> (match model.Model.route_page, model.Model.journals with
-        | Some page, _ -> page.Model.page_uuid
-        | None, page :: _ -> page.Model.page_uuid
-        | None, [] -> None) in
+  (* cljs db-based-save-assets!: editing block wins; otherwise
+     :last-edit-block (drop target) inserts as a sibling. Empty
+     targets must set upload_empty so asset_of_file reuses the
+     target UUID — otherwise the worker replaces the asset UUID
+     while the file was written under a generated id. *)
+  let target, sibling, empty =
+    match edit with
+    | Some {S.owner = S.Explicit_draft owner; _} ->
+        (Some owner#asset_target, false, false)
+    | Some e ->
+        ( Some e.S.uuid
+        , true
+        , (not (S.is_draft e)) && String.trim e.S.buffer = "" )
+    | None -> (
+        match drop_target with
+        | Some uuid -> (Some uuid, true, block_title_empty uuid)
+        | None ->
+            ( (match model.Model.route_page, model.Model.journals with
+               | Some page, _ -> page.Model.page_uuid
+               | None, page :: _ -> page.Model.page_uuid
+               | None, [] -> None)
+            , false
+            , false ))
+  in
   if Ui_services.env_publishing () then None else
   Option.bind model.Model.repo (fun repo -> Option.map (fun target ->
-    let persisted = Option.fold ~none:false ~some:(fun e -> not (S.is_draft e)) edit in
     {upload_repo = repo; upload_route = Runtime.route (); upload_target = target;
-     upload_edit = edit; upload_sibling = persisted;
-     upload_empty = persisted && Option.fold ~none:false
-       ~some:(fun e -> String.trim e.S.buffer = "") edit}) target)
+     upload_edit = edit; upload_sibling = sibling; upload_empty = empty}) target)
 
 let asset_upload_current upload =
   upload.upload_repo = Runtime.repo () && upload.upload_route = Runtime.route ()
@@ -3781,8 +3876,8 @@ let commit_uploaded_assets upload blocks =
     | _ -> Js.Promise.resolve [] in
   if not (asset_upload_current upload) then Js.Promise.resolve () else
   let* () = Ops.apply_and_refresh ~opts:(Ops.op_opts "insert-blocks")
-      (save_ops @ [Ops.insert_blocks ~bottom:true
-        ~replace_empty_target:upload.upload_sibling blocks upload.upload_target
+      (save_ops @ [Ops.insert_blocks ~bottom:(not upload.upload_sibling)
+        ~replace_empty_target:upload.upload_empty blocks upload.upload_target
         ~sibling:upload.upload_sibling]) in
   if upload.upload_empty && asset_upload_current upload then Ops.resync_open_editor ()
   else Js.Promise.resolve ()

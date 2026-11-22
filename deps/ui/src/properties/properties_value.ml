@@ -774,6 +774,14 @@ let text_edit_cell ?(jump_target = true) ctx row : t =
     | None -> ()
   in
   let pending = take_pending_edit ~block_uuid:ctx.block_uuid ~ident ~value_uuid:uuid in
+  (* Appear can land after the next keystroke (draft surfaces mount
+     before Appear). Schedule activate immediately when the dialog
+     handed us a pending edit so the caret reaches the value cell
+     before the user types — on_appear remains as a fallback. *)
+  (if pending then
+     ignore
+       (Ui_services.timers_timeout
+          (fun () -> if alive () then activate ()) 0));
   (column ~gap:0 ~grow:1. ~min_width:0
      ~on_appear:(fun _ -> if pending then activate ())
      [ reactive (fun target ->
@@ -827,16 +835,7 @@ type rep =
   }
 
 let repeat_choice_title ident title =
-  let translated prefix namespace =
-    let suffix=String.sub ident (String.length prefix) (String.length ident-String.length prefix) in
-    I18n.t (namespace ^ suffix)
-  in
-  if String.starts_with ~prefix:"logseq.property.repeat/recur-unit." ident then
-    translated "logseq.property.repeat/recur-unit." "property.repeat-recur-unit/"
-  else if String.starts_with ~prefix:"logseq.property.repeat/repeat-type." ident then
-    translated "logseq.property.repeat/repeat-type." "property.repeat-repeat-type/"
-  else if ident="logseq.property/status.done" then I18n.t "property.status/done"
-  else title
+  I18n.built_in_display_title ~ident ~fallback:title ()
 
 let repeat_done_title values =
   List.find_map (fun value ->
@@ -1733,7 +1732,11 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
            ~height:(if bottom_pill then 20 else 24) ~min_height:(if bottom_pill then 20 else 24)
            ~min_width:0 ~padding_horizontal:0 ~padding_vertical:0 ~main:`start
            ~on_press:(fun _ -> activate ())
-           (if chips=[] then [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []] else []))
+           (* cljs property-empty-btn-value uses line-dashed, not "Empty" *)
+           (if chips=[] then
+              [icon ~name:(`app "line-dashed") ~point_size:14
+                 ~foreground:"var(--lx-gray-09)" []]
+            else []))
     else if table_many then
       Ui_components.with_props
         [ Ui_components.Prop.cursor `pointer
@@ -1748,13 +1751,13 @@ let node_view ?(jump_target = true) ?(table_view = false) ?(bottom_pill = false)
     else
       Ui_components.button ~text:"" ~variant:`ghost
         ~accessibility_identifier:anchor_id
-        ?icon:(if many then Some (`app "plus") else None)
+        ?icon:(if many then Some (`app "plus")
+               else if chips = [] then Some (`app "line-dashed")
+               else None)
         ~label:(I18n.t "property/select-property-placeholder")
         ~main:`start ~min_height:24 ~min_width:24
         ~on_press:(fun _ -> activate ())
-        (if many then [] else if chips = [] then
-          [text ~value:(I18n.t "ui/empty") ~foreground:"var(--lx-gray-09)" []]
-         else chips)
+        (if many || chips = [] then [] else chips)
   in
   let trigger_row =
     if plain then
@@ -1952,7 +1955,7 @@ and icon_view ?(jump_target = true) ctx row : t =
   (Lui_elements.row ~gap:0 ~grow:1.0
      [ Ui_components.button ~variant:`ghost ~grow:1.0 ~text_alignment:`start
          ~accessibility_identifier:anchor_id ~style_class:"pv-scalar"
-         ~label:"Icon"
+         ~label:(I18n.t "property.built-in/icon")
          ~foreground:"var(--ls-primary-text-color)"
          ~text:(match icon with Some _ -> "" | None -> I18n.t "ui/empty")
          ~data_attrs:
