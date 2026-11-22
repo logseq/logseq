@@ -400,13 +400,14 @@ Right twice before Tab and Undo restores offset 2 rather than the pre-Home caret
 Paste snapshots the live caret before its transaction and consumes that snapshot,
 not an older Home/End navigation cursor. Pasting at offset 4 in
 `Nonempty destination` restores offset 4 on undo; redo still edits the last
-inserted block at its end. This applies to copied subtrees and Markdown paste.
+inserted block at its end for copied subtrees and Markdown paste. A structured
+single-block paste instead records offset 0 on its inserted block for Redo.
 
-Plain text pasted into one existing block records its pre-paste cursor for Redo,
-rather than the caret after insertion. Pasting `Gamma single` into an empty
-block initially places the caret at 12; Undo then Redo restores its text at
-caret 0, matching Master. The debounced save accepts an explicit history-after
-cursor for these inline paste paths; other edits retain their live after-cursor.
+Plain text pasted into one existing block records its live post-insertion caret
+for Redo. Pasting OS text `Gamma single` into an empty block initially places the
+caret at 12; Undo then Redo restores its text at caret 12. Copying the same text
+as a structured Logseq block and pasting it restores caret 0 on Redo. These
+separate history paths match Master; initial paste focus remains at the end.
 
 ## Zoom breadcrumb ancestor loading
 

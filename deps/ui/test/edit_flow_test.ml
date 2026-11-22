@@ -3498,10 +3498,10 @@ let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
      && W.map_get_string before "scope"=Some "main"
      && W.get before "caret"=Some (W.Int caret)
      && W.get before "start-pos"=Some (W.Int caret));
-  check "Structured paste records the last inserted block at end as its after-cursor"
+  check "Structured single-block paste records the inserted block at zero as its after-cursor"
     (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
      && W.map_get_string after "scope"=Some "main"
-     && W.get after "caret"=Some (W.Keyword "end"));
+     && W.get after "caret"=Some (W.Int 0));
   let after = match after with
     | W.Map kvs -> W.Map (List.map (fun (key,value) ->
         key,(if key=W.kw "block-uuid" then W.Uuid "paste-result" else value)) kvs)
@@ -3513,9 +3513,9 @@ let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
      =Some ("paste-origin",caret));
   let* () = restore false in
-  check "Structured paste redo restores the last inserted block at end"
+  check "Structured single-block paste redo restores the inserted block at zero"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
-     =Some ("paste-result",String.length "Clipboard parent"));
+     =Some ("paste-result",0));
   reset_editor ();
   Js.Promise.resolve ()
 
@@ -3524,6 +3524,9 @@ let test_paste_history_cursors (h : host) =
   paste_history_cursors_case h ~title:"Nonempty destination" ~caret:4 ~history_caret:20
 
 let test_single_block_paste_redo_caret (h : host) =
+  let rec run = function
+  | [] -> Js.Promise.resolve ()
+  | (structured,redo_caret) :: rest ->
   let* () = settle h 40 in
   reset_editor ();
   stage_page h [Test_check.block "paste-single" ""];
@@ -3532,19 +3535,29 @@ let test_single_block_paste_redo_caret (h : host) =
   S.history_input_before := None;
   install_worker ~repo:h.repo h;
   let worker = Option.get !Runtime.worker and options = ref W.Nil and redos = ref 0 in
+  let inserted = W.Map [W.kw "block/uuid",W.Uuid "paste-single";
+    W.kw "block/title",W.String "Gamma single"] in
   let restore title undo =
     Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
       [Test_check.block "paste-single" title]}) !Runtime.current_page;
     h.sync_page ();
     let cursors = List.filter_map (W.get !options)
-      ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+      ["undo-redo/editor-info";"undo-redo/editor-info-after"]
+      |> List.map (function W.Map fields -> W.Map (List.map (fun (key,value) ->
+        key,(if key=W.kw "block-uuid" && value=W.Keyword "last-inserted-block"
+          then W.Uuid "paste-single" else value)) fields) | cursor -> cursor) in
     Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool undo;
       W.kw "editor-cursors",W.List cursors]) in
   Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
     match name,args with
     | "thread-api/apply-outliner-ops",[_;_;opts] ->
         options := opts;
-        worker.invoke_fn name args
+        if structured then begin
+          Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+            [Test_check.block "paste-single" "Gamma single"]}) !Runtime.current_page;
+          h.sync_page ();
+          Js.Promise.resolve (W.Map [W.kw "result",W.Map [W.kw "blocks",W.Array [inserted]]])
+        end else worker.invoke_fn name args
     | "thread-api/undo-redo-undo",_ -> restore "" true
     | "thread-api/undo-redo-redo",_ ->
         incr redos;
@@ -3552,7 +3565,11 @@ let test_single_block_paste_redo_caret (h : host) =
         else if !redos=3 then h.reject_promise "single-block redo rejected"
         else restore "Gamma single" false
     | _ -> worker.invoke_fn name args)};
-  A.splice_clipboard_text "paste-single" "Gamma single";
+  let* () = if structured then
+    let* _ = A.paste_copied_blocks (false,[inserted]) "paste-single"
+      ~sibling:true ~replace_empty:true in Js.Promise.resolve ()
+    else begin A.splice_clipboard_text "paste-single" "Gamma single"; Js.Promise.resolve () end in
+  let* () = settle h 40 in
   check "Single-block paste initially places the caret after the pasted text"
     ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=12);
   let* () = Ops.flush_pending_save () in
@@ -3565,13 +3582,14 @@ let test_single_block_paste_redo_caret (h : host) =
     | name :: rest ->
         A.redo ();
         let* () = settle h 40 in
-        check ("Single-block paste Redo retains caret zero: " ^ name)
-          ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=0);
+        check ((if structured then "Structured" else "Plaintext") ^ " single-block Redo: " ^ name)
+          ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=redo_caret);
         redo rest in
   let* () = redo ["restored text";"empty history";"rejected history"] in
   Runtime.worker := Some worker;
   reset_editor ();
-  Js.Promise.resolve ()
+  run rest in
+  run [false,12;true,0]
 
 let test_structured_paste_completion (h : host) =
   let* () = test_paste_history_cursors h in
@@ -3623,7 +3641,7 @@ let test_structured_paste_completion (h : host) =
              | Some (W.Map kvs) ->
                  List.assoc_opt (W.Keyword "block-uuid") kvs
                    = Some (W.Keyword "last-inserted-block")
-                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Keyword "end")
+                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Int 0)
              | _ -> false);
         reset_editor ();
         run rest

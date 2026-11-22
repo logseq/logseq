@@ -1832,7 +1832,7 @@ let last_inserted_uuid (resp : Wire.t option) : string option =
   | None -> None
 
 
-let schedule_save ?history_after uuid title =
+let schedule_save uuid title =
   if not (match S.editing () with
     | Some e -> e.S.uuid = uuid && S.is_draft e
     | None -> false) then begin
@@ -1846,8 +1846,7 @@ let schedule_save ?history_after uuid title =
         let before, _ = S.consume_history_before () in
         before
   in
-  let after = Option.value history_after ~default:(S.history_cursor ()) in
-  let opts = history_opts ~before ~after () in
+  let opts = history_opts ~before ~after:(S.history_cursor ()) () in
   (match take_pending_save () with
    | Some save when save.uuid <> uuid || save.context.repo <> context.repo ->
        ignore (save_pending save)
