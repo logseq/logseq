@@ -372,6 +372,13 @@ typed over selected text. Selecting `chosen` in `before chosen after` and typing
 `/Query` seeds `before  after`, not `before / after`. An existing literal slash
 after an unselected caret is preserved.
 
+Conversion is not a single graph transaction, matching Master. A rejected final
+write leaves the earlier cleaned host save and empty Query property committed;
+Advanced Query also retains its earlier Query tag. The final query text, host
+clearing, and code metadata are not committed on rejection. No rollback is
+attempted: retry keeps the earlier property rather than deleting graph data that
+may already be referenced. The retained editor buffer remains available to retry.
+
 ## Editing undo after a pending indent
 
 An Undo shortcut during an in-flight structural edit waits for that edit to

@@ -2386,6 +2386,30 @@ let test_query_selection_conversion (h : host) =
             Outliner_ops.flush_pending_save ()
           end else Js.Promise.resolve () in
         let attempts = ref [] and committed = ref [] in
+        let graph = Hashtbl.create 2 in
+        let entity uuid = match Hashtbl.find_opt graph uuid with
+          | Some attrs -> attrs
+          | None -> let attrs = Hashtbl.create 8 in
+              Hashtbl.add attrs "block/uuid" (W.Uuid uuid);
+              Hashtbl.add graph uuid attrs; attrs in
+        let initial_title = (Option.get (S.find "b1")).Model.block_title in
+        Hashtbl.add (entity "b1") "block/title" (W.String initial_title);
+        let graph_value uuid attr = Option.bind (Hashtbl.find_opt graph uuid)
+          (fun attrs -> Hashtbl.find_opt attrs attr) in
+        let apply_graph batch = List.iter (function
+          | W.Array [W.Keyword "save-block";W.Array (W.Map fields :: _)] ->
+              let uuid = Option.get (W.map_get_uuid (W.Map fields) "block/uuid") in
+              List.iter (fun (key,value) -> match key with
+                | W.Keyword attr | W.String attr -> Hashtbl.replace (entity uuid) attr value
+                | _ -> failwith "Invalid query fixture attribute") fields
+          | W.Array [W.Keyword "set-block-property";
+              W.Array [W.Uuid uuid;W.Keyword attr;value]] ->
+              Hashtbl.replace (entity uuid) attr value
+          | W.Array [W.Keyword "create-property-text-block";
+              W.Array (W.Uuid uuid :: W.Keyword attr :: W.String text :: _)] ->
+              Hashtbl.replace (entity uuid) attr (W.Uuid "query-source");
+              Hashtbl.replace (entity "query-source") "block/title" (W.String text)
+          | _ -> failwith "Unsupported query fixture operation") batch in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
           if name="thread-api/apply-outliner-ops" then begin
             (match args with [_;W.Array batch;_] -> attempts := batch :: !attempts | _ -> ());
@@ -2393,14 +2417,14 @@ let test_query_selection_conversion (h : host) =
               h.reject_promise "query conversion rejected"
             else begin
               committed := List.hd !attempts :: !committed;
+              apply_graph (List.hd !attempts);
               Js.Promise.resolve (worker_handler h name args)
             end
           end else if name="thread-api/get-blocks"
             && (match args with [_;W.Array [request]] ->
                   W.get request "id"=Some (W.Uuid "b1") | _ -> false) then
             Js.Promise.resolve (W.Array [W.Map [W.Keyword "block", W.Map
-              [W.Keyword "block/uuid", W.Uuid "b1";
-               W.Keyword "logseq.property/query", W.Uuid "query-source"]]])
+              (Hashtbl.fold (fun attr value attrs -> (W.kw attr,value)::attrs) (entity "b1") [])]])
           else Js.Promise.resolve
             (if owned_call name then worker_handler h name args else h.base_handler name args));
           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -2438,6 +2462,25 @@ let test_query_selection_conversion (h : host) =
                  (S.editing ()) && Option.is_some !Ops.pending_save));
         check "Successful query conversion exits only after its writes complete"
           (rejected > 0 || S.editing ()=None);
+        let clean_host = if replace then "" else expected_query in
+        let query_tag = match graph_value "b1" "block/tags" with
+          | Some (W.Keyword "logseq.class/Query") -> true
+          | Some (W.Set tags) -> List.mem (W.Keyword "logseq.class/Query") tags
+          | _ -> false in
+        check "Query graph retains only Master's successfully committed conversion stages"
+          (graph_value "b1" "block/title"=Some (W.String
+              (if rejected=1 then initial_title else if rejected=2 || advanced then clean_host else ""))
+           && graph_value "b1" "logseq.property/query"=
+              (if rejected=1 then None else Some (W.Uuid "query-source"))
+           && graph_value "query-source" "block/title"=
+              (if rejected=1 then None else Some (W.String
+                (if rejected=2 || advanced then "" else expected_query)))
+           && query_tag=(rejected=0 || advanced && rejected=2));
+        check "Rejected final Query writes leave code metadata uncommitted in the graph"
+          (graph_value "query-source" "logseq.property.node/display-type"=
+              (if advanced && rejected=0 then Some (W.Keyword "code") else None)
+           && graph_value "query-source" "logseq.property.code/lang"=
+              (if advanced && rejected=0 then Some (W.String "clojure") else None));
         run ?selection rest in
   let* () = run ["Search seed parity","Search seed parity",false,0,false;
        "Saved seed","Saved seed with unsaved edits ",false,0,false;
