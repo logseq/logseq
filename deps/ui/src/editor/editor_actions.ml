@@ -2764,7 +2764,9 @@ let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
   let session_current = paste_session_current () in
   let input_seq = !S.edit_input_seq in
   let focus = paste_focus () in
-  let after_caret = match blocks with [_] -> Wire.Int 0 | _ -> Wire.Keyword "end" in
+  let after_caret = match blocks with
+    | [_] when replace_empty -> Wire.Int 0
+    | _ -> Wire.Keyword "end" in
   let opts = paste_history_opts target_uuid ~after_caret in
   let* resp = Ops.apply_and_refresh_result ~opts
       [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in

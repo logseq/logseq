@@ -3533,10 +3533,10 @@ let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
      && W.map_get_string before "scope"=Some "main"
      && W.get before "caret"=Some (W.Int caret)
      && W.get before "start-pos"=Some (W.Int caret));
-  check "Structured single-block paste records the inserted block at zero as its after-cursor"
+  check "Structured single-block paste after a nonempty destination records the inserted block end"
     (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
      && W.map_get_string after "scope"=Some "main"
-     && W.get after "caret"=Some (W.Int 0));
+     && W.get after "caret"=Some (W.Keyword "end"));
   let after = match after with
     | W.Map kvs -> W.Map (List.map (fun (key,value) ->
         key,(if key=W.kw "block-uuid" then W.Uuid "paste-result" else value)) kvs)
@@ -3544,13 +3544,15 @@ let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
   let restore undo = A.restore_history (W.Map [W.kw "undo?",W.Bool undo;
     W.kw "editor-cursors",W.List [before;after]]) in
   let* () = restore true in
+  let* () = settle h 40 in
   check "Structured paste undo restores the captured origin caret"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
      =Some ("paste-origin",caret));
   let* () = restore false in
-  check "Structured single-block paste redo restores the inserted block at zero"
+  let* () = settle h 40 in
+  check "Structured single-block paste after a nonempty destination redoes at the inserted block end"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
-     =Some ("paste-result",0));
+     =Some ("paste-result",String.length "Clipboard parent"));
   reset_editor ();
   Js.Promise.resolve ()
 
