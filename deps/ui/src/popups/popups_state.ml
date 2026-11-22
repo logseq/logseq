@@ -677,9 +677,11 @@ let slash_items ~statuses ~priorities ~has_heading : ac_item list =
       || Option.fold ~none:false ~some:(fun group -> List.mem group groups) item.ai_group) items
 ;;
 
-(* cljs components/editor.cljs no-matched-commands — hardcoded English *)
+(* cljs hardcodes English; LUI uses the shared dict key so locales localize. *)
 let slash_fallback () =
-  mk_item ~key:"no-matched" ~label:"No matched commands" Noop
+  mk_item ~key:"editor.slash/no-matched-commands"
+    ~label:(U.t "editor.slash/no-matched-commands")
+    ~english:(U.en_text "editor.slash/no-matched-commands") Noop
 ;;
 
 (* ---- filtering ---- *)
