@@ -9,14 +9,16 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | Item | Status | Notes |
 |------|--------|-------|
 | Indent undo caret position | done | Captures `:editor/start-pos` on End/arrows; undo restores caret (`1e87a84d81`). |
-| Zoom breadcrumb separator + link styling | done | Kit → semantic `/` + links (`de3b00d1fd`). |
-| ArrowLeft at first block → page title | done | `arrow_edge` falls through to `focus_page_title` like cljs `.ls-page-title` neighbour (`459b2a5028`). |
-| Shift+Click range select while editing | done | `modifier_select` exits edit before range; finish_exit preserves armed bar (`e090c6f6af`). |
+| Zoom breadcrumb separator + link styling | done | Kit → semantic `/` + links (`de3b00d1fd`); typed layout props `a28c7880a5`. |
+| ArrowLeft at first block → page title | done | `arrow_edge` → `focus_page_title` (`459b2a5028`); journal gate via `page_title_focusable` (`3a03022c3b`). |
+| Shift+Click range select while editing | done | Exits edit before range (`e090c6f6af`); editing-block fallback when enter_edit cleared anchor (`a750ce212e`). |
 | No action bar on Shift+arrow exit from edit | done | Removed LUI-only `show_action_bar` after exit; matches master timing where selection is empty when `show-action-bar!` runs (`3c04615938`). |
 | Context menu mod shortcut labels (Ctrl vs ⌘) | done | Shared `mod_cap` with tag menus (`79bca8bdb3`). |
 | Hide selection action bar when context menu opens | done | `open_cm` calls `hide_action_bar` like cljs `shui/popup-hide!` before dots dropdown (`0d523eebd3`). |
 | `editor/open-link-in-sidebar` for `[[page]]` | done | `follow_link ~sidebar` uses `Sidebar_state.open_ref` (`c3e24b9b53`). |
 | Shift+Up typed-char leak | n/a | Probes did not reproduce a typed char landing in block text; dropped. |
+| Indent undo after End mid-block (post-autosave) | done | Home/End/Page* capture live pre-key caret as start-pos (`abdc9534f8`). |
+| Ctrl-click sidebar while editing main | done | `exit_edit ~select:false` preserves `selection_scope` (`d38d908767`). |
 
 ### G1 handoff — non-editor items already committed (G6: skip)
 
