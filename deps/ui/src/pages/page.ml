@@ -43,6 +43,7 @@ let breadcrumb_row (items : (string * string * string) list) : t list =
       ~url:(Runtime.nav_hash hash) ~target:`self_
       ~foreground:"var(--ls-primary-text-color)"
       ~on_press:(nav_crumb hash)
+      (* white-space is a text prop — row rejects it at runtime. *)
       [ text ~style_class:"breadcrumb__label"
           ~white_space:`nowrap ~text_overflow:`ellipsis ~value:label [] ]
   in

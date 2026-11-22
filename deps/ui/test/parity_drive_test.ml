@@ -867,8 +867,8 @@ let test_editor_ctrl_np () =
 let test_arrow_left_first_block ~finish =
   stage_main_session [ block "b1" "first"; block "b2" "second" ];
   set_editing "b1" "first" ~caret:0;
+  let prev_last = !Editor_actions.last_edit_uuid in
   Editor_actions.last_edit_uuid := None;
-  (* Ordinary page with a mounted title — ArrowLeft exits into title. *)
   let document = Stub_dom.document () in
   let title = Stub_dom.make_element "div" in
   Stub_dom.set_field title "className" "ls-page-title";
@@ -901,6 +901,7 @@ let test_arrow_left_first_block ~finish =
             (!Editor_actions.last_edit_uuid = None
              && Editor_state.editing_uuid () = Some "b1");
           Stub_dom.detach title;
+          Editor_actions.last_edit_uuid := prev_last;
           clear_editing ();
           finish ()))
 

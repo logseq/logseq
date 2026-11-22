@@ -1505,8 +1505,11 @@ let test_modifier_select_preserves_sidebar_scope (h : host) =
         ; anchor = None
         ; action_bar = false
         });
+    A.last_edit_uuid := None;
     check (label ^ " is a modifier gesture")
       (Block_selection.modifier_select pointer_ev "side-only");
+    check (label ^ " routes exit_edit")
+      (!A.last_edit_uuid = Some "main-a");
     let* () = settle h 40 in
     check (label ^ " keeps sidebar scope and selected UUID")
       (E.selection_scope () = scope
