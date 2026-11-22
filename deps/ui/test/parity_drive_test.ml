@@ -909,6 +909,7 @@ let test_arrow_left_first_block ~finish =
    still range-select from the editing block. *)
 let test_shift_click_from_edit ~finish =
   let module E = Editor_state in
+  let prev_last = !Editor_actions.last_edit_uuid in
   stage_main_session [ block "a" "A"; block "b" "B"; block "c" "C" ];
   set_editing "a" "A" ~caret:0;
   E.set (fun st ->
@@ -958,6 +959,7 @@ let test_shift_click_from_edit ~finish =
          && E.editing () = None
          && (E.read ()).E.action_bar);
       clear_editing ();
+      Editor_actions.last_edit_uuid := prev_last;
       finish ())
 
 (* ================================================================

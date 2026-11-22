@@ -1455,6 +1455,7 @@ let test_exit_waits_for_save (h : host) =
 
 let test_modifier_select_preserves_sidebar_scope (h : host) =
   let module E = Editor_state in
+  let prev_last = !A.last_edit_uuid in
   let scope = "sidebar-scope" in
   let unregister =
     E.register_block_source ~scope ~kind:E.Outliner (fun () ->
@@ -1510,7 +1511,16 @@ let test_modifier_select_preserves_sidebar_scope (h : host) =
       (Block_selection.modifier_select pointer_ev "side-only");
     check (label ^ " routes exit_edit")
       (!A.last_edit_uuid = Some "main-a");
+    if dirty then
+      check (label ^ " keeps sidebar scope and selected UUID while save pending")
+        (E.selection_scope () = scope
+         && E.String_set.equal (E.selected ())
+              (E.String_set.singleton "side-only")
+         && E.editing_uuid () = Some "main-a");
     let* () = settle h 40 in
+    if dirty then
+      check (label ^ " saves the dirty block through the worker")
+        (List.exists (wire_has "main dirty") (save_ops ()));
     check (label ^ " keeps sidebar scope and selected UUID")
       (E.selection_scope () = scope
        && E.String_set.equal (E.selected ())
@@ -1526,6 +1536,7 @@ let test_modifier_select_preserves_sidebar_scope (h : host) =
   let* () = run ~dirty:false "clean exit" in
   let* () = run ~dirty:true "save exit" in
   unregister ();
+  A.last_edit_uuid := prev_last;
   Js.Promise.resolve ()
 
 let test_sidebar_escape_selection (h : host) =
