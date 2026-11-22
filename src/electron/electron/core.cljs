@@ -402,6 +402,32 @@
       :log-info! logger/info
       :log-warn! logger/warn})))
 
+(defn- <stop-db-workers!
+  [warn-key]
+  (-> (handler/stop-all-db-workers!)
+      (p/catch (fn [error]
+                 (logger/warn warn-key error)
+                 nil))))
+
+(defn- register-before-quit!
+  [^js app']
+  (.on app' "before-quit"
+       (fn [e]
+         (reset! win/*quitting? true)
+         (lifecycle/handle-before-quit!
+          {:event e
+           :already-started? *quit-teardown-started?
+           :prevent-default! (fn [^js event]
+                               (.preventDefault event))
+           :on-error! (fn [error]
+                        (logger/warn :electron/quit-teardown-failed error))
+           :teardown! (fn []
+                        (-> (<stop-db-workers! :electron/quit-stop-workers-failed)
+                            (p/then (fn [_]
+                                      (embedding-server/stop!)))))
+           :exit! (fn []
+                    (.exit app' 0))}))))
+
 (defn- on-app-ready!
   [^js app']
   (.on app' "ready"
@@ -448,11 +474,7 @@
                                    tt (exceptions/setup-exception-listeners!)]
 
                                (vreset! *teardown-fn
-                                        #(-> (handler/stop-all-db-workers!)
-                                             (p/catch
-                                              (fn [error]
-                                                (logger/warn :electron/teardown-stop-workers-failed error)
-                                                nil))
+                                        #(-> (<stop-db-workers! :electron/teardown-stop-workers-failed)
                                              (p/then
                                               (fn [_]
                                                 (p/all (mapv (fn [f]
@@ -485,25 +507,7 @@
                                                  (.hide win)))
                                            :else
                                            nil)))))
-                  (.on app' "before-quit" (fn [e]
-                                            (reset! win/*quitting? true)
-                                            (lifecycle/handle-before-quit!
-                                             {:event e
-                                              :already-started? *quit-teardown-started?
-                                              :prevent-default! (fn [^js event]
-                                                                  (.preventDefault event))
-                                              :on-error! (fn [error]
-                                                           (logger/warn :electron/quit-teardown-failed error))
-                                              :teardown! (fn []
-                                                           (-> (handler/stop-all-db-workers!)
-                                                               (p/catch
-                                                                (fn [error]
-                                                                  (logger/warn :electron/quit-stop-workers-failed error)
-                                                                  nil))
-                                                               (p/then (fn [_]
-                                                                         (embedding-server/stop!)))))
-                                              :exit! (fn []
-                                                       (.exit app' 0))})))
+                  (register-before-quit! app')
 
                   (.on app' "activate" #(when @*win (.show win))))))
              (p/catch (fn [error]
