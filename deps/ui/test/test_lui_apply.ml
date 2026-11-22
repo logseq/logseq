@@ -573,6 +573,48 @@ let test_internal_link_targets () =
         [updated, "_self"; default, "_blank"])
       ["#/all-pages?graph-id=fixture"; ""; "#/page/updated"])
 
+let test_menu_document_keyboard () =
+  let renderer = make_renderer () in
+  let captured = ref [] and renamed = ref 0 in
+  Ui_services.dom_on_document_event ~capture:true "keydown" (fun event ->
+    if not (Editor_keys.control_target event) then
+      captured := Option.value event.Ui_services.key ~default:"" :: !captured;
+    Editor_keys.on_global_key event);
+  Ui_services.dom_on_document_event ~capture:true "keydown" Editor_keys.on_keydown;
+  ignore (Lui_web.set_event_handler renderer (fun event ->
+    (match event with Wv.Press 4 -> incr renamed | _ -> ()); true));
+  let ops = Wv.[create_node_op 1 Column; create_node_op 2 Popover;
+    set_prop_op 2 RoleValue (StringValue "menu");
+    set_prop_op 2 PopupX (FloatValue 64.); set_prop_op 2 PopupY (FloatValue 96.);
+    insert_child_op 1 2 0; create_node_op 3 Column; insert_child_op 2 3 0;
+    create_node_op 4 MenuItem; set_prop_op 4 PressEnabled (BoolValue true);
+    set_prop_op 4 AccessibilityLabel (StringValue "Name"); insert_child_op 3 4 0;
+    create_node_op 5 Text; set_prop_op 5 TextValue (StringValue "Name");
+    insert_child_op 4 5 0] in
+  check "The document keyboard fixture mounts an actual role-menu popover" (apply renderer 1 ops);
+  let popup_node = platform (Option.get (Store.node renderer.T.web_store 2)) in
+  let popup = Lui_web_util.child_element popup_node 0 in
+  Lui_web_util.focus_element_without_scroll popup;
+  let send key = Stub_dom.fire_on ~fields:["key", Js.Json.string key]
+    (Stub_dom.get_field (Stub_dom.document ()) "activeElement") "keydown" in
+  send "ArrowDown";
+  let name = platform (Option.get (Store.node renderer.T.web_store 4)) in
+  check "Document ArrowDown reaches the menu before block-selection shortcuts"
+    (!captured = [] && Stub_dom.get_field (Stub_dom.document ()) "activeElement" == of_json name);
+  send "Enter";
+  check "Document Enter activates the menu's Name row rather than block editing"
+    (!renamed = 1 && !captured = []);
+  ignore (apply renderer 2 [Wv.set_prop_op 4 Wv.Enabled (Wv.BoolValue false)]);
+  Lui_web_util.focus_element_without_scroll popup;
+  send "ArrowDown"; send "Enter";
+  check "A disabled Name row does not activate or expose the underlying editor"
+    (!renamed = 1 && !captured = []);
+  ignore (apply renderer 3 [Wv.detach_subtree_op 4]);
+  send "ArrowDown"; send "Enter";
+  check "An empty menu keeps navigation out of the underlying editor"
+    (!renamed = 1 && !captured = []);
+  ignore (apply renderer 4 [Wv.detach_subtree_op 1])
+
 let test_icon_palette_search_lifecycle () =
   let renderer = make_renderer () in
   let () = [%mel.raw "window.__emojiData = require('@emoji-mart/data')"] in
