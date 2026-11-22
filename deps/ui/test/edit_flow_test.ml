@@ -1453,6 +1453,112 @@ let test_exit_waits_for_save (h : host) =
   reset_editor ();
   Js.Promise.resolve ()
 
+let test_modifier_select_preserves_sidebar_scope (h : host) =
+  let module E = Editor_state in
+  let scope = "sidebar-scope" in
+  let unregister =
+    E.register_block_source ~scope ~kind:E.Outliner (fun () ->
+        [ block "side-only" "side" ])
+  in
+  let pointer_ev =
+    { Ui_services.x = 0.
+    ; y = 0.
+    ; shift = false
+    ; meta = false
+    ; ctrl = true
+    ; alt = false
+    ; composing = false
+    ; key = None
+    ; key_char = None
+    ; buttons = 1
+    ; button = 0
+    ; repeat = false
+    ; movement_x = 0.
+    ; movement_y = 0.
+    ; default_prevented = false
+    ; target = None
+    ; touches = []
+    ; detail = (fun _ -> None)
+    ; detail_json = (fun _ -> None)
+    ; clipboard_get = (fun _ -> "")
+    ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
+    ; clipboard_set = (fun _ _ -> ())
+    ; data_transfer_get = (fun _ -> "")
+    ; files = []
+    ; has_files = false
+    ; prevent_default = (fun () -> ())
+    ; stop_propagation = (fun () -> ())
+    ; stop_immediate = (fun () -> ())
+    }
+  in
+  let run ~dirty label =
+    let* () = settle h 40 in
+    reset_editor ();
+    stage_page h [ block "main-a" "main"; block "main-b" "b" ];
+    install_worker ~repo:h.repo h;
+    set_editing ~uuid:"main-a" ~buffer:(if dirty then "main dirty" else "main")
+      ~caret:0 ~base:"main";
+    E.set (fun st ->
+        { st with
+          E.selection_scope = scope
+        ; selected = E.String_set.empty
+        ; anchor = None
+        ; action_bar = false
+        });
+    check (label ^ " is a modifier gesture")
+      (Block_selection.modifier_select pointer_ev "side-only");
+    let* () = settle h 40 in
+    check (label ^ " keeps sidebar scope and selected UUID")
+      (E.selection_scope () = scope
+       && E.String_set.equal (E.selected ())
+            (E.String_set.singleton "side-only")
+       && E.editing () = None);
+    check (label ^ " resolves selected UUID in the preserved scope")
+      (List.exists
+         (fun b -> b.Model.block_uuid = Some "side-only")
+         (A.selection_forest ()));
+    reset_editor ();
+    Js.Promise.resolve ()
+  in
+  let* () = run ~dirty:false "clean exit" in
+  let* () = run ~dirty:true "save exit" in
+  unregister ();
+  Js.Promise.resolve ()
+
+let test_sidebar_escape_selection (h : host) =
+  let scope = "escape-sidebar" in
+  let rec run = function
+    | [] -> Js.Promise.resolve ()
+    | dirty :: rest ->
+        let* () = settle h 40 in
+        stage_page h [ block "b1" "side" ];
+        install_worker ~repo:h.repo h;
+        let unregister =
+          S.register_block_source ~scope ~kind:S.Outliner (fun () ->
+              (Option.get !Runtime.current_page).Model.page_blocks)
+        in
+        set_editing ~uuid:"b1" ~buffer:(if dirty then "side dirty" else "side")
+          ~caret:0 ~base:"side";
+        S.set (fun st ->
+            { st with
+              S.editing = Some { (editing_now ()) with S.scope }
+            ; selection_scope = scope
+            ; selected = S.String_set.empty
+            });
+        A.exit_edit ~select:true;
+        let* () = settle h 40 in
+        check "Escape selects the edited sidebar block in its own scope"
+          (S.editing () = None && S.selection_scope () = scope
+           && S.String_set.equal (S.selected ()) (S.String_set.singleton "b1"));
+        check "Escape retains the sidebar block source"
+          (List.exists (fun b -> b.Model.block_uuid = Some "b1")
+             (A.selection_forest ()));
+        unregister ();
+        reset_editor ();
+        run rest
+  in
+  run [ false; true ]
+
 let test_select_all_exit (h : host) =
   let* () = settle h 40 in
   let rec run = function
@@ -3267,6 +3373,8 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_indent_type_double_undo_caret h in
   let* () = test_indent_undo_restores_start_pos h in
   let* () = test_exit_waits_for_save h in
+  let* () = test_modifier_select_preserves_sidebar_scope h in
+  let* () = test_sidebar_escape_selection h in
   let* () = test_select_all_exit h in
   let* () = test_task_cycle h in
   let* () = test_enter_edit_origin h in

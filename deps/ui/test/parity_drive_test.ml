@@ -110,6 +110,7 @@ let stage_main_session blocks =
   staged_model :=
     { Model.initial with
       Model.repo = Some "logseq_db_test"
+    ; route = Model.Page p.Model.page_title
     ; route_page = Some p };
   Runtime.read_model := (fun () -> !staged_model);
   Runtime.current_page := Some p
@@ -537,7 +538,7 @@ let test_editor_shift_enter () =
      && Editor_state.editing_uuid () = Some "b1");
   clear_editing ()
 
-let test_editor_escape () =
+let test_editor_escape ~finish =
   stage_main_session [ block "b1" "Hello" ];
   set_editing "b1" "Hello" ~caret:0;
   Editor_keys.apply_input "b1"
@@ -553,7 +554,8 @@ let test_editor_escape () =
      commit pending, so only the routing half is observable here *)
   after 8 (fun () ->
       check "Escape routes to exit_edit"
-        (!Editor_actions.last_edit_uuid = Some "b1"))
+        (!Editor_actions.last_edit_uuid = Some "b1");
+      finish ())
 
 (* cljs: mod+b/mod+i insert markers or remove a matching wrapper. *)
 let test_editor_format_wraps () =
@@ -862,7 +864,7 @@ let test_editor_ctrl_np () =
    .ls-block neighbour of the first content row. Finish_exit needs a
    worker save reply the fake harness cannot fully emulate, so assert
    the exit_edit route like Escape (last_edit_uuid). *)
-let test_arrow_left_first_block () =
+let test_arrow_left_first_block ~finish =
   stage_main_session [ block "b1" "first"; block "b2" "second" ];
   set_editing "b1" "first" ~caret:0;
   Editor_actions.last_edit_uuid := None;
@@ -899,94 +901,12 @@ let test_arrow_left_first_block () =
             (!Editor_actions.last_edit_uuid = None
              && Editor_state.editing_uuid () = Some "b1");
           Stub_dom.detach title;
-          clear_editing ()))
-
-(* Ctrl-click a sidebar-only block while editing main: finish_exit must
-   keep the sidebar selection_scope so Delete can resolve the UUID. *)
-let test_modifier_select_preserves_sidebar_scope () =
-  let module E = Editor_state in
-  let module A = Editor_actions in
-  let scope = "sidebar-scope" in
-  stage_main_session [ block "main-a" "main"; block "main-b" "b" ];
-  let unregister =
-    E.register_block_source ~scope ~kind:E.Outliner (fun () ->
-        [ block "side-only" "side" ])
-  in
-  let pointer_ev =
-    { Ui_services.x = 0.
-    ; y = 0.
-    ; shift = false
-    ; meta = false
-    ; ctrl = true
-    ; alt = false
-    ; composing = false
-    ; key = None
-    ; key_char = None
-    ; buttons = 1
-    ; button = 0
-    ; repeat = false
-    ; movement_x = 0.
-    ; movement_y = 0.
-    ; default_prevented = false
-    ; target = None
-    ; touches = []
-    ; detail = (fun _ -> None)
-    ; detail_json = (fun _ -> None)
-    ; clipboard_get = (fun _ -> "")
-    ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
-    ; clipboard_set = (fun _ _ -> ())
-    ; data_transfer_get = (fun _ -> "")
-    ; files = []
-    ; has_files = false
-    ; prevent_default = (fun () -> ())
-    ; stop_propagation = (fun () -> ())
-    ; stop_immediate = (fun () -> ())
-    }
-  in
-  let run ~dirty label =
-    set_editing "main-a" "main" ~caret:0;
-    (match E.editing () with
-     | Some e ->
-         E.set (fun st ->
-             { st with
-               E.editing =
-                 Some
-                   { e with
-                     E.base = "main"
-                   ; buffer = (if dirty then "main dirty" else "main")
-                   }
-             })
-     | None -> ());
-    (* pointerdown switches scope before modifier_select *)
-    E.set (fun st ->
-        { st with
-          E.selection_scope = scope
-        ; selected = E.String_set.empty
-        ; anchor = None
-        ; action_bar = false
-        });
-    check (label ^ " is a modifier gesture")
-      (Block_selection.modifier_select pointer_ev "side-only");
-    after (if dirty then 20 else 8) (fun () ->
-        check (label ^ " keeps sidebar scope and selected UUID")
-          (E.selection_scope () = scope
-           && E.String_set.equal (E.selected ())
-                (E.String_set.singleton "side-only")
-           && E.editing () = None);
-        check (label ^ " resolves selected UUID in the preserved scope")
-          (List.exists
-             (fun b -> b.Model.block_uuid = Some "side-only")
-             (A.selection_forest ()));
-        clear_editing ())
-  in
-  run ~dirty:false "clean exit";
-  after 8 (fun () ->
-      run ~dirty:true "save exit";
-      after 20 (fun () -> unregister ()))
+          clear_editing ();
+          finish ()))
 
 (* Enter_edit clears the press anchor; Shift-click another block must
    still range-select from the editing block. *)
-let test_shift_click_from_edit () =
+let test_shift_click_from_edit ~finish =
   let module E = Editor_state in
   stage_main_session [ block "a" "A"; block "b" "B"; block "c" "C" ];
   set_editing "a" "A" ~caret:0;
@@ -1036,7 +956,8 @@ let test_shift_click_from_edit () =
          && E.anchor () = Some "a"
          && E.editing () = None
          && (E.read ()).E.action_bar);
-      clear_editing ())
+      clear_editing ();
+      finish ())
 
 (* ================================================================
    C. Block context menu — cljs components/content.cljs
@@ -2155,7 +2076,6 @@ let run ~finish =
   test_cm_submenu st;
   test_cm_keynav st s;
   (* B. editor keys *)
-  test_editor_escape ();
   test_editor_shift_enter ();
   test_editor_format_wraps ();
   test_editor_word_nav ();
@@ -2172,9 +2092,6 @@ let run ~finish =
   test_editor_paste_url_over_visual_selection ();
   test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
-  test_arrow_left_first_block ();
-  test_shift_click_from_edit ();
-  test_modifier_select_preserves_sidebar_scope ();
   test_editor_tab ();
   test_editor_enter_split ();
   (* D. page menu *)
@@ -2188,6 +2105,9 @@ let run ~finish =
   test_sidebar_nav ();
   after 30 (fun () ->
       async_checks ();
+      test_editor_escape ~finish:(fun () ->
+      test_arrow_left_first_block ~finish:(fun () ->
+      test_shift_click_from_edit ~finish:(fun () ->
       test_preview_lifetime st ~finish:(fun () ->
       (* cleanup after the deferred stage so async ops still resolve
          against the live session *)
@@ -2201,4 +2121,4 @@ let run ~finish =
       P.close_cm st;
       ignore (Lui_app.dispose s.S.app);
       restore snap;
-      finish ()))
+      finish ())))))

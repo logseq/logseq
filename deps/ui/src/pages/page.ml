@@ -44,16 +44,14 @@ let breadcrumb_row (items : (string * string * string) list) : t list =
       ~foreground:"var(--ls-primary-text-color)"
       ~on_press:(nav_crumb hash)
       [ text ~style_class:"breadcrumb__label"
-          ~text_overflow:`ellipsis ~value:label [] ]
+          ~white_space:`nowrap ~text_overflow:`ellipsis ~value:label [] ]
   in
   match items with
   | [] -> []
   | items ->
       (* Typed layout only — raw style attrs would not reach native hosts. *)
       [ Ui_components.with_props
-          [ Ui_components.Prop.overflow `hidden
-          ; Ui_components.Prop.white_space `nowrap
-          ]
+          [ Ui_components.Prop.overflow `hidden ]
           (row ~key:"bc" ~min_width:0 ~grow:1. ~padding_vertical:8 ~gap:0
              ~cross:`center
              ~style_class:"breadcrumb block-parents breadcrumb--block-page"
