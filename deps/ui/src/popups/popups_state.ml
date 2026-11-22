@@ -1515,7 +1515,7 @@ let query_closed ac q = query_closed_kind ac.kind q
 let on_buffer_change ?before t ~deleted uuid =
   let replaced_source = Option.bind before (fun model ->
     match Edit_model.selection_range model with
-    | Some (0, last) when last = S.length model.Edit_model.source -> Some model.source
+    | Some _ -> Some model.source
     | _ -> None) in
   let open_for_change kind = open_ac ?replaced_source t kind in
   match Editor_actions.edit_model uuid with

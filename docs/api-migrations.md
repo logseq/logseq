@@ -350,8 +350,8 @@ does not redirect the newer route. Empty titles and failed writes do not navigat
 ## Slash Query conversion after selection replacement
 
 Simple Query takes its initial search text from the live editing buffer with the
-slash trigger removed, preserving unsaved edits. A whole-buffer selection
-replacement captures the selected text before slash insertion instead.
+slash trigger removed, preserving unsaved edits. Slash input over a selection
+captures the full editing source before insertion instead.
 For example, replacing `G5RegressionToken` with `/Query` and choosing Query
 creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
 to retain the slash-cleared live host title and create an empty code query.
@@ -370,10 +370,11 @@ conversion is pending saves the cleaned host title, never `/Advanced Query`.
 If conversion fails while that editor is still owned, its original buffer and
 caret are restored for retry; completion never replaces a newer editor.
 
-Query conversion also removes the paired closing slash when the command was
-typed over selected text. Selecting `chosen` in `before chosen after` and typing
-`/Query` seeds `before  after`, not `before / after`. An existing literal slash
-after an unselected caret is preserved.
+Slash input autopairs around selected text, as Master does. Selecting `chosen`
+in `before chosen after`, typing `/Query`, and choosing Query seeds
+`before chosen after` from the captured source, not the intermediate paired text.
+The host cleanup also removes the paired closing slash after a typed command;
+an existing literal slash after an unselected caret is preserved.
 
 Conversion is not a single graph transaction, matching Master. A rejected final
 write leaves the earlier cleaned host save and empty Query property committed;

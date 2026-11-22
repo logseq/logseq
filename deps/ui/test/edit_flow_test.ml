@@ -2357,7 +2357,15 @@ let test_calculator_exit_structure (h : host) =
 let test_query_selection_conversion (h : host) =
   let previous_popup = !Popups_state.active in
   let popup = Option.get previous_popup in
-  let rec run ?selection = function
+  let popup_key key =
+    { Ui_services.x=0.;y=0.;shift=false;meta=false;ctrl=false;alt=false;
+      composing=false;key=Some key;key_char=Some key;buttons=0;button=0;repeat=false;
+      movement_x=0.;movement_y=0.;default_prevented=false;target=None;touches=[];
+      detail=(fun _ -> None);detail_json=(fun _ -> None);clipboard_get=(fun _ -> "");
+      clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+      clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+      prevent_default=(fun () -> ());stop_propagation=(fun () -> ());stop_immediate=(fun () -> ()) } in
+  let rec run ?selection ?(filter_query=true) = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (title, edited, advanced, rejected, replace) :: rest ->
@@ -2366,17 +2374,32 @@ let test_query_selection_conversion (h : host) =
         Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
         (* Append and selection-replacement slash input share the saved block. *)
-        let expected_query = String.trim (match selection with
+        let expected_query = String.trim edited in
+        let expected_cleared = String.trim (match selection with
           | Some (first,last) -> String.sub edited 0 first
               ^ String.sub edited last (String.length edited-last)
           | None -> edited) in
         if replace || Option.is_some selection then begin
           set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
-          A.update_model "b1" (match selection with
-            | None -> Edit_model.select_all
-            | Some (anchor,focus) -> fun model -> Edit_model.select model ~anchor ~focus);
+          (match selection with
+           | None -> A.update_model "b1" Edit_model.select_all
+           | Some (first,last) ->
+               Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Home",false));
+               for _ = 1 to first do
+                 Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "ArrowRight",false))
+               done;
+               for _ = first+1 to last do
+                 Editor_keys.apply_input "b1" (EI.Key (EM.key_ev ~shift:true "ArrowRight",false))
+               done;
+               check "Query source is visibly selected through navigation keys"
+                 (EM.selection_range (editing_now ()).model =
+                    (if first=last then None else Some (first,last))));
+          Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "/",false));
           Editor_keys.apply_input "b1" (EI.Insert "/");
-          Editor_keys.apply_input "b1" (EI.Insert "Query")
+          if filter_query then String.iter (fun c ->
+            let text = String.make 1 c in
+            Editor_keys.apply_input "b1" (EI.Key (EM.key_ev text,false));
+            Editor_keys.apply_input "b1" (EI.Insert text)) "Query"
         end else begin
           let source = edited ^ "/Query" in
           set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
@@ -2432,7 +2455,17 @@ let test_query_selection_conversion (h : host) =
           else Js.Promise.resolve
             (if owned_call name then worker_handler h name args else h.base_handler name args));
           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
-        Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced;
+        (match selection with
+         | None -> Popups_state.run_query popup
+             (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced
+         | Some _ ->
+             let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+             let index = List.find_index (fun item ->
+               item.Popups_state.ai_act=Popups_state.Run_query false) ac.items |> Option.get in
+             for _ = 1 to index do ignore (Popups_state.ac_keydown popup (popup_key "ArrowDown")) done;
+             Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Enter",false));
+             check "Query conversion is chosen through the live popup Enter handler"
+               (Popups_state.ac_keydown popup (popup_key "Enter")));
         let* () = h.wait_ms 25 in
         let* () = settle h 40 in
         let batch = List.concat !committed in
@@ -2466,7 +2499,7 @@ let test_query_selection_conversion (h : host) =
                  (S.editing ()) && Option.is_some !Ops.pending_save));
         check "Successful query conversion exits only after its writes complete"
           (rejected > 0 || S.editing ()=None);
-        let clean_host = if replace then "" else expected_query in
+        let clean_host = if replace then "" else expected_cleared in
         let query_tag = match graph_value "b1" "block/tags" with
           | Some (W.Keyword "logseq.class/Query") -> true
           | Some (W.Set tags) -> List.mem (W.Keyword "logseq.class/Query") tags
@@ -2485,7 +2518,7 @@ let test_query_selection_conversion (h : host) =
               (if advanced && rejected=0 then Some (W.Keyword "code") else None)
            && graph_value "query-source" "logseq.property.code/lang"=
               (if advanced && rejected=0 then Some (W.String "clojure") else None));
-        run ?selection rest in
+        run ?selection ~filter_query rest in
   let* () = run ["Search seed parity","Search seed parity",false,0,false;
        "G5RegressionToken","G5RegressionToken ",false,0,false;
        "Saved seed","Saved seed with unsaved edits ",false,0,false;
@@ -2505,7 +2538,9 @@ let test_query_selection_conversion (h : host) =
     ["before chosen after","before chosen after",false,0,false;
      "before chosen after","before chosen after",false,2,false;
      "before       after","before       after",false,0,false] in
-  run ~selection:(7,7) ["before  /literal","before  /literal",false,0,false]
+  let* () = run ~selection:(7,7) ["before  /literal","before  /literal",false,0,false] in
+  run ~selection:(7,13) ~filter_query:false
+    ["before chosen after","before chosen after",false,0,false]
 
 let test_query_navigation_conversion (h : host) =
   let popup = Option.get !Popups_state.active in
