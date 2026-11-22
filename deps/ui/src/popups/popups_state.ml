@@ -1982,14 +1982,15 @@ let run_query t ac ~advanced =
         | None -> false) ac.editor in
       let last = if paired_slash && trigger_last < S.length model.source
         && S.get model.source trigger_last = '/' then trigger_last + 1 else trigger_last in
-      let title = (Edit_model.splice model first last "").Edit_model.source in
-      let query_title = Option.value ac.replaced_source ~default:title in
+      let cleared_model = Edit_model.splice model first last "" in
+      let title = String.trim cleared_model.Edit_model.source in
+      let query_title = String.trim (Option.value ac.replaced_source ~default:title) in
       let conversion_buffer = ref editing.buffer in
       let editor_current () = ac_current ac && match Editor_state.editing () with
         | Some current -> current.buffer = !conversion_buffer
         | None -> false in
       if advanced then begin
-        Editor_actions.update_model buuid (fun _ -> Edit_model.splice model first last "");
+        Editor_actions.update_model buuid (fun _ -> Edit_model.set_source cleared_model title);
         conversion_buffer := title
       end;
       let repo_v = repo () in

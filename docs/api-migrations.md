@@ -356,6 +356,9 @@ For example, replacing `G5RegressionToken` with `/Query` and choosing Query
 creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
 to retain the slash-cleared live host title and create an empty code query.
 Autosave while the menu is open does not replace this captured search text.
+The slash-cleared title and captured search text are trimmed at conversion,
+matching Master's command removal and save boundary. Appending ` /Query` to
+`G5RegressionToken` therefore persists `G5RegressionToken`, without trailing space.
 Conversion keeps the editor and its original buffer until every conversion write
 succeeds, then clears editing without a competing save-exit write. A failed
 initial or final write retains the buffer and re-arms autosave so unsaved text

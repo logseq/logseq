@@ -2362,10 +2362,10 @@ let test_query_selection_conversion (h : host) =
         Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
         (* Append and selection-replacement slash input share the saved block. *)
-        let expected_query = match selection with
+        let expected_query = String.trim (match selection with
           | Some (first,last) -> String.sub edited 0 first
               ^ String.sub edited last (String.length edited-last)
-          | None -> edited in
+          | None -> edited) in
         if replace || Option.is_some selection then begin
           set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
           A.update_model "b1" (match selection with
@@ -2483,9 +2483,12 @@ let test_query_selection_conversion (h : host) =
               (if advanced && rejected=0 then Some (W.String "clojure") else None));
         run ?selection rest in
   let* () = run ["Search seed parity","Search seed parity",false,0,false;
+       "G5RegressionToken","G5RegressionToken ",false,0,false;
        "Saved seed","Saved seed with unsaved edits ",false,0,false;
        "", "",false,0,false;
+       "", " \t ",false,0,false;
        "Advanced seed","Advanced seed",true,0,false;
+       "Advanced seed","Advanced seed ",true,0,false;
        "Retain on rejection","Retain on rejection",false,1,false;
        "Saved seed","Unsaved edit on rejection ",false,1,false;
        "Saved seed","Unsaved edit on final rejection ",false,2,false;
