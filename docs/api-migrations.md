@@ -392,6 +392,8 @@ When no earlier navigation position is recorded, indent/outdent captures the
 current caret before writing history. A clean `Indent child` block at offset 2
 therefore returns to offset 2 after Tab then Cmd+Z. Existing Home/End start
 positions remain authoritative.
+Plain Arrow keys refresh the pending history cursor after moving, so Home then
+Right twice before Tab and Undo restores offset 2 rather than the pre-Home caret.
 
 ## Structured paste undo caret
 

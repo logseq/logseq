@@ -1478,6 +1478,14 @@ and apply_input ?frame uuid ev =
          model — republishing m' here would push the stale buffer back
          over the committed merge *)
       A.update_model uuid (fun m_cur -> if m_cur == e.S.model then m' else m_cur);
+      (match ev, S.editing () with
+       | Edit_input.Key
+           ({ Edit_model.key = "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown"
+            ; meta = false; ctrl = false; alt = false; shift = false }, _), Some current
+         when current.S.epoch == e.S.epoch ->
+           S.note_editor_start_pos_from_arrow current.S.model.Edit_model.caret;
+           S.record_history_start ~force:true current
+       | _ -> ());
       (match ev with
        | Edit_input.Blur when S.is_draft e ->
            A.schedule_blur_commit ~keep:(fun () ->

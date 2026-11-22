@@ -1237,7 +1237,7 @@ let test_indent_undo_key_dispatch (h : host) =
   let* () = settle h 40 in
   reset_editor ();
   stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Indent child"];
-  set_editing ~uuid:"b2" ~buffer:"Indent child" ~caret:2 ~base:"Indent child";
+  set_editing ~uuid:"b2" ~buffer:"Indent child" ~caret:12 ~base:"Indent child";
   S.clear_editor_start_pos ();
   S.history_input_before := None;
   install_worker ~repo:h.repo h;
@@ -1266,6 +1266,10 @@ let test_indent_undo_key_dispatch (h : host) =
   let previous_cmdk = !Cmdk_state.latest_st in
   Option.iter (fun state -> Cmdk_state.latest_st := Some
     {state with Cmdk_state.svs = {state.Cmdk_state.svs with Cmdk_state.Svs.undo=A.undo}}) previous_cmdk;
+  List.iter (fun key -> Editor_keys.apply_input "b2" (EI.Key (EM.key_ev key,false)))
+    ["Home";"ArrowRight";"ArrowRight"];
+  check "Home and two Right key events place the indent caret at two"
+    ((editing_now ()).model.EM.caret=2);
   Editor_keys.apply_input "b2" (EI.Key (EM.key_ev "Tab",false));
   let* () = h.wait_ms 25 in
   check "Indent is pending when the editing undo shortcut arrives" !S.structure_pending;
