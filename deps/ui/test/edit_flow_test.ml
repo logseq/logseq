@@ -3096,6 +3096,39 @@ let test_asset_insert_placement (h : host) =
   h.restore before;
   Js.Promise.resolve ()
 
+let test_breadcrumb_parent_loading (h : host) =
+  let previous = !Runtime.worker in
+  let worker = Option.get previous in
+  let mode = ref `Parents in
+  let titles = ["P14088 Editor"; "Alpha first"; "Long parent"; "Nearest parent"] in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn = (fun name args ->
+    if name <> "thread-api/get-block-parents" then worker.Worker_client.invoke_fn name args
+    else match !mode with
+      | `Reject -> h.reject_promise "parent load rejected"
+      | `Empty -> Js.Promise.resolve (W.List [])
+      | `Parents ->
+          let depth = match args with [_;_;W.Int depth] -> depth | _ -> 3 in
+          let visible = List.filteri (fun i _ -> i >= List.length titles - depth) titles in
+          Js.Promise.resolve (W.List (List.mapi (fun i title -> W.Map
+            [W.kw "block/title", W.String title;
+             W.kw "block/uuid", W.Uuid ("parent-" ^ string_of_int i)]) visible)))};
+  let task =
+    let* parents = Ops.fetch_page_parents h.repo "zoomed-leaf" in
+    check "Zoom breadcrumb loading includes the containing page above three block ancestors"
+      (List.map (fun b -> b.Model.block_title) parents = titles);
+    mode := `Empty;
+    let* parents = Ops.fetch_page_parents h.repo "root-page" in
+    check "Root pages have no placeholder breadcrumb parents" (parents = []);
+    mode := `Reject;
+    let* rejected = Ops.fetch_page_parents h.repo "zoomed-leaf"
+      |> Js.Promise.then_ (fun _ -> Js.Promise.resolve false)
+      |> Js.Promise.catch (fun _ -> Js.Promise.resolve true) in
+    check "Breadcrumb parent failures propagate to the route loader" rejected;
+    Runtime.worker := previous;
+    Js.Promise.resolve () in
+  task |> Js.Promise.catch (fun _ -> Runtime.worker := previous;
+    failwith "Breadcrumb parent test failed")
+
 let test_append_owner (h : host) =
   let rec run = function
     | [] -> Js.Promise.resolve ()
@@ -3468,5 +3501,6 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_zoom_out_origin h in
   let* () = test_append_owner h in
   let* () = test_asset_insert_placement h in
+  let* () = test_breadcrumb_parent_loading h in
   h.restore saved;
   Js.Promise.resolve ()

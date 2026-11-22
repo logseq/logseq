@@ -364,3 +364,10 @@ Paste snapshots the live caret before its transaction and consumes that snapshot
 not an older Home/End navigation cursor. Pasting at offset 4 in
 `Nonempty destination` restores offset 4 on undo; redo still edits the last
 inserted block at its end. This applies to copied subtrees and Markdown paste.
+
+## Zoom breadcrumb ancestor loading
+
+Route loads and refreshes share the ancestor loader and explicitly request depth
+1000, as Master's complete breadcrumb resource does. The worker's default depth
+3 is not a page boundary: a fourth-level leaf must include its containing page
+before its block ancestors. Empty ancestry stays empty; load failures propagate.

@@ -497,19 +497,7 @@ let rec load_page_ref ?(accept_missing = false) for_route ref_v =
       let* p'' =
         match p''.Model.page_uuid with
         | Some u ->
-            (let* parents_w =
-               Runtime.invoke2 "thread-api/get-block-parents"
-                 (Wire.String (repo ()))
-                 (Wire.List
-                    [ Wire.Keyword "block/uuid"; Wire.Uuid u ])
-             in
-             let page_parents =
-               Wire.elems parents_w
-               |> List.filter_map (fun w ->
-                      match w with
-                      | Wire.Map _ -> Some (Decode.block_of_wire w)
-                      | _ -> None)
-             in
+            (let* page_parents = Outliner_ops.fetch_page_parents (repo ()) u in
              Js.Promise.resolve { p'' with Model.page_parents })
         | None -> Js.Promise.resolve p''
       in
@@ -655,20 +643,7 @@ let load_block_zoom uuid =
              in
              let collapsed = ref Editor_state.String_set.empty in
              ignore
-               ((let* parents_w =
-                  Runtime.invoke2 "thread-api/get-block-parents"
-                    (Wire.String (repo ()))
-                    (Wire.List
-                       [ Wire.Keyword "block/uuid"; Wire.Uuid uuid ])
-                in
-                let page_parents =
-                  Wire.elems parents_w
-                  |> List.filter_map (fun w ->
-                         match w with
-                         | Wire.Map _ ->
-                             Some (Decode.block_of_wire w)
-                         | _ -> None)
-                in
+               ((let* page_parents = Outliner_ops.fetch_page_parents (repo ()) uuid in
                 let* bs0 = Outliner_ops.fill_embed_children (repo ()) ancestors collapsed [ b ] in
                 let* bs = Outliner_ops.resolve_block_tags bs0 in
                 (* drop the late result when the
