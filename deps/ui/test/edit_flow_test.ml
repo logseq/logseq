@@ -2498,7 +2498,7 @@ let test_query_selection_conversion (h : host) =
     ["before chosen after","before chosen after",false,0,false;
      "before chosen after","before chosen after",false,2,false;
      "before       after","before       after",false,0,false] in
-  run ~selection:(7,7) ["before /literal","before /literal",false,0,false]
+  run ~selection:(7,7) ["before  /literal","before  /literal",false,0,false]
 
 let test_query_navigation_conversion (h : host) =
   let popup = Option.get !Popups_state.active in
@@ -2513,7 +2513,9 @@ let test_query_navigation_conversion (h : host) =
         set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
         Popups_state.open_ac ~tpos:(String.length title) ~autopair:false popup Popups_state.Slash;
         install_worker ~repo:h.repo h;
-        let release = ref (fun () -> ()) and fetching = ref false and writes = ref 0 in
+        let release = ref (fun () -> ()) and fetched = ref (fun () -> ()) and writes = ref 0 in
+        let host_saved = Js.Promise.make (fun ~resolve ~reject:_ ->
+          fetched := (fun () -> let value = () in resolve value [@u])) in
         let gate = Js.Promise.make (fun ~resolve ~reject:_ ->
           release := (fun () -> resolve (W.Array [W.Map [W.kw "block", W.Map
             [W.kw "block/uuid",W.Uuid "b1";
@@ -2521,7 +2523,7 @@ let test_query_navigation_conversion (h : host) =
         Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
           if name="thread-api/get-blocks" && (match args with
             | [_;W.Array [request]] -> W.get request "id"=Some (W.Uuid "b1")
-            | _ -> false) then begin fetching:=true; gate end
+            | _ -> false) then begin !fetched (); gate end
           else if name="thread-api/apply-outliner-ops" then begin
             incr writes;
             if rejected && !writes=2 then h.reject_promise "conversion final write rejected"
@@ -2530,17 +2532,18 @@ let test_query_navigation_conversion (h : host) =
             (if owned_call name then worker_handler h name args else h.base_handler name args));
           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
         Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced:true;
-        let* () = settle h 40 in
+        let* () = host_saved in
         check "Advanced Query waits with a slash-cleared editor after saving its host"
-          (!fetching && (editing_now ()).buffer=title && current_titles ()=[title;"Other block"]);
+          (!writes=1 && (editing_now ()).buffer=title && current_titles ()=[title;"Other block"]);
         A.enter_edit "b2" 0;
         let* () = settle h 40 in
         check "Entering another block cannot recommit the pending Advanced Query trigger"
           ((editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
         !release ();
+        let* () = h.wait_ms 25 in
         let* () = settle h 40 in
         check "Advanced Query completion or rejection preserves the newer editor and clean host"
-          ((editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
+          (!writes=2 && (editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
         run rest in
   run ["Advanced seed",false;"",false;"Retain cleaned host",true]
 
