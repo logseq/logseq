@@ -49,11 +49,14 @@ let breadcrumb_row (items : (string * string * string) list) : t list =
   match items with
   | [] -> []
   | items ->
+      (* Typed layout only — raw style attrs would not reach native hosts. *)
       [ Ui_components.with_props
-          [ Ui_components.Prop.overflow `hidden ]
-          (row ~key:"bc" ~min_width:0 ~padding_vertical:8 ~gap:0 ~cross:`center
+          [ Ui_components.Prop.overflow `hidden
+          ; Ui_components.Prop.white_space `nowrap
+          ]
+          (row ~key:"bc" ~min_width:0 ~grow:1. ~padding_vertical:8 ~gap:0
+             ~cross:`center
              ~style_class:"breadcrumb block-parents breadcrumb--block-page"
-             ~data_attrs:[ ("style", "max-width:100%;white-space:nowrap") ]
              (interleave items)) ]
 
 (* block zoom: .breadcrumb lists ancestor block titles (root first),
