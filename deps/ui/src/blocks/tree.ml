@@ -1197,7 +1197,8 @@ and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight
                      ~gap:8
                     [ column ~key:("col3-" ^ key) ~grow:1.
                         [ content_wrap key b
-                            [ box ~key:("cei-" ^ key)
+                            [ Ui_components.with_props [Ui_components.Prop.padding_right 4]
+                              (column ~key:("cei-" ^ key) ~grow:1. ~min_width:0
                                 ~style_class:"block-content-or-editor-inner"
                                 [ row ~key:("row-" ^ key)
                                     ~style_class:"block-row"
@@ -1221,7 +1222,7 @@ and block_row_static ?(depth = 0) ?(library = false) ?(siblings = []) ?highlight
                                         ; tags_el uuid b
                                         ]
                                     ]
-                                ]
+                                ])
                             ]
                         ; (* same as row_main: block-below pills under
                              the content cell — list-view rows render

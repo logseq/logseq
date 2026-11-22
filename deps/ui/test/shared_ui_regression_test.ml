@@ -802,7 +802,7 @@ let reference_disclosure ~registry ~profile =
   let root = Test_check.block "reference-root" "Reference root" ~children:[child;empty] in
   let blank = Test_check.block "reference-blank" "" in
   let child = {child with Model.block_children = child.Model.block_children @ [blank]} in
-  let root = {root with Model.block_children = [child;empty]} in
+  let root = {root with Model.block_children = [child;empty]; block_tags = ["Reference tag"]} in
   Fun.protect ~finally:(fun () ->
     Editor_state.st := previous_editor; Editor_state.field_sigs_opt := previous_fields;
     Settings_state.st := previous_settings;
@@ -830,6 +830,15 @@ let reference_disclosure ~registry ~profile =
           (nodes session) in
       check "Linked-reference roots and children advertise editability"
         (editable "reference-root" && editable child_id);
+      let content_columns = List.filter (fun node ->
+        class_has node "block-content-or-editor-inner") (nodes session) in
+      check "Reference content fills its row so Tags align at the right edge"
+        (List.exists (fun node -> class_has node "block-tags") (nodes session)
+         && content_columns <> [] && List.for_all (fun node ->
+          node.M.kind = "column"
+          && Hashtbl.find_opt node.M.props "grow" = Some (P.FloatValue 1.)
+          && Hashtbl.find_opt node.M.props "min-width" = Some (P.IntValue 0)
+          && Hashtbl.find_opt node.M.props "padding-right" = Some (P.IntValue 4)) content_columns);
       check "Linked-reference editing resolves its root and child in the occurrence scope"
         (Editor_state.find_in (Editor_state.blocks_in_scope scope) child_id<>None);
       Editor_state.set_collapsed ~scope:"other-reference" child_id false;
