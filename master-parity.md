@@ -15,6 +15,23 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | Hide selection action bar when context menu opens | done | `open_cm` calls `hide_action_bar` like cljs `shui/popup-hide!` before dots dropdown (`0d523eebd3`). |
 | `editor/open-link-in-sidebar` for `[[page]]` | done | `follow_link ~sidebar` uses `Sidebar_state.open_ref` (`c3e24b9b53`). |
 | Shift+Up typed-char leak | n/a | Probes did not reproduce a typed char landing in block text; dropped. |
+
+### G1 — modules 01 / 03 / 05 (sidebar, onboarding, pages)
+
+Forwarded batch (9 reviewed findings). Shared causes fixed once; each check verified against current branch content.
+
+| check | module | severity | status | notes |
+|-------|--------|----------|--------|-------|
+| nav-pages | 03 | high | verified fixed `ffa4ccb71e` | Pages link wires `on_press` → `nav_set_hash` + `ls:navigate` to `#/all-pages` (finding predates fix). |
+| nav-flashcards | 03 | med | verified fixed `c86ab14da8` | Loading gate + clear `all_cards` before open; empty deck shows `flashcard.empty/title`. Overlaps G4 go-flashcards / go-flashcards-tc. |
+| create-dialog | 01 | low | fixed `afc8812d25` | Sync checkbox gated on `rtc_group?` only (same root as create-graph-empty-name). |
+| create-graph-empty-name | 01 | low | fixed `afc8812d25` | Same Sync-row gate; empty name still refuses submit. |
+| first-load | 01 | low | fixed `ad773195f2` | Same as header-buttons: hide back/forward on non-Electron web. |
+| header-buttons | 01 | low | fixed `ad773195f2` | Match cljs `(when (util/electron?) (back-and-forward))` → 4 buttons on browser web. |
+| favorite-click | 03 | low | verified fixed `79819583d4` | Favorites navigate via `#/page/<uuid>` when uuid present (real product match to master). |
+| recent | 03 | low | verified fixed `79819583d4` | Same UUID route preference as favorites. |
+| delete-page | 05 | low | verified fixed `a2bc4f8b64` | Delete stays on route; page body shows moved-to-recycle (`page_ops.delete` + `page_recycled`). |
+
 ## G2 — copy/paste/undo/redo
 
 Module 09. G1 owns indent-undo caret (module 06); general undo caret restoration is fixed here — G1 can skip if covered.
@@ -140,8 +157,8 @@ Branch: `logseq/g5-slash-commands-7f98`.
 | --- | --- | --- | --- | --- | --- | --- |
 | nav-pages | 03 left sidebar | Click Pages navigates to All pages | Only highlighted; stayed on current route | left sidebar `.all-pages-nav` click | high | fixed `70cb570dfa` |
 | nav-flashcards | 03 left sidebar / 26 flashcards | Empty deck shows "Time to create a card!" + `#Card` hint | Showed "No cards due" from stale `all_cards` / missing loading gate | `.flashcards-nav` / `g f` on empty graph | med | fixed `98946559ee` |
-| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | kept by user (revert `1606f384ef`) |
-| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | kept by user (revert `e778f33305`) |
+| header-buttons | 01 first-load | Web header has 4 icons (no back/forward) | Always mounts back/forward (6 icons) | open graph on web | low | re-fixed by G1 `ad773195f2` (was kept-by-user revert `1606f384ef`) |
+| create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | re-fixed by G1 `afc8812d25` (was kept-by-user revert `e778f33305`) |
 | favorite-click / recent | 03 left sidebar | Favorites/recents navigate to `#/page/<uuid>` | Navigated to `#/page/<name>` | click favorite or recent item | low | fixed `fe8a15537b` |
 | delete-page | 05 pages | After confirm, stay on page; show moved-to-recycle | Navigated to journals/Home | page menu → Delete → Confirm | low | fixed `51098daff9` |
 | drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `c76dd5cb2c`; empty-target UUID reuse `dcac000a38` |
