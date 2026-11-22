@@ -2353,7 +2353,7 @@ let test_calculator_exit_structure (h : host) =
 let test_query_selection_conversion (h : host) =
   let previous_popup = !Popups_state.active in
   let popup = Option.get previous_popup in
-  let rec run = function
+  let rec run ?selection = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (title, edited, advanced, rejected, replace) :: rest ->
@@ -2362,9 +2362,15 @@ let test_query_selection_conversion (h : host) =
         Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
         (* Append and selection-replacement slash input share the saved block. *)
-        if replace then begin
+        let expected_query = match selection with
+          | Some (first,last) -> String.sub edited 0 first
+              ^ String.sub edited last (String.length edited-last)
+          | None -> edited in
+        if replace || Option.is_some selection then begin
           set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
-          A.update_model "b1" Edit_model.select_all;
+          A.update_model "b1" (match selection with
+            | None -> Edit_model.select_all
+            | Some (anchor,focus) -> fun model -> Edit_model.select model ~anchor ~focus);
           Editor_keys.apply_input "b1" (EI.Insert "/");
           Editor_keys.apply_input "b1" (EI.Insert "Query")
         end else begin
@@ -2408,10 +2414,10 @@ let test_query_selection_conversion (h : host) =
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
         check "Query conversion matches master Query vs Advanced Query steps"
-          (if rejected > 0 then not (saves "query-source" edited)
+          (if rejected > 0 then not (saves "query-source" expected_query)
            else if advanced then
              (* advanced-query-steps: keep host title, empty code query child *)
-             saves "b1" edited && saves "query-source" ""
+             saves "b1" expected_query && saves "query-source" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch
              && List.mem (Ops.set_block_property "query-source"
@@ -2419,21 +2425,21 @@ let test_query_selection_conversion (h : host) =
              && List.mem (Ops.set_block_property "query-source"
                   "logseq.property.code/lang" (W.String "clojure")) batch
            else
-             saves "query-source" edited && saves "b1" ""
+             saves "query-source" expected_query && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
           (rejected > 0 || !Ops.pending_save=None);
         check "Rejected query conversion never publishes a query title"
-          (rejected = 0 || not (saves "query-source" edited));
+          (rejected = 0 || not (saves "query-source" expected_query));
         check "Rejected query conversion retains the live buffer and autosave"
           (rejected = 0 || (
             Option.fold ~none:false ~some:(fun e -> e.S.uuid="b1" && e.buffer=source)
                  (S.editing ()) && Option.is_some !Ops.pending_save));
         check "Successful query conversion exits only after its writes complete"
           (rejected > 0 || S.editing ()=None);
-        run rest in
-  run ["Search seed parity","Search seed parity",false,0,false;
+        run ?selection rest in
+  let* () = run ["Search seed parity","Search seed parity",false,0,false;
        "Saved seed","Saved seed with unsaved edits ",false,0,false;
        "", "",false,0,false;
        "Advanced seed","Advanced seed",true,0,false;
@@ -2444,7 +2450,12 @@ let test_query_selection_conversion (h : host) =
        "G5RegressionToken","G5RegressionToken",false,0,true;
        "Saved seed","Unsaved replaced seed",false,0,true;
        "", "",false,0,true;
-       "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true]
+       "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true] in
+  let* () = run ~selection:(7,13)
+    ["before chosen after","before chosen after",false,0,false;
+     "before chosen after","before chosen after",false,2,false;
+     "before       after","before       after",false,0,false] in
+  run ~selection:(7,7) ["before /literal","before /literal",false,0,false]
 
 let test_query_navigation_conversion (h : host) =
   let popup = Option.get !Popups_state.active in

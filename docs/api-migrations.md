@@ -367,6 +367,11 @@ conversion is pending saves the cleaned host title, never `/Advanced Query`.
 If conversion fails while that editor is still owned, its original buffer and
 caret are restored for retry; completion never replaces a newer editor.
 
+Query conversion also removes the paired closing slash when the command was
+typed over selected text. Selecting `chosen` in `before chosen after` and typing
+`/Query` seeds `before  after`, not `before / after`. An existing literal slash
+after an unselected caret is preserved.
+
 ## Editing undo after a pending indent
 
 An Undo shortcut during an in-flight structural edit waits for that edit to

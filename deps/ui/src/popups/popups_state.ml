@@ -1972,8 +1972,16 @@ let run_query t ac ~advanced =
       close_ac t;
       let model = editing.Editor_state.model in
       let first = max 0 (min ac.tpos (S.length model.Edit_model.source)) in
-      let last = max first (min (fst (Editor_actions.sel_span_of model))
+      let trigger_last = max first (min (fst (Editor_actions.sel_span_of model))
         (S.length model.source)) in
+      let paired_slash = Option.fold ~none:false ~some:(fun snapshot ->
+        let initial = snapshot.Editor_state.model in
+        match Edit_model.selection_range initial with
+        | Some (lo, hi) -> lo = ac.tpos + ac.tlen && hi < S.length initial.source
+            && S.get initial.source hi = '/'
+        | None -> false) ac.editor in
+      let last = if paired_slash && trigger_last < S.length model.source
+        && S.get model.source trigger_last = '/' then trigger_last + 1 else trigger_last in
       let title = (Edit_model.splice model first last "").Edit_model.source in
       let query_title = Option.value ac.replaced_source ~default:title in
       let conversion_buffer = ref editing.buffer in
