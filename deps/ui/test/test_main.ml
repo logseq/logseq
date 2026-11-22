@@ -3186,8 +3186,8 @@ let test_popups_state () =
   (match Popups_state.filter_slash "zzzzz" items with
    | [ f ] ->
        check "filter_slash fallback"
-         (f.Popups_state.ai_key = "no-matched"
-          && f.Popups_state.ai_label = "No matched commands")
+         (f.Popups_state.ai_key = "editor.slash/no-matched-commands"
+          && f.Popups_state.ai_label = I18n.t "editor.slash/no-matched-commands")
    | _ -> check "filter_slash fallback" false);
   check "filter_slash whitespace closes"
     (Popups_state.filter_slash_result " " items = Popups_state.Slash_close);

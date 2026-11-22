@@ -241,14 +241,16 @@ let test_ac_slash st (s : ('m, 'a) S.t) =
   check "popup keys are consumed" (keydown st "ArrowDown");
   ignore (keydown st "ArrowUp");
   (* cljs: short no-match shows "No matched commands"; >2 chars past
-     the last match closes the popup. Group headers stay while filtering. *)
+     the last match closes the popup. Group headers stay while filtering.
+     LUI serves the same EN via editor.slash/no-matched-commands. *)
   P.ac_update st ac "zz";
   (match ac_of st with
    | Some ac ->
        check "unmatched slash query falls back to 'No matched commands'"
          (List.length ac.P.items = 1
           && (List.hd ac.P.items).P.ai_act = P.Noop
-          && (List.hd ac.P.items).P.ai_label = "No matched commands");
+          && (List.hd ac.P.items).P.ai_label
+             = I18n.t "editor.slash/no-matched-commands");
        ignore (keydown st "Enter");
        check "the no-match row closes the popup" (ac_of st = None)
    | None -> check "slash popup still open" false);
