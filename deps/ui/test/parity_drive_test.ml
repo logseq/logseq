@@ -874,6 +874,60 @@ let test_arrow_left_first_block () =
         (!Editor_actions.last_edit_uuid = Some "b1");
       clear_editing ())
 
+(* Enter_edit clears the press anchor; Shift-click another block must
+   still range-select from the editing block. *)
+let test_shift_click_from_edit () =
+  let module E = Editor_state in
+  stage_main_session [ block "a" "A"; block "b" "B"; block "c" "C" ];
+  set_editing "a" "A" ~caret:0;
+  E.set (fun st ->
+      { st with
+        E.anchor = None
+      ; selected = E.String_set.empty
+      ; selection_scope = "main"
+      ; action_bar = false
+      ; selected_footer = None });
+  let ev =
+    { Ui_services.x = 0.
+    ; y = 0.
+    ; shift = true
+    ; meta = false
+    ; ctrl = false
+    ; alt = false
+    ; composing = false
+    ; key = None
+    ; key_char = None
+    ; buttons = 1
+    ; button = 0
+    ; repeat = false
+    ; movement_x = 0.
+    ; movement_y = 0.
+    ; default_prevented = false
+    ; target = None
+    ; touches = []
+    ; detail = (fun _ -> None)
+    ; detail_json = (fun _ -> None)
+    ; clipboard_get = (fun _ -> "")
+    ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
+    ; clipboard_set = (fun _ _ -> ())
+    ; data_transfer_get = (fun _ -> "")
+    ; files = []
+    ; has_files = false
+    ; prevent_default = (fun () -> ())
+    ; stop_propagation = (fun () -> ())
+    ; stop_immediate = (fun () -> ())
+    }
+  in
+  check "Shift-click while editing is a modifier gesture"
+    (Block_selection.modifier_select ev "c");
+  after 8 (fun () ->
+      check "Shift-click from editing A selects A through C"
+        (E.String_set.equal (E.selected ()) (E.String_set.of_list [ "a"; "b"; "c" ])
+         && E.anchor () = Some "a"
+         && E.editing () = None
+         && (E.read ()).E.action_bar);
+      clear_editing ())
+
 (* ================================================================
    C. Block context menu — cljs components/content.cljs
    block-context-menu-content + ui.cljs dropdown menu
@@ -2009,6 +2063,7 @@ let run ~finish =
   test_selected_clipboard_paste ();
   test_editor_ctrl_np ();
   test_arrow_left_first_block ();
+  test_shift_click_from_edit ();
   test_editor_tab ();
   test_editor_enter_split ();
   (* D. page menu *)
