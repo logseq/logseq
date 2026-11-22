@@ -327,3 +327,11 @@ as Escape and Option+A arriving as å. Modifier-only events remain ignored.
 Saving an empty or whitespace-only `logseq/custom.css` now removes the active
 custom stylesheet immediately. Previously its old rules remained active until
 reload. Saving unrelated files does not change the stylesheet.
+
+## Graph-open custom stylesheet ownership
+
+Custom CSS reset waits for the graph-open model publication before reading
+`custom-css-url`. Switching from graph A with a URL to graph B without one reads
+B's `logseq/custom.css`, rather than reusing A's URL. Delayed file reads from an
+old graph or configuration are discarded. Missing CSS clears the stylesheet;
+read failures still reject instead of silently substituting another graph's CSS.

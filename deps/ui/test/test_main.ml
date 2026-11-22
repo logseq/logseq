@@ -5380,6 +5380,7 @@ let () =
      the summary + exit must wait for that stage. The parity suite runs
      first: it mounts its own app session and cleans up on its own drain
      stage, so it does not depend on the shared drive mount. *)
+  Theme_web_test.custom_css_graph_switch ~finish:(fun () ->
   test_cmdk_filter_dispatch ~finish:(fun () ->
   test_cmdk_block_reveal ~finish:(fun () ->
   Parity_drive_test.run ~finish:(fun () ->
@@ -5392,4 +5393,4 @@ let () =
           (* after the drive mount + deferred assertions — Editor_state's
              cell and Platform_web services exist by then; the summary
              runs at the end of the scenario's own drain stage *)
-          test_editor_cmds ()))))))))
+          test_editor_cmds ())))))))))

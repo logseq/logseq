@@ -47,7 +47,10 @@ let custom_css_url_of_config = function
   | _ -> None
 
 let apply_for_repo repo =
-  match custom_css_url_of_config (Runtime.model ()).Model.graph_config with
+  let config = (Runtime.model ()).Model.graph_config in
+  let current () = Runtime.repo () = repo
+    && (Runtime.model ()).Model.graph_config = config in
+  match custom_css_url_of_config config with
   | Some url ->
       add_style (Some url);
       Js.Promise.resolve ()
@@ -56,14 +59,16 @@ let apply_for_repo repo =
         Runtime.invoke2 "thread-api/get-file-content" (Wire.String repo)
           (Wire.String file_path)
       in
-      (match w with
+      if current () then (match w with
        | Wire.String s -> add_style (Some s)
        | _ -> remove ());
       Js.Promise.resolve ()
 
 let reset_for_repo repo =
   remove ();
-  apply_for_repo repo
+  let* () = Js.Promise.resolve () in
+  if Runtime.repo () = repo then apply_for_repo repo
+  else Js.Promise.resolve ()
 
 let on_file_saved path content =
   if path = file_path then apply_content content
