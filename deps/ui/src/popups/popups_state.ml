@@ -1517,7 +1517,7 @@ let on_buffer_change ?before t ~deleted uuid =
     match Edit_model.selection_range model with
     | Some (0, last) when last = S.length model.Edit_model.source -> Some model.source
     | _ -> None) in
-  let open_ac t kind = open_ac ?replaced_source t kind in
+  let open_for_change kind = open_ac ?replaced_source t kind in
   match Editor_actions.edit_model uuid with
   | None -> ()
   | Some m ->
@@ -1548,17 +1548,17 @@ let on_buffer_change ?before t ~deleted uuid =
               match c with
               | Some '/' when bounded ->
                   close_ac t;
-                  open_ac t Slash;
+                  open_for_change Slash;
                   true
               | Some '[' when two '[' ->
                   close_ac t;
-                  open_ac t Page_ref;
+                  open_for_change Page_ref;
                   true
               (* cljs autopairs "(" -> "()" and warns to use [[ instead —
                  "((" never opens block-ref search; the typed char just
                  joins the open popup's query below *)
               | Some '#' when bounded || two '#' ->
-                  if bounded && not (two '#') then open_ac t Tag_search
+                  if bounded && not (two '#') then open_for_change Tag_search
                   else close_ac t;
                   true
               | _ -> false
@@ -1613,12 +1613,12 @@ let on_buffer_change ?before t ~deleted uuid =
               pos >= 3 && S.get v (pos - 2) = ']' && S.get v (pos - 3) = ']'
             in
             if c = '/' && (line_starts_with '/' || word_before) then
-              open_ac t Slash
-            else if c = '[' && two then open_ac t Page_ref
+              open_for_change Slash
+            else if c = '[' && two then open_for_change Page_ref
             else if
               c = '#' && (line_starts_with '#' || word_before || ref_before)
               && not (pos < S.length v && S.get v pos = '+')
-            then open_ac t Tag_search
+            then open_for_change Tag_search
             else ()
 
 (* the event funnel in editor_keys calls through the live layer *)
@@ -1972,13 +1972,27 @@ let run_query t ac ~advanced =
       close_ac t;
       let model = editing.Editor_state.model in
       let first = max 0 (min ac.tpos (S.length model.Edit_model.source)) in
-      let last = max first (min (fst (Editor_actions.sel_span_of model))
+      let trigger_last = max first (min (fst (Editor_actions.sel_span_of model))
         (S.length model.source)) in
-      let title = (Edit_model.splice model first last "").Edit_model.source in
-      let query_title = Option.value ac.replaced_source ~default:title in
+      let paired_slash = Option.fold ~none:false ~some:(fun snapshot ->
+        let initial = snapshot.Editor_state.model in
+        match Edit_model.selection_range initial with
+        | Some (lo, hi) -> lo = ac.tpos + ac.tlen && hi < S.length initial.source
+            && S.get initial.source hi = '/'
+        | None -> false) ac.editor in
+      let last = if paired_slash && trigger_last < S.length model.source
+        && S.get model.source trigger_last = '/' then trigger_last + 1 else trigger_last in
+      let cleared_model = Edit_model.splice model first last "" in
+      let title = String.trim cleared_model.Edit_model.source in
+      let query_title = String.trim (Option.value ac.replaced_source ~default:title) in
+      let conversion_buffer = ref editing.buffer in
       let editor_current () = ac_current ac && match Editor_state.editing () with
-        | Some current -> current.buffer = editing.buffer
+        | Some current -> current.buffer = !conversion_buffer
         | None -> false in
+      if advanced then begin
+        Editor_actions.update_model buuid (fun _ -> Edit_model.set_source cleared_model title);
+        conversion_buffer := title
+      end;
       let repo_v = repo () in
       let fetch_query_uuid () =
         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
@@ -2034,13 +2048,15 @@ let run_query t ac ~advanced =
             Editor_actions.cancel_pending_focus ();
             Editor_sink.invalidate buuid;
             Editor_state.clear_editor_start_pos ();
-            Editor_state.retire_title_override buuid editing.buffer;
+            Editor_state.retire_title_override buuid !conversion_buffer;
             Editor_state.set (fun st -> {st with Editor_state.editing = None});
             Editor_state.notify_edit_exit buuid
           end;
           Js.Promise.resolve ())
         |> Views_db.catch_quiet ~on_error:(fun () ->
           if editor_current () then begin
+            if advanced then
+              Editor_actions.update_model buuid (fun _ -> model);
             Outliner_ops.schedule_save buuid editing.buffer;
             Editor_sink.focus_input buuid
           end))

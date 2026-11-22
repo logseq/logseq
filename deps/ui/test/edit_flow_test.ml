@@ -2353,7 +2353,7 @@ let test_calculator_exit_structure (h : host) =
 let test_query_selection_conversion (h : host) =
   let previous_popup = !Popups_state.active in
   let popup = Option.get previous_popup in
-  let rec run = function
+  let rec run ?selection = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (title, edited, advanced, rejected, replace) :: rest ->
@@ -2362,9 +2362,15 @@ let test_query_selection_conversion (h : host) =
         Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
         (* Append and selection-replacement slash input share the saved block. *)
-        if replace then begin
+        let expected_query = String.trim (match selection with
+          | Some (first,last) -> String.sub edited 0 first
+              ^ String.sub edited last (String.length edited-last)
+          | None -> edited) in
+        if replace || Option.is_some selection then begin
           set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
-          A.update_model "b1" Edit_model.select_all;
+          A.update_model "b1" (match selection with
+            | None -> Edit_model.select_all
+            | Some (anchor,focus) -> fun model -> Edit_model.select model ~anchor ~focus);
           Editor_keys.apply_input "b1" (EI.Insert "/");
           Editor_keys.apply_input "b1" (EI.Insert "Query")
         end else begin
@@ -2380,6 +2386,30 @@ let test_query_selection_conversion (h : host) =
             Outliner_ops.flush_pending_save ()
           end else Js.Promise.resolve () in
         let attempts = ref [] and committed = ref [] in
+        let graph = Hashtbl.create 2 in
+        let entity uuid = match Hashtbl.find_opt graph uuid with
+          | Some attrs -> attrs
+          | None -> let attrs = Hashtbl.create 8 in
+              Hashtbl.add attrs "block/uuid" (W.Uuid uuid);
+              Hashtbl.add graph uuid attrs; attrs in
+        let initial_title = (Option.get (S.find "b1")).Model.block_title in
+        Hashtbl.add (entity "b1") "block/title" (W.String initial_title);
+        let graph_value uuid attr = Option.bind (Hashtbl.find_opt graph uuid)
+          (fun attrs -> Hashtbl.find_opt attrs attr) in
+        let apply_graph batch = List.iter (function
+          | W.Array [W.Keyword "save-block";W.Array (W.Map fields :: _)] ->
+              let uuid = Option.get (W.map_get_uuid (W.Map fields) "block/uuid") in
+              List.iter (fun (key,value) -> match key with
+                | W.Keyword attr | W.String attr -> Hashtbl.replace (entity uuid) attr value
+                | _ -> failwith "Invalid query fixture attribute") fields
+          | W.Array [W.Keyword "set-block-property";
+              W.Array [W.Uuid uuid;W.Keyword attr;value]] ->
+              Hashtbl.replace (entity uuid) attr value
+          | W.Array [W.Keyword "create-property-text-block";
+              W.Array (W.Uuid uuid :: W.Keyword attr :: W.String text :: _)] ->
+              Hashtbl.replace (entity uuid) attr (W.Uuid "query-source");
+              Hashtbl.replace (entity "query-source") "block/title" (W.String text)
+          | _ -> failwith "Unsupported query fixture operation") batch in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
           if name="thread-api/apply-outliner-ops" then begin
             (match args with [_;W.Array batch;_] -> attempts := batch :: !attempts | _ -> ());
@@ -2387,14 +2417,14 @@ let test_query_selection_conversion (h : host) =
               h.reject_promise "query conversion rejected"
             else begin
               committed := List.hd !attempts :: !committed;
+              apply_graph (List.hd !attempts);
               Js.Promise.resolve (worker_handler h name args)
             end
           end else if name="thread-api/get-blocks"
             && (match args with [_;W.Array [request]] ->
                   W.get request "id"=Some (W.Uuid "b1") | _ -> false) then
             Js.Promise.resolve (W.Array [W.Map [W.Keyword "block", W.Map
-              [W.Keyword "block/uuid", W.Uuid "b1";
-               W.Keyword "logseq.property/query", W.Uuid "query-source"]]])
+              (Hashtbl.fold (fun attr value attrs -> (W.kw attr,value)::attrs) (entity "b1") [])]])
           else Js.Promise.resolve
             (if owned_call name then worker_handler h name args else h.base_handler name args));
           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
@@ -2408,10 +2438,10 @@ let test_query_selection_conversion (h : host) =
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
         check "Query conversion matches master Query vs Advanced Query steps"
-          (if rejected > 0 then not (saves "query-source" edited)
+          (if rejected > 0 then not (saves "query-source" expected_query)
            else if advanced then
              (* advanced-query-steps: keep host title, empty code query child *)
-             saves "b1" edited && saves "query-source" ""
+             saves "b1" expected_query && saves "query-source" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch
              && List.mem (Ops.set_block_property "query-source"
@@ -2419,24 +2449,46 @@ let test_query_selection_conversion (h : host) =
              && List.mem (Ops.set_block_property "query-source"
                   "logseq.property.code/lang" (W.String "clojure")) batch
            else
-             saves "query-source" edited && saves "b1" ""
+             saves "query-source" expected_query && saves "b1" ""
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
           (rejected > 0 || !Ops.pending_save=None);
         check "Rejected query conversion never publishes a query title"
-          (rejected = 0 || not (saves "query-source" edited));
+          (rejected = 0 || not (saves "query-source" expected_query));
         check "Rejected query conversion retains the live buffer and autosave"
           (rejected = 0 || (
             Option.fold ~none:false ~some:(fun e -> e.S.uuid="b1" && e.buffer=source)
                  (S.editing ()) && Option.is_some !Ops.pending_save));
         check "Successful query conversion exits only after its writes complete"
           (rejected > 0 || S.editing ()=None);
-        run rest in
-  run ["Search seed parity","Search seed parity",false,0,false;
+        let clean_host = if replace then "" else expected_query in
+        let query_tag = match graph_value "b1" "block/tags" with
+          | Some (W.Keyword "logseq.class/Query") -> true
+          | Some (W.Set tags) -> List.mem (W.Keyword "logseq.class/Query") tags
+          | _ -> false in
+        check "Query graph retains only Master's successfully committed conversion stages"
+          (graph_value "b1" "block/title"=Some (W.String
+              (if rejected=1 then initial_title else if rejected=2 || advanced then clean_host else ""))
+           && graph_value "b1" "logseq.property/query"=
+              (if rejected=1 then None else Some (W.Uuid "query-source"))
+           && graph_value "query-source" "block/title"=
+              (if rejected=1 then None else Some (W.String
+                (if rejected=2 || advanced then "" else expected_query)))
+           && query_tag=(rejected=0 || advanced && rejected=2));
+        check "Rejected final Query writes leave code metadata uncommitted in the graph"
+          (graph_value "query-source" "logseq.property.node/display-type"=
+              (if advanced && rejected=0 then Some (W.Keyword "code") else None)
+           && graph_value "query-source" "logseq.property.code/lang"=
+              (if advanced && rejected=0 then Some (W.String "clojure") else None));
+        run ?selection rest in
+  let* () = run ["Search seed parity","Search seed parity",false,0,false;
+       "G5RegressionToken","G5RegressionToken ",false,0,false;
        "Saved seed","Saved seed with unsaved edits ",false,0,false;
        "", "",false,0,false;
+       "", " \t ",false,0,false;
        "Advanced seed","Advanced seed",true,0,false;
+       "Advanced seed","Advanced seed ",true,0,false;
        "Retain on rejection","Retain on rejection",false,1,false;
        "Saved seed","Unsaved edit on rejection ",false,1,false;
        "Saved seed","Unsaved edit on final rejection ",false,2,false;
@@ -2444,7 +2496,59 @@ let test_query_selection_conversion (h : host) =
        "G5RegressionToken","G5RegressionToken",false,0,true;
        "Saved seed","Unsaved replaced seed",false,0,true;
        "", "",false,0,true;
-       "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true]
+       "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true] in
+  let* () = run ~selection:(7,13)
+    ["before chosen after","before chosen after",false,0,false;
+     "before chosen after","before chosen after",false,2,false;
+     "before       after","before       after",false,0,false] in
+  run ~selection:(7,7) ["before  /literal","before  /literal",false,0,false]
+
+let test_query_navigation_conversion (h : host) =
+  let popup = Option.get !Popups_state.active in
+  let rec run = function
+    | [] -> reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
+    | (title, rejected) :: rest ->
+        let* () = settle h 40 in
+        reset_editor ();
+        Popups_state.close_ac popup;
+        stage_page h [Test_check.block "b1" title; Test_check.block "b2" "Other block"];
+        let source = title ^ "/Advanced Query" in
+        set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
+        Popups_state.open_ac ~tpos:(String.length title) ~autopair:false popup Popups_state.Slash;
+        install_worker ~repo:h.repo h;
+        let release = ref (fun () -> ()) and fetched = ref (fun () -> ()) and writes = ref 0 in
+        let host_saved = Js.Promise.make (fun ~resolve ~reject:_ ->
+          fetched := (fun () -> let value = () in resolve value [@u])) in
+        let gate = Js.Promise.make (fun ~resolve ~reject:_ ->
+          release := (fun () -> resolve (W.Array [W.Map [W.kw "block", W.Map
+            [W.kw "block/uuid",W.Uuid "b1";
+             W.kw "logseq.property/query",W.Uuid "query-source"]]]) [@u])) in
+        Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
+          if name="thread-api/get-blocks" && (match args with
+            | [_;W.Array [request]] -> W.get request "id"=Some (W.Uuid "b1")
+            | _ -> false) then begin !fetched (); gate end
+          else if name="thread-api/apply-outliner-ops" then begin
+            incr writes;
+            if rejected && !writes=2 then h.reject_promise "conversion final write rejected"
+            else Js.Promise.resolve (worker_handler h name args)
+          end else Js.Promise.resolve
+            (if owned_call name then worker_handler h name args else h.base_handler name args));
+          on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
+        Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced:true;
+        let* () = host_saved in
+        check "Advanced Query waits with a slash-cleared editor after saving its host"
+          (!writes=1 && (editing_now ()).buffer=title && current_titles ()=[title;"Other block"]);
+        A.enter_edit "b2" 0;
+        let* () = settle h 40 in
+        check "Entering another block cannot recommit the pending Advanced Query trigger"
+          ((editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
+        !release ();
+        let* () = h.wait_ms 25 in
+        let* () = settle h 40 in
+        check "Advanced Query completion or rejection preserves the newer editor and clean host"
+          (!writes=2 && (editing_now ()).uuid="b2" && current_titles ()=[title;"Other block"]);
+        run rest in
+  run ["Advanced seed",false;"",false;"Retain cleaned host",true]
 
 let test_property_command_refresh (h : host) =
   let rec run = function
@@ -3611,6 +3715,7 @@ let async_stage (h : host) : unit Js.Promise.t =
   let* () = test_suggestion_selection_commits_pending_save h in
   let* () = test_node_reference_suggestions h in
   let* () = test_query_selection_conversion h in
+  let* () = test_query_navigation_conversion h in
   let* () = test_youtube_timestamp_selection h in
   let* () = test_quick_add_opening h in
   let* () = test_reference_preview h in
