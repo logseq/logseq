@@ -2298,10 +2298,33 @@ let test_property_value_choices_preserve_numeric_content () =
      | [Some (Wire.Float 5.);Some (Wire.Int 19)] -> true
      | _ -> false)
 
+let test_closed_numeric_property_choices () =
+  let conn = topic_conn ~properties:number_prop [] in
+  let ident = "user.property/score" in
+  let db = db_of conn in
+  let property = Option.get (entity db (Ident ident)) in
+  check "a number property without closed choices stays unrestricted"
+    (Property_maps.property_closed_values db property = Wire.Array []);
+  List.iter (fun n ->
+    Outliner_property.upsert_closed_value conn ident ~id:None
+      ~value:(Wire.String (string_of_int n)) ~description:None ~scoped_class_id:Wire.Nil)
+    [19;21];
+  let db = db_of conn in
+  let property = Option.get (entity db (Ident ident)) in
+  let choices = match Property_maps.property_closed_values db property with
+    | Wire.Array values -> values | _ -> [] in
+  check "saved numeric choices remain available through the property endpoint"
+    (List.map (Wire.get "logseq.property/value") choices
+     = [Some (Wire.Float 19.);Some (Wire.Float 21.)]);
+  check "display property snapshots retain the closed numeric choices"
+    (Wire.get "property/closed-values" (Property_maps.display_property_map db property)
+     = Some (Wire.Array choices))
+
 let () =
   Alcotest.run "db_view"
     [ ( "view_test"
-      , [ Alcotest.test_case "property-value-choices-preserve-numeric-content" `Quick test_property_value_choices_preserve_numeric_content
+      , [ Alcotest.test_case "closed-numeric-property-choices" `Quick test_closed_numeric_property_choices
+        ; Alcotest.test_case "property-value-choices-preserve-numeric-content" `Quick test_property_value_choices_preserve_numeric_content
         ; Alcotest.test_case "text-not-contains-uses-case-folded-content" `Quick test_text_not_contains_uses_case_folded_content
         ; Alcotest.test_case "query-ref-set-filter-matches-raw-ref-datoms" `Quick test_query_ref_set_filter_matches_raw_ref_datoms
         ; Alcotest.test_case "text-filters-ignore-missing-ref-content" `Quick test_text_filters_ignore_missing_ref_content

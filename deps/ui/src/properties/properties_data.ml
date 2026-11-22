@@ -167,13 +167,6 @@ let row_with_effective_value row =
    set of them; plain types come through as scalars. *)
 let value_is_ref = function W.Map _ | W.Set _ | W.Array _ | W.List _ -> true | _ -> false
 
-let ref_title w =
-  let w = untag w in
-  match gets w "block/title" with
-  | Some t -> t
-  | None -> (
-      match gets w "block/name" with Some n -> n | None -> "")
-
 let ref_uuid w = entity_uuid_of w
 let ref_dbid w = entity_id_of w
 
@@ -201,7 +194,16 @@ let number_of_text text =
   | Some n when Float.is_finite n -> Some n
   | _ -> None
 
-let rec value_display w =
+let rec ref_title w =
+  let w = untag w in
+  match gets w "block/title" with
+  | Some t -> t
+  | None -> (
+      match getf w "logseq.property/value" with
+      | Some value -> value_display value
+      | None -> Option.value ~default:"" (gets w "block/name"))
+
+and value_display w =
   match w with
   | W.Nil -> ""
   | W.Bool b -> if b then "true" else "false"
