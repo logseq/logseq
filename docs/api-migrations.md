@@ -379,6 +379,12 @@ not an older Home/End navigation cursor. Pasting at offset 4 in
 `Nonempty destination` restores offset 4 on undo; redo still edits the last
 inserted block at its end. This applies to copied subtrees and Markdown paste.
 
+Plain text pasted into one existing block records its pre-paste cursor for Redo,
+rather than the caret after insertion. Pasting `Gamma single` into an empty
+block initially places the caret at 12; Undo then Redo restores its text at
+caret 0, matching Master. The debounced save accepts an explicit history-after
+cursor for these inline paste paths; other edits retain their live after-cursor.
+
 ## Zoom breadcrumb ancestor loading
 
 Route loads and refreshes share the ancestor loader and explicitly request depth
