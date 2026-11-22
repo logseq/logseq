@@ -529,12 +529,12 @@ let between_picker inst ~tree ~loc ~anchor =
               if inst.active () then
                 begin Signal.set picking (Some first); Runtime.flush () end) []
         in
-        column ~padding:16 ~gap:8
+        column ~padding:16 ~gap:8 ~cross:`start
           [row ~cross:`center ~gap:8
             [field true (I.t "query.builder/between-start-label") start;
              text ~value:"~" [];
              field false (I.t "query.builder/between-end-label") finish];
-           Ui_components.button ~variant:`primary ~text:(I.t "ui/submit")
+           Ui_components.button ~variant:`primary ~size:`sm ~text:(I.t "ui/submit")
              ~on_press:(fun _ ->
                match Signal.get_state start, Signal.get_state finish with
                | Some start, Some finish when inst.active () ->
