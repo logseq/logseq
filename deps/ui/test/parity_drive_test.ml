@@ -901,6 +901,89 @@ let test_arrow_left_first_block () =
           Stub_dom.detach title;
           clear_editing ()))
 
+(* Ctrl-click a sidebar-only block while editing main: finish_exit must
+   keep the sidebar selection_scope so Delete can resolve the UUID. *)
+let test_modifier_select_preserves_sidebar_scope () =
+  let module E = Editor_state in
+  let module A = Editor_actions in
+  let scope = "sidebar-scope" in
+  stage_main_session [ block "main-a" "main"; block "main-b" "b" ];
+  let unregister =
+    E.register_block_source ~scope ~kind:E.Outliner (fun () ->
+        [ block "side-only" "side" ])
+  in
+  let pointer_ev =
+    { Ui_services.x = 0.
+    ; y = 0.
+    ; shift = false
+    ; meta = false
+    ; ctrl = true
+    ; alt = false
+    ; composing = false
+    ; key = None
+    ; key_char = None
+    ; buttons = 1
+    ; button = 0
+    ; repeat = false
+    ; movement_x = 0.
+    ; movement_y = 0.
+    ; default_prevented = false
+    ; target = None
+    ; touches = []
+    ; detail = (fun _ -> None)
+    ; detail_json = (fun _ -> None)
+    ; clipboard_get = (fun _ -> "")
+    ; clipboard_snapshot = (fun () -> Ui_services.empty_clipboard_snapshot)
+    ; clipboard_set = (fun _ _ -> ())
+    ; data_transfer_get = (fun _ -> "")
+    ; files = []
+    ; has_files = false
+    ; prevent_default = (fun () -> ())
+    ; stop_propagation = (fun () -> ())
+    ; stop_immediate = (fun () -> ())
+    }
+  in
+  let run ~dirty label =
+    set_editing "main-a" "main" ~caret:0;
+    (match E.editing () with
+     | Some e ->
+         E.set (fun st ->
+             { st with
+               E.editing =
+                 Some
+                   { e with
+                     E.base = "main"
+                   ; buffer = (if dirty then "main dirty" else "main")
+                   }
+             })
+     | None -> ());
+    (* pointerdown switches scope before modifier_select *)
+    E.set (fun st ->
+        { st with
+          E.selection_scope = scope
+        ; selected = E.String_set.empty
+        ; anchor = None
+        ; action_bar = false
+        });
+    check (label ^ " is a modifier gesture")
+      (Block_selection.modifier_select pointer_ev "side-only");
+    after (if dirty then 20 else 8) (fun () ->
+        check (label ^ " keeps sidebar scope and selected UUID")
+          (E.selection_scope () = scope
+           && E.String_set.equal (E.selected ())
+                (E.String_set.singleton "side-only")
+           && E.editing () = None);
+        check (label ^ " resolves selected UUID in the preserved scope")
+          (List.exists
+             (fun b -> b.Model.block_uuid = Some "side-only")
+             (A.selection_forest ()));
+        clear_editing ())
+  in
+  run ~dirty:false "clean exit";
+  after 8 (fun () ->
+      run ~dirty:true "save exit";
+      after 20 (fun () -> unregister ()))
+
 (* Enter_edit clears the press anchor; Shift-click another block must
    still range-select from the editing block. *)
 let test_shift_click_from_edit () =
@@ -2091,6 +2174,7 @@ let run ~finish =
   test_editor_ctrl_np ();
   test_arrow_left_first_block ();
   test_shift_click_from_edit ();
+  test_modifier_select_preserves_sidebar_scope ();
   test_editor_tab ();
   test_editor_enter_split ();
   (* D. page menu *)

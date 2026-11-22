@@ -784,7 +784,12 @@ let rec exit_edit ~select =
               S.set (fun st ->
                   { st with
                     S.editing = None
-                  ; selection_scope = e.scope
+                    (* Escape selects in the editing outliner. Modifier
+                       selection (Ctrl/Shift on another container) already
+                       switched selection_scope — keep that scope so
+                       Delete / range ops resolve the selected UUIDs. *)
+                  ; selection_scope =
+                      (if select then e.scope else st.selection_scope)
                   ; selected_footer = None
                   ; selected =
                       (if select then S.String_set.singleton e.uuid else st.selected)
