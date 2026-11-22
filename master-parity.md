@@ -9,7 +9,7 @@ Tracking LUI vs master (`9af1a190`) headless Chromium parity findings. Each grou
 | Item | Status | Notes |
 |------|--------|-------|
 | Indent undo caret position | done | Captures `:editor/start-pos` on End/arrows; undo restores caret (`1e87a84d81`). |
-| Zoom breadcrumb separator + link styling | done | Kit → semantic `/` + links (`de3b00d1fd`); typed layout props `a28c7880a5`. |
+| Zoom breadcrumb separator + link styling | done | Kit → semantic `/` + links (`de3b00d1fd`); typed layout props `a28c7880a5`; nowrap on text (not row) `c3541d9d61`. |
 | ArrowLeft at first block → page title | done | `arrow_edge` → `focus_page_title` (`459b2a5028`); journal gate via `page_title_focusable` (`3a03022c3b`). |
 | Shift+Click range select while editing | done | Exits edit before range (`e090c6f6af`); editing-block fallback when enter_edit cleared anchor (`a750ce212e`). |
 | No action bar on Shift+arrow exit from edit | done | Removed LUI-only `show_action_bar` after exit; matches master timing where selection is empty when `show-action-bar!` runs (`3c04615938`). |
