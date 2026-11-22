@@ -4352,6 +4352,29 @@ let run_views ~registry ~profile ~finish =
       sidebar:=Some st;Sidebar_state.st_ref:=Some st;Sidebar_state.model_signal:=Some ms;
       Lui_elements.column (Page_menu.page_items target @ [Left_sidebar_view.nav_edit_menu st])) () in
   let st = Option.get !sidebar in
+  let reference_item = { (Option.get (Sidebar_state.static_item "block-ref-context" "block-ref" "Target")) with
+    Sidebar_state.uuid = Some "sidebar-reference-target";
+    breadcrumb = ["Source parent"; "Source child"];
+    blocks = [Test_check.block "sidebar-reference-target" "Target"] } in
+  let panel_editor = !Editor_state.st and panel_fields = !Editor_state.field_sigs_opt
+  and panel_settings = !Settings_state.st in
+  Editor_state.st := None; Editor_state.field_sigs_opt := None; Settings_state.st := None;
+  let reference_panel = mount (fun _ -> Lui_elements.column
+    [Right_sidebar_view.item_title reference_item;
+     Right_sidebar_view.item_body st 0 reference_item]) in
+  check "Block-reference sidebar panels use Master's Block references heading"
+    (List.exists (fun node -> M.string_prop node "text" = Some (I18n.t "reference/blocks"))
+      (nodes reference_panel));
+  check "Block-reference sidebar bodies retain the target's breadcrumb context"
+    (List.for_all (fun title -> List.exists (fun node ->
+      class_has node "breadcrumb-item" && M.string_prop node "text" = Some title)
+      (nodes reference_panel)) ["Source parent"; "Source child"]);
+  check "Block-reference sidebar bodies show the target rather than only a page reference list"
+    (List.exists (fun node -> M.string_prop node "accessibility-identifier"
+      = Some "ls-block-sidebar-reference-target") (nodes reference_panel));
+  ignore (Lui_app.dispose reference_panel.S.app);
+  Editor_state.st := panel_editor; Editor_state.field_sigs_opt := panel_fields;
+  Settings_state.st := panel_settings;
   let item = nodes menu |> List.filter (fun n -> n.M.kind="menu-item")
     |> List.sort (fun a b -> Int.compare a.M.id b.M.id) |> List.hd in
   let label () = M.string_prop (List.find (fun n -> n.M.id=item.M.id) (nodes menu)) "text" in
