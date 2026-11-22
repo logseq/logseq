@@ -32,6 +32,17 @@ Forwarded batch (9 reviewed findings). Shared causes fixed once; each check veri
 | recent | 03 | low | verified fixed `79819583d4` | Same UUID route preference as favorites. |
 | delete-page | 05 | low | verified fixed `a2bc4f8b64` | Delete stays on route; page body shows moved-to-recycle (`page_ops.delete` + `page_recycled`). |
 
+### G1 — modules 10 / 16 (dnd, tags and classes)
+
+Forwarded batch (4 reviewed findings). Findings timestamp predates G6 fixes already on this branch; verified current source still carries them.
+
+| check | module | severity | status | notes |
+|-------|--------|----------|--------|-------|
+| drop-file-image | 10 | med | verified fixed `55f6019f6d` (+ empty-target `fa0fcdccd4`) | Drop resolves `.ls-block` under pointer → sibling insert after target (not page end). |
+| class-page-add-object | 16 | med | verified fixed `583badf716` | `+ New` opens sidebar then `refresh` so the objects table shows the new row immediately. |
+| tag-chip | 16 | low | verified fixed `95fe078837` (+ caret `ce88cd542c`) | Class-tag completion trims trailing space after erasing `#query` (shared with untag). |
+| untag | 16 | low | verified fixed `95fe078837` (+ caret `ce88cd542c`) | Same trim path; stored title has no trailing space after re-edit. |
+
 ## G2 — copy/paste/undo/redo
 
 Module 09. G1 owns indent-undo caret (module 06); general undo caret restoration is fixed here — G1 can skip if covered.
@@ -161,9 +172,9 @@ Branch: `logseq/g5-slash-commands-7f98`.
 | create-graph-empty-name | 01 onboarding | Create graph Sync row gated on `rtc-group?` only | Also shows Sync when `?rtc-test=true` while logged out | create-graph dialog, logged-out web | low | re-fixed by G1 `afc8812d25` (was kept-by-user revert `e778f33305`) |
 | favorite-click / recent | 03 left sidebar | Favorites/recents navigate to `#/page/<uuid>` | Navigated to `#/page/<name>` | click favorite or recent item | low | fixed `fe8a15537b` |
 | delete-page | 05 pages | After confirm, stay on page; show moved-to-recycle | Navigated to journals/Home | page menu → Delete → Confirm | low | fixed `51098daff9` |
-| drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `c76dd5cb2c`; empty-target UUID reuse `dcac000a38` |
-| class-page-add-object | 16 tags and classes | Class page `+ New` opens sidebar and table shows new row | Sidebar opened; table stayed stale until later sync | Class page Objects tab → `+ New` | med | fixed `9e1644ee13` |
-| tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `cf1c12c604`; caret-after-trim `8e45ef3cf5` |
+| drop-file-image | 10 drag and drop | Drop PNG on a block inserts after that block | Inserted at page end | drop PNG onto a block body | med | fixed `55f6019f6d`; empty-target UUID reuse `fa0fcdccd4` (G1 verified) |
+| class-page-add-object | 16 tags and classes | Class page `+ New` opens sidebar and table shows new row | Sidebar opened; table stayed stale until later sync | Class page Objects tab → `+ New` | med | fixed `583badf716` (G1 verified) |
+| tag-chip / untag | 16 tags and classes | After class tagging, block title has no trailing space | Left trailing space from erased `#query` | type `#Tag`, choose class tag | low | fixed `95fe078837`; caret-after-trim `ce88cd542c` (G1 verified) |
 | delete-page (class/property) | 05 pages | Hard-delete shows not-found | Stale page stayed visible | delete custom class/property | med | fixed `0a012de040` |
 | delete-page undo recycle shell | 05 pages | Undo clears moved-to-recycle | `page_recycled` stuck true | delete page → Ctrl+Z | med | fixed `b5a078690b` |
 | add-text-property | 15 Properties UI | After Text type, caret in value; shows `myprop: v1`; no dialog title | Focus to BODY; renders Empty; extra header | ctrl+alt+p → myprop → Text → v1 | high | fixed header `7df071baae` + focus `d0d1c625da` (G4 p-t/p-d/p-p/p-i share header) |
