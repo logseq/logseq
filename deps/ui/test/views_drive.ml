@@ -956,6 +956,7 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~before_
         Runtime.model_source:=Some source;
         Page.today_queries page) () in
     Runtime.app_flush:=(fun () -> S.flush mounted); mounted in
+  h.hold "thread-api/get-view-data";
   let mounted = mount page in
   let subscription = List.hd (List.rev !Subs_state.sync_subs) in
   let header mounted = List.find_opt (fun n ->
@@ -963,6 +964,13 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~before_
   let marker mounted = List.exists (fun n -> M.string_prop n "accessibility-identifier"
     =Some ("ls-block-" ^ uuid)) (M.all_nodes mounted.S.tree) in
   h.after 30 (fun () ->
+    S.flush mounted;
+    check "Initial configured query counts arrive before held view data"
+      (header mounted<>None && List.mem "thread-api/get-view-data" (h.pending ()));
+    ignore (Lui_app.send mounted.S.app (Action.Journals_loaded [page]));
+    S.flush mounted;
+    h.release "thread-api/get-view-data";
+    h.after 30 (fun () ->
     S.flush mounted;
     check "Configured journal queries load collapsed, overriding configured collapsed=false"
       (header mounted<>None && not (marker mounted)
@@ -1037,7 +1045,7 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~before_
                   ignore (Lui_app.dispose mounted.S.app);
                   title_cases rest) in
           title_cases [Edn.parse {|[:h3 "Hiccup journal default"]|},["Hiccup journal default"];
-                       W.Array [],[]]))))
+                       W.Array [],[]])))))
 
 let configured_journal_reload (h : (_, _) Shared_scenarios_views.host) ~mounted ~finish =
   let previous_model = Lui_app.model mounted.S.app in
