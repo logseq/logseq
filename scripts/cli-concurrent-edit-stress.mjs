@@ -327,6 +327,8 @@ function recordStressOutcome(summary, event) {
     counts.ok += 1;
   } else if (event.outcome === "race-conflict") {
     counts.expectedRace += 1;
+  } else if (event.outcome === "retried") {
+    counts.retried = (counts.retried || 0) + 1;
   } else {
     counts.unexpectedErrors += 1;
     summary.unexpectedErrors += 1;
@@ -642,7 +644,7 @@ function runProcess(command, args, opts, extraEnv) {
   });
 }
 
-export async function runCli(opts, args, context = {}) {
+export async function runCli(opts, args, context = {}, { retryFetchFailure = false } = {}) {
   const cliBin =
     opts.clientIndex != null && opts.clientClis?.[opts.clientIndex]
       ? opts.clientClis[opts.clientIndex]
@@ -677,6 +679,10 @@ export async function runCli(opts, args, context = {}) {
   }
 
   const classification = classifyCliResult(result, parsed, context);
+  if (retryFetchFailure && cliFetchFailed({ ...classification, parsed, result })) {
+    classification.outcome = "retried";
+    classification.level = "warn";
+  }
   if (deleteRecord) {
     completeVolatilePropertyDelete(deleteRecord, {
       endMs,
@@ -745,8 +751,10 @@ function cliFetchFailed(response) {
   );
 }
 
-async function runSyncStart(opts, context = {}) {
-  let response = await runCli(opts, ["sync", "start", "--graph", opts.graph], context);
+export async function runSyncStart(opts, context = {}) {
+  let response = await runCli(opts, ["sync", "start", "--graph", opts.graph], context, {
+    retryFetchFailure: !opts.failFast,
+  });
   if (cliFetchFailed(response)) {
     await delay(500);
     await runCli(opts, ["server", "list"], { ...context, op: "server-list-before-sync-start-retry" });

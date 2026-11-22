@@ -26,6 +26,7 @@ import {
   operationWeights,
   parseArgs,
   runCli,
+  runSyncStart,
   stressPageNames,
   stressConfigText,
   stressReferenceViewOrder,
@@ -40,6 +41,44 @@ import {
   todayJournalPageName,
   uniqueOperationPageTitle,
 } from "./cli-concurrent-edit-stress.mjs";
+
+test("sync start accounts for recovered and exhausted fetch retries", async (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "logseq-stress-sync-retry-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const bin = join(dir, "cli.js");
+  writeFileSync(bin, `
+    const fs = require("node:fs");
+    const marker = process.env.LOGSEQ_CLI_CONFIG + ".attempted";
+    if (process.argv[2] === "sync" && (!fs.existsSync(marker) || process.env.FAIL_RETRY === "1")) {
+      fs.writeFileSync(marker, "attempted");
+      console.error("Failure(fetch failed)");
+      process.exit(1);
+    }
+    console.log(JSON.stringify({ status: "ok" }));
+  `);
+  for (const failRetry of [false, true]) {
+    const opts = {
+      clientIndex: 0,
+      clientClis: [bin],
+      config: join(dir, `${failRetry}.edn`),
+      graph: "stress-graph",
+      logFile: join(dir, `${failRetry}.jsonl`),
+      timeoutMs: 5000,
+      env: { FAIL_RETRY: failRetry ? "1" : "0" },
+      runSummary: { unexpectedErrors: 0, workerErrors: 0, operations: {} },
+    };
+    const response = await runSyncStart(opts, { op: "offline-today-journal-race", phase: "start" });
+    assert.equal(response.ok, !failRetry);
+    assert.equal(opts.runSummary.unexpectedErrors, failRetry ? 1 : 0);
+    const counts = opts.runSummary.operations["cli:offline-today-journal-race"];
+    assert.equal(counts.retried, 1);
+    assert.equal(counts.unexpectedErrors, failRetry ? 1 : 0);
+    const [first] = readFileSync(opts.logFile, "utf8").trim().split("\n").map(JSON.parse);
+    assert.equal(first.outcome, "retried");
+    assert.equal(first.level, "warn");
+    assert.equal(first.stderr, "Failure(fetch failed)");
+  }
+});
 
 test("logs bounded, content-free diagnostics only for unexpected create-tree ID failures", async (t) => {
   const dir = mkdtempSync(join(tmpdir(), "logseq-stress-trace-"));
