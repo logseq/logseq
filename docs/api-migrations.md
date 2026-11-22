@@ -356,8 +356,10 @@ For example, replacing `G5RegressionToken` with `/Query` and choosing Query
 creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
 to retain the slash-cleared live host title and create an empty code query.
 Autosave while the menu is open does not replace this captured search text.
-Conversion clears editing without starting a second, competing save-exit write;
-rejected conversion does not leave a transient slash-title override behind.
+Conversion keeps the editor and its original buffer until every conversion write
+succeeds, then clears editing without a competing save-exit write. A failed
+initial or final write retains the buffer and re-arms autosave so unsaved text
+can still be edited or retried.
 
 ## Structured paste undo caret
 

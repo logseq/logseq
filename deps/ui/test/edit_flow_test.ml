@@ -2299,16 +2299,20 @@ let test_query_selection_conversion (h : host) =
         let source = (editing_now ()).buffer in
         install_worker ~repo:h.repo h;
         let* () =
-          if replace && title <> "" && not rejected then begin
+          if replace && title <> "" && rejected = 0 then begin
             Outliner_ops.schedule_save "b1" source;
             Outliner_ops.flush_pending_save ()
           end else Js.Promise.resolve () in
-        let attempts = ref [] in
+        let attempts = ref [] and committed = ref [] in
         Runtime.worker := Some {Worker_client.invoke_fn = (fun name args ->
           if name="thread-api/apply-outliner-ops" then begin
             (match args with [_;W.Array batch;_] -> attempts := batch :: !attempts | _ -> ());
-            if rejected then h.reject_promise "query conversion rejected"
-            else Js.Promise.resolve (worker_handler h name args)
+            if rejected > 0 && List.length !attempts = rejected then
+              h.reject_promise "query conversion rejected"
+            else begin
+              committed := List.hd !attempts :: !committed;
+              Js.Promise.resolve (worker_handler h name args)
+            end
           end else if name="thread-api/get-blocks"
             && (match args with [_;W.Array [request]] ->
                   W.get request "id"=Some (W.Uuid "b1") | _ -> false) then
@@ -2321,14 +2325,14 @@ let test_query_selection_conversion (h : host) =
         Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced;
         let* () = h.wait_ms 25 in
         let* () = settle h 40 in
-        let batch = List.concat !attempts in
+        let batch = List.concat !committed in
         let saves uuid source = List.exists (function
           | W.Array [W.Keyword "save-block";W.Array [block;_]] ->
               W.get block "block/uuid"=Some (W.Uuid uuid)
               && W.get block "block/title"=Some (W.String source)
           | _ -> false) batch in
         check "Query conversion matches master Query vs Advanced Query steps"
-          (if rejected then not (saves "query-source" title)
+          (if rejected > 0 then not (saves "query-source" edited)
            else if advanced then
              (* advanced-query-steps: keep host title, empty code query child *)
              saves "b1" edited && saves "query-source" ""
@@ -2343,19 +2347,26 @@ let test_query_selection_conversion (h : host) =
              && List.mem (Ops.set_block_property "b1" "block/tags"
                   (W.Keyword "logseq.class/Query")) batch);
         check "Query conversion does not leave a slash-trigger autosave pending"
-          (!Ops.pending_save=None);
+          (rejected > 0 || !Ops.pending_save=None);
         check "Rejected query conversion never publishes a query title"
-          (not rejected || current_titles ()=[title]);
+          (rejected = 0 || (current_titles ()=[source]
+            && Option.fold ~none:false ~some:(fun e -> e.S.uuid="b1" && e.buffer=source)
+                 (S.editing ()) && Option.is_some !Ops.pending_save));
+        check "Successful query conversion exits only after its writes complete"
+          (rejected > 0 || S.editing ()=None);
         run rest in
-  run ["Search seed parity","Search seed parity",false,false,false;
-       "Saved seed","Saved seed with unsaved edits ",false,false,false;
-       "", "",false,false,false;
-       "Advanced seed","Advanced seed",true,false,false;
-       "Retain on rejection","Retain on rejection",false,true,false;
-       "G5RegressionToken","G5RegressionToken",false,false,true;
-       "Saved seed","Unsaved replaced seed",false,false,true;
-       "", "",false,false,true;
-       "Retain replaced query on rejection","Retain replaced query on rejection",false,true,true]
+  run ["Search seed parity","Search seed parity",false,0,false;
+       "Saved seed","Saved seed with unsaved edits ",false,0,false;
+       "", "",false,0,false;
+       "Advanced seed","Advanced seed",true,0,false;
+       "Retain on rejection","Retain on rejection",false,1,false;
+       "Saved seed","Unsaved edit on rejection ",false,1,false;
+       "Saved seed","Unsaved edit on final rejection ",false,2,false;
+       "Advanced seed","Unsaved advanced on rejection ",true,2,false;
+       "G5RegressionToken","G5RegressionToken",false,0,true;
+       "Saved seed","Unsaved replaced seed",false,0,true;
+       "", "",false,0,true;
+       "Retain replaced query on rejection","Retain replaced query on rejection",false,1,true]
 
 let test_property_command_refresh (h : host) =
   let rec run = function

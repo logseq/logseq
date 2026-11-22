@@ -1969,17 +1969,16 @@ let run_query t ac ~advanced =
   | Some _, Some editing when ac_current ac ->
       let buuid = editing.Editor_state.uuid in
       Outliner_ops.cancel_pending_save ();
-      erase_trigger_text ac;
       close_ac t;
-      let title = Editor_actions.live_buffer buuid in
+      let model = editing.Editor_state.model in
+      let first = max 0 (min ac.tpos (S.length model.Edit_model.source)) in
+      let last = max first (min (fst (Editor_actions.sel_span_of model))
+        (S.length model.source)) in
+      let title = (Edit_model.splice model first last "").Edit_model.source in
       let query_title = Option.value ac.replaced_source ~default:title in
-      Editor_actions.sync_buffer buuid title;
-      Editor_actions.last_edit_uuid := Some buuid;
-      Editor_actions.cancel_pending_focus ();
-      Editor_sink.invalidate buuid;
-      Editor_state.clear_editor_start_pos ();
-      Editor_state.set (fun st -> {st with Editor_state.editing = None});
-      Editor_state.notify_edit_exit buuid;
+      let editor_current () = ac_current ac && match Editor_state.editing () with
+        | Some current -> current.buffer = editing.buffer
+        | None -> false in
       let repo_v = repo () in
       let fetch_query_uuid () =
         Runtime.invoke2 "thread-api/get-blocks" (Wire.String repo_v)
@@ -2013,8 +2012,8 @@ let run_query t ac ~advanced =
           in
           let* w = fetch_query_uuid () in
           let quuid = query_property_uuid w in
-          if quuid = "" then Js.Promise.resolve ()
-          else if advanced then
+          if quuid = "" then failwith "Query property was not created";
+          let* () = if advanced then
             (* keep host title; query child stays empty code block *)
             Outliner_ops.apply_parsed
               ~rest:
@@ -2029,8 +2028,22 @@ let run_query t ac ~advanced =
               ~rest:
                 [ Outliner_ops.set_block_property buuid "block/tags"
                     (Wire.Keyword "logseq.class/Query") ]
-              [ (quuid, query_title); (buuid, "") ])
-        |> Views_db.catch_quiet)
+              [ (quuid, query_title); (buuid, "") ] in
+          if editor_current () then begin
+            Editor_actions.last_edit_uuid := Some buuid;
+            Editor_actions.cancel_pending_focus ();
+            Editor_sink.invalidate buuid;
+            Editor_state.clear_editor_start_pos ();
+            Editor_state.retire_title_override buuid editing.buffer;
+            Editor_state.set (fun st -> {st with Editor_state.editing = None});
+            Editor_state.notify_edit_exit buuid
+          end;
+          Js.Promise.resolve ())
+        |> Views_db.catch_quiet ~on_error:(fun () ->
+          if editor_current () then begin
+            Outliner_ops.schedule_save buuid editing.buffer;
+            Editor_sink.focus_input buuid
+          end))
   | _ -> ()
 
 exception Unsupported_configured_input
