@@ -19,7 +19,9 @@ let standard_kind context node =
    element and register Press on the mounted node. Kinds that admit no
    PressEnabled make enable a silent no-op and the click dead — fail
    fast so an inert wrap site can never ship. *)
-let enable_press context node =
+let pressable ~on_press (elem : t) : t =
+ fun context parent ->
+  let node = elem context parent in
   let kind = standard_kind context node in
   if not (Lui_protocol.property_supported kind Lui_protocol.PressEnabled)
   then
@@ -27,24 +29,8 @@ let enable_press context node =
       (Printf.sprintf
          {js|Ui_parts.pressable: kind %s admits no Press — route the press through a supported kind or a Logseq_el.el ~events node|js}
          (Lui_wire_schema.node_kind_name kind));
-  enable context node Lui_protocol.PressEnabled
-
-let pressable ~on_press (elem : t) : t =
- fun context parent ->
-  let node = elem context parent in
-  enable_press context node;
+  enable context node Lui_protocol.PressEnabled;
   register_press context node on_press;
-  node
-
-let pressable_with_modifiers ~on_press (elem : t) : t =
- fun context parent ->
-  let node = elem context parent in
-  enable_press context node;
-  enable context node Lui_protocol.PointerEnabled;
-  ignore (on_event context node is_press (function
-    | Lui_protocol.Press _ -> on_press 0
-    | Lui_protocol.PressModifiers (_, modifiers) -> on_press modifiers
-    | _ -> assert false));
   node
 
 (* reactive style_class — kinds take only a static ~style_class, so bind

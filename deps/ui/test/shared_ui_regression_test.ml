@@ -887,7 +887,7 @@ let preview_reference_disclosure ~registry ~profile =
     let session = S.mount ~registry ~profile ~initial:Model.initial
       ~reducer:(fun model () -> model)
       ~view:(fun _ _ _ context parent ->
-        let extras = Popups_view.preview_row_extras context [root_id,0;child_id,3]
+        let extras = Popups_view.preview_row_extras context [root_id,0;child_id,1]
           ~open_in_sidebar:(fun uuid -> opened := uuid :: !opened)
           ~render_references:(fun uuid -> Lui_elements.text
             ~value:("references for " ^ uuid) []) in
@@ -907,23 +907,24 @@ let preview_reference_disclosure ~registry ~profile =
       check "Preview reference counts expose the action's accessible label"
         (M.string_prop child_counter "accessibility-label" =
            Some (I18n.t "block/open-block-references"));
+      let click modifiers =
+        S.dispatch session (P.PressDetail (child_counter.M.id,
+          {x=0.;y=0.;modifiers;button=0;target_class=""}));
+        S.press session child_counter.M.id;
+        S.flush session in
       List.iter (fun expected ->
-        S.press session child_counter.M.id; S.flush session;
+        click 0;
         check "Preview count presses expand and re-collapse the referenced block's inline references"
-          (references_visible ()=expected)) [true;false];
-      S.dispatch session (P.PressDetail (child_counter.M.id,
-        {x=0.;y=0.;modifiers=2;button=0;target_class=""}));
-      S.flush session;
+          (references_visible ()=expected && !opened=[])) [true;false];
+      click 2;
       check "Shift-clicking a preview count opens that block's sidebar references without expanding inline"
         (!opened=[child_id] && not (references_visible ()));
       opened := [];
       List.iter (fun modifiers ->
-        S.dispatch session (P.PressModifiers (child_counter.M.id, modifiers));
-        S.flush session;
+        click modifiers;
         check "Unshifted modifier presses toggle inline references without opening the sidebar"
           (!opened=[] && references_visible ()=(modifiers=0))) [0;1];
-      S.dispatch session (P.PressModifiers (child_counter.M.id, 2));
-      S.flush session;
+      click 2;
       check "Shift-modified preview activation opens sidebar references without expanding inline"
         (!opened=[child_id] && not (references_visible ()))))
 
@@ -3007,7 +3008,7 @@ let run_views ~registry ~profile ~finish =
     let page = Test_check.page [block] in
     let model = {Model.initial with repo=Some "ordinary-references";route_page=Some page} in
     Runtime.read_model := (fun () -> model);
-    let count = ref 2 and failed = ref false in
+    let count = ref 1 and failed = ref false in
     Runtime.worker := Some {Worker_client.invoke_fn=(fun name args ->
       if name="thread-api/get-render-snapshots" && !failed then
         Js.Promise.make (fun ~resolve:_ ~reject -> reject (Failure "reference count rejected") [@u])
@@ -3035,6 +3036,18 @@ let run_views ~registry ~profile ~finish =
     let changed () = Subs_state.run_sync_subs [Wire.Array [Wire.kw "refs";Wire.Uuid "ordinary-reference-target"]] in
     ignore (Js.Global.setTimeout ~f:(fun () ->
       check "Ordinary rows expose their incoming reference count" (visible ());
+      let counter = List.find (fun node -> class_has node "block-refs-count") (nodes mounted) in
+      let references_visible () = List.exists (fun node ->
+        Hashtbl.find_opt node.M.props "margin-left"=Some (P.IntValue 42)
+        && Hashtbl.find_opt node.M.props "padding-horizontal"=Some (P.IntValue 16)
+        && Hashtbl.find_opt node.M.props "border-width"=Some (P.IntValue 1)) (nodes mounted) in
+      List.iter (fun expected ->
+        S.dispatch mounted (P.PressDetail (counter.M.id,
+          {x=0.;y=0.;modifiers=0;button=0;target_class=""}));
+        S.press mounted counter.M.id;
+        S.flush mounted;
+        check "Ordinary count-one clicks expand and re-collapse inline references exactly once"
+          (references_visible ()=expected)) [true;false];
       failed:=true;changed ();
       ignore (Js.Global.setTimeout ~f:(fun () ->
         check "A rejected reference-count refresh retains the last successful count" (visible ());

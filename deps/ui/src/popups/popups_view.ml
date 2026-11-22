@@ -1053,16 +1053,14 @@ let preview_row_extras ~open_in_sidebar ~render_references context counts : Tree
       else (Signal.set expanded (not (Runtime.signal_get expanded)); Runtime.flush ())
     in
     let right =
-      Ui_parts.pressable_with_modifiers
-        ~on_press:(fun modifiers -> activate (modifiers land 2 <> 0))
-        (Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
+      Ui_components.with_props [Ui_components.Prop.opacity 0.7; Ui_components.Prop.hover_opacity 1.]
         (button ~text:"" ~key:("preview-count-" ^ uuid) ~variant:`ghost ~size:`sm
           ~accessibility_identifier:("preview-reference-count-" ^ uuid)
           ~label:(U.t "block/open-block-references")
           ~width:20 ~height:20 ~padding_horizontal:4 ~padding_vertical:0
           ~tooltip:(U.t "block/open-block-references")
           ~on_press_detail:(fun detail -> activate (detail.P.modifiers land 2 <> 0))
-          [text ~font_size:"14px" ~value:(string_of_int count) []])) in
+          [text ~font_size:"14px" ~value:(string_of_int count) []]) in
     let below =
       if_ ~test:(Signal.value expanded)
         (column ~key:("preview-references-" ^ uuid)
