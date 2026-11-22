@@ -2738,6 +2738,11 @@ let paste_focus () =
     then edit_last_inserted ~scope resp
 
 let paste_history_opts target_uuid =
+  (match S.editing () with
+   | Some e ->
+       S.note_editor_start_pos_from_arrow e.S.model.Edit_model.caret;
+       S.record_history_start ~force:true e
+   | None -> ());
   let scope = match S.editing () with
     | Some e -> e.S.scope
     | None -> scope_of_uuid target_uuid in

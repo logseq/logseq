@@ -3162,14 +3162,14 @@ let test_authoritative_route_miss (h : host) =
     Ui_services.log_error ("Authoritative route miss test failed", error);
     failwith "Authoritative route miss test failed")
 
-let test_paste_history_cursors (h : host) =
+let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
   let* () = settle h 40 in
   reset_editor ();
-  stage_page h [Test_check.block "paste-origin" "Original"];
-  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:2 ~base:"Original";
-  S.note_editor_start_pos_from_arrow 2;
+  stage_page h [Test_check.block "paste-origin" title];
+  set_editing ~uuid:"paste-origin" ~buffer:title ~caret:history_caret ~base:title;
+  S.note_editor_start_pos_from_arrow history_caret;
   S.record_history_start ~force:true (editing_now ());
-  set_editing ~uuid:"paste-origin" ~buffer:"Original" ~caret:5 ~base:"Original";
+  A.update_model "paste-origin" (fun m -> EM.select m ~anchor:caret ~focus:caret);
   install_worker ~repo:h.repo h;
   let worker = Option.get !Runtime.worker and options = ref W.Nil in
   let inserted = W.Map [W.kw "block/uuid", W.Uuid "paste-result";
@@ -3179,7 +3179,7 @@ let test_paste_history_cursors (h : host) =
     else begin
       (match args with [_;_;opts] -> options:=opts | _ -> ());
       Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
-        [Test_check.block "paste-origin" "Original";
+        [Test_check.block "paste-origin" title;
          Test_check.block "paste-result" "Clipboard parent"]}) !Runtime.current_page;
       h.sync_page ();
       Js.Promise.resolve (W.Map [W.kw "result",W.Map [W.kw "blocks",W.Array [inserted]]])
@@ -3188,11 +3188,11 @@ let test_paste_history_cursors (h : host) =
       ~sibling:true ~replace_empty:false in
   let before = Option.get (W.get !options "undo-redo/editor-info")
   and after = Option.get (W.get !options "undo-redo/editor-info-after") in
-  check "Structured paste preserves its captured before-caret rather than the live caret"
+  check "Structured paste captures the pre-paste caret rather than stale navigation history"
     (W.map_get_uuid before "block-uuid"=Some "paste-origin"
      && W.map_get_string before "scope"=Some "main"
-     && W.get before "caret"=Some (W.Int 2)
-     && W.get before "start-pos"=Some (W.Int 2));
+     && W.get before "caret"=Some (W.Int caret)
+     && W.get before "start-pos"=Some (W.Int caret));
   check "Structured paste records the last inserted block at end as its after-cursor"
     (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
      && W.map_get_string after "scope"=Some "main"
@@ -3206,13 +3206,17 @@ let test_paste_history_cursors (h : host) =
   let* () = restore true in
   check "Structured paste undo restores the captured origin caret"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
-     =Some ("paste-origin",2));
+     =Some ("paste-origin",caret));
   let* () = restore false in
   check "Structured paste redo restores the last inserted block at end"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
      =Some ("paste-result",String.length "Clipboard parent"));
   reset_editor ();
   Js.Promise.resolve ()
+
+let test_paste_history_cursors (h : host) =
+  let* () = paste_history_cursors_case h ~title:"Original" ~caret:2 ~history_caret:2 in
+  paste_history_cursors_case h ~title:"Nonempty destination" ~caret:4 ~history_caret:20
 
 let test_structured_paste_completion (h : host) =
   let* () = test_paste_history_cursors h in

@@ -357,3 +357,10 @@ to retain the slash-cleared live host title and create an empty code query.
 Autosave while the menu is open does not replace this captured search text.
 Conversion clears editing without starting a second, competing save-exit write;
 rejected conversion does not leave a transient slash-title override behind.
+
+## Structured paste undo caret
+
+Paste snapshots the live caret before its transaction and consumes that snapshot,
+not an older Home/End navigation cursor. Pasting at offset 4 in
+`Nonempty destination` restores offset 4 on undo; redo still edits the last
+inserted block at its end. This applies to copied subtrees and Markdown paste.
