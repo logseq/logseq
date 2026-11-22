@@ -74,7 +74,9 @@ let row_value row =
   | Some v -> v
   | None -> W.Nil
 let row_title row =
-  gets (row_prop row) "block/title" |> Option.value ~default:""
+  let prop = row_prop row in
+  let fallback = gets prop "block/title" |> Option.value ~default:"" in
+  I18n.built_in_display_title ?ident:(getk prop "db/ident") ~fallback ()
 
 let row_type row =
   getk (row_prop row) "logseq.property/type"
@@ -169,10 +171,12 @@ let value_is_ref = function W.Map _ | W.Set _ | W.Array _ | W.List _ -> true | _
 
 let ref_title w =
   let w = untag w in
-  match gets w "block/title" with
-  | Some t -> t
-  | None -> (
-      match gets w "block/name" with Some n -> n | None -> "")
+  let fallback =
+    match gets w "block/title" with
+    | Some t -> t
+    | None -> (match gets w "block/name" with Some n -> n | None -> "")
+  in
+  I18n.built_in_display_title ?ident:(getk w "db/ident") ~fallback ()
 
 let ref_uuid w = entity_uuid_of w
 let ref_dbid w = entity_id_of w

@@ -38,7 +38,7 @@ Intentional differences (out of scope for G2): graph view; rich-text inline form
 | tag-space-closes | 11 autocomplete | `#` popup has no Page | Included Page | page `tag-space-closes`; type `#` then space | low | fixed `f7c7e893b1` |
 | tag-duplicate | 11 autocomplete | Same `#ui__ac` / hint sibling structure as master | Hint appeared inside `#ui__ac` | page `tag-duplicate`; add `#MyTag` twice | low | fixed `789ca92986` |
 | slash-filter | 11 autocomplete | Filtering `/head` keeps group header Heading | Group headers dropped while filtering | page `slash-filter`; type `/head` | low | fixed by G5 `0aa74f9f8c` |
-| slash-nomatch | 11 autocomplete | `/zzzzqq` with no match closes popup | Stayed open with raw i18n key | page `slash-nomatch`; type `/zzzzqq` | med | fixed by G5 `0aa74f9f8c` |
+| slash-nomatch | 11 autocomplete | `/zzzzqq` with no match closes popup | Stayed open with raw i18n key | page `slash-nomatch`; type `/zzzzqq` | med | fixed by G5 `0aa74f9f8c` (dict key by G7 `4e9897330d`) |
 | slash-space-close | 11 autocomplete | `/` then space closes popup | Stayed open with full command list | page `slash-space-close`; type `/ ` | med | fixed by G5 `0aa74f9f8c` |
 | slash-then-pageref | 11 autocomplete | After slash then `[[`, empty popup has 10 date items | Had 34 date items | page `slash-then-pageref`; type `/`, Backspace, `[[` | low | fixed `135989e0bb` |
 | follow-link-sidebar | 13 refs/embeds | Ctrl+Shift+O inside `[[Linked Pg2]]` opens page in right sidebar | Nothing; sidebar stayed closed | caret inside ref; mod+shift+o | high | fixed `b4f17a0497` |
@@ -185,3 +185,30 @@ Branch: `logseq/g5-slash-commands-7f98`.
 | quick-add-open | 32 Quick add | Add to today shows mod+e / mod+alt+e | No shortcut hint | open Quick add | low | fixed `166da5da39` |
 | deadline-slash | 34 Dates | Unset repeat → Next date Empty | Invented Advance/double-plus | slash deadline calendar | med | fixed `e5dc951f29` |
 | picker-month-nav / slash-date-picker | 34 Dates | Month caption + year input | Year easy to lose on slash path | open date picker / slash date | med | fixed `e5dc951f29` |
+
+## G7 — i18n
+
+Shared dictionaries: `resources/dicts/*.edn` (25 locales). LUI loads EN embedded + other locales on demand; Settings → General → Language matches master's `frontend.dicts/languages` and persists `localStorage["preferred-language"]`, then reloads.
+
+| check | module | master behavior | LUI behavior | repro | severity | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| recycle-delete-confirm | recycle | Hardcoded English permanent-delete confirm | Raw key `storage.recycle/delete-*-confirm-desc` | Recycle → permanent delete | high | fixed `68c632606e` + G6 `a9b9c730a0` (EN matches master; zh-CN from Recycle) |
+| recycle-restored-toast | recycle | No restore toast (silent) | Restore toast showed raw `storage.recycle/restored-feedback` | Recycle → Restore | med | fixed `68c632606e` (LUI-only toast; EN `{1} restored`) |
+| export-error-unexpected | export / worker | Dict key `:export/error-unexpected` | Key missing from LUI dicts; toast path ignored `:i18n-key` | Export EDN failure | high | fixed `720ba5c8c2` + `1f3cb98848` |
+| storage-invalid-data-writing | worker notify | Dict key `:storage/invalid-data-writing` via `:i18n-key` | Key missing; Nil-message + i18n-key dropped | Invalid DB write notification | high | fixed `720ba5c8c2` + `1f3cb98848` |
+| import-unsupported-key | i18n helper | `:graph.add-existing/unsupported-error` | Helper used missing `import/unsupported-error` | Latent helper | low | fixed `16ef4a073f` |
+| slash-no-matched-key | slash popup | Hardcoded `"No matched commands"` | Raw `editor.slash/no-matched-commands` | `/zzzzqq` | med | fixed `4e9897330d` (popup-close by G5 `0aa74f9f8c`) |
+| validate-db-cmdk-toasts | cmdk / (Dev) | Handler only invokes worker; worker notifies | Hardcoded `"Your graph is valid"` / `"Validation failed"` | Command palette → Validate | low | fixed `3bdd9242c4` |
+| language-menu-options | settings | 25 locales from `dicts/languages` | Same 25 codes/labels | Settings → Language | high | fixed (already matched; verified) |
+| language-switch-rerender | settings | `set-preferred-language!` + re-render-root | `I18n.load` + `doc_reload` (full reload) | Switch zh-CN / ja / de; reload | high | fixed (reload parity; verified) |
+| language-persist | settings | `localStorage preferred-language` | Same storage key/EDN quote | Switch language; reload | high | fixed (already matched) |
+| missing-key-lint | CI | `bb lang:validate-translations` (opam AST) | No opam-free LUI key check | CI | med | fixed `04149588b0` (`scripts/test-lui-i18n-keys.mjs`) |
+| bare-alias-key-lint | CI | — | Bare `t`/`tf`/`t1` aliases (handbook) escaped key scan | CI | med | fixed `b7f620d24a` |
+| builtin-display-title | properties / views | `built-in-display-title` via `built-in-ident->i18n-key` | Raw `block/title` for built-in props/choices/columns | Property UI, table headers, status chips | high | fixed (OCaml port of master's mapper) |
+| icon-a11y-label | properties | `:property.built-in/icon` | Hardcoded `~label:"Icon"` | Icon property control | low | fixed |
+| hardcoded-prop-lint | CI | CLJS `.i18n-lint.toml` hardcoded scan | No LUI prop-literal check | CI | med | fixed (`scripts/test-lui-i18n-keys.mjs` + allowlist) |
+| rs-contents-header | right sidebar | `(t :page/contents)` panel header | Used DB English `"Contents"` page title | Right sidebar → Contents | med | fixed |
+| rs-block-ref-header | right sidebar | `(t :reference/blocks)` panel header | Used referenced block title | Right sidebar → block references | med | fixed |
+| worker-validate-english | db-worker | Hardcoded English validate notifications | Same hardcoded English in OCaml worker | (Dev) Validate | low | needs-decision — matches master worker hardcoding; dict keys exist (`graph.validation/valid`) but neither side uses them for the broadcast body |
+| a11y-english-labels | various | Mixed a11y identifiers | A few English `~label` / DnD a11y sentences remain (allowlisted) | Screen reader / DnD | low | needs-decision — not shipped visible chrome; no matching master keys for most |
+| graph-view-nav | left/right nav | `:nav/graph-view` / `:graph.page/title` | Surfaces absent from LUI nav/topbar | Graph view entry points | low | needs-decision — missing UI surface, not a hardcoded string |

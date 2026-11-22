@@ -146,9 +146,16 @@ let run path =
   let runner = load () in
   check "all registrations published" (List.length (Plugin_host.portable_commands ()) = 15);
   let ac = editing "/portable-batch" in
-  check "portable creation preserves ordered receipts, schema atomicity and the active buffer"
-    (task (Popups_state.run_portable_command popup ac (handle "portable-batch")) = Ok ()
-     && buffer () = "/portable-batch");
+  (* Match the per-key pattern below: surface the Error name on failure so
+     macOS CI logs are actionable (Ok()+buffer was opaque). *)
+  (match task (Popups_state.run_portable_command popup ac (handle "portable-batch")) with
+   | Ok () ->
+       check "portable creation preserves the active buffer"
+         (buffer () = "/portable-batch")
+   | Error error ->
+       failwith
+         ("portable creation preserves ordered receipts, schema atomicity and the active buffer: "
+          ^ error_name error));
   let ac = editing "/delete-special-pages" in
   check "special pages cannot be permanently deleted"
     (task (Popups_state.run_portable_command popup ac (handle "delete-special-pages")) = Ok ());
