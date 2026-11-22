@@ -1236,9 +1236,9 @@ let test_indent_outdent (h : host) =
 let test_indent_undo_key_dispatch (h : host) =
   let* () = settle h 40 in
   reset_editor ();
-  stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Level two"];
-  set_editing ~uuid:"b2" ~buffer:"Level two" ~caret:2 ~base:"Level two";
-  S.note_editor_start_pos_from_arrow 2;
+  stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Indent child"];
+  set_editing ~uuid:"b2" ~buffer:"Indent child" ~caret:2 ~base:"Indent child";
+  S.clear_editor_start_pos ();
   S.history_input_before := None;
   install_worker ~repo:h.repo h;
   let worker = Option.get !Runtime.worker in
@@ -3519,8 +3519,59 @@ let test_paste_history_cursors (h : host) =
   let* () = paste_history_cursors_case h ~title:"Original" ~caret:2 ~history_caret:2 in
   paste_history_cursors_case h ~title:"Nonempty destination" ~caret:4 ~history_caret:20
 
+let test_single_block_paste_redo_caret (h : host) =
+  let* () = settle h 40 in
+  reset_editor ();
+  stage_page h [Test_check.block "paste-single" ""];
+  set_editing ~uuid:"paste-single" ~buffer:"" ~caret:0 ~base:"";
+  S.clear_editor_start_pos ();
+  S.history_input_before := None;
+  install_worker ~repo:h.repo h;
+  let worker = Option.get !Runtime.worker and options = ref W.Nil and redos = ref 0 in
+  let restore title undo =
+    Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+      [Test_check.block "paste-single" title]}) !Runtime.current_page;
+    h.sync_page ();
+    let cursors = List.filter_map (W.get !options)
+      ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+    Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool undo;
+      W.kw "editor-cursors",W.List cursors]) in
+  Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
+    match name,args with
+    | "thread-api/apply-outliner-ops",[_;_;opts] ->
+        options := opts;
+        worker.invoke_fn name args
+    | "thread-api/undo-redo-undo",_ -> restore "" true
+    | "thread-api/undo-redo-redo",_ ->
+        incr redos;
+        if !redos=2 then Js.Promise.resolve (W.Map [])
+        else if !redos=3 then h.reject_promise "single-block redo rejected"
+        else restore "Gamma single" false
+    | _ -> worker.invoke_fn name args)};
+  A.splice_clipboard_text "paste-single" "Gamma single";
+  check "Single-block paste initially places the caret after the pasted text"
+    ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=12);
+  let* () = Ops.flush_pending_save () in
+  A.undo ();
+  let* () = settle h 40 in
+  check "Single-block paste Undo restores the empty block at caret zero"
+    ((editing_now ()).buffer="" && (editing_now ()).model.EM.caret=0);
+  let rec redo = function
+    | [] -> Js.Promise.resolve ()
+    | name :: rest ->
+        A.redo ();
+        let* () = settle h 40 in
+        check ("Single-block paste Redo retains caret zero: " ^ name)
+          ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=0);
+        redo rest in
+  let* () = redo ["restored text";"empty history";"rejected history"] in
+  Runtime.worker := Some worker;
+  reset_editor ();
+  Js.Promise.resolve ()
+
 let test_structured_paste_completion (h : host) =
   let* () = test_paste_history_cursors h in
+  let* () = test_single_block_paste_redo_caret h in
   let rec run = function
     | [] -> Js.Promise.resolve ()
     | outcome :: rest ->
