@@ -2111,6 +2111,79 @@ let run_views ~registry ~profile ~finish =
   Views_popup.close_all ();
   ignore (Lui_app.dispose delayed_filter.S.app);
   Views_popup.stack_st := previous_stack;
+  let builder_property_values_check done_ =
+    let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
+    and previous_stack = !Views_popup.stack_st and previous_flush = !Runtime.app_flush in
+    Runtime.read_model := (fun () -> {Model.initial with repo=Some "builder-property-values"});
+    Views_popup.stack_st := None;
+    let instance = ref None in
+    let selector = mount (fun _ context parent ->
+      instance := Some (Views_state.make ~sched:context.Lui_ui.ui_scheduler
+        ~kind:Views_state.KAllPages ~feature:"builder-property-values" ~owner:Wire.Nil);
+      popup_layer context parent) in
+    let inst = Option.get !instance in
+    let saved = ref [] and tree = ref (Views_builder.COp ("and",[])) in
+    let editor = { (Views_builder.editor_of_inst inst ~active:(fun () -> true)) with
+      save=(fun clause -> saved := Views_builder.tree_to_dsl clause :: !saved) } in
+    let ident = "user.property/t101-filter-number" in
+    let prop = Wire.Map [Wire.kw "db/ident",Wire.kw ident;
+      Wire.kw "block/title",Wire.String "T101FilterNumber"] in
+    let choice label = Wire.Map [Wire.kw "label",label;Wire.kw "value",Wire.Map
+      [Wire.kw "db/id",Wire.Int 101;Wire.kw "block/uuid",Wire.Uuid "number-value"]] in
+    let later f = ignore (Js.Global.setTimeout ~f 10) in
+    let press label =
+      match List.find_opt (fun n -> button_label n=Some label) (nodes selector) with
+      | Some node -> S.press selector node.M.id
+      | None -> check ("Query property picker exposes " ^ label) false in
+    let rec next = function
+      | [] ->
+          Views_popup.close_all ();ignore (Lui_app.dispose selector.S.app);
+          Runtime.worker := previous_worker;Runtime.read_model := previous_model;
+          Views_popup.stack_st := previous_stack;Runtime.app_flush := previous_flush;done_ ()
+      | (closed,used,label,argument)::rest ->
+          saved := [];tree := Views_builder.COp ("and",[]);
+          let worker = Fake_worker.install (fun name _ -> match name with
+            | "thread-api/get-all-properties" -> Wire.Array [prop]
+            | "thread-api/get-property-closed-values" -> Wire.Array closed
+            | "thread-api/get-property-values" -> Wire.Array (Option.value used ~default:[])
+            | _ -> Wire.Nil) in
+          Runtime.worker := Some {worker with invoke_fn=(fun name args ->
+            if name="thread-api/get-property-values" && used=None then
+              Js.Promise.reject (Failure "property choices fixture failure")
+            else worker.invoke_fn name args)};
+          Views_builder.picker editor ~tree ~loc:[0] ~anchor:(popup_anchor ());
+          press (Views_builder.item_label "property");
+          later (fun () ->
+            S.flush selector;press "T101FilterNumber";
+            later (fun () ->
+              S.flush selector;
+              let options = nodes selector |> List.filter (fun n -> n.M.kind="list-item")
+                |> List.filter_map button_label |> List.sort String.compare in
+              let select_all = I18n.t "view.table/select-all" in
+              let expected = if used=None then [] else
+                select_all :: Option.to_list label |> List.sort String.compare in
+              check "Query property choices match Master closed/used content and Select all"
+                (options=expected);
+              if used=None then
+                check "Failed property choices cannot save a query clause" (!saved=[])
+              else begin
+                press (Option.value label ~default:select_all);
+                check "Query property selection preserves the original argument type"
+                  (!saved=["(property :" ^ ident ^ argument ^ ")"])
+              end;
+              Views_popup.close_all ();next rest))
+    in
+    next
+      [[],Some [choice (Wire.Int 19)],Some "19"," 19";
+       [],Some [choice (Wire.String "Alpha")],Some "Alpha"," \"Alpha\"";
+       [Wire.Map [Wire.kw "logseq.property/value",Wire.Int 19]],
+         Some [choice (Wire.Int 42)],Some "19"," \"19\"";
+       [Wire.Map [Wire.kw "block/title",Wire.String "Closed"]],
+         Some [choice (Wire.Int 42)],Some "Closed"," \"Closed\"";
+       [],Some [],None,"";
+       [],Some [choice Wire.Nil],None,"";
+       [],None,None,""]
+  in
   let reference_facet_check done_ =
     let previous_worker = !Runtime.worker and previous_model = !Runtime.read_model
     and previous_stack = !Views_popup.stack_st and previous_ops = !Views_state.ops_ref in
@@ -6324,8 +6397,9 @@ let run_views ~registry ~profile ~finish =
       Graphs_view.remote_st_ref := remote_before;
       Collaborators.members_sig_ref := members_before;
       Graphs_ops.on_repos_changed := repos_changed_before;
+      builder_property_values_check (fun () ->
       async_selection_check (fun () -> reference_facet_check (fun () -> filter_value_check (fun () ->
-        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ()))))))))))));
+        filter_reference_titles_check (fun () -> filter_edit_check (fun () -> filter_operator_check (fun () -> page_name_filter_check (fun () -> filter_input_check ();filter_scope_check ();config_boot_check (fun () -> config_save_check (fun () -> custom_date_check (fun () -> property_date_check (fun () -> type_choice_check (fun () -> Runtime.app_flush := previous_flush;finish ())))))))))))));
       Js.Promise.resolve ()) (Js.Promise.resolve ()))))
 
 let popup_press (ev : Ui_services.ev) =

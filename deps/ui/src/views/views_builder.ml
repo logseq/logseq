@@ -344,8 +344,13 @@ let value_picker inst ~tree ~loc ~anchor ~head ident =
       let items =
         if cvs <> [] then
           List.filter_map (fun cv ->
-              Option.map (fun title -> W.String title)
-                (W.map_get_string cv "block/title")) cvs
+              let content = match W.get cv "block/title" with
+                | None | Some W.Nil | Some (W.Bool false) -> W.get cv "logseq.property/value"
+                | content -> content in
+              match content with
+              | None | Some W.Nil | Some (W.Bool false) -> None
+              | Some (W.String text) -> Some (W.String text)
+              | Some value -> Some (W.String (Edn.to_string value))) cvs
         else []
       in
       let open_select its =
@@ -354,7 +359,7 @@ let value_picker inst ~tree ~loc ~anchor ~head ident =
              ~wrap_cls:"query-builder-picker"
              ~items:
                (P.fixed_items
-                ({ P.si_label = I.t "query.builder/all-values-label"
+                ({ P.si_label = I.t "view.table/select-all"
                  ; si_value = "all"; si_extra = None }
                 :: List.mapi
                   (fun index value ->
