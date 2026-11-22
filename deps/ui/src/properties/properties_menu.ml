@@ -89,7 +89,7 @@ let config_sub ?(padding = 4) ~icon_name ~title ?desc items : t =
   (Ui_components.with_props [ Ui_components.Prop.accessibility_label title ]
    @@ Ui_components.menu_item ~icon:(Icons.name_ref icon_name)
      ~on_press:(fun _ ->
-       Runtime.signal_set open_ (not (Runtime.signal_get open_)))
+       Runtime.signal_set open_ true)
      ~on_pointer_enter:(fun _ -> Runtime.signal_set open_ true)
      [ config_trailing ?desc ~chevron:true title
      ; if_ ~test:(Signal.value open_)
