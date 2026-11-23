@@ -48,10 +48,10 @@
             (.setAttribute anchor "download" "index.html")
             (.click anchor)))))))
 
-(defn file-name [repo extension]
-  (-> (str repo)
-      (string/replace #"^[/\\\\]+" "")
-      (common-sqlite/sanitize-db-name)
+(defn- file-name [repo extension]
+  (-> repo
+      (string/replace #"^[/\\]+" "")
+      (string/replace #"[/:\\]" "_")
       (str "_" (quot (util/time-ms) 1000))
       (str "." (string/lower-case (name extension)))))
 
