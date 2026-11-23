@@ -925,33 +925,35 @@
   can point at blocks from several delete ops, so run these after every
   deleted block has been inserted again. `:delete-page` hard-deletes blocks
   too, e.g. when it truncates today's journal page."
-  [db-before tx-data]
+  [db-before db-after tx-data]
   (let [deleted-ids (into #{}
                           (keep (fn [d]
                                   (when (and (= :block/uuid (:a d))
                                              (not (:added d)))
                                     (:e d))))
-                          tx-data)]
+                          tx-data)
+        affected (into #{}
+                       (keep (fn [{:keys [e a v added]}]
+                               (when (and (not added)
+                                          (contains? deleted-ids v)
+                                          (not (contains? deleted-ids e))
+                                          (worker-ref-attr? db-before a))
+                                 [e a])))
+                       tx-data)]
     (->> tx-data
-         (filter (fn [d]
-                   (and (not (:added d))
-                        (contains? deleted-ids (:v d))
-                        (not (contains? deleted-ids (:e d)))
-                        (worker-ref-attr? db-before (:a d)))))
-         (group-by :e)
-         (keep (fn [[e datoms]]
-                 (let [ent (d/entity db-before e)
-                       attrs (vec (distinct (map :a datoms)))]
-                   (when-let [block-uuid (:block/uuid ent)]
-                     ;; Replace, not add: a delete can also add values to the
-                     ;; same attr, e.g. a child class extends Root after its
-                     ;; parent class is deleted.
-                     [:save-block
-                      [(reduce (fn [m a]
-                                 (assoc m a (sanitize-ref-value db-before (get ent a))))
-                               {:block/uuid block-uuid}
-                               attrs)
-                       {:retract-attributes attrs}]])))))))
+         (reduce (fn [holders {:keys [e a v added]}]
+                   (if-let [uuid (when (and (contains? affected [e a])
+                                           (= added (boolean (seq (d/datoms db-after :eavt e a v))))
+                                           (not= added (boolean (seq (d/datoms db-before :eavt e a v)))))
+                                   (:block/uuid (d/entity db-before e)))]
+                     (let [entity-ref (stable-entity-ref (if added db-after db-before) v)]
+                       (if (or (vector? entity-ref) (qualified-keyword? entity-ref))
+                         (update-in holders [uuid a (if added :retract :add)] (fnil conj []) entity-ref)
+                         holders))
+                     holders))
+                 {})
+         (map (fn [[uuid deltas]]
+                [:save-block [{:block/uuid uuid} {:ref-value-deltas deltas}]])))))
 
 (defn- build-inverse-delete-blocks
   [db-before db-after ids]
@@ -1242,7 +1244,10 @@
                         (case op
                           :save-block
                           (let [[block opts] args]
-                            (build-inverse-save-block db-before block opts))
+                            ;; Reference deltas are part of an undo replay.
+                            ;; Its explicit inverse is the original deletion.
+                            (when-not (:ref-value-deltas opts)
+                              (build-inverse-save-block db-before block opts)))
 
                           :insert-blocks
                           (build-inverse-insert-like db-before db-after tx-data args)
@@ -1342,7 +1347,7 @@
         (some->> (concat
                   (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
                   (when-let [restore-ops (and (some #(contains? #{:delete-blocks :delete-page} (first %)) forward-ops)
-                                              (seq (inbound-ref-restore-ops db-before tx-data)))]
+                                              (seq (inbound-ref-restore-ops db-before db-after tx-data)))]
                     [restore-ops]))
                  (mapcat #(if (and (sequential? %)
                                    (sequential? (first %)))

@@ -1455,10 +1455,11 @@
           block-base (dissoc block :db/id :block/order)
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
-      (when (nil? block-ent)
+      (when (and (nil? block-ent) (not (:ref-value-deltas opts)))
         (invalid-rebase-op! op {:args args
                                 :reason :missing-block}))
-      (outliner-core/save-block! conn block' opts))
+      (when block-ent
+        (outliner-core/save-block! conn block' opts)))
 
     :insert-blocks
     (let [[blocks target-id opts] args

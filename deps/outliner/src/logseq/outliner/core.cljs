@@ -720,6 +720,30 @@
         (mapcat #(tree-seq map? children-key %))
         (map #(dissoc % :block/children)))))
 
+(defn- ref-value-delta-tx
+  [db entity deltas]
+  (let [eid (:db/id entity)
+        ref-ids (fn [refs]
+                  (into [] (keep #(some-> (d/entity db %) :db/id)) refs))]
+    (into []
+          (mapcat (fn [[attr {:keys [add retract]}]]
+                    (let [property (d/entity db attr)
+                          add-ids (ref-ids add)
+                          retract-ids (ref-ids retract)
+                          single-value-id (:db/id (get entity attr))]
+                      ;; A different current value on a single-valued ref is
+                      ;; a newer change. Multi-valued refs can be restored independently.
+                      (when (and (= :db.type/ref (:db/valueType property))
+                                 (or (empty? add) (seq add-ids))
+                                 (or (= :db.cardinality/many (:db/cardinality property))
+                                     (and (nil? single-value-id) (empty? retract))
+                                     (some #{single-value-id} retract-ids)
+                                     (some #{single-value-id} add-ids)))
+                        (into (mapv (fn [id] [:db/retract eid attr id]) retract-ids)
+                              (map (fn [id] [:db/add eid attr id]))
+                              add-ids)))))
+          deltas)))
+
 (defn ^:api save-block
   "Save the `block`."
   [db block opts]
@@ -734,12 +758,15 @@
                         {:type :notification
                          :payload {:message "Built-in nodes can't be modified"
                                    :type :error}})))
-      (let [*txs-state (atom [])
-            block' (if (de/entity? block)
-                     block
-                     (merge entity block))]
-        (otree/-save block' *txs-state db opts)
-        {:tx-data @*txs-state}))))
+      (if-let [deltas (:ref-value-deltas opts)]
+        (when-let [tx-data (seq (ref-value-delta-tx db entity deltas))]
+          {:tx-data tx-data})
+        (let [*txs-state (atom [])
+              block' (if (de/entity? block)
+                       block
+                       (merge entity block))]
+          (otree/-save block' *txs-state db opts)
+          {:tx-data @*txs-state})))))
 
 (defn- get-right-siblings
   "Get `node`'s right siblings."

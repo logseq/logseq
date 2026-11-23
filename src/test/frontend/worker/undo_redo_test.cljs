@@ -704,6 +704,50 @@
       (is (nil? (d/entity @conn [:block/uuid target-uuid])))
       (is (empty? (property-value-titles (get (d/entity @conn [:block/uuid child-uuid]) one-property)))))))
 
+(deftest undo-delete-preserves-intervening-node-property-changes-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        {:keys [page-uuid parent-uuid child-uuid]} (seed-page-parent-child!)
+        target (db-test/find-block-by-content @conn "task")
+        target-uuid (:block/uuid target)
+        holder [:block/uuid child-uuid]
+        previous [:block/uuid parent-uuid]
+        replacement [:block/uuid page-uuid]
+        single :user.property/single-node
+        multiple :user.property/multiple-nodes]
+    (apply-ops! conn
+                [[:upsert-property [single {:logseq.property/type :node
+                                            :db/cardinality :one} {}]]
+                 [:upsert-property [multiple {:logseq.property/type :node
+                                              :db/cardinality :many} {}]]]
+                (local-tx-meta {}))
+    (d/transact! conn [[:db/add holder single (:db/id target)]
+                      [:db/add holder multiple (:db/id target)]
+                      [:db/add holder multiple previous]])
+    (worker-undo-redo/clear-history! test-repo)
+    (apply-ops! conn [[:delete-blocks [[target-uuid] {}]]] (local-tx-meta {}))
+    (d/transact! conn [[:db/add holder single replacement]
+                      [:db/add holder multiple replacement]
+                      [:db/retract holder multiple previous]])
+    (is (map? (worker-undo-redo/undo test-repo)))
+    (let [entity (d/entity @conn holder)]
+      (is (= page-uuid (:block/uuid (get entity single))))
+      (is (= #{target-uuid page-uuid} (set (map :block/uuid (get entity multiple))))))))
+
+(deftest replay-ref-delta-preserves-cleared-single-value-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        {:keys [page-uuid parent-uuid child-uuid]} (seed-page-parent-child!)
+        attr :user.property/single-node
+        holder [:block/uuid child-uuid]
+        replacement [:block/uuid page-uuid]]
+    (apply-ops! conn [[:upsert-property [attr {:logseq.property/type :node
+                                              :db/cardinality :one} {}]]] (local-tx-meta {}))
+    (d/transact! conn [[:db/add holder attr replacement]])
+    (d/transact! conn [[:db/retract holder attr replacement]])
+    (apply-ops! conn [[:save-block [{:block/uuid child-uuid}
+                                    {:ref-value-deltas {attr {:add [[:block/uuid parent-uuid]]
+                                                              :retract [replacement]}}}]]] (local-tx-meta {}))
+    (is (nil? (get (d/entity @conn holder) attr)))))
+
 (deftest undo-separate-deletes-restores-node-property-values-on-shared-holder-test
   (testing "undoing one action with separate delete-blocks ops restores both blocks and the holder's values"
     (worker-undo-redo/clear-history! test-repo)
