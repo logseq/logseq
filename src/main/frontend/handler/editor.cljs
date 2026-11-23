@@ -3198,6 +3198,44 @@
          (not= (nth value pos) sym)
          true)))
 
+(defn- last-backtick-runs
+  [value]
+  (let [pattern (js/RegExp. "`+" "g")]
+    (loop [positions {}]
+      (if-let [match (.exec pattern value)]
+        (recur (assoc positions (count (aget match 0)) (.-index match)))
+        positions))))
+
+(defn- closing-display-math-dollar?
+  "Check whether `pos` is on the second dollar of a display math closer."
+  [value pos]
+  (let [delimiters (js/RegExp. #"\\[\s\S]|`+|\$+" "g")
+        ticks (js/RegExp. "`+" "g")
+        last-backticks (delay (last-backtick-runs value))]
+    (loop [from 0 code-width nil display-math? false]
+      ;; Inside code, only a backtick run of the opening width can close it.
+      (let [pattern (if code-width ticks delimiters)]
+        (set! (.-lastIndex pattern) from)
+        (when-let [match (.exec pattern value)]
+          (let [token (aget match 0)
+                start (.-index match)
+                end (.-lastIndex pattern)
+                width (count token)]
+            (cond
+              (> start pos) false
+              code-width (recur end (when-not (= width code-width) code-width) false)
+              (= "`" (.charAt token 0))
+              (let [opens-code? (and (not display-math?) (< start (get @last-backticks width start)))]
+                (recur end (when opens-code? width) display-math?))
+              (= "$" (.charAt token 0))
+              (if (< pos end)
+                (and display-math? (= pos (inc start)))
+                (recur end nil (case width
+                                 1 display-math?
+                                 2 (not display-math?)
+                                 false)))
+              :else (recur end nil display-math?))))))))
+
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
   "NOTE: Keydown cannot be used on Android platform"
   [format]
@@ -3247,7 +3285,12 @@
         (and (= "$" key) (string/blank? (util/get-selected-text)))
         (do
           (util/stop e)
-          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
+          ;; Between two dollars, distinguish an empty pair from a display closer.
+          (if (and (= "$" (get-current-input-char input))
+                   (or (not= "$" (util/nth-safe value (dec pos)))
+                       (closing-display-math-dollar? value pos)))
+            (cursor/move-cursor-to input (inc pos))
+            (commands/simple-insert! input-id "$$" {:backward-pos 1})))
 
         (and (contains? (set/difference (set (keys editor-autopair/reversed-autopair-map))
                                         #{"`"})
