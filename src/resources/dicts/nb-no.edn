@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Veksle åpne blokker (slå sammen eller utvid alle blokker)"
  :command.editor/undo "Angre"
  :command.editor/up "Flytt markøren opp / Velg opp"
- :command.editor/zoom-in "Zoom inn / Fremover"
- :command.editor/zoom-out "Zoom ut / Tilbake"
+ :command.editor/zoom-in "Zoom inn på blokken som redigeres"
+ :command.editor/zoom-out "Zoom ut fra blokken som redigeres"
 
  :command.go/all-graphs "Alle grafer"
  :command.go/all-pages "Gå til alle sider"

@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Öffnen von Blöcken umschalten (alle Blöcke ein- oder ausklappen)"
  :command.editor/undo "Rückgängig"
  :command.editor/up "Cursor nach oben bewegen / Nach oben auswählen"
- :command.editor/zoom-in "Heranzoomen"
- :command.editor/zoom-out "Herauszoomen"
+ :command.editor/zoom-in "An den bearbeiteten Block heranzoomen"
+ :command.editor/zoom-out "Aus dem bearbeiteten Block herauszoomen"
 
  :command.go/all-graphs "Zu allen Graphen springen"
  :command.go/all-pages "Zu allen Seiten springen"

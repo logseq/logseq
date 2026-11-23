@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Réduire ou étendre les blocs"
  :command.editor/undo "Annuler"
  :command.editor/up "Déplacer le curseur vers le haut / Sélectionner au-dessus"
- :command.editor/zoom-in "Zoomer"
- :command.editor/zoom-out "Dézoomer"
+ :command.editor/zoom-in "Zoomer sur le bloc en cours d’édition"
+ :command.editor/zoom-out "Dézoomer depuis le bloc en cours d’édition"
 
  :command.go/all-graphs "Aller vers tous les graphes"
  :command.go/all-pages "Aller vers toutes les pages"

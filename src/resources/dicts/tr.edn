@@ -369,8 +369,8 @@
  :command.editor/toggle-open-blocks "Açık blokları kapat/aç (tüm blokları daralt veya genişlet)"
  :command.editor/undo "Geri al"
  :command.editor/up "İmleci yukarı taşı / Yukarıyı seç"
- :command.editor/zoom-in "Düzenlenen bloğu yakınlaştır / Aksi takdirde ileri git"
- :command.editor/zoom-out "Düzenlenen bloğu uzaklaştır / Aksi takdirde geri git"
+ :command.editor/zoom-in "Düzenlenen bloğa yakınlaştır"
+ :command.editor/zoom-out "Düzenlenen bloktan uzaklaştır"
 
  :command.go/all-graphs "Bütün graflara git"
  :command.go/all-pages "Bütün sayfalara git"

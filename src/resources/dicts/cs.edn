@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Přepnout otevřené bloky (sbalit nebo rozbalit všechny bloky)"
  :command.editor/undo "Zpátky"
  :command.editor/up "Posunout kurzor nahoru/vybrat nahoru"
- :command.editor/zoom-in "Přiblížit upravovaný blok / Jinak dopředu"
- :command.editor/zoom-out "Oddálit upravaný blok / Jinak dozadu"
+ :command.editor/zoom-in "Přiblížit upravovaný blok"
+ :command.editor/zoom-out "Oddálit upravovaný blok"
 
  :command.go/all-graphs "Přejít na všechny grafy"
  :command.go/all-pages "Přejít na všechny stránky"

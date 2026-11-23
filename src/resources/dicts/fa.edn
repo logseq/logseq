@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "تغییر بلوک‌های باز"
  :command.editor/undo "واگرد"
  :command.editor/up "بالا"
- :command.editor/zoom-in "بزرگ‌نمایی"
- :command.editor/zoom-out "کوچک‌نمایی"
+ :command.editor/zoom-in "تمرکز روی بلوک در حال ویرایش"
+ :command.editor/zoom-out "خروج از حالت تمرکز روی بلوک در حال ویرایش"
 
  :command.go/all-graphs "همه گراف‌ها"
  :command.go/all-pages "همه صفحات"

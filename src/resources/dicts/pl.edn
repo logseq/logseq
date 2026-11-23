@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Zwiń / Rozwiń otwarte bloki"
  :command.editor/undo "Cofnij"
  :command.editor/up "Przesuń kursor do góry / Zaznacz powyższą opcję"
- :command.editor/zoom-in "Wejdź do edytowanego bloku lub w przód"
- :command.editor/zoom-out "Wyjdź z edytowanego bloku lub wstecz"
+ :command.editor/zoom-in "Wejdź do edytowanego bloku"
+ :command.editor/zoom-out "Wyjdź z edytowanego bloku"
 
  :command.go/all-graphs "Idź do Wszystkich grafów"
  :command.go/all-pages "Idź do indeksu wszystkich stron"

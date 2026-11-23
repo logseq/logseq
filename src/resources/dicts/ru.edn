@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Переключить открытые блоки (свернуть или развернуть все блоки)"
  :command.editor/undo "Отменить"
  :command.editor/up "Переместить курсор вверх / Выбрать вверх"
- :command.editor/zoom-in "Войти в редактируемый блок / Иначе вперёд"
- :command.editor/zoom-out "Выйти из редактируемого блока / Иначе назад"
+ :command.editor/zoom-in "Войти в редактируемый блок"
+ :command.editor/zoom-out "Выйти из редактируемого блока"
 
  :command.go/all-graphs "Перейти ко всем графам"
  :command.go/all-pages "Перейти ко всем страницам"
