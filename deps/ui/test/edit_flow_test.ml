@@ -1237,7 +1237,7 @@ let test_indent_undo_key_dispatch (h : host) =
   let* () = settle h 40 in
   reset_editor ();
   stage_page h [Test_check.block "b1" "Parent"; Test_check.block "b2" "Indent child"];
-  set_editing ~uuid:"b2" ~buffer:"Indent child" ~caret:2 ~base:"Indent child";
+  set_editing ~uuid:"b2" ~buffer:"Indent child" ~caret:12 ~base:"Indent child";
   S.clear_editor_start_pos ();
   S.history_input_before := None;
   install_worker ~repo:h.repo h;
@@ -1266,6 +1266,10 @@ let test_indent_undo_key_dispatch (h : host) =
   let previous_cmdk = !Cmdk_state.latest_st in
   Option.iter (fun state -> Cmdk_state.latest_st := Some
     {state with Cmdk_state.svs = {state.Cmdk_state.svs with Cmdk_state.Svs.undo=A.undo}}) previous_cmdk;
+  List.iter (fun key -> Editor_keys.apply_input "b2" (EI.Key (EM.key_ev key,false)))
+    ["Home";"ArrowRight";"ArrowRight"];
+  check "Home and two Right key events place the indent caret at two"
+    ((editing_now ()).model.EM.caret=2);
   Editor_keys.apply_input "b2" (EI.Key (EM.key_ev "Tab",false));
   let* () = h.wait_ms 25 in
   check "Indent is pending when the editing undo shortcut arrives" !S.structure_pending;
@@ -2353,7 +2357,15 @@ let test_calculator_exit_structure (h : host) =
 let test_query_selection_conversion (h : host) =
   let previous_popup = !Popups_state.active in
   let popup = Option.get previous_popup in
-  let rec run ?selection = function
+  let popup_key key =
+    { Ui_services.x=0.;y=0.;shift=false;meta=false;ctrl=false;alt=false;
+      composing=false;key=Some key;key_char=Some key;buttons=0;button=0;repeat=false;
+      movement_x=0.;movement_y=0.;default_prevented=false;target=None;touches=[];
+      detail=(fun _ -> None);detail_json=(fun _ -> None);clipboard_get=(fun _ -> "");
+      clipboard_snapshot=(fun () -> Ui_services.empty_clipboard_snapshot);
+      clipboard_set=(fun _ _ -> ());data_transfer_get=(fun _ -> "");files=[];has_files=false;
+      prevent_default=(fun () -> ());stop_propagation=(fun () -> ());stop_immediate=(fun () -> ()) } in
+  let rec run ?selection ?(filter_query=true) = function
     | [] -> Popups_state.active := previous_popup;
         reset_editor (); install_worker ~repo:h.repo h; Js.Promise.resolve ()
     | (title, edited, advanced, rejected, replace) :: rest ->
@@ -2362,17 +2374,32 @@ let test_query_selection_conversion (h : host) =
         Popups_state.close_ac popup;
         stage_page h [Test_check.block "b1" title];
         (* Append and selection-replacement slash input share the saved block. *)
-        let expected_query = String.trim (match selection with
+        let expected_query = String.trim edited in
+        let expected_cleared = String.trim (match selection with
           | Some (first,last) -> String.sub edited 0 first
               ^ String.sub edited last (String.length edited-last)
           | None -> edited) in
         if replace || Option.is_some selection then begin
           set_editing ~uuid:"b1" ~buffer:edited ~caret:(String.length edited) ~base:title;
-          A.update_model "b1" (match selection with
-            | None -> Edit_model.select_all
-            | Some (anchor,focus) -> fun model -> Edit_model.select model ~anchor ~focus);
+          (match selection with
+           | None -> A.update_model "b1" Edit_model.select_all
+           | Some (first,last) ->
+               Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Home",false));
+               for _ = 1 to first do
+                 Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "ArrowRight",false))
+               done;
+               for _ = first+1 to last do
+                 Editor_keys.apply_input "b1" (EI.Key (EM.key_ev ~shift:true "ArrowRight",false))
+               done;
+               check "Query source is visibly selected through navigation keys"
+                 (EM.selection_range (editing_now ()).model =
+                    (if first=last then None else Some (first,last))));
+          Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "/",false));
           Editor_keys.apply_input "b1" (EI.Insert "/");
-          Editor_keys.apply_input "b1" (EI.Insert "Query")
+          if filter_query then String.iter (fun c ->
+            let text = String.make 1 c in
+            Editor_keys.apply_input "b1" (EI.Key (EM.key_ev text,false));
+            Editor_keys.apply_input "b1" (EI.Insert text)) "Query"
         end else begin
           let source = edited ^ "/Query" in
           set_editing ~uuid:"b1" ~buffer:source ~caret:(String.length source) ~base:title;
@@ -2428,7 +2455,17 @@ let test_query_selection_conversion (h : host) =
           else Js.Promise.resolve
             (if owned_call name then worker_handler h name args else h.base_handler name args));
           on_message=(fun _ _ -> ());dead=Js.Promise.make (fun ~resolve:_ ~reject:_ -> ())};
-        Popups_state.run_query popup (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced;
+        (match selection with
+         | None -> Popups_state.run_query popup
+             (Option.get (Popups_state.get popup).Popups_state.ac) ~advanced
+         | Some _ ->
+             let ac = Option.get (Popups_state.get popup).Popups_state.ac in
+             let index = List.find_index (fun item ->
+               item.Popups_state.ai_act=Popups_state.Run_query false) ac.items |> Option.get in
+             for _ = 1 to index do ignore (Popups_state.ac_keydown popup (popup_key "ArrowDown")) done;
+             Editor_keys.apply_input "b1" (EI.Key (EM.key_ev "Enter",false));
+             check "Query conversion is chosen through the live popup Enter handler"
+               (Popups_state.ac_keydown popup (popup_key "Enter")));
         let* () = h.wait_ms 25 in
         let* () = settle h 40 in
         let batch = List.concat !committed in
@@ -2462,7 +2499,7 @@ let test_query_selection_conversion (h : host) =
                  (S.editing ()) && Option.is_some !Ops.pending_save));
         check "Successful query conversion exits only after its writes complete"
           (rejected > 0 || S.editing ()=None);
-        let clean_host = if replace then "" else expected_query in
+        let clean_host = if replace then "" else expected_cleared in
         let query_tag = match graph_value "b1" "block/tags" with
           | Some (W.Keyword "logseq.class/Query") -> true
           | Some (W.Set tags) -> List.mem (W.Keyword "logseq.class/Query") tags
@@ -2481,7 +2518,7 @@ let test_query_selection_conversion (h : host) =
               (if advanced && rejected=0 then Some (W.Keyword "code") else None)
            && graph_value "query-source" "logseq.property.code/lang"=
               (if advanced && rejected=0 then Some (W.String "clojure") else None));
-        run ?selection rest in
+        run ?selection ~filter_query rest in
   let* () = run ["Search seed parity","Search seed parity",false,0,false;
        "G5RegressionToken","G5RegressionToken ",false,0,false;
        "Saved seed","Saved seed with unsaved edits ",false,0,false;
@@ -2501,7 +2538,9 @@ let test_query_selection_conversion (h : host) =
     ["before chosen after","before chosen after",false,0,false;
      "before chosen after","before chosen after",false,2,false;
      "before       after","before       after",false,0,false] in
-  run ~selection:(7,7) ["before  /literal","before  /literal",false,0,false]
+  let* () = run ~selection:(7,7) ["before  /literal","before  /literal",false,0,false] in
+  run ~selection:(7,13) ~filter_query:false
+    ["before chosen after","before chosen after",false,0,false]
 
 let test_query_navigation_conversion (h : host) =
   let popup = Option.get !Popups_state.active in
@@ -3494,7 +3533,7 @@ let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
      && W.map_get_string before "scope"=Some "main"
      && W.get before "caret"=Some (W.Int caret)
      && W.get before "start-pos"=Some (W.Int caret));
-  check "Structured paste records the last inserted block at end as its after-cursor"
+  check "Structured single-block paste after a nonempty destination records the inserted block end"
     (W.get after "block-uuid"=Some (W.Keyword "last-inserted-block")
      && W.map_get_string after "scope"=Some "main"
      && W.get after "caret"=Some (W.Keyword "end"));
@@ -3505,11 +3544,13 @@ let paste_history_cursors_case (h : host) ~title ~caret ~history_caret =
   let restore undo = A.restore_history (W.Map [W.kw "undo?",W.Bool undo;
     W.kw "editor-cursors",W.List [before;after]]) in
   let* () = restore true in
+  let* () = settle h 40 in
   check "Structured paste undo restores the captured origin caret"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
      =Some ("paste-origin",caret));
   let* () = restore false in
-  check "Structured paste redo restores the last inserted block at end"
+  let* () = settle h 40 in
+  check "Structured single-block paste after a nonempty destination redoes at the inserted block end"
     (Option.map (fun e -> e.S.uuid,e.S.model.EM.caret) (S.editing ())
      =Some ("paste-result",String.length "Clipboard parent"));
   reset_editor ();
@@ -3520,6 +3561,9 @@ let test_paste_history_cursors (h : host) =
   paste_history_cursors_case h ~title:"Nonempty destination" ~caret:4 ~history_caret:20
 
 let test_single_block_paste_redo_caret (h : host) =
+  let rec run = function
+  | [] -> Js.Promise.resolve ()
+  | (structured,redo_caret) :: rest ->
   let* () = settle h 40 in
   reset_editor ();
   stage_page h [Test_check.block "paste-single" ""];
@@ -3528,19 +3572,29 @@ let test_single_block_paste_redo_caret (h : host) =
   S.history_input_before := None;
   install_worker ~repo:h.repo h;
   let worker = Option.get !Runtime.worker and options = ref W.Nil and redos = ref 0 in
+  let inserted = W.Map [W.kw "block/uuid",W.Uuid "paste-single";
+    W.kw "block/title",W.String "Gamma single"] in
   let restore title undo =
     Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
       [Test_check.block "paste-single" title]}) !Runtime.current_page;
     h.sync_page ();
     let cursors = List.filter_map (W.get !options)
-      ["undo-redo/editor-info";"undo-redo/editor-info-after"] in
+      ["undo-redo/editor-info";"undo-redo/editor-info-after"]
+      |> List.map (function W.Map fields -> W.Map (List.map (fun (key,value) ->
+        key,(if key=W.kw "block-uuid" && value=W.Keyword "last-inserted-block"
+          then W.Uuid "paste-single" else value)) fields) | cursor -> cursor) in
     Js.Promise.resolve (W.Map [W.kw "undo?",W.Bool undo;
       W.kw "editor-cursors",W.List cursors]) in
   Runtime.worker := Some {worker with Worker_client.invoke_fn=(fun name args ->
     match name,args with
     | "thread-api/apply-outliner-ops",[_;_;opts] ->
         options := opts;
-        worker.invoke_fn name args
+        if structured then begin
+          Runtime.current_page := Option.map (fun page -> {page with Model.page_blocks =
+            [Test_check.block "paste-single" "Gamma single"]}) !Runtime.current_page;
+          h.sync_page ();
+          Js.Promise.resolve (W.Map [W.kw "result",W.Map [W.kw "blocks",W.Array [inserted]]])
+        end else worker.invoke_fn name args
     | "thread-api/undo-redo-undo",_ -> restore "" true
     | "thread-api/undo-redo-redo",_ ->
         incr redos;
@@ -3548,7 +3602,11 @@ let test_single_block_paste_redo_caret (h : host) =
         else if !redos=3 then h.reject_promise "single-block redo rejected"
         else restore "Gamma single" false
     | _ -> worker.invoke_fn name args)};
-  A.splice_clipboard_text "paste-single" "Gamma single";
+  let* () = if structured then
+    let* _ = A.paste_copied_blocks (false,[inserted]) "paste-single"
+      ~sibling:true ~replace_empty:true in Js.Promise.resolve ()
+    else begin A.splice_clipboard_text "paste-single" "Gamma single"; Js.Promise.resolve () end in
+  let* () = settle h 40 in
   check "Single-block paste initially places the caret after the pasted text"
     ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=12);
   let* () = Ops.flush_pending_save () in
@@ -3561,13 +3619,14 @@ let test_single_block_paste_redo_caret (h : host) =
     | name :: rest ->
         A.redo ();
         let* () = settle h 40 in
-        check ("Single-block paste Redo retains caret zero: " ^ name)
-          ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=0);
+        check ((if structured then "Structured" else "Plaintext") ^ " single-block Redo: " ^ name)
+          ((editing_now ()).buffer="Gamma single" && (editing_now ()).model.EM.caret=redo_caret);
         redo rest in
   let* () = redo ["restored text";"empty history";"rejected history"] in
   Runtime.worker := Some worker;
   reset_editor ();
-  Js.Promise.resolve ()
+  run rest in
+  run [false,12;true,0]
 
 let test_structured_paste_completion (h : host) =
   let* () = test_paste_history_cursors h in
@@ -3619,7 +3678,7 @@ let test_structured_paste_completion (h : host) =
              | Some (W.Map kvs) ->
                  List.assoc_opt (W.Keyword "block-uuid") kvs
                    = Some (W.Keyword "last-inserted-block")
-                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Keyword "end")
+                 && List.assoc_opt (W.Keyword "caret") kvs = Some (W.Int 0)
              | _ -> false);
         reset_editor ();
         run rest

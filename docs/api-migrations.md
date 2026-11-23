@@ -350,8 +350,8 @@ does not redirect the newer route. Empty titles and failed writes do not navigat
 ## Slash Query conversion after selection replacement
 
 Simple Query takes its initial search text from the live editing buffer with the
-slash trigger removed, preserving unsaved edits. A whole-buffer selection
-replacement captures the selected text before slash insertion instead.
+slash trigger removed, preserving unsaved edits. Slash input over a selection
+captures the full editing source before insertion instead.
 For example, replacing `G5RegressionToken` with `/Query` and choosing Query
 creates `Search: G5RegressionToken`, not `Search: /`. Advanced Query continues
 to retain the slash-cleared live host title and create an empty code query.
@@ -370,10 +370,11 @@ conversion is pending saves the cleaned host title, never `/Advanced Query`.
 If conversion fails while that editor is still owned, its original buffer and
 caret are restored for retry; completion never replaces a newer editor.
 
-Query conversion also removes the paired closing slash when the command was
-typed over selected text. Selecting `chosen` in `before chosen after` and typing
-`/Query` seeds `before  after`, not `before / after`. An existing literal slash
-after an unselected caret is preserved.
+Slash input autopairs around selected text, as Master does. Selecting `chosen`
+in `before chosen after`, typing `/Query`, and choosing Query seeds
+`before chosen after` from the captured source, not the intermediate paired text.
+The host cleanup also removes the paired closing slash after a typed command;
+an existing literal slash after an unselected caret is preserved.
 
 Conversion is not a single graph transaction, matching Master. A rejected final
 write leaves the earlier cleaned host save and empty Query property committed;
@@ -392,19 +393,25 @@ When no earlier navigation position is recorded, indent/outdent captures the
 current caret before writing history. A clean `Indent child` block at offset 2
 therefore returns to offset 2 after Tab then Cmd+Z. Existing Home/End start
 positions remain authoritative.
+Plain Arrow keys refresh the pending history cursor after moving, so Home then
+Right twice before Tab and Undo restores offset 2 rather than the pre-Home caret.
 
 ## Structured paste undo caret
 
 Paste snapshots the live caret before its transaction and consumes that snapshot,
 not an older Home/End navigation cursor. Pasting at offset 4 in
 `Nonempty destination` restores offset 4 on undo; redo still edits the last
-inserted block at its end. This applies to copied subtrees and Markdown paste.
+inserted block at its end for copied subtrees and Markdown paste. A structured
+single-block paste records offset 0 for Redo only when replacing an empty
+destination. Into a nonempty destination it records the inserted block's end,
+for both copy and cut, while Undo still restores the original caret.
 
-Plain text pasted into one existing block records its pre-paste cursor for Redo,
-rather than the caret after insertion. Pasting `Gamma single` into an empty
-block initially places the caret at 12; Undo then Redo restores its text at
-caret 0, matching Master. The debounced save accepts an explicit history-after
-cursor for these inline paste paths; other edits retain their live after-cursor.
+Plain text pasted into one existing block records its live post-insertion caret
+for Redo. Pasting OS text `Gamma single` into an empty block initially places the
+caret at 12; Undo then Redo restores its text at caret 12. Copying the same text
+as a structured Logseq block into an empty destination restores caret 0 on Redo;
+into a nonempty destination it restores caret 12. These separate history paths
+match Master; initial paste focus remains at the end.
 
 ## Zoom breadcrumb ancestor loading
 

@@ -2726,10 +2726,9 @@ let paste_clipboard_text uuid =
           (if current () then
              match edit_model uuid with
              | Some m ->
-                 let history_after = S.history_cursor () in
                  let lo, hi = sel_span_of m in
                  splice_range uuid lo hi text;
-                 Ops.schedule_save ~history_after uuid (live_buffer uuid)
+                 Ops.schedule_save uuid (live_buffer uuid)
              | None -> ());
           Ui_task.resolve ())
 
@@ -2741,7 +2740,7 @@ let paste_focus () =
     if context = (Runtime.repo (), Runtime.route ()) && session_current ()
     then edit_last_inserted ~scope resp
 
-let paste_history_opts target_uuid =
+let paste_history_opts target_uuid ~after_caret =
   (match S.editing () with
    | Some e ->
        S.note_editor_start_pos_from_arrow e.S.model.Edit_model.caret;
@@ -2753,7 +2752,7 @@ let paste_history_opts target_uuid =
   let after = Wire.Map
       [ Wire.Keyword "block-uuid", Wire.Keyword "last-inserted-block"
       ; Wire.Keyword "scope", Wire.String scope
-      ; Wire.Keyword "caret", Wire.Keyword "end" ] in
+      ; Wire.Keyword "caret", after_caret ] in
   let before, _ = S.consume_history_before () in
   Ops.history_opts ~opts:(Ops.op_opts "paste") ~before ~after ()
 
@@ -2765,7 +2764,10 @@ let paste_copied_blocks (cut, blocks) target_uuid ~sibling ~replace_empty =
   let session_current = paste_session_current () in
   let input_seq = !S.edit_input_seq in
   let focus = paste_focus () in
-  let opts = paste_history_opts target_uuid in
+  let after_caret = match blocks with
+    | [_] when replace_empty -> Wire.Int 0
+    | _ -> Wire.Keyword "end" in
+  let opts = paste_history_opts target_uuid ~after_caret in
   let* resp = Ops.apply_and_refresh_result ~opts
       [ Ops.paste_blocks blocks target_uuid ~cut ~sibling ~replace_empty ] in
   if context = (Runtime.repo (), Runtime.route ()) && session_current ()
@@ -2791,7 +2793,7 @@ let paste_markdown_blocks uuid text ~replace_empty ~sibling =
   let current = paste_context_current () in
   let repo = Runtime.repo () in
   let focus = paste_focus () in
-  let opts = paste_history_opts uuid in
+  let opts = paste_history_opts uuid ~after_caret:(Wire.Keyword "end") in
   let* w =
     Runtime.invoke3 "thread-api/paste-extract-blocks"
       (Wire.String repo)
@@ -2863,10 +2865,9 @@ let paste_lines lines =
 let splice_clipboard_text uuid text =
   match edit_model uuid with
   | Some m ->
-      let history_after = S.history_cursor () in
       let lo, hi = sel_span_of m in
       update_model uuid (fun _ -> Edit_model.splice m lo hi text);
-      Ops.schedule_save ~history_after uuid (live_buffer uuid)
+      Ops.schedule_save uuid (live_buffer uuid)
   | None -> ()
 
 (* in-editor paste: when the event text matches what our copy/cut wrote,
