@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
@@ -919,6 +920,12 @@
     (-> (mapv #(to-insert-op db-before %) plans')
         (into save-ops))))
 
+(defkeywords
+  :outliner/ref-value-deltas {:doc "Reference changes to reverse when replaying a deletion from history."})
+
+(defn ref-value-deltas [opts]
+  (or (:outliner/ref-value-deltas opts) (:ref-value-deltas opts)))
+
 (defn- inbound-ref-restore-ops
   "`:db/retractEntity` on a deleted block also retracts the ref values other
   blocks hold on it, e.g. a node property value. Restore those values. They
@@ -952,8 +959,14 @@
                          holders))
                      holders))
                  {})
-         (map (fn [[uuid deltas]]
-                [:save-block [{:block/uuid uuid} {:ref-value-deltas deltas}]])))))
+         (map
+          (fn [[uuid deltas]]
+            (let [holder [:block/uuid uuid]
+                  title (fn [db] (:v (first (d/datoms db :eavt holder :block/title))))
+                  changes (cond-> deltas
+                            (contains? deltas :block/refs)
+                            (assoc-in [:block/refs :titles] [(title db-after) (title db-before)]))]
+              [:save-block [{:block/uuid uuid} {:outliner/ref-value-deltas changes}]]))))))
 
 (defn- build-inverse-delete-blocks
   [db-before db-after ids]
@@ -1246,7 +1259,7 @@
                           (let [[block opts] args]
                             ;; Reference deltas are part of an undo replay.
                             ;; Its explicit inverse is the original deletion.
-                            (when-not (:ref-value-deltas opts)
+                            (when-not (ref-value-deltas opts)
                               (build-inverse-save-block db-before block opts)))
 
                           :insert-blocks

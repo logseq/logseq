@@ -14,6 +14,7 @@
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
             [logseq.outliner.datascript :as ds]
+            [logseq.outliner.op.construct :as op-construct]
             [logseq.outliner.page :as outliner-page]
             [logseq.outliner.pipeline :as outliner-pipeline]
             [logseq.outliner.recycle :as outliner-recycle]
@@ -726,39 +727,49 @@
         ref-ids (fn [refs]
                   (into [] (keep #(some-> (d/entity db %) :db/id)) refs))]
     (into []
-          (mapcat (fn [[attr {:keys [add retract]}]]
+          (mapcat (fn [[attr {:keys [add retract titles]}]]
                     (let [property (d/entity db attr)
                           add-ids (ref-ids add)
                           retract-ids (ref-ids retract)
-                          single-value-id (:db/id (get entity attr))]
+                          single-value-id (:db/id (get entity attr))
+                          [expected-title restored-title] titles]
                       ;; A different current value on a single-valued ref is
                       ;; a newer change. Multi-valued refs can be restored independently.
                       (when (and (= :db.type/ref (:db/valueType property))
+                                 (or (nil? titles)
+                                     (and (= attr :block/refs)
+                                          (= expected-title (:v (first (d/datoms db :eavt eid :block/title))))
+                                          (= (count add) (count add-ids))))
                                  (or (empty? add) (seq add-ids))
                                  (or (= :db.cardinality/many (:db/cardinality property))
                                      (and (nil? single-value-id) (empty? retract))
                                      (some #{single-value-id} retract-ids)
                                      (some #{single-value-id} add-ids)))
-                        (into (mapv (fn [id] [:db/retract eid attr id]) retract-ids)
-                              (map (fn [id] [:db/add eid attr id]))
-                              add-ids)))))
+                        (cond-> (into (mapv (fn [id] [:db/retract eid attr id]) retract-ids)
+                                      (map (fn [id] [:db/add eid attr id]))
+                                      add-ids)
+                          (and (string? restored-title) (not= restored-title expected-title))
+                          (conj [:db/add eid :block/title restored-title]))))))
           deltas)))
 
 (defn ^:api save-block
   "Save the `block`."
   [db block opts]
   {:pre [(map? block)]}
-  (let [eid (or (:db/id block) (when-let [id (:block/uuid block)] [:block/uuid id]))]
+  (let [eid (or (:db/id block) (when-let [id (:block/uuid block)] [:block/uuid id]))
+        deltas (op-construct/ref-value-deltas opts)]
     (when (nil? eid)
       (throw (ex-info "Block eid doesn't exist"
                       {:block block})))
     (when-let [entity (d/entity db eid)]
-      (when (outliner-validate/built-in-entity? entity)
+      (when (and (outliner-validate/built-in-entity? entity)
+                 (not (and (ldb/class? entity)
+                           (= [:logseq.property.class/properties] (keys deltas)))))
         (throw (ex-info "Built-in nodes can't be modified"
                         {:type :notification
                          :payload {:message "Built-in nodes can't be modified"
                                    :type :error}})))
-      (if-let [deltas (:ref-value-deltas opts)]
+      (if deltas
         (when-let [tx-data (seq (ref-value-delta-tx db entity deltas))]
           {:tx-data tx-data})
         (let [*txs-state (atom [])

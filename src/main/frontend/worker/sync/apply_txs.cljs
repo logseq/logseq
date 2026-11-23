@@ -1455,7 +1455,7 @@
           block-base (dissoc block :db/id :block/order)
           block' (merge block-base
                         (op-construct/rewrite-block-title-with-retracted-refs db block-base))]
-      (when (and (nil? block-ent) (not (:ref-value-deltas opts)))
+      (when (and (nil? block-ent) (not (op-construct/ref-value-deltas opts)))
         (invalid-rebase-op! op {:args args
                                 :reason :missing-block}))
       (when block-ent

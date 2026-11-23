@@ -704,6 +704,47 @@
       (is (nil? (d/entity @conn [:block/uuid target-uuid])))
       (is (empty? (property-value-titles (get (d/entity @conn [:block/uuid child-uuid]) one-property)))))))
 
+(deftest undo-delete-property-on-built-in-class-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        attr :user.property/weight
+        tag :logseq.class/Task
+        class-uuid (:block/uuid (d/entity @conn tag))
+        attached? #(contains? (set (map :db/ident (:logseq.property.class/properties (d/entity @conn tag)))) attr)]
+    (apply-ops! conn [[:upsert-property [attr {:logseq.property/type :number} {}]]
+                      [:class-add-property [class-uuid attr]]] (local-tx-meta {}))
+    (is (attached?))
+    (worker-undo-redo/clear-history! test-repo)
+    (apply-ops! conn [[:delete-page [(:block/uuid (d/entity @conn attr)) {}]]] (local-tx-meta {}))
+    (is (not (attached?)))
+    (is (map? (worker-undo-redo/undo test-repo)))
+    (is (attached?))
+    (is (map? (worker-undo-redo/redo test-repo)))
+    (is (not (attached?)))))
+
+(deftest undo-delete-inline-reference-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        {:keys [child-uuid parent-uuid]} (seed-page-parent-child!)
+        target (db-test/find-block-by-content @conn "task")
+        uuid (:block/uuid target)
+        title (str "See [[" uuid "]]")
+        state (fn [id]
+                (let [e (d/entity @conn [:block/uuid id])]
+                  [(:v (first (d/datoms @conn :eavt (:db/id e) :block/title)))
+                   (contains? (set (map :block/uuid (:block/refs e))) uuid)]))]
+    (doseq [id [child-uuid parent-uuid]]
+      (d/transact! conn [[:db/add [:block/uuid id] :block/title title]
+                         [:db/add [:block/uuid id] :block/refs (:db/id target)]]))
+    (worker-undo-redo/clear-history! test-repo)
+    (apply-ops! conn [[:delete-blocks [[uuid] {}]]] (local-tx-meta {}))
+    (is (= ["See task" false] (state child-uuid)))
+    (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/title "Edited"]])
+    (is (map? (worker-undo-redo/undo test-repo)))
+    (is (= [title true] (state child-uuid)))
+    (is (= ["Edited" false] (state parent-uuid)))
+    (is (map? (worker-undo-redo/redo test-repo)))
+    (is (= ["See task" false] (state child-uuid)))
+    (is (= ["Edited" false] (state parent-uuid)))))
+
 (deftest undo-delete-preserves-intervening-node-property-changes-test
   (let [conn (worker-state/get-datascript-conn test-repo)
         {:keys [page-uuid parent-uuid child-uuid]} (seed-page-parent-child!)
