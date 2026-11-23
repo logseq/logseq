@@ -919,8 +919,35 @@
     (-> (mapv #(to-insert-op db-before %) plans')
         (into save-ops))))
 
+(defn- inbound-ref-restore-ops
+  "`:db/retractEntity` on a deleted block also retracts the ref values other
+  blocks hold on it, e.g. a node property value. Restore those values."
+  [db-before tx-data]
+  (let [deleted-ids (into #{}
+                          (keep (fn [d]
+                                  (when (and (= :block/uuid (:a d))
+                                             (not (:added d)))
+                                    (:e d))))
+                          tx-data)]
+    (->> tx-data
+         (filter (fn [d]
+                   (and (not (:added d))
+                        (contains? deleted-ids (:v d))
+                        (not (contains? deleted-ids (:e d)))
+                        (worker-ref-attr? db-before (:a d)))))
+         (group-by :e)
+         (keep (fn [[e datoms]]
+                 (let [ent (d/entity db-before e)]
+                   (when-let [block-uuid (:block/uuid ent)]
+                     [:save-block
+                      [(reduce (fn [m a]
+                                 (assoc m a (sanitize-ref-value db-before (get ent a))))
+                               {:block/uuid block-uuid}
+                               (distinct (map :a datoms)))
+                       {}]])))))))
+
 (defn- build-inverse-delete-blocks
-  [db-before db-after ids]
+  [db-before db-after tx-data ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
         recycled-roots (filter #(ldb/recycled? (d/entity db-after [:block/uuid (:block/uuid %)])) roots)
         recycled-ids (set (map :db/id recycled-roots))
@@ -930,7 +957,8 @@
                (seq roots)
                (every? some? plans))
       (seq (concat (map (fn [root] [:restore-recycled [(:block/uuid root)]]) recycled-roots)
-                   (restore-plans->ops db-before plans))))))
+                   (restore-plans->ops db-before plans)
+                   (inbound-ref-restore-ops db-before tx-data))))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -1241,7 +1269,7 @@
 
                           :delete-blocks
                           (let [[ids _opts] args]
-                            (build-inverse-delete-blocks db-before db-after ids))
+                            (build-inverse-delete-blocks db-before db-after tx-data ids))
 
                           :restore-recycled
                           (let [[root-id] args
