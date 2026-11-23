@@ -1399,7 +1399,6 @@
                   util/get-selected-text (constantly "")
                   util/stop (constantly nil)
                   cursor/pos (constantly cursor-pos)
-                  cursor/get-caret-pos (constantly {:pos cursor-pos})
                   cursor/move-cursor-to (fn [_ pos' & _]
                                           (reset! cursor-pos' pos'))]
       ((editor/keydown-not-matched-handler :markdown) event nil)
@@ -1446,7 +1445,12 @@
     (is (= {:content "costs $5, $$$$"
             :cursor-pos 12}
            (keydown-dollar-without-selection-result {:value "costs $5, $$"
-                                                     :cursor-pos 11})))))
+                                                     :cursor-pos 11}))))
+  (testing "dollars in inline code do not affect display math closing"
+    (is (= {:content nil
+            :cursor-pos 16}
+           (keydown-dollar-without-selection-result {:value "Code `$$`; $$y$$"
+                                                     :cursor-pos 15})))))
 
 (defn- keydown-backtick-autopaired?
   [event]
