@@ -1,6 +1,7 @@
 (ns logseq.db-sync.worker.routes.semantic
   (:require [clojure.string :as string]
             [flatland.ordered.map :refer [ordered-map]]
+            [logseq.common.config :as common-config]
             [reitit.core :as r]))
 
 (def operations
@@ -117,7 +118,7 @@
    "updateProperty" ["Update a property definition" "Updates the name, value type, or cardinality of one typed property definition in a DB graph. Never use legacy file-graph key:: value syntax."]
    "deleteProperty" ["Delete a property definition" "Deletes one property definition through Logseq's property deletion rules."]
    "listAssets" ["List assets" "Returns a cursor-paginated list of asset blocks with optional creation and update time filters."]
-   "createAsset" ["Upload an asset" "Streams a file of at most 100MB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum. On E2EE graphs, title must be encrypted and the body must be the canonical Transit [iv ciphertext] package of AES-GCM-encrypted file bytes; size and checksum describe the plaintext file."]
+   "createAsset" ["Upload an asset" "Streams a file of at most 200 MiB to R2 and creates its Asset-class block. Requires a client-computed SHA-256 checksum. On E2EE graphs, title must be encrypted and the body must be the canonical Transit [iv ciphertext] package of AES-GCM-encrypted file bytes; size and checksum describe the plaintext file."]
    "getAsset" ["Get an asset download link" "Returns asset metadata and a five-minute signed URL for the asset block's R2 object. The URL does not require an Authorization header. On plain graphs, use it to display image content. On E2EE graphs the object contains encrypted file bytes and must be decrypted with the graph AES key before display."]
    "searchGraph" ["Search graph resources" "Searches blocks, tags, properties, and assets by title and returns cursor-paginated results."]
    "getE2eePublicKeys" ["List graph members' public keys" "Returns the RSA-OAEP public keys of every member of an E2EE graph for wrapping the shared graph AES key. Only available on E2EE-encrypted graphs."]
@@ -173,8 +174,8 @@
 (def ^:private asset-upload-parameters
   [{:name "file-name" :in "query" :required true :schema {:type "string"}}
    {:name "size" :in "query" :required true
-    :description "Exact plaintext file size in bytes, at most 100MB. For E2EE uploads this excludes the GCM tag and Transit framing; the server validates the encrypted stream against this size."
-    :schema {:type "integer" :minimum 0 :maximum 104857600}}
+    :description "Exact plaintext file size in bytes, at most 200 MiB. For E2EE uploads this excludes the GCM tag and Transit framing; the server validates the encrypted stream against this size."
+    :schema {:type "integer" :minimum 0 :maximum common-config/max-asset-size}}
    {:name "title" :in "query" :schema {:type "string"}}
    {:name "page-id" :in "query"
     :description "Destination page UUID. Omit to append to today's journal."
@@ -399,7 +400,7 @@
                               :properties {:uuid {:type "string"}
                                            :title {:type "string"}
                                            :type {:type "string"}
-                                           :size {:type "integer" :minimum 0 :maximum 104857600}
+                                           :size {:type "integer" :minimum 0 :maximum common-config/max-asset-size}
                                            :checksum {:type "string" :pattern "^[0-9a-f]{64}$"}
                                            :url {:type "string" :format "uri"}
                                            :expires-at {:type "integer"}}}

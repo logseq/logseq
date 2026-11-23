@@ -46,6 +46,6 @@
                       {:properties {friend-prop bob-id}}))
 
       (page/goto-page target)
-      (w/wait-for ".property-k:text('People')")
-      (assert/assert-is-visible ".property-value .block-title-wrap:text('Alice')")
-      (assert/assert-have-count ".property-k:text('Projects')" 0))))
+      (w/wait-for ".ls-bidirectional-properties [role='tab']:has-text('People')")
+      (assert/assert-is-visible ".ls-bidirectional-block-container .block-title-wrap:text('Alice')")
+      (assert/assert-have-count ".ls-bidirectional-properties [role='tab']:has-text('Projects')" 0))))

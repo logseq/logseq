@@ -241,14 +241,15 @@
     (w/click "button[title*='Time'], button:has-text('Time travel')")
     (let [slider (w/-query "input[type='range']")]
       (assert/assert-is-visible slider)
-      (let [full-count (util/count-elements ".graph-node, [data-node-id]")]
+      (let [full-count (util/count-elements ".graph-node, [data-node-id]")
+            now-label (loc/filter ".graph-time-travel-label" :has-text "Now")]
         (w/click slider)
         (k/press "Home")
         (is (<= (util/count-elements ".graph-node, [data-node-id]")
                 full-count))
         (w/click ".graph-time-travel-reset[title='Now']")
-        (assert/assert-is-visible
-         (loc/filter ".graph-time-travel-label" :has-text "Now"))
+        (w/wait-for now-label {:timeout 10000})
+        (assert/assert-is-visible now-label)
         (is (= full-count
                (util/count-elements ".graph-node, [data-node-id]")))))))
 

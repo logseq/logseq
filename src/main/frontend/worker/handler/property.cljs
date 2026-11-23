@@ -38,6 +38,24 @@
   (when-let [conn (worker-state/get-datascript-conn repo)]
     (first-url-property-value @conn block-id)))
 
+(defn- class-alias-summary
+  "Transit writes nested Entities from their realized cache, which is often
+   only {:db/id}. Tag completion matches aliases by title, so realize those
+   fields before leaving the worker."
+  [alias]
+  (when-let [id (:db/id alias)]
+    (cond-> {:db/id id}
+      (:block/uuid alias) (assoc :block/uuid (:block/uuid alias))
+      (:block/title alias) (assoc :block/title (:block/title alias)))))
+
+(defn- class->map
+  [class]
+  (let [m (entity-util/entity->map class)
+        aliases (keep class-alias-summary (:block/alias class))]
+    (cond-> m
+      (seq aliases)
+      (assoc :block/alias (vec aliases)))))
+
 (defn get-all-classes
   [db {:keys [except-root-class? except-private-tags? except-extends-hidden-tags?]
        :or {except-root-class? false
@@ -58,7 +76,7 @@
       (remove #(= :logseq.class/Root (:db/ident %)))
 
       true
-      (map entity-util/entity->map))))
+      (map class->map))))
 
 (defn class-extends-children-tree
   ([db class-id]
@@ -131,6 +149,21 @@
     :else
     (property-node-selector-values db property option)))
 
+(defn- property-node-selector-selected-nodes
+  [db property block]
+  (let [property-ident (:db/ident property)
+        current-values (get (d/entity db (:db/id block)) property-ident)
+        values (if (db-property/many? (d/entity db property-ident)) current-values [current-values])]
+    (into []
+          (keep (fn [value]
+                  (when (and value (not= :logseq.property/empty-placeholder (:db/ident value)))
+                    (let [target (d/entity db (worker-plain/node-property-target-id
+                                              db (:db/id value) property-ident))]
+                      ;; Shallow renderer refs cannot expand linked titles without the DB.
+                      {:value (worker-plain/worker-plain-value db target)
+                       :label (db-content/recur-replace-uuid-in-block-title target)}))))
+          values)))
+
 (defn property-node-selector-data
   [db {:keys [property block] :as option}]
   (let [all-classes (get-all-classes db {:except-root-class? false
@@ -170,7 +203,9 @@
      :extends-class-options extends-class-options
      :structured-children-by-class-id structured-children-by-class-id
      :extends-by-class-id extends-by-class-id
-     :initial-choices (property-node-selector-initial-choices db property non-root-classes option)}))
+     :initial-choices (property-node-selector-initial-choices db property non-root-classes option)
+     :selected-nodes (when (seq classes)
+                       (property-node-selector-selected-nodes db property block))}))
 
 (def-thread-api :thread-api/get-all-classes
   [repo opts]
@@ -230,8 +265,8 @@
 (def-thread-api :thread-api/get-alias-source-page
   [repo page-id]
   (when-let [conn (worker-state/get-datascript-conn repo)]
-    (some-> (ldb/get-alias-source-page @conn page-id)
-            entity-util/entity->map)))
+    (when-let [source (ldb/get-alias-source-page @conn page-id)]
+      (worker-plain/entity-forward-map @conn source {}))))
 
 (def-thread-api :thread-api/get-property-closed-values
   [repo property-ident]
@@ -417,7 +452,8 @@
                             :block/order new-order}
                            (outliner-core/block-with-updated-at
                             {:db/id block-id}))
-                     {:outliner-op :save-block}))))
+                     {:outliner-op :save-block})
+      nil)))
 
 (def ^:private display-property-keys
   [:db/id
@@ -711,24 +747,19 @@
                                    (cond
                                      show-empty-and-hidden-properties?
                                      false
+                                     (:logseq.property/hide? property)
+                                     true
                                      state-hide-empty-properties?
                                      (nil? (get properties property-id))
                                      (and (:logseq.property/hide-empty-value property)
                                           (nil? (get properties property-id)))
                                      true
                                      :else
-                                     (boolean (:logseq.property/hide? property))))))
-        property-hide-f (cond
-                          publishing?
+                                     false))))
+        property-hide-f (if publishing?
                           (fn [[property-id property-value]]
                             (or (nil? property-value)
                                 (hide-with-property-id property-id)))
-                          state-hide-empty-properties?
-                          (fn [[property-id property-value]]
-                            (if (:logseq.property/hide? (d/entity db property-id))
-                              (hide-with-property-id property-id)
-                              (nil? property-value)))
-                          :else
                           (comp hide-with-property-id first))
         {block-hidden-properties true
          block-own-properties' false} (group-by property-hide-f block-own-properties)

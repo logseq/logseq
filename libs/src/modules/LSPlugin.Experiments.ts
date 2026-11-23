@@ -1,5 +1,4 @@
-import { LSPluginUser } from '../LSPlugin.user'
-import { PluginLocal } from '../LSPlugin.core'
+import type { PluginLocal } from '../LSPlugin.core'
 import { safeSnakeCase } from '../common'
 
 /**
@@ -39,13 +38,20 @@ export type BlockRendererPredicate = (
   props: BlockRendererProps
 ) => boolean
 
+type LSPluginExperimentsContext = {
+  baseInfo: {
+    id: string
+  }
+  resolveResourceFullUrl(filePath: string): string
+}
+
 /**
  * WARN: These are some experience features and might be adjusted at any time.
  * These unofficial plugins that use these APIs are temporarily
  * may not be supported on the Marketplace.
  */
 export class LSPluginExperiments {
-  constructor(private ctx: LSPluginUser) {}
+  constructor(private ctx: LSPluginExperimentsContext) {}
 
   get React(): unknown {
     return this.ensureHostScope().React

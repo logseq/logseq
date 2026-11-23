@@ -16,8 +16,6 @@
    [logseq.db :as ldb]
    [promesa.core :as p]))
 
-(def max-asset-size (* 100 1024 1024))
-
 (defonce *repo->missing-asset-upload-files
   (atom {}))
 
@@ -142,6 +140,38 @@
     (mark-asset-write-finish! repo asset-id)
     nil))
 
+(defn- checked-upload!
+  [^js response allowed-status]
+  (when-not (or (.-ok response) (= allowed-status (.-status response)))
+    (throw (ex-info "upload-asset failed"
+                    {:type :rtc.exception/upload-asset-failed
+                     :data {:status (.-status response)}})))
+  response)
+
+(defn- <upload-asset-payload!
+  [url auth-headers asset-type checksum size payload]
+  (letfn [(put! [target headers]
+            (js/fetch target (clj->js {:method "PUT" :headers headers :body payload})))
+          (proxy! []
+            (p/let [resp (put! url (merge auth-headers {"x-amz-meta-checksum" checksum
+                                                       "x-amz-meta-type" asset-type}))]
+              (checked-upload! resp nil)))
+          (control! [action]
+            (p/let [resp (js/fetch url
+                                      (clj->js {:method "POST"
+                                                :headers (assoc auth-headers "content-type" "application/json")
+                                                :body (js/JSON.stringify #js {:action action :size size :checksum checksum})}))]
+              (checked-upload! resp nil)))]
+    (p/let [^js resp (control! "prepare")
+            ^js plan (.json resp)]
+      (case (.-mode plan)
+        "proxy" (proxy!)
+        "present" (control! "complete")
+        "direct" (p/let [uploaded (put! (.-url plan) (.-headers plan))]
+                   (checked-upload! uploaded 412)
+                   (control! "complete"))
+        (throw (js/Error. "invalid asset upload plan"))))))
+
 (defn upload-remote-asset!
   [repo graph-id asset-uuid asset-type checksum]
   (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
@@ -161,6 +191,7 @@
                                                           {:type :rtc.exception/read-asset-failed}
                                                           e)))))
                   _ (clear-missing-asset-upload-file! repo asset-id)
+                  size (payload-size asset-bytes)
                   asset-bytes (if aes-key (->uint8 asset-bytes) asset-bytes)
                   payload (if (not aes-key)
                             asset-bytes
@@ -168,19 +199,9 @@
                               (ldb/write-transit-str encrypted-bytes)))
                   total (payload-size payload)
                   _ (notify-asset-progress! repo asset-id :upload 0 total)
-                  headers (merge (sync-auth/auth-headers (worker-state/get-id-token))
-                                 {"x-amz-meta-checksum" checksum
-                                  "x-amz-meta-type" asset-type})
-                  ^js resp (js/fetch put-url
-                                     (clj->js {:method "PUT"
-                                               :headers headers
-                                               :body payload}))
-                  status (.-status resp)
+                  headers (sync-auth/auth-headers (worker-state/get-id-token))
+                  _ (<upload-asset-payload! put-url headers asset-type checksum size payload)
                   _ (notify-asset-progress! repo asset-id :upload total total)]
-            (when-not (.-ok resp)
-              (throw (ex-info "upload-asset failed"
-                              {:type :rtc.exception/upload-asset-failed
-                               :data {:status status}})))
             nil)
           (p/catch
            (fn [e]
@@ -243,7 +264,7 @@
                              :asset-type asset-type}
                             current-client-f broadcast-rtc-state!-f)
 
-            (> size max-asset-size)
+            (> size common-config/max-asset-size)
             (do
               (log/info :db-sync/asset-too-large {:repo repo
                                                   :asset-uuid asset-uuid
@@ -360,13 +381,13 @@
 
 (defn download-remote-asset!
   [repo graph-id asset-uuid asset-type]
-  (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)]
+  (let [base (sync-auth/http-base-url @worker-state/*db-sync-config)
+        asset-id (str asset-uuid)]
     (if (and (seq base) (seq graph-id) (seq asset-type))
       (-> (p/let [aes-key (graph-aes-key
                            repo graph-id
                            (fn [tag data]
                              (throw (ex-info (name tag) data))))
-                  asset-id (str asset-uuid)
                   get-url (sync-large-title/asset-url base graph-id asset-id asset-type)
                   headers (sync-auth/auth-headers (worker-state/get-id-token))
                   request-opts (cond-> {:method "GET"}
@@ -378,20 +399,21 @@
                       (throw (ex-info "download asset failed"
                                       {:type :rtc.exception/download-asset-failed
                                        :data {:status status}})))
+                  ;; In-flight total may be encoded wire size; completion uses decoded size.
                   total (or (parse-content-length resp) 0)
                   _ (notify-asset-progress! repo asset-id :download 0 total)
                   body (.arrayBuffer resp)
                   body-size (.-byteLength body)
-                  total' (if (pos? total) total body-size)
-                  _ (notify-asset-progress! repo asset-id :download body-size total')
                   asset-file
                   (if (not aes-key)
                     body
                     (let [asset-file-untransited (ldb/read-transit-str (.decode (js/TextDecoder.) body))]
-                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))]
-            (<write-asset-bytes! repo asset-id asset-type asset-file))
+                      (crypt/<decrypt-uint8array aes-key asset-file-untransited)))
+                  _ (<write-asset-bytes! repo asset-id asset-type asset-file)]
+            (notify-asset-progress! repo asset-id :download body-size body-size))
           (p/catch
            (fn [e]
+             (notify-asset-progress! repo asset-id :download 0 0)
              (if (= :rtc.exception/download-asset-failed (:type (ex-data e)))
                (p/rejected e)
                (p/rejected (ex-info "download asset failed"

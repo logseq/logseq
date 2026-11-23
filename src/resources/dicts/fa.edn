@@ -26,7 +26,7 @@
  :account/refresh-token-warning "بازآوری توکن: وضعیت غیرعادی"
  :account/reset-password "بازنشانی رمز عبور"
  :account/sign-up "ثبت‌نام"
- :account/sync-assets-limit "همگام‌سازی فایل‌های پیوست تا ۱۰۰ مگابایت برای هر فایل"
+ :account/sync-assets-limit "همگام‌سازی فایل‌های پیوست تا ۲۰۰ مگابایت برای هر فایل"
  :account/synced-status "همگام‌سازی شده"
  :account/unlimited-unsynced-graphs "گراف‌های همگام‌سازی نشده نامحدود"
  :account/upcoming-cloud-features "ویژگی‌های ابری آینده، از جمله Logseq Publish"
@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "تغییر بلوک‌های باز"
  :command.editor/undo "واگرد"
  :command.editor/up "بالا"
- :command.editor/zoom-in "بزرگ‌نمایی"
- :command.editor/zoom-out "کوچک‌نمایی"
+ :command.editor/zoom-in "تمرکز روی بلوک در حال ویرایش"
+ :command.editor/zoom-out "خروج از حالت تمرکز روی بلوک در حال ویرایش"
 
  :command.go/all-graphs "همه گراف‌ها"
  :command.go/all-pages "همه صفحات"
@@ -813,7 +813,7 @@
  :icon/tab-icons "آیکون‌ها"
 
  :import/all-tags "وارد کردن همه برچسب‌ها"
- :import/asset-too-large-warning "کپی دارایی {1} رد شد چون از محدودیت 100 مگابایت بیشتر است."
+ :import/asset-too-large-warning "کپی دارایی {1} رد شد چون از محدودیت 200 مگابایت بیشتر است."
  :import/assets-import-partial "{1}/{2} فایل وارد شد. جزئیات در کنسول."
  :import/assets-imported "{1} فایل وارد شد."
  :import/assets-skipped "{1} فایل نادیده گرفته شد. جزئیات در کنسول."

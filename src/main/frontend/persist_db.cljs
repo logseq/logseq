@@ -1,10 +1,12 @@
 (ns frontend.persist-db
   "Backend of DB based graph"
-  (:require [electron.ipc :as ipc]
+  (:require [clojure.string :as string]
+            [electron.ipc :as ipc]
             [frontend.config :as config]
             [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
             [frontend.db.subs :as db-subs]
+            [frontend.error :as error]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.browser :as browser]
@@ -426,7 +428,18 @@
   (cond
     (electron-runtime?)
     (if-let [repo (state/get-current-repo)]
-      (<ensure-remote! repo)
+      (-> (<ensure-remote! repo)
+          (p/catch (fn [err]
+                     (if (error/graph-absent-error? err)
+                       (do
+                         (log/warn :event :db-worker-start-graph-absent
+                                   :repo repo
+                                   :error err)
+                         (when (same-remote-repo? repo (state/get-current-repo))
+                           (state/set-current-repo! nil)
+                           (db-subs/reset-graph! nil))
+                         nil)
+                       (throw err)))))
       (p/resolved nil))
 
     :else
@@ -440,8 +453,16 @@
 (defn <list-db []
   (if (electron-runtime?)
     (if-let [repo (or @remote-repo (state/get-current-repo))]
-      (p/let [client (<ensure-remote! repo)]
-        (protocol/<list-db client))
+      (-> (p/let [client (<ensure-remote! repo)]
+            (protocol/<list-db client))
+          (p/catch (fn [err]
+                     (if (error/graph-absent-error? err)
+                       (do
+                         (log/warn :event :db-worker-list-graph-absent
+                                   :repo repo
+                                   :error err)
+                         [])
+                       (throw err)))))
       (p/resolved []))
     (protocol/<list-db (get-impl))))
 
@@ -493,14 +514,38 @@
 
 ;; FIXME: limit repo name's length and sanity
 ;; @shuyu Do we still need this?
-(defn <new [repo opts]
+(defn- graph-storage-lock
+  [repo]
+  (str "logseq-create-graph:" (string/lower-case repo)))
+
+(defn <delete-created-browser-graph!
+  [repo graph-uuid]
+  (js/navigator.locks.request
+   (graph-storage-lock repo)
+   (fn [] (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo graph-uuid))))
+
+(defn <new [repo {:keys [create-only? on-created] :as opts}]
   {:pre [(<= (count repo) 128)]}
-  (p/let [generation (when (electron-runtime?) (ipc/ipc "createGraph" repo))
-          impl (if (electron-runtime?)
-                 (<ensure-remote! repo {:generation generation})
-                 (p/resolved (get-impl)))
-          _ (protocol/<new impl repo opts)]
-    (<export-db repo {})))
+  (let [opts (dissoc opts :create-only? :on-created)]
+    (if (electron-runtime?)
+      (p/let [generation (ipc/ipc "createGraph" repo (boolean create-only?))
+              _ (when on-created (on-created {:url repo :generation generation}))
+              impl (<ensure-remote! repo {:generation generation})
+              _ (protocol/<new impl repo opts)]
+        (<export-db repo {}))
+      (let [create! (fn []
+                      (p/let [exists? (when create-only?
+                                        (state/<invoke-db-worker :thread-api/db-exists repo))
+                              _ (when exists?
+                                  (throw (ex-info "Graph already exists" {:code :graph-already-exists :repo repo})))
+                              result (protocol/<new (get-impl) repo (cond-> opts create-only? (assoc :create-only? true)))
+                              _ (when on-created (on-created {:url repo :graph-uuid (:graph-uuid result)}))]
+                        (<export-db repo {})))]
+        (if (some? js/navigator.locks)
+          (js/navigator.locks.request (graph-storage-lock repo) create!)
+          (if create-only?
+            (p/rejected (ex-info "Graph creation requires exclusive storage access" {:repo repo}))
+            (create!)))))))
 
 (defn export-current-graph!
   [& {:keys [succ-notification?]}]

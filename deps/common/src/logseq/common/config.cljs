@@ -30,6 +30,8 @@
 
 (defonce asset-protocol "assets://")
 
+(def local-file-asset-prefix "assets://localhost/logseq__file")
+
 (defonce db-version-prefix "logseq_db_")
 (defonce file-version-prefix "logseq_local_")
 
@@ -57,6 +59,7 @@
 
 (defonce default-graphs-dir "~/logseq/graphs")
 (defonce local-assets-dir "assets")
+(def max-asset-size (* 200 1024 1024))
 (defonce unlinked-graphs-dir "Unlinked graphs")
 
 (defonce favorites-page-name "$$$favorites")

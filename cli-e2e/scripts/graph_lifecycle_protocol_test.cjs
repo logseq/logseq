@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { fork } = require('node:child_process');
 const { once } = require('node:events');
-const lifecycle = require('../../deps/graph-lifecycle');
+const lifecycle = require('@logseq/graph-lifecycle');
 
 function storage(root) { return lifecycle.resolveStorage(root, path.join(root, 'graphs')); }
 

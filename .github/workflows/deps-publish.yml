@@ -68,6 +68,12 @@ jobs:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
 
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-deps-publish-maven-v1-${{ github.job }}-java-${{ env.JAVA_VERSION }}-clojure-${{ env.CLOJURE_VERSION }}-babashka-${{ env.BABASHKA_VERSION }}-${{ hashFiles('**/deps.edn', '**/nbb.edn', '**/bb.edn') }}
+
       - name: Fetch pnpm deps
         run: pnpm install --frozen-lockfile
 
@@ -130,6 +136,12 @@ jobs:
         with:
           cli: ${{ env.CLOJURE_VERSION }}
           bb: ${{ env.BABASHKA_VERSION }}
+
+      - name: Cache Maven dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-deps-publish-maven-v1-${{ github.job }}-java-${{ env.JAVA_VERSION }}-clojure-${{ env.CLOJURE_VERSION }}-babashka-${{ env.BABASHKA_VERSION }}-${{ hashFiles('**/deps.edn', '**/nbb.edn', '**/bb.edn') }}
 
       - name: Run clj-kondo lint
         run: clojure -M:clj-kondo --lint src test

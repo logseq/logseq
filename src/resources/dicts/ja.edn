@@ -26,7 +26,7 @@
  :account/refresh-token-warning "トークンリフレッシュ：異常ステータス"
  :account/reset-password "パスワードをリセット"
  :account/sign-up "サインアップ"
- :account/sync-assets-limit "1ファイルあたり最大100MBのアセットを同期"
+ :account/sync-assets-limit "1ファイルあたり最大200MBのアセットを同期"
  :account/synced-status "同期済み"
  :account/unlimited-unsynced-graphs "未同期グラフは無制限"
  :account/upcoming-cloud-features "Logseq Publishを含む今後のクラウドベース機能"
@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "ブロック展開の切り替え（全てのブロックを折り畳む／展開する）"
  :command.editor/undo "元に戻す"
  :command.editor/up "カーソルを上へ"
- :command.editor/zoom-in "ズームイン"
- :command.editor/zoom-out "ズームアウト"
+ :command.editor/zoom-in "編集中のブロックにズームイン"
+ :command.editor/zoom-out "編集中のブロックからズームアウト"
 
  :command.go/all-graphs "全グラフへ移動"
  :command.go/all-pages "全ページへ移動"
@@ -813,7 +813,7 @@
  :icon/tab-icons "アイコン"
 
  :import/all-tags "すべてのタグをインポート"
- :import/asset-too-large-warning "アセット {1} のコピーは、100 MB の上限を超えているためスキップされました。"
+ :import/asset-too-large-warning "アセット {1} のコピーは、200 MB の上限を超えているためスキップされました。"
  :import/assets-import-partial "{1}/{2}個のアセットをインポートしました。詳細はコンソールを確認してください。"
  :import/assets-imported "{1}個のアセットをインポートしました。"
  :import/assets-skipped "{1}個のアセットをスキップしました。詳細はコンソールを確認してください。"

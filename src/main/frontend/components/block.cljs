@@ -11,6 +11,7 @@
             [electron.ipc :as ipc]
             [frontend.components.avatar :as avatar]
             [frontend.components.block.asset :as block-asset]
+            [frontend.components.block.bottom-properties-layout :as bottom-properties-layout]
             [frontend.components.block.breadcrumb :as block-breadcrumb]
             [frontend.components.block.comments :as block-comments]
             [frontend.components.block.comments-model :as comments-model]
@@ -227,7 +228,7 @@
 (defonce *resizing-image? (atom false))
 
 (hsx/defc ^:large-vars/cleanup-todo asset-container
-  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view?]}]
+  [asset-block src title metadata {:keys [breadcrumb? positioned? local? full-text gallery-view? file-url]}]
   (let [asset-width (:logseq.property.asset/width asset-block)
         asset-height (:logseq.property.asset/height asset-block)
         asset-align (normalize-asset-align (:logseq.property.asset/align asset-block))
@@ -250,8 +251,13 @@
        (fn []))
      [src load-failed?])
     (let [*el-ref (hooks/use-ref nil)
-          image-src (when (seq src)
-                      (fs/asset-path-normalize src))
+          image-src (if file-url
+                      (js/window.apis.fileURLToPath file-url)
+                      (when (seq src) (fs/asset-path-normalize src)))
+          file-src? (and (seq image-src)
+                         (or file-url
+                             (and (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
+                                  (not (util/starts-with? src "//")))))
           src' (if (and (seq src)
                         (or (string/starts-with? src "/")
                             (string/starts-with? src "~")))
@@ -286,14 +292,7 @@
                 (fn [_e]
                   ;; Electron renderer cannot fetch file:// URLs; read the
                   ;; file via IPC and copy the blob directly.
-                  ;; image-src is a filesystem path when it has no URL
-                  ;; scheme (a Windows drive like C: is not one) and src is
-                  ;; not a protocol-relative URL — an assets:// UNC path
-                  ;; normalizes to //server/share but is still a file.
-                  (if (and (util/electron?)
-                           (seq image-src)
-                           (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
-                           (not (util/starts-with? src "//")))
+                  (if (and (util/electron?) file-src?)
                     (let [ext (some-> (util/get-file-ext image-src) string/lower-case)
                           ;; Should support all exts in common-config/img-formats
                           ext->mime {"png" "image/png"
@@ -403,14 +402,7 @@
                   [:span.flex.items-center.gap-1
                    (ui/icon "copy") (t :asset/copy)])
                  (when (util/electron?)
-                   ;; http(s) opens in browser; a filesystem path reveals in
-                   ;; folder; anything else (data:, blob:, // src) supports
-                   ;; neither. src is checked for // since assets:// UNC
-                   ;; paths normalize to //server/share but are still files.
-                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))
-                         file-src? (and image-src
-                                        (not (re-find #"(?i)^[a-z][a-z0-9+.-]+:" image-src))
-                                        (not (util/starts-with? src "//")))]
+                   (let [remote-src? (and image-src (re-find #"(?i)^https?:" image-src))]
                      (when (or remote-src? file-src?)
                        (shui/dropdown-menu-item
                       {:on-click (fn [e]
@@ -457,7 +449,8 @@
                                              :positioned? positioned?
                                              :local? local?
                                              :full-text full-text
-                                             :gallery-view? (:gallery-view? config)})]
+                                             :gallery-view? (:gallery-view? config)
+                                             :file-url (:file-url config)})]
     (if (or (:disable-resize? config)
             (:table-view? config)
             (not resizable?))
@@ -639,7 +632,7 @@
             :on-drag-start #(.setData (gobj/get % "dataTransfer") "file" href)
             :on-click (fn [e]
                         (util/stop e)
-                        (open-pdf-file e (:asset-block config) src))}
+                        (open-pdf-file e (:asset-block config) (or (:file-url config) src)))}
            title]
 
           (util/mobile?)
@@ -684,13 +677,17 @@
   (let [metadata (if (string/blank? metadata)
                    nil
                    (common-util/safe-read-map-string metadata))
-        title (second (first label))]
+        title (second (first label))
+        file-url (:file-url config)]
     (ui/catch-error
      [:span.warning full_text]
-     (if (common-config/local-relative-asset? href)
+     (if (and (nil? file-url) (common-config/local-relative-asset? href))
        (asset-link config title href metadata full_text)
        (let [local-path? (or (util/starts-with? href "/") (util/starts-with? href "~"))
              href (cond
+                    file-url
+                    (or (assets-handler/file-url->assets-url file-url) file-url)
+
                     (util/starts-with? (string/lower-case href) "http")
                     href
 
@@ -715,8 +712,7 @@
                     (assets-handler/normalize-asset-resource-url href)
 
                     ;; Graph-relative paths (`../x.png`, `./x.png`, `x.png`)
-                    ;; and file:// URLs resolve to assets:// URLs; the raw
-                    ;; path resolves against the app origin and 404s.
+                    ;; resolve through the Electron assets protocol.
                     (util/electron?)
                     (assets-handler/file-path->assets-url href)
 
@@ -818,6 +814,13 @@
 
         (nil? page)
         (state/pub-event! [:page/create page-name])
+
+        ;; Normal click on a PDF annotation ref opens the PDF at the highlight.
+        ;; Shift-click (sidebar) and meta/ctrl/middle-click still reach the
+        ;; annotation block itself.
+        (and (entity/pdf-annotation? page)
+             (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
+        (pdf-assets/open-block-ref! page)
 
         (and (fn? (:on-pointer-down config))
              (not (or (= (.-button e) 1) (.-metaKey e) (.-ctrlKey e))))
@@ -1285,13 +1288,6 @@
        progress-view]
       content)))
 
-(defn- img-audio-video?
-  [block]
-  (let [asset-type (some-> (:logseq.property.asset/type block) keyword)]
-    (or (contains? (common-config/img-formats) asset-type)
-        (contains? config/audio-formats asset-type)
-        (contains? config/video-formats asset-type))))
-
 (defn- block-tagged-with?
   [block tag-ident]
   (some (fn [tag]
@@ -1336,7 +1332,7 @@
                        (not contents-page?))]
     (when-not (and (:db/id block) (= (:db/id block) (:db/id (:block config))))
       (cond
-        (and asset? (img-audio-video? block))
+        asset?
         (asset-cp config block)
 
         (and (string? uuid-or-title) (string/ends-with? uuid-or-title ".excalidraw"))
@@ -1662,20 +1658,25 @@
 
       :else
       (let [href (string-of-url url)
-            [protocol _path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
-                                 (and (= "File" (first url)) ["file" (second url)]))
+            [protocol link-path] (or (and (= "Complex" (first url)) [(:protocol (second url)) (:link (second url))])
+                                     (and (= "File" (first url)) ["file" (second url)]))
+            file-link? (= "file" (some-> protocol string/lower-case))
+            file-url (when file-link?
+                       (if (= "Complex" (first url))
+                         (str protocol "://" link-path)
+                         (when (re-find #"(?i)^file:" link-path) link-path)))
             config (cond-> config
                      (not (string/blank? protocol))
                      (assoc :link-js-url (try (js/URL. href)
                                               (catch :default _ nil))))]
         (cond
-          (= protocol "file")
+          file-link?
           (if (show-link? href full_text)
-            (media-link config url href label metadata full_text)
-            (let [file-path (file-link-path->open-path href)
-                  href* (if (util/electron?)
-                          file-path
-                          href)]
+            (media-link (cond-> config
+                          (and file-url (util/electron?))
+                          (assoc :file-url file-url))
+                        url href label metadata full_text)
+            (let [href* (or file-url href)]
               [:div.flex.flex-row.items-center
                (ui/icon "file" {:class "opacity-50"})
                (->elem
@@ -1683,9 +1684,9 @@
                 (cond-> (if (util/electron?)
                           {:on-click (fn [e]
                                        (util/stop e)
-                                       (js/window.apis.openPath file-path))
+                                       (js/window.apis.openPath (or file-url (file-link-path->open-path href))))
                            :data-href href*}
-                          {:href (path/path-join "file://" href*)
+                          {:href (or file-url (path/path-join "file://" href))
                            :data-href href*
                            :target "_blank"})
                   title (assoc :title title))
@@ -2807,7 +2808,7 @@
       [:div.opacity-75 (t :ui/untitled)]
 
       (and (ldb/asset? block)
-           (= :pdf (some-> (:logseq.property.asset/type block) string/lower-case keyword)))
+           (not (block-asset/media-asset? block)))
       (asset-cp config block)
 
       (:raw-title? config)
@@ -3178,6 +3179,8 @@
 (defn- bottom-row-focus-elements
   [^js row]
   (->> (array-seq (.querySelectorAll row "[data-bottom-row-nav='true']"))
+       (filter (fn [^js el]
+                 (pos? (.-length (.getClientRects el)))))
        vec))
 
 (defn- focus-bottom-row-item!
@@ -3281,7 +3284,7 @@
       nil)))
 
 (defn- bottom-property-pill-cp
-  [block property opts]
+  [block property opts bottom-property-index truncate-index]
   (let [many-node? (and (= :node (:logseq.property/type property))
                         (= :db.cardinality/many (:db/cardinality property)))
         property-value (get block (:db/ident property))
@@ -3289,7 +3292,12 @@
         has-value? (and (some? property-value) (not empty-placeholder?))]
     [:div.bottom-property-pill.bottom-property-pill-focusable
      {:key (str (:db/id block) "-" (:db/id property))
-      :class (util/classnames [{:bottom-property-pill-wrap many-node?}])
+      :class (util/classnames [{:bottom-property-pill-wrap many-node?
+                                :bottom-property-pill-truncate (and (some? truncate-index)
+                                                                    (= bottom-property-index truncate-index))
+                                :bottom-property-pill-after-truncate (and (some? truncate-index)
+                                                                          (> bottom-property-index truncate-index))}])
+      :data-bottom-property-pill true
       :data-bottom-pill-focusable true
       :data-bottom-row-nav true
       :tab-index -1
@@ -3346,21 +3354,58 @@
   (when-not (and (= :block-below (:property-position opts))
                  (hidden-block-below-property? property))
     (if (= :block-below (:property-position opts))
-      (bottom-property-pill-cp block property opts)
+      (bottom-property-pill-cp block property opts nil nil)
       (pv/property-value block property (assoc opts :show-tooltip? true)))))
 
 (defn- bottom-property-pill-items
-  [block properties opts]
-  (mapv (fn [property]
-          (positioned-property-row block property opts))
-        properties))
+  [block properties opts truncate-index]
+  (->> properties
+       (map-indexed (fn [idx property]
+                      (bottom-property-pill-cp block property opts idx truncate-index)))
+       vec))
 
 (defn- measure-bottom-pills-overflow!
-  [^js el *overflow?]
+  [^js el *overflow-state expanded?]
   (when el
-    (let [overflow? (> (.-scrollWidth el) (inc (.-clientWidth el)))]
-      (when (not= overflow? @*overflow?)
-        (reset! *overflow? overflow?)))))
+    (.setAttribute el "data-measuring" "true")
+    (let [state
+          (try
+            (let [max-scroll-width
+                  (fn [elements]
+                    (reduce (fn [acc ^js element]
+                              (max acc (.-scrollWidth element)))
+                            0
+                            (array-seq elements)))
+                  pill-natural-width
+                  (fn [^js pill]
+                    (let [^js content (.querySelector pill ".bottom-property-content")
+                          ^js pill-rect (.getBoundingClientRect pill)
+                          content-rect (when content (.getBoundingClientRect content))
+                          content-width (if content-rect (.-width content-rect) 0)
+                          ;; Nested node refs can hide their natural width behind local overflow styles.
+                          content-scroll (if content
+                                           (max (.-scrollWidth content)
+                                                (max-scroll-width
+                                                 (.querySelectorAll content ".page-ref > span, .block-title-wrap, .multi-values.jtrigger")))
+                                           0)
+                          pill-chrome (max 0 (- (.-width pill-rect) content-width))]
+                      (+ pill-chrome content-scroll)))
+                  pills (array-seq (.querySelectorAll el "[data-bottom-property-pill='true']"))
+                  gap' (js/parseFloat (.-columnGap (js/getComputedStyle el)))
+                  gap (if (js/isNaN gap') 0 gap')
+                  available-width (.-clientWidth el)
+                  pill-widths (mapv (fn [^js pill]
+                                      (js/Math.ceil (pill-natural-width pill)))
+                                    pills)
+                  natural-truncate-index (bottom-properties-layout/first-overflow-index pill-widths gap available-width)
+                  overflow? (or (some? natural-truncate-index)
+                                (> (.-scrollWidth el) (inc available-width)))]
+              {:overflow? overflow?
+               :truncate-index (when-not expanded? natural-truncate-index)})
+            (finally
+              (.removeAttribute el "data-measuring")))]
+      (when (not= state @*overflow-state)
+        (reset! *overflow-state state)))))
 
 (hsx/defc bottom-properties-expand-button
   [expanded? set-expanded!]
@@ -3385,24 +3430,34 @@
 (hsx/defc block-below-positioned-properties-cp
   [block properties opts show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button?]
   (let [*pills-el (hooks/use-ref nil)
-        *overflow? (hooks/use-memo #(atom false) [(:block/uuid block) (count properties)])
-        [overflow?] (hooks/use-atom *overflow?)
+        *overflow-state (hooks/use-memo #(atom {:overflow? false
+                                                :truncate-index nil})
+                                        [(:block/uuid block) (count properties)])
+        [{:keys [overflow? truncate-index]}] (hooks/use-atom *overflow-state)
         [expanded? set-expanded!] (hooks/use-state false)]
     (hooks/use-effect!
      (fn []
        (let [^js el (.-current *pills-el)
-             measure! #(measure-bottom-pills-overflow! el *overflow?)
+             measure! #(measure-bottom-pills-overflow! el *overflow-state expanded?)
              observer (when (and el (exists? js/ResizeObserver))
-                        (js/ResizeObserver. measure!))]
+                        (js/ResizeObserver. measure!))
+             mutation-observer (when (and el (exists? js/MutationObserver))
+                                 (js/MutationObserver. measure!))]
          (measure!)
-         (when observer
-           (.observe observer el))
-         (.addEventListener js/window "resize" measure!)
+         (if observer
+           (.observe observer el)
+           (.addEventListener js/window "resize" measure!))
+         (when mutation-observer
+           (.observe mutation-observer el #js {:childList true
+                                               :subtree true
+                                               :characterData true}))
          (fn []
-           (when observer
-             (.disconnect observer))
-           (.removeEventListener js/window "resize" measure!))))
-     [(:block/uuid block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
+           (if observer
+             (.disconnect observer)
+             (.removeEventListener js/window "resize" measure!))
+           (when mutation-observer
+             (.disconnect mutation-observer)))))
+     [(:block/uuid block) (:block/updated-at block) properties show-hidden-properties-pill-toggle? show-hidden-properties-control? show-add-property-button? expanded?])
     [:div.positioned-properties.block-below.flex.flex-col.gap-1.text-sm.overflow-x-hidden.w-full.min-w-0
      [:div
       {:class (util/classnames
@@ -3419,7 +3474,7 @@
                                    "flex-wrap overflow-x-hidden"
                                    "flex-nowrap overflow-x-hidden")])
         :ref #(set! (.-current *pills-el) %)}
-       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?))
+       (bottom-property-pill-items block properties (assoc opts :expanded? expanded?) truncate-index)
        (when show-hidden-properties-pill-toggle?
          (property-component/hidden-properties-toggle-button block {:bottom-pill? true
                                                                     :bottom-row-nav? true
@@ -3727,7 +3782,7 @@
                                      config))]
              show-editor? (and editor-box edit? (not type-block-editor?))]
          (cond
-           (and (ldb/asset? block) (img-audio-video? block))
+           (and (ldb/asset? block) (block-asset/media-asset? block))
            [:div.flex.flex-col.asset-block-wrap.w-full
             (block-content-f {:custom-block-content
                               [:div.flex.flex-1
@@ -3885,7 +3940,8 @@
 (defn- on-drag-and-mouse-attrs
   [block original-block uuid top? block-id *move-to']
   (when-not (entity/journal? block)
-    {:on-drag-enter (fn [event]
+    {:data-block-drop-target true
+     :on-drag-enter (fn [event]
                       (.preventDefault event))
      :on-drag-over (fn [event]
                      (block-drag-over event uuid top? block-id *move-to'))
@@ -5000,9 +5056,10 @@
                :child-uuids child-uuids
                :render-children render-children))))
    (fn [^js previous-props ^js next-props]
-     (let [[_previous-config previous-block previous-child-uuids] (.-args previous-props)
-           [_next-config next-block next-child-uuids] (.-args next-props)]
+     (let [[previous-config previous-block previous-child-uuids] (.-args previous-props)
+           [next-config next-block next-child-uuids] (.-args next-props)]
        (and (same-block-revision? previous-block next-block)
+            (= (:current-page-title previous-config) (:current-page-title next-config))
             (= previous-child-uuids next-child-uuids))))))
 
 (defn- render-loaded-block-row

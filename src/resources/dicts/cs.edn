@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Obnovit token: výjimečný stav"
  :account/reset-password "Obnovit heslo"
  :account/sign-up "Registrace"
- :account/sync-assets-limit "Synchronizace souborů do 100 MB na soubor"
+ :account/sync-assets-limit "Synchronizace souborů do 200 MB na soubor"
  :account/synced-status "Synchronizováno"
  :account/unlimited-unsynced-graphs "Neomezený počet nesynchronizovaných grafů"
  :account/upcoming-cloud-features "Nadcházející cloudové funkce, včetně Logseq Publish"
@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Přepnout otevřené bloky (sbalit nebo rozbalit všechny bloky)"
  :command.editor/undo "Zpátky"
  :command.editor/up "Posunout kurzor nahoru/vybrat nahoru"
- :command.editor/zoom-in "Přiblížit upravovaný blok / Jinak dopředu"
- :command.editor/zoom-out "Oddálit upravaný blok / Jinak dozadu"
+ :command.editor/zoom-in "Přiblížit upravovaný blok"
+ :command.editor/zoom-out "Oddálit upravovaný blok"
 
  :command.go/all-graphs "Přejít na všechny grafy"
  :command.go/all-pages "Přejít na všechny stránky"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Ikony"
 
  :import/all-tags "Importovat všechny štítky"
- :import/asset-too-large-warning "Kopírování assetu {1} bylo přeskočeno, protože překračuje limit 100 MB."
+ :import/asset-too-large-warning "Kopírování assetu {1} bylo přeskočeno, protože překračuje limit 200 MB."
  :import/assets-import-partial "{1}/{2} souborů importováno. Podrobnosti v konzoli."
  :import/assets-imported "{1} souborů importováno."
  :import/assets-skipped "{1} souborů přeskočeno. Podrobnosti v konzoli."

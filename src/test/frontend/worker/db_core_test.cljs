@@ -10,6 +10,7 @@
             [frontend.test.node-helper :as node-helper]
             [frontend.worker-common.util :as worker-util]
             [frontend.worker.db-core :as db-core]
+            [frontend.worker.db.migrate :as db-migrate]
             [frontend.worker.db-listener :as db-listener]
             [frontend.worker.export :as worker-export]
             [frontend.worker.handler.block :as block-handler]
@@ -75,7 +76,7 @@
           :thread-api/db-sync-close-db :thread-api/db-sync-invalidate-search-db
           :thread-api/db-sync-rehydrate-large-titles :thread-api/db-sync-import-prepare :thread-api/db-sync-import-rows-chunk
           :thread-api/db-sync-import-finalize :thread-api/release-access-handles :thread-api/db-exists
-          :thread-api/export-db-binary :thread-api/import-file-graph
+          :thread-api/export-db-binary :thread-api/import-file-graph :thread-api/scan-file-graph
           :thread-api/export-client-ops-db-binary :thread-api/backup-db-sqlite
           :thread-api/import-db-binary :thread-api/search-blocks :thread-api/search-upsert-blocks :thread-api/search-delete-blocks
           :thread-api/search-truncate-tables :thread-api/search-build-blocks-indice :thread-api/search-build-blocks-indice-in-worker
@@ -614,12 +615,47 @@
                                              (swap! handled-reports conj
                                                     {:repo repo
                                                      :tx-report tx-report}))]
-      (#'db-core/handle-migrate-result-local-txs!
+      (#'db-core/<handle-migrate-result-local-txs!
        test-repo
        {:upgrade-result-coll [migration-tx-report]})
       (is (= [{:repo test-repo
                :tx-report migration-tx-report}]
              @handled-reports)))))
+
+(deftest journal-title-migration-refreshes-persisted-search-test
+  (async done
+    (-> (restoring-worker-state
+         (fn []
+           (let [conn (db-test/create-conn-with-blocks
+                       [{:page {:build/journal 20241216}}
+                        {:page {:block/title "References"}
+                         :blocks [{:block/title "reference"}]}])
+                 journal (ldb/get-journal-page-by-day @conn 20241216)
+                 block (db-test/find-block-by-content @conn "reference")
+                 expected #{(:block/uuid journal) (:block/uuid block)}
+                 path (node-path/join (node-helper/create-tmp-dir "migration-search-db") "search.sqlite")]
+             (d/transact! conn [{:db/id (:db/id block)
+                                :block/title (str "[[" (:block/uuid journal) "]]")
+                                :block/refs [(:db/id journal)]}])
+             (p/let [db (#'platform-node/open-sqlite-db nil {:path path})]
+               (search/create-tables-and-triggers! db)
+               (search/upsert-blocks! db (clj->js (search/build-blocks-indice @conn)))
+               (.exec db (str "PRAGMA user_version = " search-handler/search-db-version))
+               (d/transact! conn [[:db/add :logseq.class/Journal :logseq.property.journal/title-format "yyyy-MM-dd EEEE"]
+                                 {:db/ident :logseq.kv/schema-version :kv/value {:major 65 :minor 35}}])
+               (reset! worker-state/*sqlite-conns {test-repo {:search db}})
+               (reset! worker-state/*datascript-conns {test-repo conn})
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (-> (p/let [_ (#'db-core/<handle-migrate-result-local-txs! test-repo (db-migrate/migrate conn))]
+                     (let [query #(set (map :block/uuid (search/search-blocks conn db % {:limit 20 :enable-snippet? false})))]
+                       (is (= expected (query "2024-12-16 Monday")))
+                       (is (= "2024-12-16 monday" (:block/name (d/entity @conn (:db/id journal)))))
+                       (is (empty? (query "Dec 16th, 2024")))))
+                   (p/finally (fn []
+                                (ldb/register-transact-pipeline-fn! identity)
+                                (.close db))))))))
+        (p/catch (fn [error] (is false (str error))))
+        (p/finally done))))
 
 (deftest built-in-sync-repair-tx-data-covers-65-26-through-65-28-test
   (let [tx-data (#'db-core/built-in-sync-repair-tx-data)
@@ -2042,8 +2078,8 @@
        (reset! worker-state/*datascript-conns {test-repo conn})
        (let [result (get-latest-journals! test-repo 1)]
          (is (= [latest-uuid] (mapv :block/uuid result)))
-         (is (= ["Jan 2nd, 2024"] (mapv :block/title result)))
-         (is (= ["Jan 2nd, 2024"] (mapv :block/raw-title result))))))))
+         (is (= ["2024-01-02"] (mapv :block/title result)))
+         (is (= ["2024-01-02"] (mapv :block/raw-title result))))))))
 
 (deftest get-latest-journals-bounded-scan
   (restoring-worker-state
@@ -2841,6 +2877,44 @@
              (is false (str error))))
           (p/finally done))))
 
+(deftest scan-file-graph-rejects-with-file-and-reason
+  (async done
+         (->
+          (restoring-worker-state
+           (fn []
+             (let [scan! (get @thread-api/*thread-apis :thread-api/scan-file-graph)
+                   pipeline-before @ldb/*transact-pipeline-fn
+                   config-file {:path "logseq/config.edn"
+                                :file/content "{:meta/version 1 :journal/page-title-format \"yyyy-MM-dd EEEE\"}"}
+                   files [config-file
+                          {:path "journals/2022_03_27.md"
+                           :file/content (str "- {{query (and (todo now doing))}}\n"
+                                              "  query-table:: false\n"
+                                              "  query-sort-by:: clock-time\n")}]]
+               (is (fn? scan!))
+               (reset! worker-state/*main-thread (fn [& _] (p/resolved nil)))
+               (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+               (p/with-redefs
+                 [db-sync/update-local-sync-checksum! (fn [& _] nil)
+                  db-sync/handle-local-tx! (fn [& _] nil)
+                  shared-service/broadcast-to-clients! (fn [& _] nil)]
+                 (-> (scan! config-file files {:user-options {}})
+                     (p/then (fn [_]
+                               (is false "scan should reject")))
+                     (p/catch (fn [error]
+                                (is (= :file-graph-import/file-failed (:code (ex-data error))))
+                                (is (= "journals/2022_03_27.md" (:path (ex-data error))))
+                                (is (string/includes? (ex-message error) "clock-time"))
+                                (let [roundtrip (-> error ldb/write-transit-str ldb/read-transit-str)]
+                                  (is (= (ex-message error) (ex-message roundtrip)))
+                                  (is (= (ex-data error) (ex-data roundtrip))))))
+                     (p/finally (fn []
+                                  (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally done))))
+
 (deftest import-file-graph-reads-file-stat-from-path-string
   (async done
          (->
@@ -2915,12 +2989,15 @@
                   db-sync/handle-local-tx! (fn [& _] nil)
                   shared-service/broadcast-to-clients! (fn [& _] nil)]
                  (->
-                  (p/let [result (import-file-graph! test-repo config-file files {:user-options {}})]
-                    (is (nil? (ldb/get-page @conn "missing"))
-                        "A missing lazy file is not imported as an empty page.")
-                    (is (pos? (:ignored-files-count result))
-                        "Read failure is recorded as an ignored file.")
-                    (is (= :completed-with-errors (:status result))))
+                  (import-file-graph! test-repo config-file files {:user-options {}})
+                  (p/then (fn [_]
+                            (is false "A lazy-read failure must reject so import does not finish as a partial graph.")))
+                  (p/catch (fn [error]
+                             (is (= :file-graph-import/file-failed (:code (ex-data error))))
+                             (is (= "pages/Missing.md" (:path (ex-data error))))
+                             (is (string/includes? (or (ex-message error) "") "ENOENT"))
+                             (is (nil? (ldb/get-page @conn "missing"))
+                                 "A missing lazy file is not imported as an empty page.")))
                   (p/finally (fn []
                                (reset! ldb/*transact-pipeline-fn pipeline-before))))))))
           (p/catch
@@ -3174,6 +3251,28 @@
       (is (pos? (:tx-count payload)))
       (is (not (contains? payload :tx-data)))
       (is (string/includes? (:error payload) "store failed")))))
+
+(deftest transact-failed-logs-non-error-object-test
+  (let [conn (db-test/create-conn)
+        tx-data [{:db/id -1
+                  :block/uuid (random-uuid)
+                  :block/title "block-1"}]
+        logs (atom [])
+        original-error #js {:foo 1}]
+    (with-redefs [log/error (fn [& args]
+                              (swap! logs conj args))
+                  d/transact! (fn [& _] (throw original-error))]
+      (try
+        (ldb/transact! conn tx-data {:skip-validate-db? true})
+        (is false "expected transact! to throw")
+        (catch :default e
+          (is (identical? original-error e)))))
+    (let [payload (some (fn [args]
+                          (some #(when (and (map? %) (:tx-count %)) %) args))
+                        @logs)]
+      (is (some? payload))
+      (is (not (string/includes? (:error payload) "[object Object]"))
+          "Non-Error throws must not log as [object Object]"))))
 
 (deftest get-date-scheduled-or-deadlines-filters-sorts-and-groups-worker-results
   (restoring-worker-state
@@ -3809,6 +3908,89 @@
                               (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))]
            (is (= [page-b-id page-a-id] page-ids))))))))
 
+(defn- transact-duplicate-favorites!
+  "Favorites page whose two blocks both link to the same page, as left behind by
+   importing an OG config.edn with `:favorites [\"foo\" \"Foo\"]` (#8596)."
+  [conn {:keys [favorites-page-uuid page-uuid other-page-uuid]}]
+  (d/transact! conn [{:block/uuid favorites-page-uuid
+                      :block/title common-config/favorites-page-name
+                      :block/name common-config/favorites-page-name}
+                     {:block/uuid page-uuid
+                      :block/title "Foo"
+                      :block/name "foo"}
+                     {:block/uuid other-page-uuid
+                      :block/title "Bar"
+                      :block/name "bar"}
+                     {:block/uuid #uuid "44444444-4444-4444-4444-444444444444"
+                      :block/title ""
+                      :block/page [:block/uuid favorites-page-uuid]
+                      :block/parent [:block/uuid favorites-page-uuid]
+                      :block/order "a"
+                      :block/link [:block/uuid page-uuid]}
+                     {:block/uuid #uuid "55555555-5555-5555-5555-555555555555"
+                      :block/title ""
+                      :block/page [:block/uuid favorites-page-uuid]
+                      :block/parent [:block/uuid favorites-page-uuid]
+                      :block/order "b"
+                      :block/link [:block/uuid other-page-uuid]}
+                     {:block/uuid #uuid "66666666-6666-6666-6666-666666666666"
+                      :block/title ""
+                      :block/page [:block/uuid favorites-page-uuid]
+                      :block/parent [:block/uuid favorites-page-uuid]
+                      :block/order "c"
+                      :block/link [:block/uuid page-uuid]}]))
+
+(def ^:private duplicate-favorites-ids
+  {:favorites-page-uuid #uuid "11111111-1111-1111-1111-111111111111"
+   :page-uuid #uuid "22222222-2222-2222-2222-222222222222"
+   :other-page-uuid #uuid "33333333-3333-3333-3333-333333333333"})
+
+(deftest get-favorite-pages-dedupes-pages-linked-twice
+  (restoring-worker-state
+   (fn []
+     (let [get-favorites! (get @thread-api/*thread-apis :thread-api/get-favorite-pages)
+           conn (d/create-conn db-schema/schema)
+           {:keys [page-uuid other-page-uuid]} duplicate-favorites-ids]
+       (transact-duplicate-favorites! conn duplicate-favorites-ids)
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (is (fn? get-favorites!))
+       (when (fn? get-favorites!)
+         (is (= [page-uuid other-page-uuid]
+                (mapv :block/uuid (get-favorites! test-repo)))))))))
+
+(deftest unfavorite-page-removes-duplicate-favorite-blocks
+  (restoring-worker-state
+   (fn []
+     (let [set-favorite! (get @thread-api/*thread-apis :thread-api/set-page-favorite)
+           conn (d/create-conn db-schema/schema)
+           {:keys [favorites-page-uuid page-uuid other-page-uuid]} duplicate-favorites-ids]
+       (transact-duplicate-favorites! conn duplicate-favorites-ids)
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (when (fn? set-favorite!)
+         (set-favorite! test-repo page-uuid false)
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               other-page-id (:db/id (d/entity @conn [:block/uuid other-page-uuid]))]
+           (is (= [other-page-id]
+                  (mapv #(get-in % [:block/link :db/id])
+                        (ldb/get-page-blocks @conn (:db/id favorites-page)))))))))))
+
+(deftest reorder-favorites-drops-duplicate-favorite-blocks
+  (restoring-worker-state
+   (fn []
+     (let [reorder! (get @thread-api/*thread-apis :thread-api/reorder-favorites)
+           conn (d/create-conn db-schema/schema)
+           {:keys [favorites-page-uuid page-uuid other-page-uuid]} duplicate-favorites-ids]
+       (transact-duplicate-favorites! conn duplicate-favorites-ids)
+       (reset! worker-state/*datascript-conns {test-repo conn})
+       (when (fn? reorder!)
+         (reorder! test-repo [other-page-uuid page-uuid])
+         (let [favorites-page (d/entity @conn [:block/uuid favorites-page-uuid])
+               page-id (:db/id (d/entity @conn [:block/uuid page-uuid]))
+               other-page-id (:db/id (d/entity @conn [:block/uuid other-page-uuid]))]
+           (is (= [other-page-id page-id]
+                  (mapv #(get-in % [:block/link :db/id])
+                        (ldb/sort-by-order (ldb/get-page-blocks @conn (:db/id favorites-page))))))))))))
+
 (deftest get-page-route-info-resolves-page-flags-and-alias-source
   (restoring-worker-state
    (fn []
@@ -3818,9 +4000,11 @@
            alias-uuid #uuid "22222222-2222-2222-2222-222222222222"
            hidden-uuid #uuid "33333333-3333-3333-3333-333333333333"
            heading-uuid #uuid "44444444-4444-4444-4444-444444444444"]
+       (d/transact! conn [{:db/ident :logseq.class/Page}])
        (d/transact! conn [{:block/uuid alias-uuid
                            :block/title "Alias"
-                           :block/name "alias"}
+                           :block/name "alias"
+                           :block/tags [[:db/ident :logseq.class/Page]]}
                           {:block/uuid hidden-uuid
                            :block/title "Hidden"
                            :block/name "hidden"
@@ -3841,6 +4025,7 @@
          (is (= {:page-id (:db/id alias-page)
                  :page-uuid alias-uuid
                  :page-title "Alias"
+                 :route/eligible-for-recent? true
                  :hidden? false
                  :property? false
                  :built-in? false
@@ -3851,6 +4036,7 @@
          (is (= {:page-id (:db/id heading-block)
                  :page-uuid heading-uuid
                  :page-title "Heading Block"
+                 :route/eligible-for-recent? false
                  :hidden? false
                  :property? false
                  :built-in? false
@@ -3861,6 +4047,7 @@
          (is (= {:page-id (:db/id hidden-page)
                  :page-uuid hidden-uuid
                  :page-title "Hidden"
+                 :route/eligible-for-recent? false
                  :hidden? true
                  :property? false
                  :built-in? false

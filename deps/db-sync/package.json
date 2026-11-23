@@ -30,8 +30,8 @@
     "test:mcp-transport": "node --test --test-timeout=90000 worker/mcp_transport_test.mjs",
     "clean": "rm -rf ./worker/dist/",
     "sentry:sourcemaps": "sentry-cli sourcemaps upload --release $SENTRY_RELEASE --rewrite --strip-prefix worker/dist/worker --url-prefix \"~/\" worker/dist/worker",
-    "deploy-prod": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
-    "deploy-staging": "export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
+    "deploy-prod": "pnpm install --ignore-workspace --frozen-lockfile && export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env prod",
+    "deploy-staging": "pnpm install --ignore-workspace --frozen-lockfile && export SENTRY_RELEASE=$(git rev-parse HEAD) && pnpm clean && pnpm release && pnpm build:api-docs && pnpm test:mcp-transport && pnpm sentry:sourcemaps && cd ./worker && pnpm exec wrangler deploy --env staging"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.1",
@@ -39,6 +39,7 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@sentry/cloudflare": "^10.45.0",
     "@sentry/node": "^10.45.0",
+    "aws4fetch": "1.0.20",
     "better-sqlite3": "^12.8.0",
     "mldoc": "^1.5.9",
     "shadow-cljs": "^3.4.4",

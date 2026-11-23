@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Actualisation du token : statut exceptionnel"
  :account/reset-password "Réinitialiser le mot de passe"
  :account/sign-up "S'inscrire"
- :account/sync-assets-limit "Synchroniser les fichiers joints jusqu'à 100 Mo par fichier"
+ :account/sync-assets-limit "Synchroniser les fichiers joints jusqu'à 200 Mo par fichier"
  :account/synced-status "Synchronisé"
  :account/unlimited-unsynced-graphs "Graphes non synchronisés illimités"
  :account/upcoming-cloud-features "Prochaines fonctionnalités cloud, dont Logseq Publish"
@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Réduire ou étendre les blocs"
  :command.editor/undo "Annuler"
  :command.editor/up "Déplacer le curseur vers le haut / Sélectionner au-dessus"
- :command.editor/zoom-in "Zoomer"
- :command.editor/zoom-out "Dézoomer"
+ :command.editor/zoom-in "Zoomer sur le bloc en cours d’édition"
+ :command.editor/zoom-out "Dézoomer depuis le bloc en cours d’édition"
 
  :command.go/all-graphs "Aller vers tous les graphes"
  :command.go/all-pages "Aller vers toutes les pages"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Icônes"
 
  :import/all-tags "Importer tous les tags"
- :import/asset-too-large-warning "La copie de la ressource {1} a été ignorée car elle dépasse la limite de 100 MB."
+ :import/asset-too-large-warning "La copie de la ressource {1} a été ignorée car elle dépasse la limite de 200 MB."
  :import/assets-import-partial "{1}/{2} ressources importées. Détails dans la console."
  :import/assets-imported "{1} ressources importées."
  :import/assets-skipped "{1} ressources ignorées. Détails dans la console."

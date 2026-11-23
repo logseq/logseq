@@ -169,7 +169,8 @@
   [parent-uuid items]
   (->> items
        (map (fn [[child-uuid order :as item]]
-              (when-not (and (= 2 (count item)) (string? order))
+              (when-not (and (= 2 (count item))
+                             (or (nil? order) (string? order)))
                 (throw (ex-info "Invalid direct-child item"
                                 {:parent-uuid parent-uuid :item item})))
               [(require-uuid! :block/uuid child-uuid) order]))
@@ -313,9 +314,21 @@
     (when (and @reload? (mounted? slot-key))
       (start-load! slot-key))))
 
+(defn- missing-parent-error?
+  "The worker refuses to read the children of a parent that is gone (deleted, or an
+  inserted block undone, while its children slot was being loaded). Those children are
+  missing, like a deleted block, not a failed read: rendering the error throws in render
+  and replaces the app with the error screen."
+  [[kind _] error]
+  (and (= :children kind)
+       (= "Missing direct-children parent" (ex-message error))))
+
 (defn- load-error!
   [slot-key error]
-  (let [changed? (volatile! false)]
+  (let [changed? (volatile! false)
+        snapshot (if (missing-parent-error? slot-key error)
+                   {:status :missing}
+                   {:status :error :error error})]
     (swap! *store
            (fn [store]
              (let [current (store-slot store slot-key)]
@@ -323,8 +336,7 @@
                        (= :error (get-in current [:snapshot :status])))
                  (do (vreset! changed? true)
                      (-> store
-                         (assoc-in [:slots slot-key]
-                                   {:snapshot {:status :error :error error}})
+                         (assoc-in [:slots slot-key] {:snapshot snapshot})
                          (reindex-slot slot-key current nil)))
                  store))))
     (when @changed? (notify! slot-key))))

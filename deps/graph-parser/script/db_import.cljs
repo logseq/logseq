@@ -391,20 +391,15 @@
   (p/let [s (fsp/readFile (:path file))]
     (str s)))
 
-(defn- exceed-limit-size?
-  "Asset size no more than 100M"
-  [^js buffer]
-  (> (.-length buffer) (* 100 1024 1024)))
-
 (defn- <read-and-copy-asset [db-graph-dir file assets buffer-handler]
-  (p/let [buffer (fs/readFileSync (:path file))
-          checksum (db-asset/<get-file-array-buffer-checksum buffer)
-          asset-id (d/squuid)
-          asset-name (gp-exporter/asset-path->name (:path file))
-          asset-type (db-asset/asset-path->type (:path file))]
-    (if (exceed-limit-size? buffer)
-      (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it is larger than the 100M max."))
-      (p/let [parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
+  (let [buffer (fs/readFileSync (:path file))]
+    (if (> (.-length buffer) common-config/max-asset-size)
+      (js/console.log (str "Skipped copying asset " (pr-str (:path file)) " because it exceeds the 200 MiB limit."))
+      (p/let [checksum (db-asset/<get-file-array-buffer-checksum buffer)
+              asset-id (d/squuid)
+              asset-name (gp-exporter/asset-path->name (:path file))
+              asset-type (db-asset/asset-path->type (:path file))
+              parent-dir (node-path/join db-graph-dir common-config/local-assets-dir)
               {:keys [with-edn-content pdf-annotation?]} (buffer-handler buffer)]
         (fsp/mkdir parent-dir #js {:recursive true})
         (swap! assets assoc asset-name
@@ -435,9 +430,9 @@
                  (reverse stack))))
       (println (some-> (get-in m [:ex-data :error]) .-stack)))
     (when debug
-      (when-let [matching-tx (seq (filter #(and (get-in m [:ex-data :path])
-                                                (= (get-in % [:tx-meta ::gp-exporter/path]) (get-in m [:ex-data :path])))
-                                          @tx-queue))]
+      (when-let [matching-tx (when-let [source-path (:source-path m)]
+                               (seq (filter #(= source-path (get-in % [:tx-meta ::gp-exporter/path]))
+                                            @tx-queue)))]
         (println (str "\n" (count matching-tx)) "Tx Maps for failing path:")
         (pprint/pprint matching-tx))))
   (when (and (= :error (:level m)) (not continue))
@@ -582,7 +577,8 @@
                        true
                        (set/rename-keys {:all-tags :convert-all-tags? :remove-inline-tags :remove-inline-tags?}))
         _ (when (:verbose options) (prn :options user-options))
-        options' (merge {:user-options user-options}
+        options' (merge {:user-options user-options
+                         :fail-fast? (not (:continue options))}
                         (select-keys options [:files :verbose :continue :debug :validate :profile :profile-out]))
         profile-started (when (:profile options) (now-ms))]
     (p/let [{:keys [import-state]}

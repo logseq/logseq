@@ -90,8 +90,26 @@
    (sanitize-ref-value db nil v))
   ([db tx-data v]
    (cond
-     (vector? v) (stable-entity-ref-with-tx-data db tx-data v)
-     (or (set? v) (sequential? v)) (set (map #(stable-entity-ref-with-tx-data db tx-data %) v))
+     (and (vector? v) (= 2 (count v)) (get-in db [:schema (first v) :db/unique]))
+     (stable-entity-ref-with-tx-data db tx-data v)
+
+     (vector? v)
+     (mapv (fn [ref-value]
+             ;; Reference maps carry creation data for replay.
+             (if (or (map? ref-value) (de/entity? ref-value))
+               ref-value
+               (stable-entity-ref-with-tx-data db tx-data ref-value)))
+           v)
+
+     (or (set? v) (sequential? v))
+     (into #{} (map (fn [ref-value]
+                      (let [ref-uuid (:block/uuid ref-value)]
+                        (if (and (map? ref-value)
+                                 (uuid? ref-uuid)
+                                 (nil? (d/entity db [:block/uuid ref-uuid])))
+                          (dissoc ref-value :db/id)
+                          (stable-entity-ref-with-tx-data db tx-data ref-value)))))
+           v)
      :else (stable-entity-ref-with-tx-data db tx-data v))))
 
 (defn- sanitize-upsert-property-schema
@@ -136,13 +154,16 @@
    (sanitize-block-payload db block nil))
   ([db block {:keys [created-uuids tx-data]}]
    (if (map? block)
-     (let [refs (sanitize-block-refs (:block/refs block))
-           created-ref-uuids (when (and (seq created-uuids) (seq refs))
-                               (->> refs
-                                    (keep :block/uuid)
-                                    (filter (set created-uuids))
-                                    distinct
-                                    vec))
+     (let [;; A replayed payload keeps the reference metadata recorded with it.
+           refs (or (get block rebase-refs-key)
+                    (sanitize-block-refs (:block/refs block)))
+           created-ref-uuids (or (get block rebase-created-refs-key)
+                                 (when (and (seq created-uuids) (seq refs))
+                                   (->> refs
+                                        (keep :block/uuid)
+                                        (filter (set created-uuids))
+                                        distinct
+                                        vec)))
           m (reduce-kv
              (fn [m k v]
                (cond
@@ -189,8 +210,13 @@
   (let [refs (get block rebase-refs-key)
         created-ref-uuids (set (get block rebase-created-refs-key))
         missing-refs (remove (fn [ref-entity] (d/entity db [:block/uuid (:block/uuid ref-entity)])) refs)
-        retracted-refs (remove (fn [block]
-                                 (contains? created-ref-uuids (:block/uuid block)))
+        block-refs (set (:block/refs block))
+        nil-refs? (contains? block-refs nil)
+        ;; Replay recreates the references behind a nil, so their links stay.
+        retracted-refs (remove (fn [{ref-uuid :block/uuid}]
+                                 (or (contains? created-ref-uuids ref-uuid)
+                                     (and nil-refs?
+                                          (not (contains? block-refs [:block/uuid ref-uuid])))))
                                missing-refs)
         tag-lookups (->> (:block/tags block)
                          (filter (fn [v]
@@ -203,7 +229,20 @@
                                                      (or (get missing-ref-by-lookup block-ref)
                                                          block-ref))]
                                    (map rewrite-ref v)))
-        block' (cond-> block
+        recovered-block (if nil-refs?
+                          (do
+                            (when-not (and (seq refs)
+                                           (every? #(uuid? (:block/uuid %)) refs)
+                                           (every? #(string? (:block/title %)) missing-refs))
+                              (throw (ex-info "Cannot recover nil block refs without reference metadata"
+                                              {:block/uuid (:block/uuid block)})))
+                            ;; Several missing references can collapse into one nil in a set.
+                            (assoc block :block/refs
+                                   (into (disj block-refs nil)
+                                         (map (fn [ref-entity] [:block/uuid (:block/uuid ref-entity)]))
+                                         refs)))
+                          block)
+        block' (cond-> recovered-block
                  (seq retracted-refs)
                  (update :block/title
                          (fn [title]
@@ -881,13 +920,17 @@
         (into save-ops))))
 
 (defn- build-inverse-delete-blocks
-  [db-before ids]
+  [db-before db-after ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
-        plans (mapv #(delete-root->restore-plan db-before %) roots)]
+        recycled-roots (filter #(ldb/recycled? (d/entity db-after [:block/uuid (:block/uuid %)])) roots)
+        recycled-ids (set (map :db/id recycled-roots))
+        plans (mapv #(delete-root->restore-plan db-before %)
+                    (remove #(contains? recycled-ids (:db/id %)) roots))]
     (when (and (not incomplete?)
                (seq roots)
                (every? some? plans))
-      (seq (restore-plans->ops db-before plans)))))
+      (seq (concat (map (fn [root] [:restore-recycled [(:block/uuid root)]]) recycled-roots)
+                   (restore-plans->ops db-before plans))))))
 
 (defn- move-root->restore-op
   [db-before root]
@@ -1095,14 +1138,16 @@
   [db-before db-after target-id opts]
   (when (:replace-empty-target? opts)
     (when-let [target-ref (stable-entity-ref db-before target-id)]
-      (when (d/entity db-after target-ref)
-        (when-let [target (d/entity db-before target-ref)]
-          (let [insert-block (build-insert-block-payload db-before target)
-                [target-id sibling?] (resolve-target-and-sibling target)]
-            [[:delete-blocks [[target-ref] {}]]
-             (to-insert-op db-before {:blocks [insert-block]
-                                      :target-id (stable-entity-ref db-before target-id)
-                                      :sibling? sibling?})]))))))
+      (when-let [target (d/entity db-before target-ref)]
+        (let [insert-block (build-insert-block-payload db-before target)
+              [target-id sibling?] (resolve-target-and-sibling target)]
+          (cond-> []
+            (d/entity db-after target-ref)
+            (conj [:delete-blocks [[target-ref] {}]])
+            :always
+            (conj (to-insert-op db-before {:blocks [insert-block]
+                                          :target-id (stable-entity-ref db-before target-id)
+                                          :sibling? sibling?}))))))))
 
 (defn- build-inverse-insert-like
   [db-before db-after tx-data args]
@@ -1196,7 +1241,13 @@
 
                           :delete-blocks
                           (let [[ids _opts] args]
-                            (build-inverse-delete-blocks db-before ids))
+                            (build-inverse-delete-blocks db-before db-after ids))
+
+                          :restore-recycled
+                          (let [[root-id] args
+                                root (block-entity db-before root-id)]
+                            (when (and root (not (ldb/page? root)))
+                              (restore-plans->ops db-before [(delete-root->restore-plan db-before root)])))
 
                           :create-page
                           (let [[_title opts] args]

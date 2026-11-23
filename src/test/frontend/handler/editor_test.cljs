@@ -236,6 +236,117 @@
       (is (= [keydown-state "a" nil] @insert-call)
           "The split must keep the content captured by keydown."))))
 
+(defn- pending-new-block-state
+  []
+  (#'editor/pending-new-block))
+
+(defn- with-pending-new-block!
+  [f]
+  (try
+    (#'editor/start-pending-new-block!)
+    (f)
+    (finally
+      (#'editor/clear-pending-new-block!))))
+
+(defn- fake-keydown
+  [target]
+  #js {:target target
+       :preventDefault (fn [])
+       :stopPropagation (fn [])})
+
+(deftest apply-pending-new-block-backspace-trims-or-noops-until-delete-test
+  (testing "typed text is trimmed from the end when the block is not being deleted"
+    (is (= {:typed-text "x"}
+           (#'editor/apply-pending-new-block-backspace {:typed-text "xy"} false))))
+  (testing "an empty buffer is a no-op before the editor has landed"
+    (is (= {:typed-text ""}
+           (#'editor/apply-pending-new-block-backspace {:typed-text ""} false)))
+    (is (nil? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text ""} false)))))
+  (testing "caret-at-start after landing still deletes the pending block"
+    (is (true? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text "xy"} true))))
+    (is (true? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text ""} true))))))
+
+(deftest pending-new-block-delete-on-backspace-ignores-source-caret-until-editor-moves-test
+  (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
+        new-id #uuid "22222222-2222-2222-2222-222222222222"
+        pending {:typed-text "" :source-uuid source-id}
+        empty-source #js {:value "" :selectionStart 0}
+        new-block-start #js {:value "xy" :selectionStart 0}
+        new-block-end #js {:value "xy" :selectionStart 2}]
+    (testing "caret 0 on the source block is not a delete, including during a queued Tab indent"
+      (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                   pending source-id (fake-keydown empty-source))))
+      (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                   (assoc pending :tab-indent? true :typed-text "xy")
+                   source-id
+                   (fake-keydown empty-source)))))
+    (testing "no current edit block is not a delete"
+      (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                   pending nil (fake-keydown empty-source)))))
+    (testing "after the editor has moved onto the new block, caret 0 deletes it"
+      (is (true? (#'editor/pending-new-block-delete-on-backspace?
+                  (assoc pending :typed-text "xy")
+                  new-id
+                  (fake-keydown new-block-start)))))
+    (testing "after the editor has moved, caret at the end of typed text trims instead"
+      (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                   (assoc pending :typed-text "xy")
+                   new-id
+                   (fake-keydown new-block-end)))))))
+
+(deftest backspace-pending-new-block-state-matches-enter-sequences-test
+  (testing "Enter, Enter, Backspace before landing leaves the in-flight block"
+    (with-pending-new-block!
+      (fn []
+        (#'editor/backspace-pending-new-block! false)
+        (let [pending (pending-new-block-state)]
+          (is (= "" (:typed-text pending)))
+          (is (nil? (:delete? pending)))
+          (is (some? pending))))))
+  (testing "Enter, x, y, Backspace before landing keeps x"
+    (with-pending-new-block!
+      (fn []
+        (#'editor/append-pending-new-block-text! "x")
+        (#'editor/append-pending-new-block-text! "y")
+        (#'editor/backspace-pending-new-block! false)
+        (is (= "x" (:typed-text (pending-new-block-state))))
+        (is (nil? (:delete? (pending-new-block-state))))))))
+
+(deftest start-pending-new-block-records-the-source-uuid-test
+  (let [source-id #uuid "11111111-1111-1111-1111-111111111111"]
+    (with-redefs [state/get-edit-block (constantly {:block/uuid source-id})]
+      (with-pending-new-block!
+        (fn []
+          (is (= source-id (:source-uuid (pending-new-block-state))))
+          (is (false? (#'editor/pending-new-block-delete-on-backspace?
+                       (pending-new-block-state)
+                       source-id
+                       (fake-keydown #js {:value "" :selectionStart 0})))))))))
+
+(deftest enter-while-insert-is-pending-is-dropped-test
+  (let [calls (atom [])
+        target #js {:value "" :selectionStart 0}
+        event #js {:target target
+                   :preventDefault (fn [] (swap! calls conj :prevent-default))}]
+    (with-pending-new-block!
+      (fn []
+        (with-redefs [editor/get-state (constantly {:block {}
+                                                    :config {}
+                                                    :node target
+                                                    :value ""
+                                                    :pos 0})
+                      editor/inside-of-editor-block (constantly true)
+                      editor/auto-complete? (constantly false)
+                      editor/keydown-new-block (fn [_state]
+                                                 (swap! calls conj :new-block))
+                      editor/insert-new-block! (fn [& _args]
+                                                 (swap! calls conj :insert-new-block))]
+          (editor/keydown-new-block-handler event)
+          (is (= [:prevent-default] @calls)
+              "A second Enter while the first insert is pending must not start another insert.")
+          (is (nil? (:enter-at (pending-new-block-state)))
+              "A second Enter is dropped, not queued, so Backspace cannot undo it."))))))
+
 (deftest inserted-block-edit-uses-persisted-window-row-test
   (async done
     (let [block-id #uuid "11111111-1111-1111-1111-111111111111"
@@ -1139,9 +1250,15 @@
                      :block/title "Project Tag"}]
                    (map #(select-keys % [:db/id :db/ident :block/uuid :block/title]) title-matches))
                 "Existing class choices keep their identity so they are not recreated")
-            (is (= ["Alias Only"]
-                   (map :block/title alias-matches))
-                "Tag aliases stay available as tag completion choices"))
+            (is (= [{:db/id 1
+                     :db/ident :user.class/project-tag
+                     :block/uuid class-uuid
+                     :block/title "Project Tag"
+                     :alias {:db/id 2
+                             :block/uuid alias-uuid
+                             :block/title "Alias Only"}}]
+                   (map #(select-keys % [:db/id :db/ident :block/uuid :block/title :alias]) alias-matches))
+                "Matching a tag alias chooses the source tag, not the alias page"))
           (p/catch (fn [error]
                      (is false (str error))))
           (p/finally (fn []
@@ -1228,8 +1345,12 @@
       (-> (#'editor-component/search-pages "Alias Only" true #(reset! matched-pages %) (fn [_]))
           (p/then
            (fn []
-             (is (some #(= "Alias Only" (:block/title %)) @matched-pages)
+             (is (some #(or (= "Alias Only" (:block/title %))
+                            (= "Alias Only" (get-in % [:alias :block/title])))
+                       @matched-pages)
                  "The alias is still selectable from tag completion")
+             (is (some #(= "Project Tag" (:block/title %)) @matched-pages)
+                 "Choosing the alias completes to the source tag")
              (is (not-any? :convert-page-to-tag? @matched-pages)
                  "A class alias must not show a redundant Convert action")))
           (p/catch
@@ -1241,6 +1362,57 @@
                        (set! state/<invoke-db-worker original-<invoke-db-worker)
 	                       (reset! state/*db-worker previous-worker)
 	                       (done)))))))
+
+(deftest get-matched-classes-deduplicates-before-limit
+  (async done
+    (let [classes [{:db/id 1
+                    :block/title "A"
+                    :block/alias (mapv (fn [i]
+                                       {:db/id (+ 100 i)
+                                        :block/title (str "ZZ " i)})
+                                      (range 25))}
+                   {:db/id 2
+                    :block/title "Boring ZZZZZZZZZZZZZZZZ"}]
+          original-<get-all-classes db-async/<get-all-classes]
+      (set! db-async/<get-all-classes (fn [& _args] (p/resolved classes)))
+      (-> (editor/get-matched-classes "ZZ")
+          (p/then
+           (fn [matches]
+             (is (= [1 2] (map :db/id matches))
+                 "One tag's aliases must not crowd another matching tag out of the results")))
+          (p/finally
+           (fn []
+             (set! db-async/<get-all-classes original-<get-all-classes)
+             (done)))))))
+
+(deftest get-matched-classes-ignores-untitled-aliases
+  (async done
+    (let [class-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          alias-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          untitled-alias {:db/id 2}
+          titled-class {:db/id 2
+                        :block/uuid alias-uuid
+                        :block/title "ET"
+                        :db/ident :user.class/ET}
+          source-class {:db/id 1
+                        :block/uuid class-uuid
+                        :block/title "Example Tag"
+                        :db/ident :user.class/ExampleTag
+                        :block/alias [untitled-alias]}
+          original-<get-all-classes db-async/<get-all-classes]
+      (set! db-async/<get-all-classes
+            (fn [_repo _opts]
+              (p/resolved [source-class titled-class])))
+      (-> (p/let [alias-matches (editor/get-matched-classes "ET")]
+            (is (some #(= {:db/id 2 :block/title "ET"}
+                          (select-keys % [:db/id :block/title]))
+                      alias-matches)
+                "Untitled nested aliases must not hide a titled class with the same id"))
+          (p/catch (fn [error]
+                     (is false (str error))))
+          (p/finally (fn []
+                       (set! db-async/<get-all-classes original-<get-all-classes)
+                       (done)))))))
 
 (deftest tag-search-does-not-prepend-new-tag-for-matched-page-class
   (async done
@@ -3455,3 +3627,79 @@
         "Escape during the move keeps nothing selected")
     (is (false? (#'editor/reselect-moved-rows? ["b" "c"] [:b2] before before))
         "a row not drawn yet: no partial selection")))
+
+(deftest select-parent-target-uses-page-ness-not-nested-parent-test
+  (let [child-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        grandchild-uuid #uuid "22222222-2222-2222-2222-222222222222"
+        page-uuid #uuid "33333333-3333-3333-3333-333333333333"
+        grandchild {:block/uuid grandchild-uuid
+                    :block/title "grandchild text"
+                    :block/parent {:db/id 10
+                                   :block/uuid child-uuid
+                                   :block/title "child"}
+                    :block/parent-uuid child-uuid}
+        child {:block/uuid child-uuid
+               :block/title "child"
+               :block/parent {:db/id 1
+                              :block/uuid page-uuid
+                              :block/name "page"
+                              :block/title "page"
+                              :block/tags [:logseq.class/Page]}
+               :block/parent-uuid page-uuid}]
+    (testing "DB worker parent summaries omit nested :block/parent"
+      (is (nil? (:block/parent (:block/parent grandchild)))
+          "The reported worker summary has no parent-of-parent field")
+      (is (= {:select-block child-uuid}
+             (#'editor/select-parent-target grandchild "page"))
+          "Nested block expands to its parent block")
+      (is (= {:select-all-page "page"}
+             (#'editor/select-parent-target child "page"))
+          "Top-level block whose parent is a page selects the whole page"))
+    (testing "zoomed-in root stays put"
+      (is (nil? (#'editor/select-parent-target grandchild (str grandchild-uuid)))))
+    (testing "file-graph parent entities still expand"
+      (is (= {:select-block child-uuid}
+             (#'editor/select-parent-target
+              (assoc-in grandchild [:block/parent :block/parent] {:block/name "page"})
+              "page"))))
+    (testing "parent uuid fallback when the parent summary is only a db id"
+      (is (= {:select-block child-uuid}
+             (#'editor/select-parent-target
+              {:block/uuid grandchild-uuid
+               :block/parent {:db/id 10}
+               :block/parent-uuid child-uuid}
+              "page"))))))
+
+(deftest select-parent-block-node-stays-in-the-selected-view-test
+  (let [parent-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        embed-parent (js-obj "id" "embed-parent")
+        page-parent (js-obj "id" "page-parent")
+        page-child (js-obj "id" "page-child")]
+    (with-redefs [editor/get-node-parent (fn [node]
+                                           (when (= node page-child) page-parent))
+                  editor/row-container-id (fn [node]
+                                            (case (.-id node)
+                                              "page-child" 3
+                                              "page-parent" 3
+                                              "embed-parent" 7
+                                              nil))
+                  util/get-blocks-by-id (fn [_] [embed-parent page-parent])
+                  dom/attr (fn [node attr]
+                             (when (and (= attr "blockid") (= node page-parent))
+                               (str parent-uuid)))]
+      (is (= page-parent
+             (#'editor/select-parent-block-node page-child parent-uuid))
+          "prefers the parent in the child's view over an earlier embed copy")))
+  (let [parent-uuid #uuid "11111111-1111-1111-1111-111111111111"
+        embed-parent (js-obj "id" "embed-parent")
+        page-child (js-obj "id" "page-child")]
+    (with-redefs [editor/get-node-parent (constantly nil)
+                  editor/row-container-id (fn [node]
+                                            (case (.-id node)
+                                              "page-child" 3
+                                              "embed-parent" 7
+                                              nil))
+                  util/get-blocks-by-id (fn [_] [embed-parent])
+                  dom/attr (constantly nil)]
+      (is (nil? (#'editor/select-parent-block-node page-child parent-uuid))
+          "keeps the current selection when the parent is only drawn in another view"))))

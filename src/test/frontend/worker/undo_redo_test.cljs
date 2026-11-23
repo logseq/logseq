@@ -1,5 +1,7 @@
 (ns frontend.worker.undo-redo-test
-  (:require [cljs.test :refer [deftest is testing use-fixtures]]
+  (:require [cljs-time.coerce :as tc]
+            [cljs-time.core :as t]
+            [cljs.test :refer [deftest is testing use-fixtures]]
             [datascript.core :as d]
             [frontend.worker.a-test-env]
             [frontend.worker.pipeline :as worker-pipeline]
@@ -549,6 +551,31 @@
       (let [redo-result (worker-undo-redo/redo test-repo)]
         (is (map? redo-result))
         (is (= "local-1" (:block/title (d/entity @conn [:block/uuid child-uuid]))))))))
+
+(deftest journal-format-changes-are-not-undoable-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        previous-pipeline @ldb/*transact-pipeline-fn
+        {:keys [child-uuid]} (seed-page-parent-child!)]
+    (sqlite-build/create-blocks conn {:pages-and-blocks [{:page {:build/journal 20240102}}]})
+    (worker-undo-redo/clear-history! test-repo)
+    (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+    (try
+      (save-block-title! conn child-uuid "before format change")
+      (doseq [formatter ["yyyy-MM-dd" "yyyy/MM/dd"]]
+        (apply-ops! conn
+                    [[:set-block-property [(:block/uuid (d/entity @conn :logseq.class/Journal))
+                                           :logseq.property.journal/title-format formatter]]]
+                    (local-tx-meta {:client-id "test-client"})))
+      (is (= 1 (count (:undo-ops (worker-undo-redo/get-debug-state test-repo)))))
+      (worker-undo-redo/undo test-repo)
+      (is (= "child" (:block/title (d/entity @conn [:block/uuid child-uuid]))))
+      (worker-undo-redo/undo test-repo)
+      (is (= "yyyy/MM/dd" (:logseq.property.journal/title-format (d/entity @conn :logseq.class/Journal))))
+      (let [journal (ldb/get-journal-page-by-day @conn 20240102)]
+        (is (= "2024/01/02" (:block/title journal)))
+        (is (= "2024/01/02" (:block/name journal))))
+      (finally
+        (reset! ldb/*transact-pipeline-fn previous-pipeline)))))
 
 (deftest undo-cycle-todo-removes-task-class-test
   (testing "undoing first status set should remove task class and status"
@@ -2034,3 +2061,116 @@
           (is (= a-parent-id (:db/id (:block/parent a))))
           (is (= (:db/id a) (:db/id (:block/parent b))))
           (is (= (:db/id a) (:db/id (:block/parent c)))))))))
+
+(deftest redo-repeating-deadline-does-not-advance-extra-interval-test
+  (testing "redo of completing a daily repeating Deadline restores the original next date, not +2"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          deadline-oct-10 (tc/to-long (t/date-time 2026 10 10))
+          deadline-oct-11 (tc/to-long (t/date-time 2026 10 11))
+          task-uuid (random-uuid)
+          deadline (fn []
+                     (:logseq.property/deadline (d/entity @conn [:block/uuid task-uuid])))
+          status (fn []
+                   (some-> (d/entity @conn [:block/uuid task-uuid])
+                           :logseq.property/status
+                           :db/ident))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks
+         conn
+         [{:page {:block/title "redo repeat"}
+           :blocks [{:block/title "QA redo day"
+                     :block/uuid task-uuid
+                     :build/tags [:logseq.class/Task]
+                     :build/properties
+                     {:logseq.property/status :logseq.property/status.todo
+                      :logseq.property/deadline deadline-oct-10
+                      :logseq.property.repeat/repeated? true
+                      :logseq.property.repeat/recur-frequency 1
+                      :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}}]}])
+        (d/transact! conn
+                     [[:db/add [:block/uuid task-uuid]
+                       :logseq.property.repeat/repeat-type
+                       :logseq.property.repeat/repeat-type.plus]])
+        (worker-undo-redo/clear-history! test-repo)
+        (apply-ops! conn
+                    [[:set-block-property [task-uuid
+                                           :logseq.property/status
+                                           :logseq.property/status.done]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (= deadline-oct-10 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (= deadline-oct-10 (deadline)))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))
+
+(deftest redo-ops-replay-reruns-repeating-task-commands-test
+  (testing "redo replaying semantic ops still re-derives repeating-task reschedule"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          prev-pipeline @ldb/*transact-pipeline-fn
+          deadline-oct-10 (tc/to-long (t/date-time 2026 10 10))
+          deadline-oct-11 (tc/to-long (t/date-time 2026 10 11))
+          tmpl-uuid (random-uuid)
+          done-task-uuid (random-uuid)
+          target-uuid (random-uuid)
+          copy (fn [] (d/q '[:find ?b . :in $ ?tu :where
+                             [?t :block/uuid ?tu]
+                             [?b :logseq.property/used-template ?t]]
+                           @conn tmpl-uuid))
+          deadline (fn [] (:logseq.property/deadline (d/entity @conn (copy))))
+          status (fn [] (some-> (d/entity @conn (copy)) :logseq.property/status :db/ident))]
+      (ldb/register-transact-pipeline-fn! worker-pipeline/transact-pipeline)
+      (try
+        (sqlite-build/create-blocks
+         conn
+         [{:page {:block/title "redo ops repeat"}
+           :blocks [{:block/title "tmpl"
+                     :block/uuid tmpl-uuid
+                     :build/tags [:logseq.class/Template]
+                     :build/children
+                     [{:block/title "QA redo ops day"
+                       :block/uuid done-task-uuid
+                       :build/tags [:logseq.class/Task]
+                       :build/properties
+                       {:logseq.property/status :logseq.property/status.done
+                        :logseq.property/deadline deadline-oct-10
+                        :logseq.property.repeat/repeated? true
+                        :logseq.property.repeat/recur-frequency 1
+                        :logseq.property.repeat/recur-unit :logseq.property.repeat/recur-unit.day}}]}
+                    {:block/title "target"
+                     :block/uuid target-uuid}]}])
+        (d/transact! conn
+                     [[:db/add [:block/uuid done-task-uuid]
+                       :logseq.property.repeat/repeat-type
+                       :logseq.property.repeat/repeat-type.plus]])
+        (worker-undo-redo/clear-history! test-repo)
+        (apply-ops! conn
+                    [[:apply-template [tmpl-uuid target-uuid {:sibling? false}]]]
+                    (local-tx-meta {:client-id "test-client"}))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (nil? (copy)))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (is (map? (worker-undo-redo/undo test-repo)))
+        (is (nil? (copy)))
+        (is (map? (worker-undo-redo/redo test-repo)))
+        (is (= deadline-oct-11 (deadline)))
+        (is (= :logseq.property/status.todo (status)))
+        (finally
+          (reset! ldb/*transact-pipeline-fn prev-pipeline))))))

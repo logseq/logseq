@@ -343,9 +343,9 @@
              (group-by #(select-keys (:page %) [:block/title :build/journal]))
              (mapv #(apply merge-with (fn [e1 e2]
                                         ;; merge :page and add :blocks
-                                        (if (and (map? e1) (map e2))
+                                        (if (and (map? e1) (map? e2))
                                           (merge e1 e2)
-                                          (into e1 e2)))
+                                          (sqlite-build/dedupe-blocks-by-uuid (into e1 e2))))
                            (second %))))
         ;; Use merge-with to preserve new-property? and to allow full copies to overwrite shallow ones
         properties (apply merge-with merge (keep :properties export-maps))
@@ -1321,11 +1321,11 @@
           {:error (str "The following imported properties conflict with the current graph: "
                        (pr-str (mapv :property-id @property-conflicts)))})
         (if (#{:graph :graph-human} (::export-type export-map''))
-          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map''))
+          (-> (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'') db)
               (assoc :misc-tx (vec (concat (::graph-files export-map'')
                                            (::kv-values export-map'')
                                            (::property-history export-map'')))))
-          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'')))))))
+          (sqlite-build/build-blocks-tx (remove-namespaced-keys export-map'') db))))))
 
 (defn import-tx-data
   [{:keys [init-tx block-props-tx misc-tx]}]

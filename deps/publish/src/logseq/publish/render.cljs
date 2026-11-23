@@ -696,6 +696,12 @@
         [node]
         [])
 
+      (= "Latex_Fragment" type)
+      (let [[mode s] data]
+        [[:span.math-inline
+          (cond-> {} (= "Displayed" mode) (assoc :data-display "true"))
+          (hiccups.runtime/escape-html (str s))]])
+
       :else
       (content->nodes (str data) uuid->title graph-uuid))))
 
@@ -760,6 +766,16 @@
 
       "Horizontal_Rule"
       [[:hr]]
+
+      "Displayed_Math"
+      [[:div.math-block (hiccups.runtime/escape-html (str data))]]
+
+      "Latex_Environment"
+      (let [[_ name option content] block-ast'
+            tex (if (= (string/lower-case (str name)) "equation")
+                  (str content)
+                  (str "\\begin{" name "}" option "\n" content "\\end{" name "}"))]
+        [[:div.math-block (hiccups.runtime/escape-html tex)]])
 
       (let [fallback (content->nodes (str data) (:uuid->title ctx) (:graph-uuid ctx))]
         (when (seq fallback)

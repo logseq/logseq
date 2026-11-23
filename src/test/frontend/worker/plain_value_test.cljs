@@ -1,6 +1,7 @@
 (ns frontend.worker.plain-value-test
   (:require [cljs.test :refer [deftest is testing]]
             [datascript.core :as d]
+            [frontend.util.entity :as entity]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.plain-value :as plain-value]
             [logseq.db.frontend.schema :as db-schema]
@@ -148,3 +149,56 @@
         value (get-in result [:block :block/properties :user.property/related])]
     (is (= target-uuid (:block/uuid value)))
     (is (= "Target" (:block/title value)))))
+
+(defn- tag-with-alias-db
+  []
+  (let [conn (d/create-conn db-schema/schema)
+        class-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        alias-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+        page-alias-uuid #uuid "cccccccc-cccc-cccc-cccc-cccccccccccc"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.class/ExampleTag
+                        :block/title "Example Tag"
+                        :block/name "example tag"
+                        :block/uuid class-uuid
+                        :block/tags :logseq.class/Tag
+                        :block/alias [-2]}
+                       {:db/id -2
+                        :block/title "ET"
+                        :block/name "et"
+                        :block/uuid alias-uuid
+                        :block/tags :logseq.class/Page}
+                       {:db/id -3
+                        :block/title "Source Page"
+                        :block/name "source page"
+                        :block/uuid #uuid "dddddddd-dddd-dddd-dddd-dddddddddddd"
+                        :block/tags :logseq.class/Page
+                        :block/alias [-4]}
+                       {:db/id -4
+                        :block/title "SP"
+                        :block/name "sp"
+                        :block/uuid page-alias-uuid
+                        :block/tags :logseq.class/Page}])
+    [@conn class-uuid alias-uuid page-alias-uuid]))
+
+(deftest entity-forward-map-marks-class-alias-pages
+  (let [[db class-uuid alias-uuid page-alias-uuid] (tag-with-alias-db)
+        class-alias (plain-value/entity-forward-map db (d/entity db [:block/uuid alias-uuid]) {})
+        page-alias (plain-value/entity-forward-map db (d/entity db [:block/uuid page-alias-uuid]) {})
+        class-map (plain-value/entity-forward-map db (d/entity db [:block/uuid class-uuid]) {})]
+    (is (true? (:block/alias-source-page-class? class-alias)))
+    (is (= "Example Tag"
+           (:block/title (d/entity db (:block/alias-source-page-id class-alias)))))
+    (is (true? (entity/class? class-map))
+        "Serialized class pages must stay recognizable as classes")
+    (is (false? (:block/alias-source-page-class? page-alias)))
+    (is (some? (:block/alias-source-page-id page-alias)))))
+
+(deftest get-block-and-children-includes-class-alias-flag
+  (let [[db _class-uuid alias-uuid _page-alias-uuid] (tag-with-alias-db)
+        alias (d/entity db [:block/uuid alias-uuid])
+        result (:block (block-handler/get-block-and-children db (:db/id alias) {:children? false}))]
+    (is (true? (:block/alias-source-page-class? result)))
+    (is (= alias-uuid (:block/uuid result)))
+    (is (not (contains? result :block/_alias)))))
