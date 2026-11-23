@@ -475,7 +475,8 @@
                      [:db/add e :logseq.property/created-by-ref created-by-id]))))
              tx-data)]
         (cond->> add-created-by-tx-data
-          (nil? created-by-ent) (cons created-by-block))))))
+          (and (nil? created-by-ent) (seq add-created-by-tx-data))
+          (cons created-by-block))))))
 
 (defn- revert-disallowed-changes
   [{:keys [tx-meta tx-data db-before db-after]}]

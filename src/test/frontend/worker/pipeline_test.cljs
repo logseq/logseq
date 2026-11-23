@@ -7,6 +7,7 @@
             [frontend.worker.db.validate :as worker-db-validate]
             [frontend.worker.handler.block :as block-handler]
             [frontend.worker.pipeline :as worker-pipeline]
+            [frontend.worker.state :as worker-state]
             [frontend.worker.input-test-helper :as input-helper]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
@@ -1913,3 +1914,50 @@
           (is (not (ldb/internal-page? converted)))
           (is (= (:db/id page) (:db/id converted)))
           (is (some? (:block/name converted))))))))
+
+(deftest user-page-is-created-only-by-a-tx-that-references-it-test
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page1"}
+                :blocks [{:block/title "target"}]}])
+        user-uuid (random-uuid)
+        id-token (str "header."
+                      (-> (js/JSON.stringify #js {:sub (str user-uuid)
+                                                  :cognito:username "member"
+                                                  :email "member@example.com"})
+                          js/btoa
+                          (string/replace "+" "-")
+                          (string/replace "/" "_"))
+                      ".signature")
+        target (db-test/find-block-by-content @conn "target")
+        inserted-uuid (random-uuid)
+        state-prev @worker-state/*state]
+    (swap! worker-state/*state assoc :auth/id-token id-token)
+    (try
+      (with-transact-pipeline
+        #(ldb/transact! conn [(ldb/kv :logseq.kv/graph-remote? true)]
+                        {:persist-op? false}))
+      (is (nil? (d/entity @conn [:block/uuid user-uuid]))
+          "A tx without new blocks must not create the user page.")
+      (let [tx-report* (atom nil)]
+        (d/listen! conn ::capture (fn [tx-report] (reset! tx-report* tx-report)))
+        (with-transact-pipeline
+          #(outliner-core/insert-blocks!
+            conn
+            [{:block/uuid inserted-uuid
+              :block/title "inserted"
+              :block/page (:db/id (:block/page target))}]
+            target
+            {:sibling? true
+             :keep-uuid? true}))
+        (d/unlisten! conn ::capture)
+        (let [user-page (d/entity @conn [:block/uuid user-uuid])]
+          (is (= (:db/id user-page)
+                 (:db/id (:logseq.property/created-by-ref
+                          (d/entity @conn [:block/uuid inserted-uuid])))))
+          (is (some #(and (= (:db/id user-page) (:e %))
+                          (= :block/uuid (:a %))
+                          (:added %))
+                    (:tx-data @tx-report*))
+              "The user page is created in the same tx as its first reference.")))
+      (finally
+        (reset! worker-state/*state state-prev)))))
