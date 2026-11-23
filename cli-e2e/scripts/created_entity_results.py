@@ -114,10 +114,18 @@ def main():
                              "--update-tags", '["ResultTag"]',
                              "--update-properties", '{"Result Note" 1}', output=output)
                 ids = result if output == "edn" else result["result"]
+                reference_after_create = entity(reference)
+                assert reference_after_create == before, "Command metadata changed the reference page"
+                reference_ids = [reference]
+                snapshots = [reference_after_create]
                 stored_titles = titles
                 if refs:
-                    existing_uuid = entity(reference)["block/uuid"]
-                    new_uuid = entity(title_id(new_page))["block/uuid"]
+                    new_page_id = title_id(new_page)
+                    new_page_after_create = entity(new_page_id)
+                    reference_ids.append(new_page_id)
+                    snapshots.append(new_page_after_create)
+                    existing_uuid = reference_after_create["block/uuid"]
+                    new_uuid = new_page_after_create["block/uuid"]
                     stored_titles = [title.replace("[[ExistingReference]]", f"[[{existing_uuid}]]")
                                      .replace(f"[[{new_page}]]", f"[[{new_uuid}]]") for title in titles]
                 expected = [query('[:find ?e . :where [?e :block/title ?title] '
@@ -125,7 +133,6 @@ def main():
                             for title in titles]
                 print(f"{args.case} {source} {output} refs={refs}: {ids}; expected {expected}", flush=True)
                 assert all(expected), expected
-                assert entity(reference) == before, "Command metadata changed the reference page"
                 for index, entity_id in enumerate(expected):
                     created = entity(entity_id)
                     assert created["block/title"] == stored_titles[index], created
@@ -135,10 +142,6 @@ def main():
                 if args.case == "metadata":
                     continue
                 assert ids == expected, (ids, expected)
-                reference_ids = [reference]
-                if refs:
-                    reference_ids.append(query(f'[:find ?e . :where [?e :block/title "{new_page}"]]'))
-                snapshots = [entity(i) for i in reference_ids]
                 for entity_id in ids:
                     run("upsert", "block", "--id", str(entity_id),
                         "--update-properties", f'{{:{property_key} 2}}')
