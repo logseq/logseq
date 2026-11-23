@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Hidupkan/matikan blok terbuka (perluas atau perkecil semua blok)"
  :command.editor/undo "Batal"
  :command.editor/up "Geser kursor ke atas / Pilih ke atas"
- :command.editor/zoom-in "Perbesar blok yang sedang disunting / Maju sebaliknya"
- :command.editor/zoom-out "Perkecil blok yang sedang disunting / Mundur sebaliknya"
+ :command.editor/zoom-in "Perbesar tampilan blok yang sedang disunting"
+ :command.editor/zoom-out "Perkecil tampilan blok yang sedang disunting"
 
  :command.go/all-graphs "Buka semua grafik"
  :command.go/all-pages "Buka semua halaman"

@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "ブロック展開の切り替え（全てのブロックを折り畳む／展開する）"
  :command.editor/undo "元に戻す"
  :command.editor/up "カーソルを上へ"
- :command.editor/zoom-in "ズームイン"
- :command.editor/zoom-out "ズームアウト"
+ :command.editor/zoom-in "編集中のブロックにズームイン"
+ :command.editor/zoom-out "編集中のブロックからズームアウト"
 
  :command.go/all-graphs "全グラフへ移動"
  :command.go/all-pages "全ページへ移動"

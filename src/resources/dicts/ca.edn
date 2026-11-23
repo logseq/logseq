@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Alternar blocs oberts, (col·lapsar o expandir tots)"
  :command.editor/undo "Desfer"
  :command.editor/up "Moure cursor amunt / Seleccionar amunt"
- :command.editor/zoom-in "Apropar / Endavant"
- :command.editor/zoom-out "Allunyar / Enrere"
+ :command.editor/zoom-in "Apropar la vista al bloc que s’està editant"
+ :command.editor/zoom-out "Allunyar la vista del bloc que s’està editant"
 
  :command.go/all-graphs "Anar a tots els grafs"
  :command.go/all-pages "Anar a totes les pàgines"

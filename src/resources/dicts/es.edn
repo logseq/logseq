@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Alternar bloques abiertos, (colapsar o expandir todos)"
  :command.editor/undo "Deshacer"
  :command.editor/up "Mover cursor arriba / Seleccionar arriba"
- :command.editor/zoom-in "Acercar / Adelante"
- :command.editor/zoom-out "Alejar / Atrás"
+ :command.editor/zoom-in "Acercar la vista al bloque en edición"
+ :command.editor/zoom-out "Alejar la vista del bloque en edición"
 
  :command.go/all-graphs "Ir a todos los grafos"
  :command.go/all-pages "Ir a todas las páginas"
