@@ -1814,7 +1814,6 @@
  :window/minimize "Minimalkan"
  :window/restore "Pulihkan"
 
- :youtube/embed-first-reminder-mobile "Silakan sisipkan video YouTube terlebih dahulu, kemudian gunakan ikon ini.\nIngat: Anda dapat menempel URL YouTube mentah sebagai video yang disematkan di seluler."
  :youtube/player-not-ready "Pemutar YouTube belum siap."
  :youtube/timestamps-not-available-mobile "Cap waktu YouTube belum tersedia di seluler."
 

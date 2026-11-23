@@ -1814,7 +1814,6 @@
  :window/minimize "تصغير"
  :window/restore "استعادة"
 
- :youtube/embed-first-reminder-mobile "يرجى تضمين فيديو YouTube أولاً، ثم استخدم هذا الرمز.\nتذكر: يمكنك لصق عنوان URL لـ YouTube الخام كفيديو مضمن على الجوال."
  :youtube/player-not-ready "مشغل YouTube غير جاهز حتى الآن."
  :youtube/timestamps-not-available-mobile "طوابع زمنية YouTube غير متاحة على الجوال حتى الآن."
 

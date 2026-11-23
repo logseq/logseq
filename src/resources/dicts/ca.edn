@@ -1814,7 +1814,6 @@
  :window/minimize "Minimitzar"
  :window/restore "Restaurar"
 
- :youtube/embed-first-reminder-mobile "Si us plau, incrusta primer un vídeo de YouTube i després utilitza aquesta icona.\nRecordar: pots enganxar una URL de YouTube directa com a vídeo incrustat en dispositius mòbils."
  :youtube/player-not-ready "El reproductor de YouTube encara no està preparat."
  :youtube/timestamps-not-available-mobile "Les marques de temps de YouTube encara no estan disponibles en dispositius mòbils."
 

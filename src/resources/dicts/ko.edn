@@ -1814,7 +1814,6 @@
  :window/minimize "최소화"
  :window/restore "복원"
 
- :youtube/embed-first-reminder-mobile "먼저 YouTube 동영상을 포함한 후 이 아이콘을 사용하세요.\n기억하세요: 모바일에서 원본 YouTube URL을 붙여넣어 포함된 동영상을 사용할 수 있습니다."
  :youtube/player-not-ready "YouTube 플레이어가 아직 준비되지 않았습니다."
  :youtube/timestamps-not-available-mobile "YouTube 타임스탬프는 아직 모바일에서 사용할 수 없습니다."
 

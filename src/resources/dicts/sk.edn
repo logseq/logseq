@@ -1814,7 +1814,6 @@
  :window/minimize "Minimalizovať"
  :window/restore "Obnoviť"
 
- :youtube/embed-first-reminder-mobile "Najprv vložte video z YouTube a potom použite túto ikonu.\nPripomenutie: Na mobile môžete vložiť raw YouTube URL ako vložené video."
  :youtube/player-not-ready "Prehrávač YouTube ešte nie je pripravený."
  :youtube/timestamps-not-available-mobile "Časové pečiatky YouTube ešte nie sú na mobile dostupné."
 

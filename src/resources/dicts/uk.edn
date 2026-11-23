@@ -1994,7 +1994,6 @@
  :window/minimize "Згорнути"
  :window/restore "Відновити"
 
- :youtube/embed-first-reminder-mobile "Спочатку вбудуйте відео YouTube, а потім використовуйте цей значок.\nПам'ятайте: ви можете вставити сиру URL-адресу YouTube як вбудоване відео на мобільному пристрої."
  :youtube/player-not-ready "Програвач YouTube ще не готовий."
  :youtube/timestamps-not-available-mobile "Часові мітки YouTube ще недоступні на мобільних пристроях."
 

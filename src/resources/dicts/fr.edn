@@ -1814,7 +1814,6 @@
  :window/minimize "Réduire"
  :window/restore "Restorer"
 
- :youtube/embed-first-reminder-mobile "Veuillez d'abord intégrer une vidéo YouTube, puis utilisez cette icône.\nRappelez-vous : vous pouvez coller une URL YouTube brute comme vidéo intégrée sur mobile."
  :youtube/player-not-ready "Le lecteur YouTube n'est pas encore prêt."
  :youtube/timestamps-not-available-mobile "Les horodatages YouTube ne sont pas encore disponibles sur mobile."
 

@@ -1827,7 +1827,6 @@
  :window/minimize "最小化"
  :window/restore "復元"
 
- :youtube/embed-first-reminder-mobile "まずYouTube動画を埋め込み、次にこのアイコンを使用してください。\n注意：モバイルでは、YouTube URLを直接貼り付けて埋め込み動画として使用できます。"
  :youtube/player-not-ready "YouTubeプレーヤーはまだ準備できていません。"
  :youtube/timestamps-not-available-mobile "YouTubeタイムスタンプはまだモバイルで利用できません。"
 

@@ -2083,7 +2083,6 @@
  :window/minimize "Minimize"
  :window/restore "Restore"
 
- :youtube/embed-first-reminder-mobile "Please embed a YouTube video at first, then use this icon.\nRemember: You can paste a raw YouTube url as embedded video on mobile."
  :youtube/player-not-ready "YouTube player isn't ready yet."
  :youtube/timestamps-not-available-mobile "YouTube timestamps aren't available on mobile yet."
 

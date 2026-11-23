@@ -1814,7 +1814,6 @@
  :window/minimize "Minimalizuj"
  :window/restore "Przywróć"
 
- :youtube/embed-first-reminder-mobile "Najpierw osadź film z YouTube, a następnie użyj tej ikony.\nPamiętaj: możesz wkleić surowy adres URL YouTube jako osadzony film na urządzeniu mobilnym."
  :youtube/player-not-ready "Odtwarzacz YouTube nie jest jeszcze gotowy."
  :youtube/timestamps-not-available-mobile "Sygnatury czasowe YouTube nie są jeszcze dostępne na urządzeniach mobilnych."
 
