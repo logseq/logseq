@@ -48,19 +48,20 @@ test('CLI metadata writes preserve named links, backlinks and recurring journal 
   }
   async function checkpoint(label, block, required, absent = []) {
     const actual = await titleRefs(block);
+    const sourceUUID = await uuid(block);
     report.stages.push({ label, refs: actual });
     for (const name of required) {
       equal(label + ' refs include ' + name, actual.includes(name), true);
       const target = await id(name);
       const membership = await query(`[:find ?tag . :where [${block} :block/tags ?tag] [(= ?tag ${target})]]`);
       equal(label + (membership ? ' tag membership excluded from linked references on ' : ' UI backlinks include source on ') + name,
-        (await backlinkUUIDs(target)).includes(await uuid(block)), !membership);
+        (await backlinkUUIDs(target)).includes(sourceUUID), !membership);
     }
     for (const name of absent) {
       equal(label + ' refs exclude ' + name, actual.includes(name), false);
       const target = await id(name);
       if (target) equal(label + ' UI backlinks exclude source on ' + name,
-        (await backlinkUUIDs(target)).includes(await uuid(block)), false);
+        (await backlinkUUIDs(target)).includes(sourceUUID), false);
     }
   }
   async function refreshServer() {
