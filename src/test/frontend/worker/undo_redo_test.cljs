@@ -725,17 +725,17 @@
   (let [conn (worker-state/get-datascript-conn test-repo)
         {:keys [child-uuid parent-uuid]} (seed-page-parent-child!)
         target (db-test/find-block-by-content @conn "task")
-        uuid (:block/uuid target)
-        title (str "See [[" uuid "]]")
+        target-uuid (:block/uuid target)
+        title (str "See [[" target-uuid "]]")
         state (fn [id]
                 (let [e (d/entity @conn [:block/uuid id])]
                   [(:v (first (d/datoms @conn :eavt (:db/id e) :block/title)))
-                   (contains? (set (map :block/uuid (:block/refs e))) uuid)]))]
+                   (contains? (set (map :block/uuid (:block/refs e))) target-uuid)]))]
     (doseq [id [child-uuid parent-uuid]]
       (d/transact! conn [[:db/add [:block/uuid id] :block/title title]
                          [:db/add [:block/uuid id] :block/refs (:db/id target)]]))
     (worker-undo-redo/clear-history! test-repo)
-    (apply-ops! conn [[:delete-blocks [[uuid] {}]]] (local-tx-meta {}))
+    (apply-ops! conn [[:delete-blocks [[target-uuid] {}]]] (local-tx-meta {}))
     (is (= ["See task" false] (state child-uuid)))
     (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/title "Edited"]])
     (is (map? (worker-undo-redo/undo test-repo)))

@@ -949,24 +949,24 @@
                        tx-data)]
     (->> tx-data
          (reduce (fn [holders {:keys [e a v added]}]
-                   (if-let [uuid (when (and (contains? affected [e a])
-                                           (= added (boolean (seq (d/datoms db-after :eavt e a v))))
-                                           (not= added (boolean (seq (d/datoms db-before :eavt e a v)))))
-                                   (:block/uuid (d/entity db-before e)))]
+                   (if-let [holder-uuid (when (and (contains? affected [e a])
+                                                   (= added (boolean (seq (d/datoms db-after :eavt e a v))))
+                                                   (not= added (boolean (seq (d/datoms db-before :eavt e a v)))))
+                                          (:block/uuid (d/entity db-before e)))]
                      (let [entity-ref (stable-entity-ref (if added db-after db-before) v)]
                        (if (or (vector? entity-ref) (qualified-keyword? entity-ref))
-                         (update-in holders [uuid a (if added :retract :add)] (fnil conj []) entity-ref)
+                         (update-in holders [holder-uuid a (if added :retract :add)] (fnil conj []) entity-ref)
                          holders))
                      holders))
                  {})
          (map
-          (fn [[uuid deltas]]
-            (let [holder [:block/uuid uuid]
+          (fn [[holder-uuid deltas]]
+            (let [holder [:block/uuid holder-uuid]
                   title (fn [db] (:v (first (d/datoms db :eavt holder :block/title))))
                   changes (cond-> deltas
                             (contains? deltas :block/refs)
                             (assoc-in [:block/refs :titles] [(title db-after) (title db-before)]))]
-              [:save-block [{:block/uuid uuid} {:outliner/ref-value-deltas changes}]]))))))
+              [:save-block [{:block/uuid holder-uuid} {:outliner/ref-value-deltas changes}]]))))))
 
 (defn- build-inverse-delete-blocks
   [db-before db-after ids]
