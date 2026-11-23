@@ -165,8 +165,8 @@
     (do
       (notify-timestamp-unavailable!)
       nil)
-    (if-let [player (get-player (state/get-input))]
-      (if-let [get-current-time (player-method player "getCurrentTime")]
+    (let [player (get-player (state/get-input))]
+      (if-let [get-current-time (some-> player (player-method "getCurrentTime"))]
         (util/format "{{youtube-timestamp %s}}"
                      (Math/floor (.call get-current-time player)))
         (do
@@ -174,13 +174,7 @@
            (t :youtube/player-not-ready)
            :warning
            false)
-          nil))
-      (when (mobile-util/native-platform?)
-        (notification/show!
-         (t :youtube/embed-first-reminder-mobile)
-         :warning
-         false)
-        nil))))
+          nil)))))
 
 (defn parse-timestamp [timestamp']
   (let [reg #"^(?:(\d+):)?([0-5]?\d):([0-5]?\d)$"
