@@ -139,8 +139,6 @@ def main():
                     is_root = index in (0, 3)
                     assert (property_value(created) == 1) == is_root, created
                     assert any(t["db/id"] == tag for t in created.get("block/tags", [])) == is_root, created
-                if args.case == "metadata":
-                    continue
                 assert ids == expected, (ids, expected)
                 for entity_id in ids:
                     run("upsert", "block", "--id", str(entity_id),
