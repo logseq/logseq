@@ -368,8 +368,8 @@
  :command.editor/toggle-open-blocks "Згорнути/Розгорнути всі блоки"
  :command.editor/undo "Відмінити"
  :command.editor/up "Перемістити курсор вгору / Вибрати вгору"
- :command.editor/zoom-in "Збільшення масштабу в блоці редагування / Або перехід уперед"
- :command.editor/zoom-out "Зменшити масштаб блоку редагування / Або в зворотному напрямку"
+ :command.editor/zoom-in "Наблизити блок, що редагується"
+ :command.editor/zoom-out "Віддалити блок, що редагується"
 
  :command.go/all-graphs "Перейти до всіх графів"
  :command.go/all-pages "Перейти на всі сторінки"

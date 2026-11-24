@@ -1065,10 +1065,11 @@
   (testing "after Backspace removes an ordered-list marker, the next Backspace deletes the empty block"
     (let [journal (ls-api-call! :editor.createJournalPage
                                 (str (java.time.Instant/now)))]
-      (ls-api-call! :app.pushState "page" {:name (get journal "uuid")} nil))
-    (util/wait-editor-visible)
-    (when-not (util/get-editor)
-      (b/open-last-block))
+      (ls-api-call! :app.pushState "page" {:name (get journal "uuid")} nil)
+      (-> (w/-query "div[data-testid='page title'] .block-title-wrap")
+          assert/assert-that
+          (.hasText (get journal "title"))))
+    (b/open-last-block)
     (when-not (string/blank? (or (util/get-edit-content) ""))
       (b/new-block ""))
     (util/press-seq "1. ")

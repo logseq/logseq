@@ -18,6 +18,10 @@
   [sql]
   (count (re-seq #"\?" sql)))
 
+(defn- empty-search-conn
+  []
+  (d/create-conn {:block/uuid {:db/unique :db.unique/identity}}))
+
 (defn- checking-db
   []
   #js {:exec (fn [opts]
@@ -262,11 +266,11 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       result)]
-        (is (empty? (search/search-blocks (atom :large-db) db "\"" {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar" {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar AND baz" {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar or baz" {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "foo \"bar not baz" {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "\"" {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "foo \"bar" {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "foo \"bar AND baz" {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "foo \"bar or baz" {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "foo \"bar not baz" {:limit 10})))
         (is (= ["\"\"\"\"*"
                 "\"foo \"\"bar\"*"
                 "\"foo \"\"bar AND baz\"*"
@@ -287,12 +291,12 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       (assoc result :block/uuid (uuid (:id result))))]
-        (is (empty? (search/search-blocks (atom :large-db) db "xxx and " {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "xxx AND " {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "xxx or " {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "xxx NOT " {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "xxx & " {:limit 10})))
-        (is (empty? (search/search-blocks (atom :large-db) db "xxx | " {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "xxx and " {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "xxx AND " {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "xxx or " {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "xxx NOT " {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "xxx & " {:limit 10})))
+        (is (empty? (search/search-blocks (empty-search-conn) db "xxx | " {:limit 10})))
         (is (= ["\"xxx AND \"*"
                 "\"xxx AND \"*"
                 "\"xxx OR \"*"
@@ -313,7 +317,7 @@
                             (when-not (= expected actual)
                               (throw (js/Error. (str "Bind index " (inc expected) " is out of range."))))
                             #js []))}]
-      (is (empty? (search/search-blocks (atom :large-db) db "alpha" {:limit 10})))
+      (is (empty? (search/search-blocks (empty-search-conn) db "alpha" {:limit 10})))
       (is (not-any? #(string/includes? % "order by rank") @calls)))))
 
 (deftest search-blocks-fuzzy-matches-from-search-db
@@ -333,7 +337,7 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       (assoc result :block/uuid (uuid (:id result))))]
-        (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
+        (let [result (vec (search/search-blocks (empty-search-conn) db "nwp" {:limit 10}))]
           (is (= [{:id "67e55044-10b1-426f-9247-bb680e5fe0c8"
                    :page "67e55044-10b1-426f-9247-bb680e5fe0c8"
                    :title "New Project"}]
@@ -357,7 +361,7 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       (assoc result :block/uuid (uuid (:id result))))]
-        (let [result (vec (search/search-blocks (atom :large-db) db "grün" {:limit 10}))]
+        (let [result (vec (search/search-blocks (empty-search-conn) db "grün" {:limit 10}))]
           (is (= [{:id page-id
                    :page page-id
                    :title "Grun"}]
@@ -387,7 +391,7 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       result)]
-        (let [result (vec (search/search-blocks (atom :large-db) db "nwp" {:limit 10}))]
+        (let [result (vec (search/search-blocks (empty-search-conn) db "nwp" {:limit 10}))]
           (is (some #(= page-id (:id %)) result))
           (is (= page-id (:id (first result))))
           (is (some #(string/includes? % "id = page") @calls))
@@ -413,7 +417,7 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       result)]
-        (let [result (vec (search/search-blocks (atom :large-db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 db
                                                 "page 10000"
                                                 {:limit 10}))]
@@ -457,7 +461,7 @@
                     search/search-result->block-result
                     (fn [_conn _q _code-class _option result]
                       (assoc result :block/uuid (uuid (:id result))))]
-        (let [result (vec (search/search-blocks (atom :large-db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 db
                                                 "block"
                                                 {:limit 10
@@ -497,7 +501,7 @@
                     d/db? (constantly true)
                     d/datoms (fn [& _]
                                (throw (js/Error. "direct page scan should not run for exact tag title queries")))]
-        (let [result (vec (search/search-blocks (atom :large-db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 db
                                                 "#Movies"
                                                 {:limit 10}))]
@@ -535,7 +539,7 @@
                     d/db? (constantly true)
                     d/datoms (fn [& _]
                                (throw (js/Error. "direct page scan should not run after exact title hits")))]
-        (let [result (vec (search/search-blocks (atom :large-db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 db
                                                 "Tag"
                                                 {:limit 10}))]
@@ -625,7 +629,7 @@
                     (fn [_conn _q _code-class _option result]
                       (assoc result :block/uuid (uuid (:id result))))]
         (is (= 10
-               (count (search/search-blocks (atom :large-db)
+               (count (search/search-blocks (empty-search-conn)
                                             (checking-db)
                                             "logseq"
                                             {:limit 10 :enable-snippet? false}))))))))
@@ -651,7 +655,7 @@
                                (get blocks (str id)))
                     ldb/page? (constantly false)
                     ldb/built-in? (constantly false)]
-        (let [result (search/search-blocks (atom :large-db)
+        (let [result (search/search-blocks (empty-search-conn)
                                            (checking-db)
                                            "logseq"
                                            {:limit 10
@@ -1228,7 +1232,7 @@
                     ldb/hidden? (constantly false)
                     ldb/page? (constantly false)
                     ldb/built-in? (constantly false)]
-        (let [result (vec (search/search-blocks (atom :db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 (checking-db)
                                                 vector-index
                                                 "meaning based query"
@@ -1276,7 +1280,7 @@
                                     (true? (:logseq.property/built-in? block)))
                     ldb/class? (fn [block]
                                  (= (:db/id block) 905))]
-        (let [result (vec (search/search-blocks (atom :db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 (checking-db)
                                                 vector-index
                                                 "manu spurs"
@@ -1326,7 +1330,7 @@
                     ldb/hidden? (constantly false)
                     ldb/page? (constantly false)
                     ldb/built-in? (constantly false)]
-        (let [result (doall (search/search-blocks (atom :db)
+        (let [result (doall (search/search-blocks (empty-search-conn)
                                                   (checking-db)
                                                   vector-index
                                                   "semantic large graph"
@@ -1384,7 +1388,7 @@
                     ldb/hidden? (constantly false)
                     ldb/page? (constantly false)
                     ldb/built-in? (constantly false)]
-        (let [result (vec (search/search-blocks (atom :db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                db
                                                vector-index
                                                "alpha"
@@ -1429,7 +1433,7 @@
                     ldb/hidden? (constantly false)
                     ldb/page? (constantly false)
                     ldb/built-in? (constantly false)]
-        (let [result (vec (search/search-blocks (atom :db)
+        (let [result (vec (search/search-blocks (empty-search-conn)
                                                 db
                                                 vector-index
                                                 "alpha"
@@ -1486,7 +1490,7 @@
                                        :vector-score 0.68
                                        :title "generic tagged result"
                                        :vector-title "Block: generic tagged result"}])}
-              result (vec (search/search-blocks (atom :db)
+              result (vec (search/search-blocks (empty-search-conn)
                                                 db
                                                 vector-index
                                                 "manu spurs"
@@ -1760,6 +1764,77 @@
   (let [dir (node-helper/create-tmp-dir "search-db")]
     (#'platform-node/open-sqlite-db nil {:path (node-path/join dir "search.sqlite")})))
 
+(deftest search-blocks-keeps-page-name-prefixes-among-many-keyword-matches
+  (async done
+    (let [conn (db-test/create-conn-with-blocks
+                [{:page {:block/title "Long parent page name"}
+                  :blocks (mapv (fn [n] {:block/title (str "Policy public reference " n)})
+                                (range 105))}
+                 {:page {:block/title "Pólicy públic"}}])
+          parent (ldb/get-page @conn "Long parent page name")
+          target (ldb/get-page @conn "Pólicy públic")]
+      (d/transact! conn [[:db/add (:db/id target) :block/parent (:db/id parent)]
+                         [:db/add (:db/id target) :block/order "a"]])
+      (-> (p/let [db (<open-search-db)
+                  target (d/entity @conn (:db/id target))
+                  blocks (concat (:block/_page (d/entity @conn (:db/id parent))) [target])]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (clj->js (mapv search/block->index blocks)))
+            (let [opts {:limit 10 :search-limit 100 :enable-snippet? false}
+                  first-match (fn [query opts]
+                                (:block/uuid (first (search/search-blocks conn db query opts))))]
+              (is (= (:block/uuid target) (first-match "policy" opts)))
+              (is (= (:block/uuid target) (first-match "policy pu" opts)))
+              (is (= (:block/uuid target) (first-match "po" opts)))
+              (is (= (:block/uuid target) (first-match "policy pu" (assoc opts :page-only? true))))
+              (is (not= (:block/uuid target) (first-match "policy pu" (assoc opts :page (str (:block/uuid parent))))))
+              (is (empty? (#'search/page-name-prefix-results @conn db "policy pu" 100 false)))
+              (is (= (str (:block/uuid target))
+                     (:id (first (#'search/page-name-prefix-results @conn db "pólicy pú" 100 false))))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
+(deftest search-blocks-ranks-page-prefixes-before-applying-candidate-limit
+  (async done
+    (let [titles (conj (mapv #(str "Project Archive " %) (range 105)) "Project Z")
+          conn (db-test/create-conn-with-blocks (mapv (fn [title] {:page {:block/title title}}) titles))
+          pages (mapv #(ldb/get-page @conn %) titles)]
+      (-> (p/let [db (<open-search-db)]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (clj->js (mapv search/block->index pages)))
+            (is (= "Project Z"
+                   (:block/title (first (search/search-blocks conn db "project"
+                                                             {:limit 10
+                                                              :search-limit 100
+                                                              :enable-snippet? false})))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
+(deftest search-blocks-counts-a-keyword-candidate-once-in-hybrid-ranking
+  (async done
+    (let [titles ["Policy public reference" "Reference: policy publicity"
+                  "Policy public" "Unrelated semantic hit"]
+          conn (db-test/create-conn-with-blocks (mapv (fn [title] {:page {:block/title title}}) titles))
+          pages (mapv #(ldb/get-page @conn %) titles)
+          vector-index {:query (fn [& _]
+                                 [{:id (str (:block/uuid (last pages)))
+                                   :vector-score 0.8}])}]
+      (-> (p/let [db (<open-search-db)]
+            (search/create-tables-and-triggers! db)
+            (search/upsert-blocks! db (clj->js (mapv search/block->index pages)))
+            (is (= "Policy public"
+                   (:block/title (first (search/search-blocks conn db vector-index "policy pu"
+                                                             {:limit 10
+                                                              :search-limit 2
+                                                              :enable-snippet? false
+                                                              :feature/enable-semantic-search? true
+                                                              :query-embedding [0.1]})))))
+            (.close db))
+          (p/catch (fn [e] (is false (str e))))
+          (p/finally done)))))
+
 (deftest journal-format-change-reindexes-journal-and-referrers-test
   (async done
     (let [conn (db-test/create-conn-with-blocks
@@ -1806,7 +1881,7 @@
   (with-redefs [search/combine-results (fn [_db results] results)
                 search/search-result->block-result (fn [_conn _q _code-class _option result]
                                                      (assoc result :block/uuid (uuid (:id result))))]
-    (set (map :id (search/search-blocks (atom :large-db) db q {:limit 10 :enable-snippet? false})))))
+    (set (map :id (search/search-blocks (empty-search-conn) db q {:limit 10 :enable-snippet? false})))))
 
 (defn- index-rows
   [page id-titles]
@@ -1825,7 +1900,7 @@
                                 (assoc result
                                        :id (:id result)
                                        :block/uuid (uuid (:id result))))]
-                  (set (map :id (search/search-blocks (atom :large-db)
+                  (set (map :id (search/search-blocks (empty-search-conn)
                                                       db
                                                       "alpha/needle"
                                                       (merge {:limit 10

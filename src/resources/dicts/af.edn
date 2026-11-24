@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Wissel oop blokke"
  :command.editor/undo "Ontdoen"
  :command.editor/up "Op"
- :command.editor/zoom-in "Zoem in"
- :command.editor/zoom-out "Zoem uit"
+ :command.editor/zoom-in "Zoem in op die blok wat jy redigeer"
+ :command.editor/zoom-out "Zoem uit vanaf die blok wat jy redigeer"
 
  :command.go/all-graphs "Alle grafieke"
  :command.go/all-pages "Alle bladsye"

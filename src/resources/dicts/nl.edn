@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Toggle open blocks (open of dichtklappen van alle blokken)"
  :command.editor/undo "Ongedaan maken"
  :command.editor/up "Verplaats cursor omhoog / Selecteer omhoog"
- :command.editor/zoom-in "Zoom in bewerkingsblok / Vooruit anders"
- :command.editor/zoom-out "Zoom uit bewerkingsblok / Achteruit anders"
+ :command.editor/zoom-in "Zoom in op het blok dat je bewerkt"
+ :command.editor/zoom-out "Zoom uit vanaf het blok dat je bewerkt"
 
  :command.go/all-graphs "Alle grafieken"
  :command.go/all-pages "Ga naar alle pagina's"

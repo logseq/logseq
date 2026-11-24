@@ -334,8 +334,8 @@
  :command.editor/toggle-open-blocks "Chuyển đổi mở khối (thu gọn hoặc mở rộng tất cả khối)"
  :command.editor/undo "Hoàn tác"
  :command.editor/up "Di chuyển con trỏ lên / Chọn lên"
- :command.editor/zoom-in "Phóng to khối đang chỉnh sửa / Tiến về phía trước khi không chỉnh sửa"
- :command.editor/zoom-out "Thu nhỏ khối đang chỉnh sửa / Lùi về phía sau khi không chỉnh sửa"
+ :command.editor/zoom-in "Phóng to khối đang chỉnh sửa"
+ :command.editor/zoom-out "Thu nhỏ khối đang chỉnh sửa"
 
  :command.go/all-graphs "Đi đến tất cả đồ thị"
  :command.go/all-pages "Đi đến tất cả trang"

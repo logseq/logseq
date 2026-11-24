@@ -772,11 +772,9 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
      (let [weight (or (get weights list-idx) 1.0)]
        (reduce-kv
         (fn [scores rank {:keys [id]}]
-          (if id
-            (update scores id (fnil + 0) (/ weight (+ rrf-k rank 1)))
-            scores))
+          (update scores id (fnil + 0) (/ weight (+ rrf-k rank 1))))
         scores
-        (vec results))))
+        (unique-search-results results))))
    {}
    (vec result-lists)))
 
@@ -988,6 +986,38 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
                            (:title result) (assoc :title (:title result))
                            (:vector-title result) (assoc :vector-title (:vector-title result))))))))))))
 
+(defn- page-name-prefix-results
+  [db search-db q limit remove-accents?]
+  (let [prefix (fuzzy/search-normalize (common-util/page-name-sanity-lc q) remove-accents?)]
+    (when-not (string/blank? prefix)
+      (let [indexed-prefix (fuzzy/search-normalize prefix true)
+            rows (if (>= (.-length (js/Array.from indexed-prefix)) 3)
+                   (exec-search-blocks-fuzzy
+                    search-db
+                    "select id from blocks_fts where id = page and title MATCH ?"
+                    [(fts-phrase-input indexed-prefix)])
+                   ;; Trigrams need three characters. SQLite LIKE folds ASCII,
+                   ;; so also check Unicode titles against the page name below.
+                   (exec-search-blocks-fuzzy
+                    search-db
+                    "select id from blocks where id = page and (title LIKE ? escape '\\' or title glob '*[^ -~]*')"
+                    [(str "%" (string/join (map like-escape-char indexed-prefix)) "%")]))]
+        (->> rows
+             (keep (fn [[id]]
+                     (let [page (d/entity db [:block/uuid (uuid id)])
+                           page-name (fuzzy/search-normalize (:block/name page) remove-accents?)]
+                       (when (and page-name
+                                  (string/starts-with? page-name prefix)
+                                  (ldb/page? page)
+                                  (not (hidden-entity? page)))
+                         (let [title (:block/title page)]
+                           {:id id
+                            :page id
+                            :title title
+                            :keyword-score (fuzzy/score q title)})))))
+             (sort-by :keyword-score >)
+             (take limit))))))
+
 (defn search-blocks
   "Options:
    * :page - the page to specifically search on
@@ -1005,12 +1035,17 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
    (let [tag-title? (boolean (tag-title-query q))
          q (or (tag-title-query q) q)]
      (when-not (string/blank? q)
-       (let [option (assoc option :enable-snippet? enable-snippet?)
+       (let [db @conn
+             option (assoc option :enable-snippet? enable-snippet?)
              match-input (get-match-input q)
              non-match-input (when (<= (count q) 2)
                                (str "%" (string/replace q #"\s+" "%") "%"))
              limit (or limit 100)
              limit-p (or search-limit limit)
+             ;; Rank the page-name prefixes independently of the block candidate limit.
+             page-prefix-result (when-not (or page tag-title? code-only?)
+                                  (page-name-prefix-results db search-db q limit-p
+                                                            (get option :feature/enable-search-remove-accents? true)))
              exact-title-result (when (and (not page-only?)
                                            (exact-title-query? q))
                                   (search-blocks-exact-title-aux search-db q page limit-p))
@@ -1044,12 +1079,13 @@ ALTER TABLE blocks_fts_next RENAME TO blocks_fts;"))
              ;;  _ (prn :debug "Search results before combine:" enable-snippet? (map :snippet matched-result))
              ;;  _ (doseq [item (concat fuzzy-result matched-result)]
              ;;      (prn :debug :keyword-search-result item))
-             combined-result (combine-results @conn
-                                              (concat exact-title-result fuzzy-result matched-result non-match-result)
+             combined-result (combine-results db
+                                              (concat page-prefix-result exact-title-result fuzzy-result
+                                                      matched-result non-match-result)
                                               vector-result
                                               q)
              code-class (when code-only?
-                          (d/entity @conn :logseq.class/Code-block))
+                          (d/entity db :logseq.class/Code-block))
              matched-count (when include-matched-count?
                              (count (filter #(search-result-visible? conn code-class option %) combined-result)))
              result (->> combined-result

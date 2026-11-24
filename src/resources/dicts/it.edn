@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Attiva/disattiva i blocchi aperti (collassa o espandi tutti i blocchi)"
  :command.editor/undo "Annulla"
  :command.editor/up "Muovi il cursore sopra / Seleziona sopra"
- :command.editor/zoom-in "Ingrandisci blocco di modifica / Avanti altrimenti"
- :command.editor/zoom-out "Rimpicciolisci il blocco di modifica / Indietro altrimenti"
+ :command.editor/zoom-in "Zoom avanti sul blocco in modifica"
+ :command.editor/zoom-out "Zoom indietro dal blocco in modifica"
 
  :command.go/all-graphs "Vai a tutti i grafi"
  :command.go/all-pages "Vai a tutte le pagine"

@@ -368,8 +368,8 @@
  :command.editor/toggle-open-blocks "切換開啟/折叠所有塊"
  :command.editor/undo "復原"
  :command.editor/up "向上移動游標 / 向上選擇"
- :command.editor/zoom-in "聚焦"
- :command.editor/zoom-out "推出聚焦"
+ :command.editor/zoom-in "聚焦目前編輯的區塊"
+ :command.editor/zoom-out "退出目前編輯區塊的聚焦檢視"
 
  :command.go/all-graphs "前往所有圖譜"
  :command.go/all-pages "前往全部頁面"

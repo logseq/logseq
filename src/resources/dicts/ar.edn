@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "تبديل الكتل المفتوحة"
  :command.editor/undo "تراجع"
  :command.editor/up "أعلى"
- :command.editor/zoom-in "التركيز على الكتلة المحررة / أو الانتقال للأمام"
- :command.editor/zoom-out "الخروج من تركيز الكتلة / أو الرجوع للخلف"
+ :command.editor/zoom-in "التركيز على الكتلة قيد التحرير"
+ :command.editor/zoom-out "الخروج من وضع التركيز على الكتلة قيد التحرير"
 
  :command.go/all-graphs "كل الرسوم البيانية"
  :command.go/all-pages "كل الصفحات"
