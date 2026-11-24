@@ -1978,7 +1978,7 @@
                            persist-db/<ensure-remote! (fn [repo opts]
                                                         (swap! calls conj [:open repo opts])
                                                         (p/resolved (->FakeRemote repo (fn [& _]))))]
-            (p/let [_ (persist-db/<import-db "imported" (js/Uint8Array. 0))
+            (p/let [_ (persist-db/<import-db "imported" (js/Uint8Array. 0) nil)
                     _ (persist-db/<open-and-fetch-schema "downloaded" {:sync-download-graph? true})
                     _ (persist-db/<open-and-fetch-schema "existing")]
               (is (= [["createGraph" "imported"] [:open "imported" {:generation "created-generation"}]
@@ -2025,7 +2025,7 @@
                     _ (persist-db/<open-and-fetch-schema "logseq_db_source")
                     _ (lifecycle/stopGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) "source" "cli")
                     payload (fs/readFileSync (node-path/join root "graphs/source/db.sqlite"))
-                    _ (persist-db/<import-db "logseq_db_imported" payload)
+                    _ (persist-db/<import-db "logseq_db_imported" payload nil)
                     _ (persist-db/<open-and-fetch-schema "logseq_db_downloaded" {:sync-download-graph? true})]
               (doseq [repo ["imported" "downloaded"]]
                 (is (fs/existsSync (node-path/join root "graphs" repo "db.sqlite")))
