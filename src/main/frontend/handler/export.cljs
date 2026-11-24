@@ -14,6 +14,7 @@
             [frontend.state :as state]
             [frontend.util :as util]
             [goog.dom :as gdom]
+            [lambdaisland.glogi :as log]
             [logseq.db :as ldb]
             [logseq.db.common.sqlite :as common-sqlite]
             [logseq.common.path :as path]
@@ -202,14 +203,16 @@
         (.setAttribute anchor "download" (file-name (str repo "_roam") :json))
         (.click anchor)))))
 
-(defn truncate-old-versioned-files!
+(defn- <truncate-old-versioned-files!
   "reserve the latest 12 version files"
   [^js backups-handle]
   (p/let [files (utils/getFiles backups-handle false)
-          old-versioned-files (drop 12 (reverse (sort-by (fn [^js file] (.-name file)) files)))]
-    (p/map (fn [^js file]
-             (.removeEntry backups-handle (.-name file)))
-           old-versioned-files)))
+          version-names (keep (fn [^js file]
+                                (re-matches #"\d+\.db\.sqlite" (.-name file)))
+                              files)
+          old-version-names (drop 12 (reverse (sort version-names)))]
+    (p/doseq [version-name old-version-names]
+      (.removeEntry backups-handle version-name))))
 
 (defn choose-backup-folder
   [repo]
@@ -261,9 +264,11 @@
                  (p/do!
                   (when (> (.-size file) 0)
                     (.move backup-handle backups-handle (str (util/time-ms) ".db.sqlite")))
-                  (truncate-old-versioned-files! backups-handle)
                   (p/let [new-backup-handle ^js (.getFileHandle graph-dir-handle "db.sqlite" #js {:create true})]
                     (utils/writeFile new-backup-handle data))
+                  (-> (<truncate-old-versioned-files! backups-handle)
+                      (p/catch (fn [error]
+                                 (log/warn :event :db-backup-prune-failed :graph repo :error error))))
                   (println "Successfully created a backup for" repo-name "at" (str (js/Date.)) ".")
                   true)))
              (p/catch (fn [error]
