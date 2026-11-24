@@ -243,3 +243,33 @@ Shared dictionaries: `resources/dicts/*.edn` (25 locales). LUI loads EN embedded
 | worker-validate-english | db-worker | Hardcoded English validate notifications | Same hardcoded English in OCaml worker | (Dev) Validate | low | needs-decision — matches master worker hardcoding; dict keys exist (`graph.validation/valid`) but neither side uses them for the broadcast body |
 | a11y-english-labels | various | Mixed a11y identifiers | A few English `~label` / DnD a11y sentences remain (allowlisted) | Screen reader / DnD | low | needs-decision — not shipped visible chrome; no matching master keys for most |
 | graph-view-nav | left/right nav | `:nav/graph-view` / `:graph.page/title` | Surfaces absent from LUI nav/topbar | Graph view entry points | low | needs-decision — missing UI surface, not a hardcoded string |
+
+## R2 — full-feature review sweep (2026-11-25)
+
+Method: paired Playwright runs — LUI @ :3010 vs master CLJS @ :3011, Demo graph each side, same click/key sequence; paired screenshots under `~/parity/evidence/<scenario>/`. Driver: `~/parity/drive.mjs`, shared helpers `~/parity/lib.mjs`.
+
+Baseline (verified identical): first-load Demo chrome, left sidebar, all-pages table, help menu, Page-not-found, cmdk open/filter, create-page via cmdk, outliner seed render (nesting, refs, tags), block hover collapse chevron, bullet-click collapse, slash menu contents.
+
+| check | module | master behavior | LUI behavior | repro / evidence | severity | status |
+| --- | --- | --- | --- | --- | --- | --- |
+| blank-blocks | journal/page | Empty journal/page shows add-button strip only | Renders extra `is-blank` empty blocks + zero-width-space block | New page / journal DOM dump | low | open |
+| blockref-hint | editor popup | `((` typing shows hint "To reference a node, please use `[[ ]]`." | No popup/hint at all | Type `((al` in a block | low | open |
+| tag-popup-fixture | editor popup | `#ta` lists [Task, New tag ta, Template] | Same + existing tag-a (fixture divergence, not a UI diff) | — | — | n/a |
+| right-click-pageview | block menu | Right-click block text on page view: no custom menu (native only) | Same | — | — | parity |
+| icon-picker-tabs | icon picker | All/Emojis/Icons tab row at TOP above search | Tab row at BOTTOM below grid | Page → Add icon | med | open |
+| export-page-options | export | Page export has Indentation: dashes/spaces/no-indent + level <= all/1..9 | Missing 'spaces','no-indent' and level 1-9 options | Page menu → Export page | med | open |
+| right-sidebar-tabs | right sidebar | Tabs: Contents / Page graph / Help | Contents / Help (Page graph = graph-view exclusion, intentional) | Right sidebar | — | intentional |
+| page-menu | page menu | Add to Favorites/Delete/Export/Publish/Convert to Tag/Settings/Plugins/Appearance/Recycle/Export graph/Import/Login | identical incl. icons | Page "..." menu | — | parity |
+| delete-page-confirm | page menu | "Are you sure you want to permanently delete this page?" Cancel/Confirm | identical | Page menu → Delete page | — | parity |
+| convert-to-tag | page menu | Converts page to tag page (Add tag property/# Tag title UI) | identical end state | Page menu → Convert to Tag | — | parity |
+| publish-page-dialog | page menu | Password field + Cancel/Publish | identical | Page menu → Publish page | — | parity |
+| appearance-submenu | page menu | theme light/dark/system, Font, Wide mode, Show brackets, Accent color | identical | Page menu → Appearance | — | parity |
+| deadline-picker | slash/date | Calendar + Repeat task + Next date + When Status is Done + time | identical popup | /Deadline | — | parity |
+| icon-applied | icon picker | Emoji set on title renders same | identical | Add icon → 😀 | — | parity |
+| prop-picker-list | properties | Same 17 built-in property list | identical | Set property | — | parity |
+| sidebar-favorites-recent | left sidebar | Favorites + Recent groups with page icons | identical | Add to Favorites flow | — | parity |
+| all-pages-view | views | All table + toolbar (sort/filter/search/view-type/+) identical; page list | identical (page count diff = fixture: LUI has extra 'tag-a' page) | #/all-pages | — | parity |
+| linked-refs | backlinks | "Linked references / 1 / R2Alpha / ref to [[PageLink]] inline" | identical | PageLink page | — | parity |
+| undo-new-block | editing | Meta+z in fresh typed block: clears text, stays editing | removes whole block + exits edit | clickAddBlock → type → ⌘z | low | suspect |
+| slash-escape | editing | Esc on slash suggest leaves no block text | leaves literal "/code" as block content | /code → Esc | low | suspect |
+| block-multiselect | editing | (couldn't trigger via bullet shift+click on either) | same | needs better entry method | n/a | inconclusive |
