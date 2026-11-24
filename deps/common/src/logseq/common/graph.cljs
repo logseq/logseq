@@ -51,7 +51,9 @@
            (try
              (.isDirectory (fs/statSync (node-path/join parent (.-name dirent))))
              (catch :default e
-               (if (= "ENOENT" (.-code e)) false (throw e)))))))
+               (if (contains? #{"ENOENT" "ENOTDIR" "EACCES" "EPERM" "ELOOP"} (.-code e))
+                 false
+                 (throw e)))))))
 
 (defn read-directories
   "Given a dir, returns all the sub-directories, including links to directories"

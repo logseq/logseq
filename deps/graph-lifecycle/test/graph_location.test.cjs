@@ -70,6 +70,53 @@ test('outdated worker cleanup visits graphs linked from another location', () =>
     fs.mkdirSync(location);
     await lifecycle.createGraph(storage, 'linked', true, location);
     fs.symlinkSync(path.join(temporary, 'missing'), path.join(storage.graphsDir, 'dangling'));
+    // Cleanup recreates lifecycle state only for graphs it visits.
+    const { stateFile } = lifecycle.context(storage, 'linked');
+    fs.rmSync(stateFile);
     await lifecycle.stopOutdatedWorkers(storage, 'revision-1');
+    assert.equal(fs.existsSync(stateFile), true);
     assert.equal(lifecycle.snapshot(storage, 'linked').phase, 'available');
+  }));
+
+test('outdated worker cleanup skips links whose target is not reachable', {
+  skip: process.platform === 'win32' || process.getuid?.() === 0
+}, () =>
+  withTemporary('graph-location-eacces-', async temporary => {
+    const storage = lifecycle.resolveStorage(temporary, path.join(temporary, 'graphs'));
+    await lifecycle.createGraph(storage, 'local', true);
+    const shared = path.join(temporary, 'shared');
+    fs.mkdirSync(shared);
+    await lifecycle.createGraph(storage, 'locked', true, shared);
+    fs.chmodSync(shared, 0o000);
+    try {
+      await lifecycle.stopOutdatedWorkers(storage, 'revision-1');
+    } finally { fs.chmodSync(shared, 0o755); }
+    assert.equal(lifecycle.snapshot(storage, 'local').phase, 'available');
+  }));
+
+test('recreating a graph replaces a link whose folder was moved away', () =>
+  withTemporary('graph-location-moved-', async temporary => {
+    const storage = lifecycle.resolveStorage(temporary, path.join(temporary, 'graphs'));
+    const oldLocation = path.join(temporary, 'old');
+    const newLocation = path.join(temporary, 'new');
+    fs.mkdirSync(oldLocation);
+    fs.mkdirSync(newLocation);
+    await lifecycle.createGraph(storage, 'work', true, oldLocation);
+    fs.renameSync(path.join(oldLocation, 'work'), path.join(temporary, 'moved'));
+    await lifecycle.createGraph(storage, 'work', true, newLocation);
+    assert.equal(fs.realpathSync(path.join(storage.graphsDir, 'work')), path.join(newLocation, 'work'));
+    assert.equal(fs.existsSync(path.join(temporary, 'moved')), true);
+  }));
+
+test('a failed link leaves no empty graph folder behind', () =>
+  withTemporary('graph-location-link-fail-', async temporary => {
+    const storage = lifecycle.resolveStorage(temporary, path.join(temporary, 'graphs'));
+    const location = path.join(temporary, 'elsewhere');
+    fs.mkdirSync(location);
+    const symlink = fs.symlinkSync;
+    fs.symlinkSync = () => { throw Object.assign(new Error('link refused'), { code: 'EPERM' }); };
+    try {
+      await assert.rejects(lifecycle.createGraph(storage, 'work', true, location), { code: 'EPERM' });
+    } finally { fs.symlinkSync = symlink; }
+    assert.equal(fs.existsSync(path.join(location, 'work')), false);
   }));

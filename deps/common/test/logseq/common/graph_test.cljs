@@ -54,7 +54,10 @@
   (fs/mkdirSync "tmp/elsewhere/linked" #js {:recursive true})
   (fs/mkdirSync "tmp/graphs/.hidden")
   (fs/writeFileSync "tmp/graphs/file.txt" "")
+  (fs/mkdirSync "tmp/elsewhere/junction" #js {:recursive true})
   (fs/symlinkSync (node-path/resolve "tmp/elsewhere/linked") "tmp/graphs/linked" "dir")
+  ;; Desktop links external graphs with junctions on Windows; elsewhere the type is ignored.
+  (fs/symlinkSync (node-path/resolve "tmp/elsewhere/junction") "tmp/graphs/junction" "junction")
   (fs/symlinkSync (node-path/resolve "tmp/missing") "tmp/graphs/dangling" "dir")
-  (is (= ["linked" "local"]
+  (is (= ["junction" "linked" "local"]
          (sort (common-graph/read-directories "tmp/graphs")))))

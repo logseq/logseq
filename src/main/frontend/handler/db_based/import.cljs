@@ -225,6 +225,7 @@
      (p/catch
       (fn [e]
         (js/console.error e)
+        (clear-importing-state!)
         (notification/show!
          (str (.-message e))
          :error))))))
@@ -327,15 +328,20 @@
 (defn import-from-debug-transit!
   [bare-graph-name location raw finished-ok-handler]
   (let [graph (str config/db-version-prefix bare-graph-name)]
-    (p/do!
-     (persist-db/<new graph {:import-type :debug-transit
-                             :debug-transit-raw raw
-                             :location location})
-     (state/add-repo! {:url graph})
-     (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
-     (<transact-import-marker! graph :debug-transit)
-     (state/set-current-repo! graph)
-     (finished-ok-handler))))
+    (-> (p/do!
+         (persist-db/<new graph {:import-type :debug-transit
+                                 :debug-transit-raw raw
+                                 :location location})
+         (state/add-repo! {:url graph})
+         (repo-handler/restore-and-setup-repo! graph {:import-type :debug-transit})
+         (<transact-import-marker! graph :debug-transit)
+         (state/set-current-repo! graph)
+         (finished-ok-handler))
+        (p/catch
+         (fn [e]
+           (js/console.error e)
+           (clear-importing-state!)
+           (notification/show! (str (.-message e)) :error))))))
 
 (defn import-from-edn-file!
   "Creates a new DB graph and imports sqlite.build EDN file"
