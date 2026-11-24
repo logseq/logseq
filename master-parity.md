@@ -272,3 +272,10 @@ Baseline (verified identical): first-load Demo chrome, left sidebar, all-pages t
 | linked-refs | backlinks | "Linked references / 1 / R2Alpha / ref to [[PageLink]] inline" | identical | PageLink page | — | parity |
 | slash-escape | editing | Esc commits typed slash text as block | same | /code → Esc | — | parity |
 | block-multiselect | editing | (couldn't trigger via bullet shift+click on either) | same | needs better entry method | n/a | inconclusive |
+| graph-switcher | left sidebar | Demo dropdown: Create db graph/Import existing notes/All graphs | identical (needs open sidebar; hidden element gives false hit) | Sidebar Demo btn | — | parity |
+| plugins-dialog | graph menu | Plugins page: Installed/Marketplace, Plugins(0)/Themes(0), submit link | identical | "..." → Plugins | — | parity |
+| export-graph-dialog | graph menu | Export SQLite DB / DB+assets / debug transit options | identical | "..." → Export graph | — | parity |
+| login-dialog | graph menu | Login: Email/Password/Sign In/Sign up/Forgot password | identical | "..." → Login | — | parity |
+| settings-general | settings | General tab: version, What's new, Language, theme, Font | identical | "..." → Settings | — | parity |
+| prop-suggest | properties | "/prop" suggest = ADVANCED / Add property | identical | /prop in editor | — | parity |
+| recycle-import | graph menu | Recycle navigates; Import opens native dialog (not capturable) | same behavior | "..." menu | — | parity |
