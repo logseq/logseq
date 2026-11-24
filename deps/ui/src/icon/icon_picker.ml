@@ -1,9 +1,9 @@
-(* Icon picker popup — mirrors cljs icon.cljs icon-search (bottom-footer
-   layout used by master parity / pre-top-tab icon.css):
+(* Icon picker popup — mirrors cljs icon.cljs icon-search + icon.css
+   (top tab-band layout):
    .cp__emoji-icon-picker[data-keep-selection]
-     > .hd  (absolute top) search + clear
-     > .bd  scroll body
-     > .ft  (absolute bottom) All | Emojis | Icons + color picker + del
+     > .ft  (absolute top, 40px) All | Emojis | Icons + color picker + del
+     > .hd  (absolute, top 38px) search + clear
+     > .bd  scroll body (padding-top 96px)
 
    All tab = "Frequently used" (when storage has items) + "Emojis (N)"
    first-32 + "Icons (M)" first-48 pane-sections. Tabler icon names are
@@ -387,9 +387,10 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                       ~mount:(fun row -> box ~height:44 ~padding_vertical:4
                         [reactive (fun (_, items) -> render_row (`Cells items)) row]) ()]])
     in
-    (* Search band on top (~pt-14) + footer band (~40px) at bottom. *)
+    (* Master parity: tab footer band (40px) on top, search band below
+       it (~38px offset), body padded under both (96px). *)
     Ui_components.with_props
-      [Ui_components.Prop.padding_top 56; Ui_components.Prop.padding_bottom 44;
+      [Ui_components.Prop.padding_top 96; Ui_components.Prop.padding_bottom 4;
        Ui_components.Prop.padding_horizontal 0]
       (column ~key:("bd-" ^ tab_name s.tab ^ "-" ^ s.q)
          ~style_class:("bd " ^ tab_name s.tab) ~grow:1. ~min_height:0
@@ -431,11 +432,13 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let hd =
     Ui_components.with_props
       [ Ui_components.Prop.position `absolute
-      ; Ui_components.Prop.inset_top 0.
+      ; Ui_components.Prop.inset_top 38.
       ; Ui_components.Prop.inset_left 0.
-      ; Ui_components.Prop.inset_right 0. ]
+      ; Ui_components.Prop.inset_right 0.
+      ; Ui_components.Prop.padding_top 10
+      ; Ui_components.Prop.padding_bottom 4 ]
       (box ~key:"hd" ~background:"hsl(var(--popover))"
-         ~padding_horizontal:12 ~padding_vertical:4
+         ~padding_horizontal:12
          [ reactive
              ~equal:(fun (a : pstate) b ->
                 a.tab = b.tab && a.reset = b.reset)
@@ -465,7 +468,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let ft =
     Ui_components.with_props
       [ Ui_components.Prop.position `absolute
-      ; Ui_components.Prop.inset_bottom 0.
+      ; Ui_components.Prop.inset_top 0.
       ; Ui_components.Prop.inset_left 0.
       ; Ui_components.Prop.inset_right 0. ]
       (row ~key:"ft" ~cross:`center ~padding:12 ~height:40
@@ -490,8 +493,8 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                           ~variant:`ghost ~size:`sm ~corner_radius:4
                           ~text:label ~label ~on_press:(fun _ -> set_tab t) [])))
                 tabs) ]
-          (* cljs hides the color picker on the emoji tab; open upward
-             from the bottom footer so the menu stays on-screen *)
+          (* cljs hides the color picker on the emoji tab; the tab band
+             sits on top, so the palette menu opens downward *)
           @
           [ if_
               ~test:(reactive (fun s -> s.tab <> Tab_emoji) sv)
@@ -509,7 +512,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
                           update (fun s -> { s with pal_open = not s.pal_open }))
                         [])
                  ; if_ ~test:(reactive (fun s -> s.pal_open) sv)
-                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~target:(Anchor { side = `above; source = Parent;
+                     (popover ~transition:Ui_components.popover_transition ~key:"pal-pop" ~target:(Anchor { side = `below; source = Parent;
                                                                                             align = `start; offset = 4.; align_offset = 0. })
                         ~on_dismiss:(fun _ ->
                           update (fun s -> { s with pal_open = false }))

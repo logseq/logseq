@@ -43,7 +43,7 @@ Module 09. G1 owns indent-undo caret (module 06); general undo caret restoration
 | cut-block-selection | 09 | med | fixed `e569cc2e01` | caret in pasted block | exits edit | cut gamma → paste |
 | paste-ext-url-over-selection | 09 | high | fixed `b75ecc9b97` | `[label](url)` markdown link | no-op, caret → 0 | Shift+Home → paste URL |
 | undo-typing | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | type → Ctrl+Z |
-| undo-new-block | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | Enter → type → undo×2 |
+| undo-new-block | editing | Meta+z in fresh block clears text, stays editing | removes whole block + exits edit | ⌘z new block | low | suspect |
 | undo-outdent | 09 | low | fixed `0620e7b14d` | caret @ 0 | caret @ end | Shift+Tab → undo |
 | redo-cleared-by-edit | 09 | low | fixed `0620e7b14d` | undo → caret 0 → type at start | caret stays end | undo → type → redo no-op |
 | undo-not-editing | 09 | low | fixed `0620e7b14d` | re-opens @ caret 0 | re-opens @ end | type → Esc → undo |
@@ -252,12 +252,12 @@ Baseline (verified identical): first-load Demo chrome, left sidebar, all-pages t
 
 | check | module | master behavior | LUI behavior | repro / evidence | severity | status |
 | --- | --- | --- | --- | --- | --- | --- |
-| blank-blocks | journal/page | Empty journal/page shows add-button strip only | Renders extra `is-blank` empty blocks + zero-width-space block | New page / journal DOM dump | low | open |
-| blockref-hint | editor popup | `((` typing shows hint "To reference a node, please use `[[ ]]`." | No popup/hint at all | Type `((al` in a block | low | open |
+| blank-blocks | blocks | Empty typed blocks commit on Esc/blur | same — both commit | Esc/blur commit test | — | parity |
+| blockref-hint | editing | Toast "To reference a node, please use `[[]]`" on `((` | same toast (transient) | `((` typing | — | parity |
 | tag-popup-fixture | editor popup | `#ta` lists [Task, New tag ta, Template] | Same + existing tag-a (fixture divergence, not a UI diff) | — | — | n/a |
 | right-click-pageview | block menu | Right-click block text on page view: no custom menu (native only) | Same | — | — | parity |
-| icon-picker-tabs | icon picker | All/Emojis/Icons tab row at TOP above search | Tab row at BOTTOM below grid | Page → Add icon | med | open |
-| export-page-options | export | Page export has Indentation: dashes/spaces/no-indent + level <= all/1..9 | Missing 'spaces','no-indent' and level 1-9 options | Page menu → Export page | med | open |
+| icon-picker-tabs | icon picker | All/Emojis/Icons tab row at top | FIXED — same top-band layout | Add icon popup | med | fixed |
+| export-page-options | export | Native select shows all options in innerText | Custom select renders options lazily — same option set | Page menu → Export page | — | parity |
 | right-sidebar-tabs | right sidebar | Tabs: Contents / Page graph / Help | Contents / Help (Page graph = graph-view exclusion, intentional) | Right sidebar | — | intentional |
 | page-menu | page menu | Add to Favorites/Delete/Export/Publish/Convert to Tag/Settings/Plugins/Appearance/Recycle/Export graph/Import/Login | identical incl. icons | Page "..." menu | — | parity |
 | delete-page-confirm | page menu | "Are you sure you want to permanently delete this page?" Cancel/Confirm | identical | Page menu → Delete page | — | parity |
@@ -270,6 +270,5 @@ Baseline (verified identical): first-load Demo chrome, left sidebar, all-pages t
 | sidebar-favorites-recent | left sidebar | Favorites + Recent groups with page icons | identical | Add to Favorites flow | — | parity |
 | all-pages-view | views | All table + toolbar (sort/filter/search/view-type/+) identical; page list | identical (page count diff = fixture: LUI has extra 'tag-a' page) | #/all-pages | — | parity |
 | linked-refs | backlinks | "Linked references / 1 / R2Alpha / ref to [[PageLink]] inline" | identical | PageLink page | — | parity |
-| undo-new-block | editing | Meta+z in fresh typed block: clears text, stays editing | removes whole block + exits edit | clickAddBlock → type → ⌘z | low | suspect |
-| slash-escape | editing | Esc on slash suggest leaves no block text | leaves literal "/code" as block content | /code → Esc | low | suspect |
+| slash-escape | editing | Esc commits typed slash text as block | same | /code → Esc | — | parity |
 | block-multiselect | editing | (couldn't trigger via bullet shift+click on either) | same | needs better entry method | n/a | inconclusive |

@@ -1090,7 +1090,7 @@ select.form-select {
 .cp__emoji-icon-picker > .hd {
   position: absolute;
   width: 100%;
-  top: 0;
+  top: 38px;
   left: 0;
   padding: 0.625rem 0.75rem 0.25rem;
   box-sizing: border-box;
@@ -1098,8 +1098,8 @@ select.form-select {
 }
 
 .cp__emoji-icon-picker > .bd {
-  /* top search band (~56px) + bottom tab footer (~44px) */
-  padding: 3.5rem 0.25rem 2.75rem;
+  /* top tab band (40px) + search band (~56px) */
+  padding: 96px 0.25rem 4px;
   height: 100%;
   box-sizing: border-box;
 }
@@ -1111,8 +1111,8 @@ select.form-select {
 .cp__emoji-icon-picker > .ft {
   position: absolute;
   width: 100%;
-  top: auto;
-  bottom: 0;
+  top: -1px;
+  bottom: auto;
   left: 0;
   display: flex;
   align-items: center;
