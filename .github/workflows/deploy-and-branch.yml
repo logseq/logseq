@@ -33,12 +33,17 @@ jobs:
       - name: Install LUI system dependencies
         run: |
           cache_dir="$HOME/apt-package-cache"
-          mkdir -p "$cache_dir/partial"
+          apt_archives="$RUNNER_TEMP/apt-archives"
+          mkdir -p "$cache_dir" "$apt_archives/partial"
+          find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -exec cp -t "$apt_archives" {} +
           sudo apt-get update
-          sudo apt-get -o Dir::Cache::Archives="$cache_dir" install -y pkg-config libpango1.0-dev \
+          sudo apt-get -o Dir::Cache::Archives="$apt_archives" install -y pkg-config libpango1.0-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
             libxfixes-dev libxss-dev libxtst-dev
-          sudo apt-get -o Dir::Cache::Archives="$cache_dir" autoclean
+          sudo apt-get -o Dir::Cache::Archives="$apt_archives" autoclean
+          find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -delete
+          sudo find "$apt_archives" -maxdepth 1 -type f -name '*.deb' -exec cp -t "$cache_dir" {} +
+          sudo find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -exec chown "$USER" {} +
 
       - name: Save APT package cache
         uses: actions/cache/save@v4
