@@ -746,3 +746,31 @@ runtime chords are editing-command niceties (ctrl+u kill-line,
 ctrl+w kill-word, mod+shift+v paste-text, copy-embed) plus pdf alt-keys
 and auto-complete navigation; they share the same dispatch path as the
 verified ones but can be spot-checked if needed.
+
+### Round 10: left sidebar animation + header controls (user-reported)
+Reported: sidebar animation transition inconsistent; the heading's
+toggle/search position shifts during the animation.
+
+Root causes found:
+1. LUI split animation ran 300ms ease-in-out vs master's
+   width 0.15s cubic-bezier(0.4, 0, 0.2, 1).
+2. Structural: master's header spans the full window width with the
+   menu/search buttons fixed at x8/x40 while the sidebar (position
+   fixed) slides underneath — the buttons never move. LUI's header
+   lives inside the right split pane, and the buttons hopped between
+   the sidebar copy and the header copy at toggle time, sliding with
+   the animating sidebar track mid-transition.
+
+Fix (deps/ui/src/shell/chrome.ml):
+- menu/search controls now mount once in a fixed-position overlay at
+  the top-left corner (leading_overlay), pixel-identical in both end
+  states and stable through the animation; the header keeps an 80x48
+  spacer reserving their box and the sidebar top row stays as spacing.
+- both split motions now run 150ms (the `standard` easing token
+  resolves to ease-in-out in the pinned lui build; cubic-bezier
+  (0.4,0,0.2,1) vs ease-in-out at 150ms is visually negligible —
+  recorded as residual).
+
+Verified: button positions sampled at 50/100/150/250/400ms during both
+directions — constant 8,8 in both apps; end-state screenshots match
+master; left-menu click toggles, search opens cmdk.

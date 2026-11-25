@@ -759,9 +759,10 @@ let header (ms : Model.t Signal.signal) =
     ~main:`space_between ~cross:`center
     ~height:48 ~min_height:48
     ~data_attrs:[ ("style", "line-height:1;white-space:nowrap") ]
-    [ Ui_components.leading_toolbar ~key:"head-leading" ~in_sidebar:false
-        ~safe_area:0 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
-        ~controls:(fun () -> [left_menu_button (); search_button ()])
+    [ (* the menu/search controls live in the fixed leading_overlay so
+         they never move while the sidebar animates (cljs keeps them in
+         its full-width header); this spacer reserves their 80x48 box *)
+      spacer ~key:"head-leading" ~width:80 ~height:48 ~min_height:48 []
     ; Ui_components.with_props [ Ui_components.Prop.padding_right 6 ]
       (row ~key:"head-r" ~grow:1. ~min_width:0 ~main:`space_between ~cross:`center
         ~gap:8 ~style_class:"r"
@@ -898,9 +899,7 @@ let left_sidebar (ms : Model.t Signal.signal) (st : Sidebar_state.t) =
               ~style_class:"left-sidebar-inner as-container"
               [ row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center
                   ~style_class:"left-sidebar-top"
-                  [ Ui_components.leading_toolbar ~key:"sidebar-leading" ~in_sidebar:true
-                      ~safe_area:0 ~state:ms ~is_open:(fun (m : Model.t) -> m.left_sidebar_open)
-                      ~controls:(fun () -> [left_menu_button (); search_button ()]) ]
+                  [ spacer ~key:"sidebar-leading" [] ]
               ; Ui_components.with_props [Ui_components.Prop.position `relative]
                   (column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
                     ~style_class:"wrap"
@@ -935,7 +934,7 @@ let left_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
               First_width (if Sidebar_state.left_docked m.Model.left_sidebar_open vw then width else 0.))
             ms (Signal.value st.Sidebar_state.left_width)
             (Signal.value st.Sidebar_state.viewport_w))
-       ~motion:{duration_ms=300; easing=`standard; origin=None}
+       ~motion:{duration_ms=150; easing=`standard; origin=None}
        ~on_resize:(Sidebar_state.on_left_split_resize st)
        (if Ui_services.env_publishing () then Logseq_el.nothing
         else left_sidebar ms st)
@@ -957,7 +956,7 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
             (fun (m : Model.t) fraction ->
               Fraction (if m.Model.right_sidebar_open then 1. -. fraction else 1.))
             ms (Signal.value st.Sidebar_state.right_fraction))
-       ~motion:{duration_ms=300; easing=`standard; origin=None}
+       ~motion:{duration_ms=150; easing=`standard; origin=None}
        ~on_resize:(Sidebar_state.on_right_split_resize st)
        first second)
 
@@ -1162,6 +1161,24 @@ let not_found_page : t =
    flags are re-read on each publish so the live DOM toggles in
    Settings_state (wide-mode) and Pdf_state (hl-colored) stay in sync. *)
 
+(* cljs keeps the menu/search controls in its full-width header, so they
+   never move while the left sidebar slides underneath. LUI's header lives
+   inside the right split pane, so the controls mount as a fixed overlay
+   instead: pixel-identical in both end states (80x48 at the top-left
+   corner) and stable throughout the width animation. *)
+let leading_overlay : t =
+ fun ctx parent ->
+  (* the buttons resolve their shortcut tooltips at construction time,
+     so the element must build lazily at render, not at module init *)
+  (Ui_components.with_props
+    [ Ui_components.Prop.position `fixed
+    ; Ui_components.Prop.inset_top 0.
+    ; Ui_components.Prop.inset_left 0.
+    ; Ui_components.Prop.z_index 30 ]
+    (row ~key:"leading-overlay" ~height:48 ~min_height:48 ~cross:`center
+       ~padding_horizontal:8
+       [ left_menu_button (); search_button () ])) ctx parent
+
 let shell (ms : Model.t Signal.signal) : t =
   let st = Sidebar_state.ensure ms in
   Ui_parts.class_signal ms
@@ -1199,6 +1216,8 @@ let shell (ms : Model.t Signal.signal) : t =
         ; box ~key:"asc" ~accessibility_identifier:"app-single-container"
             []
         ]
+    ; (if Ui_services.env_publishing () then Logseq_el.nothing
+       else leading_overlay)
     ; overlays ms
     ; (if Ui_services.env_publishing () then Logseq_el.nothing else help_area ms)
     ; reactive
