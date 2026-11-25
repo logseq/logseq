@@ -642,3 +642,12 @@ range selection works when sequenced that way.
   click flips to the checked (blue) state, persists.
 - Icon-picker opening from the property area verified symmetric
   (identical popup in both).
+
+### Round 8: text property editing — verified identical
+- Clicking the value placeholder focuses the inline editor in both
+  (master TEXTAREA.uniline-block, LUI TEXTAREA.ed-input), typed value
+  saves on Enter and renders in the row with the same layout
+  (dot + name + dot + value + "Add property" button below).
+- Harness note: clicks must land precisely on the 'Empty' placeholder
+  text — clicking the row padding does not enter value editing in
+  either app (symmetric).
