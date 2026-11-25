@@ -367,3 +367,11 @@ Parity confirmed (structure):
   insertion produces the template child lines in the page, same as master.
   (Note: test pages accumulated repeat insertions across runs; a pristine
   single-pass re-verification is still desirable for fine details.)
+
+### i18n runtime (round 4, evidence cmp-i18n-*.png)
+- Language dropdown in settings: identical option list on both sides.
+- Switching to 简体中文 works on both; LUI renders translated UI including
+  translated deprecation text in outlines.
+- Minor difference to verify: master keeps the settings modal open after the
+  language switch (hot swap); in LUI the settings modal closed (possible full
+  reload). Behavior parity of the modal retention unconfirmed.
