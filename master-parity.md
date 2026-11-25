@@ -617,3 +617,18 @@ Residual notes (not user-visible defects):
 - Harness notes: slash autocomplete filtering needs REAL keypresses
   (insertText is flaky); clicking the menu item directly is more
   reliable than Enter for the filechooser path.
+
+### Round 8: pdf highlight lifecycle — fully verified end-to-end in LUI
+Harness breakthrough: the highlight selection state machine requires
+mousedown on the viewer element (arms dirty tracker) -> selectionchange
+-> document mouseup, each in separate event-loop ticks; programmatic
+range selection works when sequenced that way.
+- New-selection menu: yellow,red,green,blue,purple,copy(copy-text) —
+  matches cljs ctx spec.
+- Color pick creates the highlight AND auto-copies the block reference
+  ([[uuid]]) to the clipboard — cljs copy-hl-ref! behavior identical.
+- Highlight renders as hls-text-region-item overlay at the correct text
+  position (verified visually + hit-testable).
+- Existing-highlight menu: colors + ref(copy-ref) + copy(copy-text) +
+  link(linked-ref) + del(delete) — all four actions present, matching
+  cljs core.cljs spec item-for-item.
