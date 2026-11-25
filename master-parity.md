@@ -582,3 +582,13 @@ Residual notes (not user-visible defects):
   gestures) but the fallback semantics differ.
 - collapse bullet click test inconclusive in automation (needs precise
   bullet hit target); collapse already verified in round 2.
+
+### Round 7 corrections (scratch-editor false alarms)
+- LUI rich-text editor uses a hidden 1px scratch textarea: text insertion
+  is preventDefault'd and re-inserted through the model, so
+  `textarea.value` is EMPTY BY DESIGN. Probes that check the scratch
+  value misreport typing as broken — block content rendering is the only
+  valid signal. Verified correctly: typing, Enter-split, and `/` slash
+  autocomplete all work; slash menu content identical to master
+  (BASIC/FORMAT sections). Earlier "typing dead" and "'/' opens page
+  menu" readings were test artifacts of stale state / wrong signals.
