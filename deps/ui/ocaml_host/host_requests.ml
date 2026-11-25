@@ -931,6 +931,7 @@ let save_download ~binary parsed =
   match Lui_shell.save_dialog ~default_name:name () with
   | None -> ()
   | Some path -> (
+      let temporary = Printf.sprintf "%s.tmp-%d" path (Unix.getpid ()) in
       try
         let data =
           if binary then
