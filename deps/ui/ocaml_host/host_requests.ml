@@ -939,9 +939,11 @@ let save_download ~binary parsed =
               (Option.value (jstr_opt "data-b64" parsed) ~default:"")
           else Option.value (jstr_opt "text" parsed) ~default:""
         in
-        Out_channel.with_open_bin path (fun channel ->
-          output_string channel data)
+        Out_channel.with_open_bin temporary (fun channel ->
+          output_string channel data);
+        Unix.rename temporary path
       with error ->
+        (try Unix.unlink temporary with Unix.Unix_error _ -> ());
         log "download save failed: %s" (Printexc.to_string error))
 
 let dom_op (e : env) (op : string) (body : string) =
