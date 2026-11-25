@@ -24,11 +24,11 @@ jobs:
           fetch-depth: 1
 
       - name: Install LUI system dependencies
-        uses: awalsh128/cache-apt-pkgs-action@553a35bb8ebd9fcabcb1c9451aa4c98e1b4ca8a9
-        with:
-          packages: pkg-config libpango1.0-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev
-          version: deploy-branch-v1
-          execute_install_scripts: true
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pkg-config libpango1.0-dev \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
+            libxfixes-dev libxss-dev libxtst-dev
 
       - name: Resolve pinned dependency revisions
         id: pins
@@ -54,7 +54,7 @@ jobs:
               continue
             fi
             if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
-              echo "$repo $ref" >> "$pin_revisions"
+              echo "$repo $ref $ref" >> "$pin_revisions"
               continue
             fi
             sha=$(git ls-remote "https://github.com/$repo" "refs/heads/$ref" | awk 'NR == 1 {print $1}')
@@ -67,13 +67,14 @@ jobs:
           sort -o "$pin_revisions" "$pin_revisions"
           cat "$pin_revisions"
           echo "fingerprint=$(shasum -a 256 "$pin_revisions" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "OPAM_PIN_LOCK=$pin_revisions" >> "$GITHUB_ENV"
 
       - name: Restore pinned SDL3 cache
         id: sdl3-cache
         uses: actions/cache/restore@v4
         with:
           path: ${{ runner.temp }}/sdl3
-          key: sdl3-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.sdl-script-sha }}
+          key: sdl3-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.sdl-script-sha }}
 
       - name: Configure SDL3 environment
         run: |
