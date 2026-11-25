@@ -676,3 +676,8 @@ Both: Property name, Property type, Default value (Set value),
 Available choices, Multiple values, Hide by default, Hide empty value,
 Go to this property, Delete property from node — same order, same
 labels.
+
+### Round 8: hide-by-default flow — identical
+- 'Hide by default' in the configure popover hides the property in both;
+  the 'Show hidden properties' toggle row appears in both with the same
+  label; toggle interaction symmetric in both.
