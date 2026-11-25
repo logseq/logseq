@@ -427,3 +427,13 @@ Flashcards review modal is now at parity.
 - custom.css: implementation matches cljs (link injection into head);
   custom.css file page renders in both. Runtime injection verified at
   code level only.
+
+### Round 5c: asset drop / pdf — automation limits reached
+- Asset drag-drop and pdf viewer flows cannot be faithfully automated:
+  synthesized DragEvent/DataTransfer events are untrusted and ignored
+  by design in both apps, and no pdf asset exists in the demo graph.
+  These need manual verification or real-device testing. Everything
+  automatable across the interactive surface (popups, dropdowns, menus,
+  dialogs, icon/property interactions, flashcards, templates, search,
+  settings, keymap, i18n, sidebars, help, custom.css page) has been
+  reviewed with screenshot evidence and brought to parity.
