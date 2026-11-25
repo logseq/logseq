@@ -173,7 +173,8 @@ pnpm test:node-adapter
 ### Mobile discussion push
 
 Mobile devices register with `PUT /mobile/push-device` and unregister with
-`DELETE /mobile/push-device`. Both requests use Cognito authentication. Apply
+`DELETE /mobile/push-device`. The iOS URLSession and Android OkHttp clients call
+the endpoint directly with Cognito authentication. Apply
 D1 migration 0008 before enabling the feature. The worker generates generic
 alerts after an authenticated graph member writes a comment or reaction. The
 push payload includes a graph UUID and event UUID for navigation.

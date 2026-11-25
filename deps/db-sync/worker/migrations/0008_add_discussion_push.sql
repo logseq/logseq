@@ -31,3 +31,18 @@ CREATE TABLE discussion_push_receipts (
   sent_at INTEGER NOT NULL,
   PRIMARY KEY (graph_id, event_id, recipient_id, installation_id)
 );
+
+CREATE TRIGGER delete_user_discussion_push
+AFTER DELETE ON users
+BEGIN
+  DELETE FROM discussion_push_receipts
+  WHERE recipient_id = OLD.id OR EXISTS (
+    SELECT 1 FROM discussion_push_outbox
+    WHERE graph_id = discussion_push_receipts.graph_id
+      AND event_id = discussion_push_receipts.event_id
+      AND recipient_id = discussion_push_receipts.recipient_id
+      AND sender_id = OLD.id
+  );
+  DELETE FROM discussion_push_outbox WHERE recipient_id = OLD.id OR sender_id = OLD.id;
+  DELETE FROM discussion_push_devices WHERE user_id = OLD.id;
+END;

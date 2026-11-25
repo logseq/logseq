@@ -2,7 +2,7 @@ const leaseMs = 90_000;
 const retentionMs = 24 * 60 * 60 * 1000;
 const activityLifetimeMs = 60 * 60 * 1000;
 const title = "Logseq";
-const body = "New activity in a discussion.";
+const bodyLocalizationKey = "discussion_push_body";
 const providerTokens = new Map();
 
 function base64url(bytes) {
@@ -54,7 +54,7 @@ async function apns(env, device, route, send) {
       "apns-expiration": String(Math.floor(Date.now() / 1000) + 3600),
       "content-type": "application/json",
     },
-    body: JSON.stringify({ aps: { alert: { title, body }, sound: "default" }, ...route }),
+    body: JSON.stringify({ aps: { alert: { title, "loc-key": bodyLocalizationKey }, sound: "default" }, ...route }),
   });
   if (response.ok) return "sent";
   const error = await response.json().catch(() => ({}));
@@ -92,8 +92,11 @@ async function fcm(env, device, route, send) {
     headers: { authorization: "Bearer " + token, "content-type": "application/json" },
     body: JSON.stringify({
       message: {
-        token: device.token, notification: { title, body }, data: route,
-        android: { priority: "HIGH", ttl: "3600s", notification: { channel_id: "discussions", tag: route.eventId } },
+        token: device.token, data: route,
+        android: {
+          priority: "HIGH", ttl: "3600s",
+          notification: { title, body_loc_key: bodyLocalizationKey, channel_id: "discussions", tag: route.eventId },
+        },
       },
     }),
   });

@@ -67,10 +67,41 @@ test("APNs alerts contain opaque routing IDs and generic text", async () => {
       assert.equal(request.headers["apns-collapse-id"], "opaque-event");
       assert.equal(request.headers.authorization.split(".").length, 3);
       assert.deepEqual(JSON.parse(request.body), {
-        aps: { alert: { title: "Logseq", body: "New activity in a discussion." }, sound: "default" },
+        aps: { alert: { title: "Logseq", "loc-key": "discussion_push_body" }, sound: "default" },
         graphId: "opaque-graph", eventId: "opaque-event",
       });
       return new Response(null, { status: 200 });
     });
   assert.equal(outcome, "sent");
+});
+
+test("deleting a user unlinks push devices and delivery history without a cron run", () => {
+  const { sqlite } = fixture();
+  sqlite.exec(`INSERT INTO users (id) VALUES ('receiver');
+    INSERT INTO discussion_push_receipts VALUES ('graph', 'event', 'receiver', 'device1', 1000);
+    DELETE FROM users WHERE id = 'receiver';`);
+  for (const table of ["discussion_push_devices", "discussion_push_outbox", "discussion_push_receipts"]) {
+    assert.equal(sqlite.prepare(`SELECT count(*) AS count FROM ${table}`).get().count, 0);
+  }
+});
+
+test("FCM requests use the Android bundle localization key", async () => {
+  const pair = await crypto.subtle.generateKey({
+    name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256",
+  }, true, ["sign", "verify"]);
+  const encoded = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
+  const env = { FCM_PROJECT_ID: "test", FCM_CLIENT_EMAIL: "push@example.com",
+    FCM_PRIVATE_KEY: btoa(String.fromCharCode(...encoded)) };
+  const route = { graphId: "graph", eventId: "event" };
+  const posted = [];
+  const status = await deliverDiscussionPush(env, { platform: "fcm", token: "device" }, route,
+    async (url, request) => {
+      if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "token" });
+      posted.push(JSON.parse(request.body));
+      assert.equal(request.headers.authorization, "Bearer token");
+      return Response.json({ name: "message" });
+    });
+  assert.equal(status, "sent");
+  assert.deepEqual(posted[0].message.data, route);
+  assert.equal(posted[0].message.android.notification.body_loc_key, "discussion_push_body");
 });
