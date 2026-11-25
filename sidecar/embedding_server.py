@@ -4,6 +4,8 @@ import json
 import logging
 import os
 import signal
+import subprocess
+import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -134,6 +136,10 @@ def watch_parent():
 
 
 def main():
+    if sys.argv[1:2] == ["--run-setup"]:
+        threading.Thread(target=watch_parent, daemon=True).start()
+        return subprocess.call([sys.executable, *sys.argv[2:]], stdin=subprocess.DEVNULL)
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8765)
@@ -179,4 +185,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

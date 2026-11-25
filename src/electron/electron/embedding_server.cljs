@@ -271,10 +271,11 @@
        :windowsHide true})
 
 (defn- run-command!
-  [cmd args {:keys [cwd logger]}]
+  [cmd args {:keys [cwd logger script-path]}]
   (js/Promise.
    (fn [resolve reject]
-     (let [proc (.spawn child-process cmd (clj->js args) (spawn-opts cwd))]
+     (let [spawn-args (if script-path (into [script-path "--run-setup"] args) args)
+           proc (.spawn child-process cmd (clj->js spawn-args) (spawn-opts cwd))]
        (swap! *setup-processes conj proc)
        (log-stream! (.-stdout proc) (:debug logger) :embedding-server/setup)
        (log-stream! (.-stderr proc) (:warn logger) :embedding-server/setup)
@@ -425,10 +426,11 @@
   (filterv #(exists? %) venv-python-candidates))
 
 (defn- validate-venv-python!
-  [{:keys [runtime-dir logger] :as cfg} venv-python]
+  [{:keys [runtime-dir logger script-path] run-command-fn :run-command!} venv-python]
   (throw-if-stopped!)
-  (-> ((:run-command! cfg) venv-python ["-c" "import sys"] {:cwd runtime-dir
-                                                            :logger logger})
+  (-> (run-command-fn venv-python ["-c" "import sys"] {:cwd runtime-dir
+                                                       :logger logger
+                                                       :script-path script-path})
       (p/then (fn [_] venv-python))
       (p/catch (fn [error]
                  (if (aborted-error? error)
@@ -448,10 +450,11 @@
 
 (defn- install-runtime!
   [{:keys [runtime-dir venv-dir deps-stamp python-command
-           ensure-dir! remove-dir! exists? write-file! logger] :as cfg}]
+           ensure-dir! remove-dir! exists? write-file! logger script-path]
+    run-command-fn :run-command! :as cfg}]
   (throw-if-stopped!)
   (ensure-dir! runtime-dir)
-  (let [run-command-fn (:run-command! cfg)]
+  (let [command-opts {:cwd runtime-dir :logger logger :script-path script-path}]
     (p/let [venv-python (usable-venv-python! cfg)
             _ (throw-if-stopped!)
             needs-venv? (nil? venv-python)
@@ -460,8 +463,7 @@
             _ (when needs-venv?
                 (throw-if-stopped!)
                 (remove-dir! venv-dir)
-                (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir
-                                                                         :logger logger}))
+                (run-command-fn python-command ["-m" "venv" venv-name] command-opts))
             _ (throw-if-stopped!)
             venv-python (if needs-venv?
                           (usable-venv-python! cfg)
@@ -472,8 +474,7 @@
                                              :candidates (:venv-python-candidates cfg)})))
             _ (when needs-deps?
                 (throw-if-stopped!)
-                (run-command-fn venv-python (into ["-m" "pip" "install"] dependencies) {:cwd runtime-dir
-                                                                                        :logger logger}))]
+                (run-command-fn venv-python (into ["-m" "pip" "install"] dependencies) command-opts))]
       (throw-if-stopped!)
       (when needs-deps?
         (write-file! deps-stamp (str (string/join "\n" dependencies) "\n")))

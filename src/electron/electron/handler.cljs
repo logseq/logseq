@@ -271,12 +271,18 @@
   []
   (db-worker/stop-all-managed!))
 
+(defn- assert-app-running!
+  []
+  (when @win/*quitting?
+    (throw (ex-info "Application is stopping" {:code :app-stopping}))))
+
 (defmethod handle :db-worker-runtime [^js window [_ repo opts]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (p/let [embedding-endpoint (when (and (not @win/*quitting?)
-                                        (cfgs/semantic-search-enabled?))
+    (p/let [_ (assert-app-running!)
+            embedding-endpoint (when (cfgs/semantic-search-enabled?)
                                  (embedding-server/ensure-endpoint! app))]
+      (assert-app-running!)
       (p/let [runtime (db-worker/ensure-runtime! (canonical-repo repo)
                                                  (.-id window)
                                                  (cond-> {:generation (:generation opts)
