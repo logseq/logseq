@@ -798,3 +798,10 @@ rejects ~data_attrs at runtime (data_attrs_encode Invalid_argument)
 and the throw breaks the enclosing render pass — use style_class or a
 wrapping kind for attributes. The full timestamp tooltip
 ("yyyy-MM-dd HH:mm" title attr) is not yet carried — noted as residual.
+
+### Round 10d: reactions on comments — VERIFIED PARITY
+Posted comment -> hover row -> reaction (mood) action -> emoji-mart
+picker -> pick emoji: both apps render the same badge structure (emoji
++ count "1") under the comment. The first block-level p+r test was a
+harness artifact (no active selection); comment-level reaction is the
+reliable flow and matches.
