@@ -345,3 +345,15 @@ Gaps found (need fixing):
 3. **"Show answers" button position**: master bottom-left, LUI bottom-center.
 4. **Question bullet**: master renders a collapse arrow before the bullet in
    the review; LUI shows only the bullet.
+
+### Misc UI batch (round 4, evidence cmp-*.png side-by-side)
+Parity confirmed (screenshots essentially identical):
+- Command palette (mod+shift+p): same commands/order/key hints/tips.
+- cmdk search with recently-updated list: same rows, same order, same footer
+  actions (Open / Open in sidebar / Copy ref). Note: footer tip text differed
+  ("Press ⌘↵ to open search in the sidebar" vs "Press ⌘/ to filter search
+  results") — possibly rotating tips, not confirmed as a gap.
+- Customize appearance panel (c c): same theme thumbnails, font picker, wide
+  mode/brackets toggles, accent color palette, hint text.
+- Settings General page (t s): same sidebar tabs and content.
+- Keymap settings page (g s): same search/tabs/commands/bindings.
