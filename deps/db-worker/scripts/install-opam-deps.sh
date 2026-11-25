@@ -11,6 +11,20 @@ set -eu
 opam option --global 'wrap-build-commands=[]'
 opam option --global 'wrap-install-commands=[]'
 opam option --global 'wrap-remove-commands=[]'
+# CI can provide OPAM_PIN_LOCK with "repo ref sha" lines so the cache key
+# and the pins installed in the switch describe the same upstream revisions.
+pin_git() {
+  package=$1
+  pin=$2
+  repo_ref=${pin#git+https://github.com/}
+  repo=${repo_ref%%#*}
+  ref=${repo_ref##*#}
+  locked_ref=
+  if [ -n "${OPAM_PIN_LOCK:-}" ] && [ -f "$OPAM_PIN_LOCK" ]; then
+    locked_ref=$(awk -v repo="$repo" -v ref="$ref" '$1 == repo && $2 == ref { print $3; exit }' "$OPAM_PIN_LOCK")
+  fi
+  opam pin add -y -n "$package" "git+https://github.com/$repo#${locked_ref:-$ref}"
+}
 # Pin all three datascript packages at the same explicit version: the
 # melange/native opam files constrain datascript_ocaml with {= version},
 # and opam resolves unpinned versions inconsistently (~dev vs dev).
@@ -22,16 +36,16 @@ DATASCRIPT_SHA=9f2e87f0498cd5bd5b7d2472642c6a91b863e238
 opam pin add -y -n datascript_ocaml.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-melange.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
 opam pin add -y -n datascript-ocaml-native.dev "git+https://github.com/logseq/datascript-ocaml.git#${DATASCRIPT_SHA}"
-opam pin add -y -n persistent_sorted_set_ocaml git+https://github.com/logseq/persistent-sorted-set-ocaml.git#main
-opam pin add -y -n melange-edn-core git+https://github.com/logseq/melange-edn.git#main
-opam pin add -y -n melange-edn-melange git+https://github.com/logseq/melange-edn.git#main
-opam pin add -y -n melange-edn-native git+https://github.com/logseq/melange-edn.git#main
-opam pin add -y -n melange-transit-core git+https://github.com/logseq/melange-transit.git#main
-opam pin add -y -n melange-transit-melange git+https://github.com/logseq/melange-transit.git#main
-opam pin add -y -n melange-transit-native git+https://github.com/logseq/melange-transit.git#main
-opam pin add -y -n rrbvec git+https://github.com/logseq/rrbvec.git#main
-opam pin add -y -n angstrom git+https://github.com/logseq/angstrom#fork
-opam pin add -y -n xmlm git+https://github.com/logseq/xmlm#master
+pin_git persistent_sorted_set_ocaml git+https://github.com/logseq/persistent-sorted-set-ocaml.git#main
+pin_git melange-edn-core git+https://github.com/logseq/melange-edn.git#main
+pin_git melange-edn-melange git+https://github.com/logseq/melange-edn.git#main
+pin_git melange-edn-native git+https://github.com/logseq/melange-edn.git#main
+pin_git melange-transit-core git+https://github.com/logseq/melange-transit.git#main
+pin_git melange-transit-melange git+https://github.com/logseq/melange-transit.git#main
+pin_git melange-transit-native git+https://github.com/logseq/melange-transit.git#main
+pin_git rrbvec git+https://github.com/logseq/rrbvec.git#main
+pin_git angstrom git+https://github.com/logseq/angstrom#fork
+pin_git xmlm git+https://github.com/logseq/xmlm#master
 opam pin add -y -n mldoc git+https://github.com/logseq/mldoc#bc0e57e8c0ef25080b97b96174274d1dc4f5f3d4
 # Re-resolve the git-branch pins: `opam pin add` alone treats an already
 # installed .dev package as satisfied, so a moved upstream ref never
