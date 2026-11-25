@@ -134,11 +134,13 @@ export async function processDiscussionPush(env, now = Date.now(), deliver = del
     }
     const { results: devices } = await db.prepare(`SELECT installation_id, platform, token
       FROM discussion_push_devices d WHERE user_id = ?
+      AND (CASE ? WHEN 'comment' THEN d.comments WHEN 'reaction' THEN d.reactions
+        ELSE d.comments AND d.reactions END) = 1
       AND ${matchesMember} AND ${matchesMember}
       AND NOT EXISTS (SELECT 1 FROM discussion_push_receipts r WHERE r.graph_id = ?
         AND r.event_id = ? AND r.recipient_id = ? AND r.installation_id = d.installation_id)
       ORDER BY updated_at DESC LIMIT 10`)
-      .bind(recipient, graph, recipient, graph, recipient, graph, sender, graph, sender, ...eventKey).all();
+      .bind(recipient, event.event_kind, graph, recipient, graph, recipient, graph, sender, graph, sender, ...eventKey).all();
     let retry = false;
     for (const device of devices) {
       const status = await deliver(env, device, { graphId: graph, eventId: id }).catch(() => "retry");

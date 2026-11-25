@@ -3,6 +3,7 @@
             [logseq.db-sync.common :as common]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.http :as http]
+            [logseq.db.frontend.entity-util :as entity-util]
             [promesa.core :as p]))
 
 (def device-path "/mobile/push-device")
@@ -39,7 +40,9 @@
       (p/let [body (common/read-json request)
               installation (some-> body (aget "installationId"))
               platform (some-> body (aget "platform"))
-              token (some-> body (aget "token"))]
+              token (some-> body (aget "token"))
+              comments (some-> body (aget "comments"))
+              reactions (some-> body (aget "reactions"))]
         (cond
           (not (uuid-string? installation)) (http/bad-request "Invalid installation")
           (= method "DELETE")
@@ -48,34 +51,53 @@
                                      installation account))]
             (js/Response. nil #js {:status 204}))
           (not (valid-token? platform token)) (http/bad-request "Invalid platform or token")
+          (or (and (some? comments) (not (boolean? comments)))
+              (and (some? reactions) (not (boolean? reactions))))
+          (http/bad-request "Invalid notification preferences")
           :else
-          (p/let [_ (.batch db
+          (p/let [comment-flag (when (some? comments) (if comments 1 0))
+                  reaction-flag (when (some? reactions) (if reactions 1 0))
+                  _ (.batch db
                             #js [(statement db
-                                            "DELETE FROM discussion_push_devices WHERE platform = ? AND token = ?"
-                                            platform token)
+                                            "DELETE FROM discussion_push_devices WHERE platform = ? AND token = ? AND installation_id <> ?"
+                                            platform token installation)
                                  (statement db
-                                            (str "INSERT INTO discussion_push_devices VALUES (?, ?, ?, ?, ?) "
+                                            (str "INSERT INTO discussion_push_devices "
+                                                 "(installation_id, user_id, platform, token, updated_at, comments, reactions) "
+                                                 "VALUES (?, ?, ?, ?, ?, COALESCE(?, 1), COALESCE(?, 1)) "
                                                  "ON CONFLICT(installation_id) DO UPDATE SET user_id = excluded.user_id, "
-                                                 "platform = excluded.platform, token = excluded.token, updated_at = excluded.updated_at")
-                                            installation account platform token (common/now-ms))])]
+                                                 "platform = excluded.platform, token = excluded.token, updated_at = excluded.updated_at, "
+                                                 "comments = COALESCE(?, discussion_push_devices.comments), "
+                                                 "reactions = COALESCE(?, discussion_push_devices.reactions)")
+                                            installation account platform token (common/now-ms)
+                                            comment-flag reaction-flag comment-flag reaction-flag)])]
             (js/Response. nil #js {:status 204})))))))
 
 (defn- class? [entity ident]
   (some #(= ident (:db/ident %)) (:block/tags entity)))
 
 (defn- live? [entity]
-  (and (:block/uuid entity) (nil? (:logseq.property/deleted-at entity))))
+  (and (:block/uuid entity) (not (entity-util/recycled? entity))))
 
 (defn- author [entity]
   (some-> entity :logseq.property/created-by-ref :block/uuid str))
 
-(defn- event-recipients [entity]
+(defn- event-recipients [db-before entity]
   (if-let [target (:logseq.property.reaction/target entity)]
     (when (live? target) [(author target)])
     (let [thread (:block/parent entity)]
-      (when (and (live? thread) (class? thread :logseq.class/Comments))
-        (let [targets (or (seq (:logseq.property.comments/blocks thread)) [(:block/parent thread)])]
-          (map author (filter live? (concat targets (:block/_parent thread)))))))))
+      (when (and (live? thread)
+                 (class? thread :logseq.class/Comments)
+                 (not (class? entity :logseq.class/Comments)))
+        (let [targets (or (seq (:logseq.property.comments/blocks thread)) [(:block/parent thread)])
+              previous-thread (d/entity db-before (:db/id thread))
+              position (juxt :block/order #(str (:block/uuid %)))
+              event-position (position entity)
+              prior-comments (filter (fn [earlier]
+                                       (and (not (class? earlier :logseq.class/Comments))
+                                            (neg? (compare (position earlier) event-position))))
+                                     (:block/_parent previous-thread))]
+          (map author (filter live? (concat targets prior-comments))))))))
 
 (defn event-routes [db-before db-after tx-data sender]
   (when (uuid-string? sender)
@@ -88,33 +110,36 @@
                  (let [event (d/entity db-after eid)]
                    (when (and (not (:block/uuid (d/entity db-before eid)))
                               (live? event) (= sender (author event)))
-                     (let [members (->> (event-recipients event)
+                     (let [members (->> (event-recipients db-before event)
                                         (filter uuid-string?)
                                         (remove #{sender})
                                         distinct
                                         (take 12)
                                         vec)]
                        (when (seq members)
-                         {:event (str (:block/uuid event)) :recipients members}))))))
+                         {:event (str (:block/uuid event))
+                          :kind (if (:logseq.property.reaction/target event) "reaction" "comment")
+                          :recipients members}))))))
          vec)))
 
 (defn <queue-events! [env graph-id sender events]
   (let [now (common/now-ms)
         ^js db (aget env "DB")
         insert (str "INSERT OR IGNORE INTO discussion_push_outbox "
-                    "(graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at) "
-                    "SELECT ?, ?, ?, ?, ?, ? WHERE "
+                    "(graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at, event_kind) "
+                    "SELECT ?, ?, ?, ?, ?, ?, ? WHERE "
                     "EXISTS (SELECT 1 FROM graphs WHERE graph_id = ? AND user_id = ? "
                     "UNION SELECT 1 FROM graph_members WHERE graph_id = ? AND user_id = ?) "
                     "AND EXISTS (SELECT 1 FROM graphs WHERE graph_id = ? AND user_id = ? "
                     "UNION SELECT 1 FROM graph_members WHERE graph_id = ? AND user_id = ?) "
-                    "AND EXISTS (SELECT 1 FROM discussion_push_devices WHERE user_id = ?) "
+                    "AND EXISTS (SELECT 1 FROM discussion_push_devices WHERE user_id = ? "
+                    "AND (CASE ? WHEN 'comment' THEN comments ELSE reactions END) = 1) "
                     "AND (SELECT count(*) FROM discussion_push_outbox WHERE sender_id = ? AND created_at > ?) < 60")
-        writes (for [{:keys [event recipients]} events
+        writes (for [{:keys [event kind recipients]} events
                      recipient recipients]
-                 (statement db insert graph-id event recipient sender now now
+                 (statement db insert graph-id event recipient sender now now kind
                             graph-id sender graph-id sender graph-id recipient graph-id recipient
-                            recipient sender (- now 60000)))]
+                            recipient kind sender (- now 60000)))]
     (when (and db (send-enabled? env) (uuid-string? graph-id) (seq events))
       (.batch db (to-array (take 60 writes))))))
 

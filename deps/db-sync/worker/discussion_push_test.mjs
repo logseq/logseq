@@ -4,16 +4,21 @@ import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
 import { deliverDiscussionPush, processDiscussionPush } from "./discussion_push.mjs";
 
+function applyMigration(sqlite, name) {
+  sqlite.exec(readFileSync(new URL("./migrations/" + name, import.meta.url), "utf8"));
+}
+
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
-  for (const name of ["0001_init.sql", "0008_add_discussion_push.sql"]) {
-    sqlite.exec(readFileSync(new URL("./migrations/" + name, import.meta.url), "utf8"));
-  }
+  applyMigration(sqlite, "0001_init.sql");
+  applyMigration(sqlite, "0008_add_discussion_push.sql");
   sqlite.exec(`INSERT INTO graphs (graph_id, user_id) VALUES ('graph', 'sender');
     INSERT INTO graph_members (graph_id, user_id, role) VALUES ('graph', 'receiver', 'member');
-    INSERT INTO discussion_push_devices VALUES ('device1','receiver','fcm','valid',1000),
+    INSERT INTO discussion_push_devices (installation_id, user_id, platform, token, updated_at) VALUES ('device1','receiver','fcm','valid',1000),
       ('device2','receiver','fcm','retry',1000), ('device3','receiver','fcm','expired',1000);
-    INSERT INTO discussion_push_outbox VALUES ('graph','event','receiver','sender',1000,1000,0);`);
+    INSERT INTO discussion_push_outbox (graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at)
+      VALUES ('graph','event','receiver','sender',1000,1000);`);
+  applyMigration(sqlite, "0009_discussion_push_preferences.sql");
   const DB = {
     prepare(sql) {
       return { bind(...args) {
@@ -53,6 +58,22 @@ test("the delivery worker rechecks membership after a member is removed", async 
   let attempts = 0;
   await processDiscussionPush(env, 1000, async () => { attempts++; return "sent"; });
   assert.equal(attempts, 0);
+});
+
+test("the delivery worker applies each device's latest comment and reaction settings", async () => {
+  const { sqlite, env } = fixture();
+  sqlite.exec(`UPDATE discussion_push_outbox SET event_kind = 'comment';
+    INSERT INTO discussion_push_outbox (graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at, event_kind)
+      VALUES ('graph','reaction','receiver','sender',1000,1000,'reaction');
+    UPDATE discussion_push_devices SET comments = 0 WHERE installation_id = 'device1';
+    UPDATE discussion_push_devices SET reactions = 0 WHERE installation_id = 'device2';
+    UPDATE discussion_push_devices SET comments = 0, reactions = 0 WHERE installation_id = 'device3';`);
+  const sends = [];
+  await processDiscussionPush(env, 1000, async (_env, device, route) => {
+    sends.push([device.installation_id, route.eventId]);
+    return "sent";
+  });
+  assert.deepEqual(sends.sort(), [["device1", "reaction"], ["device2", "event"]]);
 });
 
 test("APNs alerts contain opaque routing IDs and generic text", async () => {
