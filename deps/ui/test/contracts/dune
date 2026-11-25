@@ -31,6 +31,6 @@
 (rule
  (alias runtest)
  (enabled_if (= %{os_type} "Unix"))
- (deps ../../scripts/check-shared-boundaries.sh)
+ (deps ../../scripts/check-shared-boundaries.sh (universe))
  (action
   (system "bash %{dep:../../scripts/check-shared-boundaries.sh}")))
