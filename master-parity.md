@@ -701,3 +701,11 @@ menu ops), outliner full operation chain, properties (picker, 8 types,
 creation, checkbox toggle, text/date/url editing, configure popover,
 hide-by-default flow). One real bug found+fixed (upload slash-trigger
 remnant). Detailed evidence in ~/parity/evidence/.
+
+### Round 8: reactions
+- Add reaction in the block ctx menu opens the same emoji picker in
+  both: same grid layout, same emoji ordering, Frequently-used section.
+  LUI frames it with an "Emojis" title + search box; the underlying
+  picker content matches. Reaction-pick completion automation is flaky
+  (click targets collide with sidebar emoji) — manual verification
+  recommended for the badge render.
