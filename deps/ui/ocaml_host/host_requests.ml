@@ -945,7 +945,7 @@ let rec files_below root dir errors acc =
       else
         let path = Filename.concat dir name in
         let relative = root_relative root path name in
-        if ignored_import_file relative then acc
+        if ignored_import_dir relative then acc
         else
         try
           match (Unix.lstat path).Unix.st_kind with
@@ -989,8 +989,8 @@ let save_download ~binary parsed =
             invalid_arg "unable to allocate export staging file"
           else create_temporary (attempt + 1)
       in
-      let temporary, descriptor = create_temporary 0 in
       try
+        let temporary, descriptor = create_temporary 0 in
         let data =
           if binary then
             Transit.base64_decode
