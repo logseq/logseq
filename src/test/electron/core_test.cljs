@@ -41,21 +41,21 @@
   (async done
     (let [events (atom [])
           teardown-done (p/deferred)
-          already-started? (atom false)
+          quit-state (atom :idle)
           event #js {:defaultPrevented false}]
-      (lifecycle/handle-before-quit!
+      (lifecycle/<handle-before-quit!
        {:event event
-        :already-started? already-started?
+        :quit-state quit-state
         :prevent-default! (fn [_]
                             (swap! events conj :prevent-default))
         :teardown! (fn []
                      (swap! events conj :teardown-start)
                      teardown-done)
-        :exit! (fn []
+        :quit! (fn []
                  (swap! events conj :exit))})
       (-> (p/let [_ (p/delay 0)]
             (is (= [:prevent-default :teardown-start] @events))
-            (is (true? @already-started?))
+            (is (= :stopping @quit-state))
             (p/resolve! teardown-done true)
             (p/delay 0))
           (p/then (fn [_]
@@ -68,18 +68,19 @@
   (async done
     (let [events (atom [])
           teardown-done (p/deferred)
-          already-started? (atom false)
+          quit-state (atom :idle)
           opts {:event #js {}
-                :already-started? already-started?
+                :quit-state quit-state
                 :prevent-default! (fn [_]
                                     (swap! events conj :prevent-default))
                 :teardown! (fn []
                              (swap! events conj :teardown)
-                             teardown-done)
-                :exit! (fn []
-                         (swap! events conj :exit))}]
-      (lifecycle/handle-before-quit! opts)
-      (lifecycle/handle-before-quit! opts)
+                             teardown-done)}
+          resume-quit (fn []
+                        (swap! events conj :exit)
+                        (lifecycle/<handle-before-quit! opts))]
+      (lifecycle/<handle-before-quit! (assoc opts :quit! resume-quit))
+      (lifecycle/<handle-before-quit! opts)
       (-> (p/let [_ (p/delay 0)]
             (is (= [:prevent-default :prevent-default :teardown] @events))
             (p/resolve! teardown-done true)
@@ -93,10 +94,10 @@
 (deftest before-quit-logs-teardown-errors-then-exits
   (async done
     (let [events (atom [])
-          already-started? (atom false)]
-      (lifecycle/handle-before-quit!
+          quit-state (atom :idle)]
+      (lifecycle/<handle-before-quit!
        {:event #js {}
-        :already-started? already-started?
+        :quit-state quit-state
         :prevent-default! (fn [_]
                             (swap! events conj :prevent-default))
         :on-error! (fn [error]
@@ -104,7 +105,7 @@
         :teardown! (fn []
                      (swap! events conj :teardown)
                      (throw (ex-info "teardown boom" {})))
-        :exit! (fn []
+        :quit! (fn []
                  (swap! events conj :exit))})
       (-> (p/delay 0)
           (p/then (fn [_]

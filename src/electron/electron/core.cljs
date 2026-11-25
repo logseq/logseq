@@ -49,7 +49,7 @@
 (defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
 (defonce *pending-open-urls (atom []))
-(defonce *quit-teardown-started? (atom false))
+(defonce *quit-state (atom :idle))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -404,7 +404,7 @@
 
 (defn- <stop-db-workers!
   [warn-key]
-  (-> (handler/stop-all-db-workers!)
+  (-> (p/do (handler/stop-all-db-workers!))
       (p/catch (fn [error]
                  (logger/warn warn-key error)
                  nil))))
@@ -414,9 +414,9 @@
   (.on app' "before-quit"
        (fn [e]
          (reset! win/*quitting? true)
-         (lifecycle/handle-before-quit!
+         (lifecycle/<handle-before-quit!
           {:event e
-           :already-started? *quit-teardown-started?
+           :quit-state *quit-state
            :prevent-default! (fn [^js event]
                                (.preventDefault event))
            :on-error! (fn [error]
@@ -425,8 +425,8 @@
                         (-> (<stop-db-workers! :electron/quit-stop-workers-failed)
                             (p/then (fn [_]
                                       (embedding-server/stop!)))))
-           :exit! (fn []
-                    (.exit app' 0))}))))
+           :quit! (fn []
+                    (.quit app'))}))))
 
 (defn- on-app-ready!
   [^js app']

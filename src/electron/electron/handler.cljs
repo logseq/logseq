@@ -274,7 +274,8 @@
 (defmethod handle :db-worker-runtime [^js window [_ repo opts]]
   (if (string/blank? repo)
     (p/rejected (ex-info "repo is required" {:code :missing-repo}))
-    (p/let [embedding-endpoint (when (cfgs/semantic-search-enabled?)
+    (p/let [embedding-endpoint (when (and (not @win/*quitting?)
+                                        (cfgs/semantic-search-enabled?))
                                  (embedding-server/ensure-endpoint! app))]
       (p/let [runtime (db-worker/ensure-runtime! (canonical-repo repo)
                                                  (.-id window)
@@ -379,11 +380,10 @@
             (do (cfgs/set-item! k v)
                 (when (= k :spell-check)
                   (spell-check/apply-window-spellcheck! window (spell-check/session-spellcheck-enabled? v)))
+                (state/set-state! [:config k] v)
                 (when (and (= k :feature/enable-semantic-search?)
                            (false? v))
-                  (embedding-server/stop!))
-                (state/set-state! [:config k] v)
-                nil)))
+                  (embedding-server/stop!)))))
         (cfgs/get-item k))
       config)))
 
