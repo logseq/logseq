@@ -234,6 +234,8 @@
   (let [owner (random-uuid)
         participant (random-uuid)
         author (random-uuid)
+        page-owner (random-uuid)
+        later-participant (random-uuid)
         target (random-uuid)
         comment-id (random-uuid)
         reaction (random-uuid)
@@ -247,13 +249,20 @@
     (d/transact! conn [{:db/id -1 :block/uuid owner}
                        {:db/id -2 :block/uuid participant}
                        {:db/id -3 :block/uuid author}
-                       {:db/id -4 :block/uuid target :logseq.property/created-by-ref -1}
+                       {:db/id -4 :block/uuid target :logseq.property/created-by-ref -1 :block/parent -9}
                        {:db/id -5 :db/ident :logseq.class/Comments}
                        {:db/id -6 :block/uuid (random-uuid) :block/tags [-5] :logseq.property.comments/blocks [-4]}
-                       {:db/id -7 :block/uuid (random-uuid) :block/parent -6 :logseq.property/created-by-ref -2}])
+                       {:db/id -7 :block/uuid (random-uuid) :block/parent -6 :logseq.property/created-by-ref -2
+                        :block/created-at 100}
+                       {:db/id -8 :block/uuid page-owner}
+                       {:db/id -9 :block/uuid (random-uuid) :logseq.property/created-by-ref -8}
+                       {:db/id -10 :block/uuid later-participant}
+                       {:db/id -11 :block/uuid (random-uuid) :block/parent -6 :logseq.property/created-by-ref -10
+                        :block/created-at 300}])
     (let [thread (-> (d/entity @conn [:block/uuid target]) :logseq.property.comments/_blocks first :db/id)
           {:keys [db-before db-after tx-data]}
           (d/transact! conn [{:block/uuid comment-id :block/parent thread
+                              :block/created-at 200
                               :logseq.property/created-by-ref [:block/uuid author]}
                              {:block/uuid reaction :logseq.property.reaction/target [:block/uuid target]
                               :logseq.property/created-by-ref [:block/uuid author]}])
@@ -261,4 +270,6 @@
       (is (= {(str comment-id) #{(str owner) (str participant)}
               (str reaction) #{(str owner)}}
              (into {} (map (juxt :event (comp set :recipients))) routes)))
+      (is (= {(str comment-id) "comment" (str reaction) "reaction"}
+             (into {} (map (juxt :event :kind)) routes)))
       (is (empty? (discussion-push/event-routes db-before db-after tx-data (str owner)))))))
