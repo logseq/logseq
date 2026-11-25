@@ -12160,39 +12160,49 @@ let () =
   let root = Filename.temp_file "native-import-root-" "" in
   Unix.unlink root;
   Unix.mkdir root 0o700;
-  let mkdir path = Unix.mkdir path 0o700 in
-  let write path =
-    Out_channel.with_open_bin path (fun channel -> output_string channel "x")
+  let rec remove_tree path =
+    if Sys.file_exists path then begin
+      if Sys.is_directory path then begin
+        Array.iter (fun name -> remove_tree (Filename.concat path name))
+          (Sys.readdir path);
+        Unix.rmdir path
+      end else Unix.unlink path
+    end
   in
-  mkdir (Filename.concat root "assets");
-  mkdir (Filename.concat root "assets/.archive");
-  mkdir (Filename.concat root ".archive");
-  mkdir (Filename.concat root "pages");
-  mkdir (Filename.concat root "pages/project.v2");
-  mkdir (Filename.concat root "node_modules");
-  write (Filename.concat root "assets/.archive/photo.png");
-  write (Filename.concat root ".archive/page.md");
-  write (Filename.concat root "pages/project.v2/page.md");
-  write (Filename.concat root "node_modules/page.md");
-  let errors = ref [] in
-  let files = Host_requests.files_below root root errors [] in
-  let paths =
-    List.filter_map
-      (function
-        | `Assoc fields -> (
-            match List.assoc_opt "relative-path" fields with
-            | Some (`String path) -> Some path
-            | _ -> None)
-        | _ -> None)
-      files
-  in
-  check "Directory import keeps files below hidden asset directories"
-    (List.mem "assets/.archive/photo.png" paths);
-  check "Directory import skips root hidden directories"
-    (not (List.mem ".archive/page.md" paths));
-  check "Directory import keeps pages below dotted folders"
-    (List.mem "pages/project.v2/page.md" paths);
-  check "Directory import skips node_modules"
-    (not (List.mem "node_modules/page.md" paths));
-  check "Readable directory import enumeration has no errors" (!errors = []);
+  Fun.protect ~finally:(fun () -> remove_tree root) (fun () ->
+    let mkdir path = Unix.mkdir path 0o700 in
+    let write path =
+      Out_channel.with_open_bin path (fun channel -> output_string channel "x")
+    in
+    mkdir (Filename.concat root "assets");
+    mkdir (Filename.concat root "assets/.archive");
+    mkdir (Filename.concat root ".archive");
+    mkdir (Filename.concat root "pages");
+    mkdir (Filename.concat root "pages/project.v2");
+    mkdir (Filename.concat root "node_modules");
+    write (Filename.concat root "assets/.archive/photo.png");
+    write (Filename.concat root ".archive/page.md");
+    write (Filename.concat root "pages/project.v2/page.md");
+    write (Filename.concat root "node_modules/page.md");
+    let errors = ref [] in
+    let files = Host_requests.files_below root root errors [] in
+    let paths =
+      List.filter_map
+        (function
+          | `Assoc fields -> (
+              match List.assoc_opt "relative-path" fields with
+              | Some (`String path) -> Some path
+              | _ -> None)
+          | _ -> None)
+        files
+    in
+    check "Directory import keeps files below hidden asset directories"
+      (List.mem "assets/.archive/photo.png" paths);
+    check "Directory import skips root hidden directories"
+      (not (List.mem ".archive/page.md" paths));
+    check "Directory import keeps pages below dotted folders"
+      (List.mem "pages/project.v2/page.md" paths);
+    check "Directory import skips node_modules"
+      (not (List.mem "node_modules/page.md" paths));
+    check "Readable directory import enumeration has no errors" (!errors = []));
   print_endline "native directory import path filtering: OK"
