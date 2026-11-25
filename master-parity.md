@@ -387,3 +387,19 @@ Parity confirmed (structure):
   state or listener registration next).
 - OPEN: 'Contents' crumb label vs page name; missing collapse arrow on
   the question bullet.
+
+### Flashcards sweep RESOLVED (2025-11-25)
+- FIXED: keyboard shortcuts — root cause was twofold: (a) a deeper
+  capture-phase keydown handler stops propagation for printable keys,
+  so the document bubble listener never fired; fixed by registering the
+  modal keydown listener with ~capture:true (67d3791204); (b) the
+  default_prevented guard dropped earlier (912d38628c). Verified end to
+  end: s reveals answers, 1-4 rate cards.
+- FIXED: Show answers button alignment (start-aligned, ratings centered)
+  in 912d38628c.
+- NOT A BUG: 'Contents' crumb — earlier observation was fixture
+  pollution from hijacked seeding; verified the breadcrumb renders the
+  card page name correctly (evidence fix-crumb.png).
+- NOT A GAP: collapse arrow on the review question bullet — master
+  renders identically with no arrow (evidence arrow-lui/master.png).
+Flashcards review modal is now at parity.
