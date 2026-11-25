@@ -598,7 +598,7 @@ let init (ms : Model.t Signal.signal) : t =
             | None -> None
           in
           open_modal st eid_opt);
-      Ui_services.dom_on_document_event "keydown" (fun ev ->
+      Ui_services.dom_on_document_event ~capture:true "keydown" (fun ev ->
           on_keydown ev st);
       st
 
