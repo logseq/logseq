@@ -20,8 +20,16 @@ pin_git() {
   repo=${repo_ref%%#*}
   ref=${repo_ref##*#}
   locked_ref=
-  if [ -n "${OPAM_PIN_LOCK:-}" ] && [ -f "$OPAM_PIN_LOCK" ]; then
+  if [ -n "${OPAM_PIN_LOCK:-}" ]; then
+    if [ ! -f "$OPAM_PIN_LOCK" ]; then
+      echo "OPAM_PIN_LOCK file not found: $OPAM_PIN_LOCK" >&2
+      exit 1
+    fi
     locked_ref=$(awk -v repo="$repo" -v ref="$ref" '$1 == repo && $2 == ref { print $3; exit }' "$OPAM_PIN_LOCK")
+    if [ -z "$locked_ref" ]; then
+      echo "Missing pin lock entry for $repo#$ref in $OPAM_PIN_LOCK" >&2
+      exit 1
+    fi
   fi
   opam pin add -y -n "$package" "git+https://github.com/$repo#${locked_ref:-$ref}"
 }
