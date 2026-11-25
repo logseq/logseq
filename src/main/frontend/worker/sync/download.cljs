@@ -83,12 +83,16 @@
       (nil? body)
       (p/resolved nil)
 
-      ;; Never trust `content-encoding` alone.
+      ;; Never trust `content-encoding`, in either direction.
       ;; Some runtimes (e.g. Node/undici fetch) may auto-decompress body while
       ;; still exposing `content-encoding: gzip` in headers.
-      ;; We only stream-decompress when the first bytes are actual gzip magic.
-      (and (= "gzip" encoding)
-           (exists? js/DecompressionStream)
+      ;; A proxy that drops gzip from the request's `Accept-Encoding`, or strips
+      ;; the response header, leaves the snapshot gzip-compressed with no
+      ;; `content-encoding` at all.
+      ;; We stream-decompress whenever the first bytes are actual gzip magic.
+      ;; A frame starts with its 4-byte length, so a frame can only look like
+      ;; gzip if it is over 529MB.
+      (and (exists? js/DecompressionStream)
            (fn? (.-tee body)))
       (let [branches (.tee body)
             probe (aget branches 0)

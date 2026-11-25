@@ -46,6 +46,39 @@
                           (is false (str error))
                           (done)))))))
 
+(defn- <gzip-bytes
+  [^js payload]
+  (-> (js/Response. (.pipeThrough (stream-from-payload payload)
+                                  (js/CompressionStream. "gzip")))
+      (.arrayBuffer)
+      (p/then (fn [buf] (js/Uint8Array. buf)))))
+
+(deftest stream-snapshot-row-batches-decompresses-gzip-without-header-test
+  (async done
+         (let [rows [[1 "row-1" nil]
+                     [2 "row-2" nil]]
+               payload (frame-bytes (snapshot/encode-rows rows))
+               batches* (atom [])]
+           ;; When gzip is missing from the request's `Accept-Encoding` (a proxy
+           ;; rewrote it), the sync server returns the snapshot still gzipped
+           ;; and without a `content-encoding` header.
+           (-> (p/let [gzipped (<gzip-bytes payload)
+                       resp (js/Response.
+                             (stream-from-payload gzipped)
+                             #js {:status 200})]
+                 (#'sync-download/<stream-snapshot-row-batches!
+                  resp
+                  1000
+                  (fn [batch]
+                    (swap! batches* conj batch)
+                    (p/resolved true))))
+               (p/then (fn [_]
+                         (is (= [rows] @batches*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
 (deftest encrypted-download-preflights-e2ee-before-fetching-snapshot-stream-test
   (async done
          (let [config-prev @worker-state/*db-sync-config
