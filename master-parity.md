@@ -731,3 +731,18 @@ Verified identical step-by-step in both:
 - p r on selection opens the same emoji-mart reaction picker in both;
   p i opens icon picker in both
 - mod+j jump: no popup in EITHER app on a property-less page (symmetric)
+- Escape selects block, alt+down expands selection downward,
+  shift+enter opens block in right sidebar — all identical (master's
+  sidebar additionally lists "Page graph"; excluded scope)
+- mod+shift+a select-all, backspace delete-selection, mod+z undo
+  restore: step-by-step identical selection counts and block texts
+
+Round 9 keyboard interaction parity coverage: binding tables equal at
+code level; runtime-verified formatting (b/i/hl/strike), zoom in/out,
+navigation chords (g j/g h), toggles (t l/t t), selection chords
+(p r/p i/mod+j), block selection ops (escape/alt+down/shift+enter/
+mod+shift+a/backspace/undo). No gaps found. Remaining unverified-at-
+runtime chords are editing-command niceties (ctrl+u kill-line,
+ctrl+w kill-word, mod+shift+v paste-text, copy-embed) plus pdf alt-keys
+and auto-complete navigation; they share the same dispatch path as the
+verified ones but can be spot-checked if needed.
