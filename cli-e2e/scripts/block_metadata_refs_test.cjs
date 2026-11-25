@@ -46,21 +46,33 @@ test('CLI metadata writes preserve named links, backlinks and recurring journal 
     report.checks++;
     if (JSON.stringify(actual) !== JSON.stringify(expected)) report.failures.push({ label, actual, expected });
   }
-  async function checkpoint(label, block, required, absent = []) {
+  async function checkpoint(label, block, required, excludedRefs = []) {
     const actual = await titleRefs(block);
+    const sourceUUID = await uuid(block);
+    const rows = (await command('query', '--query',
+      '[:find ?title ?target :in $ [?title ...] :where [?target :block/title ?title]]',
+      '--inputs', JSON.stringify([[...required, ...excludedRefs]]))).result;
+    const targets = new Map(rows);
+    assert.equal(targets.size, rows.length, `${label}: ambiguous target titles`);
+    function fixtureTarget(name) {
+      assert.ok(targets.has(name), `${label}: missing fixture target ${name}`);
+      const target = targets.get(name);
+      assert.ok(Number.isSafeInteger(target) && target > 0, `${label}: invalid fixture target ID for ${name}: ${target}`);
+      return target;
+    }
+    const tags = new Set(await query(`[:find [?tag ...] :where [${block} :block/tags ?tag]]`));
     report.stages.push({ label, refs: actual });
     for (const name of required) {
       equal(label + ' refs include ' + name, actual.includes(name), true);
-      const target = await id(name);
-      const membership = await query(`[:find ?tag . :where [${block} :block/tags ?tag] [(= ?tag ${target})]]`);
+      const target = fixtureTarget(name);
+      const membership = tags.has(target);
       equal(label + (membership ? ' tag membership excluded from linked references on ' : ' UI backlinks include source on ') + name,
-        (await backlinkUUIDs(target)).includes(await uuid(block)), !membership);
+        (await backlinkUUIDs(target)).includes(sourceUUID), !membership);
     }
-    for (const name of absent) {
+    for (const name of excludedRefs) {
       equal(label + ' refs exclude ' + name, actual.includes(name), false);
-      const target = await id(name);
-      if (target) equal(label + ' UI backlinks exclude source on ' + name,
-        (await backlinkUUIDs(target)).includes(await uuid(block)), false);
+      equal(label + ' UI backlinks exclude source on ' + name,
+        (await backlinkUUIDs(fixtureTarget(name))).includes(sourceUUID), false);
     }
   }
   async function refreshServer() {
