@@ -7,7 +7,7 @@
     "test:query-integration": "node --test ../cli-e2e/scripts/query_desktop_parity_test.cjs"
   },
   "devDependencies": {
-    "vite": "^8.0.16"
+    "vite": "^8.1.6"
   },
   "dependencies": {
     "@logseq/graph-lifecycle": "link:../deps/graph-lifecycle",
