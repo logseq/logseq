@@ -670,3 +670,9 @@ range selection works when sequenced that way.
   observer); right-clicking an unselected block opens nothing in BOTH
   apps — the earlier "master opens on bare right-click" reading was
   stale-selection test pollution.
+
+### Round 8: configure property popover full contents — byte-identical
+Both: Property name, Property type, Default value (Set value),
+Available choices, Multiple values, Hide by default, Hide empty value,
+Go to this property, Delete property from node — same order, same
+labels.
