@@ -23,12 +23,29 @@ jobs:
           ref: ${{ inputs.branch }}
           fetch-depth: 1
 
+      - name: Restore APT package cache
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-package-cache
+          key: apt-${{ runner.os }}-${{ runner.arch }}-deploy-v1-${{ hashFiles('.github/workflows/deploy-and-branch.yml') }}
+
       - name: Install LUI system dependencies
         run: |
+          cache_dir="$HOME/apt-package-cache"
+          mkdir -p "$cache_dir/partial"
           sudo apt-get update
-          sudo apt-get install -y pkg-config libpango1.0-dev \
+          sudo apt-get -o Dir::Cache::Archives="$cache_dir" install -y pkg-config libpango1.0-dev \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev \
             libxfixes-dev libxss-dev libxtst-dev
+          sudo apt-get -o Dir::Cache::Archives="$cache_dir" autoclean
+
+      - name: Save APT package cache
+        uses: actions/cache/save@v4
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/apt-package-cache
+          key: ${{ steps.apt-cache.outputs.cache-primary-key }}
 
       - name: Resolve pinned dependency revisions
         id: pins

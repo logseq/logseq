@@ -23,10 +23,27 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Restore APT package cache
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-package-cache
+          key: apt-${{ runner.os }}-${{ runner.arch }}-rlui-v1-${{ hashFiles('.github/workflows/refactor-lui.yml') }}
+
       - name: System deps
         run: |
+          cache_dir="$HOME/apt-package-cache"
+          mkdir -p "$cache_dir/partial"
           sudo apt-get update
-          sudo apt-get install -y pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev
+          sudo apt-get -o Dir::Cache::Archives="$cache_dir" install -y pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev
+          sudo apt-get -o Dir::Cache::Archives="$cache_dir" autoclean
+
+      - name: Save APT package cache
+        uses: actions/cache/save@v4
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/apt-package-cache
+          key: ${{ steps.apt-cache.outputs.cache-primary-key }}
 
       - uses: pnpm/action-setup@v4
         with:
