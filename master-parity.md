@@ -681,3 +681,9 @@ labels.
 - 'Hide by default' in the configure popover hides the property in both;
   the 'Show hidden properties' toggle row appears in both with the same
   label; toggle interaction symmetric in both.
+
+### Round 8: date property datepicker — identical
+Both open the same calendar popup: month grid, Repeat panel
+(Every/Day/Set Repeating type with Advance-from-completion/scheduled/
+skip-to-future submenu), Next date, natural-language input
+("e.g. Next week").
