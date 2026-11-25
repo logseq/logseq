@@ -28,7 +28,7 @@
         row [:div.flex.flex-row.justify-between.w-full
 	             {:class (when chosen? "chosen")
 	              :on-pointer-down util/stop-propagation}
-	             [:div.flex.flex-row.items-center.gap-1
+	             [:div.flex.flex-row.items-center.gap-1.min-w-0
 	              (when multiple-choices?
 	                (ui/checkbox {:checked (boolean (selected-choices (:value result)))
 	                              :on-click (fn [e]
@@ -85,7 +85,7 @@
      [:input.cp__select-input.w-full
       (merge {:type "text"
               :ref *input-el
-              :class "!p-1.5"
+              :class "!px-2 !py-1.5"
               :placeholder (or input-default-placeholder (t prompt-key))
               :auto-focus auto-focus?
               :value input

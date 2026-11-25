@@ -247,16 +247,18 @@
        :item-height (- (+ element-top (.-height element-rect)) cluster-top)})))
 
 (defn- auto-complete-keep-visible-scroll-top
-  "Returns a `scrollTop` that keeps the focused item inside the viewport."
-  [{:keys [scroll-top viewport-height item-top item-height]}]
+  "Returns a `scrollTop` that keeps the focused item inside the viewport,
+  at least `edge-padding` px away from either edge."
+  [{:keys [scroll-top viewport-height item-top item-height edge-padding]}]
   (let [item-bottom (+ item-top item-height)
-        viewport-bottom (+ scroll-top viewport-height)]
+        viewport-top (+ scroll-top edge-padding)
+        viewport-bottom (- (+ scroll-top viewport-height) edge-padding)]
     (cond
-      (< item-top scroll-top)
-      (max 0 item-top)
+      (< item-top viewport-top)
+      (max 0 (- item-top edge-padding))
 
       (> item-bottom viewport-bottom)
-      (max 0 (- item-bottom viewport-height))
+      (max 0 (- (+ item-bottom edge-padding) viewport-height))
 
       :else
       scroll-top)))
@@ -264,15 +266,19 @@
 (defn- auto-complete-scroll-into-view!
   "Keeps the highlighted auto-complete item visible in `#ui__ac-inner`.
 
-  Slash-command and search popups scroll that inner list, not the popover
-  wrapper. Arrow up/down used to set `scrollTop` on `#ui__ac`'s parent, so
-  the chosen row could move out of view."
+  Every auto-complete (slash commands, search popups, `select` pickers)
+  scrolls that inner list, not the popover wrapper, so the container is
+  looked up from the item itself."
   [idx]
-  (when-let [element (gdom/getElement (str "ac-" idx))]
-    (when-let [container (gdom/getElement "ui__ac-inner")]
+  (when-let [^js element (gdom/getElement (str "ac-" idx))]
+    (when-let [container (.closest element "#ui__ac-inner")]
       (when-let [geometry (auto-complete-scroll-geometry container element)]
+        ;; `#ui__ac-inner` sets `scroll-padding` to its edge fade height, so
+        ;; rows stop clear of the faded edges.
         (set! (.-scrollTop container)
-              (auto-complete-keep-visible-scroll-top geometry))))))
+              (auto-complete-keep-visible-scroll-top
+               (assoc geometry :edge-padding
+                      (js/parseFloat (.-scrollPaddingTop (js/getComputedStyle container))))))))))
 
 (defn auto-complete-prev
   [state e]

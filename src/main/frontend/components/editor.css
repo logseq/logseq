@@ -59,9 +59,17 @@ pre {
   }
 }
 
+/* One surface for every editor popup (slash commands, node and template
+   search). shui popovers have no padding of their own. The add-property key
+   picker matches it in property/value.css. Each popup scrolls its list,
+   not the popover, so keyboard navigation and the edge fades apply. */
 .ui__popover-content, .ui__dropdown-menu-content {
   &[data-editor-popup-ref] {
     @apply p-1.5 w-72;
+
+    #ui__ac-inner {
+      max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
+    }
 
     &[data-side=top] {
       position: relative;
@@ -69,36 +77,14 @@ pre {
     }
   }
 
-  &[data-editor-popup-ref=commands] {
-    @apply w-72;
-
-    #ui__ac-inner {
-      max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
-    }
-
-    &[data-side=top] {
-      #ui__ac-inner {
-        max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
-      }
-    }
-
-    &[data-side=bottom] {
-      #ui__ac-inner {
-        max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
-      }
-    }
+  &[data-editor-popup-ref=commands][data-side=top] #ui__ac-inner {
+    max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
   }
 
   &[data-editor-popup-ref=page-search],
   &[data-editor-popup-ref=block-search],
   &[data-editor-popup-ref=page-search-hashtag] {
     @apply w-full sm:w-128;
-  }
-
-  &[data-editor-popup-ref=page-search] #ui__ac-inner,
-  &[data-editor-popup-ref=block-search] #ui__ac-inner,
-  &[data-editor-popup-ref=page-search-hashtag] #ui__ac-inner {
-    max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
   }
 
   &[data-editor-popup-ref=datepicker] {
@@ -110,24 +96,6 @@ pre {
   max-height: min(calc(var(--available-height, 460px) - 60px), 460px);
 }
 
-[data-side=bottom] > .ui__popover-content[data-editor-popup-ref=commands] #ui__ac-inner {
-  max-height: min(calc(var(--available-height, 480px) - 20px), 480px);
-}
-
-.cp__commands-slash {
-  .ui__icon {
-    opacity: .7;
-    margin-right: 1px;
-    color: inherit !important;
-
-    &.ls-icon-queryCode {
-      @apply relative left-[1px];
-    }
-  }
-
-  .menu-link {
-    &.chosen .ui__icon {
-      @apply opacity-100;
-    }
-  }
+.cp__commands-slash .ui__icon.ls-icon-queryCode {
+  @apply relative left-[1px];
 }

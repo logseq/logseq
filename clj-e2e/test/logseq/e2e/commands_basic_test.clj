@@ -97,14 +97,14 @@
     (b/new-block "slash-headings")
     (util/press-seq " /")
     (w/wait-for "a.menu-link.chosen:has-text('Node reference')")
-    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")
-    (assert/assert-is-visible ".ui__ac-group-name:has-text('FORMAT')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('Basic')")
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('Format')")
     (assert/assert-is-visible ".ui__ac-group-name:has-text('Heading')")
     (assert/assert-is-hidden "a.menu-link:has-text('Clear heading')"))
   (testing "typed slash filter keeps matching section headings"
     (util/press-seq "node" {:delay 20})
     (w/wait-for "a.menu-link:has-text('Node reference')")
-    (assert/assert-is-visible ".ui__ac-group-name:has-text('BASIC')")))
+    (assert/assert-is-visible ".ui__ac-group-name:has-text('Basic')")))
 
 (defn- chosen-slash-command-visibility
   []

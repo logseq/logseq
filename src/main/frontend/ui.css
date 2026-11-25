@@ -1,8 +1,48 @@
+/* Every auto-complete list scrolls here, whether it sits in an editor popup or
+   in a `select` picker. Edges that hide more content fade out; the fade is
+   toggled by `sync-auto-complete-scroll-fade!` in ui.cljs, and keyboard
+   navigation reads `scroll-padding` so the chosen row stays clear of it.
+   The fade stops don't inherit, so toggling them restyles only this box. */
+@property --ui-ac-fade-top {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --ui-ac-fade-bottom {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
 #ui__ac-inner {
+  --ui-ac-fade-size: 16px;
+
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   position: relative;
   -webkit-overflow-scrolling: touch;
+  scroll-padding-block: var(--ui-ac-fade-size);
+
+  /* Lists that fit have no mask at all. */
+  &:is([data-fade-top], [data-fade-bottom]) {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      #000 var(--ui-ac-fade-top),
+      #000 calc(100% - var(--ui-ac-fade-bottom)),
+      transparent 100%
+    );
+  }
+
+  &[data-fade-top] {
+    --ui-ac-fade-top: var(--ui-ac-fade-size);
+  }
+
+  &[data-fade-bottom] {
+    --ui-ac-fade-bottom: var(--ui-ac-fade-size);
+  }
 
   .menu-link {
     @apply break-all rounded;
@@ -42,8 +82,92 @@
   }
 }
 
+/* Groups, titles and rows for every auto-complete list. Rendered by
+   `auto-complete-group` and `auto-complete-item-label` in ui.cljs.
+
+   Spacing groups by proximity: a title sits close to its own rows
+   (pb-1) and, when rows come before it, gets a larger gap above (pt-3)
+   than below. Titles use the rows' px-2 so text lines up with the icons. */
 .ui__ac-group-name {
-  @apply p-2 text-xs text-popover-foreground/20 font-medium;
+  @apply flex items-center gap-2 px-2 py-1 select-none;
+  @apply text-xs font-medium text-gray-11;
+
+  > .ui__ac-group-name-text {
+    @apply min-w-0 truncate;
+  }
+
+  /* Faint rule from the title to the right edge, in the same color as
+     shui's Separator and the popover border, so it holds up in every theme. */
+  &::after {
+    content: "";
+    @apply h-px flex-1 bg-border;
+  }
+}
+
+.ui__ac-group + .ui__ac-group > .ui__ac-group-name {
+  @apply pt-3;
+}
+
+/* Rows: a fixed 18px icon slot one text line tall, then the label. The slot
+   centers on the first line, so wrapped labels keep the icon in place. */
+.ui__ac-item-label {
+  @apply flex items-start gap-1.5 min-w-0;
+
+  > .ui__ac-item-icon {
+    @apply flex h-5 w-[18px] shrink-0 items-center justify-center opacity-70;
+
+    .ui__icon {
+      color: inherit !important;
+    }
+  }
+
+  /* Long labels wrap rather than truncate, so translated command names
+     and long node titles stay readable. */
+  > .ui__ac-item-text {
+    @apply min-w-0 flex-1 font-normal leading-5;
+    overflow-wrap: anywhere;
+  }
+
+  > .ui__ac-item-hint {
+    @apply shrink-0 text-xs leading-5 text-gray-10;
+  }
+}
+
+#ui__ac-inner .menu-link.chosen .ui__ac-item-label > .ui__ac-item-icon {
+  @apply opacity-100;
+}
+
+/* Context line above a row's label (node breadcrumbs). When the label has an
+   icon, indent past the icon slot and gap so the context lines up with the text. */
+.ui__ac-item-context {
+  @apply mb-0.5 text-xs text-gray-11;
+
+  &:has(+ .ui__ac-item-label > .ui__ac-item-icon) {
+    padding-left: calc(18px + var(--spacing) * 1.5);
+  }
+}
+
+/* Empty state and hint lines use the rows' px-2 so text lines up. */
+.ui__ac-empty {
+  @apply px-2 py-1.5 text-sm text-gray-11;
+}
+
+.ui__ac-hint {
+  @apply flex items-center gap-2 px-2 pt-1.5 pb-0.5 text-xs text-gray-11;
+}
+
+/* `select` pickers cap their results at `.item-results-wrap`. Pass that cap
+   down so `#ui__ac-inner` stays the scroll container, as in editor popups. */
+.item-results-wrap {
+  @apply flex flex-col;
+
+  > #ui__ac {
+    @apply flex flex-col min-h-0;
+  }
+
+  #ui__ac-inner {
+    @apply min-h-0;
+  }
 }
 
 .search-all #ui__ac-inner {

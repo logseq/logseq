@@ -25,11 +25,12 @@
             [tick.core :as tick]))
 
 (commands/register-slash-command
- (fn []
-   [(t :editor.slash/cloze)
+ (fn [t-fn]
+   [(t-fn :editor.slash/cloze)
     [[:editor/input "{{cloze }}" {:backward-pos 2}]]
-    nil
-    :icon/brackets-contain]))
+    (t-fn :editor.slash/cloze-desc)
+    :icon/brackets-contain
+    (t-fn :editor.slash/group-format)]))
 
 (def ^:private instant->inst-ms (comp inst-ms tick/inst))
 (defn- inst-ms->instant [ms] (tick/instant (js/Date. ms)))

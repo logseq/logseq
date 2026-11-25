@@ -291,7 +291,7 @@
     (util/exit-edit)
 
     (w/click "button:text('Set property')")
-    (w/click (loc/and "strong" (util/get-by-text "Alias" true)))
+    (w/click (loc/and ".ui__ac-item-text" (util/get-by-text "Alias" true)))
     (w/fill "input[placeholder='Set Alias']" target-page)
     (w/click target-result)
     (k/esc)

@@ -98,7 +98,7 @@
 (defn- picker-chosen-label
   []
   (string/trim
-   (or (util/get-text ".ls-property-dialog .cp__select-results a.menu-link.chosen strong")
+   (or (util/get-text ".ls-property-dialog .cp__select-results a.menu-link.chosen .ui__ac-item-text")
        "")))
 
 (deftest keyboard-highlight-selects-property-test
