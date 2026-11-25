@@ -1,5 +1,8 @@
 (ns logseq.db-sync.worker.handler.discussion-push
-  (:require [datascript.core :as d]
+  (:require ["@emoji-mart/data" :as emoji-data]
+            [clojure.string :as string]
+            [datascript.core :as d]
+            [goog.object :as gobj]
             [logseq.db-sync.common :as common]
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.http :as http]
@@ -99,6 +102,39 @@
                                      (:block/_parent previous-thread))]
           (map author (filter live? (concat targets prior-comments))))))))
 
+(defn- short-text [value limit]
+  (when (string? value)
+    (let [text (-> value
+                   (string/replace #"[\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069]+" " ")
+                   (string/replace #"\s+" " ")
+                   string/trim)
+          ;; The extra code point lets us detect truncation without splitting surrogate pairs.
+          points (js/Array.from (subs text 0 (min (count text) (* 2 (inc limit)))))]
+      (when (seq text)
+        (if (> (.-length points) limit)
+          (str (.join (.slice points 0 limit) "") "…")
+          text)))))
+
+(defn- display-name [value]
+  (when (and (string? value) (not (string/includes? value "@")) (not (uuid-string? value)))
+    (short-text value 64)))
+
+(defn- avatar-url [value]
+  (when (and (string? value) (<= (count value) 512) (string/starts-with? value "https://"))
+    (try
+      (let [url (js/URL. value)]
+        (when (and (contains? #{"logseq-user-public-metadata-bucket-prod.s3.amazonaws.com" "assets.logseq.com" "assets.logseq.io" "avatars.githubusercontent.com" "lh3.googleusercontent.com"} (.-hostname url))
+                   (every? string/blank? [(.-username url) (.-password url) (.-port url) (.-search url) (.-hash url)]))
+          (.-href url)))
+      (catch :default _ nil))))
+
+(defn- reaction-glyph [value]
+  (when (and (string? value) (re-matches #"[a-zA-Z0-9+_-]{1,80}" value))
+    (some-> (gobj/get (gobj/get emoji-data "emojis") value)
+            (gobj/get "skins")
+            (aget 0)
+            (gobj/get "native"))))
+
 (defn event-routes [db-before db-after tx-data sender]
   (when (uuid-string? sender)
     (->> tx-data
@@ -117,17 +153,23 @@
                                         (take 12)
                                         vec)]
                        (when (seq members)
-                         {:event (str (:block/uuid event))
-                          :kind (if (:logseq.property.reaction/target event) "reaction" "comment")
-                          :recipients members}))))))
+                         (let [reaction? (some? (:logseq.property.reaction/target event))
+                               profile (:logseq.property/created-by-ref event)]
+                           {:event (str (:block/uuid event))
+                            :kind (if reaction? "reaction" "comment")
+                            :recipients members
+                            :sender-name (display-name (:logseq.property.user/name profile))
+                            :avatar (avatar-url (:logseq.property.user/avatar profile))
+                            :reaction (when reaction? (reaction-glyph (:logseq.property.reaction/emoji-id event)))
+                            :comment-preview (when-not reaction? (short-text (:block/title event) 140))})))))))
          vec)))
 
 (defn <queue-events! [env graph-id sender events]
   (let [now (common/now-ms)
         ^js db (aget env "DB")
         insert (str "INSERT OR IGNORE INTO discussion_push_outbox "
-                    "(graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at, event_kind) "
-                    "SELECT ?, ?, ?, ?, ?, ?, ? WHERE "
+                    "(graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at, event_kind, sender_name, avatar_url, reaction_glyph, comment_preview) "
+                    "SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN (SELECT graph_e2ee FROM graphs WHERE graph_id = ?) = 0 THEN ? END WHERE "
                     "EXISTS (SELECT 1 FROM graphs WHERE graph_id = ? AND user_id = ? "
                     "UNION SELECT 1 FROM graph_members WHERE graph_id = ? AND user_id = ?) "
                     "AND EXISTS (SELECT 1 FROM graphs WHERE graph_id = ? AND user_id = ? "
@@ -135,9 +177,9 @@
                     "AND EXISTS (SELECT 1 FROM discussion_push_devices WHERE user_id = ? "
                     "AND (CASE ? WHEN 'comment' THEN comments ELSE reactions END) = 1) "
                     "AND (SELECT count(*) FROM discussion_push_outbox WHERE sender_id = ? AND created_at > ?) < 60")
-        writes (for [{:keys [event kind recipients]} events
+        writes (for [{:keys [event kind recipients sender-name avatar reaction comment-preview]} events
                      recipient recipients]
-                 (statement db insert graph-id event recipient sender now now kind
+                 (statement db insert graph-id event recipient sender now now kind sender-name avatar reaction graph-id comment-preview
                             graph-id sender graph-id sender graph-id recipient graph-id recipient
                             recipient kind sender (- now 60000)))]
     (when (and db (send-enabled? env) (uuid-string? graph-id) (seq events))

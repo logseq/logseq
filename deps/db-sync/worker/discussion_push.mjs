@@ -3,6 +3,20 @@ const retentionMs = 24 * 60 * 60 * 1000;
 const activityLifetimeMs = 60 * 60 * 1000;
 const title = "Logseq";
 const bodyLocalizationKey = "discussion_push_body";
+
+function apnsAlert(details) {
+  const { senderName, kind, commentPreview, reactionEmoji } = details;
+  const heading = senderName ? { title: senderName } : { title };
+  if (kind === "comment") {
+    return { ...heading, ...(commentPreview ? { body: commentPreview } : { "loc-key": "discussion_push_comment" }) };
+  }
+  if (kind === "reaction") {
+    return { ...heading, ...(reactionEmoji
+      ? { "loc-key": "discussion_push_reaction_emoji", "loc-args": [reactionEmoji] }
+      : { "loc-key": "discussion_push_reaction" }) };
+  }
+  return { ...heading, "loc-key": bodyLocalizationKey };
+}
 const providerTokens = new Map();
 
 function base64url(bytes) {
@@ -35,7 +49,7 @@ function providerToken(key, lifetimeMs, issue) {
   return promise;
 }
 
-async function apns(env, device, route, send) {
+async function apns(env, device, route, send, details) {
   if (!env.APNS_KEY_ID || !env.APNS_TEAM_ID || !env.APNS_PRIVATE_KEY || !env.APNS_TOPIC) {
     return "retry";
   }
@@ -54,7 +68,12 @@ async function apns(env, device, route, send) {
       "apns-expiration": String(Math.floor(Date.now() / 1000) + 3600),
       "content-type": "application/json",
     },
-    body: JSON.stringify({ aps: { alert: { title, "loc-key": bodyLocalizationKey }, sound: "default" }, ...route }),
+    body: JSON.stringify({
+      aps: { alert: apnsAlert(details), sound: "default", ...(details.senderName ? { "mutable-content": 1 } : {}) },
+      ...route,
+      ...(details.senderName ? { senderId: details.senderId, senderName: details.senderName } : {}),
+      ...(details.senderName && details.avatarURL ? { avatarURL: details.avatarURL } : {}),
+    }),
   });
   if (response.ok) return "sent";
   const error = await response.json().catch(() => ({}));
@@ -63,7 +82,7 @@ async function apns(env, device, route, send) {
   return "retry";
 }
 
-async function fcm(env, device, route, send) {
+async function fcm(env, device, route, send, details) {
   const project = env.FCM_PROJECT_ID;
   const email = env.FCM_CLIENT_EMAIL;
   if (!project || !email || !env.FCM_PRIVATE_KEY) return "retry";
@@ -92,11 +111,9 @@ async function fcm(env, device, route, send) {
     headers: { authorization: "Bearer " + token, "content-type": "application/json" },
     body: JSON.stringify({
       message: {
-        token: device.token, data: route,
-        android: {
-          priority: "HIGH", ttl: "3600s",
-          notification: { title, body_loc_key: bodyLocalizationKey, channel_id: "discussions", tag: route.eventId },
-        },
+        token: device.token,
+        data: Object.fromEntries(Object.entries({ ...route, ...details }).filter(([, value]) => typeof value === "string")),
+        android: { priority: "HIGH", ttl: "3600s" },
       },
     }),
   });
@@ -107,8 +124,8 @@ async function fcm(env, device, route, send) {
   return "retry";
 }
 
-export async function deliverDiscussionPush(env, device, route, send = fetch) {
-  return device.platform === "fcm" ? fcm(env, device, route, send) : apns(env, device, route, send);
+export async function deliverDiscussionPush(env, device, route, details, send = fetch) {
+  return device.platform === "fcm" ? fcm(env, device, route, send, details) : apns(env, device, route, send, details);
 }
 
 const matchesMember = `EXISTS (SELECT 1 FROM graphs WHERE graph_id = ? AND user_id = ?
@@ -117,8 +134,9 @@ const matchesMember = `EXISTS (SELECT 1 FROM graphs WHERE graph_id = ? AND user_
 export async function processDiscussionPush(env, now = Date.now(), deliver = deliverDiscussionPush) {
   if (env.DISCUSSION_PUSH_ENABLED !== "true") return;
   const db = env.DB;
-  const { results } = await db.prepare(`SELECT * FROM discussion_push_outbox
-    WHERE next_attempt_at <= ? AND attempts >= 0 ORDER BY next_attempt_at LIMIT 20`).bind(now).all();
+  const { results } = await db.prepare(`SELECT o.*, g.graph_e2ee FROM discussion_push_outbox o
+    JOIN graphs g ON g.graph_id = o.graph_id
+    WHERE o.next_attempt_at <= ? AND o.attempts >= 0 ORDER BY o.next_attempt_at LIMIT 20`).bind(now).all();
   for (const event of results) {
     const { graph_id: graph, event_id: id, recipient_id: recipient, sender_id: sender } = event;
     const eventKey = [graph, id, recipient];
@@ -126,7 +144,7 @@ export async function processDiscussionPush(env, now = Date.now(), deliver = del
       WHERE graph_id = ? AND event_id = ? AND recipient_id = ? AND next_attempt_at = ?`)
       .bind(now + leaseMs, ...eventKey, event.next_attempt_at).run();
     if (!result.meta.changes) continue;
-    const finish = () => db.prepare(`UPDATE discussion_push_outbox SET attempts = -1
+    const finish = () => db.prepare(`UPDATE discussion_push_outbox SET attempts = -1, comment_preview = NULL, sender_name = NULL, avatar_url = NULL, reaction_glyph = NULL
       WHERE graph_id = ? AND event_id = ? AND recipient_id = ?`).bind(...eventKey).run();
     if (now - event.created_at > activityLifetimeMs) {
       await finish();
@@ -141,9 +159,17 @@ export async function processDiscussionPush(env, now = Date.now(), deliver = del
         AND r.event_id = ? AND r.recipient_id = ? AND r.installation_id = d.installation_id)
       ORDER BY updated_at DESC LIMIT 10`)
       .bind(recipient, event.event_kind, graph, recipient, graph, recipient, graph, sender, graph, sender, ...eventKey).all();
+    const details = {
+      kind: event.event_kind,
+      senderId: sender,
+      senderName: event.sender_name,
+      avatarURL: event.avatar_url,
+      reactionEmoji: event.event_kind === "reaction" ? event.reaction_glyph : null,
+      commentPreview: event.event_kind === "comment" && event.graph_e2ee === 0 ? event.comment_preview : null,
+    };
     let retry = false;
     for (const device of devices) {
-      const status = await deliver(env, device, { graphId: graph, eventId: id }).catch(() => "retry");
+      const status = await deliver(env, device, { graphId: graph, eventId: id }, details).catch(() => "retry");
       if (status === "expired") {
         await db.prepare(`DELETE FROM discussion_push_devices WHERE installation_id = ? AND token = ? AND user_id = ?`)
           .bind(device.installation_id, device.token, recipient).run();
