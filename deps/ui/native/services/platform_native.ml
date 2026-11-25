@@ -379,7 +379,17 @@ let body_rm_class c =
 
 (* ---------- url / hash routing ---------- *)
 
-let hash_ref = ref ""
+let initial_hash () =
+  let rec find index =
+    if index + 1 >= Array.length Sys.argv then None
+    else if Sys.argv.(index) = "--initial-hash" then
+      let hash = Sys.argv.(index + 1) in
+      if String.starts_with ~prefix:"#/" hash then Some hash else None
+    else find (index + 1)
+  in
+  find 1
+
+let hash_ref = ref (Option.value (initial_hash ()) ~default:"")
 
 (* in-memory navigation history — the native app has no browser
    history, so back/forward is a pair of hash stacks. [set_location_hash]

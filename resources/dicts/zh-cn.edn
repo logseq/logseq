@@ -818,6 +818,7 @@
  :graph/node-count (fn [n] (str n " 个节点"))
  :graph/open-folder-action "打开图谱所在文件夹"
  :graph/open-in-another-tab-action "在另一个标签页中打开"
+:graph/open-in-new-window-action "在新窗口中打开"
  :graph/open-selected-node "打开 {1}"
  :graph/preparing "加载中"
  :graph/refresh-remote-graphs "刷新远程知识库"
