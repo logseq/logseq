@@ -651,3 +651,12 @@ range selection works when sequenced that way.
 - Harness note: clicks must land precisely on the 'Empty' placeholder
   text — clicking the row padding does not enter value editing in
   either app (symmetric).
+
+### Round 8: property configure popover — identical
+- Left-click on a property name opens the same Configure property
+  popover in both, item-for-item identical: Property name (value),
+  Property type (Text), Default value (Set value), Available choices,
+  Multiple values, Hide...
+- Right-click on the property area yields the same page context menu in
+  both (Add to Favorites/Delete page/Export page/Publish page/
+  Convert to Tag).
