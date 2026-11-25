@@ -375,3 +375,15 @@ Parity confirmed (structure):
 - Minor difference to verify: master keeps the settings modal open after the
   language switch (hot swap); in LUI the settings modal closed (possible full
   reload). Behavior parity of the modal retention unconfirmed.
+
+### Flashcards fixes (in progress)
+- FIXED: Show answers button alignment — now start-aligned like cljs
+  (verified in fix-flashcards.png).
+- PARTIAL: keyboard shortcut issue — diagnosis: keydown reaches document
+  bubble but is already defaultPrevented (dp:true) by the deck select
+  trigger (BUTTON.lui-select holds initial focus). Removed the
+  default_prevented guard in cards_state, but 's' still did not advance
+  in the re-test — root cause is deeper (investigate match_event/chord
+  state or listener registration next).
+- OPEN: 'Contents' crumb label vs page name; missing collapse arrow on
+  the question bullet.
