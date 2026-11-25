@@ -7,6 +7,7 @@
             [logseq.db-sync.worker.auth :as auth]
             [logseq.db-sync.worker.asset-link :as asset-link]
             [logseq.db-sync.worker.handler.assets :as assets-handler]
+            [logseq.db-sync.worker.handler.discussion-push :as discussion-push]
             [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
             [logseq.db-sync.worker.handler.personal-access-token :as pat-handler]
@@ -31,7 +32,12 @@
       (.fetch stub request)
       (do
         (.set (.-searchParams new-url) "graph-id" graph-id)
-        (let [rewritten (platform/request (.toString new-url) request)]
+        (let [rewritten (platform/request (.toString new-url) request)
+              headers (.-headers rewritten)
+              actor (some-> request auth/token-from-request auth/unsafe-jwt-claims (aget "sub"))]
+          (.delete headers "x-logseq-sync-account")
+          (when (string? actor)
+            (.set headers "x-logseq-sync-account" actor))
           (.fetch stub rewritten))))))
 
 (defn- scopes [claims]
@@ -203,6 +209,9 @@
 
          (= path "/openapi.json")
          (http/json-response nil (semantic-routes/openapi-document (or (aget env "COGNITO_ISSUER") "")))
+
+         (= path discussion-push/device-path)
+         (discussion-push/<register request env)
 
          (pat-handler/route? path)
          (pat-handler/handle request env)

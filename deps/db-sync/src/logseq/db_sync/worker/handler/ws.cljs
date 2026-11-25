@@ -52,6 +52,8 @@
                           (cond-> {:graph-id (aget self "graph-id")}
                             (:client-revision message)
                             (assoc :client-revision (:client-revision message))
+                            (:user-id user)
+                            (assoc :account (:user-id user))
                             (:username user)
                             (assoc :username (:username user)))))
             (ws/send! ws {:type "tx/reject" :reason "invalid tx"})))
