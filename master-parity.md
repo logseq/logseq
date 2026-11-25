@@ -592,3 +592,13 @@ Residual notes (not user-visible defects):
   autocomplete all work; slash menu content identical to master
   (BASIC/FORMAT sections). Earlier "typing dead" and "'/' opens page
   menu" readings were test artifacts of stale state / wrong signals.
+
+### Round 7 pdf status
+- Slash `/upload` item present in both apps (LUI label `/upload` —
+  query-filtered text; master `Upload an asset`). filechooser automation
+  is flaky in both symmetrically (harness issue, not app gap).
+- Round 6 evidence stands: viewer open/render/toolbar identical;
+  highlight create + auto-copy-ref verified end-to-end in LUI; the
+  highlight ctx menu is a line-by-line port (code-verified). Remaining
+  manual-only checks: existing-highlight menu ops (copy-ref/copy-text/
+  delete), area-select.
