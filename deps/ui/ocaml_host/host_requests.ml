@@ -936,7 +936,21 @@ let save_download ~binary parsed =
   match Lui_shell.save_dialog ~default_name:name () with
   | None -> ()
   | Some path -> (
-      let temporary = Printf.sprintf "%s.tmp-%d" path (Unix.getpid ()) in
+      Random.self_init ();
+      let rec create_temporary attempt =
+        let temporary =
+          Filename.concat (Filename.dirname path)
+            (Printf.sprintf ".logseq-download-%d-%x.tmp" (Unix.getpid ())
+               (Random.bits ()))
+        in
+        try (temporary, Unix.openfile temporary
+               [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_EXCL ] 0o600)
+        with Unix.Unix_error (Unix.EEXIST, _, _) ->
+          if attempt >= 20 then
+            invalid_arg "unable to allocate export staging file"
+          else create_temporary (attempt + 1)
+      in
+      let temporary, descriptor = create_temporary 0 in
       try
         let data =
           if binary then
