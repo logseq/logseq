@@ -1425,15 +1425,34 @@ let handle (envelope : string) =
             reply "clipboard-read" (`Assoc [ ("text", `String text) ])
           | "open-url" ->
             let url =
-              match J.from_string payload with
-              | `Assoc _ as j -> (
+              (* Host.open_url sends the URL itself; SDK/plugin bridges may
+                 already have encoded it as JSON. *)
+              match (try Some (J.from_string payload) with Yojson.Json_error _ -> None) with
+              | Some (`Assoc _ as j) -> (
                   match jstr_opt "url" j with
                   | Some u -> u
                   | None -> payload)
-              | `String u -> u
+              | Some (`String u) -> u
               | _ -> payload
             in
-            ignore (Lui_shell.open_url url)
+            if String.starts_with ~prefix:"#/" url then begin
+              (* The browser/Electron host opens graph deep links in a new
+                 window or tab. Native keeps windows process-isolated and
+                 lets the shared per-graph db-worker daemon arbitrate data
+                 access, so spawn another host process with the deep-link
+                 hash instead of handing the fragment to the system
+                 browser. *)
+              let executable = Sys.executable_name in
+              let command =
+                Printf.sprintf "%s --initial-hash %s >/dev/null 2>&1 &"
+                  (Filename.quote executable) (Filename.quote url)
+              in
+              match Sys.command command with
+              | 0 -> ()
+              | code ->
+                filelog "open native window failed: exit=%d hash=%s" code url
+            end
+            else ignore (Lui_shell.open_url url)
           | "ui-state" ->
             let data = J.from_string payload |> J.Util.member "data" in
             (match jstr_opt "theme" data with

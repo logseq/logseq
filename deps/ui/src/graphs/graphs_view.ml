@@ -44,6 +44,11 @@ let open_in_another_tab repo =
        ^ "#/?graph-id=" ^ uuid)
   | None -> ()
 
+let open_in_another_tab_label () =
+  T.t
+    (if Ui_services.env_native_drag () then "graph/open-in-new-window-action"
+     else "graph/open-in-another-tab-action")
+
 let selector ~remove (ms : Model.t Signal.signal) : t = fun ctx parent ->
   let query = Signal.state ctx.Lui_ui.ui_scheduler "" in
   let chosen = Signal.state ctx.Lui_ui.ui_scheduler 0 in
@@ -138,7 +143,7 @@ let graph_row repo : t =
     ; column ~key:("grc-" ^ repo) ~style_class:"controls"
         [ Menu_item.dots_menu ~key:("grm-" ^ repo) ~compact:true
             ([ ( "open-in-another-tab-menu-item"
-               , (T.t "graph/open-in-another-tab-action")
+               , (open_in_another_tab_label ())
                , false
                , fun () -> open_in_another_tab repo )
              ; ( "delete-local-graph-menu-item"
@@ -184,7 +189,7 @@ let remote_row (name, uuid, e2ee, role) : t =
        graph also has a local root *)
     (if local then
        [ ( "open-in-another-tab-menu-item"
-         , (T.t "graph/open-in-another-tab-action")
+         , (open_in_another_tab_label ())
          , false
          , fun () -> open_in_another_tab local_repo )
        ; ( "delete-local-graph-menu-item"
