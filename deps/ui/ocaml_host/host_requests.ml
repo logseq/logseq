@@ -884,6 +884,40 @@ let file_json ?relative path =
      | Some relative -> [ ("relative-path", `String relative) ]
      | None -> [])
 
+let root_relative root path fallback =
+  if String.length path >= String.length root
+     && String.sub path 0 (String.length root) = root
+  then
+    let rest =
+      String.sub path (String.length root)
+        (String.length path - String.length root)
+    in
+    if String.length rest > 0 && rest.[0] = '/' then
+      String.sub rest 1 (String.length rest - 1)
+    else rest
+  else fallback
+
+(* Keep host enumeration aligned with Importer.ignored_import_path so an
+   unreadable .git/node_modules or an unreadable file that the importer
+   would discard cannot reject an otherwise valid graph selection. *)
+let ignored_import_file path =
+  if String.starts_with ~prefix:"assets/" path then false
+  else
+    let rec ignored_parts = function
+      | [] -> false
+      | part :: rest ->
+          String.starts_with ~prefix:"." part || part = "node_modules"
+          || (part = "logseq"
+              && match rest with
+                 | ("bak" | "version-files" | "graphs-txid.edn") :: _ -> true
+                 | _ -> false)
+          || ignored_parts rest
+    in
+    ignored_parts (String.split_on_char '/' path)
+    || let extension = String.lowercase_ascii (Filename.extension path) in
+       extension <> ""
+       && not (List.mem extension [ ".md"; ".markdown"; ".org"; ".js"; ".edn"; ".css" ])
+
 let rec files_below root dir errors acc =
   let entries =
     try Sys.readdir dir
@@ -897,24 +931,16 @@ let rec files_below root dir errors acc =
       if name = "." || name = ".." then acc
       else
         let path = Filename.concat dir name in
+        let relative = root_relative root path name in
+        if ignored_import_file relative then acc
+        else
         try
           match (Unix.lstat path).Unix.st_kind with
           | Unix.S_DIR -> files_below root path errors acc
           | Unix.S_REG ->
-            let relative =
-              if String.length path >= String.length root
-                 && String.sub path 0 (String.length root) = root
-              then
-                let rest =
-                  String.sub path (String.length root)
-                    (String.length path - String.length root)
-                in
-                if String.length rest > 0 && rest.[0] = '/' then
-                  String.sub rest 1 (String.length rest - 1)
-                else rest
-              else name
-            in
-            `Assoc (file_json ~relative path) :: acc
+            let relative = root_relative root path name in
+            if ignored_import_file relative then acc
+            else `Assoc (file_json ~relative path) :: acc
           | _ -> acc
         with Unix.Unix_error _ ->
           errors := path :: !errors;
@@ -958,11 +984,16 @@ let save_download ~binary parsed =
               (Option.value (jstr_opt "data-b64" parsed) ~default:"")
           else Option.value (jstr_opt "text" parsed) ~default:""
         in
-        Out_channel.with_open_bin temporary (fun channel ->
-          output_string channel data);
-        Unix.rename temporary path
+        let channel = Unix.out_channel_of_descr descriptor in
+        (try
+           output_string channel data;
+           close_out channel;
+           Unix.rename temporary path
+         with error ->
+           close_out_noerr channel;
+           (try Unix.unlink temporary with Unix.Unix_error _ -> ());
+           raise error)
       with error ->
-        (try Unix.unlink temporary with Unix.Unix_error _ -> ());
         log "download save failed: %s" (Printexc.to_string error))
 
 let dom_op (e : env) (op : string) (body : string) =
