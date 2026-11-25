@@ -467,3 +467,13 @@ generation, empty-search-results footer hint-row difference (minor).
   noting LUI may lack an isTrusted/closest-dropzone guard master has.
   Image asset rendering itself needs comparison once master has the
   same asset (pending manual/heavier test).
+
+### Round 6b: export file generation — PARITY CONFIRMED
+- Export dialog identical both sides: format tabs (文本/OPML/HTML/EDN),
+  preview, indent-style select, same option checkboxes (evidence
+  r6-exportdlg-cmp.png).
+- Code review: both implement copy-to-clipboard (with png ClipboardItem
+  path) AND save-to-file as logseq_<timestamp>.<ext> — same mechanism,
+  same naming (cljs export.cljs:462-473 vs export_view.ml copy_save_row).
+- Format tabs only switch the preview in both (no direct download) —
+  consistent by design.
