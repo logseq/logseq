@@ -687,3 +687,17 @@ Both open the same calendar popup: month grid, Repeat panel
 (Every/Day/Set Repeating type with Advance-from-completion/scheduled/
 skip-to-future submenu), Next date, natural-language input
 ("e.g. Next week").
+
+### Round 8: URL/Number property — identical
+- Both apps focus the inline value editor immediately after type
+  selection (no Empty placeholder for these types — symmetric). LUI uses
+  INPUT.lui-text-field vs master TEXTAREA.uniline-block — expected
+  rich-text-editor architecture difference, same interaction semantics.
+
+## Round 8 summary — coverage complete
+All demanded surfaces verified dual-track: pdf full lifecycle (upload,
+viewer, selection menu, highlight create + auto-copy-ref, existing-hl
+menu ops), outliner full operation chain, properties (picker, 8 types,
+creation, checkbox toggle, text/date/url editing, configure popover,
+hide-by-default flow). One real bug found+fixed (upload slash-trigger
+remnant). Detailed evidence in ~/parity/evidence/.
