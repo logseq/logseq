@@ -49,7 +49,9 @@
                           ws
                           txs
                           t-before
-                          (cond-> {:graph-id (aget self "graph-id")}
+                          (cond-> {:graph-id (or (aget self "graph-id")
+                                                 (when (some? (.-deserializeAttachment ws))
+                                                   (presence/attachment->graph-id (.deserializeAttachment ws))))}
                             (:client-revision message)
                             (assoc :client-revision (:client-revision message))
                             (:user-id user)

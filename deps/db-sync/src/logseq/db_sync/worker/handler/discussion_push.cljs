@@ -80,9 +80,8 @@
 (defn event-routes [db-before db-after tx-data sender]
   (when (uuid-string? sender)
     (->> tx-data
-         (keep (fn [^js datom]
-                 (when (and (.-added datom) (= :block/uuid (.-a datom)))
-                   (.-e datom))))
+         (keep (fn [{:keys [added a e]}]
+                 (when (and added (= :block/uuid a)) e)))
          distinct
          (take 32)
          (keep (fn [eid]
