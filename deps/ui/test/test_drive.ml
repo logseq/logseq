@@ -274,6 +274,7 @@ let test_leading_toolbar_ownership () =
     | None -> false
   in
   let initially_open = sidebar_open () in
+  let control_ids = Hashtbl.create 2 in
   Fun.protect ~finally:(fun () ->
     Runtime.signal_set st.viewport_w viewport;
     if sidebar_open () <> initially_open then
@@ -296,6 +297,11 @@ let test_leading_toolbar_ownership () =
             let found = controls id in
             eqi (id ^ " has one mounted interactive occurrence") 1 (List.length found);
             List.iter (fun control ->
+              (match Hashtbl.find_opt control_ids id with
+               | Some previous ->
+                 eqi (id ^ " keeps the same mounted node") previous control.M.id;
+                 Hashtbl.replace control_ids id control.M.id
+               | None -> Hashtbl.replace control_ids id control.M.id);
               check (id ^ " belongs to the fixed leading overlay")
                 (inside_fixed_leading_overlay control);
               check (id ^ " is absent from the header and sidebar toolbars")
