@@ -11,6 +11,7 @@ import {
   assetImageResource,
   assetImageResult,
 } from "./asset_image.mjs";
+import { processDiscussionPush } from "./discussion_push.mjs";
 import { apiDocsResponse } from "./api_docs.mjs";
 import { logseqIconResponse, setLogseqMcpServerInfoIcons } from "./logseq_icon.mjs";
 import { ensureMcpAcceptHeader } from "./mcp_request.mjs";
@@ -190,6 +191,9 @@ async function handleMcp(request, env, ctx) {
 }
 
 export default {
+  scheduled(_controller, env, ctx) {
+    ctx.waitUntil(processDiscussionPush(env));
+  },
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
     const challengeResponse = openAiAppsChallengeResponse(request, env);
