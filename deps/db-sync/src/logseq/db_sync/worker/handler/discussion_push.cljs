@@ -91,12 +91,11 @@
                  (not (class? entity :logseq.class/Comments)))
         (let [targets (or (seq (:logseq.property.comments/blocks thread)) [(:block/parent thread)])
               previous-thread (d/entity db-before (:db/id thread))
-              event-time (:block/created-at entity)
-              prior-comments (remove (fn [comment]
-                                       (let [comment-time (:block/created-at comment)]
-                                         (or (class? comment :logseq.class/Comments)
-                                             (and (number? event-time) (number? comment-time)
-                                                  (> comment-time event-time)))))
+              position (juxt :block/order #(str (:block/uuid %)))
+              event-position (position entity)
+              prior-comments (filter (fn [earlier]
+                                       (and (not (class? earlier :logseq.class/Comments))
+                                            (neg? (compare (position earlier) event-position))))
                                      (:block/_parent previous-thread))]
           (map author (filter live? (concat targets prior-comments))))))))
 

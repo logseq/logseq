@@ -174,10 +174,15 @@ pnpm test:node-adapter
 
 Mobile devices register with `PUT /mobile/push-device` and unregister with
 `DELETE /mobile/push-device`. The iOS URLSession and Android OkHttp clients call
-the endpoint directly with Cognito authentication. Apply
-D1 migration 0008 before enabling the feature. The worker generates generic
-alerts after an authenticated graph member writes a comment or reaction. The
-push payload includes a graph UUID and event UUID for navigation.
+the endpoint directly with Cognito authentication. Apply D1 migrations 0008
+and 0009 before enabling the preference-aware Worker. For an existing deployment,
+set `DISCUSSION_PUSH_ENABLED=false` before applying 0009. Deploy the new Worker
+before re-enabling push. Migration 0009 adds device columns and requires the
+new Worker's registration query. The Worker generates generic alerts after an
+authenticated graph member writes a comment or reaction. Comment alerts
+include authors of earlier, already committed comments in the same thread,
+using the committed block order after sync. The push payload includes a graph
+UUID and event UUID for navigation.
 
 Set the following provider credentials in the worker environment.
 
