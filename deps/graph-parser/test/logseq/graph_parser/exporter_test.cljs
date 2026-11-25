@@ -1595,7 +1595,27 @@ abc
     ;; 2nd link
     ["[[FIRST UUID]] and ![dino!](assets/subdir/partydino.gif)"
      "assets/subdir/partydino.gif"]
-    "[[FIRST UUID]] and [[UUID]]"))
+    "[[FIRST UUID]] and [[UUID]]"
+
+    ;; Org link-to-asset
+    ["Image test\n[[../assets/image.png]]\n"
+     "assets/image.png"]
+    "Image test\n[[UUID]]\n"
+
+    ;; Org labeled link-to-asset
+    ["[[../assets/image.png][image]]"
+     "assets/image.png"]
+    "[[UUID]]"
+
+    ;; Org link-to-asset with Logseq resize metadata
+    ["[[../assets/image.png]]{:height 100, :width 100}"
+     "assets/image.png"]
+    "[[UUID]]"
+
+    ;; Org labeled link-to-asset with resize metadata
+    ["[[../assets/image.png][image]]{:height 50, :width 80}"
+     "assets/image.png"]
+    "[[UUID]]"))
 
 (deftest-async import-missing-local-pdf-asset-link-is-ignored-quietly
   (let [graph-dir (write-temp-file-graph
@@ -1665,6 +1685,48 @@ abc
       (is (= (str "body link " (page-ref/->page-ref (:block/uuid body-asset)))
              (:block/title body-block))
           "Body asset links are unchanged")
+      (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
+      (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
+          "Imported graph validates"))))
+
+(deftest-async import-org-asset-links-are-converted-to-asset-refs
+  (let [graph-dir (write-temp-file-graph
+                   {"logseq/config.edn" "{:meta/version 1 :preferred-format :org}"
+                    "pages/org-image.org"
+                    (str "#+title: Org Image\n\n"
+                         "* Image test\n"
+                         "[[../assets/image.png]]\n"
+                         "* Image labeled\n"
+                         "[[../assets/image.png][image]]\n"
+                         "* Image with meta\n"
+                         "[[../assets/image.png]]{:height 100, :width 100}\n")
+                    "assets/image.png" "png"})]
+    (p/let [conn (db-test/create-conn)
+            assets (atom [])
+            {:keys [import-state]} (import-file-graph-to-db graph-dir conn {:assets assets})
+            asset (db-test/find-block-by-content @conn "image")
+            image-test (db-test/find-block-by-content @conn #"^Image test")
+            image-labeled (db-test/find-block-by-content @conn #"^Image labeled")
+            image-meta (db-test/find-block-by-content @conn #"^Image with meta")
+            asset-ref (page-ref/->page-ref (:block/uuid asset))]
+      (is (some? asset) "Org-linked PNG becomes an Asset")
+      (is (= {:block/tags [:logseq.class/Asset]
+              :logseq.property.asset/type "png"}
+             (select-keys (db-test/readable-properties asset)
+                          [:block/tags :logseq.property.asset/type]))
+          "Imported org asset has the correct type")
+      (is (= (str "Image test\n" asset-ref "\n")
+             (:block/title image-test))
+          "Org [[../assets/image.png]] is rewritten to an Asset page-ref")
+      (is (= (str "Image labeled\n" asset-ref "\n")
+             (:block/title image-labeled))
+          "Org [[../assets/image.png][image]] is rewritten to an Asset page-ref")
+      (is (= (str "Image with meta\n" asset-ref "\n")
+             (:block/title image-meta))
+          "Org asset link with resize metadata is rewritten to an Asset page-ref")
+      (is (not (some #(string/includes? (str (:block/title %)) "assets/image.png")
+                     [image-test image-labeled image-meta]))
+          "Org titles no longer contain the file-graph asset path")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))

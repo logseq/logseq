@@ -1588,13 +1588,26 @@
         (when (pdf-file? path)
           path))))
 
+(defn- replace-asset-link-in-title
+  "Replace file-graph asset links in a block title with a DB asset page-ref.
+   Handles markdown image/link syntax and org link-to-asset syntax."
+  [title asset-name asset-uuid]
+  (let [escaped (common-util/escape-regex-chars asset-name)
+        uuid-ref (page-ref/->page-ref asset-uuid)
+        markdown-re (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
+                                     escaped
+                                     "\\)(\\{[^}]*\\})?"))
+        ;; Org [[path]], [[path][label]], and either form with trailing {:height ...}
+        org-re (re-pattern (str "\\[\\[[^\\]]*"
+                                escaped
+                                "\\](?:\\[[^\\]]*\\])?\\](\\{[^}]*\\})?"))]
+    (-> title
+        (string/replace markdown-re uuid-ref)
+        (string/replace org-re uuid-ref))))
+
 (defn- update-asset-links-in-block-title [block-title asset-name-to-uuids ignored-assets]
   (reduce (fn [acc [asset-name asset-uuid]]
-            (let [new-title (string/replace acc
-                                            (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
-                                                             (common-util/escape-regex-chars asset-name)
-                                                             "\\)(\\{[^}]*\\})?"))
-                                            (page-ref/->page-ref asset-uuid))]
+            (let [new-title (replace-asset-link-in-title acc asset-name asset-uuid)]
               (when (string/includes? new-title asset-name)
                 (swap! ignored-assets conj
                        {:reason "Some asset links were not updated to block references"
