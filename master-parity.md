@@ -660,3 +660,13 @@ range selection works when sequenced that way.
 - Right-click on the property area yields the same page context menu in
   both (Add to Favorites/Delete page/Export page/Publish page/
   Convert to Tag).
+
+### Round 8: block context menu — verified identical (false alarm corrected)
+- Block ctx menu contents item-for-item identical once open (Open in
+  sidebar/Add comment/Add reaction/Set icon/Copy block ref/Copy-Export/
+  Cut/Delete/Make a Flashcard/Toggle number list/Expand/Collapse all).
+- Trigger semantics identical in both: right-click only opens the menu
+  when it lands inside an EXISTING selection (or on the bullet per cljs
+  observer); right-clicking an unselected block opens nothing in BOTH
+  apps — the earlier "master opens on bare right-click" reading was
+  stale-selection test pollution.
