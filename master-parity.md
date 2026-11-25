@@ -783,3 +783,9 @@ master neither cleared the composer nor showed the comment (the click
 may have missed the real submit control or master requires mod+enter).
 Both sides need a deeper follow-up: inspect the comments-area DOM after
 submission and compare against cljs's comment rendering contract.
+
+### Round 10c: comments submit flow — RESOLVED + new gap found
+Both apps submit comments correctly (the earlier "lost submission" was
+a test artifact — the click hit the wrong button). Count increments,
+comment renders in both. NEW GAP: master renders a timestamp line
+("1:45 AM") above each comment; LUI renders no timestamp.
