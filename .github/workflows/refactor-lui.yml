@@ -23,10 +23,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve APT package revisions
+        id: apt-packages
+        run: |
+          packages="pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev"
+          printf '%s\n' $packages > "$RUNNER_TEMP/apt-packages"
+          sudo apt-get update
+          fingerprint=$(sudo apt-get --print-uris -y install $packages | sort | shasum -a 256 | awk '{print $1}')
+          test -n "$fingerprint"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+
+      - name: Restore APT package cache
+        id: apt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-package-cache
+          key: apt-${{ runner.os }}-${{ runner.arch }}-rlui-v2-${{ steps.apt-packages.outputs.fingerprint }}
+          restore-keys: |
+            apt-${{ runner.os }}-${{ runner.arch }}-rlui-v2-
+
       - name: System deps
         run: |
-          sudo apt-get update
-          sudo apt-get install -y pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev
+          cache_dir="$HOME/apt-package-cache"
+          apt_archives="$RUNNER_TEMP/apt-archives"
+          mkdir -p "$cache_dir" "$apt_archives/partial"
+          find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -exec cp -t "$apt_archives" {} +
+          xargs sudo apt-get -o Dir::Cache::Archives="$apt_archives" install -y < "$RUNNER_TEMP/apt-packages"
+          sudo apt-get -o Dir::Cache::Archives="$apt_archives" autoclean
+          find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -delete
+          sudo find "$apt_archives" -maxdepth 1 -type f -name '*.deb' -exec cp -t "$cache_dir" {} +
+          sudo find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -exec chown "$USER" {} +
+
+      - name: Save APT package cache
+        uses: actions/cache/save@v4
+        if: steps.apt-cache.outputs.cache-hit != 'true'
+        with:
+          path: ~/apt-package-cache
+          key: ${{ steps.apt-cache.outputs.cache-primary-key }}
 
       - uses: pnpm/action-setup@v4
         with:
@@ -46,7 +79,6 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
-          dune-cache: true
 
       - name: Checkout lui at pinned revision
         id: lui
@@ -58,10 +90,65 @@ jobs:
           git -C "$RUNNER_TEMP/lui" checkout "$lui_ref"
           test "$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" = "$lui_ref"
           echo "commit=$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sdl-script-sha=$(shasum -a 256 "$RUNNER_TEMP/lui/tooling/install_sdl3.py" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
 
+      - name: Restore pinned SDL3 cache
+        id: sdl3-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/sdl3
+          key: sdl3-${{ github.job }}-${{ runner.os }}-${{ runner.arch }}-${{ steps.lui.outputs.sdl-script-sha }}
+
+      - name: Configure SDL3 environment
+        run: |
+          echo "SDL3_LIBRARY=${{ runner.temp }}/sdl3/lib/libSDL3.so.0" >> "$GITHUB_ENV"
+          echo "PKG_CONFIG_PATH=${{ runner.temp }}/sdl3/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=${{ runner.temp }}/sdl3/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
+
       - name: Install pinned SDL3
-        run: python3 "$LUI_SOURCE/tooling/install_sdl3.py" "$RUNNER_TEMP/sdl3" --github-env
+        if: steps.sdl3-cache.outputs.cache-hit != 'true'
+        run: python3 "$LUI_SOURCE/tooling/install_sdl3.py" "$RUNNER_TEMP/sdl3"
+
+      - name: Verify pinned SDL3
+        run: test -f "$RUNNER_TEMP/sdl3/lib/libSDL3.so.0"
+
+      - name: Save pinned SDL3 cache
+        uses: actions/cache/save@v4
+        if: steps.sdl3-cache.outputs.cache-hit != 'true'
+        with:
+          path: ${{ runner.temp }}/sdl3
+          key: ${{ steps.sdl3-cache.outputs.cache-primary-key }}
+
+      - name: Resolve floating opam pin revisions
+        id: opam-pins
+        run: |
+          pin_revisions="$RUNNER_TEMP/opam-pin-revisions"
+          : > "$pin_revisions"
+          grep -hEo 'git\+https://github\.com/[^"[:space:]]+#[^"[:space:]]+' \
+            deps/db-worker/scripts/install-opam-deps.sh \
+            deps/ui/scripts/install-opam-deps.sh | sort -u | while IFS= read -r pin; do
+            repo_ref="${pin#git+https://github.com/}"
+            repo="${repo_ref%%#*}"
+            ref="${repo_ref##*#}"
+            if [[ ! "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              continue
+            fi
+            if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "$repo $ref $ref" >> "$pin_revisions"
+              continue
+            fi
+            sha=$(git ls-remote "https://github.com/$repo" "refs/heads/$ref" | awk 'NR == 1 {print $1}')
+            if [ -z "$sha" ]; then
+              sha=$(git ls-remote "https://github.com/$repo" "refs/tags/$ref" | awk 'NR == 1 {print $1}')
+            fi
+            test -n "$sha"
+            echo "$repo $ref $sha" >> "$pin_revisions"
+          done
+          sort -o "$pin_revisions" "$pin_revisions"
+          cat "$pin_revisions"
+          echo "fingerprint=$(shasum -a 256 "$pin_revisions" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "OPAM_PIN_LOCK=$pin_revisions" >> "$GITHUB_ENV"
 
       - name: Restore opam switch cache
         id: opam-cache
@@ -70,7 +157,7 @@ jobs:
           path: |
             ~/.opam
             _opam
-          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
+          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ steps.opam-pins.outputs.fingerprint }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
           restore-keys: |
             ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-
 
@@ -80,11 +167,16 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
       - name: opam deps (db-worker + ui)
+        if: steps.opam-cache.outputs.cache-hit != 'true'
         run: |
           (cd deps/db-worker && sh scripts/install-opam-deps.sh)
           (cd deps/ui && sh scripts/install-opam-deps.sh)
           opam install -y uri
           opam list --pinned
+
+      - name: Prune opam cache artifacts
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        run: opam clean --all-switches --download-cache --logs --repo-cache --untracked --unused-repositories
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -102,6 +194,18 @@ jobs:
           pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
           pnpm --dir libs install --ignore-workspace --frozen-lockfile
 
+      - name: Restore incremental build cache
+        id: build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            deps/db-worker/_build
+            deps/ui/_build
+          key: ${{ runner.os }}-${{ runner.arch }}-rlui-build-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ steps.opam-pins.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-rlui-build-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ steps.opam-pins.outputs.fingerprint }}-
+            ${{ runner.os }}-${{ runner.arch }}-rlui-build-${{ env.OCAML_VERSION }}-
+
       - name: Build deps/db-worker
         working-directory: deps/db-worker
         run: opam exec -- dune build
@@ -115,6 +219,23 @@ jobs:
       - name: Build deps/ui
         working-directory: deps/ui
         run: opam exec -- dune build
+
+      - name: QuickJS SDK contract
+        run: |
+          (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
+          sh deps/ui/scripts/check-quickjs-sdk.sh
+
+      - name: Prune non-incremental native artifacts
+        run: rm -rf deps/ui/_build/native-experimental
+
+      - name: Save incremental build cache
+        uses: actions/cache/save@v4
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            deps/db-worker/_build
+            deps/ui/_build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
       - name: UI tests (test_main.js)
         working-directory: deps/ui
@@ -131,11 +252,6 @@ jobs:
 
       - name: db-worker bundle
         run: pnpm db-worker:build
-
-      - name: QuickJS SDK contract
-        run: |
-          (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
-          sh deps/ui/scripts/check-quickjs-sdk.sh
 
       - name: Web bundle (vite)
         run: pnpm ui:build
@@ -178,7 +294,6 @@ jobs:
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: ${{ env.OCAML_VERSION }}
-          dune-cache: true
 
       - name: Checkout lui at pinned revision
         id: lui
@@ -190,7 +305,38 @@ jobs:
           git -C "$RUNNER_TEMP/lui" checkout "$lui_ref"
           test "$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" = "$lui_ref"
           echo "commit=$(git -C "$RUNNER_TEMP/lui" rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "sdl-script-sha=$(shasum -a 256 "$RUNNER_TEMP/lui/tooling/install_sdl3.py" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
           echo "LUI_SOURCE=$RUNNER_TEMP/lui" >> "$GITHUB_ENV"
+
+      - name: Resolve floating opam pin revisions
+        id: opam-pins
+        run: |
+          pin_revisions="$RUNNER_TEMP/opam-pin-revisions"
+          : > "$pin_revisions"
+          grep -hEo 'git\+https://github\.com/[^"[:space:]]+#[^"[:space:]]+' \
+            deps/db-worker/scripts/install-opam-deps.sh \
+            deps/ui/scripts/install-opam-deps.sh | sort -u | while IFS= read -r pin; do
+            repo_ref="${pin#git+https://github.com/}"
+            repo="${repo_ref%%#*}"
+            ref="${repo_ref##*#}"
+            if [[ ! "$ref" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+              continue
+            fi
+            if [[ "$ref" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "$repo $ref $ref" >> "$pin_revisions"
+              continue
+            fi
+            sha=$(git ls-remote "https://github.com/$repo" "refs/heads/$ref" | awk 'NR == 1 {print $1}')
+            if [ -z "$sha" ]; then
+              sha=$(git ls-remote "https://github.com/$repo" "refs/tags/$ref" | awk 'NR == 1 {print $1}')
+            fi
+            test -n "$sha"
+            echo "$repo $ref $sha" >> "$pin_revisions"
+          done
+          sort -o "$pin_revisions" "$pin_revisions"
+          cat "$pin_revisions"
+          echo "fingerprint=$(shasum -a 256 "$pin_revisions" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          echo "OPAM_PIN_LOCK=$pin_revisions" >> "$GITHUB_ENV"
 
       - name: Restore opam switch cache
         id: opam-cache
@@ -199,7 +345,7 @@ jobs:
           path: |
             ~/.opam
             _opam
-          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
+          key: ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ steps.opam-pins.outputs.fingerprint }}-${{ hashFiles('deps/db-worker/scripts/install-opam-deps.sh', 'deps/db-worker/dune-project', 'deps/ui/scripts/install-opam-deps.sh', 'deps/ui/dune-project') }}
           restore-keys: |
             ${{ runner.os }}-opam-rlui-${{ env.OCAML_VERSION }}-
 
@@ -209,11 +355,16 @@ jobs:
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: true
 
       - name: opam deps (db-worker + ui)
+        if: steps.opam-cache.outputs.cache-hit != 'true'
         run: |
           (cd deps/db-worker && sh scripts/install-opam-deps.sh)
           (cd deps/ui && sh scripts/install-opam-deps.sh)
           opam install -y uri
           opam list --pinned
+
+      - name: Prune opam cache artifacts
+        if: steps.opam-cache.outputs.cache-hit != 'true'
+        run: opam clean --all-switches --download-cache --logs --repo-cache --untracked --unused-repositories
 
       - name: Save opam switch cache
         uses: actions/cache/save@v4
@@ -229,6 +380,18 @@ jobs:
           pnpm --dir deps/db-worker install --ignore-workspace --frozen-lockfile
           pnpm --dir deps/ui install --ignore-workspace --frozen-lockfile
           pnpm --dir libs install --ignore-workspace --frozen-lockfile
+
+      - name: Restore incremental build cache
+        id: build-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            deps/db-worker/_build
+            deps/ui/_build
+          key: ${{ runner.os }}-${{ runner.arch }}-rlui-build-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ steps.opam-pins.outputs.fingerprint }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-rlui-build-${{ env.OCAML_VERSION }}-${{ steps.lui.outputs.commit }}-${{ steps.opam-pins.outputs.fingerprint }}-
+            ${{ runner.os }}-${{ runner.arch }}-rlui-build-${{ env.OCAML_VERSION }}-
 
       - name: QuickJS SDK contract
         run: |
@@ -250,3 +413,16 @@ jobs:
           name: logseq-native-experimental-macos-arm64
           path: deps/ui/_build/native-experimental/LogseqNative-macos-arm64.zip
           if-no-files-found: error
+
+      - name: Prune non-incremental native artifacts
+        if: ${{ always() }}
+        run: rm -rf deps/ui/_build/native-experimental
+
+      - name: Save incremental build cache
+        uses: actions/cache/save@v4
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            deps/db-worker/_build
+            deps/ui/_build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}

@@ -16,6 +16,7 @@
 ; (outside the project) so emoji-mart upgrades can't leave a stale copy.
 (rule
  (target emoji_mart_data.ml)
+ (deps (universe))
  (action
   (run
    sh
