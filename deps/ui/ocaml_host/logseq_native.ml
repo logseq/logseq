@@ -1996,7 +1996,7 @@ let () =
   in
   (* ---- boot the embedded app ---- *)
   Lui_shell.set_app_name app_name;
-  ignore (Lui_shell.set_window_title app_name);
+  ignore (Lui_shell.set_window_title "Logseq");
   (* The selected platform and generic host profile drive the app's
      shortcuts, app-icons push and host-gated views. *)
   let init_patches = Domain.join init_d in

@@ -874,6 +874,75 @@ let flush_pending_focus () =
 
 (* ---------- dom-op dispatch ---------- *)
 
+let file_json ?relative path =
+  let stat = Unix.stat path in
+  [ ("path", `String path)
+  ; ("name", `String (Filename.basename path))
+  ; ("size", `Float (float_of_int stat.Unix.st_size))
+  ; ("last-modified", `Float (stat.Unix.st_mtime *. 1000.)) ]
+  @ (match relative with
+     | Some relative -> [ ("relative-path", `String relative) ]
+     | None -> [])
+
+let rec files_below root dir acc =
+  let entries =
+    try Sys.readdir dir with Sys_error _ -> [||]
+  in
+  Array.sort String.compare entries;
+  Array.fold_left
+    (fun acc name ->
+      if name = "." || name = ".." then acc
+      else
+        let path = Filename.concat dir name in
+        try
+          match (Unix.lstat path).Unix.st_kind with
+          | Unix.S_DIR -> files_below root path acc
+          | Unix.S_REG ->
+            let relative =
+              if String.length path >= String.length root
+                 && String.sub path 0 (String.length root) = root
+              then
+                let rest =
+                  String.sub path (String.length root)
+                    (String.length path - String.length root)
+                in
+                if String.length rest > 0 && rest.[0] = '/' then
+                  String.sub rest 1 (String.length rest - 1)
+                else rest
+              else name
+            in
+            `Assoc (file_json ~relative path) :: acc
+          | _ -> acc
+        with Unix.Unix_error _ -> acc)
+    acc entries
+
+let accept_filters accept =
+  accept
+  |> String.split_on_char ','
+  |> List.filter_map (fun part ->
+       let part = String.trim part in
+       if part = "" || String.contains part '/' then None
+       else if part.[0] = '.' then
+         Some (String.sub part 1 (String.length part - 1))
+       else Some part)
+
+let save_download ~binary parsed =
+  let name = Option.value (jstr_opt "name" parsed) ~default:"download" in
+  match Lui_shell.save_dialog ~default_name:name () with
+  | None -> ()
+  | Some path -> (
+      try
+        let data =
+          if binary then
+            Transit.base64_decode
+              (Option.value (jstr_opt "data-b64" parsed) ~default:"")
+          else Option.value (jstr_opt "text" parsed) ~default:""
+        in
+        Out_channel.with_open_bin path (fun channel ->
+          output_string channel data)
+      with error ->
+        log "download save failed: %s" (Printexc.to_string error))
+
 let dom_op (e : env) (op : string) (body : string) =
   let parsed =
     match J.from_string body with
@@ -1070,6 +1139,51 @@ let dom_op (e : env) (op : string) (body : string) =
                  , false )))
        end
      | _ -> ())
+  | "set-document-title" ->
+    Option.iter
+      (fun title -> ignore (Lui_shell.set_window_title title))
+      (jstr_opt "title" parsed)
+  | "download-text" -> save_download ~binary:false parsed
+  | "download-binary" -> save_download ~binary:true parsed
+  | "open-file-picker" -> (
+      let request = jint_opt "request" parsed in
+      let directory =
+        match jbool_opt "directory" parsed with
+        | Some value -> value
+        | None -> false
+      in
+      let multiple =
+        match jbool_opt "multiple" parsed with
+        | Some value -> value
+        | None -> false
+      in
+      let filters =
+        match jstr_opt "accept" parsed with
+        | Some accept -> accept_filters accept
+        | None -> []
+      in
+      let paths =
+        Lui_shell.open_dialog ~dirs:directory ~files:(not directory)
+          ~multi:multiple ~filters ()
+      in
+      match request with
+      | None -> ()
+      | Some request ->
+        let files =
+          match paths with
+          | None -> `List []
+          | Some paths ->
+            `List
+              (List.concat_map
+                 (fun path ->
+                   if directory then List.rev (files_below path path [])
+                   else
+                     try [ `Assoc (file_json path) ]
+                     with Unix.Unix_error _ -> [])
+                 paths)
+        in
+        reply "files-picked"
+          (`Assoc [ ("request", `Int request); ("files", files) ]))
   | "click" | "katex-pending" | "hljs-pending"
   | "imperative-attach" | "imperative-detach" -> ()
   | "caret-rect" | "selection-rects" | "offset-at" | "line-ranges" | "scroll-height" ->

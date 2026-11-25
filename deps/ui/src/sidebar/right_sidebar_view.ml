@@ -312,7 +312,12 @@ let item_drag st (it : Sidebar_state.item) : t =
             (if it.Sidebar_state.collapsed then "rotating-arrow collapsed"
              else "rotating-arrow not-collapsed")
           [ Lui_elements.icon ~key:("arw-" ^ key)
-              ~name:(`app "rotating-arrow") ~point_size:16
+              ~name:(`app
+                (if Ui_services.env_css_transform_icons ()
+                   || it.Sidebar_state.collapsed
+                 then "rotating-arrow"
+                 else "rotating-arrow-down"))
+              ~point_size:16
               ~transition:"transform 100ms ease-in" [] ]) ])) context parent
 
 let item_header st idx (it : Sidebar_state.item) =
