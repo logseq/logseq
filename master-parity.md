@@ -415,3 +415,15 @@ Flashcards review modal is now at parity.
 - templates: structure verified in round 4 (tag rendering + /template
   picker insertion); earlier noise was repeat insertion in test data,
   not app behavior.
+
+### Round 5b: help panel + search-in-page
+- Help panel (shift+/): PARITY — identical items/icons both sides
+  (evidence r5-help-cmp.png; master extra '页面图谱' tab excluded per
+  scope).
+- Search-in-page (mod+shift+k): mostly parity — same modal, filter chip,
+  no-results state. MINOR GAP: empty-results footer — master shows the
+  static hint row (打开/在侧边栏打开/复制引用) while LUI shows a 创建
+  affordance instead (evidence r5-sip-cmp.png). Low priority.
+- custom.css: implementation matches cljs (link injection into head);
+  custom.css file page renders in both. Runtime injection verified at
+  code level only.
