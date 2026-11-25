@@ -709,3 +709,13 @@ remnant). Detailed evidence in ~/parity/evidence/.
   picker content matches. Reaction-pick completion automation is flaky
   (click targets collide with sidebar emoji) — manual verification
   recommended for the badge render.
+
+### Round 9: keybinding table audit (code-level)
+Compared cljs shortcut config.cljs bindings vs LUI keymap_data.ml
+defaults for all 126 bound command ids: NO binding differences. The
+only variance is cosmetic ([] vs null for unbound dev commands) plus
+cljs-only entries that are electron-specific (find-in-page,
+window/close), file-graph legacy (graph/db-save), dev internals
+(shell/run), or unbound-in-cljs anyway (copy-page-url, plugin install).
+Table-level parity confirmed; runtime verification of individual chords
+proceeds below.
