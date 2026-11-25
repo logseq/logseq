@@ -538,3 +538,29 @@ generation, empty-search-results footer hint-row difference (minor).
   copy-hl-ref! flow.
 - pdf_hls.ml ctx menu is a faithful port (same
   extensions__pdf-hls-ctx-menu class/data-action structure).
+
+### Round 6g: settings modal after language switch — PARITY
+- Both keep the settings dialog open after switching language.
+- This was the last recorded open verification item.
+
+## FINAL SWEEP STATUS (2025-11-25)
+All recorded findings are now closed. Summary of the session's fixes:
+1. icon-picker tab bar position (f63d589857)
+2. menu-close black squares (e9a6419276)
+3. flashcards alignment + keybindings (912d38628c, 67d3791204)
+4. comments composer cancel button (this round)
+
+Verified at parity with evidence: popups, dropdowns, menus, dialogs,
+icon/property interactions, date picker, flashcards, templates, cmdk,
+search (global + in-page), settings, keymap, appearance, i18n,
+sidebars, help panel, document/wide modes, comments/reactions,
+asset paste+upload+rendering, export dialog + file generation,
+pdf viewer + highlight flow (create/copy-ref), drag reorder, undo.
+
+Residual notes (not user-visible defects):
+- LUI accepts synthesized untrusted drop events; master ignores them.
+- pdf area-select and existing-highlight menu verified as faithful
+  ports in code; area-select interaction itself untested end to end.
+- master headless harness cannot enter block edit mode via synthetic
+  clicks — a test-infra limitation that forced several master-side
+  verifications to be code-level instead.
