@@ -291,7 +291,7 @@ let http_get ~(port : int) ~(path : string) : (int * string) option =
   let addr =
     Unix.ADDR_INET (Unix.inet_addr_of_string "127.0.0.1", port)
   in
-  let fd = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  let fd = Unix.socket ~cloexec:true Unix.PF_INET Unix.SOCK_STREAM 0 in
   try
     Unix.setsockopt_float fd Unix.SO_RCVTIMEO 0.5;
     Unix.setsockopt_float fd Unix.SO_SNDTIMEO 0.5;
@@ -614,6 +614,7 @@ let http_post ~(host : string) ~(port : int) ~(path : string)
     ~(body : string) : (int * string) =
   let addr = Unix.ADDR_INET (Unix.inet_addr_of_string host, port) in
   let ic, oc = Unix.open_connection addr in
+  Unix.set_close_on_exec (Unix.descr_of_in_channel ic);
   let req =
     Printf.sprintf
       "POST %s HTTP/1.1\r\nHost: %s:%d\r\nContent-Type: \
@@ -681,7 +682,7 @@ let http_post ~(host : string) ~(port : int) ~(path : string)
 let http_get_stream ~(host : string) ~(port : int) ~(path : string)
     ~(on_line : string -> unit) ~(alive : unit -> bool) : unit =
   let addr = Unix.ADDR_INET (Unix.inet_addr_of_string host, port) in
-  let fd = Unix.socket Unix.PF_INET Unix.SOCK_STREAM 0 in
+  let fd = Unix.socket ~cloexec:true Unix.PF_INET Unix.SOCK_STREAM 0 in
   (try
      Unix.connect fd addr;
      let oc = Unix.out_channel_of_descr fd in
