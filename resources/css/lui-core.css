@@ -2218,7 +2218,6 @@ a.tag {
   /* icon kind paints via --lui-icon-image mask (no base .lui-icon rule
      in this sheet) */
   .lui-icon {
-    background-color: currentColor;
     mask-image: var(--lui-icon-image);
     mask-size: contain;
     mask-repeat: no-repeat;
@@ -2227,6 +2226,10 @@ a.tag {
     -webkit-mask-size: contain;
     -webkit-mask-repeat: no-repeat;
     -webkit-mask-position: center;
+  }
+
+  .lui-icon[data-name] {
+    background-color: currentColor;
   }
 }
 

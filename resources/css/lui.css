@@ -1178,6 +1178,13 @@ body {
     pointer-events: none;
   }
 
+  /* Closing surfaces release their icon props before the exit animation
+     finishes; without this the unmasked icons paint as solid squares
+     through the fade. */
+  :is(.lui-dropdown-menu, .lui-context-menu, .lui-popover)[data-ending-style] .lui-icon {
+    display: none !important;
+  }
+
   .lui-dropdown-menu[data-starting-style],
   .lui-dropdown-menu[data-ending-style] {
     opacity: 0;
@@ -1523,7 +1530,7 @@ body {
   }
 
   .lui-icon {
-    @apply size-[18px] shrink-0 bg-current;
+    @apply size-[18px] shrink-0;
     mask-image: var(--lui-icon-image);
     mask-position: center;
     mask-repeat: no-repeat;
@@ -1534,6 +1541,7 @@ body {
     -webkit-mask-size: contain;
   }
 
+  .lui-icon[data-name] { @apply bg-current; }
   .lui-icon[data-size="sm"] { @apply size-4; }
   .lui-icon[data-size="lg"] { @apply size-6; }
   .lui-icon[data-size="icon"] { @apply size-[18px]; }
