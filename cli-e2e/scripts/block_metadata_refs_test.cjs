@@ -49,17 +49,24 @@ test('CLI metadata writes preserve named links, backlinks and recurring journal 
   async function checkpoint(label, block, required, absent = []) {
     const actual = await titleRefs(block);
     const sourceUUID = await uuid(block);
+    const rows = (await command('query', '--query',
+      '[:find ?title ?target :in $ [?title ...] :where [?target :block/title ?title]]',
+      '--inputs', JSON.stringify([[...required, ...absent]]))).result;
+    const targets = new Map(rows);
+    assert.equal(targets.size, rows.length, `${label}: ambiguous target titles`);
+    const tags = new Set(await query(`[:find [?tag ...] :where [${block} :block/tags ?tag]]`));
     report.stages.push({ label, refs: actual });
     for (const name of required) {
       equal(label + ' refs include ' + name, actual.includes(name), true);
-      const target = await id(name);
-      const membership = await query(`[:find ?tag . :where [${block} :block/tags ?tag] [(= ?tag ${target})]]`);
+      const target = targets.get(name);
+      assert.ok(target, `${label}: missing target ${name}`);
+      const membership = tags.has(target);
       equal(label + (membership ? ' tag membership excluded from linked references on ' : ' UI backlinks include source on ') + name,
         (await backlinkUUIDs(target)).includes(sourceUUID), !membership);
     }
     for (const name of absent) {
       equal(label + ' refs exclude ' + name, actual.includes(name), false);
-      const target = await id(name);
+      const target = targets.get(name);
       if (target) equal(label + ' UI backlinks exclude source on ' + name,
         (await backlinkUUIDs(target)).includes(sourceUUID), false);
     }
