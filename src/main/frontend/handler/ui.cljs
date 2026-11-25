@@ -324,8 +324,11 @@
 
 (defn toggle-cards!
   []
-  (if (shui-dialog/get-dialog :srs)
+  (cond
+    (shui-dialog/get-dialog :srs)
     (shui/dialog-close!)
+
+    (state/enable-flashcards?)
     (state/pub-event! [:modal/show-cards])))
 
 (defn open-new-window-or-tab!
