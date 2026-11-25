@@ -279,3 +279,27 @@ Baseline (verified identical): first-load Demo chrome, left sidebar, all-pages t
 | settings-general | settings | General tab: version, What's new, Language, theme, Font | identical | "..." → Settings | — | parity |
 | prop-suggest | properties | "/prop" suggest = ADVANCED / Add property | identical | /prop in editor | — | parity |
 | recycle-import | graph menu | Recycle navigates; Import opens native dialog (not capturable) | same behavior | "..." menu | — | parity |
+
+## Menu close black-square artifact (fixed in e9a6419276)
+
+Reproduced: when a dropdown/popover closes, icons (Settings/Plugins/etc. in the
+page dots menu) rendered as solid black squares through the 100ms exit fade.
+Master closes the same menu with content intact (effectively instant).
+
+Root cause: at close start the view layer releases icon props (inline svg
+removed, inline `--lui-icon-image` cleared, `data-name` removed) while the
+surface DOM is kept for the exit animation. Between the stripping and the DOM
+removal the unmasked icons paint as solid squares (mutation log evidence: all
+icon mutations land in one batch at close start; live DOM end-state has icons
+collapsed/display:none yet the composited fade still shows the squares).
+
+Fix (resources/css/lui.css, lui-core.css):
+1. `.lui-icon` base rule no longer paints `background-color: currentColor`;
+   the paint is gated on `.lui-icon[data-name]` so a stripped icon can never
+   fill as a solid square.
+2. Icons inside `[data-ending-style]` surfaces are hidden outright so the exit
+   fade never renders partially released icons.
+
+Follow-up candidate (platform level, ~/repos/lui): defer icon/content release
+until the surface is actually removed so the fade renders intact content;
+master parity would also accept removing the close fade entirely.
