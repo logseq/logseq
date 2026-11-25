@@ -220,6 +220,18 @@ jobs:
         working-directory: deps/ui
         run: opam exec -- dune build
 
+      - name: Prune non-incremental native artifacts
+        run: rm -rf deps/ui/_build/native-experimental
+
+      - name: Save incremental build cache
+        uses: actions/cache/save@v4
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            deps/db-worker/_build
+            deps/ui/_build
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
       - name: UI tests (test_main.js)
         working-directory: deps/ui
         run: node _build/default/test/ui_test/test/test_main.js
@@ -246,19 +258,6 @@ jobs:
 
       - name: CSS build
         run: pnpm gulp:build
-
-      - name: Prune non-incremental native artifacts
-        if: ${{ always() }}
-        run: rm -rf deps/ui/_build/native-experimental
-
-      - name: Save incremental build cache
-        uses: actions/cache/save@v4
-        if: steps.build-cache.outputs.cache-hit != 'true'
-        with:
-          path: |
-            deps/db-worker/_build
-            deps/ui/_build
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   macos:
     name: Experimental native host (macOS)
