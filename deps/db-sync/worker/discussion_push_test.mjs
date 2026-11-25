@@ -11,6 +11,7 @@ function applyMigration(sqlite, name) {
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
   applyMigration(sqlite, "0001_init.sql");
+  applyMigration(sqlite, "0002_add_graph_e2ee.sql");
   applyMigration(sqlite, "0008_add_discussion_push.sql");
   sqlite.exec(`INSERT INTO graphs (graph_id, user_id) VALUES ('graph', 'sender');
     INSERT INTO graph_members (graph_id, user_id, role) VALUES ('graph', 'receiver', 'member');
@@ -19,6 +20,7 @@ function fixture() {
     INSERT INTO discussion_push_outbox (graph_id, event_id, recipient_id, sender_id, created_at, next_attempt_at)
       VALUES ('graph','event','receiver','sender',1000,1000);`);
   applyMigration(sqlite, "0009_discussion_push_preferences.sql");
+  applyMigration(sqlite, "0010_discussion_push_previews.sql");
   const DB = {
     prepare(sql) {
       return { bind(...args) {
@@ -76,19 +78,22 @@ test("the delivery worker applies each device's latest comment and reaction sett
   assert.deepEqual(sends.sort(), [["device1", "reaction"], ["device2", "event"]]);
 });
 
-test("APNs alerts contain opaque routing IDs and generic text", async () => {
+test("APNs alerts show the author and actual reaction without changing the route", async () => {
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
   const encoded = new Uint8Array(await crypto.subtle.exportKey("pkcs8", pair.privateKey));
   const env = { APNS_KEY_ID: "test", APNS_TEAM_ID: "example", APNS_TOPIC: "com.logseq.logseq",
     APNS_PRIVATE_KEY: btoa(String.fromCharCode(...encoded)) };
   const outcome = await deliverDiscussionPush(env, { platform: "apns-sandbox", token: "test-token" },
-    { graphId: "opaque-graph", eventId: "opaque-event" }, async (url, request) => {
+    { graphId: "opaque-graph", eventId: "opaque-event" },
+    { kind: "reaction", senderId: "sender", senderName: "Ada", reactionEmoji: "❤️" }, async (url, request) => {
       assert.equal(url, "https://api.sandbox.push.apple.com/3/device/test-token");
       assert.equal(request.headers["apns-push-type"], "alert");
       assert.equal(request.headers["apns-collapse-id"], "opaque-event");
       assert.equal(request.headers.authorization.split(".").length, 3);
       assert.deepEqual(JSON.parse(request.body), {
-        aps: { alert: { title: "Logseq", "loc-key": "discussion_push_body" }, sound: "default" },
+        aps: { alert: { title: "Ada", "loc-key": "discussion_push_reaction_emoji", "loc-args": ["❤️"] },
+          sound: "default", "mutable-content": 1 },
+        senderId: "sender", senderName: "Ada",
         graphId: "opaque-graph", eventId: "opaque-event",
       });
       return new Response(null, { status: 200 });
@@ -106,7 +111,7 @@ test("deleting a user unlinks push devices and delivery history without a cron r
   }
 });
 
-test("FCM requests use the Android bundle localization key", async () => {
+test("FCM delivers presentation data to the Android notification service", async () => {
   const pair = await crypto.subtle.generateKey({
     name: "RSASSA-PKCS1-v1_5", modulusLength: 2048, publicExponent: new Uint8Array([1, 0, 1]), hash: "SHA-256",
   }, true, ["sign", "verify"]);
@@ -115,7 +120,8 @@ test("FCM requests use the Android bundle localization key", async () => {
     FCM_PRIVATE_KEY: btoa(String.fromCharCode(...encoded)) };
   const route = { graphId: "graph", eventId: "event" };
   const posted = [];
-  const status = await deliverDiscussionPush(env, { platform: "fcm", token: "device" }, route,
+  const details = { kind: "comment", senderId: "sender", senderName: "Ada", commentPreview: "Thanks!" };
+  const status = await deliverDiscussionPush(env, { platform: "fcm", token: "device" }, route, details,
     async (url, request) => {
       if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "token" });
       posted.push(JSON.parse(request.body));
@@ -123,6 +129,22 @@ test("FCM requests use the Android bundle localization key", async () => {
       return Response.json({ name: "message" });
     });
   assert.equal(status, "sent");
-  assert.deepEqual(posted[0].message.data, route);
-  assert.equal(posted[0].message.android.notification.body_loc_key, "discussion_push_body");
+  assert.deepEqual(posted[0].message.data, { ...route, ...details });
+  assert.deepEqual(posted[0].message.android, { priority: "HIGH", ttl: "3600s" });
+});
+
+test("only explicitly unencrypted graphs can send a comment preview", async () => {
+  for (const encrypted of [0, 1, null]) {
+    const { sqlite, env } = fixture();
+    sqlite.prepare("UPDATE graphs SET graph_e2ee = ?").run(encrypted);
+    sqlite.exec("UPDATE discussion_push_outbox SET event_kind = 'comment', comment_preview = 'private text'");
+    const details = [];
+    await processDiscussionPush(env, 1000, async (_env, _device, _route, presentation) => {
+      details.push(presentation);
+      return "sent";
+    });
+    assert.equal(details.length, 3);
+    assert.ok(details.every(value => value.commentPreview === (encrypted === 0 ? "private text" : null)));
+    assert.equal(sqlite.prepare("SELECT comment_preview FROM discussion_push_outbox").get().comment_preview, null);
+  }
 });

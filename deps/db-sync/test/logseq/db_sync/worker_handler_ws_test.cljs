@@ -251,7 +251,7 @@
                :logseq.property.reaction/target {:db/valueType :db.type/ref}})]
     (d/transact! conn [{:db/id -1 :block/uuid owner}
                        {:db/id -2 :block/uuid participant}
-                       {:db/id -3 :block/uuid author}
+                       {:db/id -3 :block/uuid author :logseq.property.user/name "Ada"}
                        {:db/id -4 :block/uuid target :logseq.property/created-by-ref -1 :block/parent -9}
                        {:db/id -5 :db/ident :logseq.class/Comments}
                        {:db/id -6 :block/uuid (random-uuid) :block/tags [-5] :logseq.property.comments/blocks [-4]}
@@ -265,9 +265,10 @@
     (let [thread (-> (d/entity @conn [:block/uuid target]) :logseq.property.comments/_blocks first :db/id)
           {:keys [db-before db-after tx-data]}
           (d/transact! conn [{:block/uuid comment-id :block/parent thread
-                              :block/order "a1" :block/created-at 200
+                              :block/order "a1" :block/created-at 200 :block/title "Thanks!\nLooks good."
                               :logseq.property/created-by-ref [:block/uuid author]}
-                             {:block/uuid reaction :logseq.property.reaction/target [:block/uuid target]
+                             {:block/uuid reaction :logseq.property.reaction/emoji-id "heart"
+                              :logseq.property.reaction/target [:block/uuid target]
                               :logseq.property/created-by-ref [:block/uuid author]}])
           routes (discussion-push/event-routes db-before db-after tx-data (str author))]
       (is (= {(str comment-id) #{(str owner) (str participant)}
@@ -275,6 +276,8 @@
              (into {} (map (juxt :event (comp set :recipients))) routes)))
       (is (= {(str comment-id) "comment" (str reaction) "reaction"}
              (into {} (map (juxt :event :kind)) routes)))
+      (is (= {"comment" ["Ada" "Thanks! Looks good." nil] "reaction" ["Ada" nil "❤️"]}
+             (into {} (map (juxt :kind (juxt :sender-name :comment-preview :reaction))) routes)))
       (is (empty? (discussion-push/event-routes db-before db-after tx-data (str owner)))))))
 
 (deftest discussion-push-refresh-and-enqueue-respect-installation-preferences
@@ -305,7 +308,8 @@
           queue! (fn [id kind]
                    (discussion-push/<queue-events! env graph sender
                                                   [{:event id :kind kind :recipients [recipient]}]))]
-      (doseq [migration ["0001_init.sql" "0008_add_discussion_push.sql" "0009_discussion_push_preferences.sql"]]
+      (doseq [migration ["0001_init.sql" "0002_add_graph_e2ee.sql" "0008_add_discussion_push.sql"
+                         "0009_discussion_push_preferences.sql" "0010_discussion_push_previews.sql"]]
         (.exec sqlite (fs/readFileSync (str "worker/migrations/" migration) "utf8")))
       (.run (.prepare sqlite "INSERT INTO graphs (graph_id, user_id) VALUES (?, ?)") graph sender)
       (.run (.prepare sqlite "INSERT INTO graph_members (graph_id, user_id, role) VALUES (?, ?, 'member')") graph recipient)
