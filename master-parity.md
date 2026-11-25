@@ -602,3 +602,18 @@ Residual notes (not user-visible defects):
   highlight ctx menu is a line-by-line port (code-verified). Remaining
   manual-only checks: existing-highlight menu ops (copy-ref/copy-text/
   delete), area-select.
+
+### Round 8: asset upload slash-trigger remnant — FIXED
+- BUG (real parity gap): picking "Upload an asset" in the slash menu and
+  choosing a file left the literal `/upload` trigger text as a permanent
+  block in LUI; master wipes the trigger (cljs insert-command! restore).
+  Fixed by routing upload through the shared clear_range path
+  (editor_commands.ml) and dropping the empty-range special case in
+  popups_state.ml. Verified end-to-end: fresh pdf upload now yields only
+  the asset block, no remnant — same structure as master.
+- Upload dedup parity confirmed: both apps reject duplicate checksums
+  with the same "Asset exists already, title: X, node reference: [[uuid]]"
+  toast.
+- Harness notes: slash autocomplete filtering needs REAL keypresses
+  (insertText is flaky); clicking the menu item directly is more
+  reliable than Enter for the filechooser path.
