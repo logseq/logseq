@@ -918,6 +918,19 @@ let ignored_import_file path =
        extension <> ""
        && not (List.mem extension [ ".md"; ".markdown"; ".org"; ".js"; ".edn"; ".css" ])
 
+let ignored_import_dir path =
+  let rec ignored_parts = function
+    | [] -> false
+    | part :: rest ->
+        String.starts_with ~prefix:"." part || part = "node_modules"
+        || (part = "logseq"
+            && match rest with
+               | ("bak" | "version-files" | "graphs-txid.edn") :: _ -> true
+               | _ -> false)
+        || ignored_parts rest
+  in
+  ignored_parts (String.split_on_char '/' path)
+
 let rec files_below root dir errors acc =
   let entries =
     try Sys.readdir dir
