@@ -357,3 +357,13 @@ Parity confirmed (screenshots essentially identical):
   mode/brackets toggles, accent color palette, hint text.
 - Settings General page (t s): same sidebar tabs and content.
 - Keymap settings page (g s): same search/tabs/commands/bindings.
+
+### Templates (round 4, evidence r4tpl-*.png)
+Parity confirmed (structure):
+- Tagging a block with `#Template` renders the `#Template` tag pill and the
+  "Apply template to tags:" property affordance identically on both sides.
+- Slash `/template` autocomplete shows the same ADVANCED > Template item.
+- After invoking it, LUI shows the template picker listing 'my template' and
+  insertion produces the template child lines in the page, same as master.
+  (Note: test pages accumulated repeat insertions across runs; a pristine
+  single-pass re-verification is still desirable for fine details.)
