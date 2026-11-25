@@ -51,7 +51,7 @@
 
       (testing "a pending new block prevents the old block from reclaiming focus"
         (reset! edit-calls [])
-        (reset! pending-new-block {:typed-text "new block text"})
+        (reset! pending-new-block {:keys ["new block text"]})
         (#'events/refocus-upsert-type-block! source-block converted-block true)
         (is (empty? @edit-calls)))
 

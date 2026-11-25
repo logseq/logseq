@@ -315,12 +315,18 @@
     (escape-editing)
     (p/resolved [nil nil nil])))
 
+(def ^:private *pending-new-block-seed-keys
+  "Keys to copy onto the next `start-pending-new-block!`. Replay uses this
+  so a replayed Enter keeps the keys that follow it."
+  (atom []))
+
 (defn- start-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block
-                    {:id (random-uuid)
-                     :typed-text ""
-                     :source-uuid (:block/uuid (state/get-edit-block))}))
+  (let [seed @*pending-new-block-seed-keys]
+    (reset! *pending-new-block-seed-keys [])
+    (state/set-state! :editor/pending-new-block
+                      {:id (random-uuid)
+                       :keys (vec seed)})))
 
 (defn- pending-new-block
   []
@@ -330,101 +336,126 @@
   []
   (some? (pending-new-block)))
 
-(defn- append-pending-new-block-text!
-  [text]
+(defn- pending-letter-key?
+  [k]
+  (and (string? k) (= 1 (count k))))
+
+(defn- queue-pending-new-block-key!
+  [k]
   (when (pending-new-block?)
     (state/update-state! :editor/pending-new-block
-                         #(update % :typed-text str text))))
+                         #(update % :keys (fnil conj []) k))))
 
-(defn- queue-pending-new-block-tab!
-  [indent?]
-  (when (pending-new-block?)
-    (state/update-state! :editor/pending-new-block
-                         #(assoc % :tab-indent? indent?))))
-
-(defn- pending-new-block-delete-on-backspace?
-  "Backspace deletes the pending block only once the editor has moved off
-  the source block and the caret is at 0. Until then .-target is still the
-  source textarea (an empty source always reports caret 0), including
-  while a queued Tab indent is still in flight."
-  [pending current-edit-uuid e]
-  (boolean
-   (and (:source-uuid pending)
-        current-edit-uuid
-        (not= current-edit-uuid (:source-uuid pending))
-        (zero? (util/get-selection-start (.-target e))))))
-
-(defn- apply-pending-new-block-backspace
-  "Before landing, Backspace trims the last buffered character and is a no-op
-  when there is nothing to trim (it does not delete the in-flight block).
-  After landing, caret 0 still deletes the new block."
-  [pending delete-block?]
-  (cond
-    delete-block?
-    (assoc pending :delete? true)
-
-    (seq (:typed-text pending))
-    (assoc pending :typed-text (subs (:typed-text pending) 0 (dec (count (:typed-text pending)))))
-
-    :else
-    pending))
-
-(defn- backspace-pending-new-block!
-  [delete-block?]
-  (when (pending-new-block?)
-    (state/update-state!
-     :editor/pending-new-block
-     #(apply-pending-new-block-backspace % delete-block?))))
+(defn- take-pending-new-block-keys!
+  []
+  (let [queued (vec (:keys (pending-new-block) []))]
+    (when (pending-new-block?)
+      (state/update-state! :editor/pending-new-block
+                           #(assoc % :keys [])))
+    queued))
 
 (defn- clear-pending-new-block!
   []
+  (reset! *pending-new-block-seed-keys [])
   (state/set-state! :editor/pending-new-block nil))
 
 (declare get-new-container-id)
-(declare delete-block-aux!)
-(declare expand-collapsed-indent-target!)
+(declare get-state)
+(declare keydown-new-block)
+(declare insert)
+(declare indent-outdent)
+(declare keydown-backspace-handler)
+(declare replay-pending-new-block-keys!)
+
+(defn- split-pending-letter-prefix
+  [queued]
+  (split-with pending-letter-key? queued))
+
+(defn- <wait-for-editor-input
+  []
+  (p/loop [n 30]
+    (cond
+      (state/get-input) (state/get-input)
+      (zero? n) nil
+      :else (p/do! (p/delay 16) (p/recur (dec n))))))
+
+(defn- replay-backspace!
+  []
+  (when-let [input (state/get-input)]
+    (keydown-backspace-handler
+     false
+     #js {:target input
+          :preventDefault (fn [])
+          :stopPropagation (fn [])})))
+
+(defn- replay-pending-key!
+  [k]
+  (case k
+    :enter (when-let [st (get-state)]
+             (keydown-new-block st))
+    :backspace (replay-backspace!)
+    :tab (indent-outdent true)
+    :shift-tab (indent-outdent false)
+    (when (pending-letter-key? k)
+      (insert k))))
+
+(defn- replay-pending-keys!
+  [queued]
+  (p/loop [ks (vec queued)]
+    (if (empty? ks)
+      nil
+      (p/do!
+       (<wait-for-editor-input)
+       (let [k (first ks)
+             remaining (subvec ks 1)]
+         (if (= :enter k)
+           (if-let [st (get-state)]
+             (do
+               (reset! *pending-new-block-seed-keys remaining)
+               (let [ret (keydown-new-block st)]
+                 (if (pending-new-block?)
+                   nil
+                   (p/do!
+                    ret
+                    (if (pending-new-block?)
+                      nil
+                      (let [leftover @*pending-new-block-seed-keys]
+                        (reset! *pending-new-block-seed-keys [])
+                        (p/recur leftover)))))))
+             nil)
+           (p/do!
+            (replay-pending-key! k)
+            (p/recur remaining))))))))
+
+(defn- replay-pending-new-block-keys!
+  []
+  (let [queued (take-pending-new-block-keys!)]
+    (clear-pending-new-block!)
+    (replay-pending-keys! queued)))
 
 (defn- inserted-block-edit-fn
-  [source-block block container-id]
+  [_source-block block container-id]
   (fn [rows]
     (let [block' (or (some #(when (= (:block/uuid block) (:block/uuid %)) %) rows)
                      block)
-          source-block' (or (some #(when (= (:block/uuid source-block) (:block/uuid %)) %) rows)
-                            source-block)
-          {:keys [typed-text tab-indent? delete?]} (pending-new-block)]
-      (if delete?
-        (let [source-title (:block/title source-block')
-              block-title (:block/title block')]
-          (p/do!
-           (edit-block! source-block' (+ (count source-title) (count typed-text))
-                        {:container-id container-id
-                         :custom-content (str source-title typed-text block-title)
-                         :tail-len (count block-title)
-                         :save-code-editor? false
-                         :save-current-block? false
-                         :skip-load? true})
-           (delete-block-aux! block')
-           (let [latest-text (:typed-text (pending-new-block))]
-             (edit-block! source-block' (+ (count source-title) (count latest-text))
-                          {:container-id container-id
-                           :custom-content (str source-title latest-text block-title)
-                           :tail-len (count block-title)
-                           :save-code-editor? false
-                           :save-current-block? false
-                           :skip-load? true}))
-           (clear-pending-new-block!)))
-        (p/do!
-         (when (true? tab-indent?)
-           (expand-collapsed-indent-target! block'))
-         (when (some? tab-indent?)
-           (block-handler/indent-outdent-blocks! [block'] tab-indent? nil))
-         (edit-block! block' (count typed-text)
-                      (cond-> {:container-id container-id
-                               :save-code-editor? false
-                               :save-current-block? false
-                               :skip-load? true}
-                        (seq typed-text)
-                        (assoc :custom-content (str typed-text (:block/title block')))))
+          queued (:keys (pending-new-block) [])
+          [letters remaining] (split-pending-letter-prefix queued)
+          text (apply str letters)
+          opts (cond-> {:container-id container-id
+                        :save-code-editor? false
+                        :save-current-block? false
+                        :skip-load? true}
+                 (seq text)
+                 (assoc :custom-content (str text (:block/title block'))))]
+      (when (pending-new-block?)
+        (state/update-state! :editor/pending-new-block
+                             #(assoc % :keys (vec remaining))))
+      (p/do!
+       (edit-block! block' (count text) opts)
+       (if (seq (:keys (pending-new-block)))
+         (p/do!
+          (<wait-for-editor-input)
+          (replay-pending-new-block-keys!))
          (clear-pending-new-block!))))))
 
 (defn insert-new-block-before-block-aux!
@@ -646,8 +677,9 @@
                          _ (first insert-result)]
                    (clear-when-saved!))
                  (p/catch (fn [error]
-                            (clear-pending-new-block!)
-                            (throw error)))))))))))
+                            (p/do!
+                             (replay-pending-new-block-keys!)
+                             (throw error))))))))))))
 
 (defn api-insert-new-block!
   [content {:keys [page block-uuid
@@ -2403,8 +2435,6 @@
       (insert-template! element-id db-id
                         {:replace-empty-target? true}))))
 
-(declare indent-outdent)
-
 (defn- last-top-level-child?
   [{:keys [id page]} block]
   (let [parent (:block/parent block)
@@ -2502,7 +2532,9 @@
                (or (nil? target)
                    (inside-of-editor-block target)))
       (if (pending-new-block?)
-        (when e (.preventDefault e))
+        (do
+          (when e (.preventDefault e))
+          (queue-pending-new-block-key! :enter))
         (let [new-line? (or (state/doc-mode-enter-for-new-line?)
                             (inside-of-single-block (:node state)))]
           (cond
@@ -3072,11 +3104,7 @@
       (pending-new-block?)
       (do
         (util/stop e)
-        (backspace-pending-new-block!
-         (pending-new-block-delete-on-backspace?
-          (pending-new-block)
-          (:block/uuid (state/get-edit-block))
-          e)))
+        (queue-pending-new-block-key! :backspace))
 
       (= input element)
       (let [id (state/get-edit-input-id)
@@ -3182,7 +3210,7 @@
         (pending-new-block?)
         (do
           (util/stop e)
-          (queue-pending-new-block-tab! (not= :left direction)))
+          (queue-pending-new-block-key! (if (not= :left direction) :tab :shift-tab)))
 
         (state/editing?)
         (when-not (state/get-editor-action)
@@ -3270,8 +3298,10 @@
           (notification/show! (t :page.validation/name-no-hash) :warning))
         (pending-new-block?)
         (do
-          (when (= 1 (count (str key)))
-            (append-pending-new-block-text! key))
+          (when (and (pending-letter-key? key)
+                     (not ctrlKey)
+                     (not metaKey))
+            (queue-pending-new-block-key! key))
           (util/stop e))
 
         (contains? #{"ArrowLeft" "ArrowRight"} key)

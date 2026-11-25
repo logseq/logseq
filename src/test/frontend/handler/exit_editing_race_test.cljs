@@ -94,7 +94,7 @@
           save-result (p/deferred)
           prev-pending (state/get-state :editor/pending-new-block)
           prev-action (state/get-editor-action)
-          pending {:id (random-uuid) :typed-text "draft"}]
+          pending {:id (random-uuid) :keys ["draft"]}]
       (-> (p/with-redefs [state/get-edit-input-id #(deref editing)
                           state/get-edit-block (constantly {:block/uuid (random-uuid)})
                           state/get-current-repo (constantly "test-repo")

@@ -248,91 +248,24 @@
     (finally
       (#'editor/clear-pending-new-block!))))
 
-(defn- fake-keydown
-  [target]
-  #js {:target target
-       :preventDefault (fn [])
-       :stopPropagation (fn [])})
+(defn- pending-keydown-event
+  [key]
+  (let [calls (atom [])]
+    {:calls calls
+     :event #js {:key key
+                 :ctrlKey false
+                 :metaKey false
+                 :target #js {:value "" :selectionStart 0}
+                 :preventDefault (fn [] (swap! calls conj :prevent-default))
+                 :stopPropagation (fn [] (swap! calls conj :stop-propagation))}}))
 
-(deftest apply-pending-new-block-backspace-trims-or-noops-until-delete-test
-  (testing "typed text is trimmed from the end when the block is not being deleted"
-    (is (= {:typed-text "x"}
-           (#'editor/apply-pending-new-block-backspace {:typed-text "xy"} false))))
-  (testing "an empty buffer is a no-op before the editor has landed"
-    (is (= {:typed-text ""}
-           (#'editor/apply-pending-new-block-backspace {:typed-text ""} false)))
-    (is (nil? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text ""} false)))))
-  (testing "caret-at-start after landing still deletes the pending block"
-    (is (true? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text "xy"} true))))
-    (is (true? (:delete? (#'editor/apply-pending-new-block-backspace {:typed-text ""} true))))))
-
-(deftest pending-new-block-delete-on-backspace-ignores-source-caret-until-editor-moves-test
-  (let [source-id #uuid "11111111-1111-1111-1111-111111111111"
-        new-id #uuid "22222222-2222-2222-2222-222222222222"
-        pending {:typed-text "" :source-uuid source-id}
-        empty-source #js {:value "" :selectionStart 0}
-        new-block-start #js {:value "xy" :selectionStart 0}
-        new-block-end #js {:value "xy" :selectionStart 2}]
-    (testing "caret 0 on the source block is not a delete, including during a queued Tab indent"
-      (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   pending source-id (fake-keydown empty-source))))
-      (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   (assoc pending :tab-indent? true :typed-text "xy")
-                   source-id
-                   (fake-keydown empty-source)))))
-    (testing "no current edit block is not a delete"
-      (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   pending nil (fake-keydown empty-source)))))
-    (testing "after the editor has moved onto the new block, caret 0 deletes it"
-      (is (true? (#'editor/pending-new-block-delete-on-backspace?
-                  (assoc pending :typed-text "xy")
-                  new-id
-                  (fake-keydown new-block-start)))))
-    (testing "after the editor has moved, caret at the end of typed text trims instead"
-      (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                   (assoc pending :typed-text "xy")
-                   new-id
-                   (fake-keydown new-block-end)))))))
-
-(deftest backspace-pending-new-block-state-matches-enter-sequences-test
-  (testing "Enter, Enter, Backspace before landing leaves the in-flight block"
-    (with-pending-new-block!
-      (fn []
-        (#'editor/backspace-pending-new-block! false)
-        (let [pending (pending-new-block-state)]
-          (is (= "" (:typed-text pending)))
-          (is (nil? (:delete? pending)))
-          (is (some? pending))))))
-  (testing "Enter, x, y, Backspace before landing keeps x"
-    (with-pending-new-block!
-      (fn []
-        (#'editor/append-pending-new-block-text! "x")
-        (#'editor/append-pending-new-block-text! "y")
-        (#'editor/backspace-pending-new-block! false)
-        (is (= "x" (:typed-text (pending-new-block-state))))
-        (is (nil? (:delete? (pending-new-block-state))))))))
-
-(deftest start-pending-new-block-records-the-source-uuid-test
-  (let [source-id #uuid "11111111-1111-1111-1111-111111111111"]
-    (with-redefs [state/get-edit-block (constantly {:block/uuid source-id})]
-      (with-pending-new-block!
-        (fn []
-          (is (= source-id (:source-uuid (pending-new-block-state))))
-          (is (false? (#'editor/pending-new-block-delete-on-backspace?
-                       (pending-new-block-state)
-                       source-id
-                       (fake-keydown #js {:value "" :selectionStart 0})))))))))
-
-(deftest enter-while-insert-is-pending-is-dropped-test
-  (let [calls (atom [])
-        target #js {:value "" :selectionStart 0}
-        event #js {:target target
-                   :preventDefault (fn [] (swap! calls conj :prevent-default))}]
+(deftest enter-while-insert-is-pending-is-queued-test
+  (let [{:keys [calls event]} (pending-keydown-event "Enter")]
     (with-pending-new-block!
       (fn []
         (with-redefs [editor/get-state (constantly {:block {}
                                                     :config {}
-                                                    :node target
+                                                    :node (.-target event)
                                                     :value ""
                                                     :pos 0})
                       editor/inside-of-editor-block (constantly true)
@@ -344,8 +277,85 @@
           (editor/keydown-new-block-handler event)
           (is (= [:prevent-default] @calls)
               "A second Enter while the first insert is pending must not start another insert.")
-          (is (nil? (:enter-at (pending-new-block-state)))
-              "A second Enter is dropped, not queued, so Backspace cannot undo it."))))))
+          (is (= [:enter] (:keys (pending-new-block-state)))
+              "A second Enter is queued so it can be replayed after the insert lands."))))))
+
+(deftest pending-new-block-queues-fast-typing-sequences-test
+  (testing "Enter b Enter c Enter d queues letters and Enters in order"
+    (with-pending-new-block!
+      (fn []
+        (#'editor/queue-pending-new-block-key! "b")
+        (#'editor/queue-pending-new-block-key! :enter)
+        (#'editor/queue-pending-new-block-key! "c")
+        (#'editor/queue-pending-new-block-key! :enter)
+        (#'editor/queue-pending-new-block-key! "d")
+        (is (= ["b" :enter "c" :enter "d"]
+               (:keys (pending-new-block-state)))))))
+  (testing "Enter Backspace queues a join, not a no-op"
+    (with-pending-new-block!
+      (fn []
+        (#'editor/queue-pending-new-block-key! :backspace)
+        (is (= [:backspace] (:keys (pending-new-block-state)))))))
+  (testing "Enter Tab Backspace queues indent then join"
+    (with-pending-new-block!
+      (fn []
+        (#'editor/queue-pending-new-block-key! :tab)
+        (#'editor/queue-pending-new-block-key! :backspace)
+        (is (= [:tab :backspace] (:keys (pending-new-block-state)))))))
+  (testing "Enter Enter Backspace and Enter x y Backspace stay queued in order"
+    (with-pending-new-block!
+      (fn []
+        (#'editor/queue-pending-new-block-key! :enter)
+        (#'editor/queue-pending-new-block-key! :backspace)
+        (is (= [:enter :backspace] (:keys (pending-new-block-state))))))
+    (with-pending-new-block!
+      (fn []
+        (#'editor/queue-pending-new-block-key! "x")
+        (#'editor/queue-pending-new-block-key! "y")
+        (#'editor/queue-pending-new-block-key! :backspace)
+        (is (= ["x" "y" :backspace] (:keys (pending-new-block-state))))))))
+
+(deftest split-pending-letter-prefix-keeps-structural-keys-test
+  (is (= ["b" "c"] (first (#'editor/split-pending-letter-prefix ["b" "c" :enter "d"]))))
+  (is (= [:enter "d"] (vec (second (#'editor/split-pending-letter-prefix ["b" "c" :enter "d"])))))
+  (is (= [:backspace] (vec (second (#'editor/split-pending-letter-prefix [:backspace])))))
+  (is (= [:tab :backspace] (vec (second (#'editor/split-pending-letter-prefix [:tab :backspace]))))))
+
+#_{:clj-kondo/ignore [:private-call]}
+(deftest replay-pending-keys-chains-remaining-keys-onto-the-next-insert-test
+  (async done
+    (let [calls (atom [])
+          original-insert editor/insert
+          original-get-state editor/get-state
+          original-keydown-new-block #'editor/keydown-new-block
+          original-keydown-new-block-fn @original-keydown-new-block
+          original-get-input state/get-input]
+      (set! editor/insert (fn
+                            ([text] (swap! calls conj [:letter text]))
+                            ([text _] (swap! calls conj [:letter text]))))
+      (set! editor/get-state (constantly {:block {} :value "b" :pos 1}))
+      (set! editor/keydown-new-block (fn [_state]
+                                       (swap! calls conj :enter)
+                                       (#'editor/start-pending-new-block!)))
+      (set! state/get-input (constantly #js {:value "b" :selectionStart 1}))
+      (-> (#'editor/replay-pending-keys! ["b" :enter "c" :enter "d"])
+          (p/then
+           (fn []
+             (is (= [[:letter "b"] :enter] @calls)
+                 "Replay stops at Enter so later keys are not applied to this block.")
+             (is (= ["c" :enter "d"] (:keys (pending-new-block-state)))
+                 "Keys after a replayed Enter seed the next pending insert.")))
+          (p/catch
+           (fn [error]
+             (is false (str error))))
+          (p/finally
+           (fn []
+             (set! editor/insert original-insert)
+             (set! editor/get-state original-get-state)
+             (set! editor/keydown-new-block original-keydown-new-block-fn)
+             (set! state/get-input original-get-input)
+             (#'editor/clear-pending-new-block!)
+             (done)))))))
 
 (deftest inserted-block-edit-uses-persisted-window-row-test
   (async done
