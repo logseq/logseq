@@ -2719,6 +2719,21 @@
              :else
              (map-inline config' block-ast-title)))))))))
 
+(hsx/defc flashcards-practice-button
+  [block-id]
+  (let [_ (rfx/use-sub [:config])]
+    (when (state/enable-flashcards?)
+      (ui/tooltip
+       (shui/button
+        {:variant :ghost
+         :size :sm
+         :class "!px-1 text-xs text-muted-foreground"
+         :on-click (fn [e]
+                     (util/stop e)
+                     (state/pub-event! [:modal/show-cards block-id]))}
+        (t :block/practice))
+       [:div (t :block/practice-cards)]))))
+
 (hsx/defc block-title-aux
   [config block {:keys [query? *show-query?]}]
   (let [[hover? set-hover?] (hooks/use-state false)
@@ -2773,16 +2788,7 @@
        (text-block-title config block))
      query-setting
      (when (cards-block? block)
-       (ui/tooltip
-        (shui/button
-         {:variant :ghost
-          :size :sm
-          :class "!px-1 text-xs text-muted-foreground"
-          :on-click (fn [e]
-                      (util/stop e)
-                      (state/pub-event! [:modal/show-cards (:db/id block)]))}
-         (t :block/practice))
-        [:div (t :block/practice-cards)]))
+       (flashcards-practice-button (:db/id block)))
      (when-let [message property-validation-message]
                  (ui/tooltip
                   (shui/button
