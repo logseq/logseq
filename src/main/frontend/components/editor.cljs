@@ -211,7 +211,7 @@
       (p/let [repo (state/get-current-repo)
               classes (db-async/<get-all-classes repo {:except-root-class? true})]
         (set-exact-page! nil)
-        (set-matched-pages! (state/classes-for-tag-completion repo classes))))
+        (set-matched-pages! (editor-handler/classes-for-tag-completion repo classes))))
     (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
             result (if db-tag?
                      (p/let [classes (editor-handler/get-matched-classes q)]

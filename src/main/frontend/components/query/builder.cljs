@@ -257,7 +257,7 @@
      (fn []
        (p/let [result (db-async/<get-all-classes repo {:except-root-class? true
                                                         :except-private-tags? false})]
-         (set-values! (state/classes-for-tag-completion repo result))))
+         (set-values! result)))
      [])
     (let [items (->> (sort-by :block/title values)
                      (map (fn [block]

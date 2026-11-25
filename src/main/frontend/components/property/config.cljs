@@ -151,7 +151,7 @@
                    options (map (fn [class]
                                   {:label (:block/title class)
                                    :value (:block/uuid class)})
-                                (state/classes-for-tag-completion repo classes schema-classes))
+                                classes)
                    options (if no-class?
                              (cons {:label (t :property/skip-choosing-tag)
                                     :value :no-tag}

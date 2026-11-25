@@ -240,13 +240,9 @@
 
 (hsx/defc ^:large-vars/cleanup-todo sidebar-navigations-loaded
   [{:keys [default-home route-match route-name srs-open?]}]
-  (let [_preferred-language (rfx/use-sub [:preferred-language])
-        _config (rfx/use-sub [:config])
+  (let [navs [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
+        _preferred-language (rfx/use-sub [:preferred-language])
         repo (state/get-current-repo)
-        flashcards-enabled? (state/enable-flashcards? repo)
-        navs (cond-> [:flashcards :all-pages :graph-view :tag/tasks :tag/assets]
-               (not flashcards-enabled?)
-               (->> (into [] (remove #{:flashcards}))))
         db-worker-ready? (hooks/use-atom-value state/db-worker-ready?)
         [class-ident->uuid set-class-ident->uuid!] (hooks/use-state {})
         [checked-navs set-checked-navs!] (hooks/use-state (or (storage/get :ls-sidebar-navigations)
@@ -315,7 +311,7 @@
       (for [nav checked-navs]
         (cond
           (= nav :flashcards)
-          (when flashcards-enabled?
+          (when (state/enable-flashcards? (state/get-current-repo))
             (let [num (rfx/use-sub [:srs/cards-due-count])]
               (sidebar-item
                {:class "flashcards-nav"

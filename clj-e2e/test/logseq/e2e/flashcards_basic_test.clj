@@ -1,12 +1,10 @@
 (ns logseq.e2e.flashcards-basic-test
-  (:require [clojure.test :refer [deftest is testing use-fixtures]]
+  (:require [clojure.test :refer [deftest testing use-fixtures]]
             [logseq.e2e.api :refer [ls-api-call!]]
             [logseq.e2e.assert :as assert]
-            [logseq.e2e.block :as b]
             [logseq.e2e.fixtures :as fixtures]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
-            [logseq.e2e.page :as page]
             [logseq.e2e.util :as util]
             [wally.main :as w]))
 
@@ -117,57 +115,62 @@
 (defn- set-flashcards-enabled!
   [enabled?]
   (ls-api-call! :app.setCurrentGraphConfigs {"feature/enable-flashcards?" enabled?})
-  (util/wait-timeout 500))
+  (.waitForFunction (w/get-page)
+                    "async enabled => (await logseq.api.get_user_configs()).enabledFlashcards === enabled"
+                    enabled?))
 
 (defn- press-flashcards-shortcut!
   [first-key second-key]
   (util/double-esc)
   (assert/assert-in-normal-mode?)
   (k/press first-key)
-  (util/wait-timeout 150)
-  (k/press second-key)
-  (util/wait-timeout 700))
+  (k/press second-key))
 
-(defn- card-tag-suggestions
-  [q]
+(defn- assert-card-tag-suggestions
+  [query enabled?]
   (util/double-esc)
-  (page/new-page (str "fc-flag-" (random-uuid)))
-  (b/open-last-block)
-  (util/press-seq (str " #" q) {:delay 30})
-  (util/wait-timeout 500)
-  (let [links (w/-query "a.menu-link")
-        n (.count links)
-        titles (mapv #(.textContent (.nth links %)) (range n))]
-    (util/double-esc)
-    titles))
+  (let [journal (ls-api-call! :editor.getCurrentPage)
+        note (ls-api-call! :editor.appendBlockInPage (get journal "name") "Sample note")]
+    (w/click (format ".ls-block[blockid='%s'] .block-content" (get note "uuid"))))
+  (util/move-cursor-to-end)
+  (util/press-seq (str " #" query) {:delay 20})
+  (let [options "#ui__ac a.menu-link > span"
+        assert-visibility (if enabled? assert/assert-is-visible assert/assert-is-hidden)]
+    (assert/assert-is-visible (loc/filter options :has-text "Card sample"))
+    (assert-visibility (loc/filter options :has-text #"^\s*Card\s*$"))
+    (assert-visibility (loc/filter options :has-text #"^\s*Cards\s*$")))
+  (util/double-esc))
 
 (deftest flashcards-feature-flag-gates-shortcuts-and-tags-test
-  (try
-    (testing "disabling Flashcards hides shortcuts and #card / #cards tags"
-      (set-flashcards-enabled! false)
-      (is (false? (get (ls-api-call! :app.getUserConfigs) "enabledFlashcards")))
-      (press-flashcards-shortcut! "g" "f")
-      (assert/assert-is-hidden "#cards-modal")
-      (press-flashcards-shortcut! "t" "c")
-      (assert/assert-is-hidden "#cards-modal")
-      (let [card-sugs (card-tag-suggestions "card")
-            cards-sugs (card-tag-suggestions "cards")]
-        (is (not-any? #{"Card"} card-sugs))
-        (is (not-any? #{"Cards"} card-sugs))
-        (is (not-any? #{"Cards"} cards-sugs))))
+  (ls-api-call! :editor.createTag "Card sample")
+  (util/goto-journals)
+  (let [journal (ls-api-call! :editor.getCurrentPage)
+        cards (ls-api-call! :editor.getTag "logseq.class/Cards")
+        deck (ls-api-call! :editor.appendBlockInPage (get journal "name") "Sample deck"
+                           {:properties {:block/tags #{(get cards "id")}}})
+        practice (format ".ls-block[blockid='%s'] button:text-is('Practice')" (get deck "uuid"))]
+    (try
+      (testing "disabling Flashcards prevents review and hides built-in tag suggestions"
+        (assert/assert-is-visible practice)
+        (set-flashcards-enabled! false)
+        (assert/assert-is-hidden practice)
+        (doseq [[first-key second-key] [["g" "f"] ["t" "c"]]]
+          (press-flashcards-shortcut! first-key second-key)
+          (assert/assert-is-hidden "#cards-modal"))
+        (assert-card-tag-suggestions "" false)
+        (.reload (w/get-page))
+        (assert/assert-graph-loaded?)
+        (assert-card-tag-suggestions "card" false))
 
-    (testing "enabling Flashcards restores shortcuts and #card / #cards tags"
-      (set-flashcards-enabled! true)
-      (is (true? (get (ls-api-call! :app.getUserConfigs) "enabledFlashcards")))
-      (press-flashcards-shortcut! "g" "f")
-      (assert/assert-is-visible "#cards-modal")
-      (k/esc)
-      (assert/assert-is-hidden "#cards-modal")
-      (press-flashcards-shortcut! "t" "c")
-      (assert/assert-is-visible "#cards-modal")
-      (k/esc)
-      (let [card-sugs (card-tag-suggestions "card")]
-        (is (some #{"Card"} card-sugs))
-        (is (some #{"Cards"} card-sugs))))
-    (finally
-      (set-flashcards-enabled! true))))
+      (testing "enabling Flashcards restores review and built-in tag suggestions"
+        (set-flashcards-enabled! true)
+        (util/goto-journals)
+        (assert/assert-is-visible practice)
+        (doseq [[first-key second-key] [["g" "f"] ["t" "c"]]]
+          (press-flashcards-shortcut! first-key second-key)
+          (assert/assert-is-visible "#cards-modal")
+          (k/esc)
+          (assert/assert-is-hidden "#cards-modal"))
+        (assert-card-tag-suggestions "card" true))
+      (finally
+        (set-flashcards-enabled! true)))))

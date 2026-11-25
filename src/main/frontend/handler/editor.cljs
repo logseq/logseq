@@ -1757,17 +1757,25 @@
         " "
         (get-in class [:alias :block/title]))))
 
+(defn classes-for-tag-completion
+  [repo classes]
+  (if (state/enable-flashcards? repo)
+    classes
+    (when classes
+      (into [] (remove (comp #{:logseq.class/Card :logseq.class/Cards} :db/ident)) classes))))
+
 (defn get-matched-classes
   "Return matched classes except the root tag.
 
   Alias titles are searchable, but the chosen item is always the source class
   so `#<alias>` tags the tag, not the alias page."
   [q]
-  (let [editing-block (state/get-edit-block)
+  (let [repo (state/get-current-repo)
+        editing-block (state/get-edit-block)
         non-page-block? (and editing-block (not (entity/page? editing-block)))]
-    (p/let [all-classes (db-async/<get-all-classes (state/get-current-repo) {:except-root-class? true})
+    (p/let [all-classes (db-async/<get-all-classes repo {:except-root-class? true})
             private-classes (when non-page-block?
-                              (db-async/<get-all-classes (state/get-current-repo)
+                              (db-async/<get-all-classes repo
                                                          {:except-root-class? true
                                                           :except-private-tags? false}))]
       (let [page-class (some #(when (= :logseq.class/Page (:db/ident %)) %) private-classes)
@@ -1778,7 +1786,7 @@
                               (concat [(class-search-choice class)]
                                       (keep #(class-alias-search-choice class %)
                                             (:block/alias class))))
-                            all-classes)]
+                            (classes-for-tag-completion repo all-classes))]
         (->> (search/fuzzy-search choices q {:extract-fn class-search-text
                                            :limit (count choices)})
              (common-util/distinct-by :db/id)
