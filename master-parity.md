@@ -514,3 +514,16 @@ generation, empty-search-results footer hint-row difference (minor).
 - NOTE: Chrome clipboard.write does not support application/pdf — pdf
   paste automation impossible; the filechooser path is the automatable
   one.
+
+### Round 6e: comments cancel button — FIXED
+- cljs add-comment-button passes no :on-cancel to the area composer
+  (cancel only appears when editing an existing comment); LUI showed
+  取消 in both. Fixed with a show_cancel flag on editor_box, false from
+  add_box. Verified: composer now shows only the send plane
+  (evidence r6-commentfix-crop.png). Blur/Escape dismissal behavior
+  unchanged.
+### Round 6e2: cmdk empty-search footer — NOT A GAP
+- Round-5b 'empty-results footer' difference was test-data divergence:
+  master's graph had matching blocks while LUI's did not. Retested with
+  a guaranteed-empty query (zzzznotfoundxyz): both show 未找到匹配项 +
+  identical 创建⏎ footer button (evidence r6-emptysearch-cmp.png).
