@@ -383,6 +383,97 @@
                (is false (str error))))
             (p/finally cleanup!))))))
 
+(deftest repo-handle-key-encodes-unicode-and-ascii-safely-test
+  (testing "ASCII repo names match standard base64 encoding"
+    (is (= "handle/bG9nc2VxX2RiX2JhY2t1cF93b3JrZXI=/Backups"
+           (export/repo-handle-key "logseq_db_backup_worker" "Backups"))))
+  (testing "Unicode and emoji repo names encode without throwing InvalidCharacterError"
+    (is (= "handle/5oiR55qE56yU6K6w/Backups"
+           (export/repo-handle-key "我的笔记" "Backups")))
+    (is (= "handle/8J+TmiBOb3Rlcw==/Backups"
+           (export/repo-handle-key "📚 Notes" "Backups")))
+    (is (= "handle/0LfQsNC80LXRgtC60Lg=/Backups"
+           (export/repo-handle-key "заметки" "Backups")))))
+
+(deftest choose-backup-folder-supports-unicode-graph-names-test
+  (async done
+    (let [repo "我的笔记"
+          handle #js {:name "Backups"}
+          idb-call (atom nil)
+          worker-call (atom nil)
+          original-open-directory browser-utils/openDirectory
+          original-idb-set-item! idb/set-item!
+          original-invoke-db-worker state/<invoke-db-worker
+          original-db-transact! db/transact!]
+      (set! browser-utils/openDirectory
+            (fn [_opts]
+              (p/resolved #js [handle])))
+      (set! idb/set-item!
+            (fn [key value]
+              (reset! idb-call [key value])
+              nil))
+      (set! state/<invoke-db-worker
+            (fn [& args]
+              (reset! worker-call args)
+              (p/resolved nil)))
+      (set! db/transact!
+            (fn [& _]
+              (throw (js/Error. "renderer DB should not persist graph backup folder"))))
+      (letfn [(cleanup! []
+                (set! browser-utils/openDirectory original-open-directory)
+                (set! idb/set-item! original-idb-set-item!)
+                (set! state/<invoke-db-worker original-invoke-db-worker)
+                (set! db/transact! original-db-transact!)
+                (done))]
+        (-> (export/choose-backup-folder repo)
+            (p/then
+             (fn [result]
+               (is (= ["Backups" handle] result))
+               (is (= [(export/repo-handle-key repo "Backups") handle]
+                      @idb-call))
+               (is (= [:thread-api/transact
+                       repo
+                       [{:db/ident :logseq.kv/graph-backup-folder
+                         :kv/value "Backups"}]
+                       nil
+                       nil]
+                      @worker-call))))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
+(deftest web-backup-migrates-legacy-latin1-handle-key-test
+  (async done
+    (let [repo "logseq_db_café"
+          backup-folder "Backups"
+          mock-handle #js {:name backup-folder}
+          legacy-key (str "handle/" (js/btoa repo) "/" backup-folder)
+          primary-key (export/repo-handle-key repo backup-folder)
+          idb-store (atom {legacy-key mock-handle})
+          original-idb-get-item idb/get-item
+          original-idb-set-item! idb/set-item!]
+      (set! idb/get-item
+            (fn [key]
+              (p/resolved (get @idb-store key))))
+      (set! idb/set-item!
+            (fn [key val]
+              (swap! idb-store assoc key val)
+              (p/resolved nil)))
+      (letfn [(cleanup! []
+                (set! idb/get-item original-idb-get-item)
+                (set! idb/set-item! original-idb-set-item!)
+                (done))]
+        (-> (#'export/<get-backup-handle repo backup-folder)
+            (p/then
+             (fn [handle]
+               (is (= mock-handle handle) "Finds handle via legacy Latin-1 key")
+               (is (= mock-handle (get @idb-store primary-key)) "Migrates handle to primary UTF-8 key")))
+            (p/catch
+             (fn [error]
+               (is false (str error))))
+            (p/finally cleanup!))))))
+
 (deftest auto-db-backup-skips-interval-when-worker-has-no-backup-folder-test
   (async done
     (let [repo "logseq_db_backup_worker"
