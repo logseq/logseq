@@ -165,7 +165,7 @@ let reactions_el uuid : t =
 
 (* Draft ownership survives worker-driven render remounts. *)
 let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~current_activation ~asset_target ~initial
-    ?on_cancel ~on_saved prepare : t =
+    ?on_cancel ?(show_cancel = true) ~on_saved prepare : t =
  fun ctx parent ->
   let draft = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope draft_slot initial in
   let busy = Signal.state_at ctx.Lui_ui.ui_scheduler ctx.ui_state_scope saving_slot None in
@@ -278,9 +278,11 @@ let editor_box ?area_uuid ?comment_uuid ~scope ~activation ~current_activation ~
         ~on_appear:activate ~padding_horizontal:7 ~padding_vertical:5
         [Editor_surface.mount ~owner uuid scope]
     ; row ~style_class:"ls-comment-box-actions" ~gap:4 ~cross:`center
-        ((match on_cancel with None -> [] | Some _ ->
-          [ Ui_components.button ~variant:`ghost ~size:`sm ~text:(I.t "ui/cancel")
-              ~on_press:(fun _ -> cancel ()) [] ])
+        ((match on_cancel, show_cancel with
+          | Some _, true ->
+              [ Ui_components.button ~variant:`ghost ~size:`sm ~text:(I.t "ui/cancel")
+                  ~on_press:(fun _ -> cancel ()) [] ]
+          | _ -> [])
          @ [ Ui_components.icon_button ~variant:`ghost ~size:`sm
                ~style_class:"ls-comment-submit" ~icon:(`app "send") ~label:(I.t "ui/submit")
                ~disabled:(reactive (fun content saving -> String.trim content = "" || saving <> None)
@@ -376,7 +378,7 @@ let add_box ~scope area_uuid : t =
         | Some activation ->
           editor_box ~area_uuid ~scope ~asset_target:area_uuid
             ~activation ~current_activation:(fun () -> Runtime.signal_get opened = Some activation)
-            ~initial:(load_draft area_uuid)
+            ~initial:(load_draft area_uuid) ~show_cancel:false
             ~on_cancel:(fun () ->
               if Runtime.signal_get opened = Some activation then Runtime.signal_set opened None)
             ~on_saved:(fun () -> ())
