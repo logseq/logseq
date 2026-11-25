@@ -53,6 +53,8 @@ These differences are deliberate desktop-host behavior. They should not be count
 | Medium | Query block layout | `/query` inserted a query UI and `+ Filter` opened the operator menu, but the inserted query layout was visibly broken: black rectangle-like fragments obscured text and controls were compressed. | Runtime-confirmed rendering failure; exact parity classification is uncertain because no paired web capture was taken. |
 | Medium | Structured block clipboard | Native has no structured block clipboard reader; writing structured blocks degrades to plain text. | Source-confirmed capability gap. Plain multi-block copy/paste passed runtime smoke. |
 | Medium | Plugin runtime beyond opening the dialog | Native reports no installed plugins, toolbar items, palette commands, marketplace actions/settings, or plugin README support. | Source-confirmed capability gap. Opening the Plugins dialog itself is fixed. |
+| Medium | Multi-window support | Native host architecture is a single embedded SDL window; there is no web-like multi-window/workspace support. | Runtime/source-confirmed architectural gap; requires separate host/LUI window management work. |
+| Medium | Sidebar typography | Native sidebar row spacing and left alignment are close to web, but native text is visibly smaller (roughly 15–20%) with different weight/rendering. | Runtime-confirmed visual mismatch; not yet fixed. |
 | Medium | Asset/media richness | PDF assets render as a filename/text path and clicking the text did not open a viewer; clicking the PDF icon zoomed the block because the icon acts as the bullet. PNG upload plumbing passed, but the uploaded PNG rendered as text because native image loading refused the local asset path. PNG export/copy reports unsupported. | Runtime-confirmed integration gaps. The PDF path also produced `Ui_parts adapters wrap standard-kind elements only — dom/extension nodes must use their own ~events/~attrs props`; image lightbox was not reached. |
 | Medium | Custom CSS | Native custom-CSS functions are no-ops. | Source-confirmed capability gap. |
 | Low | Markdown-to-HTML conversion | Native `markdown_to_html` returns input unchanged. | Source-confirmed capability gap; visual impact uncertain. |
@@ -93,6 +95,15 @@ Uncertain or caveated:
 - The export dialog still shows web-centric File System Access API text in native even though native save panels now work.
 - The web run exposed a separate modal-close regression: after closing quick add with Escape, an inert/invisible layer appeared to intercept sidebar clicks until reload. This is a web issue, not a native parity gap.
 
+
+Follow-up runtime results:
+
+- Failed: MP4/WAV upload plumbing copied files into isolated assets, but neither media type rendered; native image loading refused local `.mp4`/`.wav` asset paths.
+- Failed: custom CSS text entry accepted `body { background: red !important; }`, but no visual change occurred.
+- Passed with caveat: block context-menu ArrowDown/Enter opened `Open in sidebar`; Escape required two presses.
+- Failed: math remained raw `x^2`; calculator showed only a shell without evaluation; `{{youtube abcdef12345}}` rendered only `?`.
+- Passed: fixed caret placement, quick-add autocomplete/slash layering, compact context menu, open panels, and save-panel presentation remained working in the follow-up run.
+
 ## Surfaces that appeared parity-passing in runtime comparison
 
 - Fresh journal home/startup layout, allowing for host chrome and intentional desktop deltas.
@@ -109,11 +120,11 @@ Uncertain or caveated:
 
 ## Surfaces not tested or only partially tested
 
-- Real IME composition for Chinese/Japanese/Korean. Direct Unicode injection is not IME proof.
+- Real IME composition for Chinese/Japanese/Korean. Direct Unicode injection is not IME proof; the follow-up host environment only had ABC input enabled.
 - Structured clipboard edge cases, cut/paste, paste types beyond the passing plain block copy/paste smoke.
 - Advanced query editor and actual query execution/filter completion.
-- Audio/video asset upload/rendering and image lightbox (PNG rendering failed before lightbox could be reached).
-- Custom CSS runtime behavior beyond source inspection.
+- Image lightbox (PNG rendering failed before lightbox could be reached).
+- Custom user macros and built-in macro matrix beyond the tested YouTube embed macro.
 - Plugin marketplace installation/actions.
 - RTC/synced-graph status and login flow (explicitly skipped).
 - Full macOS native menu command coverage beyond smoke-tested commands.
@@ -131,4 +142,4 @@ Runtime evidence is under `/tmp` because these are test artifacts rather than re
 - `/tmp/logseq-native-fix-verify-small` — context menu, disclosure, window-title verification.
 - `/tmp/logseq-native-untested-smoke` — broad editing/menu/table smoke report and screenshots.
 - `/tmp/logseq-native-fileops-verify2` — file picker/download verification, recording, screenshots, and exported EDN artifact.
-- `/tmp/logseq-native-remaining-smoke` — partial asset/query smoke report, recording, screenshots, crash logs, and evidence archive.
+- `/tmp/logseq-native-remaining-smoke` — partial asset/query smoke report, follow-up media/CSS/macro/sidebar report, annotated recording, screenshots, crash logs, and evidence archives.
