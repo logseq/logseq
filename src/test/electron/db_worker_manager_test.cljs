@@ -604,7 +604,7 @@
           (p/catch (fn [error] (is false (str error))))
           (p/finally done)))))
 
-(deftest stop-all-drains-starts-and-rejects-runtime-requests
+(deftest shutdown-drains-starts-and-rejects-runtime-requests
   (async done
     (let [entered (p/deferred)
           starting (p/deferred)
@@ -621,7 +621,7 @@
                                     (p/resolved true))})
           opening (db-worker/ensure-started! manager "opening" 1)]
       (-> (p/let [_ entered
-                  stopped (let [stopped (db-worker/stop-all! manager)
+                  stopped (let [stopped (db-worker/shutdown! manager)
                                 request (-> (db-worker/ensure-started! manager "recovering" 2)
                                             (p/then (constantly :started))
                                             (p/catch (comp :code ex-data)))]

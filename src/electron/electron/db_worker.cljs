@@ -148,7 +148,7 @@
                             (throw (ex-info "Graph lifecycle changed" {:code :graph-not-exists :repo repo}))))
         start! (fn []
                  (assert-current!)
-                 (when (:stopping-all @state)
+                 (when (:shutdown @state)
                    (throw (app-stopping-error)))
                  (start-daemon! repo opts))
         install! (fn [runtime]
@@ -204,7 +204,7 @@
 (defn ensure-started!
   ([manager repo window-id] (ensure-started! manager repo window-id nil))
   ([{:keys [state] :as manager} repo window-id opts]
-   (if (:stopping-all @state)
+   (if (:shutdown @state)
      (p/rejected (app-stopping-error))
      (let [starting (<ensure-started! manager repo window-id opts)]
        (swap! state update :starts (fnil conj #{}) starting)
@@ -260,21 +260,26 @@
 
 (defn stop-all!
   [{:keys [state] :as manager}]
-  (or (:stopping-all @state)
-      (let [stopping
+  (-> (p/all (map #(ensure-repo-stopped! manager %)
+                  (keys (:repos (ensure-state @state)))))
+      (p/then (fn [_] true))))
+
+(defn shutdown!
+  [{:keys [state] :as manager}]
+  (or (:shutdown @state)
+      (let [shutdown
             ;; A daemon that has already started must be installed before we take the stop snapshot.
-            (-> (p/let [_ (p/all (map #(p/handle % (fn [_ _] nil)) (:starts @state)))
-                        errors (p/all (for [[repo entry] (:repos (ensure-state @state))]
-                                        (-> (p/let [stopped? (:stopping entry)]
-                                              (when-not stopped?
-                                                (ensure-repo-stopped! manager repo)))
-                                            (p/handle (fn [_ error] error)))))]
-                  (when-let [error (some identity errors)]
-                    (throw error))
-                  true)
-                (p/finally #(swap! state dissoc :stopping-all)))]
-        (swap! state assoc :stopping-all stopping)
-        stopping)))
+            (p/let [_ (p/all (map #(p/handle % (fn [_ _] nil)) (:starts @state)))
+                    errors (p/all (for [[repo entry] (:repos (ensure-state @state))]
+                                    (-> (p/let [stopped? (:stopping entry)]
+                                          (when-not stopped?
+                                            (ensure-repo-stopped! manager repo)))
+                                        (p/handle (fn [_ error] error)))))]
+              (when-let [error (some identity errors)]
+                (throw error))
+              true)]
+        (swap! state assoc :shutdown shutdown)
+        shutdown)))
 
 (defn invalidate-repo!
   [{:keys [state]} repo & {:keys [keep-observer?]}]
@@ -341,3 +346,7 @@
 (defn stop-all-managed!
   []
   (stop-all! manager))
+
+(defn shutdown-managed!
+  []
+  (shutdown! manager))

@@ -403,8 +403,8 @@
       :log-warn! logger/warn})))
 
 (defn- <stop-db-workers!
-  [warn-key]
-  (-> (p/do (handler/stop-all-db-workers!))
+  [stop! warn-key]
+  (-> (p/do (stop!))
       (p/catch (fn [error]
                  (logger/warn warn-key error)
                  nil))))
@@ -422,7 +422,7 @@
            :on-error! (fn [error]
                         (logger/warn :electron/quit-teardown-failed error))
            :teardown! (fn []
-                        (-> (<stop-db-workers! :electron/quit-stop-workers-failed)
+                        (-> (<stop-db-workers! db-worker/shutdown-managed! :electron/quit-stop-workers-failed)
                             (p/then (fn [_]
                                       (embedding-server/stop!)))))
            :quit! (fn []
@@ -474,7 +474,8 @@
                                    tt (exceptions/setup-exception-listeners!)]
 
                                (vreset! *teardown-fn
-                                        #(-> (<stop-db-workers! :electron/teardown-stop-workers-failed)
+                                        #(-> (<stop-db-workers! handler/stop-all-db-workers!
+                                                                :electron/teardown-stop-workers-failed)
                                              (p/then
                                               (fn [_]
                                                 (p/all (mapv (fn [f]
