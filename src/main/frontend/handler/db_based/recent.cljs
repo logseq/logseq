@@ -4,7 +4,7 @@
 
 (defn add-page-to-recent!
   [db-id _click-from-recent?]
-  (assert db-id (number? db-id))
+  (assert (number? db-id) "db-id must be a number")
   (when-not (:db/restoring? (state/get-state))
     (let [pages (state/get-recent-pages)]
       ;; Keep existing positions so revisits do not reshuffle sidebar shortcuts.

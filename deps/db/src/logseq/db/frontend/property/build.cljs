@@ -24,7 +24,7 @@
 (defn build-closed-value-block
   "Builds a closed value block to be transacted"
   [block-uuid block-type block-value property {:keys [db-ident icon]}]
-  (assert block-uuid (uuid? block-uuid))
+  (assert (uuid? block-uuid) "block-uuid must be a UUID")
   (cond->
    (closed-value-new-block block-uuid block-type block-value property)
     (and db-ident (keyword? db-ident))
