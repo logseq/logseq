@@ -498,3 +498,19 @@ generation, empty-search-results footer hint-row difference (minor).
 - RESIDUAL NOTED DIFFERENCE (not user-visible in real usage): LUI paste
   upload accepted synthesized untrusted drop events earlier; master
   ignores them.
+
+### Round 6d: pdf viewer — working, structure at parity
+- PDF upload via slash 上传资源 + filechooser works end to end in LUI
+  (asset block inserted, evidence r6-pdfuploaded-lui.png).
+- Clicking the pdf asset title opens the in-app viewer: pdf.js renders
+  content, full toolbar (highlight/area/copy/search/finder, page nav,
+  close), left-panel layout matching master design (evidence
+  r6-pdfviewer-lui-s.png). Console confirms 'Indexing all PDF objects'.
+- pdf_toolbar.ml is a faithful port with verbatim cljs svg paths.
+- OPEN: deep interactions untested — highlight creation, area select,
+  hl copy-ref, pdf search-in-document. Also: pdf asset row click target
+  is small (must hit the title text exactly) — verify against master
+  whether the whole row should be clickable.
+- NOTE: Chrome clipboard.write does not support application/pdf — pdf
+  paste automation impossible; the filechooser path is the automatable
+  one.
