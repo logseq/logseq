@@ -719,3 +719,15 @@ window/close), file-graph legacy (graph/db-save), dev internals
 (shell/run), or unbound-in-cljs anyway (copy-page-url, plugin install).
 Table-level parity confirmed; runtime verification of individual chords
 proceeds below.
+
+### Round 9: keyboard chords runtime verification
+Verified identical step-by-step in both:
+- mod+b bold / mod+i italics / mod+shift+h highlight / mod+shift+s
+  strikethrough: formatting applies and renders identical elements
+  (EM/MARK/DEL) in both
+- mod+. zoom-in navigates to block page in both; mod+, zooms back out
+- g j journals, g h home, t l left sidebar toggle, t t theme toggle —
+  same effects in both
+- p r on selection opens the same emoji-mart reaction picker in both;
+  p i opens icon picker in both
+- mod+j jump: no popup in EITHER app on a property-less page (symmetric)
