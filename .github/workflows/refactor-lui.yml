@@ -220,6 +220,11 @@ jobs:
         working-directory: deps/ui
         run: opam exec -- dune build
 
+      - name: QuickJS SDK contract
+        run: |
+          (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
+          sh deps/ui/scripts/check-quickjs-sdk.sh
+
       - name: Prune non-incremental native artifacts
         run: rm -rf deps/ui/_build/native-experimental
 
@@ -247,11 +252,6 @@ jobs:
 
       - name: db-worker bundle
         run: pnpm db-worker:build
-
-      - name: QuickJS SDK contract
-        run: |
-          (cd libs && pnpm exec tsc --ignoreConfig --noEmit --strict --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022 src/LSPlugin.quickjs.ts src/LSPlugin.quickjs-entry.ts)
-          sh deps/ui/scripts/check-quickjs-sdk.sh
 
       - name: Web bundle (vite)
         run: pnpm ui:build
