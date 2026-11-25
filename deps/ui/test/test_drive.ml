@@ -255,16 +255,35 @@ let test_leading_toolbar_ownership () =
     | None -> false
     | Some parent -> inside cls (Hashtbl.find (tree ()).M.nodes parent)
   in
+  let fixed_at_leading_origin node =
+    Hashtbl.find_opt node.M.props "position" = Some (Wv.StringValue "fixed")
+    && Hashtbl.find_opt node.M.props "inset-top" = Some (Wv.FloatValue 0.)
+    && Hashtbl.find_opt node.M.props "inset-left" = Some (Wv.FloatValue 0.)
+  in
+  let rec inside_fixed_leading_overlay node =
+    fixed_at_leading_origin node ||
+    match node.M.parent with
+    | None -> false
+    | Some parent ->
+      inside_fixed_leading_overlay (Hashtbl.find (tree ()).M.nodes parent)
+  in
+  let sidebar_open () =
+    match first "prop:accessibility-identifier=\"left-sidebar\"" with
+    | Some n -> has_tok n "is-open"
+    | None -> false
+  in
+  let initially_open = sidebar_open () in
   Fun.protect ~finally:(fun () ->
     Runtime.signal_set st.viewport_w viewport;
-    if controls "left-menu" <> [] &&
-       List.exists (inside "left-sidebar-top") (controls "left-menu") then
+    if sidebar_open () <> initially_open then
       click_sel "prop:accessibility-identifier=\"left-menu\"";
     flush ()) (fun () ->
       List.iter (fun viewport ->
         Runtime.signal_set st.viewport_w viewport;
         flush ();
         List.iter (fun open_ ->
+          check (if open_ then "left sidebar is open" else "left sidebar is closed")
+            (sidebar_open () = open_);
           List.iter (fun (cls, expected) ->
             let split = List.find (fun n -> has_tok n cls) (M.all_nodes (tree ())) in
             check (cls ^ " keeps its resize handle outside layout flow")
@@ -275,12 +294,11 @@ let test_leading_toolbar_ownership () =
             let found = controls id in
             eqi (id ^ " has one mounted interactive occurrence") 1 (List.length found);
             List.iter (fun control ->
-              check (id ^ " belongs to the visible leading toolbar")
-                (if open_ then inside "left-sidebar-top" control
-                 else inside "cp__header" control);
-              check (id ^ " is absent from the other toolbar")
-                (if open_ then not (inside "cp__header" control)
-                 else not (inside "left-sidebar-top" control))) found)
+              check (id ^ " belongs to the fixed leading overlay")
+                (inside_fixed_leading_overlay control);
+              check (id ^ " is absent from the header and sidebar toolbars")
+                (not (inside "cp__header" control)
+                 && not (inside "left-sidebar-top" control))) found)
             ["left-menu"; "search-button"];
           click_sel "prop:accessibility-identifier=\"left-menu\"";
           flush ()) [false;true;false;true]) [1280.;500.;1280.])
