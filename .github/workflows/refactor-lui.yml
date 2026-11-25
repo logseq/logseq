@@ -23,12 +23,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Resolve APT package revisions
+        id: apt-packages
+        run: |
+          packages="pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev"
+          printf '%s\n' $packages > "$RUNNER_TEMP/apt-packages"
+          sudo apt-get update
+          fingerprint=$(sudo apt-get --print-uris -y install $packages | sort | shasum -a 256 | awk '{print $1}')
+          test -n "$fingerprint"
+          echo "fingerprint=$fingerprint" >> "$GITHUB_OUTPUT"
+
       - name: Restore APT package cache
         id: apt-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/apt-package-cache
-          key: apt-${{ runner.os }}-${{ runner.arch }}-rlui-v1-${{ hashFiles('.github/workflows/refactor-lui.yml') }}
+          key: apt-${{ runner.os }}-${{ runner.arch }}-rlui-v2-${{ steps.apt-packages.outputs.fingerprint }}
+          restore-keys: |
+            apt-${{ runner.os }}-${{ runner.arch }}-rlui-v2-
 
       - name: System deps
         run: |
@@ -36,10 +48,7 @@ jobs:
           apt_archives="$RUNNER_TEMP/apt-archives"
           mkdir -p "$cache_dir" "$apt_archives/partial"
           find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -exec cp -t "$apt_archives" {} +
-          sudo apt-get update
-          xargs sudo apt-get -o Dir::Cache::Archives="$apt_archives" install -y <<'EOF'
-          pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev
-          EOF
+          xargs sudo apt-get -o Dir::Cache::Archives="$apt_archives" install -y < "$RUNNER_TEMP/apt-packages"
           sudo apt-get -o Dir::Cache::Archives="$apt_archives" autoclean
           find "$cache_dir" -maxdepth 1 -type f -name '*.deb' -delete
           sudo find "$apt_archives" -maxdepth 1 -type f -name '*.deb' -exec cp -t "$cache_dir" {} +
