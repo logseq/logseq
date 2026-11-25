@@ -527,3 +527,14 @@ generation, empty-search-results footer hint-row difference (minor).
   master's graph had matching blocks while LUI's did not. Retested with
   a guaranteed-empty query (zzzznotfoundxyz): both show 未找到匹配项 +
   identical 创建⏎ footer button (evidence r6-emptysearch-cmp.png).
+
+### Round 6f: pdf deep interactions — PARITY VERIFIED
+- Text selection in pdf opens ctx menu with 5 colors + copy-text —
+  identical to cljs (copy-ref/linked-ref/delete correctly gated to
+  existing highlights in both, verified in code and structure).
+- Clicking a color creates the highlight AND auto-copies the [[uuid]]
+  block reference to clipboard — verified end to end (clip =
+  [[2f72d08a-...]], evidence r6-pdfhl3-lui.png). Matches cljs
+  copy-hl-ref! flow.
+- pdf_hls.ml ctx menu is a faithful port (same
+  extensions__pdf-hls-ctx-menu class/data-action structure).
