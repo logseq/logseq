@@ -267,8 +267,9 @@ let test_leading_toolbar_ownership () =
     | Some parent ->
       inside_fixed_leading_overlay (Hashtbl.find (tree ()).M.nodes parent)
   in
+  let sidebar_node () = first "prop:accessibility-identifier=\"left-sidebar\"" in
   let sidebar_open () =
-    match first "prop:accessibility-identifier=\"left-sidebar\"" with
+    match sidebar_node () with
     | Some n -> has_tok n "is-open"
     | None -> false
   in
@@ -282,6 +283,7 @@ let test_leading_toolbar_ownership () =
         Runtime.signal_set st.viewport_w viewport;
         flush ();
         List.iter (fun open_ ->
+          check "left sidebar node remains mounted" (sidebar_node () <> None);
           check (if open_ then "left sidebar is open" else "left sidebar is closed")
             (sidebar_open () = open_);
           List.iter (fun (cls, expected) ->
