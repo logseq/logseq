@@ -477,3 +477,24 @@ generation, empty-search-results footer hint-row difference (minor).
   same naming (cljs export.cljs:462-473 vs export_view.ml copy_save_row).
 - Format tabs only switch the preview in both (no direct download) —
   consistent by design.
+
+### Round 6c: asset paste upload — deep investigation, mostly PARITY
+- Paste-image upload in LUI WORKS end to end: pfs write confirmed via
+  tracer (mkdir/writeFile to /<graph>/assets/<uuid>.png), asset blocks
+  inserted (block count 29→30, evidence r6-paste4-crop.png). Earlier
+  'silent failure' was test confusion (click hit page title; detection
+  missed the differently-rendered asset blocks).
+- Rendering: LUI img_dims defaults width to 250 with aspect-ratio
+  preserved — verified cljs block.cljs does the same
+  (`width (or width 250 asset-width)` + aspect-ratio height). NOT a bug:
+  the 40x40 test image renders at 250px wide in both by design.
+- measure_on_load persists natural asset width/height properties in LUI;
+  cljs computes aspect-ratio from asset width/height properties —
+  consistent design.
+- Master-side live paste verification is blocked by automation limits
+  (click-to-edit won't engage in headless master for unknown reasons —
+  even previously-working paths now fail; needs investigation of the
+  harness itself, not the app). Code-level comparison shows no gap.
+- RESIDUAL NOTED DIFFERENCE (not user-visible in real usage): LUI paste
+  upload accepted synthesized untrusted drop events earlier; master
+  ignores them.
