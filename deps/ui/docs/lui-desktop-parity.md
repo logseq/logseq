@@ -130,7 +130,7 @@ Follow-up runtime results:
 - Full macOS native menu command coverage beyond smoke-tested commands.
 - Directory import completion. The host now recursively enumerates picked directories for root-relative files, but no valid directory-import fixture was run.
 - Broader table sorting/filtering/grouping beyond status-cell editing.
-- Block context-menu keyboard navigation in the real host. A focused native lifecycle test covers shared-menu key ownership, but real-host keyboard verification was not completed.
+- Block context-menu keyboard behavior beyond the verified ArrowDown highlight, Enter activation, and two-Escape close path; other keys/submenu traversal remain untested in the real host.
 
 ## Evidence inventory
 
