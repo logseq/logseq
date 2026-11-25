@@ -1607,15 +1607,44 @@ abc
      "assets/image.png"]
     "[[UUID]]"
 
-    ;; Org link-to-asset with Logseq resize metadata
+    ;; Org trailing resize map is Plain text, so keep it after the asset ref
     ["[[../assets/image.png]]{:height 100, :width 100}"
+     "assets/image.png"]
+    "[[UUID]]{:height 100, :width 100}"
+
+    ;; Org labeled link-to-asset with trailing resize map
+    ["[[../assets/image.png][image]]{:height 50, :width 80}"
+     "assets/image.png"]
+    "[[UUID]]{:height 50, :width 80}"
+
+    ;; HTTP URL with the same path suffix is not rewritten
+    ["[[../assets/image.png]] and [[https://example.org/assets/image.png][original]]"
+     "assets/image.png"]
+    "[[UUID]] and [[https://example.org/assets/image.png][original]]"
+
+    ;; Adjacent org verbatim/code copies are not rewritten
+    ["Use =[[../assets/image.png]]= to display [[../assets/image.png]]"
+     "assets/image.png"]
+    "Use =[[../assets/image.png]]= to display [[UUID]]"
+
+    ["Use ~[[../assets/image.png]]~ to display [[../assets/image.png]]"
+     "assets/image.png"]
+    "Use ~[[../assets/image.png]]~ to display [[UUID]]"
+
+    ;; Brace-delimited notes are not treated as resize metadata
+    ["[[../assets/image.png]]{draft}"
+     "assets/image.png"]
+    "[[UUID]]{draft}"
+
+    ;; Label may contain one nested [bracket] pair
+    ["[[../assets/image.png][see [note]]]"
      "assets/image.png"]
     "[[UUID]]"
 
-    ;; Org labeled link-to-asset with resize metadata
-    ["[[../assets/image.png][image]]{:height 50, :width 80}"
+    ;; Distinct local path that shares an asset-key suffix is not rewritten
+    ["[[../assets/my-assets/image.png]] and [[../assets/image.png]]"
      "assets/image.png"]
-    "[[UUID]]"))
+    "[[../assets/my-assets/image.png]] and [[UUID]]"))
 
 (deftest-async import-missing-local-pdf-asset-link-is-ignored-quietly
   (let [graph-dir (write-temp-file-graph
@@ -1699,7 +1728,11 @@ abc
                          "* Image labeled\n"
                          "[[../assets/image.png][image]]\n"
                          "* Image with meta\n"
-                         "[[../assets/image.png]]{:height 100, :width 100}\n")
+                         "[[../assets/image.png]]{:height 100, :width 100}\n"
+                         "* Image and original\n"
+                         "[[../assets/image.png]] and [[https://example.org/assets/image.png][original]]\n"
+                         "* Image draft\n"
+                         "[[../assets/image.png]]{draft}\n")
                     "assets/image.png" "png"})]
     (p/let [conn (db-test/create-conn)
             assets (atom [])
@@ -1708,6 +1741,8 @@ abc
             image-test (db-test/find-block-by-content @conn #"^Image test")
             image-labeled (db-test/find-block-by-content @conn #"^Image labeled")
             image-meta (db-test/find-block-by-content @conn #"^Image with meta")
+            image-and-original (db-test/find-block-by-content @conn #"^Image and original")
+            image-draft (db-test/find-block-by-content @conn #"^Image draft")
             asset-ref (page-ref/->page-ref (:block/uuid asset))]
       (is (some? asset) "Org-linked PNG becomes an Asset")
       (is (= {:block/tags [:logseq.class/Asset]
@@ -1721,12 +1756,18 @@ abc
       (is (= (str "Image labeled\n" asset-ref "\n")
              (:block/title image-labeled))
           "Org [[../assets/image.png][image]] is rewritten to an Asset page-ref")
-      (is (= (str "Image with meta\n" asset-ref "\n")
+      (is (= (str "Image with meta\n" asset-ref "{:height 100, :width 100}\n")
              (:block/title image-meta))
-          "Org asset link with resize metadata is rewritten to an Asset page-ref")
-      (is (not (some #(string/includes? (str (:block/title %)) "assets/image.png")
-                     [image-test image-labeled image-meta]))
-          "Org titles no longer contain the file-graph asset path")
+          "Org trailing resize map stays in the title after the Asset page-ref")
+      (is (= (str "Image and original\n" asset-ref " and [[https://example.org/assets/image.png][original]]\n")
+             (:block/title image-and-original))
+          "HTTP URL with the same path suffix is preserved")
+      (is (= (str "Image draft\n" asset-ref "{draft}\n")
+             (:block/title image-draft))
+          "Brace-delimited notes stay in the title")
+      (is (not (some #(string/includes? (str (:block/title %)) "../assets/image.png")
+                     [image-test image-labeled image-meta image-and-original image-draft]))
+          "Org titles no longer contain the local file-graph asset path")
       (is (= 0 (count @(:ignored-assets import-state))) "No ignored assets")
       (is (empty? (map :entity (:errors (db-validate/validate-local-db! @conn))))
           "Imported graph validates"))))
