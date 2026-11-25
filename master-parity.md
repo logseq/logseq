@@ -403,3 +403,15 @@ Parity confirmed (structure):
 - NOT A GAP: collapse arrow on the review question bullet — master
   renders identically with no arrow (evidence arrow-lui/master.png).
 Flashcards review modal is now at parity.
+
+### Round 5 conclusions (2025-11-25)
+- cmdk footer tips: NOT A GAP — both sides rotate tips from the same
+  dict keys (:cmdk.tip/*); LUI happened to show open-sidebar while
+  master showed filter-results in the same instant.
+- custom.css: settings entry + custom_css.ml exist in LUI; runtime
+  application not yet verified end to end.
+- pdf/assets: pdf_toolbar/pdf_hls and asset_store/asset_dom exist in
+  deps/ui; interactive runtime parity not yet verified.
+- templates: structure verified in round 4 (tag rendering + /template
+  picker insertion); earlier noise was repeat insertion in test data,
+  not app behavior.
