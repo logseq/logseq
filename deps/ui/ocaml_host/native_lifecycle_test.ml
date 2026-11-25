@@ -154,13 +154,15 @@ let () = Native_embed.with_entry_lock (fun () ->
   let scheduler = Signal.scheduler () in
   let context = Popups_state.make scheduler in
   let queries = ref 0 and commands = ref 0 in
+  let base = Ui_dom_native.el_of (Js.Json.JObject []) in
+  let menu = {base with Ui_services.rect=(fun () -> (0., 0., 240., 32.)); focus=(fun () -> ()); scroll_into_view_nearest=(fun () -> ())} in
   let dom = {Ui_dom_native.ops with
-    by_id=(fun _ -> incr queries; None);
+    by_id=(fun _ -> incr queries; Some menu);
     dispatch_json=(fun name _ -> if name="ls:editor-command" then incr commands)} in
   Platform.install_ui_services ~paints_caret:true ~assert_owner:Native_embed.assert_entry_owner
     ~request_flush:(fun () -> ()) ~dom ~timers:Ui_dom_native.timers ~files:Ui_dom_native.files;
-  check "Native menus require component ownership" (Ui_services.env_component_menus ());
-  let base = Ui_dom_native.el_of (Js.Json.JObject []) in
+  check "Native block menus use the shared popover implementation"
+    (not (Ui_services.env_component_menus ()));
   let target = {base with Ui_services.closest=(fun _ -> Some base)} in
   let event key =
     {(Ui_dom_native.ev_of (Js.Json.JObject ["key", Js.Json.JString key]))
@@ -172,11 +174,15 @@ let () = Native_embed.with_entry_lock (fun () ->
   Signal.set context.vs {ac=None;cm=Some cm;pv=None};
   Signal.stabilize scheduler;
   List.iter (fun key ->
-    check ("Legacy menu path consumed native key " ^ key)
+    check ("Shared menu path consumed native key " ^ key)
+      (Popups_view.menu_keydown context (event key)))
+    ["ArrowDown";"ArrowUp";"Home";"End"];
+  check "Shared menu Enter dispatched the highlighted action"
+    (Popups_view.menu_keydown context (event "Enter") && !commands = 1);
+  List.iter (fun key ->
+    check ("Shared menu path ignored ordinary native key " ^ key)
       (not (Popups_view.menu_keydown context (event key))))
-    ["ArrowDown";"ArrowUp";"Home";"End";"Enter";"a";"你";"Escape"];
-  check "Native component menus scanned the document or dispatched a legacy action"
-    (!queries=0 && !commands=0);
+    ["a";"你";"Escape"];
   let ev=event "a" in
   Gc.full_major ();
   let before=Gc.allocated_bytes () in
@@ -184,7 +190,7 @@ let () = Native_embed.with_entry_lock (fun () ->
   let allocated=Gc.allocated_bytes () -. before in
   check "Ordinary typing allocates legacy menu snapshots" (allocated < 65_536.);
   Popups_state.active:=previous_context;
-  print_endline "native component menu keyboard ownership: OK")
+  print_endline "native shared menu keyboard ownership: OK")
 
 (* Window notifications must reach the shared sidebar observer on the UI entry. *)
 let () =

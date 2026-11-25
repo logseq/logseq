@@ -15,7 +15,7 @@
 (executable
  (name version_gen)
  (modes native)
- (libraries yojson))
+ (libraries yojson unix))
 
 (executable
  (name icon_gen)

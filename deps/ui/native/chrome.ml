@@ -432,10 +432,10 @@ let overlays (ms : Model.t Signal.signal) =
       Ui_components.overlay_typography
         (box ~key:"overlays-wrap" ~grow:1.
         [ Cmdk_view.render ~services:(Cmdk_host.services ()) ms
-    ; Popups_view.render ms
     ; Left_sidebar_view.menus ms
     ; Dialogs_view.render ms
     ; Cards_view.render ms
+    ; Popups_view.render ms
     ; Toasts_view.render ms
     ; Properties_view.overlays
     ; Views_popup.layer

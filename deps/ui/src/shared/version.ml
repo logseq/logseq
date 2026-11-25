@@ -2,10 +2,10 @@
 
 let app = Version_gen.app
 
-(* Build revision injected by the platform's bootstrap (vite define
-   LOGSEQ_REVISION on the web, LOGSEQ_REVISION env on native); empty
-   when built outside the bundle pipeline. *)
-let revision_ref = ref ""
+(* Build revision generated with the app version. Platform bootstraps may
+   replace it with their own injection (vite define LOGSEQ_REVISION on the
+   web, LOGSEQ_REVISION env on native). *)
+let revision_ref = ref Version_gen.revision
 
 let set_revision r = revision_ref := r
 

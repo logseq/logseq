@@ -205,8 +205,9 @@ let storage_unquote s =
 
 let storage_quote v = "\"" ^ v ^ "\""
 
-(* the native window title is host-managed — the call is a no-op *)
-let set_document_title (_ : string) : unit = ()
+let set_document_title (title : string) : unit =
+  Host.dom_op "set-document-title"
+    (Yojson.Safe.to_string (`Assoc [ ("title", `String title) ]))
 
 let local_storage_get k =
   load_state ();
@@ -728,7 +729,7 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         ; open_url = Host.open_url
         ; resource_url
         ; paints_caret = (fun () -> paints_caret)
-        ; component_menus = (fun () -> true)
+        ; component_menus = (fun () -> false)
         ; css_animations = (fun () -> false)
         }
     ; dom
