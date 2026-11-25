@@ -884,9 +884,12 @@ let file_json ?relative path =
      | Some relative -> [ ("relative-path", `String relative) ]
      | None -> [])
 
-let rec files_below root dir acc =
+let rec files_below root dir errors acc =
   let entries =
-    try Sys.readdir dir with Sys_error _ -> [||]
+    try Sys.readdir dir
+    with Sys_error _ ->
+      errors := dir :: !errors;
+      [||]
   in
   Array.sort String.compare entries;
   Array.fold_left
@@ -896,7 +899,7 @@ let rec files_below root dir acc =
         let path = Filename.concat dir name in
         try
           match (Unix.lstat path).Unix.st_kind with
-          | Unix.S_DIR -> files_below root path acc
+          | Unix.S_DIR -> files_below root path errors acc
           | Unix.S_REG ->
             let relative =
               if String.length path >= String.length root
@@ -913,7 +916,9 @@ let rec files_below root dir acc =
             in
             `Assoc (file_json ~relative path) :: acc
           | _ -> acc
-        with Unix.Unix_error _ -> acc)
+        with Unix.Unix_error _ ->
+          errors := path :: !errors;
+          acc)
     acc entries
 
 let accept_filters accept =
@@ -1172,6 +1177,7 @@ let dom_op (e : env) (op : string) (body : string) =
       match request with
       | None -> ()
       | Some request ->
+        let errors = ref [] in
         let files =
           match paths with
           | None -> `List []
@@ -1179,14 +1185,23 @@ let dom_op (e : env) (op : string) (body : string) =
             `List
               (List.concat_map
                  (fun path ->
-                   if directory then List.rev (files_below path path [])
+                   if directory then List.rev (files_below path path errors [])
                    else
                      try [ `Assoc (file_json path) ]
-                     with Unix.Unix_error _ -> [])
+                     with Unix.Unix_error _ ->
+                       errors := path :: !errors;
+                       [])
                  paths)
         in
-        reply "files-picked"
-          (`Assoc [ ("request", `Int request); ("files", files) ]))
+        (match !errors with
+         | unreadable :: _ ->
+           reply "files-picked"
+             (`Assoc
+                [ ("request", `Int request)
+                ; ("error", `String ("Unreadable import path: " ^ unreadable)) ])
+         | [] ->
+           reply "files-picked"
+             (`Assoc [ ("request", `Int request); ("files", files) ])))
   | "click" | "katex-pending" | "hljs-pending"
   | "imperative-attach" | "imperative-detach" -> ()
   | "caret-rect" | "selection-rects" | "offset-at" | "line-ranges" | "scroll-height" ->
