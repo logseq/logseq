@@ -348,6 +348,29 @@ let comment_avatar (comment : Model.block) =
         (avatar ~style_class:"ls-comment-avatar" ~width:22 ~height:22
           ~corner_radius:11 ?background ~text:(Collaborators.initials name) ~label:name [])
 
+(* cljs comments-model/comment-time-label: same-day comments show the
+   bare wall-clock time ("1:45 AM"), yesterday prefixes the translated
+   "Yesterday at", older comments use the locale short date + time.
+   comment-time-title is the "yyyy-MM-dd HH:mm" tooltip. *)
+let comment_time_parts created_at =
+  let open Dates in
+  let f = fields created_at in
+  let h12 = match f.hours mod 12 with 0 -> 12 | h -> h in
+  let ampm = if f.hours < 12 then "AM" else "PM" in
+  let time = Printf.sprintf "%d:%02d %s" h12 f.minutes ampm in
+  let same_day a b = a.year = b.year && a.month = b.month && a.day = b.day in
+  let now = date_now () in
+  let label =
+    if same_day f (fields now) then time
+    else if same_day f (fields (shift_day now (-1))) then
+      I.tf "block.comments/yesterday-at" [time]
+    else I.tf "block.comments/date-at-time" [short_date_of_ts created_at; time]
+  in
+  let title =
+    Printf.sprintf "%04d-%02d-%02d %02d:%02d" f.year f.month f.day f.hours f.minutes
+  in
+  (label, title)
+
 let comment_row ~scope ~area_uuid st (comment : Model.block Signal.signal) =
   let uuid = Option.value (Signal.get comment).block_uuid ~default:"" in
   overlay ~key:("comment-" ^ uuid) ~min_width:0
@@ -358,10 +381,19 @@ let comment_row ~scope ~area_uuid st (comment : Model.block Signal.signal) =
         @ [column ~style_class:"ls-comment-main" ~grow:1. ~min_width:0
         [ reactive (fun (comment : Model.block) ->
             let author = Option.bind comment.block_created_by (fun a -> a.Model.author_name) in
+            let time_children =
+              match comment.block_created_at with
+              | Some created_at when created_at > 0. ->
+                  let label, _title = comment_time_parts created_at in
+                  [ typography "0.75rem" 400
+                      (text ~style_class:"ls-comment-time" ~value:label []) ]
+              | _ -> []
+            in
             row ~style_class:"ls-comment-meta" ~min_height:28 ~gap:6 ~cross:`center ~flex_wrap:`wrap
-              (if Rtc_flows.user_uuid () = None then [] else
-              Option.to_list (Option.map (fun name ->
-                typography "0.75rem" 600 (text ~value:name [])) author))) comment
+              ((if Rtc_flows.user_uuid () = None then [] else
+                Option.to_list (Option.map (fun name ->
+                  typography "0.75rem" 600 (text ~value:name [])) author))
+               @ time_children)) comment
         ; comment_body ~scope ~area_uuid st comment ]])
     ; align `top_trailing (reactive (comment_actions st) comment) ]
 

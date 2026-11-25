@@ -789,3 +789,12 @@ Both apps submit comments correctly (the earlier "lost submission" was
 a test artifact — the click hit the wrong button). Count increments,
 comment renders in both. NEW GAP: master renders a timestamp line
 ("1:45 AM") above each comment; LUI renders no timestamp.
+
+Round 10c resolution: comment timestamp now renders in LUI
+(comment_time_parts — same-day wall time / Yesterday at / date at
+time, matching cljs comments-model). Verified: count increments,
+"1:50 AM" label identical to master. Gotcha recorded: the `text` kind
+rejects ~data_attrs at runtime (data_attrs_encode Invalid_argument)
+and the throw breaks the enclosing render pass — use style_class or a
+wrapping kind for attributes. The full timestamp tooltip
+("yyyy-MM-dd HH:mm" title attr) is not yet carried — noted as residual.
