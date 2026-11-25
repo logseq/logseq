@@ -774,3 +774,12 @@ Fix (deps/ui/src/shell/chrome.ml):
 Verified: button positions sampled at 50/100/150/250/400ms during both
 directions — constant 8,8 in both apps; end-state screenshots match
 master; left-menu click toggles, search opens cmdk.
+
+### Round 10b: comments submit flow (IN PROGRESS, inconclusive)
+Submit-button click test: LUI cleared the composer but the comment text
+was not visible in the page afterwards (needs investigation whether the
+comment renders elsewhere/one-frame delay, or the submission is lost);
+master neither cleared the composer nor showed the comment (the click
+may have missed the real submit control or master requires mod+enter).
+Both sides need a deeper follow-up: inspect the comments-area DOM after
+submission and compare against cljs's comment rendering contract.
