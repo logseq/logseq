@@ -544,7 +544,7 @@ let on_keydown ev st =
   in
   if editing || ev.Ui_services.composing || not (Runtime.signal_get st.open_)
   then Keymap_data.reset_chord card_keys
-  else if not ev.Ui_services.default_prevented then
+  else
     let matched = Keymap_data.match_event card_keys
       ~ids:["cards/toggle-answers"; "cards/again"; "cards/hard"; "cards/good"; "cards/easy"] ev in
     let consume () = ev.Ui_services.prevent_default (); ev.Ui_services.stop_immediate () in

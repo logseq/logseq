@@ -154,7 +154,7 @@ let info_btn st =
     ctx parent
 
 let rating_buttons st =
-  box ~key:"ratings" ~style_class:"ls-center"
+  box ~key:"ratings" ~style_class:"ls-center" ~grow:1.
     [ row ~key:"row" ~style_class:"ls-ratings"
         ~cross:`center ~gap:32 ~flex_wrap:`wrap
         (List.mapi (fun i r -> rating_btn st i r) ratings
@@ -218,7 +218,7 @@ let rec card_view st b phase =
             ]
         ]
     ; row ~key:"actions" ~style_class:"ls-card-actions"
-        ~margin_top:32 ~main:`center ~cross:`start
+        ~margin_top:32 ~cross:`start
         ~data_attrs:[ ("style", "padding-bottom:0.5rem;flex-shrink:0") ]
         [ (if np = "show-cloze" || np = "show-answer" then
              (* cljs card-answers is a compact secondary sm button with
