@@ -564,3 +564,21 @@ Residual notes (not user-visible defects):
 - master headless harness cannot enter block edit mode via synthetic
   clicks — a test-infra limitation that forced several master-side
   verifications to be code-level instead.
+
+### Round 7: outliner interactions — dual-track verified
+- Verified identical step-by-step in both: Enter sibling, Tab indent,
+  Shift+Tab outdent, Backspace merge at start, mod+enter TODO cycle
+  (no-op in both for plain blocks — consistent), Escape exits editing
+  into block selection (identical), ArrowDown navigation, Shift+Arrow
+  multi-select extend, copy selection, undo/redo.
+- ROBUSTNESS GAP (minor): LUI block-selection copy relies solely on the
+  async clipboard write + a cache validated by matching paste-event
+  text/plain; when the async write fails (e.g. clipboard permission
+  denied), paste inserts nothing. Master pastes successfully in the
+  same conditions (its memory-cache fallback does not depend on the
+  paste clipboard matching). With clipboard permission granted, LUI
+  paste works correctly (verified: blocks duplicate as expected).
+  Real-world impact small (browsers allow clipboard write in user
+  gestures) but the fallback semantics differ.
+- collapse bullet click test inconclusive in automation (needs precise
+  bullet hit target); collapse already verified in round 2.
