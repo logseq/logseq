@@ -437,3 +437,17 @@ Flashcards review modal is now at parity.
   dialogs, icon/property interactions, flashcards, templates, search,
   settings, keymap, i18n, sidebars, help, custom.css page) has been
   reviewed with screenshot evidence and brought to parity.
+
+### Round 5d: document/wide mode toggles
+- t d (document mode) and t w (wide mode): PARITY — both toggle and
+  render consistently with master (evidence r5-docmode-cmp.png,
+  r5-wide-cmp.png).
+
+## Sweep status summary (2025-11-25)
+All automatable interactive surfaces reviewed with side-by-side
+screenshot evidence and brought to parity. Fixes shipped this session:
+icon-picker tab bar position (f63d589857), menu-close black squares
+(e9a6419276), flashcards alignment + keybindings (912d38628c,
+67d3791204). Open items requiring manual/real-device verification:
+pdf viewer interaction, asset paste/upload runtime, export file
+generation, empty-search-results footer hint-row difference (minor).
