@@ -12,6 +12,7 @@
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.tx-sanitize :as tx-sanitize]
             [logseq.db-sync.worker.http :as http]
+            [logseq.db-sync.worker.handler.discussion-push :as discussion-push]
             [logseq.db-sync.worker.handler.semantic :as semantic-handler]
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
             [logseq.db-sync.worker.routes.sync :as sync-routes]
@@ -633,14 +634,34 @@
 (defn- apply-tx! [^js self tx-entries request-context]
   (let [sql (.-sql self)]
     (ensure-conn! self)
-    (let [conn (.-conn self)]
+    (let [conn (.-conn self)
+          env (.-env self)
+          {:keys [account graph-id]} request-context
+          push? (and account env (discussion-push/enabled? env))
+          apply-entry (fn [entry]
+                        (if-not push?
+                          (apply-tx-entry! self conn entry request-context)
+                          (let [events (volatile! [])]
+                            (d/listen! conn ::discussion-push
+                                       (fn [{:keys [db-before db-after tx-data]}]
+                                         (vswap! events into
+                                                 (discussion-push/event-routes db-before db-after tx-data account))))
+                            (try
+                              (let [applied? (apply-tx-entry! self conn entry request-context)]
+                                (when-let [queue (discussion-push/<queue-events! env graph-id account @events)]
+                                  (.waitUntil (.-state self)
+                                              (p/catch queue (fn [_]
+                                                               (log/warn :db-sync/discussion-push-queue-failed
+                                                                         {:graph-id graph-id})))))
+                                applied?)
+                              (finally (d/unlisten! conn ::discussion-push))))))]
       (loop [remaining tx-entries
              applied? false
              successful-tx-ids []]
         (if-let [tx-entry (first remaining)]
           (let [tx-id (:tx-id tx-entry)
                 applied-entry? (try
-                                 (boolean (apply-tx-entry! self conn tx-entry request-context))
+                                 (boolean (apply-entry tx-entry))
                                  (catch :default e
                                    (log/error :db-sync/transact-failed e)
                                    (let [missing-block-uuids (missing-block-uuids-from-error e)]
@@ -842,6 +863,7 @@
                          (http/json-response :sync/tx-batch
                                              (handle-tx-batch! self nil txs t-before
                                                                {:graph-id graph-id
+                                                                :account (.get (.-headers request) "x-logseq-sync-account")
                                                                 :client-revision client-revision}))))
                      (http/bad-request "invalid tx")))))))))
 

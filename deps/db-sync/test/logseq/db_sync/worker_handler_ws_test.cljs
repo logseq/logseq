@@ -5,6 +5,7 @@
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
+            [logseq.db-sync.worker.handler.discussion-push :as discussion-push]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.presence :as presence]
@@ -203,3 +204,61 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest tx-batch-from-hibernated-socket-keeps-its-graph
+  (let [attachment (atom nil)
+        ws #js {:serializeAttachment #(reset! attachment %)
+                :deserializeAttachment #(deref attachment)}
+        account (str (random-uuid))
+        graph (str (random-uuid))
+        original #js {:graph-id graph}
+        restored #js {}
+        context (atom nil)
+        raw (protocol/encode-message
+             {:type "tx/batch"
+              :t-before 0
+              :txs [{:tx (protocol/tx->transit [[:db/add -1 :block/title "reply"]])
+                     :outliner-op :save-block}]})]
+    (presence/add-presence! original ws {:user-id account})
+    (swap! (presence/presence* restored) assoc ws (presence/attachment->user @attachment))
+    (with-redefs [sync-handler/handle-tx-batch! (fn
+                                                 ([_ _ _ _] {:type "tx/batch/ok"})
+                                                 ([_ _ _ _ request-context]
+                                                  (reset! context request-context)
+                                                  {:type "tx/batch/ok"}))
+                  ws/send! (fn [_ _] nil)]
+      (ws-handler/handle-ws-message! restored ws raw))
+    (is (= {:graph-id graph :account account} @context))))
+
+(deftest discussion-push-finds-new-comments-and-reactions-in-a-transaction-report
+  (let [owner (random-uuid)
+        participant (random-uuid)
+        author (random-uuid)
+        target (random-uuid)
+        comment-id (random-uuid)
+        reaction (random-uuid)
+        conn (d/create-conn
+              {:block/uuid {:db/unique :db.unique/identity}
+               :block/tags {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+               :block/parent {:db/valueType :db.type/ref}
+               :logseq.property/created-by-ref {:db/valueType :db.type/ref}
+               :logseq.property.comments/blocks {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+               :logseq.property.reaction/target {:db/valueType :db.type/ref}})]
+    (d/transact! conn [{:db/id -1 :block/uuid owner}
+                       {:db/id -2 :block/uuid participant}
+                       {:db/id -3 :block/uuid author}
+                       {:db/id -4 :block/uuid target :logseq.property/created-by-ref -1}
+                       {:db/id -5 :db/ident :logseq.class/Comments}
+                       {:db/id -6 :block/uuid (random-uuid) :block/tags [-5] :logseq.property.comments/blocks [-4]}
+                       {:db/id -7 :block/uuid (random-uuid) :block/parent -6 :logseq.property/created-by-ref -2}])
+    (let [thread (-> (d/entity @conn [:block/uuid target]) :logseq.property.comments/_blocks first :db/id)
+          {:keys [db-before db-after tx-data]}
+          (d/transact! conn [{:block/uuid comment-id :block/parent thread
+                              :logseq.property/created-by-ref [:block/uuid author]}
+                             {:block/uuid reaction :logseq.property.reaction/target [:block/uuid target]
+                              :logseq.property/created-by-ref [:block/uuid author]}])
+          routes (discussion-push/event-routes db-before db-after tx-data (str author))]
+      (is (= {(str comment-id) #{(str owner) (str participant)}
+              (str reaction) #{(str owner)}}
+             (into {} (map (juxt :event (comp set :recipients))) routes)))
+      (is (empty? (discussion-push/event-routes db-before db-after tx-data (str owner)))))))

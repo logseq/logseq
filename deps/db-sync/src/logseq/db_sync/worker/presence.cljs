@@ -22,9 +22,15 @@
   [attachment]
   (:presence/user (bean/->clj attachment)))
 
+(defn attachment->graph-id
+  [attachment]
+  (:presence/graph-id (bean/->clj attachment)))
+
 (defn- serialize-attachment!
-  [^js ws user]
-  (.serializeAttachment ws (bean/->js {:presence/user user})))
+  [^js self ^js ws user]
+  (let [graph-id (aget self "graph-id")]
+    (.serializeAttachment ws (bean/->js (cond-> {:presence/user user}
+                                         graph-id (assoc :presence/graph-id graph-id))))))
 
 (defn presence*
   [^js self]
@@ -42,7 +48,7 @@
 (defn add-presence!
   [^js self ^js ws user]
   (swap! (presence* self) assoc ws user)
-  (serialize-attachment! ws user))
+  (serialize-attachment! self ws user))
 
 (defn update-presence!
   [^js self ^js ws {:keys [editing-block-uuid] :as updates}]
@@ -55,7 +61,7 @@
                              (assoc user :editing-block-uuid editing-block-uuid)
                              (dissoc user :editing-block-uuid))
                            user)]
-               (serialize-attachment! ws user')
+               (serialize-attachment! self ws user')
                (assoc presence ws user'))
              presence))))
 

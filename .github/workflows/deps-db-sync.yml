@@ -78,6 +78,9 @@ jobs:
       - name: Run unit tests
         run: pnpm test:node-adapter
 
+      - name: Run discussion push delivery tests
+        run: pnpm test:discussion-push
+
       - name: Run MCP helper tests
         run: pnpm test:chatgpt-app
 
