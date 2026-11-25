@@ -303,3 +303,45 @@ Fix (resources/css/lui.css, lui-core.css):
 Follow-up candidate (platform level, ~/repos/lui): defer icon/content release
 until the surface is actually removed so the fade renders intact content;
 master parity would also accept removing the close fade entirely.
+
+## Round 4 findings (2026-11-25)
+
+### Parity confirmed
+- **Move block keyboard reorder**: `mod+shift+down` on a block in edit mode moves
+  it below the next sibling identically on both sides (order aaa,bbb,ccc ->
+  bbb,aaa,ccc). Evidence: r4-moveundo-*.png
+- **Undo in a fresh block**: typing text in a new block then `mod+z` clears the
+  text but keeps editing state on BOTH sides (the earlier low-prio suspicion
+  that LUI removes the whole block is disproven — parity).
+- **Block drag reorder (LUI)**: dragging the bullet of 'aaa first' below
+  'ccc third' reorders correctly (bs, cs, af). Master drag could not be
+  automated in headless (hover controls not exposed); keyboard reorder verified
+  on both instead.
+- **Deprecated embed macro**: typing `{{embed [[page]]}}` renders the same
+  deprecation notice "{{embed}} is deprecated. Use '/Node embed' command
+  instead." on both sides. Evidence: r4-embed-*-crop.png
+- **Contents panel**: both sides show non-current-page outline content when
+  navigating to a fresh page (upstream behavior, identical). Not a LUI bug.
+
+### i18n (code-level)
+- deps/ui/src/core/i18n.ml implements the full dict loading pipeline with en
+  fallback matching cljs tongue semantics; 25 locale dicts shared with master.
+
+### Flashcards review UI (round 4, evidence r4fc-*.png)
+Parity confirmed:
+- Card recognition: block tagged via inline `#card` autocomplete counts in both
+  (master 1/1, LUI counts all cards in graph — profile had 2 total).
+- Rating row after reveal: Again/Hard/Good/Easy buttons with key hints and
+  interval labels render the same layout on both sides.
+
+Gaps found (need fixing):
+1. **Keyboard shortcuts swallowed in review modal**: in LUI the 'All cards'
+   control is a native `<select>` that takes focus; pressing `s` (show answers)
+   or rating keys 1-4 is captured by the select instead of the modal shortcut
+   handler. Master: `s` reveals the answer immediately in the same flow.
+   Clicking the button in LUI works fine.
+2. **Card context label**: master shows the card's page name above the question
+   (e.g. `zzqfc...`); LUI shows the literal label `Contents` instead.
+3. **"Show answers" button position**: master bottom-left, LUI bottom-center.
+4. **Question bullet**: master renders a collapse arrow before the bullet in
+   the review; LUI shows only the bullet.
