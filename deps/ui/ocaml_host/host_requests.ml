@@ -919,6 +919,8 @@ let ignored_import_file path =
        && not (List.mem extension [ ".md"; ".markdown"; ".org"; ".js"; ".edn"; ".css" ])
 
 let ignored_import_dir path =
+  if String.starts_with ~prefix:"assets/" path then false
+  else
   let rec ignored_parts = function
     | [] -> false
     | part :: rest ->
