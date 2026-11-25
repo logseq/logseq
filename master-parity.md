@@ -451,3 +451,19 @@ icon-picker tab bar position (f63d589857), menu-close black squares
 67d3791204). Open items requiring manual/real-device verification:
 pdf viewer interaction, asset paste/upload runtime, export file
 generation, empty-search-results footer hint-row difference (minor).
+
+### Round 6: comments/reactions/assets (code review + UI verify)
+- Comments area (ctrl+space on selected block): BOTH open 'Comments on
+  this page' with input + send button. MINOR DIFF: LUI shows a visible
+  取消/Cancel button in the composer row, master shows only the send
+  plane (evidence r6-comment-cmp.png). Cosmetic, low priority.
+- LUI comments implementation covers drafts (localStorage persistence),
+  reactions with emoji-only picker, reaction badges with counts/usernames,
+  toggle-reaction ops — matches cljs comments/reaction feature surface.
+- ASSET DROP: LUI accepted a synthesized (untrusted) drop event and
+  uploaded drop-test.png, rendering an image asset block with resize
+  handle + filename caption. Master IGNORED the same untrusted drop.
+  Real-user impact likely nil (real drops are trusted), but worth
+  noting LUI may lack an isTrusted/closest-dropzone guard master has.
+  Image asset rendering itself needs comparison once master has the
+  same asset (pending manual/heavier test).
