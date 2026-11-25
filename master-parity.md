@@ -632,3 +632,13 @@ range selection works when sequenced that way.
 - Existing-highlight menu: colors + ref(copy-ref) + copy(copy-text) +
   link(linked-ref) + del(delete) — all four actions present, matching
   cljs core.cljs spec item-for-item.
+
+### Round 8: properties deep verification
+- Property creation flow identical step-by-step in both: type-ahead
+  filter, "Select a property type" list (Text/Number/Date/DateTime/
+  Checkbox/URL/Node/Asset — same order, same labels), row appearance.
+- Checkbox property: same row layout in both (type icon + name + value
+  box + "Add property" button below). LUI toggle verified working —
+  click flips to the checked (blue) state, persists.
+- Icon-picker opening from the property area verified symmetric
+  (identical popup in both).
