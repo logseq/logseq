@@ -197,15 +197,16 @@
 
 (deftest export-sqlite-db-on-web-uses-file-system-writable-when-available
   (async done
-    (let [writes (atom [])
+    (let [repo "logseq_db_team/fieldlogseq_db_notes\\archive"
+          writes (atom [])
           picker-calls (atom [])
           original-electron? util/electron?
           original-export-db persist-db/<export-db
           original-picker (.-showSaveFilePicker js/window)
           payload (js/Uint8Array. #js [1 2 3])]
       (set! util/electron? (constantly false))
-      (set! persist-db/<export-db (fn [repo opts]
-                                    (is (= "logseq_db_big_graph" repo))
+      (set! persist-db/<export-db (fn [export-repo opts]
+                                    (is (= repo export-repo))
                                     (is (= {:return-data? true} opts))
                                     (p/resolved payload)))
       (set! (.-showSaveFilePicker js/window)
@@ -219,9 +220,11 @@
                                                   :close (fn []
                                                            (swap! writes conj [:close])
                                                            (p/resolved nil))}))})))
-      (-> (export/export-repo-as-sqlite-db! "logseq_db_big_graph")
+      (-> (export/export-repo-as-sqlite-db! repo)
           (p/then (fn [_]
                     (is (= 1 (count @picker-calls)))
+                    (is (re-matches #"logseq_db_team_fieldlogseq_db_notes_archive_\d+\.sqlite"
+                                    (.-suggestedName (first @picker-calls))))
                     (is (= [[:write payload] [:close]] @writes))))
           (p/catch (fn [e]
                      (is false (str "unexpected error: " e))))

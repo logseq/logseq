@@ -50,7 +50,8 @@
 
 (defn- file-name [repo extension]
   (-> repo
-      (string/replace #"^/+" "")
+      (string/replace #"^[/\\]+" "")
+      (string/replace #"[/:\\]" "_")
       (str "_" (quot (util/time-ms) 1000))
       (str "." (string/lower-case (name extension)))))
 
