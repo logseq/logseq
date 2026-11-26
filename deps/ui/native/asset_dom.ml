@@ -162,6 +162,11 @@ let retry_pending () = ()
 let asset_source file =
   Platform.resource_url (Asset_store.asset_path (Runtime.repo ()) file)
 
+let image_extension ext =
+  List.mem (String.lowercase_ascii ext)
+    [ "gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
+      "cr2"; "jxl"; "heic" ]
+
 let file_cell_el (w : Wire.t) : Lui_elements.t =
   let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
   let ext =
@@ -170,14 +175,14 @@ let file_cell_el (w : Wire.t) : Lui_elements.t =
   in
   let file = uuid ^ "." ^ ext in
   Lui_elements.box ~style_class:"block-content" ~max_height:30
-    [ Lui_elements.image ~url:(asset_source file) ~alt:file ~max_height:30 [] ]
+    [ if image_extension ext then
+        Lui_elements.image ~url:(asset_source file) ~alt:file ~max_height:30 []
+      else Lui_elements.text ~value:file [] ]
 
 let gallery_cover ~width ~height (value : W.t) : Lui_elements.t =
   let block = Decode.block_of_wire value in
   match block.Model.block_uuid, block.Model.block_asset_type with
-  | Some uuid, Some ext when List.mem ext
-      ["gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
-       "cr2"; "jxl"; "heic"] ->
+  | Some uuid, Some ext when image_extension ext ->
       let file = uuid ^ "." ^ ext in
       let source = match block.Model.block_asset_url with
         | Some url when url <> "" -> url
@@ -226,8 +231,10 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            | Some url when url <> "" -> url
            | _ -> asset_source file
          in
-         Lui_elements.image ~url:source
-           ~alt:file ~max_height:800 ~container_relative_frame:`horizontal []) ] context parent
+         if image_extension ext then
+           Lui_elements.image ~url:source
+             ~alt:file ~max_height:800 ~container_relative_frame:`horizontal []
+         else Lui_elements.text ~value:file []) ] context parent
 
 let content_view = block_view
 
