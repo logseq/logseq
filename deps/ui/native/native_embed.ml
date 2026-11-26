@@ -446,6 +446,10 @@ let initialize_unlocked platform_code host_code (payload : string) =
   in
   current_app := Some app;
   Dom_ext.doc_elements_provider := collect_elements;
+  Dom_ext.node_alive_provider := (fun id ->
+    match !current_app with
+    | Some app -> Lui_runtime.node_live (Lui_app.runtime app) id
+    | None -> false);
   Dom_ext.subtree_elements_provider := collect_subtree;
   Platform.dom_handler_aliases := (fun id ->
     match !current_app with
