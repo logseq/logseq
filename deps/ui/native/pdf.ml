@@ -141,10 +141,16 @@ let track_write p =
             Js.Promise.resolve ()));
   p
 
+let popout_launch_page_consumed = ref false
+
 let popout_page () =
-  match argv_value "--pdf-page" with
-  | Some value -> int_of_string_opt value
-  | None -> None
+  if !popout_launch_page_consumed then None
+  else begin
+    popout_launch_page_consumed := true;
+    match argv_value "--pdf-page" with
+    | Some value -> int_of_string_opt value
+    | None -> None
+  end
 
 let open_popout_asset uuid =
   let path =
@@ -580,11 +586,12 @@ let load_view (a : Model.pdf_asset) =
        | Some hl -> hl.hl_id
        | None -> None
      in
+     let launch_page = popout_page () in
      let page =
        match !Pdf_state.ref_hl with
        | Some hl -> hl.hl_page
        | None -> (
-           match popout_page () with
+           match launch_page with
            | Some page when popout_mode () && page > 0 -> page
            | _ -> Option.value page_opt ~default:1)
      in
