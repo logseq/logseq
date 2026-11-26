@@ -78,6 +78,8 @@ static void pdf_autorelease_pool_close(id pool) {
 #include <dlfcn.h>
 #endif
 
+typedef struct { float left; float top; float right; float bottom; } pdfium_rectf;
+
 typedef struct {
   void *handle;
   void (*init)(void);
@@ -96,7 +98,8 @@ typedef struct {
   void (*text_close)(void *);
   int (*text_count)(void *);
   unsigned int (*text_unicode)(void *, int);
-  int (*text_char_box)(void *, int, double *, double *, double *, double *);
+  int (*text_loose_char_box)(void *, int, pdfium_rectf *);
+  int (*page_to_device)(void *, int, int, int, int, int, double, double, int *, int *);
 } pdfium_api;
 
 static pdfium_api pdfium;
@@ -157,7 +160,8 @@ static int pdfium_load(void) {
   PDFIUM_SYM(text_close, "FPDFText_ClosePage");
   PDFIUM_SYM(text_count, "FPDFText_CountChars");
   PDFIUM_SYM(text_unicode, "FPDFText_GetUnicode");
-  PDFIUM_SYM(text_char_box, "FPDFText_GetCharBox");
+  PDFIUM_SYM(text_loose_char_box, "FPDFText_GetLooseCharBox");
+  PDFIUM_SYM(page_to_device, "FPDF_PageToDevice");
 #undef PDFIUM_SYM
   pdfium.init();
   pdfium_state = 1;
@@ -181,6 +185,50 @@ static void pdfium_utf8_append(char **cur, size_t *rem, unsigned int u) {
   memcpy(*cur, bytes, (size_t)len);
   *cur += len; *rem -= (size_t)len;
   **cur = 0;
+}
+
+typedef struct { double x1; double y1; double x2; double y2; } pdfium_norm_rect;
+
+/* PDFium char boxes are in unrotated PDF user space. Map them through the
+   page display transform (crop box origin and /Rotate) into a fixed device
+   space, then normalize to top-left page coordinates like the rendered
+   bitmap and the macOS backend. */
+#define PDFIUM_NORM_DEVICE 1000000
+static int pdfium_char_rect(void *page, const pdfium_rectf *box, pdfium_norm_rect *out) {
+  double xs[2] = { box->left, box->right }, ys[2] = { box->bottom, box->top };
+  int first = 1;
+  for (int a = 0; a < 2; a++) for (int b = 0; b < 2; b++) {
+    int dx = 0, dy = 0;
+    if (!pdfium.page_to_device(page, 0, 0, PDFIUM_NORM_DEVICE, PDFIUM_NORM_DEVICE, 0,
+            xs[a], ys[b], &dx, &dy)) return 0;
+    double nx = (double)dx / PDFIUM_NORM_DEVICE, ny = (double)dy / PDFIUM_NORM_DEVICE;
+    if (first) { out->x1 = out->x2 = nx; out->y1 = out->y2 = ny; first = 0; }
+    else {
+      out->x1 = nx < out->x1 ? nx : out->x1;
+      out->x2 = nx > out->x2 ? nx : out->x2;
+      out->y1 = ny < out->y1 ? ny : out->y1;
+      out->y2 = ny > out->y2 ? ny : out->y2;
+    }
+  }
+  return 1;
+}
+
+static void pdfium_union_rect(pdfium_norm_rect *into, const pdfium_norm_rect *r) {
+  into->x1 = r->x1 < into->x1 ? r->x1 : into->x1;
+  into->x2 = r->x2 > into->x2 ? r->x2 : into->x2;
+  into->y1 = r->y1 < into->y1 ? r->y1 : into->y1;
+  into->y2 = r->y2 > into->y2 ? r->y2 : into->y2;
+}
+
+static int pdfium_push_rect(pdfium_norm_rect **rects, size_t *cap, size_t *len, pdfium_norm_rect r) {
+  if (*len == *cap) {
+    pdfium_norm_rect *grown = (pdfium_norm_rect *)realloc(*rects, *cap * 2 * sizeof(**rects));
+    if (!grown) return 0;
+    *rects = grown;
+    *cap *= 2;
+  }
+  (*rects)[(*len)++] = r;
+  return 1;
 }
 #endif
 
@@ -392,12 +440,8 @@ CAMLprim value logseq_pdf_selection_json(value doc_v, value page_v,
   int page_index = (int)Long_val(page_v);
   void *page = pdfium.load_page(doc, page_index);
   if (!page) caml_invalid_argument("PDF page is unavailable");
-  double pw = 0, ph = 0;
-  pdfium.page_size(doc, page_index, &pw, &ph);
-  double x1 = Double_val(x1_v) * pw;
-  double y1 = Double_val(y1_v) * ph;
-  double x2 = Double_val(x2_v) * pw;
-  double y2 = Double_val(y2_v) * ph;
+  double x1 = Double_val(x1_v), y1 = Double_val(y1_v);
+  double x2 = Double_val(x2_v), y2 = Double_val(y2_v);
   double sx1 = x1 < x2 ? x1 : x2, sx2 = x1 > x2 ? x1 : x2;
   double sy1 = y1 < y2 ? y1 : y2, sy2 = y1 > y2 ? y1 : y2;
   void *textpage = pdfium.text_load(page);
@@ -410,44 +454,82 @@ CAMLprim value logseq_pdf_selection_json(value doc_v, value page_v,
   char *text = (char *)calloc(cap, 1);
   char *cur = text;
   size_t rem = cap;
-  double bx1 = 0, by1 = 0, bx2 = 0, by2 = 0;
-  double last_cy = 0, last_x1 = 0;
-  int selected = 0;
-  for (int i = 0; i < count; i++) {
-    double left = 0, right = 0, bottom = 0, top = 0;
-    if (!pdfium.text_char_box(textpage, i, &left, &right, &bottom, &top)) continue;
-    double cx = (left + right) * 0.5;
-    double cy_top = ph - top;
-    double cy_bottom = ph - bottom;
-    double cy = (cy_top + cy_bottom) * 0.5;
-    if (cx < sx1 || cx > sx2 || cy < sy1 || cy > sy2) continue;
-    if (selected && (cy - last_cy > 4.0 || left + 4.0 < last_x1)) {
-      if (rem > 2) { *cur++ = '\n'; rem--; }
-    }
+  size_t rects_cap = 16, rects_len = 0;
+  pdfium_norm_rect *rects = (pdfium_norm_rect *)malloc(rects_cap * sizeof(*rects));
+  pdfium_norm_rect line = {0, 0, 0, 0};
+  int selected = 0, in_line = 0, pending_space = 0, line_break = 0, oom = !text || !rects;
+  for (int i = 0; i < count && !oom; i++) {
     unsigned int u = pdfium.text_unicode(textpage, i);
-    pdfium_utf8_append(&cur, &rem, u);
-    double nx1 = left / pw, nx2 = right / pw;
-    double ny1 = cy_top / ph, ny2 = cy_bottom / ph;
-    if (!selected) {
-      bx1 = nx1; bx2 = nx2; by1 = ny1; by2 = ny2;
-    } else {
-      if (nx1 < bx1) bx1 = nx1; if (nx2 > bx2) bx2 = nx2;
-      if (ny1 < by1) by1 = ny1; if (ny2 > by2) by2 = ny2;
+    if (u >= 0xd800 && u < 0xdc00 && i + 1 < count) {
+      unsigned int low = pdfium.text_unicode(textpage, i + 1);
+      if (low >= 0xdc00 && low < 0xe000) u = 0x10000 + ((u - 0xd800) << 10) + (low - 0xdc00);
     }
-    last_cy = cy; last_x1 = left; selected++;
+    if (u >= 0xdc00 && u < 0xe000) continue;
+    /* PDFium emits generated CR/LF between text lines it detects. */
+    if (u == '\r' || u == '\n') {
+      if (in_line) line_break = 1;
+      continue;
+    }
+    pdfium_rectf box;
+    pdfium_norm_rect r;
+    int has_box = pdfium.text_loose_char_box(textpage, i, &box) &&
+        pdfium_char_rect(page, &box, &r) && r.x2 > r.x1 && r.y2 > r.y1;
+    if (u == ' ' || u == 0xa0) {
+      if (in_line) pending_space = 1;
+      continue;
+    }
+    if (!has_box) continue;
+    if (r.x2 < sx1 || r.x1 > sx2 || r.y2 < sy1 || r.y1 > sy2) continue;
+    if (line_break) {
+      if (!pdfium_push_rect(&rects, &rects_cap, &rects_len, line)) { oom = 1; break; }
+      if (rem > 2) { *cur++ = '\n'; rem--; *cur = 0; }
+      in_line = 0;
+      line_break = 0;
+      pending_space = 0;
+    }
+    if (pending_space && rem > 2) { *cur++ = ' '; rem--; *cur = 0; }
+    pending_space = 0;
+    pdfium_utf8_append(&cur, &rem, u);
+    if (!in_line) { line = r; in_line = 1; }
+    else pdfium_union_rect(&line, &r);
+    selected++;
   }
-  size_t json_cap = 1024 + strlen(text) * 2;
-  char *json = (char *)calloc(json_cap, 1);
+  if (!oom && in_line && !pdfium_push_rect(&rects, &rects_cap, &rects_len, line)) oom = 1;
+  char *json = NULL;
+  size_t json_cap = 0;
+  if (!oom) {
+    json_cap = 1024 + strlen(text) * 2 + rects_len * 192;
+    json = (char *)calloc(json_cap, 1);
+    oom = !json;
+  }
+  if (oom) {
+    free(rects);
+    free(text);
+    pdfium.text_close(textpage);
+    pdfium.close_page(page);
+    caml_raise_out_of_memory();
+  }
   cur = json; rem = json_cap;
   cur += snprintf(cur, rem, "{\"text\":\""); rem = json_cap - (cur - json);
   json_escape_append(&cur, &rem, text);
   if (selected) {
+    pdfium_norm_rect b = rects[0];
+    for (size_t k = 1; k < rects_len; k++) pdfium_union_rect(&b, &rects[k]);
     cur += snprintf(cur, rem,
-        "\",\"bounding\":{\"x1\":%.6f,\"y1\":%.6f,\"x2\":%.6f,\"y2\":%.6f,\"w\":1.0,\"h\":1.0},\"rects\":[{\"x1\":%.6f,\"y1\":%.6f,\"x2\":%.6f,\"y2\":%.6f,\"w\":1.0,\"h\":1.0}]}",
-        bx1, by1, bx2, by2, bx1, by1, bx2, by2);
+        "\",\"bounding\":{\"x1\":%.6f,\"y1\":%.6f,\"x2\":%.6f,\"y2\":%.6f,\"w\":1.0,\"h\":1.0},\"rects\":[",
+        b.x1, b.y1, b.x2, b.y2);
+    rem = json_cap - (cur - json);
+    for (size_t k = 0; k < rects_len; k++) {
+      cur += snprintf(cur, rem,
+          "%s{\"x1\":%.6f,\"y1\":%.6f,\"x2\":%.6f,\"y2\":%.6f,\"w\":1.0,\"h\":1.0}",
+          k ? "," : "", rects[k].x1, rects[k].y1, rects[k].x2, rects[k].y2);
+      rem = json_cap - (cur - json);
+    }
+    snprintf(cur, rem, "]}");
   } else {
-    cur += snprintf(cur, rem, "\",\"bounding\":null,\"rects\":[]}");
+    snprintf(cur, rem, "\",\"bounding\":null,\"rects\":[]}");
   }
+  free(rects);
   json_v = caml_copy_string(json);
   free(json);
   free(text);
