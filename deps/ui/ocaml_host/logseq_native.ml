@@ -80,6 +80,406 @@ let perf_s = Native_window.performance_time
 
 let mods_of_keymod = Native_window.mods_of_keymod
 
+module Host_media = struct
+  open Lui_scene
+
+  external media_open : string -> bool -> int = "logseq_native_media_open"
+  external media_close : int -> unit = "logseq_native_media_close"
+  external media_set_playing : int -> bool -> unit = "logseq_native_media_set_playing"
+  external media_playing : int -> bool = "logseq_native_media_playing"
+  external media_position : int -> int * int = "logseq_native_media_position"
+  external media_seek_ratio : int -> float -> unit = "logseq_native_media_seek_ratio"
+  external media_frame : int -> int -> int * int * int * bytes = "logseq_native_media_frame"
+  external media_error : int -> string = "logseq_native_media_error"
+
+  type state = {
+    source : string;
+    is_video : bool;
+    mutable handle : int;
+    mutable audio_player : Lui_media.player option;
+    mutable video_player : Lui_media.video option;
+    mutable image : image option;
+    mutable generation : int;
+    mutable playing : bool;
+    mutable position_ms : int;
+    mutable duration_ms : int;
+    mutable error : string;
+    mutable pending_seek_ratio : float option;
+    mutable refresh_until : float;
+    mutable last_seen : float;
+    mutable last_paint_log : float;
+  }
+
+  let states : (int, state) Hashtbl.t = Hashtbl.create 8
+  let media_debug = lazy (match Sys.getenv_opt "LOGSEQ_NATIVE_MEDIA_DEBUG" with Some ("1" | "true") -> true | _ -> false)
+  let media_log fmt = if Lazy.force media_debug then Printf.eprintf (fmt ^^ "\n%!") else Printf.ifprintf stderr fmt
+
+  let json_parse text = Yojson.Safe.from_string text
+
+  let string_member json key =
+    match json with
+    | `Assoc fields -> (match List.assoc_opt key fields with
+      | Some (`String value) -> value
+      | _ -> "")
+    | _ -> ""
+
+  let attrs_src store id =
+    match Lui_store.string_prop store id "attrs" with
+    | Some text -> string_member (json_parse text) "src"
+    | None -> ""
+
+  let media_src store id =
+    match Lui_store.string_prop store id "src" with
+    | Some source when source <> "" -> source
+    | _ -> attrs_src store id
+
+  let close_handle handle =
+    if handle >= 0 then try media_close handle with _ -> ()
+
+  let close_state state =
+    close_handle state.handle;
+    Option.iter (fun player -> try Lui_media.unload player with _ -> ()) state.audio_player;
+    Option.iter (fun video -> try Lui_media.video_close video with _ -> ()) state.video_player
+
+  let media_file_path source =
+    if String.length source > 7 && String.sub source 0 7 = "file://" then
+      try Uri.pct_decode (Uri.path (Uri.of_string source)) with _ -> source
+    else source
+
+  let local_media_source source =
+    (String.length source > 7 && String.sub source 0 7 = "file://")
+    || (source <> "" && source.[0] = '/')
+    || not (String.contains source ':')
+
+  let open_state id state =
+    if state.handle <> -3 then ()
+    else begin
+      let media_path = media_file_path state.source in
+      let audio_player =
+        if (not state.is_video) && Lui_media.audio_available () then
+          match Lui_media.player_create () with
+          | Error _ -> None
+          | Ok player ->
+            (match Lui_media.load player media_path with
+             | Ok () -> Some player
+             | Error _ -> None)
+        else None
+      in
+      let video_player =
+        if state.is_video && Lui_media.video_available () then
+          match Lui_media.video_open media_path with
+          | Ok video -> Some video
+          | Error _ -> None
+        else None
+      in
+      let handle, error =
+        if Option.is_some audio_player || Option.is_some video_player then -2, ""
+        else
+          try media_open state.source state.is_video, ""
+          with
+          | Failure message -> -1, message
+          | Invalid_argument message -> -1, message
+      in
+      state.audio_player <- audio_player;
+      state.video_player <- video_player;
+      state.handle <- handle;
+      state.error <- error;
+      media_log "media open id=%d video=%b handle=%d audio=%b native-video=%b src=%s" id state.is_video handle (Option.is_some audio_player) (Option.is_some video_player) state.source
+    end
+
+  let state_for id source is_video =
+    let now = Unix.gettimeofday () in
+    match Hashtbl.find_opt states id with
+    | Some state when state.source = source && state.is_video = is_video ->
+      state.last_seen <- now;
+      state
+    | previous ->
+      Option.iter close_state previous;
+      let state = {
+        source; is_video; handle = -3; audio_player = None; video_player = None;
+        image = None; generation = 0;
+        playing = false; position_ms = 0; duration_ms = 0; error = "";
+        pending_seek_ratio = None;
+        refresh_until = now +. 8.; last_seen = now; last_paint_log = 0.;
+      } in
+      Hashtbl.replace states id state;
+      if local_media_source source then open_state id state;
+      state
+
+  let sweep store =
+    Hashtbl.filter_map_inplace
+      (fun id state ->
+        if not (Lui_store.mem store id) then begin
+          media_log "media close detached id=%d src=%s" id state.source;
+          close_state state;
+          None
+        end else Some state)
+      states
+
+  let state_active now state =
+    (state.handle >= 0 || Option.is_some state.audio_player || Option.is_some state.video_player)
+    && (state.playing || now < state.refresh_until)
+
+  let active () =
+    let now = Unix.gettimeofday () in
+    Hashtbl.fold (fun _ state acc -> acc || state_active now state) states false
+
+  let solid_fill fill_color r alpha =
+    Lui_paint.fill r (0., 0., 0., 0.) ~paint:Solid ~c1:fill_color ~c2:fill_color
+      ~grad:(0., 0., 0., 0.) ~border:(0., 0., 0., 0.)
+      ~bcolor:(color 0 0 0 0) ~dashed:false ~alpha
+
+  let rounded_fill fill_color radius r alpha =
+    let radii = (radius, radius, radius, radius) in
+    Lui_paint.fill r radii ~paint:Solid ~c1:fill_color ~c2:fill_color
+      ~grad:(0., 0., 0., 0.) ~border:(0., 0., 0., 0.)
+      ~bcolor:(color 0 0 0 0) ~dashed:false ~alpha
+
+  let inside r x y =
+    x >= r.x && x <= r.x +. r.w && y >= r.y && y <= r.y +. r.h
+
+  let bar_height ctx = 36. *. ctx.Lui_paint.scale
+
+  let bar_rect ctx frame =
+    let h = Float.min frame.h (bar_height ctx) in
+    rect frame.x (frame.y +. frame.h -. h) frame.w h
+
+  let control_rects ctx frame =
+    let s = ctx.Lui_paint.scale in
+    let bar = bar_rect ctx frame in
+    let button_size = Float.max 20. (bar.h -. (8. *. s)) in
+    let button = rect (bar.x +. (6. *. s)) (bar.y +. ((bar.h -. button_size) /. 2.)) button_size button_size in
+    let time_w = 78. *. s in
+    let progress_x = button.x +. button.w +. (12. *. s) in
+    let progress_end = bar.x +. bar.w -. time_w -. (10. *. s) in
+    let progress_w = Float.max 0. (progress_end -. progress_x) in
+    let progress_h = 6. *. s in
+    let progress = rect progress_x (bar.y +. ((bar.h -. progress_h) /. 2.)) progress_w progress_h in
+    let time = rect (progress_end +. (8. *. s)) bar.y time_w bar.h in
+    (bar, button, progress, time)
+
+  let icon_images : (string * int, image option) Hashtbl.t = Hashtbl.create 4
+
+  let icon_image name size =
+    let key = (name, size) in
+    match Hashtbl.find_opt icon_images key with
+    | Some cached -> cached
+    | None ->
+      let rendered =
+        match List.assoc_opt name Host_builtin_icons.all with
+        | None -> None
+        | Some svg ->
+          let colored =
+            match String.index_opt svg '<' with
+            | Some i when String.length svg > i + 4 && String.sub svg i 4 = "<svg" ->
+              String.sub svg 0 (i + 4) ^ " color=\"white\"" ^ String.sub svg (i + 4) (String.length svg - i - 4)
+            | _ -> svg
+          in
+          (match Lui_svg.render colored ~w:size ~h:size with
+           | Ok image -> Some image
+           | Error _ -> None)
+      in
+      Hashtbl.replace icon_images key rendered;
+      rendered
+
+  let image_op image dst =
+    Image {
+      irect2 = dst;
+      iradii = (0., 0., 0., 0.);
+      icontinuous = false;
+      iimage = image;
+      isrc = rect 0. 0. (float image.iw) (float image.ih);
+      igrayscale = false;
+      iopacity = 1.;
+    }
+
+  let fit_rect source_w source_h frame =
+    if source_w <= 0 || source_h <= 0 || frame.w <= 0. || frame.h <= 0. then frame
+    else
+      let sw = float source_w and sh = float source_h in
+      let k = Float.min (frame.w /. sw) (frame.h /. sh) in
+      let w = sw *. k and h = sh *. k in
+      rect (frame.x +. ((frame.w -. w) /. 2.)) (frame.y +. ((frame.h -. h) /. 2.)) w h
+
+  let refresh_state state =
+    match state.audio_player, state.video_player with
+    | Some player, None ->
+      (try
+        state.position_ms <- int_of_float (Lui_media.position player *. 1000.);
+        state.duration_ms <- int_of_float (Lui_media.duration player *. 1000.);
+        state.playing <- Lui_media.status player = Lui_media.Playing
+      with _ -> ())
+    | None, Some video ->
+      (try
+        state.position_ms <- int_of_float (Lui_media.video_position video *. 1000.);
+        state.duration_ms <- int_of_float (Lui_media.video_duration video *. 1000.);
+        if Lui_media.video_status video = Lui_media.Ended && state.duration_ms > 0 then
+          state.position_ms <- state.duration_ms;
+        state.playing <- Lui_media.video_status video = Lui_media.Playing;
+        match Lui_media.current_frame video with
+        | Some (Ok image) -> state.image <- Some image
+        | Some (Error message) -> state.error <- message
+        | None -> ()
+      with _ -> ())
+    | _ ->
+      if state.handle >= 0 then begin
+        (try
+          let position, duration = media_position state.handle in
+          state.position_ms <- max 0 position;
+          state.duration_ms <- max 0 duration;
+          state.playing <- media_playing state.handle;
+          let backend_error = media_error state.handle in
+          if backend_error <> "" && backend_error <> state.error then
+            media_log "media backend error: %s" backend_error;
+          if backend_error <> "" then state.error <- backend_error
+        with _ -> ());
+        if state.is_video then
+          try
+            let width, height, generation, pixels = media_frame state.handle state.generation in
+            if width > 0 && height > 0 && generation <> state.generation then begin
+              let expected = width * height * 4 in
+              if Bytes.length pixels = expected then begin
+                (match state.image with
+                 | Some image when image.iw = width && image.ih = height ->
+                   Bytes.blit pixels 0 image.ipix 0 expected;
+                   image_changed image
+                 | _ -> state.image <- Some (new_image ~w:width ~h:height (Bytes.copy pixels)));
+                state.generation <- generation
+              end
+            end
+          with _ -> ()
+      end
+
+  let format_time ms =
+    if ms <= 0 then "0:00"
+    else
+      let total = ms / 1000 in
+      Printf.sprintf "%d:%02d" (total / 60) (total mod 60)
+
+  let paint is_video ctx store node frame =
+    let id = Lui_store.node_id node in
+    let source = media_src store id in
+    if source = "" then []
+    else
+      let state = state_for id source is_video in
+      let now = Unix.gettimeofday () in
+      if now -. state.last_paint_log >= 1. then begin
+        state.last_paint_log <- now;
+        media_log "media paint id=%d pos=%d playing=%b" id state.position_ms state.playing
+      end;
+      refresh_state state;
+      let s = ctx.Lui_paint.scale in
+      let alpha = 1. in
+      let black = color 0 0 0 255 in
+      let dim = color 255 255 255 150 in
+      let bar_bg = color 0 0 0 150 in
+      let track_bg = color 255 255 255 70 in
+      let track_fg = color 96 165 250 255 in
+      let base = [ solid_fill black frame alpha ] in
+      let frame_ops =
+        if is_video then
+          match state.image with
+          | Some image -> [ image_op image (fit_rect image.iw image.ih frame) ]
+          | None -> []
+        else []
+      in
+      let bar, button, progress, time_r = control_rects ctx frame in
+      let progress_ratio =
+        if state.duration_ms > 0 then Float.min 1. (float state.position_ms /. float state.duration_ms) else 0.
+      in
+      let control_ops =
+        [ solid_fill bar_bg bar alpha;
+          rounded_fill (color 255 255 255 35) (4. *. s) button alpha ]
+        @ (match icon_image (if state.playing then "pause" else "play") (max 1 (int_of_float (16. *. s))) with
+           | Some icon ->
+             let size = float icon.iw in
+             [ image_op icon (rect (button.x +. ((button.w -. size) /. 2.)) (button.y +. ((button.h -. size) /. 2.)) size size) ]
+           | None -> [])
+        @ [ rounded_fill track_bg (progress.h /. 2.) progress alpha;
+            rounded_fill track_fg (progress.h /. 2.) (rect progress.x progress.y (progress.w *. progress_ratio) progress.h) alpha ]
+      in
+      let time_text = format_time state.position_ms ^ " / " ^ format_time state.duration_ms in
+      let text_ops = ctx.Lui_paint.hooks.text_ops id time_r dim time_text in
+      let error_ops =
+        if state.error = "" then []
+        else
+          let r = rect frame.x frame.y frame.w (Float.max 0. (frame.h -. bar.h)) in
+          ctx.Lui_paint.hooks.text_ops id r (color 252 165 165 255) state.error
+      in
+      base @ frame_ops @ control_ops @ text_ops @ error_ops
+
+  let paint_video ctx store node frame = paint true ctx store node frame
+  let paint_audio ctx store node frame = paint false ctx store node frame
+
+  let seek state ratio =
+    media_log "media seek ratio=%f pos=%d src=%s" ratio state.position_ms state.source;
+    if state.handle = -3 then state.pending_seek_ratio <- Some ratio
+    else (match state.audio_player, state.video_player with
+     | Some player, None ->
+       Lui_media.seek player (Lui_media.duration player *. Float.min 1. (Float.max 0. ratio))
+     | None, Some video ->
+       Lui_media.video_seek video (Lui_media.video_duration video *. Float.min 1. (Float.max 0. ratio))
+     | _ ->
+       if state.handle >= 0 then media_seek_ratio state.handle ratio);
+    state.refresh_until <- Unix.gettimeofday () +. 3.
+
+  let toggle id state =
+    media_log "media toggle playing=%b pos=%d src=%s" state.playing state.position_ms state.source;
+    if state.handle = -3 then open_state id state;
+    (match state.pending_seek_ratio with
+     | Some ratio ->
+       state.pending_seek_ratio <- None;
+       seek state ratio
+     | None -> ());
+    (match state.audio_player, state.video_player with
+     | Some player, None ->
+       if state.playing then Lui_media.pause player else Lui_media.play player;
+       state.playing <- Lui_media.status player = Lui_media.Playing
+     | None, Some video ->
+       if state.playing then Lui_media.video_pause video else Lui_media.video_play video;
+       state.playing <- Lui_media.video_status video = Lui_media.Playing
+     | _ ->
+       if state.handle >= 0 then begin
+         media_set_playing state.handle (not state.playing);
+         state.playing <- media_playing state.handle
+       end);
+    state.refresh_until <- Unix.gettimeofday () +. 2.
+
+  let handle_input store ~scale ~rect_of ~hit_path input =
+    match input with
+    | Lui_window.Input.Button_down (x, y, Lui_window.Input.Left, _, _) -> (
+      let path = hit_path ~x:(x *. scale) ~y:(y *. scale) in
+      let rec find = function
+        | id :: _ when Lui_store.kind store id = "extension:logseq-video" -> Some id
+        | id :: _ when Lui_store.kind store id = "extension:logseq-audio" -> Some id
+        | _ :: rest -> find rest
+        | [] -> None
+      in
+      match find path with
+      | None -> false
+      | Some id -> (
+        match Hashtbl.find_opt states id with
+        | None -> true
+        | Some state ->
+          let frame = rect_of id in
+          let ctx_scale = scale in
+          let bar_h = Float.min frame.h (36. *. ctx_scale) in
+          let bar = rect frame.x (frame.y +. frame.h -. bar_h) frame.w bar_h in
+          let button_size = Float.max 20. (bar.h -. (8. *. ctx_scale)) in
+          let button = rect (bar.x +. (6. *. ctx_scale)) (bar.y +. ((bar.h -. button_size) /. 2.)) button_size button_size in
+          let time_w = 78. *. ctx_scale in
+          let progress_x = button.x +. button.w +. (12. *. ctx_scale) in
+          let progress_end = bar.x +. bar.w -. time_w -. (10. *. ctx_scale) in
+          let progress_w = Float.max 0. (progress_end -. progress_x) in
+          let dx = x *. scale and dy = y *. scale in
+          if inside button dx dy then (toggle id state; true)
+          else if dy >= bar.y && dx >= progress_x && dx <= progress_end && progress_w > 0. then begin
+            seek state ((dx -. progress_x) /. progress_w);
+            true
+          end else true))
+    | _ -> false
+end
+
 
 let () =
   (* Keep desktop heap slack small while collecting incrementally. *)
@@ -747,6 +1147,10 @@ let () =
            | _ -> []) };
   Lui_paint.register_extension ~identifier:"logseq-pdf"
     { Lui_paint.paint = Host_pdf_viewer.paint };
+  Lui_paint.register_extension ~identifier:"logseq-video"
+    { Lui_paint.paint = Host_media.paint_video };
+  Lui_paint.register_extension ~identifier:"logseq-audio"
+    { Lui_paint.paint = Host_media.paint_audio };
   let measure_memo : (int * string * float * float, (float * float) option) Hashtbl.t =
     Hashtbl.create 256
   in
@@ -1036,15 +1440,25 @@ let () =
     match editor_actions,input with
     | Some actions,_ -> component_input := true;actions
     | None,input ->
-      let pdf_owned =
+      let media_owned =
         match input with
-        | Input.Move _ | Input.Button_down _ | Input.Button_up _
-        | Input.Wheel _ | Input.Wheel_mods _ ->
-          Host_pdf_viewer.handle_input store ~scale:!scale_cell
+        | Input.Button_down _ ->
+          Host_media.handle_input store ~scale:!scale_cell
             ~rect_of:shifted_rect
             ~hit_path:(fun ~x ~y -> hit_path ~spatial:(spatial_index ()) store rects ~x ~y)
             input
         | _ -> false
+      in
+      let pdf_owned =
+        media_owned ||
+        (match input with
+         | Input.Move _ | Input.Button_down _ | Input.Button_up _
+         | Input.Wheel _ | Input.Wheel_mods _ ->
+           Host_pdf_viewer.handle_input store ~scale:!scale_cell
+             ~rect_of:shifted_rect
+             ~hit_path:(fun ~x ~y -> hit_path ~spatial:(spatial_index ()) store rects ~x ~y)
+             input
+         | _ -> false)
       in
       if pdf_owned then begin
         component_input := true;
@@ -2499,7 +2913,9 @@ let () =
       Lui_host.invalidate_layout host;
       host_req_repaint := true
     end;
-    let ordinary_dirty = Ui.want_frame ui host || !host_req_repaint in
+    Host_media.sweep store;
+    let media_dirty = Host_media.active () in
+    let ordinary_dirty = Ui.want_frame ui host || !host_req_repaint || media_dirty in
     (match input_change with
      | Some id -> Lui_host.note_paint host id; host_req_repaint := true
      | None -> ());
@@ -2522,12 +2938,13 @@ let () =
        does not establish visible presentation FPS or input acceptance. *)
     if continuous_replay then Option.iter Lui_raster.Tile_renderer.invalidate cocoa_tiles;
     let dirty = Host_interaction.should_paint ~replay:replay_mode ~visible:can_present
-      ~backing:use_cocoa ~dirty:(Ui.want_frame ui host || !host_req_repaint) in
+      ~backing:use_cocoa ~dirty:(Ui.want_frame ui host || !host_req_repaint || media_dirty) in
     let retry = presentation.Host_interaction.pending in
     let frame_due = Renderer_metrics.frame_due ~vsync
       ~deadline:!frame_deadline ~now:(perf_s ()) in
     let input_frame_due = dirty && (frame_due || Option.is_some metrics.input_at) in
     if input_frame_due then begin
+      if media_dirty then Lui_host.invalidate_paint host;
       paint_frame ();
       if presentation.Host_interaction.pending then input_present_retry := true;
       (* A caret blink must not keep the loop in its post-input fast poll. *)
