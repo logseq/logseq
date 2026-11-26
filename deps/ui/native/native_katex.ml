@@ -47,6 +47,7 @@ let runtime () =
       let rt = qjs_create () in
       ignore (eval rt "var self = globalThis;");
       ignore (eval rt Katex_bundle.katex_js);
+      ignore (eval rt Katex_bundle.metrics_js);
       ignore (eval rt Katex_bundle.layout_js);
       runtime := Some rt;
       rt

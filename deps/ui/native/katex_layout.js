@@ -61,11 +61,69 @@
     return "KaTeX_Main";
   }
 
+  function metricFontOf(node) {
+    if (has(node, "large-op")) return "Size2-Regular";
+    if (has(node, "small-op")) return "Size1-Regular";
+    if (has(node, "delimsizing")) {
+      if (has(node, "size4")) return "Size4-Regular";
+      if (has(node, "size3")) return "Size3-Regular";
+      if (has(node, "size2")) return "Size2-Regular";
+      if (has(node, "size1")) return "Size1-Regular";
+    }
+    if (has(node, "mathbb") || has(node, "textbb") || has(node, "amsrm")) return "AMS-Regular";
+    if (has(node, "mathnormal")) return "Math-Italic";
+    if (has(node, "boldsymbol")) return "Math-BoldItalic";
+    if (has(node, "mathit")) return "Main-Italic";
+    if (has(node, "mathbf")) return "Main-Bold";
+    if (has(node, "mathsfit") || has(node, "mathitsf") || has(node, "textitsf")) return "SansSerif-Italic";
+    if (has(node, "mathboldsf") || has(node, "textboldsf")) return "SansSerif-Bold";
+    if (has(node, "mathsf") || has(node, "textsf")) return "SansSerif-Regular";
+    if (has(node, "mathtt") || has(node, "texttt")) return "Typewriter-Regular";
+    if (has(node, "mathcal")) return "Caligraphic-Regular";
+    if (has(node, "mathboldfrak") || has(node, "textboldfrak")) return "Fraktur-Bold";
+    if (has(node, "mathfrak") || has(node, "textfrak")) return "Fraktur-Regular";
+    if (has(node, "mathscr") || has(node, "textscr")) return "Script-Regular";
+    return "Main-Regular";
+  }
+
+  function symbolWidth(node) {
+    var scale = node.maxFontSize || 0;
+    var text = node.text || "";
+    if (text.length <= 1) return (node.width || 0) * scale;
+    var metrics = (globalThis.logseqKatexFontMetrics || {})[metricFontOf(node)] || {};
+    var total = 0;
+    for (var i = 0; i < text.length; i++) {
+      var metric = metrics[String(text.charCodeAt(i))];
+      total += metric ? metric[4] : (node.width || 0);
+    }
+    return total * scale;
+  }
+
+  function isZeroWidthBox(node) {
+    return has(node, "thinbox") || has(node, "llap") || has(node, "rlap") || has(node, "clap");
+  }
+
+  function isLine(node) {
+    var attrs = node.attributes || {};
+    return attrs.x1 !== undefined && attrs.y1 !== undefined &&
+      attrs.x2 !== undefined && attrs.y2 !== undefined;
+  }
+
+  function containsLine(node) {
+    if (!node) return false;
+    if (isLine(node)) return true;
+    var children = node.children || [];
+    for (var i = 0; i < children.length; i++) {
+      if (containsLine(children[i])) return true;
+    }
+    return false;
+  }
+
   function widthOf(node) {
     if (!node || isInvisible(node)) return 0;
-    if (isSymbol(node)) {
-      return (node.width || 0) * (node.maxFontSize || 0);
-    }
+    if (isSymbol(node)) return symbolWidth(node);
+    if (isZeroWidthBox(node) || isLine(node)) return 0;
+    if (isSvg(node)) return em((node.attributes || {}).width);
     if (has(node, "mspace")) return em((node.style || {}).marginRight);
     if (has(node, "nulldelimiter")) return 0.12;
     if (has(node, "frac-line") || has(node, "overline-line") ||
@@ -94,9 +152,63 @@
   function layout(node, x, baseline, out, ctx) {
     if (!node || isInvisible(node)) return;
     var i, children, cursor, child, width;
+    x += em((node.style || {}).left);
+
+    if (has(node, "llap") || has(node, "rlap") || has(node, "clap")) {
+      children = node.children || [];
+      for (i = 0; i < children.length; i++) {
+        if (has(children[i], "inner")) {
+          var innerWidth = widthOf(children[i]);
+          var innerX = x;
+          if (has(node, "llap")) innerX = x - innerWidth;
+          else if (has(node, "clap")) innerX = x - innerWidth / 2;
+          layout(children[i], innerX, baseline, out, {width: innerWidth, align: ctx.align, svgHeight: ctx.svgHeight});
+          return;
+        }
+      }
+      return;
+    }
+
+    if (isLine(node)) {
+      var lineHeight = ctx.svgHeight || 1;
+      var lineWidth = ctx.width || 0;
+      if (lineWidth > 0 && lineHeight > 0) {
+        var attrs = node.attributes || {};
+        var coord = function (value, total) {
+          if (typeof value === "string" && value.charAt(value.length - 1) === "%") {
+            return parseFloat(value) * total / 100;
+          }
+          return em(value);
+        };
+        var x1 = coord(attrs.x1, lineWidth);
+        var y1 = coord(attrs.y1, lineHeight);
+        var x2 = coord(attrs.x2, lineWidth);
+        var y2 = coord(attrs.y2, lineHeight);
+        var stroke = em(attrs["stroke-width"]) || 0.046;
+        var dx = x2 - x1;
+        var dy = y2 - y1;
+        var length = Math.sqrt(dx * dx + dy * dy) || 1;
+        var nx = -dy / length * stroke / 2;
+        var ny = dx / length * stroke / 2;
+        var path = "M" + ((x1 + nx) * 1000) + " " + ((y1 + ny) * 1000) +
+          "L" + ((x2 + nx) * 1000) + " " + ((y2 + ny) * 1000) +
+          "L" + ((x2 - nx) * 1000) + " " + ((y2 - ny) * 1000) +
+          "L" + ((x1 - nx) * 1000) + " " + ((y1 - ny) * 1000) + "Z";
+        out.items.push({
+          type: "svg",
+          x: x,
+          y: baseline + lineHeight,
+          w: lineWidth,
+          h: lineHeight,
+          viewBox: [0, 0, lineWidth * 1000, lineHeight * 1000],
+          paths: [path]
+        });
+      }
+      return;
+    }
 
     if (isSymbol(node)) {
-      if (node.text && node.text !== "\u200b") {
+      if (node.text && node.text !== "\u200b" && (node.style || {}).color !== "transparent") {
         out.items.push({
           type: "text",
           x: x,
@@ -131,11 +243,15 @@
       (node.children || []).forEach(function (childNode) {
         if (childNode.alternate) {
           paths.push(childNode.alternate);
+        } else if (typeof childNode.toMarkup === "function") {
+          var markup = childNode.toMarkup();
+          var match = /d="([\s\S]*?)"/.exec(markup);
+          if (match) paths.push(match[1]);
         }
       });
       if (paths.length) {
         var box = (node.attributes && node.attributes.viewBox || "0 0 0 0").split(/\s+/).map(Number);
-        var svgHeight = ctx.svgHeight || em((node.attributes || {}).height) || 1;
+        var svgHeight = em((node.attributes || {}).height) || ctx.svgHeight || 1;
         /* KaTeX stretchy art uses very wide viewBoxes with xMinYMin slice.
            Crop the viewBox to the same leftmost slice here; this avoids
            shrinking the visible art when a rasterizer meets instead. */
@@ -173,7 +289,7 @@
         var childWidth = widthOf(child);
         var offset = em(ws.marginLeft);
         var stretchChild = has(child, "frac-line") || has(child, "overline-line") ||
-          has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail");
+          has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail") || containsLine(child);
         if (!stretchChild && ctx.align === "center") offset += Math.max(0, (ctx.width - childWidth) / 2);
         else if (!stretchChild && ctx.align === "right") offset += Math.max(0, ctx.width - childWidth);
         var nextCtx = {width: ctx.width, align: ctx.align, svgHeight: ctx.svgHeight};
@@ -213,18 +329,27 @@
     if (has(node, "col-align-l") || has(node, "svg-align")) align = "left";
 
     children = node.children || [];
-    cursor = x + em((node.style || {}).marginLeft) + em((node.style || {}).paddingLeft);
+    var startX = x + em((node.style || {}).marginLeft) + em((node.style || {}).paddingLeft);
+    cursor = startX;
+    var lineBaseline = childBaseline;
     var ownWidth = widthOf(node);
+    if (ownWidth === 0 && containsLine(node) && ctx.width > 0) ownWidth = ctx.width;
+    var nodeSvgHeight = em((node.style || {}).height) || ctx.svgHeight;
     for (i = 0; i < children.length; i++) {
       child = children[i];
+      if (has(child, "newline")) {
+        cursor = startX;
+        lineBaseline -= 1;
+        continue;
+      }
       width = widthOf(child);
-      var childCtx = {width: width, align: align, svgHeight: ctx.svgHeight};
+      var childCtx = {width: width, align: align, svgHeight: nodeSvgHeight};
       if (has(node, "vlist") || has(node, "mfrac")) childCtx.width = ownWidth;
       if (has(node, "hide-tail")) childCtx.width = ctx.width;
       else if (has(child, "frac-line") || has(child, "overline-line") ||
           has(child, "underline-line") || has(child, "hline") ||
-          has(child, "hide-tail")) childCtx.width = ownWidth;
-      layout(child, cursor, childBaseline, out, childCtx);
+          has(child, "hide-tail") || containsLine(child)) childCtx.width = ownWidth;
+      layout(child, cursor, lineBaseline, out, childCtx);
       cursor += width;
     }
   }
@@ -246,10 +371,43 @@
     var out = {items: []};
     var width = widthOf(html);
     layout(html, 0, 0, out, {width: width, align: "left", svgHeight: 1});
+    var newlineCount = 0;
+    (html.children || []).forEach(function (child) {
+      if (has(child, "newline")) newlineCount += 1;
+    });
+    var height = node.height || html.height || 0;
+    var depth = (node.depth || html.depth || 0) + newlineCount;
+    var minX = 0;
+    var maxX = width;
+    var maxY = height;
+    var minY = -depth;
+    out.items.forEach(function (item) {
+      if (item.type === "svg" || item.type === "rule") {
+        minX = Math.min(minX, item.x);
+        maxX = Math.max(maxX, item.x + item.w);
+        if (item.type === "svg") {
+          maxY = Math.max(maxY, item.y);
+          minY = Math.min(minY, item.y - item.h);
+        } else {
+          maxY = Math.max(maxY, item.y + item.h / 2);
+          minY = Math.min(minY, item.y - item.h / 2);
+        }
+      }
+    });
+    if (minX < 0) {
+      out.items.forEach(function (item) {
+        item.x -= minX;
+      });
+      width -= minX;
+      maxX -= minX;
+    }
+    width = Math.max(width, maxX);
+    height = Math.max(height, maxY);
+    depth = Math.max(depth, -minY);
     return {
       width: width,
-      height: node.height || html.height || 0,
-      depth: node.depth || html.depth || 0,
+      height: height,
+      depth: depth,
       items: out.items
     };
   }
