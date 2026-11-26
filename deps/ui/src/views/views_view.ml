@@ -776,13 +776,6 @@ let configured_query ~(page : Model.page) query : t =
     Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ());
   schedule_refresh ();
   let collapsed_sig = Signal.value collapsed in
-  let control_cls =
-    Logseq_el.own ctx
-      (Signal.map2
-         (fun h c ->
-           if h || c then "control-show cursor-pointer" else "control-hide")
-         (Signal.value hovered) collapsed_sig)
-  in
   let arrow =
     if Ui_services.env_css_animations () then
       Ui_parts.class_signal collapsed_sig
@@ -815,7 +808,10 @@ let configured_query ~(page : Model.page) query : t =
                      ; Ui_components.Prop.opacity 0.5
                      ; Ui_components.Prop.hover_opacity 1. ]
                      (Ui_components.foldable_control
-                        [ Ui_parts.class_signal control_cls (fun cls -> cls)
+                        [ Ui_parts.float_prop Lui_protocol.Opacity
+                            ~value:(reactive
+                               (fun h c -> if h || c then 1. else 0.)
+                               (Signal.value hovered) collapsed_sig)
                             (box ~key:"ch" [ arrow ]) ])
                  ; column ~style_class:"title-text" ~min_width:0 ~grow:1. [ title ]
                  ; Ui_components.with_props [ Ui_components.Prop.opacity 0.6 ]
