@@ -3963,7 +3963,7 @@ typedef void *(*LogseqHeifContextAlloc)(void);
 typedef void (*LogseqHeifContextFree)(void *);
 typedef LogseqHeifError (*LogseqHeifReadMemory)(void *, const void *, size_t, const void *);
 typedef LogseqHeifError (*LogseqHeifPrimaryHandle)(void *, void **);
-typedef int (*LogseqHeifHandlePremultiplied)(const void *);
+typedef int (*LogseqHeifPremultiplied)(const void *);
 typedef LogseqHeifError (*LogseqHeifDecodeImage)(const void *, void **, int, int, const void *);
 typedef int (*LogseqHeifImageWidth)(const void *, int);
 typedef int (*LogseqHeifImageHeight)(const void *, int);
@@ -3977,7 +3977,7 @@ static struct {
   LogseqHeifContextFree context_free;
   LogseqHeifReadMemory read_memory;
   LogseqHeifPrimaryHandle primary_handle;
-  LogseqHeifHandlePremultiplied handle_premultiplied;
+  LogseqHeifPremultiplied image_premultiplied;
   LogseqHeifDecodeImage decode_image;
   LogseqHeifImageWidth image_width;
   LogseqHeifImageHeight image_height;
@@ -3997,7 +3997,7 @@ static void logseq_heif_load(void) {
   logseq_heif.context_free = (LogseqHeifContextFree)dlsym(logseq_heif.library, "heif_context_free");
   logseq_heif.read_memory = (LogseqHeifReadMemory)dlsym(logseq_heif.library, "heif_context_read_from_memory_without_copy");
   logseq_heif.primary_handle = (LogseqHeifPrimaryHandle)dlsym(logseq_heif.library, "heif_context_get_primary_image_handle");
-  logseq_heif.handle_premultiplied = (LogseqHeifHandlePremultiplied)dlsym(logseq_heif.library, "heif_image_handle_is_premultiplied_alpha");
+  logseq_heif.image_premultiplied = (LogseqHeifPremultiplied)dlsym(logseq_heif.library, "heif_image_is_premultiplied_alpha");
   logseq_heif.decode_image = (LogseqHeifDecodeImage)dlsym(logseq_heif.library, "heif_decode_image");
   logseq_heif.image_width = (LogseqHeifImageWidth)dlsym(logseq_heif.library, "heif_image_get_width");
   logseq_heif.image_height = (LogseqHeifImageHeight)dlsym(logseq_heif.library, "heif_image_get_height");
@@ -4012,7 +4012,7 @@ static int logseq_heif_available(void) {
   return pthread_once(&logseq_heif_once, logseq_heif_load) == 0 &&
     logseq_heif.context_alloc && logseq_heif.context_free &&
     logseq_heif.read_memory && logseq_heif.primary_handle &&
-    logseq_heif.handle_premultiplied && logseq_heif.decode_image &&
+    logseq_heif.image_premultiplied && logseq_heif.decode_image &&
     logseq_heif.image_width && logseq_heif.image_height &&
     logseq_heif.plane_readonly && logseq_heif.image_release &&
     logseq_heif.handle_release;
@@ -4076,7 +4076,6 @@ static int logseq_decode_heif_linux(const unsigned char *data, size_t data_lengt
     logseq_heif_error(error_out, error_size, "Cannot find primary AVIF/HEIC image", error);
     goto done;
   }
-  int premultiplied = logseq_heif.handle_premultiplied(handle);
   /* heif_colorspace_RGB is 1, heif_chroma_interleaved_RGBA is 11. The decoder
      applies container rotation/cropping/mirroring transformations. */
   error = logseq_heif.decode_image(handle, &image, 1, 11, NULL);
@@ -4085,6 +4084,7 @@ static int logseq_decode_heif_linux(const unsigned char *data, size_t data_lengt
     goto done;
   }
   /* heif_channel_interleaved is 10. */
+  int premultiplied = logseq_heif.image_premultiplied(image);
   int decoded_width = logseq_heif.image_width(image, 10);
   int decoded_height = logseq_heif.image_height(image, 10);
   if (decoded_width <= 0 || decoded_height <= 0) {
