@@ -13,7 +13,7 @@ Audit baseline: `refactor/lui` @ `a5dd20796628acacc0ac2467ffa31b8169b3ebaa` (`20
 - Fresh isolated graphs were used. No existing user graph was mutated. Exact content parity was impossible after interactive editing because the seeded text necessarily diverged.
 - Setup artifact only: the first web boot failed because `static/js/db-worker.js` had not been built. After `pnpm db-worker:build`, the web app booted normally. This is not counted as a parity finding.
 - Login and RTC were intentionally skipped in the follow-up pass.
-- The LUI pin in this branch uses `f1f25617678f2d615fdae87c5a7ccc266b1064d8`, a compatibility backport of the merged [lui#411](https://github.com/logseq/lui/pull/411) and [lui#412](https://github.com/logseq/lui/pull/412) fixes onto the previously pinned LUI API. Current LUI `main` also contains those fixes, but its typed-slot API migration is separate work.
+- The LUI pin in this branch uses `1776c6f7d03e2da38f75f48bf22e62ce11cfe975`, a compatibility backport of the merged [lui#411](https://github.com/logseq/lui/pull/411), [lui#412](https://github.com/logseq/lui/pull/412), and [lui#415](https://github.com/logseq/lui/pull/415) fixes onto the previously pinned LUI API. Current LUI `main` also contains the first two fixes and the upstream popup-exit renderer fix, but its typed-slot API migration is separate work.
 
 ## Intentional desktop differences
 
