@@ -831,7 +831,7 @@ let configured_query ~(page : Model.page) query : t =
       (fun c -> "ls-foldable-content" ^ if c then " is-collapsed" else "")
       (box ~key:"query-fold" ~grow:1.
          ~transition:"grid-template-rows 0.2s ease-in-out"
-         [ box ~key:"query-fold-inner" ~style_class:"ls-foldable-content-inner" ~grow:1.
+         [ box ~key:"query-fold-inner" ~style_class:"ls-foldable-content-inner"
              ~transition:"opacity 0.2s ease-in-out, transform 0.2s ease-in-out"
              [ if_ ~test:(Signal.value render_content)
                  (column ~style_class:"custom-query-results" ~margin_left:4 ~margin_top:4
