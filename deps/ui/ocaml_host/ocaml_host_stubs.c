@@ -4022,6 +4022,8 @@ static int logseq_is_heif_brand(const unsigned char *brand) {
   return memcmp(brand, "avif", 4) == 0 ||
     memcmp(brand, "heic", 4) == 0 ||
     memcmp(brand, "heix", 4) == 0 ||
+    memcmp(brand, "heim", 4) == 0 ||
+    memcmp(brand, "heis", 4) == 0 ||
     memcmp(brand, "mif1", 4) == 0;
 }
 

@@ -13,7 +13,7 @@ let sniff_webp encoded =
 
 let heif_brand brand =
   match brand with
-  | "avif" | "heic" | "heix" | "mif1" -> true
+  | "avif" | "heic" | "heix" | "heim" | "heis" | "mif1" -> true
   | _ -> false
 
 let sniff_heif encoded =
