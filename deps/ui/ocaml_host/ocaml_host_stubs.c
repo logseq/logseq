@@ -3272,7 +3272,10 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
     }
   }
 
-  jpeg_finish_decompress(&state->decoder);
+  if (!jpeg_finish_decompress(&state->decoder))
+    logseq_jpeg_fail(&state->error, "Incomplete JPEG image data");
+  if (state->error.base.num_warnings > 0)
+    logseq_jpeg_fail(&state->error, "Truncated or corrupt JPEG data");
   jpeg_destroy_decompress(&state->decoder);
   free(state->row);
   *pixels_out = state->pixels;

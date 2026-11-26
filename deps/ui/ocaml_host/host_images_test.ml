@@ -226,7 +226,9 @@ let () = begin
       Lui_store.apply_batch store initial;Host_images.sync_batch images store initial;
       ignore (pump ());Host.drain ();
       expect "Truncated and malformed JPEG reject without a bitmap" (Host_images.image_of images 1=None)))
-    [Bytes.sub (jpeg_baseline ()) 0 200;bytes_of_hex "ffd8ffe000104a46494600"];
+    (let without_end_marker encoded = Bytes.sub encoded 0 (Bytes.length encoded - 2) in
+     [Bytes.sub (jpeg_baseline ()) 0 200;without_end_marker (jpeg_baseline ());
+      bytes_of_hex "ffd8ffe000104a46494600"]);
   let path=Filename.temp_file "native-jpeg-file" ".jpg" in
   Fun.protect ~finally:(fun () -> Sys.remove path) (fun () ->
     Out_channel.with_open_bin path (fun output -> output_bytes output (jpeg_baseline ()));
