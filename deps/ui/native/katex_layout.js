@@ -119,10 +119,26 @@
     return false;
   }
 
+  function isStretchySvg(node) {
+    if (!isSvg(node)) return false;
+    var width = String((node.attributes || {}).width || "");
+    return width.charAt(width.length - 1) === "%" || em(width) > 32;
+  }
+
+  function containsStretchySvg(node) {
+    if (!node) return false;
+    if (isStretchySvg(node)) return true;
+    var children = node.children || [];
+    for (var i = 0; i < children.length; i++) {
+      if (containsStretchySvg(children[i])) return true;
+    }
+    return false;
+  }
+
   function widthOf(node) {
     if (!node || isInvisible(node)) return 0;
     if (isSymbol(node)) return symbolWidth(node);
-    if (isZeroWidthBox(node) || isLine(node)) return 0;
+    if (isZeroWidthBox(node) || isLine(node) || isStretchySvg(node)) return 0;
     if (isSvg(node)) return em((node.attributes || {}).width);
     if (has(node, "mspace")) return em((node.style || {}).marginRight);
     if (has(node, "nulldelimiter")) return 0.12;
@@ -289,7 +305,7 @@
         var childWidth = widthOf(child);
         var offset = em(ws.marginLeft);
         var stretchChild = has(child, "frac-line") || has(child, "overline-line") ||
-          has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail") || containsLine(child);
+          has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail") || containsLine(child) || containsStretchySvg(child);
         if (!stretchChild && ctx.align === "center") offset += Math.max(0, (ctx.width - childWidth) / 2);
         else if (!stretchChild && ctx.align === "right") offset += Math.max(0, ctx.width - childWidth);
         var nextCtx = {width: ctx.width, align: ctx.align, svgHeight: ctx.svgHeight};
@@ -333,7 +349,7 @@
     cursor = startX;
     var lineBaseline = childBaseline;
     var ownWidth = widthOf(node);
-    if (ownWidth === 0 && containsLine(node) && ctx.width > 0) ownWidth = ctx.width;
+    if (ownWidth === 0 && (containsLine(node) || containsStretchySvg(node)) && ctx.width > 0) ownWidth = ctx.width;
     var nodeSvgHeight = em((node.style || {}).height) || ctx.svgHeight;
     for (i = 0; i < children.length; i++) {
       child = children[i];
@@ -348,7 +364,7 @@
       if (has(node, "hide-tail")) childCtx.width = ctx.width;
       else if (has(child, "frac-line") || has(child, "overline-line") ||
           has(child, "underline-line") || has(child, "hline") ||
-          has(child, "hide-tail") || containsLine(child)) childCtx.width = ownWidth;
+          has(child, "hide-tail") || containsLine(child) || containsStretchySvg(child)) childCtx.width = ownWidth;
       layout(child, cursor, lineBaseline, out, childCtx);
       cursor += width;
     }
