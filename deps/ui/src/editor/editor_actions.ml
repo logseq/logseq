@@ -2468,13 +2468,14 @@ let write_clipboard_text ~current text on_written =
 let clipboard_action_epoch = ref 0
 let cancel_clipboard_actions () = incr clipboard_action_epoch
 
-let clipboard_action_current () =
+let clipboard_action_current ?(strict_state = true) () =
   let context = action_context () and state = S.value () in
   let model = Runtime.model () and owner = Ops.refresh_owner_for None in
   let generation = !(Runtime.load_gen) and epoch = !clipboard_action_epoch in
   fun () -> context = action_context () && generation = !(Runtime.load_gen)
             && Ops.refresh_current ?owner model
-            && epoch = !clipboard_action_epoch && S.ready () && S.value () == state
+            && epoch = !clipboard_action_epoch && S.ready ()
+            && (not strict_state || S.value () == state)
 
 let cut_editing_text uuid =
   match S.editing () with
@@ -2503,7 +2504,7 @@ let cut_editing_text uuid =
 let write_selection_copy ?(capture = fun () -> ()) ~plain ~cut () =
   let snapshot = selected_snapshot () in
   let before = S.history_cursor () in
-  let current = clipboard_action_current () in
+  let current = clipboard_action_current ~strict_state:false () in
   match selected_copy_blocks ~plain snapshot with
   | None | Some [] -> ()
   | Some blocks ->
