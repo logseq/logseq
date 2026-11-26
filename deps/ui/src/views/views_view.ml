@@ -715,6 +715,32 @@ let configured_query ~(page : Model.page) query : t =
     ~kind:(V.KQuery {block_uuid=uuid}) ~feature:"query-result" ~owner:(W.Uuid uuid) in
   let inst = {inst with V.virtualize=false} in
   let collapsed = Signal.state ctx.Lui_ui.ui_scheduler true in
+  let render_content = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let hovered = Signal.state ctx.Lui_ui.ui_scheduler false in
+  let collapse_timer = ref None in
+  let clear_collapse_timer () =
+    match !collapse_timer with
+    | Some id ->
+        Ui_services.timers_clear_timeout id;
+        collapse_timer := None
+    | None -> ()
+  in
+  let toggle_collapsed () =
+    clear_collapse_timer ();
+    let next = not (Runtime.signal_get collapsed) in
+    if not next then Signal.set render_content true;
+    Signal.set collapsed next;
+    if next then
+      collapse_timer :=
+        Some
+          (Ui_services.timers_timeout
+             (fun () ->
+               collapse_timer := None;
+               Signal.set render_content false;
+               Runtime.flush ())
+             200);
+    Runtime.flush ()
+  in
   let title = match W.get query "title", W.get query "title-key" with
     | _, Some (W.Keyword key) -> text ~value:(I.t key) []
     | Some (W.String title), _ -> row ~flex_wrap:`wrap (Render_inline.parse title)
@@ -740,31 +766,85 @@ let configured_query ~(page : Model.page) query : t =
       if model.Model.context_revision <> !(inst.V.data_context_revision) then
         schedule_refresh ())));
   Signal.on_dispose ctx.Lui_ui.ui_scope (fun () ->
+    clear_collapse_timer ();
     Runtime.off_sync sub; incr inst.V.data_gen;
     Editor_state.clear_collapse_scope ~descendants:true ~scope:inst.V.collapse_scope ());
   schedule_refresh ();
+  let collapsed_sig = Signal.value collapsed in
+  let control_cls =
+    Logseq_el.own ctx
+      (Signal.map2
+         (fun h c ->
+           if h || c then "control-show cursor-pointer" else "control-hide")
+         (Signal.value hovered) collapsed_sig)
+  in
+  let arrow =
+    if Ui_services.env_css_animations () then
+      Ui_parts.class_signal collapsed_sig
+        (fun c ->
+          if c then "rotating-arrow collapsed" else "rotating-arrow not-collapsed")
+        (box ~key:"query-caret-rot"
+           [ icon ~key:"query-caret" ~point_size:16
+               ~name:(`app "rotating-arrow")
+               ~transition:"transform 100ms ease-in" [] ])
+    else
+      icon ~key:"query-caret" ~point_size:16
+        ~name:
+          (reactive
+             (fun c ->
+               `app (if c then "rotating-arrow" else "rotating-arrow-down"))
+             collapsed_sig)
+        []
+  in
+  let header =
+    row ~style_class:"ls-foldable-title content"
+      ~on_pointer_enter:(fun _ -> Signal.set hovered true; Runtime.flush ())
+      ~on_pointer_leave:(fun _ -> Signal.set hovered false; Runtime.flush ())
+      [ Ui_parts.pressable
+          ~on_press:(fun _ -> toggle_collapsed ())
+          (row ~style_class:"foldable-title custom-query-title" ~grow:1.
+             [ (row ~cross:`center ~gap:4 ~min_height:24
+                 ~style_class:"ls-foldable-header"
+                 [ Ui_components.with_props
+                     [ Ui_components.Prop.cursor `pointer
+                     ; Ui_components.Prop.opacity 0.5
+                     ; Ui_components.Prop.hover_opacity 1. ]
+                     (Ui_components.foldable_control
+                        [ Ui_parts.class_signal control_cls (fun cls -> cls)
+                            (box ~key:"ch" [ arrow ]) ])
+                 ; column ~style_class:"title-text" ~min_width:0 ~grow:1. [ title ]
+                 ; Ui_components.with_props [ Ui_components.Prop.opacity 0.6 ]
+                     (text ~style_class:"results-count" ~font_size:"0.875rem" ~margin_left:8
+                        ~height:24 ~line_height:"20px"
+                        ~value:
+                          (reactive
+                             (fun s ->
+                               I.result_count
+                                 (List.length s.V.query_rows + List.length s.V.query_scalar_rows))
+                             (sig_of inst))
+                        []) ])
+             ]) ]
+  in
+  let results =
+    Ui_parts.class_signal collapsed_sig
+      (fun c -> "ls-foldable-content" ^ if c then " is-collapsed" else "")
+      (box ~key:"query-fold" ~grow:1.
+         ~transition:"grid-template-rows 0.2s ease-in-out"
+         [ box ~key:"query-fold-inner" ~style_class:"ls-foldable-content-inner" ~grow:1.
+             ~transition:"opacity 0.2s ease-in-out, transform 0.2s ease-in-out"
+             [ if_ ~test:(Signal.value render_content)
+                 (column ~style_class:"custom-query-results" ~margin_left:4 ~margin_top:4
+                    [ reactive ~equal:body_eq
+                        (fun s ->
+                          match query_content_key s with
+                          | `Table -> Views_table.result_el inst s
+                          | _ -> query_content inst s)
+                        (sig_of inst) ]) ] ])
+  in
   (if_ ~test:(reactive (fun s -> s.V.query_error<>None || s.V.query_rows<>[]
           || s.V.query_scalar_rows<>[]) (sig_of inst))
-        (column ~style_class:"custom-query" ~min_width:0 ~gap:0
-          [ Ui_parts.pressable
-              ~on_press:(fun _ -> Signal.set collapsed (not (Runtime.signal_get collapsed)); Runtime.flush ())
-              (row ~style_class:"custom-query-title" ~cross:`center ~gap:4 ~min_height:24 ~margin_left:(-18)
-                ~padding_horizontal:1
-              [ icon ~width:14 ~height:14
-                  ~name:(reactive (fun c -> `app (if c then "chevron-right" else "chevron-down"))
-                    (Signal.value collapsed)) []
-              ; column ~style_class:"title-text" ~min_width:0 ~grow:1. [title]
-              ; Ui_components.with_props [Ui_components.Prop.opacity 0.6]
-                (text ~style_class:"results-count" ~font_size:"0.875rem" ~margin_left:8
-                  ~height:24 ~line_height:"20px"
-                  ~value:(reactive (fun s -> I.result_count
-                    (List.length s.V.query_rows + List.length s.V.query_scalar_rows)) (sig_of inst)) []) ])
-          ; if_ ~test:(reactive not (Signal.value collapsed))
-              (column ~style_class:"custom-query-results" ~margin_left:4 ~margin_top:4
-                [ reactive ~equal:body_eq (fun s ->
-                    match query_content_key s with
-                    | `Table -> Views_table.result_el inst s
-                    | _ -> query_content inst s) (sig_of inst) ]) ])) ctx parent
+     (column ~style_class:"custom-query" ~min_width:0 ~gap:0 ~margin_left:2
+        [ header; results ])) ctx parent
 
 let refresh inst =
   match inst.V.kind with
