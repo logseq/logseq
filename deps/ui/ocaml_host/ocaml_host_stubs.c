@@ -3361,13 +3361,18 @@ CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
 #elif defined(__linux__)
   unsigned char *pixels = NULL;
   size_t width = 0, height = 0, size = 0;
+  size_t encoded_length = caml_string_length(encoded_v);
+  unsigned char *encoded = malloc(encoded_length ? encoded_length : 1);
+  if (!encoded) caml_raise_out_of_memory();
+  memcpy(encoded, Bytes_val(encoded_v), encoded_length);
   char error[JMSG_LENGTH_MAX];
   error[0] = '\0';
   caml_enter_blocking_section();
   int status = logseq_decode_jpeg_linux(
-    (const unsigned char *)Bytes_val(encoded_v), caml_string_length(encoded_v),
+    encoded, encoded_length,
     &pixels, &width, &height, &size, error, sizeof(error));
   caml_leave_blocking_section();
+  free(encoded);
   if (status != 0) caml_failwith(error[0] ? error : "Cannot decode JPEG");
   pixels_v = caml_alloc_initialized_string(size, (const char *)pixels);
   free(pixels);
