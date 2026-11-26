@@ -254,6 +254,23 @@ let () = begin
        pixel 0 0 > 200 && pixel 0 1 < 80 &&
        pixel 4 1 > 200 && pixel 4 0 < 80
      | Error _ -> false);
+  if not Host_platform.is_macos then begin
+    let without_exif_flag = Bytes.copy oriented_webp in
+    Bytes.set without_exif_flag 20 '\000';
+    expect "Linux WebP ignores EXIF without the VP8X feature flag"
+      (match Host_image.decode without_exif_flag with
+       | Ok image -> image.Lui_scene.iw=2 && image.ih=1
+       | Error _ -> false);
+    let exif_outside_riff = Bytes.copy oriented_webp in
+    Bytes.set exif_outside_riff 4 (Char.chr 48);
+    Bytes.set exif_outside_riff 5 '\000';
+    Bytes.set exif_outside_riff 6 '\000';
+    Bytes.set exif_outside_riff 7 '\000';
+    expect "Linux WebP ignores EXIF outside the RIFF boundary"
+      (match Host_image.decode exif_outside_riff with
+       | Ok image -> image.Lui_scene.iw=2 && image.ih=1
+       | Error _ -> false)
+  end;
   List.iter prerr_endline (List.rev !errors);
   check "Native JPEG decode, orientation, source ownership and local files" (!errors=[]);
   print_endline "native JPEG baseline/progressive, EXIF orientation, grayscale and local file: OK"
