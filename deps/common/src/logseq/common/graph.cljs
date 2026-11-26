@@ -42,14 +42,26 @@
        (map fix-win-path!)
        (vec)))
 
+(defn directory-entry?
+  "Whether a dirent read from `parent` is a directory or a link to one. Graphs
+  stored outside the graphs dir are linked into it."
+  [parent ^js dirent]
+  (or (.isDirectory dirent)
+      (and (.isSymbolicLink dirent)
+           (try
+             (.isDirectory (fs/statSync (node-path/join parent (.-name dirent))))
+             (catch :default e
+               (if (contains? #{"ENOENT" "ENOTDIR" "EACCES" "EPERM" "ELOOP"} (.-code e))
+                 false
+                 (throw e)))))))
+
 (defn read-directories
-  "Given a dir, returns all the sub-directories"
+  "Given a dir, returns all the sub-directories, including links to directories"
   [root-dir]
   (let [files (fs/readdirSync root-dir #js {:withFileTypes true})]
     (->> files
-         (remove #(.isSymbolicLink ^js %))
          (remove #(string/starts-with? (.-name ^js %) "."))
-         (filter #(.isDirectory %))
+         (filter #(directory-entry? root-dir %))
          (map #(.-name %)))))
 
 (defn- path-at-or-under?

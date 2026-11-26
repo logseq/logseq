@@ -1978,7 +1978,7 @@
                            persist-db/<ensure-remote! (fn [repo opts]
                                                         (swap! calls conj [:open repo opts])
                                                         (p/resolved (->FakeRemote repo (fn [& _]))))]
-            (p/let [_ (persist-db/<import-db "imported" (js/Uint8Array. 0))
+            (p/let [_ (persist-db/<import-db "imported" (js/Uint8Array. 0) nil)
                     _ (persist-db/<open-and-fetch-schema "downloaded" {:sync-download-graph? true})
                     _ (persist-db/<open-and-fetch-schema "existing")]
               (is (= [["createGraph" "imported"] [:open "imported" {:generation "created-generation"}]
@@ -2025,7 +2025,7 @@
                     _ (persist-db/<open-and-fetch-schema "logseq_db_source")
                     _ (lifecycle/stopGraph (lifecycle/resolveStorage root (node-path/join root "graphs")) "source" "cli")
                     payload (fs/readFileSync (node-path/join root "graphs/source/db.sqlite"))
-                    _ (persist-db/<import-db "logseq_db_imported" payload)
+                    _ (persist-db/<import-db "logseq_db_imported" payload nil)
                     _ (persist-db/<open-and-fetch-schema "logseq_db_downloaded" {:sync-download-graph? true})]
               (doseq [repo ["imported" "downloaded"]]
                 (is (fs/existsSync (node-path/join root "graphs" repo "db.sqlite")))
@@ -2107,3 +2107,23 @@
                        (state/replace-state! original-state)
                        (reset-runtime-state!)
                        (done)))))))
+
+(deftest electron-graph-creation-passes-chosen-location-test
+  (async done
+    (let [calls (atom [])]
+      (-> (p/with-redefs [util/electron? (constantly true)
+                          ipc/ipc (fn [& args]
+                                    (swap! calls conj (vec args))
+                                    (p/resolved "created-generation"))
+                          persist-db/<ensure-remote! (fn [repo _opts]
+                                                       (p/resolved (->FakeRemote repo (fn [& _]))))
+                          persist-db/<export-db (fn [_repo _opts] (p/resolved nil))]
+            (p/let [_ (persist-db/<new "logseq_db_new" {:location "/data/graphs"})
+                    _ (persist-db/<new "logseq_db_default" {})
+                    _ (persist-db/<import-db "logseq_db_imported" (js/Uint8Array. 0) "/data/imports")]
+              (is (= [["createGraph" "logseq_db_new" false "/data/graphs"]
+                      ["createGraph" "logseq_db_default" false nil]
+                      ["createGraph" "logseq_db_imported" false "/data/imports"]]
+                     (filterv #(= "createGraph" (first %)) @calls)))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))

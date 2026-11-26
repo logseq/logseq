@@ -660,9 +660,46 @@
    (route-handler/redirect-to-home!)
    (js/setTimeout ui-handler/re-render-root! 500)))
 
+(defn graph-location-picker?
+  "Graph storage folders can only be chosen in the desktop app."
+  []
+  (util/electron?))
+
+(defn- default-graph-location
+  []
+  (get-in (state/get-state) [:system/info :graphs-dir]))
+
+(defn selected-graph-location
+  "Location to create a graph in, or nil for the default graphs dir."
+  [location]
+  (when (and location (not= location (default-graph-location)))
+    location))
+
+(hsx/defc graph-location-field
+  "Shows where a new graph will be stored and lets the user choose another folder."
+  [{:keys [location on-change disabled?]}]
+  (let [shown (or location (default-graph-location))]
+    [:div.graph-location-field.flex.flex-col.gap-1
+     [:label.text-sm.opacity-70 (t :graph/location-label)]
+     [:div.flex.flex-row.items-center.gap-2
+      [:code.text-xs.flex-1.truncate {:title shown} shown]
+      (shui/button
+       {:size :sm
+        :variant :outline
+        :type "button"
+        :disabled disabled?
+        :data-testid "choose-graph-location"
+        :on-click (fn [e]
+                    (util/stop e)
+                    (p/let [dir (ipc/ipc :chooseGraphLocation shown)]
+                      (when-not (string/blank? dir)
+                        (on-change dir))))}
+       (t :graph/location-choose))]]))
+
 (hsx/defc add-existing-graph-name-dialog
   [default-name on-submit]
   (let [[input set-input!] (hooks/use-state (or default-name ""))
+        [location set-location!] (hooks/use-state nil)
         submit! (fn []
                   (let [graph-name (string/trim input)]
                     (cond
@@ -676,7 +713,7 @@
                       (notification/show! (t :import/graph-name-conflict) :error)
 
                       :else
-                      (on-submit graph-name))))]
+                      (on-submit graph-name (selected-graph-location location)))))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -691,6 +728,9 @@
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (submit!)))})
+     (when (graph-location-picker?)
+       [:div.mt-4
+        (graph-location-field {:location location :on-change set-location!})])
      [:div.mt-5.sm:mt-4.flex
       (ui/button (t :ui/submit)
                  {:on-click submit!})]]))
@@ -710,10 +750,10 @@
         (shui/dialog-open!
          #(add-existing-graph-name-dialog
            (db-import-handler/suggested-graph-name path)
-           (fn [graph-name]
+           (fn [graph-name location]
              (shui/dialog-close!)
              (db-import-handler/<import-existing-local-graph!
-              path graph-name <on-existing-local-graph-imported!)))
+              path graph-name location <on-existing-local-graph-imported!)))
          {:id :add-existing-graph-name
           :title (t :import/new-graph-name)})))))
 
@@ -767,6 +807,7 @@
         [cloud? set-cloud?] (hooks/use-state false)
         [graph-e2ee? set-graph-e2ee?] (hooks/use-state true)
         [e2ee-rsa-key-ensured? set-e2ee-rsa-key-ensured?] (hooks/use-state nil)
+        [location set-location!] (hooks/use-state nil)
         input-ref (hooks/create-ref)
         new-db-f (fn new-db-f
                    [graph-name]
@@ -777,7 +818,8 @@
                        (do
                          (set-creating-db? true)
                          (p/let [repo (repo-handler/new-db! graph-name
-                                                            {:creating-remote-graph? cloud?})]
+                                                            {:creating-remote-graph? cloud?
+                                                             :location (selected-graph-location location)})]
                            (when cloud?
                              (->
                               (p/do
@@ -819,6 +861,10 @@
        :placeholder (t :graph/name-placeholder)
        :on-key-down submit!
        :autoComplete "off"})
+     (when (graph-location-picker?)
+       (graph-location-field {:location location
+                              :on-change set-location!
+                              :disabled? creating-db?}))
      (when rtc-group?
        [:div.flex.flex-col
         [:div.flex.flex-row.items-center.gap-1

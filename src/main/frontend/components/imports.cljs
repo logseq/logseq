@@ -74,7 +74,7 @@
     (js/setTimeout ui-handler/re-render-root! 500)))
 
 (defn- lsq-import-handler
-  [e & {:keys [sqlite? sqlite-zip? debug-transit? graph-name db-edn?]}]
+  [e & {:keys [sqlite? sqlite-zip? debug-transit? graph-name db-edn? location]}]
   (let [file      (first (array-seq (.-files (.-target e))))]
     (cond
       sqlite?
@@ -91,7 +91,7 @@
             (set! (.-onload reader)
                   (fn []
                     (let [buffer (.-result ^js reader)]
-                      (db-import-handler/import-from-sqlite-db! buffer graph-name finished-cb)
+                      (db-import-handler/import-from-sqlite-db! buffer graph-name location finished-cb)
                       (shui/dialog-close!))))
             (set! (.-onerror reader) (fn [e] (js/console.error e)))
             (set! (.-onabort reader) (fn [e]
@@ -109,7 +109,7 @@
           (notification/show! (t :import/graph-name-conflict) :error)
 
           :else
-          (db-import-handler/import-from-sqlite-zip! file graph-name
+          (db-import-handler/import-from-sqlite-zip! file graph-name location
                                                      (fn []
                                                        (finished-cb {:reload? false})))))
 
@@ -134,6 +134,7 @@
                       (let [text (.. e -target -result)]
                         (import-f
                          graph-name
+                         location
                          text
                          #(do
                             (state/set-state! :graph/importing nil)
@@ -149,9 +150,12 @@
 (hsx/defc set-graph-name-dialog
   [input-e opts]
   (let [[input set-input!] (hooks/use-state "")
+        [location set-location!] (hooks/use-state nil)
         on-submit #(if (repo/invalid-graph-name? input)
                      (repo/invalid-graph-name-warning)
-                     (lsq-import-handler input-e (assoc opts :graph-name input)))]
+                     (lsq-import-handler input-e (assoc opts
+                                                        :graph-name input
+                                                        :location (repo/selected-graph-location location))))]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -165,6 +169,9 @@
        :on-key-down (fn [e]
                       (when (= "Enter" (util/ekey e))
                         (on-submit)))}]
+
+     (when (repo/graph-location-picker?)
+       (repo/graph-location-field {:location location :on-change set-location!}))
 
      [:div.mt-5.sm:mt-4.flex
       (ui/button (t :ui/submit)
@@ -202,12 +209,14 @@
                     :yupSchema (-> (.object form-core/yup)
                                    (.shape #js {:graph-name (-> (.string form-core/yup) (.required))})
                                    (.required))})
+         [location set-location!] (hooks/use-state nil)
          handle-submit (:handleSubmit form-ctx)
          on-submit-valid (handle-submit
                           (fn [^js e]
                             ;; (js/console.log "[form] submit: " e (js->clj e))
                             (shui/dialog-close!)
-                            (on-submit-fn (js->clj e :keywordize-keys true))))
+                            (on-submit-fn (assoc (js->clj e :keywordize-keys true)
+                                                 :location (repo/selected-graph-location location)))))
          [convert-all-tags-input set-convert-all-tags-input!] (hooks/use-state false)]
 
      (shui/form-provider form-ctx
@@ -223,6 +232,10 @@
                                               (when error
                                                 (shui/form-description
                                                  [:b.text-red-800 (:message error)])))))
+
+                          (when (repo/graph-location-picker?)
+                            [:div.my-3
+                             (repo/graph-location-field {:location location :on-change set-location!})])
 
                           (import-checkbox-field "extract-code-snippets?"
                                                  (t :import/extract-inline-code-snippets)
@@ -623,7 +636,7 @@
    default-config]
   {:user-options
    (merge
-    (dissoc user-options :graph-name)
+    (dissoc user-options :graph-name :location)
     {:tag-classes (some-> tag-classes string/trim not-empty (string/split #",\s*") set)
      :property-classes (some-> property-classes string/trim not-empty (string/split #",\s*") set)
      :property-parent-classes (some-> property-parent-classes string/trim not-empty (string/split #",\s*") set)})
@@ -774,7 +787,7 @@
                        (route-handler/redirect-to-all-graphs))))))))))))
 
 (defn- import-file-graph
-  [*files {:keys [graph-name] :as user-options} config-file client-ignored-files]
+  [*files {:keys [graph-name location] :as user-options} config-file client-ignored-files]
   (let [previous-repo (state/get-current-repo)
         expected-repo (str config/db-version-prefix graph-name)
         created-repo* (volatile! nil)]
@@ -804,6 +817,7 @@
             (open-import-indicator!)
             (p/let [start-time (t/now)
                     repo (repo-handler/new-db! graph-name {:file-graph-import? true
+                                                           :location location
                                                            :on-created #(vreset! created-repo* %)})]
               (when-not (= repo expected-repo)
                 (throw (ex-info "File-graph import did not create a new graph"

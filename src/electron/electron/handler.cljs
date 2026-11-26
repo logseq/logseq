@@ -262,8 +262,11 @@
          #js {:ok true})
        expected-generation))))
 
-(defmethod handle :createGraph [_window [_ repo exclusive?]]
-  (lifecycle/createGraph (cli-server/resolve-storage {}) (canonical-repo repo) (true? exclusive?)))
+(defmethod handle :createGraph [_window [_ repo exclusive? location]]
+  (lifecycle/createGraph (cli-server/resolve-storage {}) (canonical-repo repo) (true? exclusive?) location))
+
+(defmethod handle :chooseGraphLocation [_window [_ current-location]]
+  (open-dir-dialog (node-path/join current-location "_")))
 
 ;; DB related IPCs start
 

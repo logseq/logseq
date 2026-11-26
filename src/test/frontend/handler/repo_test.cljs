@@ -170,3 +170,17 @@
 (deftest graph-already-exists-trims-input-name
   (with-redefs [state/get-repos (constantly [{:url "logseq_db_space name"}])]
     (is (repo-handler/graph-already-exists? "  space name  "))))
+
+(deftest new-db-passes-chosen-location-to-graph-creation-test
+  (async done
+    (let [persisted (atom nil)]
+      (-> (p/with-redefs [persist-db/<new
+                          (fn [repo opts]
+                            (reset! persisted [repo (:location opts)])
+                            (p/rejected (ex-info "stop after creation" {:code :stop})))
+                          notification/show! (fn [& _] nil)]
+            (repo-handler/new-db! "located" {:location "/data/graphs"}))
+          (p/then (fn [_]
+                    (is (= ["logseq_db_located" "/data/graphs"] @persisted))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))

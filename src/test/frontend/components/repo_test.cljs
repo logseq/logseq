@@ -567,3 +567,13 @@
       (is (= [[:graph/open-new-window "logseq_db_demo"]]
              @events))
       (is (zero? @registry-reads)))))
+
+(deftest selected-graph-location-is-nil-for-default-graphs-dir-test
+  (let [original (state/get-state)]
+    (try
+      (state/set-state! :system/info {:graphs-dir "/home/me/logseq/graphs"})
+      (is (nil? (repo/selected-graph-location nil)))
+      (is (nil? (repo/selected-graph-location "/home/me/logseq/graphs")))
+      (is (= "/data/graphs" (repo/selected-graph-location "/data/graphs")))
+      (finally
+        (state/set-state! :system/info (:system/info original))))))

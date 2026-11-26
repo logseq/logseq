@@ -492,10 +492,12 @@
     (protocol/<export-db (get-impl) repo opts)))
 
 (defn <import-db
-  [repo data]
+  "Imports `data` as graph `repo`. `location` is the folder the graph is stored
+  in on desktop; nil stores it in the default graphs dir."
+  [repo data location]
   (when repo
     (if (electron-runtime?)
-      (p/let [generation (ipc/ipc "createGraph" repo)
+      (p/let [generation (ipc/ipc "createGraph" repo false location)
               client (<ensure-remote! repo {:generation generation})]
         (protocol/<import-db client repo data))
       (protocol/<import-db (get-impl) repo data))))
@@ -524,11 +526,11 @@
    (graph-storage-lock repo)
    (fn [] (state/<invoke-db-worker :thread-api/unsafe-unlink-db repo graph-uuid))))
 
-(defn <new [repo {:keys [create-only? on-created] :as opts}]
+(defn <new [repo {:keys [create-only? on-created location] :as opts}]
   {:pre [(<= (count repo) 128)]}
-  (let [opts (dissoc opts :create-only? :on-created)]
+  (let [opts (dissoc opts :create-only? :on-created :location)]
     (if (electron-runtime?)
-      (p/let [generation (ipc/ipc "createGraph" repo (boolean create-only?))
+      (p/let [generation (ipc/ipc "createGraph" repo (boolean create-only?) location)
               _ (when on-created (on-created {:url repo :generation generation}))
               impl (<ensure-remote! repo {:generation generation})
               _ (protocol/<new impl repo opts)]
