@@ -51,7 +51,7 @@ currently reports credential storage as unsupported instead of leaving promises 
 Linux needs the development packages listed in the workflow, including
 Pango, Cairo, Fontconfig, SDL3, OpenGL, SQLite, libjpeg, libffi, and GMP.
 Still-WebP decoding and its tests also need the runtime libwebp shared library, which the host loads dynamically.
-AVIF/HEIC decoding and its tests also need the runtime libheif shared library, which the host loads dynamically.
+AVIF/HEIC decoding and its tests also need the runtime libheif shared library, which the host loads dynamically. On plugin-split distributions such as Ubuntu 24.04, HEIC decoding also needs the libde265 plugin package.
 On macOS, install `pkg-config sqlite3 sdl3 libffi gmp` with Homebrew.
 Select Xcode 16.2 or a newer supported SDK before installing the OCaml
 dependencies. The current LUI Metal backend uses `MTLCompileOptions.mathMode`,
