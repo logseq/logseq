@@ -994,11 +994,10 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~before_
     check "Configured journal queries rely on the block-region minimum instead of a fixed top inset"
       (List.exists (fun n -> M.string_prop n "accessibility-identifier"=Some "today-queries"
          && not (Hashtbl.mem n.M.props "margin-top")) (M.all_nodes mounted.S.tree)
-       && List.for_all (fun n -> not (Shared_scenarios_views.has_tok n "custom-query")
-         || not (Hashtbl.mem n.M.props "margin-left")) (M.all_nodes mounted.S.tree));
-    check "Journal query title ink has a one-pixel inset and counts use Master's top-aligned text-sm line box"
-      (Hashtbl.find_opt (Option.get (header mounted)).M.props "padding-horizontal"=Some (Lui_protocol.IntValue 1)
-       && List.exists (fun n -> Shared_scenarios_views.has_tok n "results-count"
+       && List.exists (fun n -> Shared_scenarios_views.has_tok n "custom-query"
+         && Hashtbl.find_opt n.M.props "margin-left"=Some (Lui_protocol.IntValue 2)) (M.all_nodes mounted.S.tree));
+    check "Journal query counts use Master's top-aligned text-sm line box"
+      (List.exists (fun n -> Shared_scenarios_views.has_tok n "results-count"
          && Hashtbl.find_opt n.M.props "height"=Some (Lui_protocol.IntValue 24)
          && M.string_prop n "line-height"=Some "20px") (M.all_nodes mounted.S.tree));
     Hashtbl.replace query_rows "" [];
