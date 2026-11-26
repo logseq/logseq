@@ -346,22 +346,7 @@
 
 (deftest delete-short-id-owner-mismatch-is-forbidden
   (async done
-    (let [env (permission-env
-               (fn [id url method]
-                 (cond
-                   (and (= id "index")
-                        (= method "GET")
-                        (= url "https://publish/short/abc123"))
-                   (ok-json-response #js {"page" #js {"graph_uuid" "graph-1"
-                                                      "page_uuid" "page-1"}})
-
-                   (and (= id "index")
-                        (= method "GET")
-                        (= url "https://publish/pages/graph-1/page-1"))
-                   (ok-json-response #js {"owner_sub" "owner-a"})
-
-                   :else
-                   (json-error-response 404 "not found"))))
+    (let [env (short-id-delete-env)
           request (js/Request. "https://publish.example/p/abc123"
                                #js {:method "DELETE"
                                     :headers #js {"authorization" "Bearer token"}})]
