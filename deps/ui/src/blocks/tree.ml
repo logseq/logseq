@@ -666,8 +666,8 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                       []))
             ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
                else
-                 (* the 'x' press needs a pressable kind — link is not one,
-                    so it renders as text *)
+                 (* icon admits no Press events; the small box carries the
+                    press while the icon itself stays purely visual. *)
                  Ui_parts.pressable
                    ~on_press:(fun _ ->
                      if Runtime.signal_get hov then
@@ -682,18 +682,19 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                       (Ui_components.with_props
                          [ Ui_components.Prop.user_select `none
                          ; Ui_components.Prop.cursor `pointer ]
-                         (icon ~key:("tx-" ^ key)
+                         (box ~key:("tx-" ^ key)
                             ~style_class:"tag-x"
-                            ~name:(`app "x")
-                            ~point_size:13
                             ~margin_top:1 ~margin_left:2 ~margin_right:2
-                            ~foreground:"hsl(var(--muted-foreground))"
                             ~on_pointer_enter:enter
                             ~on_pointer_leave:leave
                             ~data_attrs:
                               [ ( "aria-label"
                                 , I18n.t "block/remove-this-tag" ) ]
-                            [])))) ]
+                            [ icon ~key:("txi-" ^ key)
+                                ~name:(`app "x")
+                                ~point_size:13
+                                ~foreground:"hsl(var(--muted-foreground))"
+                                [] ])))) ]
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           Ui_components.tag_link_appearance (Ui_components.with_props
