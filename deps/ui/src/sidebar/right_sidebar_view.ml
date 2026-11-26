@@ -63,7 +63,8 @@ let topbar st =
        ~data_attrs_signal:
          (Signal.constant ctx.Lui_ui.ui_scheduler
             [ ( "style"
-              , "position:sticky;top:0;-webkit-app-region:drag" ) ])
+              , "position:sticky;top:0;-webkit-app-region:drag" )
+            ; ("data-window-titlebar", "true") ])
        ~height:48 ~padding_horizontal:4
        ~background:
          "var(--ls-right-sidebar-topbar-color, var(--lx-gray-02, \
