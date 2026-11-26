@@ -3162,16 +3162,24 @@ static int logseq_tiff_exif_orientation(const unsigned char *tiff, size_t tiff_l
    JPEG-style Exif\0\0 prefix even though the container spec does not require
    it, so accept both forms without trusting chunk sizes or TIFF offsets. */
 static int logseq_webp_exif_orientation(const unsigned char *data, size_t length) {
+  if (length < 12) return 1;
+  uint32_t riff_size = (uint32_t)data[4] | ((uint32_t)data[5] << 8) |
+    ((uint32_t)data[6] << 16) | ((uint32_t)data[7] << 24);
+  uint64_t declared_end = 8 + (uint64_t)riff_size;
+  size_t end = declared_end > length ? length : (size_t)declared_end;
   size_t position = 12;
-  while (position + 8 <= length) {
+  int exif_enabled = 0;
+  while (position + 8 <= end) {
     size_t chunk_length = (size_t)data[position + 4] |
       ((size_t)data[position + 5] << 8) |
       ((size_t)data[position + 6] << 16) |
       ((size_t)data[position + 7] << 24);
     size_t payload_offset = position + 8;
-    if (chunk_length > length - payload_offset) break;
-    if (memcmp(data + position, "EXIF", 4) == 0) {
-      const unsigned char *payload = data + payload_offset;
+    if (chunk_length > end - payload_offset) break;
+    const unsigned char *payload = data + payload_offset;
+    if (memcmp(data + position, "VP8X", 4) == 0 && chunk_length >= 10)
+      exif_enabled = (payload[0] & 0x08) != 0;
+    else if (exif_enabled && memcmp(data + position, "EXIF", 4) == 0) {
       size_t payload_length = chunk_length;
       if (payload_length >= 6 && memcmp(payload, "Exif\0\0", 6) == 0) {
         payload += 6;
@@ -3180,7 +3188,7 @@ static int logseq_webp_exif_orientation(const unsigned char *data, size_t length
       return logseq_tiff_exif_orientation(payload, payload_length);
     }
     size_t padded_length = chunk_length + (chunk_length & 1);
-    if (padded_length > length - payload_offset) break;
+    if (padded_length > end - payload_offset) break;
     position = payload_offset + padded_length;
   }
   return 1;

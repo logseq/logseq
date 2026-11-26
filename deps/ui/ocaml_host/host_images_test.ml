@@ -245,7 +245,7 @@ let () = begin
     (match Host_image.decode (Bytes.sub webp 0 (Bytes.length webp - 2)) with
      | Ok _ -> false
      | Error _ -> true);
-  let oriented_webp=bytes_of_hex "5249464640000000574542505650384c110000002f010000000fb0fff31ff31f1532a2ff0100455849461a00000049492a0008000000010012010300010000000600000000000000" in
+  let oriented_webp=bytes_of_hex "524946465200000057454250565038580a000000080000000100000000005650384c110000002f010000000fb0fff31ff31f1532a2ff0100455849461a00000049492a0008000000010012010300010000000600000000000000" in
   expect "WebP EXIF orientation rotates dimensions and pixels"
     (match Host_image.decode oriented_webp with
      | Ok image ->
