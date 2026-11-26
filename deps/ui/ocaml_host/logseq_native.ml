@@ -2433,6 +2433,7 @@ let () =
     if !Theme_vars.generation <> !theme_gen_seen then begin
       theme_gen_seen := !Theme_vars.generation;
       native_menu_theme (!Theme_vars.mode = Lui_theme.Dark);
+      Host_images.refresh_math images (Lui_host.store host);
       Lui_host.invalidate_paint host;
       Lui_host.invalidate_layout host;
       host_req_repaint := true

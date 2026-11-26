@@ -9,6 +9,7 @@ let dark_vars : (string, string) Hashtbl.t = Hashtbl.create 256
 let light_overrides : (string, string) Hashtbl.t = Hashtbl.create 256
 let dark_overrides : (string, string) Hashtbl.t = Hashtbl.create 256
 let mode : Lui_theme.mode ref = ref Lui_theme.Light
+let dark_atomic = Atomic.make false
 let accent = ref "logseq"
 let generation = ref 0
 
@@ -41,7 +42,10 @@ let rebuild mode =
 let set_dark is_dark =
   let next = if is_dark then Lui_theme.Dark else Lui_theme.Light in
   if next <> !mode then incr generation;
-  mode := next
+  mode := next;
+  Atomic.set dark_atomic is_dark
+
+let current_dark () = Atomic.get dark_atomic
 
 let set_accent value =
   if not (List.mem value Ui_theme_css.accents) then
