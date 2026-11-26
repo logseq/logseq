@@ -11,12 +11,18 @@ let source_of_url url =
      String.sub url 0 (String.length math_prefix) = math_prefix then
     let rest = String.sub url (String.length math_prefix)
       (String.length url - String.length math_prefix) in
-    match String.split_on_char ':' rest with
-    | [ display; dark; encoded ] -> (
-        let tex = Uri.pct_decode encoded in
-        match Host_math.png_bytes ~dark:(dark = "1") ~tex ~display:(display = "1") with
-        | Some bytes -> Loaders.Bytes bytes
-        | None -> Loaders.Bytes Bytes.empty)
+    match String.index_opt rest ':' with
+    | Some first when first + 1 < String.length rest -> (
+        match String.index_from_opt rest (first + 1) ':' with
+        | Some second when second + 1 < String.length rest ->
+            let display = String.sub rest 0 first in
+            let dark = String.sub rest (first + 1) (second - first - 1) in
+            let encoded = String.sub rest (second + 1) (String.length rest - second - 1) in
+            let tex = Uri.pct_decode encoded in
+            (match Host_math.png_bytes ~dark:(dark = "1") ~tex ~display:(display = "1") with
+             | Some bytes -> Loaders.Bytes bytes
+             | None -> Loaders.Bytes Bytes.empty)
+        | _ -> Loaders.Bytes Bytes.empty)
     | _ -> Loaders.Bytes Bytes.empty
   else
     let uri = Uri.of_string url in
