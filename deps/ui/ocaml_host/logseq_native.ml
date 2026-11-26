@@ -379,6 +379,7 @@ let () =
         Bytes.empty) } in
   metrics.panel_open <- Sys.getenv_opt "LOGSEQ_NATIVE_METRICS_PANEL" = Some "1";
   let presentation = Host_interaction.presentation () in
+  let input_present_retry = ref false in
   let renderer, gl_live, blit =
     match metal with
     | Some m ->
@@ -2496,9 +2497,10 @@ let () =
     let retry = presentation.Host_interaction.pending in
     let frame_due = Renderer_metrics.frame_due ~vsync
       ~deadline:!frame_deadline ~now:(perf_s ()) in
-    let input_frame_presented = dirty && (frame_due || Option.is_some metrics.input_at) in
-    if input_frame_presented then begin
+    let input_frame_due = dirty && (frame_due || Option.is_some metrics.input_at) in
+    if input_frame_due then begin
       paint_frame ();
+      if presentation.Host_interaction.pending then input_present_retry := true;
       (* A caret blink must not keep the loop in its post-input fast poll. *)
       if ordinary_dirty then last_busy := t0;
       last_render := perf_s ();
@@ -2540,6 +2542,14 @@ let () =
     let work_ms = (perf_s () -. t0) *. 1000. in
     if dirty || had_events || had_mailbox || (retry && not presentation.pending)
     then Renderer_metrics.record_phase metrics Active_frame work_ms;
+    let retry_presented_input =
+      !input_present_retry && not presentation.Host_interaction.pending
+    in
+    if retry_presented_input then input_present_retry := false;
+    let input_frame_presented =
+      (input_frame_due && not presentation.Host_interaction.pending)
+      || retry_presented_input
+    in
     Renderer_metrics.record_present_frame metrics ~now:(perf_s ()) ~work_ms
       ~presented:input_frame_presented;
     let now = perf_s () in
