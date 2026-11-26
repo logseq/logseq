@@ -254,17 +254,30 @@ let local_storage_get k =
 
 let local_storage_set k v =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain storage";
-  with_state_lock (fun () ->
-      reload_state_unlocked ();
-      Hashtbl.replace ls k v;
-      if !auth_managed then write_state_unlocked ())
+  if !auth_managed then
+    with_state_lock (fun () ->
+        reload_state_unlocked ();
+        Hashtbl.replace ls k v;
+        write_state_unlocked ())
+  else begin
+    (* Without OS credential storage native preferences are intentionally
+       process-local memory. Reloading the shared file here would discard
+       earlier unpersisted changes made by this process. *)
+    load_state ();
+    Hashtbl.replace ls k v
+  end
 
 let local_storage_remove k =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain removal";
-  with_state_lock (fun () ->
-      reload_state_unlocked ();
-      Hashtbl.remove ls k;
-      if !auth_managed then write_state_unlocked ())
+  if !auth_managed then
+    with_state_lock (fun () ->
+        reload_state_unlocked ();
+        Hashtbl.remove ls k;
+        write_state_unlocked ())
+  else begin
+    load_state ();
+    Hashtbl.remove ls k
+  end
 
 let session : (string, string) Hashtbl.t = Hashtbl.create 16
 
