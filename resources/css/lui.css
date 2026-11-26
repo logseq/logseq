@@ -1178,6 +1178,15 @@ body {
     pointer-events: none;
   }
 
+  /* Closing surfaces release their icon props before the exit animation
+     finishes in the currently pinned LUI renderer; without this the
+     unmasked icons paint as solid squares through the fade. Remove this
+     together with the typed-slot LUI pin upgrade that includes upstream
+     popup icon retention. */
+  :is(.lui-dropdown-menu, .lui-context-menu, .lui-popover)[data-ending-style] .lui-icon {
+    display: none !important;
+  }
+
   .lui-dropdown-menu[data-starting-style],
   .lui-dropdown-menu[data-ending-style] {
     opacity: 0;
