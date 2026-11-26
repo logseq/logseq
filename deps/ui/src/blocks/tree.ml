@@ -626,8 +626,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
         Signal.set hov false;
         Runtime.flush ())
     in
-    (* the delegated context-menu handler reads data-tag-uuid/id/title/
-       priv off the chip root — they ride ~data_attrs *)
+    (* only the chip root owns hover tracking: enter/leave handlers on
+       descendants reset the state while the pointer moves between the
+       hash, x, and label inside the same chip. *)
     (Ui_components.with_props
        [ Ui_components.Prop.position `relative
        ; Ui_components.Prop.corner_radius 4
@@ -646,11 +647,9 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
               , "display:inline-flex" )
             ]
     [ row ~key:("tc-" ^ key) ~cross:`center
-        ~on_pointer_enter:enter ~on_pointer_leave:leave
         [ (* the # and the remove-x stack — the x overlays the # and
              contributes no flow width *)
           stack ~key:("hx-" ^ key)
-            ~on_pointer_enter:enter ~on_pointer_leave:leave
             [ Ui_parts.float_prop Lui_protocol.Opacity
                 ~value:(reactive (fun h -> if h then 0. else 0.7) (Signal.value hov))
                 (Ui_components.with_props
@@ -661,9 +660,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                       ~style_class:"hash-symbol"
                       ~foreground:
                         "var(--lx-accent-11, var(--ls-tag-text-color))"
-                      ~value:"#"
-                      ~on_pointer_enter:enter ~on_pointer_leave:leave
-                      []))
+                      ~value:"#" []))
             ; (if priv || Ui_services.env_publishing () then Logseq_el.nothing
                else
                  (* icon admits no Press events; the small box carries the
@@ -685,8 +682,6 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                          (box ~key:("tx-" ^ key)
                             ~style_class:"tag-x"
                             ~margin_top:1 ~margin_left:2 ~margin_right:2
-                            ~on_pointer_enter:enter
-                            ~on_pointer_leave:leave
                             ~data_attrs:
                               [ ( "aria-label"
                                 , I18n.t "block/remove-this-tag" ) ]
@@ -704,7 +699,6 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
             (link ~key:("ta-" ^ key)
                ~url:"#" ~target:`self_
                ~style_class:"tag"
-               ~on_pointer_enter:enter ~on_pointer_leave:leave
             ~data_attrs:
               [ ("tabindex", "0"); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
               ; ("data-uuid", tuuid)
@@ -713,9 +707,7 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                mid-word inside the chip; the child text gets the tag
                color itself — the anchor's accent doesn't cascade *)
             [ text ~key:"ts" ~value:tag ~white_space:`nowrap
-                ~foreground:Ui_components.tag_link_foreground
-                ~on_pointer_enter:enter ~on_pointer_leave:leave
-                [] ]))
+                ~foreground:Ui_components.tag_link_foreground [] ]))
         ] ]))
       context parent
 
