@@ -3185,6 +3185,7 @@ static void logseq_jpeg_fail(struct logseq_jpeg_error *error, const char *messag
   snprintf(error->message, sizeof(error->message), "%s", message);
   longjmp(error->jump, 1);
 }
+#endif
 
 #if defined(__linux__)
 /* Runtime-loaded GStreamer media backend. GStreamer is optional at start-up:
@@ -3695,6 +3696,7 @@ CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v);
 
 #endif
 
+#if defined(__linux__)
 /* Decode with the system libjpeg and transform to display orientation while
    copying rows. JPEG has no alpha channel, so opaque RGBA is already the
    premultiplied representation. Decode state lives outside the setjmp frame:
