@@ -31,10 +31,18 @@ static unsigned long pdf_ulong0(id obj, const char *name) {
   return ((unsigned long (*)(id, SEL))objc_msgSend)(obj, pdf_sel(name));
 }
 static host_rect_t pdf_rect1long(id obj, const char *name, long arg) {
+#if defined(__x86_64__)
+  return ((host_rect_t (*)(id, SEL, long))objc_msgSend_stret)(obj, pdf_sel(name), arg);
+#else
   return ((host_rect_t (*)(id, SEL, long))objc_msgSend)(obj, pdf_sel(name), arg);
+#endif
 }
 static host_rect_t pdf_rect1id(id obj, const char *name, id arg) {
+#if defined(__x86_64__)
+  return ((host_rect_t (*)(id, SEL, id))objc_msgSend_stret)(obj, pdf_sel(name), arg);
+#else
   return ((host_rect_t (*)(id, SEL, id))objc_msgSend)(obj, pdf_sel(name), arg);
+#endif
 }
 static id pdf_string(const char *utf8) {
   return ((id (*)(id, SEL, const char *))objc_msgSend)(
@@ -181,7 +189,6 @@ CAMLprim value logseq_pdf_open(value path_v) {
 #if defined(__APPLE__)
   id pool; pdf_autorelease_pool_open(&pool);
   id doc = pdf_document(String_val(path_v));
-  if (doc) doc = pdf_id0(doc, "retain");
   pdf_autorelease_pool_close(pool);
   CAMLreturn(caml_copy_nativeint((intnat)doc));
 #else
