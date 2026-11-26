@@ -21,7 +21,9 @@ let el ?key ~block ~display:_ ~tex () : Lui_elements.t =
       let lines = String.split_on_char '\n' tex in
       Lui_elements.column ?key ~style_class:"latex"
         (List.map
-           (fun line -> Lui_elements.text ~white_space:`pre_wrap ~value:line [])
+           (fun line ->
+             let value = if line = "" then " " else line in
+             Lui_elements.text ~white_space:`pre_wrap ~value [])
            lines)
     else Lui_elements.text ?key ~style_class:"latex-inline" ~value:tex []
   in source context parent
