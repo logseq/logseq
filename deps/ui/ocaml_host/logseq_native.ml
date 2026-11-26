@@ -816,6 +816,14 @@ let () =
       ~renderer:renderer_live ~width:dw ~height:dh ~scale ()
   in
   host_cell := Some host;
+  (* Native scenes composite into gamma-encoded window surfaces. Correct
+     glyph coverage for that output gamma; uncorrected linear coverage makes
+     small text look bloated and fuzzy. *)
+  let scene = Lui_host.scene host in
+  scene.Lui_scene.text <-
+    { Lui_scene.gamma_ratios = Lui_scene.gamma_ratios 2.2;
+      contrast = 0.;
+      subpixel_contrast = 0. };
   let store = Lui_host.store host in
   Lui_host.set_anchor_shift host (Ui.anchor_shift ui store);
   Daemon_client.boot_mark "host ready";
@@ -2160,7 +2168,7 @@ let () =
           !frame (model.phase = Model.Ready) journals blocks
           (List.length (Lui_host.scene host).Lui_scene.ops)))
   in
-  Native_window.install !win (fun () ->
+  let repaint_exposed () =
     let started = perf_s () in
     Host_interaction.advance_frame ui host ~now:started
       ~reduced_motion:(Native_window.reduced_motion ());
@@ -2178,7 +2186,25 @@ let () =
       Option.iter Lui_metal.present metal
     end
     else host_req_repaint := true;
-    Renderer_metrics.record_phase metrics Active_frame ((perf_s () -. started) *. 1000.));
+    Renderer_metrics.record_phase metrics Active_frame ((perf_s () -. started) *. 1000.)
+  in
+  Native_window.install !win repaint_exposed;
+  (* Cocoa's live-resize tracking loop starves ordinary SDL event delivery.
+     The Metal display link calls this registered entry once per refresh while
+     SDL is blocked in its runtime-lock-releasing wait, keeping resize frames
+     synchronized instead of compositing stretched stale content. *)
+  let live_resize_error = ref None in
+  Callback.register "lui_native_live_resize_frame" (fun id ->
+    if id = Sdl.get_window_id !win && !live_resize_error = None then
+      try repaint_exposed () with exn -> live_resize_error := Some exn);
+  let wait_event_timeout timeout =
+    let wait () = Sdl.wait_event_timeout None timeout in
+    match metal with
+    | Some _ ->
+      Lui_metal.set_sdl_waiting true;
+      Fun.protect ~finally:(fun () -> Lui_metal.set_sdl_waiting false) wait
+    | None -> wait ()
+  in
   if Option.is_some census_path then allocation_census := Some (fun () ->
     let scene = Lui_host.scene host in
     let app = Option.get !(Native_embed.current_app) in
@@ -2271,6 +2297,9 @@ let () =
   Daemon_client.boot_mark "loop";
   Fun.protect ~finally:finish_diagnostics (fun () ->
   while not !quit do
+    (match !live_resize_error with
+     | Some exn -> raise exn
+     | None -> ());
     let t0 = perf_s () in
     let allocation_requested = match allocation_path,allocation_trigger with
       | None,_ -> false
@@ -2628,14 +2657,14 @@ let () =
           | None -> timeout
           | Some _ -> min timeout
               (max 1 (int_of_float (ceil ((!caret_blink_deadline -. now) *. 1000.)))) in
-        ignore (Sdl.wait_event_timeout None timeout)
+        ignore (wait_event_timeout timeout)
     | None when not vsync ->
         frame_deadline := Renderer_metrics.next_deadline ~previous:!frame_deadline ~now;
         let remaining = !frame_deadline -. now in
         (* Process mailbox and input wakeups immediately, retaining the current
            display deadline so bursts coalesce into one layout and paint. *)
         if remaining > 0. then
-          ignore (Sdl.wait_event_timeout None
+          ignore (wait_event_timeout
             (max 1 (int_of_float (ceil (remaining *. 1000.)))))
     | None when not dirty -> Sdl.delay 1
     | None -> ()

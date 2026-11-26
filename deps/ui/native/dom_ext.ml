@@ -446,6 +446,9 @@ let doc_elements_provider : (unit -> Js.Json.t list) ref =
   ref (fun () -> [])
 let subtree_elements_provider : (int -> Js.Json.t list) ref =
   ref (fun _ -> [])
+(* Mountedness is host/runtime state, not a property of the immutable
+   event snapshot. The embedding app installs the authoritative predicate. *)
+let node_alive_provider : (int -> bool) ref = ref (fun _ -> false)
 
 let query_selector (el : element) (sel : string) : element option =
   match num_prop "node-id" el with
@@ -901,6 +904,23 @@ let el_contains (a : element) (b : element) : bool =
   let ka = el_key a in
   ka <> ""
   && (ka = el_key b || List.exists (fun anc -> el_key anc = ka) (ancestors_of b))
+
+
+let connected (el : element) : bool =
+  if el == document_el then true
+  else
+    match node_id_of el with
+    | Some id -> !node_alive_provider id
+    | None -> (
+        (* Bare ref handles cannot prove mountedness until the host resolves
+           their owner; keep them optimistically connected like a browser
+           element object. *)
+        match ref_key_of el with
+        | Some key -> (
+            match Hashtbl.find_opt reference_owners key with
+            | Some id -> !node_alive_provider id
+            | None -> true)
+        | None -> false)
 
 let el_id (el : element) : string =
   Option.value (dom_id_of el) ~default:""
