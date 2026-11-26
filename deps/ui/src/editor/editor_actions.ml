@@ -694,6 +694,16 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             | Some origin -> Runtime.reload_origin_current origin
             | None -> false
           in
+          (* A click on web-rendered math is a coordinate in the rendered
+             representation, not in the raw source that replaces it. Native
+             math already presents raw TeX, so its click coordinate remains
+             meaningful there. *)
+          let click =
+            match click, b.Model.block_display_type with
+            | Some _, Some "math"
+              when not (Ui_services.env_native_block_controls ()) -> None
+            | _ -> click
+          in
           let p =
             (let* buffer = Ops.title_on_entry uuid (display_title uuid) in
             if current () then (
@@ -702,16 +712,6 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
-            (* A click on rendered math is a coordinate in the rendered
-               representation, not in the raw source that replaces it. Do
-               not carry that point into editor hit-testing; the fallback
-               caret keeps the first click focusable instead of leaving
-               the pending geometry unresolved. *)
-            let click =
-              match click, b.Model.block_display_type with
-              | Some _, Some "math" -> None
-              | _ -> click
-            in
             S.history_input_before := None;
             arm_focus ~schedule:false
               (make_focus_request ?click ~owner:(scope, editing.S.epoch) uuid caret);
