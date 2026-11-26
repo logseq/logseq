@@ -3678,23 +3678,6 @@ CAMLprim value logseq_native_media_error(value handle_v) {
   CAMLreturn(error_v);
 }
 
-#endif
-
-#if !defined(__linux__)
-
-CAMLprim value logseq_native_media_open(value source_v, value video_v) {
-  caml_failwith("Native media playback is unsupported on this platform");
-}
-
-CAMLprim value logseq_native_media_close(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) { CAMLparam2(handle_v, playing_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_playing(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_bool(0)); }
-CAMLprim value logseq_native_media_position(value handle_v) { CAMLparam1(handle_v); CAMLlocal1(result_v); result_v = caml_alloc_tuple(2); Store_field(result_v, 0, Val_int(-1)); Store_field(result_v, 1, Val_int(-1)); CAMLreturn(result_v); }
-CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) { CAMLparam2(handle_v, ratio_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_frame(value handle_v, value seen_generation_v) { caml_failwith("Native media playback is unsupported on this platform"); }
-CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v); CAMLreturn(caml_alloc_initialized_string(0, "")); }
-
-#endif
 
 /* Decode with the system libjpeg and transform to display orientation while
    copying rows. JPEG has no alpha channel, so opaque RGBA is already the
@@ -3893,6 +3876,24 @@ static int logseq_decode_platform_linux(const unsigned char *data, size_t data_l
   return logseq_decode_jpeg_linux(data, data_length, pixels_out, width_out, height_out,
     size_out, error_out, error_size);
 }
+
+#endif
+
+#if !defined(__linux__)
+
+CAMLprim value logseq_native_media_open(value source_v, value video_v) {
+  caml_failwith("Native media playback is unsupported on this platform");
+}
+
+CAMLprim value logseq_native_media_close(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) { CAMLparam2(handle_v, playing_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_playing(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_bool(0)); }
+CAMLprim value logseq_native_media_position(value handle_v) { CAMLparam1(handle_v); CAMLlocal1(result_v); result_v = caml_alloc_tuple(2); Store_field(result_v, 0, Val_int(-1)); Store_field(result_v, 1, Val_int(-1)); CAMLreturn(result_v); }
+CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) { CAMLparam2(handle_v, ratio_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_frame(value handle_v, value seen_generation_v) { caml_failwith("Native media playback is unsupported on this platform"); }
+CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v); CAMLreturn(caml_alloc_initialized_string(0, "")); }
+
+#endif
 
 /* Image I/O owns its input and decoding objects entirely within the worker
    call. Only a tightly packed, top-left RGBA bitmap crosses into OCaml. */
