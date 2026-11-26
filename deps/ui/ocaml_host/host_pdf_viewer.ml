@@ -129,7 +129,7 @@ let geometry ctx attrs r =
   in
   let fit =
     if page_width > 0. && content.w > (2. *. margin) then
-      (content.w -. (2. *. margin)) /. page_width
+      (content.w -. (2. *. margin)) /. (page_width *. s)
     else 1.
   in
   let pdf_scale = Option.value (numeric_scale attrs.scale_text) ~default:(Float.min 3. fit) in
@@ -172,7 +172,7 @@ let page_image attrs geom ctx =
          let ppm = Host_pdf.render_ppm attrs.path attrs.page raster_scale in
          match Host_image.decode ppm with
          | Ok image ->
-             if Hashtbl.length image_cache > 24 then Hashtbl.reset image_cache;
+             if Hashtbl.length image_cache > 4 then Hashtbl.reset image_cache;
              Hashtbl.replace image_cache key image;
              Some image
          | Error _ -> None
@@ -232,8 +232,13 @@ let highlight_ops attrs geom alpha =
                   | Some (`String name) -> highlight_color name
                   | _ -> highlight_color "yellow"
                 in
-                match List.assoc_opt "rects" fields with
-                | Some (`List rects) ->
+                let rect_values =
+                  match List.assoc_opt "rects" fields with
+                  | Some (`List (_ :: _ as rects)) -> rects
+                  | _ -> (match List.assoc_opt "bounding" fields with Some value -> [ value ] | None -> [])
+                in
+                (match rect_values with
+                | rects ->
                     List.filter_map
                       (fun value ->
                         match rect_of_json value with
@@ -245,8 +250,7 @@ let highlight_ops attrs geom alpha =
                             let w = Float.max 1. ((x2 -. x1) *. geom.page_rect.w) in
                             let h = Float.max 1. ((y2 -. y1) *. geom.page_rect.h) in
                             Some (solid_fill tint (rect x y w h) alpha))
-                      rects
-                | _ -> [])
+                      rects))
           | _ -> [])
         items
   | _ -> []
@@ -299,11 +303,12 @@ let highlight_at attrs geom x y =
                     let rh = (y2 -. y1) *. geom.page_rect.h in
                     x >= rx && x <= rx +. rw && y >= ry && y <= ry +. rh
               in
-              let hit =
+              let rect_values =
                 match List.assoc_opt "rects" fields with
-                | Some (`List rects) -> List.exists hit_rect rects
-                | _ -> false
+                | Some (`List (_ :: _ as rects)) -> rects
+                | _ -> (match List.assoc_opt "bounding" fields with Some value -> [ value ] | None -> [])
               in
+              let hit = List.exists hit_rect rect_values in
               if hit then
                 match List.assoc_opt "id" fields with
                 | Some (`String id) -> Some id
@@ -515,8 +520,8 @@ let run_menu_action store node_id action hl_id =
 let hit_button ctx frame x y =
   List.find_opt (fun (_name, rect) -> inside rect x y) (button_rects ctx frame)
 
-let change_scale attrs delta =
-  let current = Option.value (numeric_scale attrs.scale_text) ~default:1. in
+let change_scale attrs current_fit delta =
+  let current = Option.value (numeric_scale attrs.scale_text) ~default:current_fit in
   let next = Float.max 0.25 (Float.min 5. (current *. delta)) in
   Printf.sprintf "\"scale\":\"%.2f\"" next
 
@@ -743,8 +748,8 @@ let handle_input store ~scale ~rect_of ~hit_path input =
                      | Some ("area", _) ->
                          emit store id "pdf-mode"
                            [ "\"name\":\"area\""; "\"on\":" ^ if attrs.area_mode then "\"false\"" else "\"true\"" ]
-                     | Some ("zoom-in", _) -> emit store id "pdf-scale" [ change_scale attrs 1.1 ]
-                     | Some ("zoom-out", _) -> emit store id "pdf-scale" [ change_scale attrs (1. /. 1.1) ]
+                     | Some ("zoom-in", _) -> emit store id "pdf-scale" [ change_scale attrs geom.pdf_scale 1.1 ]
+                     | Some ("zoom-out", _) -> emit store id "pdf-scale" [ change_scale attrs geom.pdf_scale (1. /. 1.1) ]
                      | Some ("next", _) ->
                          (try
                             if attrs.page < Host_pdf.page_count attrs.path then
