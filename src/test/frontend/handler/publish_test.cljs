@@ -1,6 +1,6 @@
 (ns frontend.handler.publish-test
   (:require [cljs.test :refer [async deftest is]]
-            [clojure.string :as string]
+            [frontend.config :as config]
             [frontend.handler.notification :as notification]
             [frontend.handler.publish :as publish-handler]
             [frontend.handler.property :as property-handler]
@@ -111,57 +111,31 @@
              (set! js/fetch original-fetch)
              (done)))))))
 
-(deftest unpublish-page-gets-graph-uuid-from-worker-test
+(deftest unpublish-stored-link-test
   (async done
-    (let [repo "logseq_db_unpublish_graph_uuid"
-          worker-calls (atom [])
-          fetch-calls (atom [])
-          removed-properties (atom [])
-          notifications (atom [])
-          previous-state (state/get-state)
-          original-auth-id-token state/get-auth-id-token
-          original-get-graph-uuid publish-handler/<get-graph-uuid
-          original-remove-property property-handler/remove-block-property!
-          original-notification-show notification/show!
-          original-fetch js/fetch]
-      (state/swap-state! assoc :git/current-repo repo)
-      (set! js/fetch
-            (fn [url opts]
-              (swap! fetch-calls conj [url opts])
-              (p/resolved #js {:ok true})))
-      (set! state/get-auth-id-token (constantly nil))
-      (set! publish-handler/<get-graph-uuid
-            (fn [repo']
-              (swap! worker-calls conj [:thread-api/get-graph-uuid repo'])
-              (p/resolved "11111111-1111-1111-1111-111111111111")))
-      (set! property-handler/remove-block-property!
-            (fn [block-id property]
-              (swap! removed-properties conj [block-id property])))
-      (set! notification/show!
-            (fn [& args]
-              (swap! notifications conj args)))
-      (-> (publish-handler/unpublish-page! {:db/id 42
-                                            :block/uuid #uuid "22222222-2222-2222-2222-222222222222"})
-          (p/then
-           (fn [_]
-             (is (= [[:thread-api/get-graph-uuid repo]]
-                    @worker-calls))
-             (is (= 1 (count @fetch-calls)))
-             (when-let [url (ffirst @fetch-calls)]
-               (is (string/includes? url
-                                     "/pages/11111111-1111-1111-1111-111111111111/22222222-2222-2222-2222-222222222222")))
-             (is (= [[42 :logseq.property.publish/published-url]]
-                    @removed-properties))
-             (is (= 1 (count @notifications)))))
-          (p/catch
-           (fn [error]
-             (is false (str error))))
-          (p/finally
-           (fn []
-             (state/replace-state! previous-state)
-             (set! state/get-auth-id-token original-auth-id-token)
-             (set! publish-handler/<get-graph-uuid original-get-graph-uuid)
-             (set! property-handler/remove-block-property! original-remove-property)
-             (set! notification/show! original-notification-show)
-             (set! js/fetch original-fetch)
-             (done)))))))
+    (let [server "https://publish.example/site"
+          page-id "22222222-2222-2222-2222-222222222222"
+          graph-id "33333333-3333-3333-3333-333333333333"
+          ids (str "/" graph-id "/" page-id)
+          run-case (fn [[url endpoint status body success?]]
+                     (let [requests (atom [])
+                           removed (atom [])]
+                       (p/with-redefs [config/publish-api-base (constantly server)
+                                       js/fetch (fn [target opts]
+                                                  (swap! requests conj [(.-method opts) target])
+                                                  (js/Response. body #js {:status status}))
+                                       property-handler/remove-block-property! (fn [& args] (swap! removed conj args))
+                                       notification/show! (fn [& _])]
+                         (p/let [_ (publish-handler/<unpublish-page! (uuid page-id) url)]
+                           (is (= (if endpoint [["DELETE" (str server endpoint)]] []) @requests))
+                           (is (= (if success? [[(uuid page-id) :logseq.property.publish/published-url]] [])
+                                  @removed))))))]
+      (-> (p/run! run-case
+                  [[(str server "/s/abc123") "/p/abc123" 200 "{\"ok\":true}" true]
+                   [(str server "/page" ids) (str "/pages" ids) 200 "{\"ok\":true}" true]
+                   ["https://other.example/p/abc123" nil 200 "" false]
+                   [(str server "/p/abc123") "/p/abc123" 200 "<html>Not found</html>" false]
+                   [(str server "/p/abc123") "/p/abc123" 404 "{}" false]
+                   [(str server "/p/abc123") "/p/abc123" 403 "{}" false]])
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))

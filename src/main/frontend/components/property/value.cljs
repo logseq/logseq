@@ -2084,7 +2084,7 @@
             :class "text-xs"
             :on-click (fn [e]
                         (util/stop e)
-                        (publish-handler/unpublish-page! block))}
+                        (publish-handler/<unpublish-page! (:block/uuid block) (:block/title value)))}
            (t :publish/unpublish)))]
 
        text-ref-type?
