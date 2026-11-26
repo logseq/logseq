@@ -8,7 +8,7 @@ let t_ = I18n.t
 let opt_row st i label =
   Ui_components.dropdown_menu_item ~key:("opt-" ^ string_of_int i) ~text:label
     ~selection_placement:`leading ~min_height:32
-    ~selected:(Runtime.signal_get st.Cards_state.sel = i)
+    ~selected:(reactive (fun sel -> sel = i) (Signal.value st.Cards_state.sel))
     ~on_press:(fun _ -> Cards_state.select_deck st i)
     []
 
