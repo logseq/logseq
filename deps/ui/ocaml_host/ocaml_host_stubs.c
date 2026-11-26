@@ -4018,39 +4018,6 @@ static int logseq_heif_available(void) {
     logseq_heif.handle_release;
 }
 
-static int logseq_is_heif_brand(const unsigned char *brand) {
-  return memcmp(brand, "avif", 4) == 0 ||
-    memcmp(brand, "heic", 4) == 0 ||
-    memcmp(brand, "heix", 4) == 0 ||
-    memcmp(brand, "heim", 4) == 0 ||
-    memcmp(brand, "heis", 4) == 0 ||
-    memcmp(brand, "mif1", 4) == 0;
-}
-
-static int logseq_is_heif_sequence_brand(const unsigned char *brand) {
-  return memcmp(brand, "avis", 4) == 0 ||
-    memcmp(brand, "msf1", 4) == 0 ||
-    memcmp(brand, "hevc", 4) == 0 ||
-    memcmp(brand, "hevx", 4) == 0 ||
-    memcmp(brand, "hevm", 4) == 0 ||
-    memcmp(brand, "hevs", 4) == 0;
-}
-
-static int logseq_is_heif(const unsigned char *data, size_t data_length) {
-  if (data_length < 16 || memcmp(data + 4, "ftyp", 4) != 0) return 0;
-  uint32_t box_size = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) |
-    ((uint32_t)data[2] << 8) | (uint32_t)data[3];
-  size_t box_end = box_size == 0 ? data_length : (size_t)box_size;
-  if (box_end < 16 || box_end > data_length) return 0;
-  if (logseq_is_heif_sequence_brand(data + 8)) return 0;
-  int still = logseq_is_heif_brand(data + 8);
-  for (size_t position = 16; position + 4 <= box_end; position += 4) {
-    if (logseq_is_heif_sequence_brand(data + position)) return 0;
-    if (logseq_is_heif_brand(data + position)) still = 1;
-  }
-  return still;
-}
-
 static void logseq_heif_error(char *error_out, size_t error_size,
     const char *action, LogseqHeifError error) {
   snprintf(error_out, error_size, "%s: %s", action,
@@ -4153,7 +4120,9 @@ static int logseq_decode_platform_linux(const unsigned char *data, size_t data_l
   if (logseq_is_webp(data, data_length))
     return logseq_decode_webp_linux(data, data_length, pixels_out, width_out, height_out,
       size_out, error_out, error_size);
-  if (logseq_is_heif(data, data_length))
+  /* Host_image routes only positively sniffed JPEG, WebP, or HEIF input here.
+     Keep the HEIF container brand parser in OCaml rather than duplicating it in C. */
+  if (data_length < 3 || data[0] != 0xff || data[1] != 0xd8 || data[2] != 0xff)
     return logseq_decode_heif_linux(data, data_length, pixels_out, width_out, height_out,
       size_out, error_out, error_size);
   return logseq_decode_jpeg_linux(data, data_length, pixels_out, width_out, height_out,
