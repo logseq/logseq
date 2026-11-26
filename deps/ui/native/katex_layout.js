@@ -153,6 +153,7 @@
       for (i = 0; i < children.length; i++) total += widthOf(children[i]);
     }
     total += horizontalExtra(node);
+    if (has(node, "root")) total += 5 / 18 - 10 / 18;
     if (fixed > total) total = fixed;
     return total;
   }
@@ -217,6 +218,7 @@
           w: lineWidth,
           h: lineHeight,
           viewBox: [0, 0, lineWidth * 1000, lineHeight * 1000],
+          preserve: "none",
           paths: [path]
         });
       }
@@ -268,11 +270,18 @@
       if (paths.length) {
         var box = (node.attributes && node.attributes.viewBox || "0 0 0 0").split(/\s+/).map(Number);
         var svgHeight = em((node.attributes || {}).height) || ctx.svgHeight || 1;
-        /* KaTeX stretchy art uses very wide viewBoxes with xMinYMin slice.
-           Crop the viewBox to the same leftmost slice here; this avoids
-           shrinking the visible art when a rasterizer meets instead. */
-        if (box.length === 4 && box[3] > 0 && ctx.width > 0 && svgHeight > 0) {
+        var preserve = (node.attributes || {}).preserveAspectRatio || "xMidYMid meet";
+        /* KaTeX emits separate xMin/xMid/xMax slices for stretchy arrows and
+           braces. Flattened items have no parent clipping, so crop each very
+           wide slice to the same portion its preserveAspectRatio exposes in
+           the browser. Percentage-width accents use preserveAspectRatio="none"
+           and must keep their full viewBox. */
+        if (box.length === 4 && box[3] > 0 && ctx.width > 0 && svgHeight > 0 &&
+            preserve.indexOf("slice") !== -1) {
+          var fullWidth = box[2];
           box[2] = box[3] * (ctx.width / svgHeight);
+          if (preserve.indexOf("xMid") === 0) box[0] += (fullWidth - box[2]) / 2;
+          else if (preserve.indexOf("xMax") === 0) box[0] += fullWidth - box[2];
         }
         out.items.push({
           type: "svg",
@@ -281,6 +290,7 @@
           w: ctx.width,
           h: svgHeight,
           viewBox: box,
+          preserve: preserve,
           paths: paths
         });
       }
@@ -305,7 +315,7 @@
         var childWidth = widthOf(child);
         var offset = em(ws.marginLeft);
         var stretchChild = has(child, "frac-line") || has(child, "overline-line") ||
-          has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail") || containsLine(child) || containsStretchySvg(child);
+          has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail") || isLine(child) || isStretchySvg(child);
         if (!stretchChild && ctx.align === "center") offset += Math.max(0, (ctx.width - childWidth) / 2);
         else if (!stretchChild && ctx.align === "right") offset += Math.max(0, ctx.width - childWidth);
         var nextCtx = {width: ctx.width, align: ctx.align, svgHeight: ctx.svgHeight};
@@ -345,7 +355,7 @@
     if (has(node, "col-align-l") || has(node, "svg-align")) align = "left";
 
     children = node.children || [];
-    var startX = x + em((node.style || {}).marginLeft) + em((node.style || {}).paddingLeft);
+    var startX = x + em((node.style || {}).marginLeft) + em((node.style || {}).paddingLeft) + (has(node, "root") ? 5 / 18 : 0);
     cursor = startX;
     var lineBaseline = childBaseline;
     var ownWidth = widthOf(node);
