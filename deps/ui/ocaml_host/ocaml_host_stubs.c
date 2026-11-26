@@ -3289,7 +3289,7 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
 
 /* Image I/O owns its input and decoding objects entirely within the worker
    call. Only a tightly packed, top-left RGBA bitmap crosses into OCaml. */
-CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
+CAMLprim value logseq_native_decode_platform(value encoded_v) {
   CAMLparam1(encoded_v);
   CAMLlocal2(pixels_v, result_v);
 #if defined(__APPLE__)
@@ -3310,10 +3310,11 @@ CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
   do {
     source = CGImageSourceCreateWithData(data, NULL);
     if (!source || CGImageSourceGetStatus(source) != kCGImageStatusComplete) {
-      error = "Incomplete or malformed JPEG"; break;
+      error = "Incomplete or malformed image"; break;
     }
-    properties = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
-    if (!properties) { error = "Missing JPEG dimensions"; break; }
+    size_t image_index = CGImageSourceGetPrimaryImageIndex(source);
+    properties = CGImageSourceCopyPropertiesAtIndex(source, image_index, NULL);
+    if (!properties) { error = "Missing image dimensions"; break; }
     CFTypeRef property_width = CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth);
     CFTypeRef property_height = CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight);
     int64_t original_width = 0, original_height = 0;
@@ -3323,9 +3324,10 @@ CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
         !CFNumberGetValue(property_width, kCFNumberSInt64Type, &original_width) ||
         !CFNumberGetValue(property_height, kCFNumberSInt64Type, &original_height) ||
         original_width <= 0 || original_height <= 0) {
-      error = "Invalid JPEG dimensions"; break;
+      error = "Invalid image dimensions"; break;
     }
     int64_t maximum_dimension = original_width > original_height ? original_width : original_height;
+    if (maximum_dimension > 16384) maximum_dimension = 16384;
     maximum = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &maximum_dimension);
     const void *keys[] = {kCGImageSourceCreateThumbnailFromImageAlways,
       kCGImageSourceCreateThumbnailWithTransform, kCGImageSourceThumbnailMaxPixelSize,
@@ -3335,22 +3337,22 @@ CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
     options = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 4,
       &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     if (!options) { out_of_memory = 1; break; }
-    image = CGImageSourceCreateThumbnailAtIndex(source, 0, options);
-    if (!image) { error = "Cannot decode JPEG"; break; }
+    image = CGImageSourceCreateThumbnailAtIndex(source, image_index, options);
+    if (!image) { error = "Cannot decode image"; break; }
     width = CGImageGetWidth(image); height = CGImageGetHeight(image);
     if (!width || !height || width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
         width > Max_long || height > Max_long) {
-      error = "JPEG bitmap dimensions overflow"; break;
+      error = "Image bitmap dimensions overflow"; break;
     }
     size = width * height * 4;
-    if (size > Max_long) { error = "JPEG bitmap size overflow"; break; }
+    if (size > Max_long) { error = "Image bitmap size overflow"; break; }
     pixels = calloc(1, size);
     if (!pixels) { out_of_memory = 1; break; }
     color = CGColorSpaceCreateWithName(kCGColorSpaceSRGB);
-    if (!color) { error = "Cannot create JPEG color space"; break; }
+    if (!color) { error = "Cannot create image color space"; break; }
     context = CGBitmapContextCreate(pixels, width, height, 8, width * 4, color,
       kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-    if (!context) { error = "Cannot create JPEG bitmap context"; break; }
+    if (!context) { error = "Cannot create image bitmap context"; break; }
     CGContextSetBlendMode(context, kCGBlendModeCopy);
     CGContextDrawImage(context, CGRectMake(0, 0, width, height), image);
   } while (0);
@@ -3399,6 +3401,6 @@ CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
   Store_field(result_v, 2, pixels_v);
   CAMLreturn(result_v);
 #else
-  caml_failwith("JPEG platform decoding is unsupported on this platform");
+  caml_failwith("Platform image decoding is unsupported on this platform");
 #endif
 }
