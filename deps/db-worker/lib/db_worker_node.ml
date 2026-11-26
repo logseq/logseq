@@ -54,6 +54,12 @@ let server_list_file : string option ref = ref None
 let admission : Graph_lifecycle.runtime option ref = ref None
 let platform_ref : platform option ref = ref None
 let stopping : bool ref = ref false
+
+(* Opt-in because the same daemon executable is also managed by the
+   Electron lifecycle supervisor. The self-drawn native host passes
+   --shutdown-on-graph-delete; managed Electron workers keep their
+   existing lifecycle ownership. *)
+let shutdown_on_graph_delete : bool ref = ref false
 let requests : unit E.t list ref = ref []
 
 let sse_keepalive_ms = 15000
@@ -106,6 +112,7 @@ type cli_opts =
   ; embedding_endpoint : string option
   ; embedding_model_id : string option
   ; create_empty_db : bool
+  ; shutdown_on_graph_delete : bool
   ; version : bool
   ; help : bool
   }
@@ -122,6 +129,7 @@ let empty_cli_opts =
   ; embedding_endpoint = None
   ; embedding_model_id = None
   ; create_empty_db = false
+  ; shutdown_on_graph_delete = false
   ; version = false
   ; help = false
   }
@@ -146,6 +154,8 @@ let parse_args (argv : string list) : cli_opts =
     | "--embedding-model-id" :: v :: rest ->
         go { opts with embedding_model_id = Some v } rest
     | "--create-empty-db" :: rest -> go { opts with create_empty_db = true } rest
+    | "--shutdown-on-graph-delete" :: rest ->
+        go { opts with shutdown_on_graph_delete = true } rest
     | "--version" :: rest -> go { opts with version = true } rest
     | "--help" :: rest -> go { opts with help = true } rest
     | _ :: rest -> go opts rest
@@ -616,7 +626,7 @@ let handle_request (proxy : proxy) ~(bound_repo : string)
   if http_method = "OPTIONS" then (send_no_content res; E.pure ())
   else if request_path = "/healthz" then begin
     send_json res
-      (if !ready then 200 else 503)
+      (if !ready && not !stopping then 200 else 503)
       (health_payload ~bound_repo ~host ~port ~owner_source ~root_dir);
     E.pure ()
   end
@@ -706,6 +716,9 @@ let show_help () : unit =
   !log_fn
     ("  " ^ Cli_style.bold "--create-empty-db"
     ^ "  (start with empty initial datoms)");
+  !log_fn
+    ("  " ^ Cli_style.bold "--shutdown-on-graph-delete"
+    ^ "  (exit after explicit graph deletion)");
   !log_fn ("  " ^ Cli_style.bold "--embedding-endpoint" ^ " <url>");
   !log_fn ("  " ^ Cli_style.bold "--embedding-model-id" ^ " <id>");
   !log_fn
@@ -792,10 +805,11 @@ let resolve_listening_daemon ~(server : Http_server.server) ~(proxy : proxy)
   let stop =
     make_stop ~proxy ~repo ~server ~stopped ~on_stopped
   in
-  Lifecycle_hooks.on_local_graph_deleted repo (fun () ->
-      ignore
-        (Timers.set_timeout 10 (fun () ->
-             ignore (stop ()))));
+  if !shutdown_on_graph_delete then
+    Lifecycle_hooks.on_local_graph_deleted repo (fun () ->
+        ignore
+          (Timers.set_timeout 10 (fun () ->
+               ignore (stop ()))));
   (match !admission with
    | Some rt ->
        E.bind
@@ -1047,6 +1061,7 @@ let main () : unit =
     !error_fn "repo is required";
     !exit_fn 1
   end;
+  shutdown_on_graph_delete := opts.shutdown_on_graph_delete;
   let on_stopped (error : exn option) : unit =
     Worker_log.info "db-worker-node-stopped" [];
     !exit_fn (match error with Some _ -> 1 | None -> 0)
