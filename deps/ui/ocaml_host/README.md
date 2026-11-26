@@ -49,7 +49,7 @@ End users do not need to install SDL3. Credential requests use the macOS Keychai
 currently reports credential storage as unsupported instead of leaving promises pending.
 
 Linux needs the development packages listed in the workflow, including
-Pango, Cairo, Fontconfig, SDL3, OpenGL, SQLite, libffi, and GMP.
+Pango, Cairo, Fontconfig, SDL3, OpenGL, SQLite, libjpeg, libffi, and GMP.
 On macOS, install `pkg-config sqlite3 sdl3 libffi gmp` with Homebrew.
 Select Xcode 16.2 or a newer supported SDK before installing the OCaml
 dependencies. The current LUI Metal backend uses `MTLCompileOptions.mathMode`,
@@ -129,11 +129,10 @@ fitting on both hosts. Relative native resource paths resolve under
 `LOGSEQ_NATIVE_ASSET_DIR` to the repository's absolute `resources` directory. Local file URLs decode their percent-encoded
 paths before reading; Unicode, spaces and literal percent sequences retain their
 filesystem names. URL images and local files share the host decoder. PNG, GIF,
-BMP and PNM use `imagelib`; macOS JPEGs use Image I/O
-with EXIF display orientation and sRGB RGBA output. Linux JPEG decoding
-remains unsupported. Decoded URL pixels belong to mounted image owners and
-are released after their final owner disappears. Local files also use the
-existing bounded resource cache.
+BMP and PNM use `imagelib`; JPEGs use Image I/O on macOS and libjpeg on Linux,
+both with EXIF display orientation and opaque RGBA output. Decoded URL pixels
+belong to mounted image owners and are released after their final owner
+disappears. Local files also use the existing bounded resource cache.
 The template enables `MallocSpaceEfficient=1` at process startup so the allocator
 can reclaim unused backing memory. The bundled worker inherits this policy.
 Direct executable launches require the same environment setting to reproduce

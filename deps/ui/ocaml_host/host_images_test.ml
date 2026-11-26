@@ -169,7 +169,7 @@ let oriented_jpeg encoded orientation =
   Bytes.set_uint8 header 28 orientation;
   Bytes.concat Bytes.empty [Bytes.sub encoded 0 2;header;Bytes.sub encoded 2 (Bytes.length encoded-2)]
 
-let () = if Host_platform.is_macos then begin
+let () = begin
   let errors=ref [] in
   let expect message condition=if not condition then errors:=message::!errors in
   let colors=[|(240,20,30);(20,220,40);(30,40,230);(230,220,30)|] in
