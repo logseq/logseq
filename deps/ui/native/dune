@@ -287,6 +287,12 @@
 (rule
  (copy ../src/views/views_wire.ml views_wire.ml))
 
+(rule
+ (target katex_bundle.ml)
+ (deps katex.min.js katex_layout.js)
+ (action
+  (run %{exe:../tools/katex_gen.exe} %{dep:katex.min.js} %{dep:katex_layout.js} %{target})))
+
 (library
  (name logseq_ui_native)
  (wrapped false)

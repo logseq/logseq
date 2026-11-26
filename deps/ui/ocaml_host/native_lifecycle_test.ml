@@ -14,10 +14,12 @@ let () = Native_embed.with_entry_lock (fun () ->
         (fun _ _ _ -> Logseq_katex.el ~block ~display ~tex ()) in
       Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
         ignore (Lui_app.start app); ignore (Lui_app.flush app);
-        check "Native math must retain its readable TeX source"
-          (List.exists (fun id -> Lui_store.string_prop store id "text" = Some tex)
-            (Lui_store.preorder store)))) [true,true; false,false]);
-  print_endline "native math source without a browser renderer: OK")
+        let urls = List.filter_map (fun id -> Lui_store.string_prop store id "url")
+          (Lui_store.preorder store) in
+        check "Native math did not produce a typeset image resource"
+          (List.exists (fun url -> String.length url > 12 && String.sub url 0 12 = "logseq-math:")
+            urls))) [true,true; false,false]);
+  print_endline "native math typesets without a browser renderer: OK")
 
 let () =
   let disposed = ref 0 in

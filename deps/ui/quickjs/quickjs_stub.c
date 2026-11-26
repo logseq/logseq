@@ -717,3 +717,94 @@ CAMLprim value logseq_quickjs_close(value handle) {
     }
     CAMLreturn(Val_unit);
 }
+
+
+/* Small persistent evaluator used by built-in native renderers. Unlike the
+   plugin bridge above, this API evaluates trusted application-owned source
+   synchronously and returns only strings. */
+typedef struct {
+    JSRuntime *runtime;
+    JSContext *context;
+} EvalRuntime;
+
+static void eval_finalize_runtime(value handle) {
+    EvalRuntime *eval = *(EvalRuntime **)Data_custom_val(handle);
+    if (!eval) return;
+    *(EvalRuntime **)Data_custom_val(handle) = NULL;
+    if (eval->context) JS_FreeContext(eval->context);
+    if (eval->runtime) JS_FreeRuntime(eval->runtime);
+    free(eval);
+}
+
+static struct custom_operations eval_operations = {
+    .identifier = "logseq.quickjs.eval.v1",
+    .finalize = eval_finalize_runtime,
+    .compare = custom_compare_default,
+    .hash = custom_hash_default,
+    .serialize = custom_serialize_default,
+    .deserialize = custom_deserialize_default,
+    .compare_ext = custom_compare_ext_default,
+    .fixed_length = custom_fixed_length_default
+};
+
+CAMLprim value logseq_qjs_create(value unit) {
+    CAMLparam1(unit);
+    CAMLlocal1(handle);
+    EvalRuntime *eval = calloc(1, sizeof(EvalRuntime));
+    if (!eval) caml_raise_out_of_memory();
+    eval->runtime = JS_NewRuntime();
+    if (eval->runtime) eval->context = JS_NewContext(eval->runtime);
+    if (!eval->runtime || !eval->context) {
+        if (eval->context) JS_FreeContext(eval->context);
+        if (eval->runtime) JS_FreeRuntime(eval->runtime);
+        free(eval);
+        caml_raise_out_of_memory();
+    }
+    handle = caml_alloc_custom(&eval_operations, sizeof(EvalRuntime *), 0, 1);
+    *(EvalRuntime **)Data_custom_val(handle) = eval;
+    CAMLreturn(handle);
+}
+
+static void eval_throw_exception(JSContext *context) {
+    JSValue exception = JS_GetException(context);
+    const char *text = JS_ToCString(context, exception);
+    char message[1024];
+    snprintf(message, sizeof(message), "QuickJS evaluation failed: %s",
+             text ? text : "unknown error");
+    if (text) JS_FreeCString(context, text);
+    JS_FreeValue(context, exception);
+    caml_failwith(message);
+}
+
+CAMLprim value logseq_qjs_eval(value handle, value source) {
+    CAMLparam2(handle, source);
+    CAMLlocal1(copy);
+    EvalRuntime *eval = *(EvalRuntime **)Data_custom_val(handle);
+    if (!eval) caml_invalid_argument("Closed QuickJS evaluator");
+    size_t length = caml_string_length(source);
+    JSValue result = JS_Eval(eval->context, String_val(source), length,
+                             "logseq-native.js", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(result)) eval_throw_exception(eval->context);
+    size_t out_length = 0;
+    const char *text = JS_ToCStringLen(eval->context, &out_length, result);
+    if (!text) {
+        JS_FreeValue(eval->context, result);
+        eval_throw_exception(eval->context);
+    }
+    copy = caml_alloc_initialized_string(out_length, text);
+    JS_FreeCString(eval->context, text);
+    JS_FreeValue(eval->context, result);
+    CAMLreturn(copy);
+}
+
+CAMLprim value logseq_qjs_close(value handle) {
+    CAMLparam1(handle);
+    EvalRuntime *eval = *(EvalRuntime **)Data_custom_val(handle);
+    if (eval) {
+        *(EvalRuntime **)Data_custom_val(handle) = NULL;
+        if (eval->context) JS_FreeContext(eval->context);
+        if (eval->runtime) JS_FreeRuntime(eval->runtime);
+        free(eval);
+    }
+    CAMLreturn(Val_unit);
+}
