@@ -731,14 +731,19 @@ let configured_query ~(page : Model.page) query : t =
     if not next then Signal.set render_content true;
     Signal.set collapsed next;
     if next then
-      collapse_timer :=
-        Some
-          (Ui_services.timers_timeout
-             (fun () ->
-               collapse_timer := None;
-               Signal.set render_content false;
-               Runtime.flush ())
-             200);
+      if Ui_services.env_css_animations () then
+        collapse_timer :=
+          Some
+            (Ui_services.timers_timeout
+               (fun () ->
+                 collapse_timer := None;
+                 Signal.set render_content false;
+                 Runtime.flush ())
+               200)
+      else begin
+        Signal.set render_content false;
+        Runtime.flush ()
+      end;
     Runtime.flush ()
   in
   let title = match W.get query "title", W.get query "title-key" with
