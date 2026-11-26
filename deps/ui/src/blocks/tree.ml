@@ -682,14 +682,18 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                       (Ui_components.with_props
                          [ Ui_components.Prop.user_select `none
                          ; Ui_components.Prop.cursor `pointer ]
-                         (text ~key:("tx-" ^ key)
+                         (icon ~key:("tx-" ^ key)
                             ~style_class:"tag-x"
+                            ~name:(`app "x")
+                            ~point_size:13
+                            ~margin_top:1 ~margin_left:2 ~margin_right:2
+                            ~foreground:"hsl(var(--muted-foreground))"
                             ~on_pointer_enter:enter
                             ~on_pointer_leave:leave
                             ~data_attrs:
                               [ ( "aria-label"
                                 , I18n.t "block/remove-this-tag" ) ]
-                            ~value:"x" [])))) ]
+                            [])))) ]
         ; (* delegated click/context-menu paths read data-uuid/data-ref
              off the anchor; a.tag css keeps matching the link's <a> *)
           Ui_components.tag_link_appearance (Ui_components.with_props
