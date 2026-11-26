@@ -230,10 +230,6 @@
   max-height: min(calc(var(--lui-popup-available-height, 460px) - 60px), 460px);
 }
 
-.ui__popover-content[data-editor-popup-ref][data-side="top"] {
-  position: relative;
-  top: -18px;
-}
 
 /* menu item (dropdown + context + sub-trigger + select rows) */
 .ui__dropdown-menu-item,
