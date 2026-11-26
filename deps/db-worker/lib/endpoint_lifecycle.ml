@@ -759,7 +759,15 @@ let () =
                          (fun entry ->
                            File_sys.remove (Filename.concat (db_dir repo) entry))
                          entries))))
-          |> Db_worker_effect.map (fun () -> Wire.nil))
+          |> Db_worker_effect.map (fun () ->
+             Broadcast.to_clients ~kind:"local-graph-gone"
+               ~transit_payload:
+                 (Transit_codec.to_string
+                    (Wire.Array
+                       [ Wire.Keyword "local-graph-gone"
+                       ; Wire.Map
+                           [ (Wire.Keyword "repo", Wire.String repo) ] ]));
+             Wire.nil))
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 
 (* :thread-api/release-access-handles [repo] — closes any active import

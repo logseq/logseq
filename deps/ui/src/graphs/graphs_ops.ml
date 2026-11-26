@@ -150,24 +150,29 @@ let () = Runtime.add_repo := add_repo
    because it resolved later. Only the newest request applies. *)
 let nav_req = ref 0
 
-let navigate_journal repo =
+let navigate_journal ?(drain = true) repo =
   incr nav_req;
   let seq = !nav_req in
-  Editor_actions.after_pending_input (fun () ->
-  if !nav_req <> seq then Js.Promise.resolve () else begin
-  Graphs_meta.touch repo;
-  let* config = Graph.open_graph repo in
-  let* () = Boot.ensure_today_journal repo in
-  Editor_actions.after_pending_input (fun () ->
-  if !nav_req = seq then begin
-    Worker_events.reset_rtc ();
-    Runtime.send (Action.Boot_graph_ready (repo,config));
-    Graph.build_search_index repo;
-    Ui_services.nav_set_hash (Runtime.nav_hash "/");
-    Router.resolve ()
-  end;
-  Js.Promise.resolve ())
-  end)
+  let open_target () =
+    if !nav_req <> seq then Js.Promise.resolve ()
+    else begin
+      Graphs_meta.touch repo;
+      let* config = Graph.open_graph repo in
+      let* () = Boot.ensure_today_journal repo in
+      let commit () =
+        if !nav_req = seq then begin
+          Worker_events.reset_rtc ();
+          Runtime.send (Action.Boot_graph_ready (repo,config));
+          Graph.build_search_index repo;
+          Ui_services.nav_set_hash (Runtime.nav_hash "/");
+          Router.resolve ()
+        end;
+        Js.Promise.resolve ()
+      in
+      if drain then Editor_actions.after_pending_input commit else commit ()
+    end
+  in
+  if drain then Editor_actions.after_pending_input open_target else open_target ()
 
 (* -- create -- *)
 
@@ -246,11 +251,50 @@ let delete_remote_http uuid =
              Ui_services.log_error ("remote graph delete failed", e);
              Js.Promise.resolve false)
 
-let delete_graph repo ~remote =
-  let drop_from_repos () =
-    Runtime.send (Action.Repos_loaded (List.filter (fun r -> r <> repo) (repos ())));
-    !on_repos_changed ()
+let locally_deleting : (string, unit) Hashtbl.t = Hashtbl.create 7
+
+let finish_deleted_graph repo =
+  (* Normally navigation drains pending editor input first. Once the
+     shared database has already been unlinked, that save can fail; the
+     graph is gone either way, so still close/navigate instead of leaving
+     an editor active against a deleted database. *)
+  let drained =
+    Editor_actions.after_pending_input (fun () -> Js.Promise.resolve ())
+    |> Js.Promise.catch (fun error ->
+           Ui_services.log_error ("pending input save failed after graph deletion", error);
+           Js.Promise.resolve ())
   in
+  let* () = drained in
+  Runtime.send
+    (Action.Repos_loaded (List.filter (fun r -> r <> repo) (repos ())));
+  !on_repos_changed ();
+  Graphs_meta.drop repo;
+  match (Runtime.model ()).Model.repo = Some repo, (repos ()) with
+  | true, next :: _ ->
+      Toast.success (T.removed_redirecting (short_name repo) (short_name next));
+      navigate_journal ~drain:false next
+  | true, [] ->
+      Toast.success (T.removed (short_name repo));
+      Custom_css.remove ();
+      Runtime.send Action.Graph_closed;
+      Router.resolve ();
+      Js.Promise.resolve ()
+  | false, _ ->
+      Toast.success (T.removed (short_name repo));
+      Js.Promise.resolve ()
+
+let handle_local_graph_gone repo =
+  if not (Hashtbl.mem locally_deleting repo) then
+    ignore
+      (finish_deleted_graph repo
+       |> Js.Promise.catch (fun error ->
+              Ui_services.log_error ("local graph deletion handling failed", error);
+              Js.Promise.resolve ()))
+
+let () = Runtime.local_graph_gone := handle_local_graph_gone
+
+let delete_graph repo ~remote =
+  Hashtbl.replace locally_deleting repo ();
   let finish () =
     Editor_actions.after_pending_input (fun () ->
     let* ok =
@@ -264,38 +308,31 @@ let delete_graph repo ~remote =
              Js.Promise.resolve false)
     in
     if not ok then Js.Promise.resolve ()
-    else begin
-      drop_from_repos ();
-      Graphs_meta.drop repo;
-      match (Runtime.model ()).Model.repo = Some repo, (repos ()) with
-      | true, next :: _ ->
-          Toast.success (T.removed_redirecting (short_name repo) (short_name next));
-          navigate_journal next
-      | true, [] ->
-          Toast.success (T.removed (short_name repo));
-          Custom_css.remove ();
-          Runtime.send Action.Graph_closed;
-          Router.resolve ();
-          Js.Promise.resolve ()
-      | false, _ ->
-          Toast.success (T.removed (short_name repo));
-          Js.Promise.resolve ()
-    end)
+    else finish_deleted_graph repo)
   in
-  if remote then
-    match
-      List.find_opt
-        (fun (n, _, _, _) -> n = short_name repo)
-        !remote_graphs
-    with
-    | Some (_, uuid, _, _) ->
-        let* remote_ok = delete_remote_http uuid in
-        if remote_ok then finish ()
-        else (
-          Toast.error (I18n.t "graph/delete-remote-server-error");
-          Js.Promise.resolve ())
-    | None -> finish ()
-  else finish ()
+  let run =
+    if remote then
+      match
+        List.find_opt
+          (fun (n, _, _, _) -> n = short_name repo)
+          !remote_graphs
+      with
+      | Some (_, uuid, _, _) ->
+          let* remote_ok = delete_remote_http uuid in
+          if remote_ok then finish ()
+          else (
+            Toast.error (I18n.t "graph/delete-remote-server-error");
+            Js.Promise.resolve ())
+      | None -> finish ()
+    else finish ()
+  in
+  (let* () = run in
+   Hashtbl.remove locally_deleting repo;
+   Js.Promise.resolve ())
+  |> Js.Promise.catch (fun error ->
+         Hashtbl.remove locally_deleting repo;
+         Ui_services.log_error ("delete graph failed", error);
+         Js.Promise.resolve ())
 
 let ask_delete ~remote repo =
   (* cljs delete-local-graph!/delete-remotely: confirm with
