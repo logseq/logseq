@@ -276,9 +276,10 @@ let render (ms : Model.t Signal.signal) : t =
           in
           (* Custom dialog chrome (confirm/e2ee) still rides a cover
              popover for the layer owner and Escape dispatch. *)
-          popover ~transition:Ui_components.popover_transition ~style_class:"ls-dialog-layer"
-            ?background:(if layer = Dialogs_state.Confirm then Some "transparent" else None)
-            ?border_width:(if layer = Dialogs_state.Confirm then Some 0 else None)
-            ~on_dismiss:(fun _ -> close ()) [ view ])
+          Ui_parts.viewport_cover
+            (popover ~transition:Ui_components.popover_transition ~style_class:"ls-dialog-layer"
+               ?background:(if layer = Dialogs_state.Confirm then Some "transparent" else None)
+               ?border_width:(if layer = Dialogs_state.Confirm then Some 0 else None)
+               ~on_dismiss:(fun _ -> close ()) [ view ]))
       )
     ctx parent

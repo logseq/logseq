@@ -425,8 +425,9 @@ let dialog_view (m : Model.t) =
   | None -> (
       match m.confirm with
       | Some c ->
-          popover ~key:"page-confirm-layer" ~style_class:"ls-dialog-layer"
-            ~transition:Ui_components.popover_transition
-            ~on_dismiss:(fun _ -> Runtime.send (Action.Confirm_set None); Runtime.flush ())
-            [ confirm_view c ]
+          Ui_parts.viewport_cover
+            (popover ~key:"page-confirm-layer" ~style_class:"ls-dialog-layer"
+               ~transition:Ui_components.popover_transition
+               ~on_dismiss:(fun _ -> Runtime.send (Action.Confirm_set None); Runtime.flush ())
+               [ confirm_view c ])
       | None -> Logseq_el.nothing)
