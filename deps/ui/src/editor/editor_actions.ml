@@ -684,7 +684,7 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
   | Some e when e.uuid <> uuid || e.scope <> scope -> save_if_dirty e.uuid
   | _ -> ());
   match S.find uuid with
-      | Some _b ->
+      | Some b ->
           (* stored titles are id-ref form; the edit buffer shows page names
              (cljs id-ref->title-ref) *)
           let restore = S.editing () in
@@ -702,6 +702,16 @@ let enter_edit ?scope ?(submit_on_enter = false) uuid caret =
             (if Lazy.force perf_keys then
                Printf.eprintf "PERF editing-set src=enter_edit uuid=%s\n%!" uuid);
             let editing = S.mk_editing ~caret ~submit_on_enter ~uuid ~buffer ~scope ~base:buffer () in
+            (* A click on rendered math is a coordinate in the rendered
+               representation, not in the raw source that replaces it. Do
+               not carry that point into editor hit-testing; the fallback
+               caret keeps the first click focusable instead of leaving
+               the pending geometry unresolved. *)
+            let click =
+              match click, b.Model.block_display_type with
+              | Some _, Some "math" -> None
+              | _ -> click
+            in
             S.history_input_before := None;
             arm_focus ~schedule:false
               (make_focus_request ?click ~owner:(scope, editing.S.epoch) uuid caret);
