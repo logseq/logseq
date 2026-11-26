@@ -167,6 +167,31 @@ let image_extension ext =
     [ "gif"; "svg"; "jpeg"; "jpe"; "jfif"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
       "cr2"; "jxl"; "heic" ]
 
+let audio_extension ext =
+  List.mem (String.lowercase_ascii ext)
+    [ "mp3"; "ogg"; "mpeg"; "wav"; "m4a"; "flac"; "wma"; "aac" ]
+
+let video_extension ext =
+  List.mem (String.lowercase_ascii ext)
+    [ "mp4"; "webm"; "mov"; "flv"; "avi"; "mkv" ]
+
+let media_props (b : Model.block) video =
+  let width =
+    match b.Model.block_asset_resize with
+    | Some resize -> resize
+    | None -> if video then 480 else 320
+  in
+  let height =
+    if video then
+      match b.Model.block_asset_width, b.Model.block_asset_height with
+      | Some asset_width, Some asset_height when asset_width > 0 ->
+        width * asset_height / asset_width
+      | _ -> width * 9 / 16
+    else 40
+  in
+  [ "width", Lui_protocol.StringValue (Printf.sprintf "%dpx" width)
+  ; "height", Lui_protocol.StringValue (Printf.sprintf "%dpx" height) ]
+
 let file_cell_el (w : Wire.t) : Lui_elements.t =
   let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
   let ext =
@@ -234,6 +259,17 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
          if image_extension ext then
            Lui_elements.image ~url:source
              ~alt:file ~container_relative_frame:`horizontal []
+         else if audio_extension ext then
+           Logseq_el.el ~key:("au-" ^ uuid) ~tag:"audio"
+             ~attrs:[ ("src", source); ("controls", "") ]
+             ~ext_props:(media_props b false)
+             []
+         else if video_extension ext then
+           Logseq_el.el ~key:("vd-" ^ uuid) ~tag:"video"
+             ~style_class:"asset-video"
+             ~attrs:[ ("src", source); ("controls", "") ]
+             ~ext_props:(media_props b true)
+             []
          else Lui_elements.text ~value:file []) ] context parent
 
 let content_view = block_view

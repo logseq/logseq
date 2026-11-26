@@ -25,6 +25,8 @@
 #if defined(__linux__)
 #include <jpeglib.h>
 #include <setjmp.h>
+#include <dlfcn.h>
+#include <pthread.h>
 #endif
 #if defined(__APPLE__)
 #include <Security/Security.h>
@@ -3183,6 +3185,499 @@ static void logseq_jpeg_fail(struct logseq_jpeg_error *error, const char *messag
   snprintf(error->message, sizeof(error->message), "%s", message);
   longjmp(error->jump, 1);
 }
+
+#if defined(__linux__)
+/* Runtime-loaded GStreamer media backend. GStreamer is optional at start-up:
+   the native host links no development package, and opening media either finds
+   the platform libraries or fails the one player with a clear error. */
+typedef struct {
+  unsigned int domain;
+  int code;
+  char *message;
+} LogseqGError;
+
+typedef struct {
+  size_t type;
+  int refcount;
+  int lockstate;
+  unsigned int flags;
+  void *copy;
+  void *dispose;
+  void *free;
+  unsigned int priv_uint;
+  void *priv_pointer;
+} LogseqGstMiniObject;
+
+typedef struct {
+  LogseqGstMiniObject mini_object;
+  unsigned int type;
+} LogseqGstMessageHead;
+
+typedef struct {
+  int attempted;
+  int ready;
+  char error[256];
+  void *core_handle;
+  void *app_handle;
+  void *glib_handle;
+  void *gobject_handle;
+  int (*gst_init_check)(void *, void *, LogseqGError **);
+  void *(*gst_element_factory_make)(const char *, const char *);
+  int (*gst_element_set_state)(void *, int);
+  int (*gst_element_query_position)(void *, int, int64_t *);
+  int (*gst_element_query_duration)(void *, int, int64_t *);
+  int (*gst_element_seek_simple)(void *, int, int, int64_t);
+  void *(*gst_element_get_bus)(void *);
+  void (*gst_object_unref)(void *);
+  void (*gst_mini_object_unref)(void *);
+  void *(*gst_caps_from_string)(const char *);
+  void *(*gst_sample_get_buffer)(void *);
+  void *(*gst_sample_get_caps)(void *);
+  void *(*gst_caps_get_structure)(void *, unsigned int);
+  const char *(*gst_structure_get_name)(void *);
+  int (*gst_structure_get_int)(void *, const char *, int *);
+  const char *(*gst_structure_get_string)(void *, const char *);
+  size_t (*gst_buffer_get_size)(void *);
+  size_t (*gst_buffer_extract)(void *, size_t, void *, size_t);
+  void *(*gst_bus_timed_pop_filtered)(void *, uint64_t, unsigned int);
+  void (*gst_message_parse_error)(void *, LogseqGError **, char **);
+  void (*gst_util_set_object_arg)(void *, const char *, const char *);
+  void (*gst_app_sink_set_caps)(void *, void *);
+  void *(*gst_app_sink_pull_sample)(void *);
+  void *(*gst_app_sink_pull_preroll)(void *);
+  unsigned long (*g_signal_connect_data)(void *, const char *, void *, void *, void *, int);
+  void (*g_object_set)(void *, const char *, ...);
+  void (*g_error_free)(LogseqGError *);
+  void (*g_free)(void *);
+} LogseqGstApi;
+
+static LogseqGstApi logseq_gst;
+
+static void *logseq_media_symbol(void *library, const char *library_name,
+    const char *name, char *error, size_t error_size) {
+  void *symbol = dlsym(library, name);
+  if (!symbol)
+    snprintf(error, error_size, "%s has no %s", library_name, name);
+  return symbol;
+}
+
+#define LOGSEQ_MEDIA_SYM(api_field, library, library_name, symbol_name, error, error_size) \
+  do { \
+    if (!*(error)) { \
+      api_field = (void *)logseq_media_symbol((library), (library_name), (symbol_name), (error), (error_size)); \
+      if (!api_field) return -1; \
+    } \
+  } while (0)
+
+static int logseq_media_api_load(void) {
+  if (logseq_gst.ready) return 0;
+  if (logseq_gst.attempted) {
+    snprintf(logseq_gst.error, sizeof(logseq_gst.error), "%s",
+      logseq_gst.error[0] ? logseq_gst.error : "GStreamer is unavailable");
+    return -1;
+  }
+  logseq_gst.attempted = 1;
+  char error[256] = "";
+  void *core = dlopen("libgstreamer-1.0.so.0", RTLD_NOW | RTLD_LOCAL);
+  void *app = dlopen("libgstapp-1.0.so.0", RTLD_NOW | RTLD_LOCAL);
+  void *glib = dlopen("libglib-2.0.so.0", RTLD_NOW | RTLD_LOCAL);
+  void *gobject = dlopen("libgobject-2.0.so.0", RTLD_NOW | RTLD_LOCAL);
+  if (!core || !app || !glib || !gobject) {
+    snprintf(error, sizeof(error),
+      "GStreamer is not installed (core %s, app %s, glib %s, gobject %s)",
+      core ? "ok" : "missing", app ? "ok" : "missing",
+      glib ? "ok" : "missing", gobject ? "ok" : "missing");
+    if (core) dlclose(core);
+    if (app) dlclose(app);
+    if (glib) dlclose(glib);
+    if (gobject) dlclose(gobject);
+    snprintf(logseq_gst.error, sizeof(logseq_gst.error), "%s", error);
+    return -1;
+  }
+
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_init_check, core, "libgstreamer", "gst_init_check", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_factory_make, core, "libgstreamer", "gst_element_factory_make", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_set_state, core, "libgstreamer", "gst_element_set_state", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_query_position, core, "libgstreamer", "gst_element_query_position", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_query_duration, core, "libgstreamer", "gst_element_query_duration", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_seek_simple, core, "libgstreamer", "gst_element_seek_simple", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_get_bus, core, "libgstreamer", "gst_element_get_bus", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_object_unref, core, "libgstreamer", "gst_object_unref", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_mini_object_unref, core, "libgstreamer", "gst_mini_object_unref", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_caps_from_string, core, "libgstreamer", "gst_caps_from_string", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_sample_get_buffer, core, "libgstreamer", "gst_sample_get_buffer", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_sample_get_caps, core, "libgstreamer", "gst_sample_get_caps", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_caps_get_structure, core, "libgstreamer", "gst_caps_get_structure", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_structure_get_name, core, "libgstreamer", "gst_structure_get_name", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_structure_get_int, core, "libgstreamer", "gst_structure_get_int", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_structure_get_string, core, "libgstreamer", "gst_structure_get_string", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_buffer_get_size, core, "libgstreamer", "gst_buffer_get_size", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_buffer_extract, core, "libgstreamer", "gst_buffer_extract", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_bus_timed_pop_filtered, core, "libgstreamer", "gst_bus_timed_pop_filtered", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_message_parse_error, core, "libgstreamer", "gst_message_parse_error", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_util_set_object_arg, core, "libgstreamer", "gst_util_set_object_arg", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_app_sink_set_caps, app, "libgstapp", "gst_app_sink_set_caps", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_app_sink_pull_sample, app, "libgstapp", "gst_app_sink_pull_sample", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_app_sink_pull_preroll, app, "libgstapp", "gst_app_sink_pull_preroll", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.g_signal_connect_data, gobject, "libgobject", "g_signal_connect_data", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.g_object_set, gobject, "libgobject", "g_object_set", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.g_error_free, glib, "libglib", "g_error_free", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.g_free, glib, "libglib", "g_free", error, sizeof(error));
+
+  LogseqGError *init_error = NULL;
+  if (!logseq_gst.gst_init_check(NULL, NULL, &init_error)) {
+    snprintf(error, sizeof(error), "GStreamer did not start: %s",
+      init_error && init_error->message ? init_error->message : "unknown error");
+    if (init_error) logseq_gst.g_error_free(init_error);
+    snprintf(logseq_gst.error, sizeof(logseq_gst.error), "%s", error);
+    return -1;
+  }
+  logseq_gst.core_handle = core;
+  logseq_gst.app_handle = app;
+  logseq_gst.glib_handle = glib;
+  logseq_gst.gobject_handle = gobject;
+  logseq_gst.ready = 1;
+  return 0;
+}
+
+#define LOGSEQ_MEDIA_MAX_PLAYERS 64
+#define LOGSEQ_GST_STATE_NULL 1
+#define LOGSEQ_GST_STATE_PAUSED 3
+#define LOGSEQ_GST_STATE_PLAYING 4
+#define LOGSEQ_GST_FORMAT_TIME 3
+#define LOGSEQ_GST_SEEK_FLUSH 1
+#define LOGSEQ_GST_SEEK_KEY_UNIT 4
+#define LOGSEQ_GST_SEEK_ACCURATE 2
+#define LOGSEQ_GST_MESSAGE_EOS (1u << 0)
+#define LOGSEQ_GST_MESSAGE_ERROR (1u << 1)
+
+typedef struct {
+  int used;
+  int is_video;
+  int playing;
+  int eos;
+  volatile int closing;
+  int lock_initialized;
+  pthread_mutex_t frame_lock;
+  unsigned int generation;
+  void *pipeline;
+  void *video_sink;
+  int video_sink_owned_by_pipeline;
+  void *bus;
+  unsigned char *frame;
+  size_t frame_size;
+  size_t width;
+  size_t height;
+  char error[256];
+} LogseqMediaPlayer;
+
+static LogseqMediaPlayer logseq_media_players[LOGSEQ_MEDIA_MAX_PLAYERS];
+
+static LogseqMediaPlayer *logseq_media_player(value handle_v) {
+  int handle = Int_val(handle_v);
+  if (handle < 0 || handle >= LOGSEQ_MEDIA_MAX_PLAYERS ||
+      !logseq_media_players[handle].used)
+    caml_invalid_argument("Invalid native media player");
+  return &logseq_media_players[handle];
+}
+
+static void logseq_media_sample_frame(LogseqMediaPlayer *player, void *sample) {
+  void *caps = logseq_gst.gst_sample_get_caps(sample);
+  if (!caps) return;
+  void *structure = logseq_gst.gst_caps_get_structure(caps, 0);
+  if (!structure) return;
+  const char *name = logseq_gst.gst_structure_get_name(structure);
+  const char *format = logseq_gst.gst_structure_get_string(structure, "format");
+  int width = 0, height = 0;
+  if (!name || strcmp(name, "video/x-raw") != 0 ||
+      !format || strcmp(format, "RGBA") != 0 ||
+      !logseq_gst.gst_structure_get_int(structure, "width", &width) ||
+      !logseq_gst.gst_structure_get_int(structure, "height", &height) ||
+      width <= 0 || height <= 0)
+    return;
+  void *buffer = logseq_gst.gst_sample_get_buffer(sample);
+  if (!buffer) return;
+  size_t size = logseq_gst.gst_buffer_get_size(buffer);
+  size_t row = (size_t)width * 4;
+  size_t tight = row * (size_t)height;
+  if (tight / row != (size_t)height || size < tight || size % (size_t)height != 0)
+    return;
+  size_t stride = size / (size_t)height;
+  if (stride < row) return;
+  if (player->frame_size != tight) {
+    unsigned char *resized = realloc(player->frame, tight);
+    if (!resized) return;
+    player->frame = resized;
+    player->frame_size = tight;
+  }
+  for (int y = 0; y < height; y++)
+    logseq_gst.gst_buffer_extract(buffer, (size_t)y * stride,
+      player->frame + (size_t)y * row, row);
+  player->width = width;
+  player->height = height;
+  player->generation++;
+}
+
+static int logseq_media_new_sample(void *sink, void *userdata) {
+  LogseqMediaPlayer *player = userdata;
+  if (player->closing) return 0;
+  void *sample = logseq_gst.gst_app_sink_pull_sample(sink);
+  if (sample) {
+    pthread_mutex_lock(&player->frame_lock);
+    logseq_media_sample_frame(player, sample);
+    pthread_mutex_unlock(&player->frame_lock);
+    logseq_gst.gst_mini_object_unref(sample);
+  }
+  return 0;
+}
+
+static int logseq_media_new_preroll(void *sink, void *userdata) {
+  LogseqMediaPlayer *player = userdata;
+  if (player->closing) return 0;
+  void *sample = logseq_gst.gst_app_sink_pull_preroll(sink);
+  if (sample) {
+    pthread_mutex_lock(&player->frame_lock);
+    logseq_media_sample_frame(player, sample);
+    pthread_mutex_unlock(&player->frame_lock);
+    logseq_gst.gst_mini_object_unref(sample);
+  }
+  return 0;
+}
+
+static void logseq_media_poll(LogseqMediaPlayer *player) {
+  if (!player->used) return;
+  if (player->bus) {
+    for (;;) {
+      void *message = logseq_gst.gst_bus_timed_pop_filtered(player->bus, 0,
+        LOGSEQ_GST_MESSAGE_EOS | LOGSEQ_GST_MESSAGE_ERROR);
+      if (!message) break;
+      unsigned int type = ((LogseqGstMessageHead *)message)->type;
+      if (type == LOGSEQ_GST_MESSAGE_ERROR) {
+        LogseqGError *error = NULL;
+        char *debug = NULL;
+        logseq_gst.gst_message_parse_error(message, &error, &debug);
+        snprintf(player->error, sizeof(player->error), "%s",
+          error && error->message ? error->message : "Cannot play media");
+        if (error) logseq_gst.g_error_free(error);
+        if (debug) logseq_gst.g_free(debug);
+        player->playing = 0;
+      } else if (type == LOGSEQ_GST_MESSAGE_EOS) {
+        player->eos = 1;
+        player->playing = 0;
+      }
+      logseq_gst.gst_mini_object_unref(message);
+    }
+  }
+}
+
+static void logseq_media_close_player(LogseqMediaPlayer *player) {
+  if (!player->used) return;
+  player->closing = 1;
+  if (player->pipeline)
+    logseq_gst.gst_element_set_state(player->pipeline, LOGSEQ_GST_STATE_NULL);
+  if (player->pipeline) logseq_gst.gst_object_unref(player->pipeline);
+  if (player->video_sink && !player->video_sink_owned_by_pipeline)
+    logseq_gst.gst_object_unref(player->video_sink);
+  if (player->bus) logseq_gst.gst_object_unref(player->bus);
+  pthread_mutex_lock(&player->frame_lock);
+  free(player->frame);
+  player->frame = NULL;
+  player->frame_size = 0;
+  pthread_mutex_unlock(&player->frame_lock);
+  int lock_initialized = player->lock_initialized;
+  memset(player, 0, sizeof(*player));
+  player->lock_initialized = lock_initialized;
+}
+
+CAMLprim value logseq_native_media_open(value source_v, value video_v) {
+  CAMLparam2(source_v, video_v);
+  if (logseq_media_api_load() != 0)
+    caml_failwith(logseq_gst.error);
+  size_t source_length = caml_string_length(source_v);
+  if (source_length == 0 || source_length > 4096)
+    caml_invalid_argument("Invalid native media source");
+  char *source = malloc(source_length + 1);
+  if (!source) caml_raise_out_of_memory();
+  memcpy(source, String_val(source_v), source_length);
+  source[source_length] = '\0';
+
+  int handle = -1;
+  for (int i = 0; i < LOGSEQ_MEDIA_MAX_PLAYERS; i++)
+    if (!logseq_media_players[i].used) { handle = i; break; }
+  if (handle < 0) {
+    free(source);
+    caml_failwith("Too many native media players");
+  }
+  LogseqMediaPlayer *player = &logseq_media_players[handle];
+  int lock_initialized = player->lock_initialized;
+  memset(player, 0, sizeof(*player));
+  player->lock_initialized = lock_initialized;
+  if (!player->lock_initialized) {
+    pthread_mutex_init(&player->frame_lock, NULL);
+    player->lock_initialized = 1;
+  }
+  player->used = 1;
+  player->is_video = Bool_val(video_v);
+
+  player->pipeline = logseq_gst.gst_element_factory_make("playbin", NULL);
+  if (!player->pipeline) {
+    free(source);
+    logseq_media_close_player(player);
+    caml_failwith("GStreamer playbin is unavailable");
+  }
+  player->bus = logseq_gst.gst_element_get_bus(player->pipeline);
+  if (player->is_video) {
+    player->video_sink = logseq_gst.gst_element_factory_make("appsink", NULL);
+    void *caps = player->video_sink
+      ? logseq_gst.gst_caps_from_string("video/x-raw,format=(string)RGBA")
+      : NULL;
+    if (!player->video_sink || !caps) {
+      if (caps) logseq_gst.gst_mini_object_unref(caps);
+      free(source);
+      logseq_media_close_player(player);
+      caml_failwith("GStreamer appsink is unavailable");
+    }
+    logseq_gst.gst_app_sink_set_caps(player->video_sink, caps);
+    logseq_gst.gst_mini_object_unref(caps);
+    logseq_gst.gst_util_set_object_arg(player->video_sink, "sync", "true");
+    logseq_gst.gst_util_set_object_arg(player->video_sink, "max-buffers", "2");
+    logseq_gst.gst_util_set_object_arg(player->video_sink, "drop", "true");
+    logseq_gst.gst_util_set_object_arg(player->video_sink, "emit-signals", "true");
+    logseq_gst.g_signal_connect_data(player->video_sink, "new-sample",
+      (void *)logseq_media_new_sample, player, NULL, 0);
+    logseq_gst.g_signal_connect_data(player->video_sink, "new-preroll",
+      (void *)logseq_media_new_preroll, player, NULL, 0);
+    logseq_gst.g_object_set(player->pipeline, "video-sink", player->video_sink, NULL);
+    player->video_sink_owned_by_pipeline = 1;
+  }
+  logseq_gst.g_object_set(player->pipeline, "uri", source, NULL);
+  free(source);
+  int state_result = logseq_gst.gst_element_set_state(player->pipeline,
+    LOGSEQ_GST_STATE_PAUSED);
+  if (state_result == 0) {
+    logseq_media_close_player(player);
+    caml_failwith("Cannot prepare native media playback");
+  }
+  CAMLreturn(Val_int(handle));
+}
+
+CAMLprim value logseq_native_media_close(value handle_v) {
+  CAMLparam1(handle_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  logseq_media_close_player(player);
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) {
+  CAMLparam2(handle_v, playing_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  int playing = Bool_val(playing_v);
+  if (playing && player->eos) {
+    logseq_gst.gst_element_seek_simple(player->pipeline, LOGSEQ_GST_FORMAT_TIME,
+      LOGSEQ_GST_SEEK_FLUSH | LOGSEQ_GST_SEEK_KEY_UNIT, 0);
+    player->eos = 0;
+  }
+  int result = logseq_gst.gst_element_set_state(player->pipeline,
+    playing ? LOGSEQ_GST_STATE_PLAYING : LOGSEQ_GST_STATE_PAUSED);
+  if (result != 0) player->playing = playing;
+  if (!playing) player->eos = 0;
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_media_playing(value handle_v) {
+  CAMLparam1(handle_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  logseq_media_poll(player);
+  CAMLreturn(Val_bool(player->playing && !player->eos));
+}
+
+CAMLprim value logseq_native_media_position(value handle_v) {
+  CAMLparam1(handle_v);
+  CAMLlocal1(result_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  logseq_media_poll(player);
+  int64_t position = -1, duration = -1;
+  if (!logseq_gst.gst_element_query_position(player->pipeline,
+        LOGSEQ_GST_FORMAT_TIME, &position))
+    position = -1;
+  if (!logseq_gst.gst_element_query_duration(player->pipeline,
+        LOGSEQ_GST_FORMAT_TIME, &duration))
+    duration = -1;
+  result_v = caml_alloc_tuple(2);
+  Store_field(result_v, 0, Val_int(position >= 0 ? position / 1000000 : -1));
+  Store_field(result_v, 1, Val_int(duration >= 0 ? duration / 1000000 : -1));
+  CAMLreturn(result_v);
+}
+
+CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) {
+  CAMLparam2(handle_v, ratio_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  double ratio = Double_val(ratio_v);
+  if (ratio < 0.) ratio = 0.;
+  if (ratio > 1.) ratio = 1.;
+  int64_t duration = -1;
+  if (logseq_gst.gst_element_query_duration(player->pipeline,
+        LOGSEQ_GST_FORMAT_TIME, &duration) && duration > 0) {
+    int64_t position = (int64_t)((double)duration * ratio);
+    if (logseq_gst.gst_element_seek_simple(player->pipeline,
+          LOGSEQ_GST_FORMAT_TIME,
+          LOGSEQ_GST_SEEK_FLUSH | LOGSEQ_GST_SEEK_ACCURATE, position)) {
+      player->eos = 0;
+      if (player->is_video)
+        logseq_gst.gst_element_set_state(player->pipeline,
+          player->playing ? LOGSEQ_GST_STATE_PLAYING : LOGSEQ_GST_STATE_PAUSED);
+    }
+  }
+  CAMLreturn(Val_unit);
+}
+
+CAMLprim value logseq_native_media_frame(value handle_v) {
+  CAMLparam1(handle_v);
+  CAMLlocal2(result_v, pixels_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  if (!player->is_video) caml_invalid_argument("Audio media has no video frame");
+  logseq_media_poll(player);
+  pthread_mutex_lock(&player->frame_lock);
+  size_t size = player->frame && player->width && player->height
+    ? player->frame_size : 0;
+  size_t width = player->width;
+  size_t height = player->height;
+  unsigned int generation = player->generation;
+  pixels_v = caml_alloc_initialized_string(size,
+    size ? (const char *)player->frame : "");
+  pthread_mutex_unlock(&player->frame_lock);
+  result_v = caml_alloc_tuple(4);
+  Store_field(result_v, 0, Val_int(width));
+  Store_field(result_v, 1, Val_int(height));
+  Store_field(result_v, 2, Val_int(generation));
+  Store_field(result_v, 3, pixels_v);
+  CAMLreturn(result_v);
+}
+
+CAMLprim value logseq_native_media_error(value handle_v) {
+  CAMLparam1(handle_v);
+  CAMLlocal1(error_v);
+  LogseqMediaPlayer *player = logseq_media_player(handle_v);
+  logseq_media_poll(player);
+  error_v = caml_alloc_initialized_string(strlen(player->error), player->error);
+  CAMLreturn(error_v);
+}
+
+#else
+
+CAMLprim value logseq_native_media_open(value source_v, value video_v) {
+  caml_failwith("Native media playback is unsupported on this platform");
+}
+
+CAMLprim value logseq_native_media_close(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) { CAMLparam2(handle_v, playing_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_playing(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_bool(0)); }
+CAMLprim value logseq_native_media_position(value handle_v) { CAMLparam1(handle_v); CAMLlocal1(result_v); result_v = caml_alloc_tuple(2); Store_field(result_v, 0, Val_int(-1)); Store_field(result_v, 1, Val_int(-1)); CAMLreturn(result_v); }
+CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) { CAMLparam2(handle_v, ratio_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_frame(value handle_v) { caml_failwith("Native media playback is unsupported on this platform"); }
+CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v); CAMLreturn(caml_alloc_initialized_string(0, "")); }
+
+#endif
 
 /* Decode with the system libjpeg and transform to display orientation while
    copying rows. JPEG has no alpha channel, so opaque RGBA is already the
