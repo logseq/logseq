@@ -3103,6 +3103,14 @@ struct logseq_jpeg_error {
   char message[JMSG_LENGTH_MAX];
 };
 
+struct logseq_jpeg_decode_state {
+  struct jpeg_decompress_struct decoder;
+  struct logseq_jpeg_error error;
+  unsigned char *pixels;
+  unsigned char *row;
+  int decoder_created;
+};
+
 static void logseq_jpeg_error_exit(j_common_ptr cinfo) {
   struct logseq_jpeg_error *error = (struct logseq_jpeg_error *)cinfo->err;
   (*cinfo->err->format_message)(cinfo, error->message);
@@ -3179,64 +3187,69 @@ static void logseq_jpeg_fail(struct logseq_jpeg_error *error, const char *messag
 
 /* Decode with the system libjpeg and transform to display orientation while
    copying rows. JPEG has no alpha channel, so opaque RGBA is already the
-   premultiplied representation. */
+   premultiplied representation. Decode state lives outside the setjmp frame:
+   automatic variables modified before a longjmp are indeterminate after it. */
 static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_length,
     unsigned char **pixels_out, size_t *width_out, size_t *height_out,
     size_t *size_out, char *error_out, size_t error_size) {
-  struct jpeg_decompress_struct decoder;
-  struct logseq_jpeg_error error;
-  unsigned char *pixels = NULL, *row = NULL;
-
-  decoder.err = jpeg_std_error(&error.base);
-  error.base.error_exit = logseq_jpeg_error_exit;
-  error.base.output_message = logseq_jpeg_output_message;
-  error.message[0] = '\0';
-  if (setjmp(error.jump)) {
-    snprintf(error_out, error_size, "%s",
-      error.message[0] ? error.message : "Cannot decode JPEG");
-    jpeg_destroy_decompress(&decoder);
-    free(row);
-    free(pixels);
+  struct logseq_jpeg_decode_state *state = calloc(1, sizeof(*state));
+  if (!state) {
+    snprintf(error_out, error_size, "Cannot allocate JPEG decoder");
     return -1;
   }
 
-  jpeg_create_decompress(&decoder);
-  jpeg_mem_src(&decoder, data, data_length);
-  jpeg_read_header(&decoder, TRUE);
-  decoder.out_color_space = JCS_RGB;
-  jpeg_start_decompress(&decoder);
+  state->decoder.err = jpeg_std_error(&state->error.base);
+  state->error.base.error_exit = logseq_jpeg_error_exit;
+  state->error.base.output_message = logseq_jpeg_output_message;
+  state->error.message[0] = '\0';
+  if (setjmp(state->error.jump)) {
+    snprintf(error_out, error_size, "%s",
+      state->error.message[0] ? state->error.message : "Cannot decode JPEG");
+    if (state->decoder_created) jpeg_destroy_decompress(&state->decoder);
+    free(state->row);
+    free(state->pixels);
+    free(state);
+    return -1;
+  }
 
-  size_t source_width = decoder.output_width;
-  size_t source_height = decoder.output_height;
-  int components = decoder.output_components;
+  jpeg_create_decompress(&state->decoder);
+  state->decoder_created = 1;
+  jpeg_mem_src(&state->decoder, data, data_length);
+  jpeg_read_header(&state->decoder, TRUE);
+  state->decoder.out_color_space = JCS_RGB;
+  jpeg_start_decompress(&state->decoder);
+
+  size_t source_width = state->decoder.output_width;
+  size_t source_height = state->decoder.output_height;
+  int components = state->decoder.output_components;
   if (!source_width || !source_height || (components != 1 && components != 3))
-    logseq_jpeg_fail(&error, "Unsupported JPEG dimensions or color channels");
+    logseq_jpeg_fail(&state->error, "Unsupported JPEG dimensions or color channels");
   int orientation = logseq_jpeg_exif_orientation(data, data_length);
   int transpose = orientation >= 5;
   size_t width = transpose ? source_height : source_width;
   size_t height = transpose ? source_width : source_height;
   if (width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
       width > Max_long || height > Max_long)
-    logseq_jpeg_fail(&error, "JPEG bitmap dimensions overflow");
+    logseq_jpeg_fail(&state->error, "JPEG bitmap dimensions overflow");
   size_t size = width * height * 4;
   if (size > Max_long)
-    logseq_jpeg_fail(&error, "JPEG bitmap size overflow");
+    logseq_jpeg_fail(&state->error, "JPEG bitmap size overflow");
   if (source_width > SIZE_MAX / (size_t)components)
-    logseq_jpeg_fail(&error, "JPEG scanline size overflow");
+    logseq_jpeg_fail(&state->error, "JPEG scanline size overflow");
   size_t row_size = source_width * (size_t)components;
 
-  pixels = calloc(1, size);
-  row = malloc(row_size);
-  if (!pixels || !row)
-    logseq_jpeg_fail(&error, "Cannot allocate JPEG bitmap");
+  state->pixels = calloc(1, size);
+  state->row = malloc(row_size);
+  if (!state->pixels || !state->row)
+    logseq_jpeg_fail(&state->error, "Cannot allocate JPEG bitmap");
 
-  while (decoder.output_scanline < decoder.output_height) {
-    JSAMPROW rows[1] = { row };
-    size_t y = decoder.output_scanline;
-    if (jpeg_read_scanlines(&decoder, rows, 1) != 1)
-      logseq_jpeg_fail(&error, "Incomplete JPEG scanline data");
+  while (state->decoder.output_scanline < state->decoder.output_height) {
+    JSAMPROW rows[1] = { state->row };
+    size_t y = state->decoder.output_scanline;
+    if (jpeg_read_scanlines(&state->decoder, rows, 1) != 1)
+      logseq_jpeg_fail(&state->error, "Incomplete JPEG scanline data");
     for (size_t x = 0; x < source_width; x++) {
-      const unsigned char *source = row + x * (size_t)components;
+      const unsigned char *source = state->row + x * (size_t)components;
       unsigned char red = source[0];
       unsigned char green = components == 1 ? source[0] : source[1];
       unsigned char blue = components == 1 ? source[0] : source[2];
@@ -3251,7 +3264,7 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
       case 8: dx = y; dy = source_width - 1 - x; break;
       default: dx = x; dy = y; break;
       }
-      unsigned char *target = pixels + (dy * width + dx) * 4;
+      unsigned char *target = state->pixels + (dy * width + dx) * 4;
       target[0] = red;
       target[1] = green;
       target[2] = blue;
@@ -3259,13 +3272,14 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
     }
   }
 
-  jpeg_finish_decompress(&decoder);
-  jpeg_destroy_decompress(&decoder);
-  free(row);
-  *pixels_out = pixels;
+  jpeg_finish_decompress(&state->decoder);
+  jpeg_destroy_decompress(&state->decoder);
+  free(state->row);
+  *pixels_out = state->pixels;
   *width_out = width;
   *height_out = height;
   *size_out = size;
+  free(state);
   return 0;
 }
 #endif
