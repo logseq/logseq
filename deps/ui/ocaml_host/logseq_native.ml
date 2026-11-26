@@ -276,6 +276,8 @@ module Host_media = struct
       (try
         state.position_ms <- int_of_float (Lui_media.video_position video *. 1000.);
         state.duration_ms <- int_of_float (Lui_media.video_duration video *. 1000.);
+        if Lui_media.video_status video = Lui_media.Ended && state.duration_ms > 0 then
+          state.position_ms <- state.duration_ms;
         state.playing <- Lui_media.video_status video = Lui_media.Playing;
         match Lui_media.current_frame video with
         | Some (Ok image) -> state.image <- Some image
