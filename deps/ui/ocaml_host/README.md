@@ -111,8 +111,9 @@ libraries from the tested build.
 The Linux builder downloads the pinned pdfium-binaries `chromium/8179` archive
 (checksum-verified, cached under `deps/ui/_build/pdfium`) and installs
 `lib/libpdfium.so` beside `bin/LogseqNative`, with its licenses under
-`Resources/licenses/pdfium`. The host loads `PDFIUM_LIBRARY` when set, then
-the bundled `../lib/libpdfium.so`, then `libpdfium.so` from the loader path.
+`Resources/licenses/pdfium`. The host loads only `PDFIUM_LIBRARY` when set;
+otherwise the bundled `../lib/libpdfium.so`, then `libpdfium.so` from the
+loader path.
 Only Linux x86_64 has a pinned archive.
 
 Copy `resources/dicts/*.edn` to `Contents/Resources/dicts/`, preserving their
