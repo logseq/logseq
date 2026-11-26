@@ -679,13 +679,14 @@ let tag_chip ~key ~owner_uuid ~tag ~tuuid ~ident ~dbid : t =
                       (Ui_components.with_props
                          [ Ui_components.Prop.user_select `none
                          ; Ui_components.Prop.cursor `pointer ]
-                         (box ~key:("tx-" ^ key)
+                         (row ~key:("tx-" ^ key) ~cross:`center
                             ~style_class:"tag-x"
-                            ~margin_top:1 ~margin_left:2 ~margin_right:2
+                            ~margin_top:1 ~margin_right:2
                             ~data_attrs:
                               [ ( "aria-label"
                                 , I18n.t "block/remove-this-tag" ) ]
-                            [ icon ~key:("txi-" ^ key)
+                            [ spacer ~key:("txs-" ^ key) ~width:2 []
+                            ; icon ~key:("txi-" ^ key)
                                 ~name:(`app "x")
                                 ~point_size:13
                                 ~foreground:"hsl(var(--muted-foreground))"
