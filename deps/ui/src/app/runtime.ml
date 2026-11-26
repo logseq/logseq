@@ -164,6 +164,10 @@ let remote_graph_gone : (unit -> unit) ref = ref (fun () -> ())
    appends a downloaded graph to the local list *)
 let add_repo : (string -> unit) ref = ref (fun _ -> ())
 
+(* set by graphs_ops: local-graph-gone broadcasts move every native
+   window away from a graph deleted through another window *)
+let local_graph_gone : (string -> unit) ref = ref (fun _ -> ())
+
 let on_navigate = Subs_state.on_navigate
 
 (* items signals live in the subs package — same store for both

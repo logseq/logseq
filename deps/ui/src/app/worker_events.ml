@@ -121,6 +121,13 @@ let dispatch kind payload =
   | "remote-graph-gone" ->
       (* cljs :rtc/remote-graph-gone: refresh remote graph list *)
       !Runtime.remote_graph_gone ()
+  | "local-graph-gone" -> (
+      (* unsafe-unlink-db removes the shared database for every attached
+         window; the initiating window suppresses this echo and runs its
+         own delete flow, other windows navigate away here *)
+      match Wire.map_get_string payload "repo" with
+      | Some repo -> !Runtime.local_graph_gone repo
+      | None -> ())
   | "add-repo" -> (
       (* cljs :add-repo -> state/add-repo! — worker broadcasts this after
          a remote-graph download completes *)
