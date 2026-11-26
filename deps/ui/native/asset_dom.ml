@@ -233,7 +233,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
          in
          if image_extension ext then
            Lui_elements.image ~url:source
-             ~alt:file ~max_height:800 ~container_relative_frame:`horizontal []
+             ~alt:file ~container_relative_frame:`horizontal []
          else Lui_elements.text ~value:file []) ] context parent
 
 let content_view = block_view
