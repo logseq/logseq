@@ -104,10 +104,7 @@ let parse_item = function
                 (match List.assoc_opt "viewBox" fields with
                  | Some (`List values) -> Array.of_list (List.map number values)
                  | _ -> [||])
-            ; preserve =
-                (match List.assoc_opt "preserve" fields with
-                 | Some (`String value) -> value
-                 | _ -> "xMidYMid meet")
+            ; preserve = string_member json "preserve"
             ; paths =
                 (match List.assoc_opt "paths" fields with
                  | Some (`List values) -> List.map Yojson.Safe.Util.to_string values
