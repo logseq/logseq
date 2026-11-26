@@ -4031,6 +4031,10 @@ static int logseq_is_heif(const unsigned char *data, size_t data_length) {
     ((uint32_t)data[2] << 8) | (uint32_t)data[3];
   size_t box_end = box_size == 0 ? data_length : (size_t)box_size;
   if (box_end < 16 || box_end > data_length) return 0;
+  if (memcmp(data + 8, "avis", 4) == 0 || memcmp(data + 8, "msf1", 4) == 0 ||
+      memcmp(data + 8, "hevc", 4) == 0 || memcmp(data + 8, "hevx", 4) == 0 ||
+      memcmp(data + 8, "hevm", 4) == 0 || memcmp(data + 8, "hevs", 4) == 0)
+    return 0;
   if (logseq_is_heif_brand(data + 8)) return 1;
   for (size_t position = 16; position + 4 <= box_end; position += 4)
     if (logseq_is_heif_brand(data + position)) return 1;

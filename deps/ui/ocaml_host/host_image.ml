@@ -27,12 +27,18 @@ let sniff_heif encoded =
   else
     let box_size=be32 0 in
     let box_end=if box_size=0 then length else box_size in
-    box_end >= 16 && box_end <= length &&
-    (heif_brand (Bytes.sub_string encoded 8 4) ||
-     let rec compatible position =
-       position + 4 <= box_end &&
-       (heif_brand (Bytes.sub_string encoded position 4) || compatible (position + 4)) in
-     compatible 16)
+    if box_end < 16 || box_end > length then false
+    else
+      let major=Bytes.sub_string encoded 8 4 in
+      match major with
+      | "avis" | "msf1" | "hevc" | "hevx" | "hevm" | "hevs" -> false
+      | _ ->
+        heif_brand major ||
+        (let rec compatible position =
+           position + 4 <= box_end &&
+           (heif_brand (Bytes.sub_string encoded position 4) || compatible (position + 4)) in
+         compatible 16)
+
 
 let decode encoded =
   match Lui_image.sniff encoded with
