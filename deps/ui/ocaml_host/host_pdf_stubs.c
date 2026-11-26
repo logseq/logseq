@@ -77,6 +77,10 @@ static void pdf_autorelease_pool_close(id pool) {
 #else
 #include <dlfcn.h>
 #endif
+#if defined(__linux__)
+#include <limits.h>
+#include <unistd.h>
+#endif
 
 typedef struct { float left; float top; float right; float bottom; } pdfium_rectf;
 
@@ -113,6 +117,23 @@ static void *pdfium_sym(void *handle, const char *name) {
 #endif
 }
 
+#if defined(__linux__)
+/* Release packages ship PDFium at <package>/lib next to <package>/bin. */
+static void *pdfium_open_bundled(void) {
+  char path[PATH_MAX];
+  ssize_t n = readlink("/proc/self/exe", path, sizeof(path) - 1);
+  if (n <= 0) return NULL;
+  path[n] = 0;
+  char *slash = strrchr(path, '/');
+  if (!slash) return NULL;
+  *slash = 0;
+  const char *suffix = "/../lib/libpdfium.so";
+  if (strlen(path) + strlen(suffix) >= sizeof(path)) return NULL;
+  strcat(path, suffix);
+  return dlopen(path, RTLD_NOW | RTLD_LOCAL);
+}
+#endif
+
 static int pdfium_load(void) {
   if (pdfium_state) return pdfium_state > 0;
   const char *custom = getenv("PDFIUM_LIBRARY");
@@ -129,6 +150,9 @@ static int pdfium_load(void) {
     h = dlopen(custom, RTLD_NOW | RTLD_LOCAL);
 #endif
   }
+#if defined(__linux__)
+  if (!h) h = pdfium_open_bundled();
+#endif
   if (!h) {
 #if defined(_WIN32)
     h = (void *)LoadLibraryA(fallback);

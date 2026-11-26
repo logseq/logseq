@@ -5,18 +5,67 @@ import argparse
 import json
 import os
 from pathlib import Path
+import hashlib
+import platform
 import plistlib
 import shutil
 import subprocess
 import sys
+import tarfile
 import tempfile
+import urllib.parse
+import urllib.request
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[2]
+PDFIUM_RELEASE = "chromium/8179"
+PDFIUM_LINUX_ARCHIVES = {
+    "x86_64": ("pdfium-linux-x64.tgz", "b4766a6bf2856efbcc6c3cc7d6ae9022bdc6bb36ddc1acdd92d1f1873f773f4b"),
+}
 
 
 def run(*arguments, **kwargs):
     return subprocess.run([str(value) for value in arguments], check=True, **kwargs)
+
+
+def pdfium_linux_archive():
+    machine = platform.machine()
+    if machine not in PDFIUM_LINUX_ARCHIVES:
+        raise ValueError(f"No pinned PDFium {PDFIUM_RELEASE} archive for Linux {machine}")
+    name, digest = PDFIUM_LINUX_ARCHIVES[machine]
+    archive = HERE.parent / "_build/pdfium" / PDFIUM_RELEASE.replace("/", "-") / name
+    if not archive.is_file():
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        url = ("https://github.com/bblanchon/pdfium-binaries/releases/download/"
+               + urllib.parse.quote(PDFIUM_RELEASE, safe="") + "/" + name)
+        partial = archive.with_suffix(".partial")
+        with urllib.request.urlopen(url) as response, partial.open("wb") as file:
+            shutil.copyfileobj(response, file)
+        partial.replace(archive)
+    actual = hashlib.sha256(archive.read_bytes()).hexdigest()
+    if actual != digest:
+        raise ValueError(f"PDFium archive checksum mismatch for {archive}: {actual}")
+    return archive
+
+
+def bundle_pdfium_linux(staged, resources):
+    licenses = resources / "licenses/pdfium"
+    (staged / "lib").mkdir()
+    licenses.mkdir(parents=True)
+    with tarfile.open(pdfium_linux_archive()) as archive:
+        for member in archive.getmembers():
+            if member.name == "lib/libpdfium.so":
+                target = staged / "lib/libpdfium.so"
+            elif member.name == "LICENSE":
+                target = licenses / "LICENSE"
+            elif member.name.startswith("licenses/") and member.isfile():
+                target = licenses / Path(member.name).name
+            else:
+                continue
+            with archive.extractfile(member) as source, target.open("wb") as file:
+                shutil.copyfileobj(source, file)
+    if not (staged / "lib/libpdfium.so").is_file():
+        raise ValueError("The PDFium archive does not contain lib/libpdfium.so")
 
 
 def build(output, lui_source=None):
@@ -67,6 +116,10 @@ def build(output, lui_source=None):
                     ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                 "logseq_dirty": bool(subprocess.check_output(
                     ["git", "status", "--porcelain"], cwd=ROOT, text=True))}
+        if sys.platform == "linux":
+            bundle_pdfium_linux(staged, resources)
+            info["pdf_runtime"] = "PDFium"
+            info["pdf_runtime_version"] = PDFIUM_RELEASE
         if lui_source is not None:
             info["lui_revision"] = subprocess.check_output(
                 ["git", "rev-parse", "HEAD"], cwd=lui_source, text=True).strip()
