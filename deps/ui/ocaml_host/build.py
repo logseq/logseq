@@ -28,23 +28,29 @@ def run(*arguments, **kwargs):
     return subprocess.run([str(value) for value in arguments], check=True, **kwargs)
 
 
+def verify_pdfium_archive(path, digest):
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual != digest:
+        raise ValueError(f"PDFium archive checksum mismatch for {path}: {actual}")
+
+
 def pdfium_linux_archive():
     machine = platform.machine()
     if machine not in PDFIUM_LINUX_ARCHIVES:
         raise ValueError(f"No pinned PDFium {PDFIUM_RELEASE} archive for Linux {machine}")
     name, digest = PDFIUM_LINUX_ARCHIVES[machine]
     archive = HERE.parent / "_build/pdfium" / PDFIUM_RELEASE.replace("/", "-") / name
-    if not archive.is_file():
-        archive.parent.mkdir(parents=True, exist_ok=True)
-        url = ("https://github.com/bblanchon/pdfium-binaries/releases/download/"
-               + urllib.parse.quote(PDFIUM_RELEASE, safe="") + "/" + name)
-        partial = archive.with_suffix(".partial")
-        with urllib.request.urlopen(url) as response, partial.open("wb") as file:
-            shutil.copyfileobj(response, file)
-        partial.replace(archive)
-    actual = hashlib.sha256(archive.read_bytes()).hexdigest()
-    if actual != digest:
-        raise ValueError(f"PDFium archive checksum mismatch for {archive}: {actual}")
+    if archive.is_file():
+        verify_pdfium_archive(archive, digest)
+        return archive
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    url = ("https://github.com/bblanchon/pdfium-binaries/releases/download/"
+           + urllib.parse.quote(PDFIUM_RELEASE, safe="") + "/" + name)
+    partial = archive.with_suffix(".partial")
+    with urllib.request.urlopen(url) as response, partial.open("wb") as file:
+        shutil.copyfileobj(response, file)
+    verify_pdfium_archive(partial, digest)
+    partial.replace(archive)
     return archive
 
 
