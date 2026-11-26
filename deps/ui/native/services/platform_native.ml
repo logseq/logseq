@@ -157,25 +157,53 @@ let rec mkdir_p path =
     try Unix.mkdir path 0o755 with _ -> ()
   end
 
-let load_state () =
-  if not !ls_loaded then begin
-    if state_exists () then begin
-      let json = try In_channel.with_open_bin (state_file ()) Yojson.Safe.from_channel
-        with Yojson.Json_error _ -> failwith "Invalid native UI state encoding" in
-      match json with
-      | `Assoc kvs ->
-          List.iter (fun (key, value) ->
-            match value with
-            | `String text -> Hashtbl.replace ls key text
-            | _ when is_auth_token key -> failwith "Invalid native authentication token"
-            | _ -> ()) kvs
-      | _ -> failwith "Invalid native UI state"
-    end;
-    ls_loaded := true
+let read_state_unlocked () =
+  if state_exists () then begin
+    let json = try In_channel.with_open_bin (state_file ()) Yojson.Safe.from_channel
+      with Yojson.Json_error _ -> failwith "Invalid native UI state encoding" in
+    match json with
+    | `Assoc kvs ->
+        List.iter (fun (key, value) ->
+          match value with
+          | `String text -> Hashtbl.replace ls key text
+          | _ when is_auth_token key -> failwith "Invalid native authentication token"
+          | _ -> ()) kvs
+    | _ -> failwith "Invalid native UI state"
   end
 
-let save_state_strict () =
-  if not !auth_managed then invalid_arg "Authentication storage has not been resolved";
+let reload_state_unlocked () =
+  Hashtbl.clear ls;
+  read_state_unlocked ();
+  ls_loaded := true
+
+let load_state () =
+  if not !ls_loaded then reload_state_unlocked ()
+
+let state_lock_file () = state_file () ^ ".lock"
+
+(* Multiple native window processes share ui-state.json. Serialize the
+   read-modify-write cycle across processes; otherwise a window writing
+   one preference can overwrite another window's concurrently saved key. *)
+let with_state_lock f =
+  let directory = app_support_dir () in
+  mkdir_p directory;
+  let descriptor =
+    Unix.openfile (state_lock_file ()) [ Unix.O_RDWR; Unix.O_CREAT ] 0o600
+  in
+  Unix.set_close_on_exec descriptor;
+  let locked = ref false in
+  Fun.protect
+    ~finally:(fun () ->
+      if !locked then
+        (try Unix.lockf descriptor Unix.F_ULOCK 0
+         with Unix.Unix_error _ -> ());
+      (try Unix.close descriptor with Unix.Unix_error _ -> ()))
+    (fun () ->
+      Unix.lockf descriptor Unix.F_LOCK 0;
+      locked := true;
+      f ())
+
+let write_state_unlocked () =
   let directory = app_support_dir () in
   mkdir_p directory;
   let json = `Assoc (Hashtbl.fold (fun key value acc ->
@@ -190,6 +218,16 @@ let save_state_strict () =
     Unix.fsync (Unix.descr_of_out_channel channel);
     close_out channel;
     Unix.rename temporary (state_file ()))
+
+(* Authentication migration callers use this when they have not changed
+   an ordinary preference. Reloading first keeps keys written by another
+   window; local_storage_set/remove below perform their own locked
+   read-modify-write and therefore must not call this reload-only save. *)
+let save_state_strict () =
+  if not !auth_managed then invalid_arg "Authentication storage has not been resolved";
+  with_state_lock (fun () ->
+      reload_state_unlocked ();
+      write_state_unlocked ())
 
 let save_state () =
   if !auth_managed then (try save_state_strict () with _ -> ())
@@ -216,15 +254,17 @@ let local_storage_get k =
 
 let local_storage_set k v =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain storage";
-  load_state ();
-  Hashtbl.replace ls k v;
-  save_state ()
+  with_state_lock (fun () ->
+      reload_state_unlocked ();
+      Hashtbl.replace ls k v;
+      if !auth_managed then write_state_unlocked ())
 
 let local_storage_remove k =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain removal";
-  load_state ();
-  Hashtbl.remove ls k;
-  save_state ()
+  with_state_lock (fun () ->
+      reload_state_unlocked ();
+      Hashtbl.remove ls k;
+      if !auth_managed then write_state_unlocked ())
 
 let session : (string, string) Hashtbl.t = Hashtbl.create 16
 
