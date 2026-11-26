@@ -724,8 +724,10 @@ let () =
   Dispatcher.register "thread-api/db-sync-close-db"
     (close_db_handler "db-sync-close-db")
 
-(* :thread-api/unsafe-unlink-db [repo] — cancel requests, close, then
-   delete the graph's storage file (node storage root). *)
+(* :thread-api/unsafe-unlink-db [repo options?] — cancel requests, close,
+   then delete the graph's storage file (node storage root). Internal
+   replacement/import callers omit options; only an explicit user graph
+   deletion asks for the local-graph-gone broadcast. *)
 let () =
   Dispatcher.register "thread-api/unsafe-unlink-db" (fun args ->
       let args =
@@ -735,6 +737,12 @@ let () =
       in
       match args with
       | Wire.String repo :: _ ->
+          let broadcast_deletion =
+            match args with
+            | Wire.String _ :: options :: _ ->
+                Wire.get "broadcast?" options = Some (Wire.Bool true)
+            | _ -> false
+          in
           let prepared =
             if Sqlite.pooled_runtime () then
               Sqlite.prepare_pool ~name:(Graph_dir.pool_name repo)
@@ -760,13 +768,14 @@ let () =
                            File_sys.remove (Filename.concat (db_dir repo) entry))
                          entries))))
           |> Db_worker_effect.map (fun () ->
-             Broadcast.to_clients ~kind:"local-graph-gone"
-               ~transit_payload:
-                 (Transit_codec.to_string
-                    (Wire.Array
-                       [ Wire.Keyword "local-graph-gone"
-                       ; Wire.Map
-                           [ (Wire.Keyword "repo", Wire.String repo) ] ]));
+             if broadcast_deletion then
+               Broadcast.to_clients ~kind:"local-graph-gone"
+                 ~transit_payload:
+                   (Transit_codec.to_string
+                      (Wire.Array
+                         [ Wire.Keyword "local-graph-gone"
+                         ; Wire.Map
+                             [ (Wire.Keyword "repo", Wire.String repo) ] ]));
              Wire.nil))
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 
