@@ -297,7 +297,7 @@ let right_sidebar (ms : Model.t Signal.signal) : t =
           ~min_height:0 ~style_class:"cp__right-sidebar closed"
           [Ui_components.with_props [Ui_components.Prop.overflow `hidden]
              (row ~key:"rs-dock" ~min_height:0 ~grow:1. ~cross:`stretch
-                ~background:"muted" [Right_sidebar_view.render ms])])) ) context parent
+                ~background:"muted" [Right_sidebar_view.render ~cap_dock_width:true ms])])) ) context parent
 
 (* A stable sidebar surface uses the same dock breakpoint and inner width
    as Web. Its own split reveals the small-window panel without squeezing text. *)
