@@ -1361,8 +1361,8 @@ let () = with_test_entry (fun () ->
       | Some value -> List.exists (fun name -> List.mem name
           (String.split_on_char ' ' value)) ["left-sidebar-top"; "hd"]
       | None -> false) (Lui_store.preorder store) in
-    check (Printf.sprintf "Sidebar surface regression must include all three section headings, got %d" (List.length headers))
-      (List.length headers = 3);
+    check (Printf.sprintf "Sidebar surface regression must include the top strip and all three section headings, got %d" (List.length headers))
+      (List.length headers = 4);
     List.iter (fun id ->
       let r = Option.get (Lui_layout.rect layout id) in
       let x = r.Lui_scene.x +. r.w /. 2. and y = r.y +. r.h /. 2. in

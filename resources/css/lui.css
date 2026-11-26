@@ -1178,13 +1178,6 @@ body {
     pointer-events: none;
   }
 
-  /* Closing surfaces release their icon props before the exit animation
-     finishes; without this the unmasked icons paint as solid squares
-     through the fade. */
-  :is(.lui-dropdown-menu, .lui-context-menu, .lui-popover)[data-ending-style] .lui-icon {
-    display: none !important;
-  }
-
   .lui-dropdown-menu[data-starting-style],
   .lui-dropdown-menu[data-ending-style] {
     opacity: 0;

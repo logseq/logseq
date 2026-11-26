@@ -62,6 +62,7 @@ let select_el ctx ~key ~show ~value ~options ~on_change =
                  (List.map
                     (fun (v, label) ->
                       Ui_components.dropdown_menu_item ~key:(key ^ "-mi-" ^ v) ~text:label
+                        ~selection_placement:`leading ~min_height:32
                         ~selected:(v = value (S.cur (S.st ctx)))
                         ~on_press:(fun _ ->
                           on_change v;

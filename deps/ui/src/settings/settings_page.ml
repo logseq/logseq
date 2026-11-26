@@ -296,7 +296,7 @@ let dfmt_menu ~scope ~key mst options current =
     (List.mapi
        (fun i fmt ->
          Ui_components.dropdown_menu_item ~key:(Printf.sprintf "dfmt-mi-%d" i)
-           ~text:fmt
+           ~text:fmt ~selection_placement:`leading ~min_height:32
            ~selected:(fmt = current)
            ~on_press:(fun _ ->
              let settings_current = S.capture_context () in

@@ -403,7 +403,8 @@ and node ~model () : t =
                                          ~label:(I18n.t "ui/copy")
                                          ~text:(I18n.t "ui/copy")
                                          ~on_press:(fun _ ->
-                                           Editor_actions.copy_selection_text ())
+                                           Editor_actions.copy_selection_text ();
+                                           Editor_actions.clear_selection ())
                                          ();
                                        sbtn ~key:"sb-set"
                                          ~label:(I18n.t "property/set-property")
