@@ -95,9 +95,9 @@ module Host_media = struct
   type state = {
     source : string;
     is_video : bool;
-    handle : int;
-    audio_player : Lui_media.player option;
-    video_player : Lui_media.video option;
+    mutable handle : int;
+    mutable audio_player : Lui_media.player option;
+    mutable video_player : Lui_media.video option;
     mutable image : image option;
     mutable generation : int;
     mutable playing : bool;
@@ -113,7 +113,7 @@ module Host_media = struct
   let media_debug = lazy (match Sys.getenv_opt "LOGSEQ_NATIVE_MEDIA_DEBUG" with Some ("1" | "true") -> true | _ -> false)
   let media_log fmt = if Lazy.force media_debug then Printf.eprintf (fmt ^^ "\n%!") else Printf.ifprintf stderr fmt
 
-  let json_parse text = try Some (Yojson.Safe.from_string text) with _ -> None
+  let json_parse text = Yojson.Safe.from_string text
 
   let string_member json key =
     match json with
@@ -123,8 +123,8 @@ module Host_media = struct
     | _ -> ""
 
   let attrs_src store id =
-    match Option.bind (Lui_store.string_prop store id "attrs") json_parse with
-    | Some json -> string_member json "src"
+    match Lui_store.string_prop store id "attrs" with
+    | Some text -> string_member (json_parse text) "src"
     | None -> ""
 
   let media_src store id =
@@ -140,21 +140,22 @@ module Host_media = struct
     Option.iter (fun player -> try Lui_media.unload player with _ -> ()) state.audio_player;
     Option.iter (fun video -> try Lui_media.video_close video with _ -> ()) state.video_player
 
-  let state_for id source is_video =
-    let now = Unix.gettimeofday () in
-    match Hashtbl.find_opt states id with
-    | Some state when state.source = source && state.is_video = is_video ->
-      state.last_seen <- now;
-      state
-    | previous ->
-      Option.iter close_state previous;
-      let media_path =
-        if String.length source > 7 && String.sub source 0 7 = "file://" then
-          try Uri.pct_decode (Uri.path (Uri.of_string source)) with _ -> source
-        else source
-      in
+  let media_file_path source =
+    if String.length source > 7 && String.sub source 0 7 = "file://" then
+      try Uri.pct_decode (Uri.path (Uri.of_string source)) with _ -> source
+    else source
+
+  let local_media_source source =
+    (String.length source > 7 && String.sub source 0 7 = "file://")
+    || (source <> "" && source.[0] = '/')
+    || not (String.contains source ':')
+
+  let open_state id state =
+    if state.handle <> -3 then ()
+    else begin
+      let media_path = media_file_path state.source in
       let audio_player =
-        if (not is_video) && Lui_media.audio_available () then
+        if (not state.is_video) && Lui_media.audio_available () then
           match Lui_media.player_create () with
           | Error _ -> None
           | Ok player ->
@@ -164,7 +165,7 @@ module Host_media = struct
         else None
       in
       let video_player =
-        if is_video && Lui_media.video_available () then
+        if state.is_video && Lui_media.video_available () then
           match Lui_media.video_open media_path with
           | Ok video -> Some video
           | Error _ -> None
@@ -173,16 +174,34 @@ module Host_media = struct
       let handle, error =
         if Option.is_some audio_player || Option.is_some video_player then -2, ""
         else
-          try media_open source is_video, ""
-          with Failure message -> -1, message
+          try media_open state.source state.is_video, ""
+          with
+          | Failure message -> -1, message
+          | Invalid_argument message -> -1, message
       in
-      media_log "media open id=%d video=%b handle=%d audio=%b native-video=%b src=%s" id is_video handle (Option.is_some audio_player) (Option.is_some video_player) source;
+      state.audio_player <- audio_player;
+      state.video_player <- video_player;
+      state.handle <- handle;
+      state.error <- error;
+      media_log "media open id=%d video=%b handle=%d audio=%b native-video=%b src=%s" id state.is_video handle (Option.is_some audio_player) (Option.is_some video_player) state.source
+    end
+
+  let state_for id source is_video =
+    let now = Unix.gettimeofday () in
+    match Hashtbl.find_opt states id with
+    | Some state when state.source = source && state.is_video = is_video ->
+      state.last_seen <- now;
+      state
+    | previous ->
+      Option.iter close_state previous;
       let state = {
-        source; is_video; handle; audio_player; video_player; image = None; generation = 0;
-        playing = false; position_ms = 0; duration_ms = 0; error;
+        source; is_video; handle = -3; audio_player = None; video_player = None;
+        image = None; generation = 0;
+        playing = false; position_ms = 0; duration_ms = 0; error = "";
         refresh_until = now +. 8.; last_seen = now; last_paint_log = 0.;
       } in
       Hashtbl.replace states id state;
+      if local_media_source source then open_state id state;
       state
 
   let sweep store =
@@ -390,8 +409,9 @@ module Host_media = struct
   let paint_video ctx store node frame = paint true ctx store node frame
   let paint_audio ctx store node frame = paint false ctx store node frame
 
-  let toggle state =
+  let toggle id state =
     media_log "media toggle playing=%b pos=%d src=%s" state.playing state.position_ms state.source;
+    if state.handle = -3 then open_state id state;
     (match state.audio_player, state.video_player with
      | Some player, None ->
        if state.playing then Lui_media.pause player else Lui_media.play player;
@@ -444,7 +464,7 @@ module Host_media = struct
           let progress_end = bar.x +. bar.w -. time_w -. (10. *. ctx_scale) in
           let progress_w = Float.max 0. (progress_end -. progress_x) in
           let dx = x *. scale and dy = y *. scale in
-          if inside button dx dy then (toggle state; true)
+          if inside button dx dy then (toggle id state; true)
           else if dy >= bar.y && dx >= progress_x && dx <= progress_end && progress_w > 0. then begin
             seek state ((dx -. progress_x) /. progress_w);
             true
