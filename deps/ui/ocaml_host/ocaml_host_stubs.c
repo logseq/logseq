@@ -3186,7 +3186,6 @@ static void logseq_jpeg_fail(struct logseq_jpeg_error *error, const char *messag
   longjmp(error->jump, 1);
 }
 
-#if defined(__linux__)
 /* Runtime-loaded GStreamer media backend. GStreamer is optional at start-up:
    the native host links no development package, and opening media either finds
    the platform libraries or fails the one player with a clear error. */
@@ -3679,7 +3678,9 @@ CAMLprim value logseq_native_media_error(value handle_v) {
   CAMLreturn(error_v);
 }
 
-#else
+#endif
+
+#if !defined(__linux__)
 
 CAMLprim value logseq_native_media_open(value source_v, value video_v) {
   caml_failwith("Native media playback is unsupported on this platform");
@@ -3892,7 +3893,6 @@ static int logseq_decode_platform_linux(const unsigned char *data, size_t data_l
   return logseq_decode_jpeg_linux(data, data_length, pixels_out, width_out, height_out,
     size_out, error_out, error_size);
 }
-#endif
 
 /* Image I/O owns its input and decoding objects entirely within the worker
    call. Only a tightly packed, top-left RGBA bitmap crosses into OCaml. */
