@@ -2540,15 +2540,10 @@ let cut_block_text uuid =
         block.Model.block_title (fun () ->
           ignore (Ops.apply_and_refresh [ Ops.delete_blocks [ uuid ] ])))
 
-let copy_selection_text ?(plain = false) () =
-  write_selection_copy ~plain ~cut:false ();
-  clear_selection ()
-
+let copy_selection_text ?(plain = false) () = write_selection_copy ~plain ~cut:false ()
 let cut_selection_text () = write_selection_copy ~plain:false ~cut:true ()
 let copy_selection ev =
-  write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:false ();
-  clear_selection ()
-
+  write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:false ()
 let cut_selection ev =
   write_selection_copy ~capture:ev.Ui_services.prevent_default ~plain:false ~cut:true ()
 
