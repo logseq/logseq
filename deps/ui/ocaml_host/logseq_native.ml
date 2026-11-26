@@ -112,19 +112,8 @@ module Host_media = struct
   let media_debug = lazy (match Sys.getenv_opt "LOGSEQ_NATIVE_MEDIA_DEBUG" with Some ("1" | "true") -> true | _ -> false)
   let media_log fmt = if Lazy.force media_debug then Printf.eprintf (fmt ^^ "\n%!") else Printf.ifprintf stderr fmt
 
-  let json_parse text = try Some (Yojson.Safe.from_string text) with _ -> None
-
-  let string_member json key =
-    match json with
-    | `Assoc fields -> (match List.assoc_opt key fields with
-      | Some (`String value) -> value
-      | _ -> "")
-    | _ -> ""
-
-  let attrs_src store id =
-    match Option.bind (Lui_store.string_prop store id "attrs") json_parse with
-    | Some json -> string_member json "src"
-    | None -> ""
+  let media_src store id =
+    Option.value (Lui_store.string_prop store id "src") ~default:""
 
   let close_handle handle =
     if handle >= 0 then try media_close handle with _ -> ()
@@ -311,7 +300,7 @@ module Host_media = struct
 
   let paint is_video ctx store node frame =
     let id = Lui_store.node_id node in
-    let source = attrs_src store id in
+    let source = media_src store id in
     if source = "" then []
     else
       let state = state_for id source is_video in

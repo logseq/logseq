@@ -261,14 +261,12 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
              ~alt:file ~container_relative_frame:`horizontal []
          else if audio_extension ext then
            Logseq_el.el ~key:("au-" ^ uuid) ~tag:"audio"
-             ~attrs:[ ("src", source); ("controls", "") ]
-             ~ext_props:(media_props b false)
+             ~ext_props:(( "src", Lui_protocol.StringValue source ) :: media_props b false)
              []
          else if video_extension ext then
            Logseq_el.el ~key:("vd-" ^ uuid) ~tag:"video"
              ~style_class:"asset-video"
-             ~attrs:[ ("src", source); ("controls", "") ]
-             ~ext_props:(media_props b true)
+             ~ext_props:(( "src", Lui_protocol.StringValue source ) :: media_props b true)
              []
          else Lui_elements.text ~value:file []) ] context parent
 

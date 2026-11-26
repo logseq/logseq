@@ -91,6 +91,7 @@ let schema_of tag =
     true (* standard_children *)
     child_identifiers (* raw elements nest freely *)
     [ Lui_extension.property "attrs" Lui_extension.StringScalar false None
+    ; Lui_extension.property "src" Lui_extension.StringScalar false None
     ; Lui_extension.property "events" Lui_extension.StringScalar false None
     ; Lui_extension.property "text" Lui_extension.StringScalar false None
     ; Lui_extension.property "style-class" Lui_extension.StringScalar false
