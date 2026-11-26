@@ -4018,12 +4018,23 @@ static int logseq_heif_available(void) {
     logseq_heif.handle_release;
 }
 
+static int logseq_is_heif_brand(const unsigned char *brand) {
+  return memcmp(brand, "avif", 4) == 0 ||
+    memcmp(brand, "heic", 4) == 0 ||
+    memcmp(brand, "heix", 4) == 0 ||
+    memcmp(brand, "mif1", 4) == 0;
+}
+
 static int logseq_is_heif(const unsigned char *data, size_t data_length) {
-  if (data_length < 12 || memcmp(data + 4, "ftyp", 4) != 0) return 0;
-  return memcmp(data + 8, "avif", 4) == 0 ||
-    memcmp(data + 8, "heic", 4) == 0 ||
-    memcmp(data + 8, "heix", 4) == 0 ||
-    memcmp(data + 8, "mif1", 4) == 0;
+  if (data_length < 16 || memcmp(data + 4, "ftyp", 4) != 0) return 0;
+  uint32_t box_size = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) |
+    ((uint32_t)data[2] << 8) | (uint32_t)data[3];
+  size_t box_end = box_size == 0 ? data_length : (size_t)box_size;
+  if (box_end < 16 || box_end > data_length) return 0;
+  if (logseq_is_heif_brand(data + 8)) return 1;
+  for (size_t position = 16; position + 4 <= box_end; position += 4)
+    if (logseq_is_heif_brand(data + position)) return 1;
+  return 0;
 }
 
 static void logseq_heif_error(char *error_out, size_t error_size,

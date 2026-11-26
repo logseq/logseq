@@ -11,12 +11,28 @@ let sniff_webp encoded =
   && Bytes.sub_string encoded 0 4 = "RIFF"
   && Bytes.sub_string encoded 8 4 = "WEBP"
 
+let heif_brand brand =
+  match brand with
+  | "avif" | "heic" | "heix" | "mif1" -> true
+  | _ -> false
+
 let sniff_heif encoded =
-  Bytes.length encoded >= 12
-  && Bytes.sub_string encoded 4 4 = "ftyp"
-  && (match Bytes.sub_string encoded 8 4 with
-      | "avif" | "heic" | "heix" | "mif1" -> true
-      | _ -> false)
+  let length=Bytes.length encoded in
+  let be32 position =
+    (Bytes.get_uint8 encoded position lsl 24) lor
+    (Bytes.get_uint8 encoded (position + 1) lsl 16) lor
+    (Bytes.get_uint8 encoded (position + 2) lsl 8) lor
+    Bytes.get_uint8 encoded (position + 3) in
+  if length < 16 || Bytes.sub_string encoded 4 4 <> "ftyp" then false
+  else
+    let box_size=be32 0 in
+    let box_end=if box_size=0 then length else box_size in
+    box_end >= 16 && box_end <= length &&
+    (heif_brand (Bytes.sub_string encoded 8 4) ||
+     let rec compatible position =
+       position + 4 <= box_end &&
+       (heif_brand (Bytes.sub_string encoded position 4) || compatible (position + 4)) in
+     compatible 16)
 
 let decode encoded =
   match Lui_image.sniff encoded with

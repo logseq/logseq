@@ -283,6 +283,12 @@ let () = begin
            pixel 12 8 1 > pixel 12 8 0 + 40
          | Error _ -> false) in
     validate "Linux libheif decodes AVIF images" avif;
+    let compatible_brand_avif = Bytes.copy avif in
+    Bytes.set compatible_brand_avif 8 'M';
+    Bytes.set compatible_brand_avif 9 'A';
+    Bytes.set compatible_brand_avif 10 '1';
+    Bytes.set compatible_brand_avif 11 'B';
+    validate "Linux libheif decodes compatible-brand AVIF images" compatible_brand_avif;
     validate "Linux libheif decodes HEIC images" heic;
     expect "Linux libheif premultiplies AVIF alpha"
       (match Host_image.decode alpha_avif with
