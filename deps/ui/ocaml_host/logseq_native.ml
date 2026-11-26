@@ -355,6 +355,7 @@ let () =
   (* Metal can report zero presentedTime on macOS even when frames reach the
      screen. Count non-skipped submitted presentations as the fallback. *)
   let metal_presented_fallback = ref 0 in
+  let metal_feedback_offset = ref None in
   let cocoa_renderer tiles =
     let id = Sdl.get_window_id !win in
     { Lui_host.name = "lui_raster+iosurface";
@@ -2518,8 +2519,22 @@ let () =
       end
     end;
     (match metal with
-     | Some m -> Renderer_metrics.record_display_count metrics ~now:(perf_s ())
-         ~presented:(max (Lui_metal.presented_frames m) !metal_presented_fallback)
+     | Some m ->
+       let feedback = Lui_metal.presented_frames m in
+       let presented =
+         if feedback > 0 then begin
+           let offset = match !metal_feedback_offset with
+             | Some offset -> offset
+             | None ->
+               let offset = max 0 (!metal_presented_fallback - feedback) in
+               metal_feedback_offset := Some offset;
+               offset
+           in
+           feedback + offset
+         end
+         else !metal_presented_fallback
+       in
+       Renderer_metrics.record_display_count metrics ~now:(perf_s ()) ~presented
      | None -> Renderer_metrics.record_display_count metrics ~now:(perf_s ())
          ~presented:!software_presented);
     let work_ms = (perf_s () -. t0) *. 1000. in
