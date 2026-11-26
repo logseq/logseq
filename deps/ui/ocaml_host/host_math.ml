@@ -93,8 +93,8 @@ let draw_svg image ink ~unit ~pad ~layout_height (item : Native_katex.svg_item) 
     in
     let source =
       Printf.sprintf
-        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"%g %g %g %g\" preserveAspectRatio=\"xMinYMin slice\" color=\"rgb(%d,%d,%d)\">%s</svg>"
-        width height vb.(0) vb.(1) vb.(2) vb.(3) ink.r ink.g ink.b paths
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"%d\" height=\"%d\" viewBox=\"%g %g %g %g\" preserveAspectRatio=\"%s\" color=\"rgb(%d,%d,%d)\">%s</svg>"
+        width height vb.(0) vb.(1) vb.(2) vb.(3) item.preserve ink.r ink.g ink.b paths
     in
     match Lui_svg.render source ~w:width ~h:height with
     | Error _ -> ()
