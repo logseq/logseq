@@ -91,6 +91,13 @@ let close_all () =
     publish ()
   end
 
+let close_if_anchor_open anchor =
+  if List.exists (fun popup -> popup.p_anchor = Some anchor) !open_popups then begin
+    close_all ();
+    true
+  end
+  else false
+
 (* capture-phase document keydown feeds only the TOP entry (nested
    submenus delegate inside it). Escape and outside-press are owned by
    each popover's own ~on_dismiss. *)
@@ -362,18 +369,21 @@ let menu_level ~pid ~cls ~register items =
 let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
     items =
   let anchor_target = anchor_identifier anchor in
-  close_all ();
-  let id = !next_id + 1 in
-  ignore
-    (push ~anchor:anchor_target
-       (fun context parent ->
-         anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id) ~role:`menu
-           ~id:(Printf.sprintf "vp-menu-%d" id) ~anchor:(Target anchor_target) ~align_end ~card:true
-           ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
-           ~on_dismiss:(fun _ -> close_entry id)
-           [ menu_level ~pid:id ~cls:cls_prefix
-               ~register:(register_key id) items ]
-           context parent))
+  let toggled_closed = close_if_anchor_open anchor_target in
+  if not toggled_closed then begin
+    close_all ();
+    let id = !next_id + 1 in
+    ignore
+      (push ~anchor:anchor_target
+         (fun context parent ->
+           anchored_popover ~key:(Printf.sprintf "vp-menu-%d" id) ~role:`menu
+             ~id:(Printf.sprintf "vp-menu-%d" id) ~anchor:(Target anchor_target) ~align_end ~card:true
+             ~cls:(cls_prefix ^ "ui__dropdown-menu-content")
+             ~on_dismiss:(fun _ -> close_entry id)
+             [ menu_level ~pid:id ~cls:cls_prefix
+                 ~register:(register_key id) items ]
+             context parent))
+  end
 
 (* ---------- select-style search popup ---------- *)
 
@@ -398,7 +408,8 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
     ?(custom_content = fun _ -> None) ~on_chosen () =
   let anchor_target = anchor_identifier anchor in
-  close_all ();
+  let toggled_closed = close_if_anchor_open anchor_target in
+  if not toggled_closed then close_all ();
   let id = !next_id + 1 in
   let view context parent =
     let sched = context.Lui_ui.ui_scheduler in
@@ -560,7 +571,7 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
       ~on_dismiss:(fun _ -> close_entry id)
       [ wrap ] context parent
   in
-  ignore (push ~anchor:anchor_target view)
+  if not toggled_closed then ignore (push ~anchor:anchor_target view)
 
 let show_code_language_picker ~anchor ~languages ~on_choose =
   let items = List.map (fun name ->
