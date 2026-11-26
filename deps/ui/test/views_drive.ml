@@ -984,6 +984,9 @@ let configured_journal_queries (h : (_, _) Shared_scenarios_views.host) ~before_
     S.press mounted (Option.get (header mounted)).M.id;
     check "Expanding a configured query renders its real result block and count"
       (marker mounted && List.exists (fun n -> M.string_prop n "text"=Some "1 result") (M.all_nodes mounted.S.tree));
+    S.press mounted (Option.get (header mounted)).M.id;
+    check "Recollapsing a configured query hides its result block"
+      (not (marker mounted));
     check "Built-in journal query results request no containing-page grouping"
       (!contexts<>[] && List.for_all (fun context -> W.get context "group-by-property-ident"=None) !contexts);
     check "Journal query headings are plain foldable rows with an expanding title and separate count"
