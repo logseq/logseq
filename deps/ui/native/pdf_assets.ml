@@ -121,6 +121,10 @@ let invoke_for context name args =
 
 let entity_for context ref_wire = invoke_for context "entity" [ ref_wire ]
 
+let q_for context query inputs =
+  invoke_for context "q" [ W.Array ([ W.String query ] @ inputs) ]
+
+
 let apply_for context ?(opts = W.Map []) ops =
   let opts =
     match opts, context.history with
@@ -410,11 +414,8 @@ let goto_asset_block uuid =
 (* ---------- area image capture + persist ---------- *)
 
 (* cljs editor-assets db-based-save-assets! {:pdf-area? true} — write
-   assets/<uuid>.png, insert an asset block into today's journal *)
+   assets/<uuid>.png and insert an asset block under the Asset class page *)
 let save_area_png ~context (png : Bytes.t) : int Js.Promise.t =
-  let journal_page () =
-    invoke_for context "get-journal-page-by-day" [ W.Int context.journal_day ]
-  in
   let uuid = Platform.random_uuid () in
   let* checksum = Asset_store.sha256_hex png in
   let* () =
@@ -422,22 +423,11 @@ let save_area_png ~context (png : Bytes.t) : int Js.Promise.t =
       ~u8:png
   in
   let size = Bytes.length png in
-  let* w =
-    let* w = journal_page () in
-    match W.map_get_uuid w "block/uuid" with
-    | Some _ -> Js.Promise.resolve w
-    | None ->
-        let* () =
-          apply_for context
-            [ Outliner_ops.op "create-page"
-                [ W.String context.journal_title
-                ; W.Map
-                    [ W.Keyword "today-journal?", W.Bool true
-                    ; W.Keyword "split-namespace?", W.Bool false ] ] ]
-        in
-        journal_page ()
+  let* asset_page =
+    invoke_for context "pull"
+      [ W.String "[:block/uuid]"; W.Keyword "logseq.class/Asset" ]
   in
-  match W.map_get_uuid w "block/uuid" with
+  match W.map_get_uuid asset_page "block/uuid" with
   | Some page_uuid ->
       let bm =
         W.Map
@@ -457,11 +447,15 @@ let save_area_png ~context (png : Bytes.t) : int Js.Promise.t =
           [ Outliner_ops.insert_blocks ~bottom:true [ bm ] page_uuid
               ~sibling:false ]
       in
-      let* e = entity_for context (Properties_data.uuid_ref uuid) in
-      (match entity_dbid e with
+      let* dbid =
+        q_for context
+          "[:find ?e . :in $ ?uuid :where [?e :block/uuid ?uuid]]"
+          [ W.Uuid uuid ]
+      in
+      (match W.as_int dbid with
        | Some id -> Js.Promise.resolve id
        | None -> Js.Promise.reject (Failure "PDF area asset was not created"))
-  | None -> Js.Promise.reject (Failure "PDF area journal was not created")
+  | None -> Js.Promise.reject (Failure "PDF asset class page is missing")
 
 (* the on-disk path an area hl's image asset resolves to (content.image
    is the asset block's db/id) *)

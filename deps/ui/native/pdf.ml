@@ -237,16 +237,19 @@ let add_area_hl (j : J.t) =
       in
       let hl = hl_of_json j in
       ignore
-        (let* context = context in
+        ((let* context = context in
          let png = Bytes.of_string (Transit.base64_decode b64) in
          let* db_id = Pdf_assets.save_area_png ~context png in
          let hl =
            { hl with
              Model.hl_image = Some (Int64.of_int db_id) }
          in
-         let* () = Pdf_assets.copy_hl_ref_for context accepted.asset hl in
          if context.current () then update_hls (fun hls -> hls @ [ hl ]);
+         let* () = Pdf_assets.copy_hl_ref_for context accepted.asset hl in
          Js.Promise.resolve ())
+        |> Js.Promise.catch (fun e ->
+               Platform.console_error ("pdf area annotation write failed", e);
+               Js.Promise.resolve ()))
   | _ -> ()
 
 let del_hl id =
@@ -300,8 +303,12 @@ let set_flag name value =
 
 let set_mode name on =
   (match name with
-   | "area" -> Pdf_state.area_mode := on
-   | "highlight" -> Pdf_state.highlight_mode := on
+   | "area" ->
+       Pdf_state.area_mode := on;
+       if on then Pdf_state.highlight_mode := false
+   | "highlight" ->
+       Pdf_state.highlight_mode := on;
+       if on then Pdf_state.area_mode := false
    | _ -> ());
   update_view (fun v -> { v with rev = v.rev + 1 })
 
@@ -468,16 +475,16 @@ let viewer_el : Lui_elements.t =
              (hls/page/scale/modes/flags) and receives annotation events *)
           (* TODO(component): logseq-pdf native extension widget —
              events + on_dom_event have no component equivalent *)
-          Ui_components.with_props [ Ui_components.Prop.grow 1. ]
-          (Logseq_el.el ~tag:"pdf"
+          Logseq_el.el ~tag:"pdf"
             ~events
             ~on_dom_event
+            ~ext_props:[ "grow", Lui_protocol.FloatValue 1. ]
             ~attrs_signal_v:
               (Logseq_el.attrs_signal view_s (fun vo ->
                    match vo with
                    | Some v -> attrs_of_view v
                    | None -> [ "path", a.Model.pdf_url ]))
-            [])) (asset_signal context))
+            []) (asset_signal context))
     context parent
 
 let container_el ~key ~id : Lui_elements.t =
