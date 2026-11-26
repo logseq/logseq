@@ -108,6 +108,13 @@ For a macOS Logseq bundle, copy [Info.plist](Info.plist) into
 `Contents/Resources/img/` for the Settings theme thumbnails. Keep the native
 libraries from the tested build.
 
+The Linux builder downloads the pinned pdfium-binaries `chromium/8179` archive
+(checksum-verified, cached under `deps/ui/_build/pdfium`) and installs
+`lib/libpdfium.so` beside `bin/LogseqNative`, with its licenses under
+`Resources/licenses/pdfium`. The host loads `PDFIUM_LIBRARY` when set, then
+the bundled `../lib/libpdfium.so`, then `libpdfium.so` from the loader path.
+Only Linux x86_64 has a pinned archive.
+
 Copy `resources/dicts/*.edn` to `Contents/Resources/dicts/`, preserving their
 filenames. English remains embedded; the selected non-English dictionary loads
 from this directory before the first view is constructed. Missing or malformed
