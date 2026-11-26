@@ -49,7 +49,7 @@ End users do not need to install SDL3. Credential requests use the macOS Keychai
 currently reports credential storage as unsupported instead of leaving promises pending.
 
 Linux needs the development packages listed in the workflow, including
-Pango, Cairo, Fontconfig, SDL3, OpenGL, SQLite, libjpeg, libffi, and GMP.
+Pango, Cairo, Fontconfig, SDL3, OpenGL, SQLite, libjpeg, libwebp, libffi, and GMP.
 On macOS, install `pkg-config sqlite3 sdl3 libffi gmp` with Homebrew.
 Select Xcode 16.2 or a newer supported SDK before installing the OCaml
 dependencies. The current LUI Metal backend uses `MTLCompileOptions.mathMode`,
