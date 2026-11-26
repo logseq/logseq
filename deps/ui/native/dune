@@ -289,9 +289,9 @@
 
 (rule
  (target katex_bundle.ml)
- (deps katex.min.js katex_layout.js)
+ (deps katex.min.js katex_font_metrics.js katex_layout.js)
  (action
-  (run %{exe:../tools/katex_gen.exe} %{dep:katex.min.js} %{dep:katex_layout.js} %{target})))
+  (run %{exe:../tools/katex_gen.exe} %{dep:katex.min.js} %{dep:katex_font_metrics.js} %{dep:katex_layout.js} %{target})))
 
 (library
  (name logseq_ui_native)
