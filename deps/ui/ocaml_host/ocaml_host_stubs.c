@@ -3312,7 +3312,8 @@ CAMLprim value logseq_native_decode_platform(value encoded_v) {
     if (!source || CGImageSourceGetStatus(source) != kCGImageStatusComplete) {
       error = "Incomplete or malformed image"; break;
     }
-    properties = CGImageSourceCopyPropertiesAtIndex(source, 0, NULL);
+    size_t image_index = CGImageSourceGetPrimaryImageIndex(source);
+    properties = CGImageSourceCopyPropertiesAtIndex(source, image_index, NULL);
     if (!properties) { error = "Missing image dimensions"; break; }
     CFTypeRef property_width = CFDictionaryGetValue(properties, kCGImagePropertyPixelWidth);
     CFTypeRef property_height = CFDictionaryGetValue(properties, kCGImagePropertyPixelHeight);
@@ -3326,6 +3327,7 @@ CAMLprim value logseq_native_decode_platform(value encoded_v) {
       error = "Invalid image dimensions"; break;
     }
     int64_t maximum_dimension = original_width > original_height ? original_width : original_height;
+    if (maximum_dimension > 16384) maximum_dimension = 16384;
     maximum = CFNumberCreate(kCFAllocatorDefault, kCFNumberSInt64Type, &maximum_dimension);
     const void *keys[] = {kCGImageSourceCreateThumbnailFromImageAlways,
       kCGImageSourceCreateThumbnailWithTransform, kCGImageSourceThumbnailMaxPixelSize,
@@ -3335,7 +3337,7 @@ CAMLprim value logseq_native_decode_platform(value encoded_v) {
     options = CFDictionaryCreate(kCFAllocatorDefault, keys, values, 4,
       &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
     if (!options) { out_of_memory = 1; break; }
-    image = CGImageSourceCreateThumbnailAtIndex(source, 0, options);
+    image = CGImageSourceCreateThumbnailAtIndex(source, image_index, options);
     if (!image) { error = "Cannot decode image"; break; }
     width = CGImageGetWidth(image); height = CGImageGetHeight(image);
     if (!width || !height || width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
