@@ -316,9 +316,10 @@
         var offset = em(ws.marginLeft);
         var stretchChild = has(child, "frac-line") || has(child, "overline-line") ||
           has(child, "underline-line") || has(child, "hline") || has(child, "hide-tail") || isLine(child) || isStretchySvg(child);
-        if (!stretchChild && ctx.align === "center") offset += Math.max(0, (ctx.width - childWidth) / 2);
-        else if (!stretchChild && ctx.align === "right") offset += Math.max(0, ctx.width - childWidth);
-        var nextCtx = {width: ctx.width, align: ctx.align, svgHeight: ctx.svgHeight};
+        var rowAlign = has(wrapper, "svg-align") ? "left" : ctx.align;
+        if (!stretchChild && rowAlign === "center") offset += Math.max(0, (ctx.width - childWidth) / 2);
+        else if (!stretchChild && rowAlign === "right") offset += Math.max(0, ctx.width - childWidth);
+        var nextCtx = {width: ctx.width, align: rowAlign, svgHeight: ctx.svgHeight};
         if (has(child, "hide-tail")) nextCtx.svgHeight = em((child.style || {}).height) || node.height || 1;
         layout(child, x + offset, childBaseline, out, nextCtx);
       }
