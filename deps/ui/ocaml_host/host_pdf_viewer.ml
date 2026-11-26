@@ -318,7 +318,7 @@ let highlight_at attrs geom x y =
     | [] -> None
   in
   match attrs.hls_json with
-  | `List items -> first items
+  | `List items -> first (List.rev items)
   | _ -> None
 
 let button_rects ctx r =
@@ -522,7 +522,7 @@ let hit_button ctx frame x y =
 
 let change_scale attrs current_fit delta =
   let current = Option.value (numeric_scale attrs.scale_text) ~default:current_fit in
-  let next = Float.max 0.25 (Float.min 5. (current *. delta)) in
+  let next = Float.max 0.05 (Float.min 5. (current *. delta)) in
   Printf.sprintf "\"scale\":\"%.2f\"" next
 
 let master_rect_json geom x1 y1 x2 y2 =
