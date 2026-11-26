@@ -17,14 +17,14 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "flags=$(pkg-config --cflags sdl3) || exit; case '%{system}' in linux) flags=\"$flags $(pkg-config --cflags fontconfig)\" || exit;; esac; printf '(%s)' \"$flags\""))))
+    "flags=$(pkg-config --cflags sdl3) || exit; case '%{system}' in linux) fontconfig_flags=$(pkg-config --cflags fontconfig) || exit; jpeg_flags=$(pkg-config --cflags libjpeg) || exit; flags=\"$flags $fontconfig_flags $jpeg_flags\";; esac; printf '(%s)' \"$flags\""))))
 
 (rule
  (target host_link_flags.sexp)
  (action
   (with-stdout-to %{target}
    (bash
-    "printf '('; case '%{system}' in macosx) printf ' -cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib PDFKit -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface';; linux) flags=$(pkg-config --libs fontconfig) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ' -cclib -ldl';; esac; flags=$(pkg-config --libs sdl3) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')'"))))
+    "printf '('; case '%{system}' in macosx) printf ' -cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib PDFKit -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface';; linux) flags=$(pkg-config --libs fontconfig) || exit; jpeg_flags=$(pkg-config --libs libjpeg) || exit; flags=\"$flags $jpeg_flags\"; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ' -cclib -ldl';; esac; flags=$(pkg-config --libs sdl3) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')'"))))
 
 (rule
  (copy ../native/native_embed.ml native_embed.ml))

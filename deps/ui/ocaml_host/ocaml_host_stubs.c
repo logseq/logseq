@@ -18,7 +18,14 @@
 
 #include <stdlib.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <string.h>
 #include <SDL3/SDL.h>
+#if defined(__linux__)
+#include <jpeglib.h>
+#include <setjmp.h>
+#endif
 #if defined(__APPLE__)
 #include <Security/Security.h>
 #endif
@@ -3089,6 +3096,197 @@ CAMLprim value logseq_native_reduced_motion(value unit_v) {
 #endif
 }
 
+#if defined(__linux__)
+struct logseq_jpeg_error {
+  struct jpeg_error_mgr base;
+  jmp_buf jump;
+  char message[JMSG_LENGTH_MAX];
+};
+
+struct logseq_jpeg_decode_state {
+  struct jpeg_decompress_struct decoder;
+  struct logseq_jpeg_error error;
+  unsigned char *pixels;
+  unsigned char *row;
+};
+
+static void logseq_jpeg_error_exit(j_common_ptr cinfo) {
+  struct logseq_jpeg_error *error = (struct logseq_jpeg_error *)cinfo->err;
+  (*cinfo->err->format_message)(cinfo, error->message);
+  longjmp(error->jump, 1);
+}
+
+static void logseq_jpeg_output_message(j_common_ptr cinfo) {
+  (void)cinfo;
+}
+
+static uint16_t logseq_exif_u16(const unsigned char *at, int little) {
+  return little ? (uint16_t)(at[0] | (at[1] << 8))
+                : (uint16_t)((at[0] << 8) | at[1]);
+}
+
+static uint32_t logseq_exif_u32(const unsigned char *at, int little) {
+  return little ? (uint32_t)at[0] | ((uint32_t)at[1] << 8) |
+           ((uint32_t)at[2] << 16) | ((uint32_t)at[3] << 24)
+                : ((uint32_t)at[0] << 24) | ((uint32_t)at[1] << 16) |
+           ((uint32_t)at[2] << 8) | (uint32_t)at[3];
+}
+
+/* Read EXIF orientation without trusting marker or TIFF offsets. Invalid or
+   absent metadata means orientation 1, matching browser/Image I/O behavior. */
+static int logseq_jpeg_exif_orientation(const unsigned char *data, size_t length) {
+  if (length < 4 || data[0] != 0xff || data[1] != 0xd8) return 1;
+  size_t position = 2;
+  while (position + 4 <= length) {
+    if (data[position] != 0xff) break;
+    while (position < length && data[position] == 0xff) position++;
+    if (position >= length) break;
+    unsigned char marker = data[position++];
+    if (marker == 0xd8 || marker == 0x01 || (marker >= 0xd0 && marker <= 0xd7))
+      continue;
+    if (marker == 0xd9 || marker == 0xda || position + 2 > length) break;
+    size_t segment_length = ((size_t)data[position] << 8) | data[position + 1];
+    if (segment_length < 2 || segment_length > length - position) break;
+    const unsigned char *payload = data + position + 2;
+    size_t payload_length = segment_length - 2;
+    if (marker == 0xe1 && payload_length >= 14 &&
+        memcmp(payload, "Exif\0\0", 6) == 0) {
+      const unsigned char *tiff = payload + 6;
+      size_t tiff_length = payload_length - 6;
+      int little;
+      if (tiff[0] == 'I' && tiff[1] == 'I') little = 1;
+      else if (tiff[0] == 'M' && tiff[1] == 'M') little = 0;
+      else return 1;
+      if (logseq_exif_u16(tiff + 2, little) != 42) return 1;
+      uint32_t ifd = logseq_exif_u32(tiff + 4, little);
+      if ((uint64_t)ifd + 2 > tiff_length) return 1;
+      uint16_t entries = logseq_exif_u16(tiff + ifd, little);
+      for (uint16_t index = 0; index < entries; index++) {
+        uint64_t entry_offset = (uint64_t)ifd + 2 + (uint64_t)index * 12;
+        if (entry_offset + 12 > tiff_length) break;
+        const unsigned char *entry = tiff + entry_offset;
+        if (logseq_exif_u16(entry, little) == 0x0112 &&
+            logseq_exif_u16(entry + 2, little) == 3 &&
+            logseq_exif_u32(entry + 4, little) == 1) {
+          int orientation = logseq_exif_u16(entry + 8, little);
+          return orientation >= 1 && orientation <= 8 ? orientation : 1;
+        }
+      }
+      return 1;
+    }
+    position += segment_length;
+  }
+  return 1;
+}
+
+static void logseq_jpeg_fail(struct logseq_jpeg_error *error, const char *message) {
+  snprintf(error->message, sizeof(error->message), "%s", message);
+  longjmp(error->jump, 1);
+}
+
+/* Decode with the system libjpeg and transform to display orientation while
+   copying rows. JPEG has no alpha channel, so opaque RGBA is already the
+   premultiplied representation. Decode state lives outside the setjmp frame:
+   automatic variables modified before a longjmp are indeterminate after it. */
+static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_length,
+    unsigned char **pixels_out, size_t *width_out, size_t *height_out,
+    size_t *size_out, char *error_out, size_t error_size) {
+  struct logseq_jpeg_decode_state *state = calloc(1, sizeof(*state));
+  if (!state) {
+    snprintf(error_out, error_size, "Cannot allocate JPEG decoder");
+    return -1;
+  }
+
+  state->decoder.err = jpeg_std_error(&state->error.base);
+  state->error.base.error_exit = logseq_jpeg_error_exit;
+  state->error.base.output_message = logseq_jpeg_output_message;
+  state->error.message[0] = '\0';
+  if (setjmp(state->error.jump)) {
+    snprintf(error_out, error_size, "%s",
+      state->error.message[0] ? state->error.message : "Cannot decode JPEG");
+    /* libjpeg keeps mem NULL until its memory manager is usable, so destroy
+       is safe even when initialization raised partway through creation. */
+    jpeg_destroy_decompress(&state->decoder);
+    free(state->row);
+    free(state->pixels);
+    free(state);
+    return -1;
+  }
+
+  jpeg_create_decompress(&state->decoder);
+  jpeg_mem_src(&state->decoder, data, data_length);
+  jpeg_read_header(&state->decoder, TRUE);
+  state->decoder.out_color_space = JCS_RGB;
+  jpeg_start_decompress(&state->decoder);
+
+  size_t source_width = state->decoder.output_width;
+  size_t source_height = state->decoder.output_height;
+  int components = state->decoder.output_components;
+  if (!source_width || !source_height || (components != 1 && components != 3))
+    logseq_jpeg_fail(&state->error, "Unsupported JPEG dimensions or color channels");
+  int orientation = logseq_jpeg_exif_orientation(data, data_length);
+  int transpose = orientation >= 5;
+  size_t width = transpose ? source_height : source_width;
+  size_t height = transpose ? source_width : source_height;
+  if (width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
+      width > Max_long || height > Max_long)
+    logseq_jpeg_fail(&state->error, "JPEG bitmap dimensions overflow");
+  size_t size = width * height * 4;
+  if (size > Max_long)
+    logseq_jpeg_fail(&state->error, "JPEG bitmap size overflow");
+  if (source_width > SIZE_MAX / (size_t)components)
+    logseq_jpeg_fail(&state->error, "JPEG scanline size overflow");
+  size_t row_size = source_width * (size_t)components;
+
+  state->pixels = calloc(1, size);
+  state->row = malloc(row_size);
+  if (!state->pixels || !state->row)
+    logseq_jpeg_fail(&state->error, "Cannot allocate JPEG bitmap");
+
+  while (state->decoder.output_scanline < state->decoder.output_height) {
+    JSAMPROW rows[1] = { state->row };
+    size_t y = state->decoder.output_scanline;
+    if (jpeg_read_scanlines(&state->decoder, rows, 1) != 1)
+      logseq_jpeg_fail(&state->error, "Incomplete JPEG scanline data");
+    for (size_t x = 0; x < source_width; x++) {
+      const unsigned char *source = state->row + x * (size_t)components;
+      unsigned char red = source[0];
+      unsigned char green = components == 1 ? source[0] : source[1];
+      unsigned char blue = components == 1 ? source[0] : source[2];
+      size_t dx, dy;
+      switch (orientation) {
+      case 2: dx = source_width - 1 - x; dy = y; break;
+      case 3: dx = source_width - 1 - x; dy = source_height - 1 - y; break;
+      case 4: dx = x; dy = source_height - 1 - y; break;
+      case 5: dx = y; dy = x; break;
+      case 6: dx = source_height - 1 - y; dy = x; break;
+      case 7: dx = source_height - 1 - y; dy = source_width - 1 - x; break;
+      case 8: dx = y; dy = source_width - 1 - x; break;
+      default: dx = x; dy = y; break;
+      }
+      unsigned char *target = state->pixels + (dy * width + dx) * 4;
+      target[0] = red;
+      target[1] = green;
+      target[2] = blue;
+      target[3] = 255;
+    }
+  }
+
+  if (!jpeg_finish_decompress(&state->decoder))
+    logseq_jpeg_fail(&state->error, "Incomplete JPEG image data");
+  if (state->error.base.num_warnings > 0)
+    logseq_jpeg_fail(&state->error, "Truncated or corrupt JPEG data");
+  jpeg_destroy_decompress(&state->decoder);
+  free(state->row);
+  *pixels_out = state->pixels;
+  *width_out = width;
+  *height_out = height;
+  *size_out = size;
+  free(state);
+  return 0;
+}
+#endif
+
 /* Image I/O owns its input and decoding objects entirely within the worker
    call. Only a tightly packed, top-left RGBA bitmap crosses into OCaml. */
 CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
@@ -3177,7 +3375,30 @@ CAMLprim value logseq_native_decode_jpeg(value encoded_v) {
   Store_field(result_v, 1, Val_long(height));
   Store_field(result_v, 2, pixels_v);
   CAMLreturn(result_v);
+#elif defined(__linux__)
+  unsigned char *pixels = NULL;
+  size_t width = 0, height = 0, size = 0;
+  size_t encoded_length = caml_string_length(encoded_v);
+  unsigned char *encoded = malloc(encoded_length ? encoded_length : 1);
+  if (!encoded) caml_raise_out_of_memory();
+  memcpy(encoded, Bytes_val(encoded_v), encoded_length);
+  char error[JMSG_LENGTH_MAX];
+  error[0] = '\0';
+  caml_enter_blocking_section();
+  int status = logseq_decode_jpeg_linux(
+    encoded, encoded_length,
+    &pixels, &width, &height, &size, error, sizeof(error));
+  caml_leave_blocking_section();
+  free(encoded);
+  if (status != 0) caml_failwith(error[0] ? error : "Cannot decode JPEG");
+  pixels_v = caml_alloc_initialized_string(size, (const char *)pixels);
+  free(pixels);
+  result_v = caml_alloc_tuple(3);
+  Store_field(result_v, 0, Val_long(width));
+  Store_field(result_v, 1, Val_long(height));
+  Store_field(result_v, 2, pixels_v);
+  CAMLreturn(result_v);
 #else
-  caml_failwith("JPEG platform decoding requires macOS");
+  caml_failwith("JPEG platform decoding is unsupported on this platform");
 #endif
 }

@@ -169,7 +169,7 @@ let oriented_jpeg encoded orientation =
   Bytes.set_uint8 header 28 orientation;
   Bytes.concat Bytes.empty [Bytes.sub encoded 0 2;header;Bytes.sub encoded 2 (Bytes.length encoded-2)]
 
-let () = if Host_platform.is_macos then begin
+let () = begin
   let errors=ref [] in
   let expect message condition=if not condition then errors:=message::!errors in
   let colors=[|(240,20,30);(20,220,40);(30,40,230);(230,220,30)|] in
@@ -226,7 +226,10 @@ let () = if Host_platform.is_macos then begin
       Lui_store.apply_batch store initial;Host_images.sync_batch images store initial;
       ignore (pump ());Host.drain ();
       expect "Truncated and malformed JPEG reject without a bitmap" (Host_images.image_of images 1=None)))
-    [Bytes.sub (jpeg_baseline ()) 0 200;bytes_of_hex "ffd8ffe000104a46494600"];
+    (let without_end_marker encoded = Bytes.sub encoded 0 (Bytes.length encoded - 2) in
+     let strict_truncation = if Host_platform.is_macos then [] else [without_end_marker (jpeg_baseline ())] in
+     [Bytes.sub (jpeg_baseline ()) 0 200] @ strict_truncation @
+     [bytes_of_hex "ffd8ffe000104a46494600"]);
   let path=Filename.temp_file "native-jpeg-file" ".jpg" in
   Fun.protect ~finally:(fun () -> Sys.remove path) (fun () ->
     Out_channel.with_open_bin path (fun output -> output_bytes output (jpeg_baseline ()));
