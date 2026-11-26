@@ -543,6 +543,8 @@ let shell_contents (ms : Model.t Signal.signal) : t =
            [ row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
                (if Pdf.popout_mode () then
                   [Pdf.container_el ~key:"asc" ~id:"app-single-container";
+                   if_ ~test:(reactive (fun asset -> asset = None) (Pdf.asset_signal context))
+                     (right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms));
                    Host_metrics.panel ()]
                 else
                   [Pdf.container_el ~key:"asc" ~id:"app-single-container";

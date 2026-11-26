@@ -323,10 +323,9 @@ let update_hl_block (hl : Model.hl) =
 let del_ref_block (hl : Model.hl) =
   match hl.hl_id with
   | Some uuid ->
-      ignore
-        (Outliner_ops.apply_and_refresh
-           [ Outliner_ops.delete_blocks [ uuid ] ])
-  | None -> ()
+      Outliner_ops.apply_and_refresh
+        [ Outliner_ops.delete_blocks [ uuid ] ]
+  | None -> Js.Promise.resolve ()
 
 (* cljs copy-hl-ref! — ensure the ref block exists, then copy [[uuid]].
    DB graphs treat Pdf-annotation entities as page refs; ((uuid)) stays
@@ -348,12 +347,14 @@ let copy_hl_ref (hl : Model.hl) =
   | None -> ()
 
 (* cljs goto-block-ref! — open the ref block's page *)
-let goto_block_ref_for context asset (hl : Model.hl) =
+let goto_block_ref_for ?(close_after = false) context asset (hl : Model.hl) =
   match hl.hl_id with
   | Some id ->
       let* () = ensure_ref_block ~context asset hl in
-      if context.current () then
+      if context.current () then begin
         Platform.set_location_hash (Runtime.nav_hash ("#/page/" ^ id));
+        if close_after then Pdf_state.set_current None
+      end;
       Js.Promise.resolve ()
   | None -> Js.Promise.resolve ()
 

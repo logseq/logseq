@@ -219,7 +219,10 @@ let current_graph_uuid : string option ref = ref None
 (* append ?graph-id=<uuid> to an in-app hash route when the uuid is known *)
 let nav_hash route =
   match !current_graph_uuid with
-  | Some u when u <> "" -> route ^ "?graph-id=" ^ u
+  | Some u when u <> "" ->
+      route
+      ^ (if String.index_opt route '?' = None then "?" else "&")
+      ^ "graph-id=" ^ u
   | _ -> route
 
 (* add the missing graph-id to the current hash without firing hashchange *)
