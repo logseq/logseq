@@ -52,18 +52,20 @@ let list_graphs () =
   boot_mark "list-db replied";
   Js.Promise.resolve (Decode.repos_of_list_db w)
 
-let open_graph repo =
-  Editor_actions.after_pending_input (fun () ->
-  (* cljs theme.cljs effect [current-repo]: pdf viewer resets when the
-     repo changes *)
-  Pdf_state.set_current None;
-  boot_mark "create-or-open issued";
-  let* _ =
-    Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
-      (Wire.Map [])
+let open_graph ?(drain = true) repo =
+  let open_db () =
+    (* cljs theme.cljs effect [current-repo]: pdf viewer resets when the
+       repo changes *)
+    Pdf_state.set_current None;
+    boot_mark "create-or-open issued";
+    let* _ =
+      Runtime.invoke2 "thread-api/create-or-open-db" (Wire.String repo)
+        (Wire.Map [])
+    in
+    boot_mark "create-or-open replied";
+    Sdk_config.read_config repo
   in
-  boot_mark "create-or-open replied";
-  Sdk_config.read_config repo)
+  if drain then Editor_actions.after_pending_input open_db else open_db ()
 
 (* cljs events.cljs <build-search-index!: on graph open the frontend asks
    the worker to build blocks_fts; seed entities (Library etc.) only reach

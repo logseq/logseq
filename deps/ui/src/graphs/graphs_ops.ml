@@ -157,7 +157,7 @@ let navigate_journal ?(drain = true) repo =
     if !nav_req <> seq then Js.Promise.resolve ()
     else begin
       Graphs_meta.touch repo;
-      let* config = Graph.open_graph repo in
+      let* config = Graph.open_graph ~drain repo in
       let* () = Boot.ensure_today_journal repo in
       let commit () =
         if !nav_req = seq then begin
