@@ -89,7 +89,7 @@ module Host_media = struct
   external media_playing : int -> bool = "logseq_native_media_playing"
   external media_position : int -> int * int = "logseq_native_media_position"
   external media_seek_ratio : int -> float -> unit = "logseq_native_media_seek_ratio"
-  external media_frame : int -> int * int * int * bytes = "logseq_native_media_frame"
+  external media_frame : int -> int -> int * int * int * bytes = "logseq_native_media_frame"
   external media_error : int -> string = "logseq_native_media_error"
 
   type state = {
@@ -288,7 +288,7 @@ module Host_media = struct
         with _ -> ());
         if state.is_video then
           try
-            let width, height, generation, pixels = media_frame state.handle in
+            let width, height, generation, pixels = media_frame state.handle state.generation in
             if width > 0 && height > 0 && generation <> state.generation then begin
               let expected = width * height * 4 in
               if Bytes.length pixels = expected then begin

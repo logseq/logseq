@@ -3418,9 +3418,16 @@ static void logseq_media_sample_frame(LogseqMediaPlayer *player, void *sample) {
   player->generation++;
 }
 
+static int logseq_media_is_closing(LogseqMediaPlayer *player) {
+  pthread_mutex_lock(&player->frame_lock);
+  int closing = player->closing;
+  pthread_mutex_unlock(&player->frame_lock);
+  return closing;
+}
+
 static int logseq_media_new_sample(void *sink, void *userdata) {
   LogseqMediaPlayer *player = userdata;
-  if (player->closing) return 0;
+  if (logseq_media_is_closing(player)) return 0;
   void *sample = logseq_gst.gst_app_sink_pull_sample(sink);
   if (sample) {
     pthread_mutex_lock(&player->frame_lock);
@@ -3433,7 +3440,7 @@ static int logseq_media_new_sample(void *sink, void *userdata) {
 
 static int logseq_media_new_preroll(void *sink, void *userdata) {
   LogseqMediaPlayer *player = userdata;
-  if (player->closing) return 0;
+  if (logseq_media_is_closing(player)) return 0;
   void *sample = logseq_gst.gst_app_sink_pull_preroll(sink);
   if (sample) {
     pthread_mutex_lock(&player->frame_lock);
@@ -3472,7 +3479,9 @@ static void logseq_media_poll(LogseqMediaPlayer *player) {
 
 static void logseq_media_close_player(LogseqMediaPlayer *player) {
   if (!player->used) return;
+  pthread_mutex_lock(&player->frame_lock);
   player->closing = 1;
+  pthread_mutex_unlock(&player->frame_lock);
   if (player->pipeline)
     logseq_gst.gst_element_set_state(player->pipeline, LOGSEQ_GST_STATE_NULL);
   if (player->pipeline) logseq_gst.gst_object_unref(player->pipeline);
@@ -3631,21 +3640,28 @@ CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) {
   CAMLreturn(Val_unit);
 }
 
-CAMLprim value logseq_native_media_frame(value handle_v) {
-  CAMLparam1(handle_v);
+CAMLprim value logseq_native_media_frame(value handle_v, value seen_generation_v) {
+  CAMLparam2(handle_v, seen_generation_v);
   CAMLlocal2(result_v, pixels_v);
   LogseqMediaPlayer *player = logseq_media_player(handle_v);
   if (!player->is_video) caml_invalid_argument("Audio media has no video frame");
   logseq_media_poll(player);
   pthread_mutex_lock(&player->frame_lock);
-  size_t size = player->frame && player->width && player->height
-    ? player->frame_size : 0;
+  unsigned int generation = player->generation;
   size_t width = player->width;
   size_t height = player->height;
-  unsigned int generation = player->generation;
-  pixels_v = caml_alloc_initialized_string(size,
-    size ? (const char *)player->frame : "");
+  size_t size = player->frame && player->width && player->height
+    && generation != (unsigned int)Int_val(seen_generation_v)
+    ? player->frame_size : 0;
+  unsigned char *copy = NULL;
+  if (size) copy = malloc(size);
+  int allocation_failed = size != 0 && copy == NULL;
+  if (copy) memcpy(copy, player->frame, size);
   pthread_mutex_unlock(&player->frame_lock);
+  if (allocation_failed) caml_raise_out_of_memory();
+  pixels_v = caml_alloc_initialized_string(size,
+    size ? (const char *)copy : "");
+  free(copy);
   result_v = caml_alloc_tuple(4);
   Store_field(result_v, 0, Val_int(width));
   Store_field(result_v, 1, Val_int(height));
@@ -3674,7 +3690,7 @@ CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) 
 CAMLprim value logseq_native_media_playing(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_bool(0)); }
 CAMLprim value logseq_native_media_position(value handle_v) { CAMLparam1(handle_v); CAMLlocal1(result_v); result_v = caml_alloc_tuple(2); Store_field(result_v, 0, Val_int(-1)); Store_field(result_v, 1, Val_int(-1)); CAMLreturn(result_v); }
 CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) { CAMLparam2(handle_v, ratio_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_frame(value handle_v) { caml_failwith("Native media playback is unsupported on this platform"); }
+CAMLprim value logseq_native_media_frame(value handle_v, value seen_generation_v) { caml_failwith("Native media playback is unsupported on this platform"); }
 CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v); CAMLreturn(caml_alloc_initialized_string(0, "")); }
 
 #endif
