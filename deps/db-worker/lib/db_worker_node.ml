@@ -792,6 +792,10 @@ let resolve_listening_daemon ~(server : Http_server.server) ~(proxy : proxy)
   let stop =
     make_stop ~proxy ~repo ~server ~stopped ~on_stopped
   in
+  Lifecycle_hooks.on_local_graph_deleted repo (fun () ->
+      ignore
+        (Timers.set_timeout 10 (fun () ->
+             ignore (stop ()))));
   (match !admission with
    | Some rt ->
        E.bind

@@ -768,7 +768,7 @@ let () =
                            File_sys.remove (Filename.concat (db_dir repo) entry))
                          entries))))
           |> Db_worker_effect.map (fun () ->
-             if broadcast_deletion then
+             if broadcast_deletion then begin
                Broadcast.to_clients ~kind:"local-graph-gone"
                  ~transit_payload:
                    (Transit_codec.to_string
@@ -776,6 +776,8 @@ let () =
                          [ Wire.Keyword "local-graph-gone"
                          ; Wire.Map
                              [ (Wire.Keyword "repo", Wire.String repo) ] ]));
+               Lifecycle_hooks.local_graph_deleted repo
+             end;
              Wire.nil))
       | _ -> invalid_arg "unsafe-unlink-db expects repo")
 

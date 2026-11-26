@@ -261,6 +261,15 @@ let spawn_daemon (repo : string) : string =
   in
   Unix.close devnull;
   Unix.close log_fd;
+  (* Reap daemon children that exit while this host is still running;
+     the waiter does not otherwise affect the daemon's intentional
+     independent lifetime. *)
+  ignore
+    (Thread.create
+       (fun () ->
+          try ignore (Unix.waitpid [] pid)
+          with Unix.Unix_error _ -> ())
+       ());
   (* poll server-list for our pid *)
   let deadline = Unix.gettimeofday () +. 15. in
   let rec poll () =
