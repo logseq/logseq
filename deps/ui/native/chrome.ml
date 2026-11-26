@@ -373,11 +373,11 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
       (reactive
          (fun (m : Model.t) fraction viewport ->
            if m.Model.right_sidebar_open && viewport>=640. then
-             let left =
-               if Sidebar_state.left_docked m.Model.left_sidebar_open viewport
-               then Runtime.signal_get st.Sidebar_state.left_width else 0. in
-             let max_fraction = Float.max 0. ((viewport -. left -. 180.) /. viewport) in
-             Fraction (1. -. Float.min fraction max_fraction)
+             Fraction
+               (1. -. Sidebar_state.effective_right_fraction
+                  ~left_open:m.Model.left_sidebar_open
+                  ~left_width:(Runtime.signal_get st.Sidebar_state.left_width)
+                  ~viewport fraction)
            else Fraction 1.)
          ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
     ~motion:{duration_ms=300; easing=`standard; origin=None}

@@ -793,11 +793,17 @@ let sidebar_item ?search st idx (it : Sidebar_state.item) =
    docked track animates to/from ~0 the inner column keeps its
    expanded layout and is clipped by the pane's overflow:hidden
    (slide-out) instead of reflowing/shrinking its text *)
-let inner st =
+let inner st ms =
   Ui_parts.int_prop Lui_protocol.MinWidth
-    ~value:(reactive (fun rf vw -> int_of_float (Float.round (rf *. vw)))
+    ~value:(reactive (fun (m : Model.t) rf vw lw ->
+         int_of_float
+           (Float.round
+              (Sidebar_state.effective_right_fraction
+                 ~left_open:m.Model.left_sidebar_open ~left_width:lw ~viewport:vw rf *. vw)))
+       ms
        (Signal.value st.Sidebar_state.right_fraction)
-       (Signal.value st.Sidebar_state.viewport_w))
+       (Signal.value st.Sidebar_state.viewport_w)
+       (Signal.value st.Sidebar_state.left_width))
     (column ~key:"rs-inner" ~accessibility_identifier:"right-sidebar-container"
        ~grow:1. ~min_height:0
        ~background:"var(--lx-gray-02, var(--ls-secondary-background-color))"
@@ -838,6 +844,6 @@ let render (ms : Model.t Signal.signal) : t =
               (Signal.map
                  (fun (m : Model.t) -> m.Model.right_sidebar_open)
                  ms))
-         (inner st)
+         (inner st ms)
      ])
     ctx parent
