@@ -129,6 +129,7 @@ let png_bytes_with_ink ~dark ~tex ~display =
       let width = max 1 (int_of_float (Float.ceil (layout.width *. unit +. (2. *. pad)))) in
       let height = max 1 (int_of_float (Float.ceil ((layout.height +. layout.depth) *. unit +. (2. *. pad)))) in
       let image = Image.create_rgb ~alpha:true ~max_val:255 width height in
+      Image.fill_rgb ~alpha:0 image 0 0 0;
       let ink = if dark then { r = 235; g = 235; b = 235 } else { r = 32; g = 32; b = 32 } in
       List.iter (fun item ->
         match item with
