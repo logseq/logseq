@@ -3348,13 +3348,15 @@ let run_views ~registry ~profile ~finish =
       let deletion = Graphs_ops.delete_graph first ~remote:false in
       let* () = Js.Promise.resolve () in
       check "Pending graph deletion retains its row and metadata until storage completes"
-        (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
+        (!requests = ["thread-api/unsafe-unlink-db",
+          [Wire.String first; Wire.Map [Wire.kw "broadcast?", Wire.Bool true]]]
          && (!state).repos = [first;last] && Graphs_meta.uuid_of first = Some first
          && (!state).toasts = []);
       (Option.get !unlink_done) Wire.Nil [@u];
       let* () = deletion in
       check "Graph deletion sends the internal repo to storage but displays its name"
-        (!requests = ["thread-api/unsafe-unlink-db",[Wire.String first]]
+        (!requests = ["thread-api/unsafe-unlink-db",
+          [Wire.String first; Wire.Map [Wire.kw "broadcast?", Wire.Bool true]]]
          && (!state).repos = [last] && success_text "Delete fixture"
          && Graphs_meta.uuid_of first = None);
       let rec failures = function
