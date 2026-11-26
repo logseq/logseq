@@ -123,28 +123,41 @@ let png_bytes_with_ink ~dark ~tex ~display =
   match Native_katex.layout ~tex ~display with
   | Error _ -> None
   | Ok layout ->
-      Mutex.lock raster_mutex;
-      Fun.protect ~finally:(fun () -> Mutex.unlock raster_mutex) (fun () ->
-        let scale = 2. in
-        let unit = Native_katex.body_size *. scale in
-        let pad = 4. in
-        let width = max 1 (int_of_float (Float.ceil (layout.width *. unit +. (2. *. pad)))) in
-        let height = max 1 (int_of_float (Float.ceil ((layout.height +. layout.depth) *. unit +. (2. *. pad)))) in
-        let image = Image.create_rgb ~alpha:true ~max_val:255 width height in
-        let ink = if dark then { r = 235; g = 235; b = 235 } else { r = 32; g = 32; b = 32 } in
-        List.iter (fun item ->
-          match item with
-          | Native_katex.Text value -> draw_text image ink ~unit ~pad ~layout_height:layout.height value
-          | Native_katex.Rule value ->
-              let x0 = pad +. (value.Native_katex.rx *. unit) in
-              let x1 = x0 +. (value.rw *. unit) in
-              let y1 = pad +. ((layout.height -. value.ry) *. unit) in
-              let y0 = y1 -. (value.rh *. unit) in
-              fill_rect image ink x0 y0 x1 y1
-          | Native_katex.Svg value -> draw_svg image ink ~unit ~pad ~layout_height:layout.height value)
-          layout.items;
-        let encoded = Buffer.create 4096 in
-        ImageLib.PNG.write (ImageUtil.chunk_writer_of_buffer encoded) image;
-        Some (Buffer.to_bytes encoded))
+      let scale = 2. in
+      let unit = Native_katex.body_size *. scale in
+      let pad = 4. in
+      let width = max 1 (int_of_float (Float.ceil (layout.width *. unit +. (2. *. pad)))) in
+      let height = max 1 (int_of_float (Float.ceil ((layout.height +. layout.depth) *. unit +. (2. *. pad)))) in
+      let image = Image.create_rgb ~alpha:true ~max_val:255 width height in
+      let ink = if dark then { r = 235; g = 235; b = 235 } else { r = 32; g = 32; b = 32 } in
+      List.iter (fun item ->
+        match item with
+        | Native_katex.Text value -> draw_text image ink ~unit ~pad ~layout_height:layout.height value
+        | Native_katex.Rule value ->
+            let x0 = pad +. (value.Native_katex.rx *. unit) in
+            let x1 = x0 +. (value.rw *. unit) in
+            let y1 = pad +. ((layout.height -. value.ry) *. unit) in
+            let y0 = y1 -. (value.rh *. unit) in
+            fill_rect image ink x0 y0 x1 y1
+        | Native_katex.Svg value -> draw_svg image ink ~unit ~pad ~layout_height:layout.height value)
+        layout.items;
+      let encoded = Buffer.create 4096 in
+      ImageLib.PNG.write (ImageUtil.chunk_writer_of_buffer encoded) image;
+      Some (Buffer.to_bytes encoded)
 
-let png_bytes ~dark ~tex ~display = png_bytes_with_ink ~dark ~tex ~display
+let png_cache = Hashtbl.create 64
+
+let png_bytes ~dark ~tex ~display =
+  let key = (dark, tex, display) in
+  Mutex.lock raster_mutex;
+  Fun.protect ~finally:(fun () -> Mutex.unlock raster_mutex) (fun () ->
+    match Hashtbl.find_opt png_cache key with
+    | Some encoded -> Some encoded
+    | None ->
+        let encoded = png_bytes_with_ink ~dark ~tex ~display in
+        (match encoded with
+         | Some bytes ->
+             if Hashtbl.length png_cache >= 128 then Hashtbl.reset png_cache;
+             Hashtbl.add png_cache key bytes
+         | None -> ());
+        encoded)
