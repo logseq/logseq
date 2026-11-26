@@ -154,9 +154,7 @@ let rec el_of (e : Js.Json.t) : Ui_services.el =
   ; checked = (fun () -> Dom_ext.el_checked e)
   ; set_checked = (fun v -> Dom_ext.el_set_checked e v)
   ; contains = (fun other -> Dom_ext.el_contains e (token_el other))
-  ; connected =
-      (fun () -> true)
-      (* a snapshot from the document providers is a mounted node *)
+  ; connected = (fun () -> Dom_ext.connected e)
   ; click = (fun () -> Dom_ext.el_click e)
   ; scroll_into_view = (fun () -> Dom_ext.el_scroll_into_view e)
   ; scroll_into_view_nearest = (fun () -> Dom_ext.el_scroll_into_view e)
