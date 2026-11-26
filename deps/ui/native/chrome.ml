@@ -164,34 +164,46 @@ let rtc_item (ms : Model.t Signal.signal) : t =
       | Some _ -> rtc_item_btn ms)
     ms
 
-(* Window-level titlebar owns the leading controls for the whole
-   session. They must not remount into the left dock — that dock's
-   width animates, and moving the buttons with it is the Devin-style
-   regression (controls slide during toggle). is_open is constantly
-   false so the shared leading_toolbar stays on the header owner. *)
-let leading_toolbar ~key ~state ~controls : t =
- fun context parent ->
-  let inset = Host.titlebar_left_signal
-    ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
-  Ui_components.leading_toolbar ~key ~in_sidebar:false ~safe_area:0
-    ~safe_area_signal:inset ~padding_horizontal:0 ~state
-    ~is_open:(fun _ -> false) ~controls context parent
-
-(* Sidebar and search controls share the leading toolbar. *)
+(* Sidebar and search controls share the fixed leading overlay. *)
 let leading_controls () =
   [ left_menu_btn (); search_btn () ]
 
+(* The header lives inside the center pane like web. Keep its leading
+   controls fixed at the window corner so they do not slide while the
+   left dock animates; reserve their width in the center header only
+   when the dock is closed and the center pane starts at x=0. *)
+let leading_spacer (ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  let inset = Host.titlebar_left_signal
+    ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
+  Ui_parts.int_prop Lui_protocol.WidthValue
+    ~value:(reactive
+       (fun (m : Model.t) inset ->
+          64 + if m.left_sidebar_open then 0 else inset)
+       ms inset)
+    (spacer ~key:"head-leading" ~height:48 ~min_height:48 []) context parent
+
+let leading_overlay (_ms : Model.t Signal.signal) : t =
+ fun context parent ->
+  let inset = Host.titlebar_left_signal
+    ~scheduler:context.Lui_ui.ui_scheduler ~scope:context.Lui_ui.ui_scope in
+  Ui_parts.int_prop Lui_protocol.MarginLeft
+    ~value:(reactive Fun.id inset)
+    (Ui_components.with_props
+       [ Ui_components.Prop.position `fixed
+       ; Ui_components.Prop.inset_top 0.
+       ; Ui_components.Prop.inset_left 0.
+       ; Ui_components.Prop.z_index 30 ]
+       (row ~key:"leading-overlay" ~width:64 ~height:48 ~min_height:48
+          ~cross:`center ~padding_horizontal:0 (leading_controls ()))) context parent
+
 let topbar (ms : Model.t Signal.signal) : t =
  fun context parent ->
-  let controls = leading_controls in
   row ~key:"head" ~accessibility_identifier:"head"
       ~style_class:"cp__header" ~cross:`center ~main:`space_between
       ~height:48 ~min_height:48
-      (* left-sidebar-bg-color stays on the dock only — the window header
-         spans content too and must not carry that strip. *)
       ~data_attrs:[ ("data-window-titlebar", "true") ]
-      [ leading_toolbar ~key:"head-leading" ~state:ms
-          ~controls
+      [ leading_spacer ms
       ; Ui_components.with_props [Ui_components.Prop.overflow `hidden;Ui_components.Prop.padding_right 6]
           (row ~key:"head-acts" ~cross:`center ~grow:1. ~min_width:0 ~main:`end_
             ~style_class:"cp__header-r"
@@ -300,7 +312,10 @@ let left_sidebar (ms : Model.t Signal.signal) : t =
        ~min_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
        ~max_width:(reactive Sidebar_state.left_inner_width (Signal.value st.Sidebar_state.left_width) viewport)
        ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
-       [column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
+       [row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center
+          ~style_class:"left-sidebar-top"
+          [ spacer ~key:"sidebar-leading" [] ]
+       ; column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
           [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
              [Left_sidebar_view.graphs_selector st ms;Left_sidebar_view.nav_group ms st];
            Left_sidebar_view.contents ms]];
@@ -409,6 +424,7 @@ let detail_column (ms : Model.t Signal.signal) : t =
             document events through this extension node *)
          Logseq_el.carrier
        ; hidden_chrome ms
+       ; topbar ms
        ; main_scroll ms ]) context parent
 
 (* Overlay layer — cmdk palette, popups (autocomplete/slash/context
@@ -514,12 +530,14 @@ let shell_contents (ms : Model.t Signal.signal) : t =
  fun context parent ->
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
-    [ column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
-        [ topbar ms; row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
-            [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
-             Pdf.container_el ~key:"asc" ~id:"app-single-container";
-             Host_metrics.panel ()]
-        ; performance_bar () ]
+    [ Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.height_viewport 1.]
+        (column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
+           [ row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
+               [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
+                Pdf.container_el ~key:"asc" ~id:"app-single-container";
+                Host_metrics.panel ()]
+           ; performance_bar () ])
+    ; leading_overlay ms
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->

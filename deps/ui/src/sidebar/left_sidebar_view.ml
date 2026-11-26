@@ -919,7 +919,7 @@ let graphs_selector st (ms : Model.t Signal.signal) : t =
                       ; Ui_components.Prop.min_width 0 ]
                       (text ~key:"gsel-n"
                           ~white_space:`nowrap ~text_overflow:`ellipsis
-                          ~font_weight:500 ~font_size:"var(--text-sm)"
+                          ~font_weight:500 ~font_size:"0.875rem"
                           ~line_height:"1.25rem"
                           ~value:(reactive name_of ms) ~grow:1. [])
                   ; Ui_components.with_props

@@ -1989,3 +1989,28 @@ html[data-theme=light] {
 html[data-theme="dark"] .hljs {
   background: transparent;
 }
+
+/* Logseq master treats list/menu selection as a muted surface state, not
+   the kit's inverted accent treatment. Keep explicit per-row hover props
+   authoritative; this is the shared default for settings rows, keymap
+   rows, select items, and context/dropdown menus on web. */
+.lui-list-item[data-selected],
+.lui-list-item:hover:not(:disabled, [data-disabled], [aria-disabled="true"], [style*="--lui-hover-bg"]) {
+  background: hsl(var(--muted));
+  color: inherit;
+}
+.lui-menu-item[data-selected]:not([data-highlighted]) {
+  background: transparent;
+  color: inherit;
+}
+.lui-menu-item:is(:hover, [data-highlighted], :focus-visible):not([aria-disabled="true"], [data-disabled], [style*="--lui-hover-bg"]) {
+  background: hsl(var(--muted));
+  color: inherit;
+}
+.lui-select:hover:not(:disabled, [data-disabled]),
+.lui-select[aria-expanded="true"]:not(:disabled, [data-disabled]),
+.lui-combobox:hover:not([data-disabled]),
+.lui-combobox:has([aria-expanded="true"]) {
+  background: hsl(var(--muted));
+  color: inherit;
+}

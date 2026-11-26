@@ -1106,7 +1106,7 @@ let styled_menu_item make ?style ?key ?gap ?main ?cross ?grow ?padding ?padding_
     ?margin_right ?margin_bottom ?margin_left ?background
     ?foreground:(Some (default foreground "inherit")) ?border_color ?border_width ?corner_radius:(Some (default corner_radius 4))
     ?width ?height ?min_width ?max_width
-    ?min_height:(Some (default min_height 0)) ?max_height ?container_relative_frame ?container_relative_frame_inset
+    ?min_height ?max_height ?container_relative_frame ?container_relative_frame_inset
     ?accessibility_identifier ?accessibility_identifier_signal ?foreground_signal ?background_signal
     ?style_class ?data_attrs ?data_attrs_signal ?on_appear
     ?on_pointer_enter ?on_pointer_leave ?text ?text_signal
