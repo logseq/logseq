@@ -207,11 +207,11 @@ let ensure_graph_created (repo : string) : unit =
 let attachment_key repo =
   (realpath (root_dir ()), graphs_dir (), realpath (lifecycle_dir ()), repo)
 
-(* (canonical storage, repo) -> base-url of the attached daemon. Daemons
-   outlive the app on purpose: a live daemon keeps its repo admission
-   and the graph open, so a later launch re-attaches in one healthz
-   round-trip instead of paying a cold spawn + graph open. *)
-let attached : (string * string * string * string, string) Hashtbl.t =
+(* (canonical storage, repo) -> pid, port and base-url of the attached
+   daemon. Daemons outlive the app on purpose: a live daemon keeps its
+   repo admission and the graph open, so a later launch re-attaches in
+   one healthz round-trip instead of paying a cold spawn + graph open. *)
+let attached : (string * string * string * string, int * int * string) Hashtbl.t =
   Hashtbl.create 4
 
 (* boot timing: stderr marks carry seconds since module init so launch
@@ -231,7 +231,7 @@ let boot_mark msg =
 (* spawn main.exe for [repo] (canonical "logseq_db_<name>"), wait for it
    to publish its port. Returns base-url. Blocking — caller runs this on
    a systhread. *)
-let spawn_daemon (repo : string) : string =
+let spawn_daemon (repo : string) : int * int * string =
   boot_mark ("spawn_daemon " ^ repo);
   mkdir_p (root_dir ());
   mkdir_p (graphs_dir ());
@@ -256,7 +256,8 @@ let spawn_daemon (repo : string) : string =
        ; "--repo"
        ; repo
        ; "--owner-source"
-       ; "electron" |]
+       ; "electron"
+       ; "--shutdown-on-graph-delete" |]
       devnull log_fd log_fd
   in
   Unix.close devnull;
@@ -278,7 +279,7 @@ let spawn_daemon (repo : string) : string =
         boot_mark
           ("daemon up pid=" ^ string_of_int pid ^ " port="
            ^ string_of_int port);
-        "http://127.0.0.1:" ^ string_of_int port
+        (pid, port, "http://127.0.0.1:" ^ string_of_int port)
     | None ->
         if Unix.gettimeofday () > deadline then
           failwith
@@ -379,7 +380,7 @@ let probe_daemon ~(pid : int) ~(port : int) ~key : bool =
       with _ -> false)
   | _ -> false
 
-let find_live_daemon key : string option =
+let find_live_daemon key : (int * int * string) option =
   let entries = read_server_list () in
   boot_mark ("probe server-list entries="
     ^ string_of_int (List.length entries));
@@ -389,7 +390,7 @@ let find_live_daemon key : string option =
          boot_mark
            ("probe ok pid=" ^ string_of_int pid ^ " port="
             ^ string_of_int port);
-         Some ("http://127.0.0.1:" ^ string_of_int port)
+         Some (pid, port, "http://127.0.0.1:" ^ string_of_int port)
        end else begin
          boot_mark
            ("probe fail pid=" ^ string_of_int pid ^ " port="
@@ -406,9 +407,11 @@ let list_repo_names () : Wire.t list =
   else
     Sys.readdir dir |> Array.to_list
     |> List.filter (fun name ->
+        let path = Filename.concat dir name in
         name <> ""
         && name.[0] <> '.'
-        && Sys.is_directory (Filename.concat dir name))
+        && Sys.is_directory path
+        && Sys.file_exists (Filename.concat path "db.sqlite"))
     |> List.filter_map (fun entry ->
         match Graph_dir.decode_canonical_graph_dir_key entry with
         | Some name when name <> "Unlinked graphs" && name <> "backup" ->
@@ -440,16 +443,17 @@ let ensure_attached (repo : string) : string =
   Fun.protect ~finally:(fun () -> Mutex.unlock attach_mu) (fun () ->
       let key = attachment_key repo in
       match Hashtbl.find_opt attached key with
-      | Some base -> base
-      | None ->
-          let base =
+      | Some (pid, port, base) when probe_daemon ~pid ~port ~key -> base
+      | cached ->
+          if Option.is_some cached then Hashtbl.remove attached key;
+          let pid, port, base =
             match find_live_daemon key with
-            | Some base ->
+            | Some (pid, port, base) ->
                 boot_mark ("reuse daemon " ^ base);
-                base
+                (pid, port, base)
             | None -> spawn_daemon repo
           in
-          Hashtbl.replace attached key base;
+          Hashtbl.replace attached key (pid, port, base);
           record_last_repo repo;
           base)
 
@@ -833,6 +837,16 @@ let sse_thread (t : transport) (host : string) (port : int)
                        | [ p ] -> p
                        | _ -> Wire.Array rest
                      in
+                     if kind = "local-graph-gone" then
+                       (match Wire.get payload "repo" with
+                        | Some (Wire.String deleted_repo) ->
+                            Mutex.lock attach_mu;
+                            Fun.protect
+                              ~finally:(fun () -> Mutex.unlock attach_mu)
+                              (fun () ->
+                                 Hashtbl.remove attached
+                                   (attachment_key deleted_repo))
+                        | _ -> ());
                      let sink = t.sink in
                      Host.enqueue (fun () -> sink kind payload)
                  | _ -> ())
