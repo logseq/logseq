@@ -3108,7 +3108,6 @@ struct logseq_jpeg_decode_state {
   struct logseq_jpeg_error error;
   unsigned char *pixels;
   unsigned char *row;
-  int decoder_created;
 };
 
 static void logseq_jpeg_error_exit(j_common_ptr cinfo) {
@@ -3205,7 +3204,9 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
   if (setjmp(state->error.jump)) {
     snprintf(error_out, error_size, "%s",
       state->error.message[0] ? state->error.message : "Cannot decode JPEG");
-    if (state->decoder_created) jpeg_destroy_decompress(&state->decoder);
+    /* libjpeg keeps mem NULL until its memory manager is usable, so destroy
+       is safe even when initialization raised partway through creation. */
+    jpeg_destroy_decompress(&state->decoder);
     free(state->row);
     free(state->pixels);
     free(state);
@@ -3213,7 +3214,6 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
   }
 
   jpeg_create_decompress(&state->decoder);
-  state->decoder_created = 1;
   jpeg_mem_src(&state->decoder, data, data_length);
   jpeg_read_header(&state->decoder, TRUE);
   state->decoder.out_color_space = JCS_RGB;
