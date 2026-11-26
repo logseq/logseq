@@ -389,8 +389,17 @@ let control_wrap ?on_toggle ?siblings ~scope ~collapse_scope ~library uuid
                  if c && not order_list then Ui_components.block_bullet_ring
                  else "transparent") cs)
                ~data_attrs:
-                 ([ ("data-blockid", uuid); ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
-                  ; ("data-empty-bullet", string_of_bool empty_bullet) ])
+                 (reactive
+                    (fun e ->
+                      let editing =
+                        match e with
+                        | Some e -> e.S.uuid = uuid && e.S.scope = scope
+                        | None -> false
+                      in
+                      [ ("data-blockid", uuid)
+                      ; ("draggable", string_of_bool (not (Ui_services.env_publishing ())))
+                      ; ("data-empty-bullet", string_of_bool (empty_bullet && not editing)) ])
+                    (S.editing_sig ()))
                [ (match node_icon ~library b with
                   | Some icon -> icon_el uuid icon
                   | None when order_list ->
