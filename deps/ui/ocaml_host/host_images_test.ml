@@ -245,6 +245,15 @@ let () = begin
     (match Host_image.decode (Bytes.sub webp 0 (Bytes.length webp - 2)) with
      | Ok _ -> false
      | Error _ -> true);
+  let oriented_webp=bytes_of_hex "5249464640000000574542505650384c110000002f010000000fb0fff31ff31f1532a2ff0100455849461a00000049492a0008000000010012010300010000000600000000000000" in
+  expect "WebP EXIF orientation rotates dimensions and pixels"
+    (match Host_image.decode oriented_webp with
+     | Ok image ->
+       let pixel offset channel = Bytes.get_uint8 image.Lui_scene.ipix (offset + channel) in
+       image.Lui_scene.iw=1 && image.ih=2 &&
+       pixel 0 0 > 200 && pixel 0 1 < 80 &&
+       pixel 4 1 > 200 && pixel 4 0 < 80
+     | Error _ -> false);
   List.iter prerr_endline (List.rev !errors);
   check "Native JPEG decode, orientation, source ownership and local files" (!errors=[]);
   print_endline "native JPEG baseline/progressive, EXIF orientation, grayscale and local file: OK"

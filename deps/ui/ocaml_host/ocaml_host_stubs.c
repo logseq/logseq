@@ -3134,6 +3134,97 @@ static uint32_t logseq_exif_u32(const unsigned char *at, int little) {
            ((uint32_t)at[2] << 8) | (uint32_t)at[3];
 }
 
+static int logseq_tiff_exif_orientation(const unsigned char *tiff, size_t tiff_length) {
+  if (tiff_length < 8) return 1;
+  int little;
+  if (tiff[0] == 'I' && tiff[1] == 'I') little = 1;
+  else if (tiff[0] == 'M' && tiff[1] == 'M') little = 0;
+  else return 1;
+  if (logseq_exif_u16(tiff + 2, little) != 42) return 1;
+  uint32_t ifd = logseq_exif_u32(tiff + 4, little);
+  if ((uint64_t)ifd + 2 > tiff_length) return 1;
+  uint16_t entries = logseq_exif_u16(tiff + ifd, little);
+  for (uint16_t index = 0; index < entries; index++) {
+    uint64_t entry_offset = (uint64_t)ifd + 2 + (uint64_t)index * 12;
+    if (entry_offset + 12 > tiff_length) break;
+    const unsigned char *entry = tiff + entry_offset;
+    if (logseq_exif_u16(entry, little) == 0x0112 &&
+        logseq_exif_u16(entry + 2, little) == 3 &&
+        logseq_exif_u32(entry + 4, little) == 1) {
+      int orientation = logseq_exif_u16(entry + 8, little);
+      return orientation >= 1 && orientation <= 8 ? orientation : 1;
+    }
+  }
+  return 1;
+}
+
+/* The WebP EXIF chunk contains a TIFF stream. Some encoders include the
+   JPEG-style Exif\0\0 prefix even though the container spec does not require
+   it, so accept both forms without trusting chunk sizes or TIFF offsets. */
+static int logseq_webp_exif_orientation(const unsigned char *data, size_t length) {
+  size_t position = 12;
+  while (position + 8 <= length) {
+    size_t chunk_length = (size_t)data[position + 4] |
+      ((size_t)data[position + 5] << 8) |
+      ((size_t)data[position + 6] << 16) |
+      ((size_t)data[position + 7] << 24);
+    size_t payload_offset = position + 8;
+    if (chunk_length > length - payload_offset) break;
+    if (memcmp(data + position, "EXIF", 4) == 0) {
+      const unsigned char *payload = data + payload_offset;
+      size_t payload_length = chunk_length;
+      if (payload_length >= 6 && memcmp(payload, "Exif\0\0", 6) == 0) {
+        payload += 6;
+        payload_length -= 6;
+      }
+      return logseq_tiff_exif_orientation(payload, payload_length);
+    }
+    size_t padded_length = chunk_length + (chunk_length & 1);
+    if (padded_length > length - payload_offset) break;
+    position = payload_offset + padded_length;
+  }
+  return 1;
+}
+
+static int logseq_apply_rgba_orientation(unsigned char **pixels_io,
+    size_t *width_io, size_t *height_io, int orientation,
+    char *error_out, size_t error_size) {
+  if (orientation == 1) return 0;
+  size_t width = *width_io;
+  size_t height = *height_io;
+  size_t size = width * height * 4;
+  unsigned char *source = *pixels_io;
+  unsigned char *transformed = malloc(size);
+  if (!transformed) {
+    snprintf(error_out, error_size, "Cannot allocate oriented WebP bitmap");
+    return -1;
+  }
+  int transpose = orientation >= 5;
+  size_t output_width = transpose ? height : width;
+  for (size_t y = 0; y < height; y++) {
+    for (size_t x = 0; x < width; x++) {
+      size_t dx, dy;
+      switch (orientation) {
+      case 2: dx = width - 1 - x; dy = y; break;
+      case 3: dx = width - 1 - x; dy = height - 1 - y; break;
+      case 4: dx = x; dy = height - 1 - y; break;
+      case 5: dx = y; dy = x; break;
+      case 6: dx = height - 1 - y; dy = x; break;
+      case 7: dx = height - 1 - y; dy = width - 1 - x; break;
+      case 8: dx = y; dy = width - 1 - x; break;
+      default: dx = x; dy = y; break;
+      }
+      memcpy(transformed + (dy * output_width + dx) * 4,
+        source + (y * width + x) * 4, 4);
+    }
+  }
+  free(source);
+  *pixels_io = transformed;
+  *width_io = transpose ? height : width;
+  *height_io = transpose ? width : height;
+  return 0;
+}
+
 /* Read EXIF orientation without trusting marker or TIFF offsets. Invalid or
    absent metadata means orientation 1, matching browser/Image I/O behavior. */
 static int logseq_jpeg_exif_orientation(const unsigned char *data, size_t length) {
@@ -3153,28 +3244,7 @@ static int logseq_jpeg_exif_orientation(const unsigned char *data, size_t length
     size_t payload_length = segment_length - 2;
     if (marker == 0xe1 && payload_length >= 14 &&
         memcmp(payload, "Exif\0\0", 6) == 0) {
-      const unsigned char *tiff = payload + 6;
-      size_t tiff_length = payload_length - 6;
-      int little;
-      if (tiff[0] == 'I' && tiff[1] == 'I') little = 1;
-      else if (tiff[0] == 'M' && tiff[1] == 'M') little = 0;
-      else return 1;
-      if (logseq_exif_u16(tiff + 2, little) != 42) return 1;
-      uint32_t ifd = logseq_exif_u32(tiff + 4, little);
-      if ((uint64_t)ifd + 2 > tiff_length) return 1;
-      uint16_t entries = logseq_exif_u16(tiff + ifd, little);
-      for (uint16_t index = 0; index < entries; index++) {
-        uint64_t entry_offset = (uint64_t)ifd + 2 + (uint64_t)index * 12;
-        if (entry_offset + 12 > tiff_length) break;
-        const unsigned char *entry = tiff + entry_offset;
-        if (logseq_exif_u16(entry, little) == 0x0112 &&
-            logseq_exif_u16(entry + 2, little) == 3 &&
-            logseq_exif_u32(entry + 4, little) == 1) {
-          int orientation = logseq_exif_u16(entry + 8, little);
-          return orientation >= 1 && orientation <= 8 ? orientation : 1;
-        }
-      }
-      return 1;
+      return logseq_tiff_exif_orientation(payload + 6, payload_length - 6);
     }
     position += segment_length;
   }
@@ -3852,6 +3922,11 @@ static int logseq_decode_webp_linux(const unsigned char *data, size_t data_lengt
   if (!logseq_webp.decode_rgba_into(data, data_length, pixels, size, (int)(width * 4))) {
     free(pixels);
     snprintf(error_out, error_size, "Cannot decode WebP image data");
+    return -1;
+  }
+  if (logseq_apply_rgba_orientation(&pixels, &width, &height,
+      logseq_webp_exif_orientation(data, data_length), error_out, error_size) != 0) {
+    free(pixels);
     return -1;
   }
   for (size_t offset = 0; offset < size; offset += 4) {
