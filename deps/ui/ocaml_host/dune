@@ -24,7 +24,7 @@
  (action
   (with-stdout-to %{target}
    (bash
-    "printf '('; case '%{system}' in macosx) printf ' -cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface';; linux) flags=$(pkg-config --libs fontconfig) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done;; esac; flags=$(pkg-config --libs sdl3) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')'"))))
+    "printf '('; case '%{system}' in macosx) printf ' -cclib -lobjc -cclib -framework -cclib CoreGraphics -cclib -framework -cclib CoreFoundation -cclib -framework -cclib Security -cclib -framework -cclib ImageIO -cclib -framework -cclib PDFKit -cclib -framework -cclib QuartzCore -cclib -framework -cclib IOSurface';; linux) flags=$(pkg-config --libs fontconfig) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ' -cclib -ldl';; esac; flags=$(pkg-config --libs sdl3) || exit; for flag in $flags; do printf ' -cclib %s' \"$flag\"; done; printf ')'"))))
 
 (rule
  (copy ../native/native_embed.ml native_embed.ml))
@@ -79,10 +79,10 @@
 (library
  (name logseq_native_host_services)
  (wrapped false)
- (modules host_requests theme_vars host_builtin_icons host_icons host_image host_images host_math text_engine)
+ (modules host_requests theme_vars host_builtin_icons host_icons host_image host_images host_math host_pdf host_pdf_viewer text_engine)
  (libraries logseq_ui_native logseq_ocaml_host_platform logseq_native_entry
    logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
-   lui.layout lui.text lui.svg lui.theme lui.ime lui.resource_loaders imagelib yojson str unix))
+   lui.layout lui.text lui.svg lui.theme lui.ime lui.resource_loaders imagelib yojson str uri unix))
 
 (test
  (name host_requests_test)
@@ -113,7 +113,7 @@
  (libraries logseq_ui_native logseq_native_interaction lui.sdl3)
  (foreign_stubs
   (language c)
-  (names ocaml_host_stubs)
+  (names ocaml_host_stubs host_pdf_stubs)
   (flags (:standard (:include host_c_flags.sexp)))))
 
 (test

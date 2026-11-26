@@ -115,6 +115,7 @@ let schema_of tag =
     ; Lui_extension.property "letter-spacing" Lui_extension.FloatScalar
         false None
     ; Lui_extension.property "opacity" Lui_extension.FloatScalar false None
+    ; Lui_extension.property "grow" Lui_extension.FloatScalar false None
     ; Lui_extension.property "corner-radius" Lui_extension.FloatScalar
         false None
     ; Lui_extension.property "padding" Lui_extension.StringScalar false

@@ -736,6 +736,8 @@ let () =
              let fg = Lui_paint.text_fg ctx store id in
              ctx.Lui_paint.hooks.Lui_paint.text_ops id r fg s
            | _ -> []) };
+  Lui_paint.register_extension ~identifier:"logseq-pdf"
+    { Lui_paint.paint = Host_pdf_viewer.paint };
   let measure_memo : (int * string * float * float, (float * float) option) Hashtbl.t =
     Hashtbl.create 256
   in
@@ -1016,14 +1018,32 @@ let () =
       | _ -> None in
     match editor_actions,input with
     | Some actions,_ -> component_input := true;actions
-    | None,input -> match input with
-    | Input.Key_down _ when Keyboard_capture.active () -> []
-    | Input.Text_input _ when Keyboard_capture.active () ->
-        component_input := true; []
-    | Input.Move _ | Input.Button_down _ | Input.Button_up _
-    | Input.Wheel _ | Input.Wheel_mods _ ->
-      Ui.handle ~spatial:(spatial_index ()) ~on_component_input ui store rects input
-    | _ -> Ui.handle ~on_component_input ui store rects input
+    | None,input ->
+      let pdf_owned =
+        match input with
+        | Input.Move _ | Input.Button_down _ | Input.Button_up _
+        | Input.Wheel _ | Input.Wheel_mods _ ->
+          Host_pdf_viewer.handle_input store ~scale:!scale_cell
+            ~rect_of:shifted_rect
+            ~hit_path:(fun ~x ~y -> hit_path ~spatial:(spatial_index ()) store rects ~x ~y)
+            input
+        | _ -> false
+      in
+      if pdf_owned then begin
+        component_input := true;
+        (match !host_cell with
+         | Some host -> Lui_host.invalidate_paint host; host_req_repaint := true
+         | None -> ());
+        []
+      end else
+      match input with
+      | Input.Key_down _ when Keyboard_capture.active () -> []
+      | Input.Text_input _ when Keyboard_capture.active () ->
+          component_input := true; []
+      | Input.Move _ | Input.Button_down _ | Input.Button_up _
+      | Input.Wheel _ | Input.Wheel_mods _ ->
+        Ui.handle ~spatial:(spatial_index ()) ~on_component_input ui store rects input
+      | _ -> Ui.handle ~on_component_input ui store rects input
   in
   (* Swift spine contract stand-in: the Swift host fires "lazy-mount"
      on row spacers scrolling into view and "virt-end" when a virt list
