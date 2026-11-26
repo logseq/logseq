@@ -136,30 +136,23 @@ static void *pdfium_open_bundled(void) {
 
 static int pdfium_load(void) {
   if (pdfium_state) return pdfium_state > 0;
-  const char *custom = getenv("PDFIUM_LIBRARY");
-#if defined(_WIN32)
-  const char *fallback = "pdfium.dll";
-#else
-  const char *fallback = "libpdfium.so";
-#endif
   void *h = NULL;
-  if (custom && *custom) {
 #if defined(_WIN32)
-    h = (void *)LoadLibraryA(custom);
+  /* Wide APIs keep non-ASCII override paths intact. The bundled fallback
+     resolves next to the executable or in System32, never the CWD or PATH. */
+  const wchar_t *custom = _wgetenv(L"PDFIUM_LIBRARY");
+  if (custom && *custom) h = (void *)LoadLibraryW(custom);
+  else h = (void *)LoadLibraryExW(L"pdfium.dll", NULL, LOAD_LIBRARY_SEARCH_DEFAULT_DIRS);
 #else
-    h = dlopen(custom, RTLD_NOW | RTLD_LOCAL);
-#endif
-  }
+  const char *custom = getenv("PDFIUM_LIBRARY");
+  if (custom && *custom) h = dlopen(custom, RTLD_NOW | RTLD_LOCAL);
+  else {
 #if defined(__linux__)
-  if (!h) h = pdfium_open_bundled();
+    h = pdfium_open_bundled();
 #endif
-  if (!h) {
-#if defined(_WIN32)
-    h = (void *)LoadLibraryA(fallback);
-#else
-    h = dlopen(fallback, RTLD_NOW | RTLD_LOCAL);
-#endif
+    if (!h) h = dlopen("libpdfium.so", RTLD_NOW | RTLD_LOCAL);
   }
+#endif
   if (!h) { pdfium_state = -1; return 0; }
 #define PDFIUM_SYM(field, symbol) \
   do { \
@@ -264,8 +257,8 @@ CAMLprim value logseq_pdf_open(value path_v) {
   pdf_autorelease_pool_close(pool);
   CAMLreturn(caml_copy_nativeint((intnat)doc));
 #else
-  void *doc = NULL;
-  if (pdfium_load()) doc = pdfium.load_document(String_val(path_v), NULL);
+  if (!pdfium_load()) caml_failwith("PDFium library is unavailable");
+  void *doc = pdfium.load_document(String_val(path_v), NULL);
   CAMLreturn(caml_copy_nativeint((intnat)doc));
 #endif
 }
@@ -495,7 +488,7 @@ CAMLprim value logseq_pdf_selection_json(value doc_v, value page_v,
       continue;
     }
     pdfium_rectf box;
-    pdfium_norm_rect r;
+    pdfium_norm_rect r = {0, 0, 0, 0};
     int has_box = pdfium.text_loose_char_box(textpage, i, &box) &&
         pdfium_char_rect(page, &box, &r) && r.x2 > r.x1 && r.y2 > r.y1;
     if (u == ' ' || u == 0xa0) {

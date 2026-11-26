@@ -19,7 +19,11 @@ let documents : (string, entry) Hashtbl.t = Hashtbl.create 8
 let path_of_url_or_path path =
   if String.length path > 7 && String.sub path 0 7 = "file://" then
     let uri = Uri.of_string path in
-    Uri.pct_decode (Uri.path uri)
+    let path = Uri.pct_decode (Uri.path uri) in
+    (* file:///C:/x.pdf has the URI path /C:/x.pdf on Windows. *)
+    if Sys.win32 && String.length path > 2 && path.[0] = '/' && path.[2] = ':' then
+      String.sub path 1 (String.length path - 1)
+    else path
   else path
 
 let with_document path f =
