@@ -16,10 +16,10 @@ let source_of_url url =
         match String.index_from_opt rest (first + 1) ':' with
         | Some second when second + 1 < String.length rest ->
             let display = String.sub rest 0 first in
-            let dark = String.sub rest (first + 1) (second - first - 1) in
+            let _dark = String.sub rest (first + 1) (second - first - 1) in
             let encoded = String.sub rest (second + 1) (String.length rest - second - 1) in
             let tex = Uri.pct_decode encoded in
-            (match Host_math.png_bytes ~dark:(dark = "1") ~tex ~display:(display = "1") with
+            (match Host_math.png_bytes ~dark:(Theme_vars.current_dark ()) ~tex ~display:(display = "1") with
              | Some bytes -> Loaders.Bytes bytes
              | None -> Loaders.Bytes Bytes.empty)
         | _ -> Loaders.Bytes Bytes.empty)
@@ -75,6 +75,21 @@ let sync_batch t store batch =
   if !dropped then Hashtbl.filter_map_inplace (fun id owner ->
     if Lui_store.mem store id then Some owner
     else (retired:=owner.scope::!retired;None)) t.owners;
+  List.iter Signal.dispose_scope !retired
+
+
+let refresh_math t store =
+  let prefix = "logseq-math:" in
+  let ids =
+    Hashtbl.fold (fun id owner ids ->
+      if String.length owner.url >= String.length prefix &&
+         String.sub owner.url 0 (String.length prefix) = prefix then id :: ids
+      else ids) t.owners []
+  in
+  let retired = ref [] in
+  List.iter (fun id ->
+    release t retired id;
+    sync_node t retired store id) ids;
   List.iter Signal.dispose_scope !retired
 
 let image_of t id = match Hashtbl.find_opt t.owners id with
