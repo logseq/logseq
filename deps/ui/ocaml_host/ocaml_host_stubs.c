@@ -3950,11 +3950,186 @@ static int logseq_decode_webp_linux(const unsigned char *data, size_t data_lengt
   return 0;
 }
 
+/* AVIF/HEIC use the system HEIF decoder when present. Like the other optional
+   codec libraries, libheif is loaded at runtime so the host keeps its existing
+   link-time footprint and only the affected image fails on minimal systems. */
+typedef struct {
+  int code;
+  int subcode;
+  const char *message;
+} LogseqHeifError;
+
+typedef void *(*LogseqHeifContextAlloc)(void);
+typedef void (*LogseqHeifContextFree)(void *);
+typedef LogseqHeifError (*LogseqHeifReadMemory)(void *, const void *, size_t, const void *);
+typedef LogseqHeifError (*LogseqHeifPrimaryHandle)(void *, void **);
+typedef int (*LogseqHeifHandlePremultiplied)(const void *);
+typedef LogseqHeifError (*LogseqHeifDecodeImage)(const void *, void **, int, int, const void *);
+typedef int (*LogseqHeifImageWidth)(const void *, int);
+typedef int (*LogseqHeifImageHeight)(const void *, int);
+typedef const uint8_t *(*LogseqHeifPlaneReadonly)(const void *, int, int *);
+typedef void (*LogseqHeifImageRelease)(const void *);
+typedef void (*LogseqHeifHandleRelease)(const void *);
+
+static struct {
+  void *library;
+  LogseqHeifContextAlloc context_alloc;
+  LogseqHeifContextFree context_free;
+  LogseqHeifReadMemory read_memory;
+  LogseqHeifPrimaryHandle primary_handle;
+  LogseqHeifHandlePremultiplied handle_premultiplied;
+  LogseqHeifDecodeImage decode_image;
+  LogseqHeifImageWidth image_width;
+  LogseqHeifImageHeight image_height;
+  LogseqHeifPlaneReadonly plane_readonly;
+  LogseqHeifImageRelease image_release;
+  LogseqHeifHandleRelease handle_release;
+} logseq_heif;
+
+static void logseq_heif_load(void) {
+  const char *candidates[] = { "libheif.so.1", "libheif.so" };
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    logseq_heif.library = dlopen(candidates[i], RTLD_NOW | RTLD_LOCAL);
+    if (logseq_heif.library) break;
+  }
+  if (!logseq_heif.library) return;
+  logseq_heif.context_alloc = (LogseqHeifContextAlloc)dlsym(logseq_heif.library, "heif_context_alloc");
+  logseq_heif.context_free = (LogseqHeifContextFree)dlsym(logseq_heif.library, "heif_context_free");
+  logseq_heif.read_memory = (LogseqHeifReadMemory)dlsym(logseq_heif.library, "heif_context_read_from_memory_without_copy");
+  logseq_heif.primary_handle = (LogseqHeifPrimaryHandle)dlsym(logseq_heif.library, "heif_context_get_primary_image_handle");
+  logseq_heif.handle_premultiplied = (LogseqHeifHandlePremultiplied)dlsym(logseq_heif.library, "heif_image_handle_is_premultiplied_alpha");
+  logseq_heif.decode_image = (LogseqHeifDecodeImage)dlsym(logseq_heif.library, "heif_decode_image");
+  logseq_heif.image_width = (LogseqHeifImageWidth)dlsym(logseq_heif.library, "heif_image_get_width");
+  logseq_heif.image_height = (LogseqHeifImageHeight)dlsym(logseq_heif.library, "heif_image_get_height");
+  logseq_heif.plane_readonly = (LogseqHeifPlaneReadonly)dlsym(logseq_heif.library, "heif_image_get_plane_readonly");
+  logseq_heif.image_release = (LogseqHeifImageRelease)dlsym(logseq_heif.library, "heif_image_release");
+  logseq_heif.handle_release = (LogseqHeifHandleRelease)dlsym(logseq_heif.library, "heif_image_handle_release");
+}
+
+static pthread_once_t logseq_heif_once = PTHREAD_ONCE_INIT;
+
+static int logseq_heif_available(void) {
+  return pthread_once(&logseq_heif_once, logseq_heif_load) == 0 &&
+    logseq_heif.context_alloc && logseq_heif.context_free &&
+    logseq_heif.read_memory && logseq_heif.primary_handle &&
+    logseq_heif.handle_premultiplied && logseq_heif.decode_image &&
+    logseq_heif.image_width && logseq_heif.image_height &&
+    logseq_heif.plane_readonly && logseq_heif.image_release &&
+    logseq_heif.handle_release;
+}
+
+static int logseq_is_heif(const unsigned char *data, size_t data_length) {
+  if (data_length < 12 || memcmp(data + 4, "ftyp", 4) != 0) return 0;
+  return memcmp(data + 8, "avif", 4) == 0 ||
+    memcmp(data + 8, "heic", 4) == 0 ||
+    memcmp(data + 8, "heix", 4) == 0 ||
+    memcmp(data + 8, "mif1", 4) == 0;
+}
+
+static void logseq_heif_error(char *error_out, size_t error_size,
+    const char *action, LogseqHeifError error) {
+  snprintf(error_out, error_size, "%s: %s", action,
+    error.message ? error.message : "unknown HEIF decoder error");
+}
+
+static int logseq_decode_heif_linux(const unsigned char *data, size_t data_length,
+    unsigned char **pixels_out, size_t *width_out, size_t *height_out,
+    size_t *size_out, char *error_out, size_t error_size) {
+  if (!logseq_heif_available()) {
+    snprintf(error_out, error_size, "AVIF/HEIC decoding requires libheif");
+    return -1;
+  }
+  void *context = NULL;
+  void *handle = NULL;
+  void *image = NULL;
+  unsigned char *pixels = NULL;
+  int status = -1;
+  context = logseq_heif.context_alloc();
+  if (!context) {
+    snprintf(error_out, error_size, "Cannot allocate HEIF decoder");
+    goto done;
+  }
+  LogseqHeifError error = logseq_heif.read_memory(context, data, data_length, NULL);
+  if (error.code != 0) {
+    logseq_heif_error(error_out, error_size, "Cannot parse AVIF/HEIC data", error);
+    goto done;
+  }
+  error = logseq_heif.primary_handle(context, &handle);
+  if (error.code != 0 || !handle) {
+    logseq_heif_error(error_out, error_size, "Cannot find primary AVIF/HEIC image", error);
+    goto done;
+  }
+  int premultiplied = logseq_heif.handle_premultiplied(handle);
+  /* heif_colorspace_RGB is 1, heif_chroma_interleaved_RGBA is 11. The decoder
+     applies container rotation/cropping/mirroring transformations. */
+  error = logseq_heif.decode_image(handle, &image, 1, 11, NULL);
+  if (error.code != 0 || !image) {
+    logseq_heif_error(error_out, error_size, "Cannot decode AVIF/HEIC image data", error);
+    goto done;
+  }
+  /* heif_channel_interleaved is 10. */
+  int decoded_width = logseq_heif.image_width(image, 10);
+  int decoded_height = logseq_heif.image_height(image, 10);
+  if (decoded_width <= 0 || decoded_height <= 0) {
+    snprintf(error_out, error_size, "Invalid AVIF/HEIC bitmap dimensions");
+    goto done;
+  }
+  size_t width = (size_t)decoded_width;
+  size_t height = (size_t)decoded_height;
+  if (width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
+      width > Max_long || height > Max_long) {
+    snprintf(error_out, error_size, "AVIF/HEIC bitmap dimensions overflow");
+    goto done;
+  }
+  size_t size = width * height * 4;
+  if (size > Max_long) {
+    snprintf(error_out, error_size, "AVIF/HEIC bitmap size overflow");
+    goto done;
+  }
+  int stride = 0;
+  const uint8_t *plane = logseq_heif.plane_readonly(image, 10, &stride);
+  if (!plane || stride < 0 || (size_t)stride < width * 4) {
+    snprintf(error_out, error_size, "Missing AVIF/HEIC RGBA bitmap data");
+    goto done;
+  }
+  pixels = malloc(size);
+  if (!pixels) {
+    snprintf(error_out, error_size, "Cannot allocate AVIF/HEIC bitmap");
+    goto done;
+  }
+  for (size_t y = 0; y < height; y++)
+    memcpy(pixels + y * width * 4, plane + y * (size_t)stride, width * 4);
+  if (!premultiplied) {
+    for (size_t offset = 0; offset < size; offset += 4) {
+      unsigned int alpha = pixels[offset + 3];
+      pixels[offset] = (unsigned char)((pixels[offset] * alpha + 127) / 255);
+      pixels[offset + 1] = (unsigned char)((pixels[offset + 1] * alpha + 127) / 255);
+      pixels[offset + 2] = (unsigned char)((pixels[offset + 2] * alpha + 127) / 255);
+    }
+  }
+  *pixels_out = pixels;
+  *width_out = width;
+  *height_out = height;
+  *size_out = size;
+  pixels = NULL;
+  status = 0;
+
+done:
+  free(pixels);
+  if (image) logseq_heif.image_release(image);
+  if (handle) logseq_heif.handle_release(handle);
+  if (context) logseq_heif.context_free(context);
+  return status;
+}
+
 static int logseq_decode_platform_linux(const unsigned char *data, size_t data_length,
     unsigned char **pixels_out, size_t *width_out, size_t *height_out,
     size_t *size_out, char *error_out, size_t error_size) {
   if (logseq_is_webp(data, data_length))
     return logseq_decode_webp_linux(data, data_length, pixels_out, width_out, height_out,
+      size_out, error_out, error_size);
+  if (logseq_is_heif(data, data_length))
+    return logseq_decode_heif_linux(data, data_length, pixels_out, width_out, height_out,
       size_out, error_out, error_size);
   return logseq_decode_jpeg_linux(data, data_length, pixels_out, width_out, height_out,
     size_out, error_out, error_size);
