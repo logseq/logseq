@@ -291,6 +291,14 @@ let on_right_split_resize st v =
    still hold space *)
 let left_docked (open_ : bool) (vw : float) = open_ && vw >= 640.
 
+(* Visual cap used when both docks compete for space. The stored preferences
+   remain independent; this only describes the width currently allocated to
+   the right dock. *)
+let effective_right_fraction ~left_open ~left_width ~viewport fraction =
+  let left = if left_docked left_open viewport then left_width else 0. in
+  Float.min fraction
+    (Float.max 0. ((viewport -. left -. 180.) /. viewport))
+
 let left_inner_width width viewport =
   max 0 (int_of_float (Float.round (if viewport<640. then viewport*.0.74 else width))-1)
 
