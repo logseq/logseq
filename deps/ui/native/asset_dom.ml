@@ -164,7 +164,7 @@ let asset_source file =
 
 let image_extension ext =
   List.mem (String.lowercase_ascii ext)
-    [ "gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
+    [ "gif"; "svg"; "jpeg"; "jpe"; "jfif"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
       "cr2"; "jxl"; "heic" ]
 
 let file_cell_el (w : Wire.t) : Lui_elements.t =
