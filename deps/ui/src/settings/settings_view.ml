@@ -119,12 +119,14 @@ let lang_menu ~scope ~key st mst =
               ~gap:8 ~padding_horizontal:8 ~padding_vertical:6
               ~corner_radius:4 ~min_height:32
               ~on_press:(fun _ev ->
-                Signal.set st label;
-                set_language ~on_error:(fun () ->
-                    if Ui_effect.alive scope then begin
-                      Runtime.signal_set st (lang_label_for (current_lang ()));
-                      Runtime.flush ()
-                    end) code;
+                if code <> current_lang () then begin
+                  Signal.set st label;
+                  set_language ~on_error:(fun () ->
+                      if Ui_effect.alive scope then begin
+                        Runtime.signal_set st (lang_label_for (current_lang ()));
+                        Runtime.flush ()
+                      end) code
+                end;
                 lang_menu_close mst)
               [])
        languages)

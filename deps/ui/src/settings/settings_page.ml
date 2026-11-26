@@ -303,7 +303,7 @@ let dfmt_menu ~scope ~key mst options current =
              let active () =
                Ui_effect.alive scope && settings_current ()
              in
-             if String.trim fmt <> "" && not (S.value ()).date_format_saving then
+             if fmt <> current && String.trim fmt <> "" && not (S.value ()).date_format_saving then
                ignore
                  ((let* saved = S.set_date_format fmt in
                    if saved && active () then begin
