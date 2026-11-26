@@ -314,6 +314,7 @@ let left_sidebar (ms : Model.t Signal.signal) : t =
        ~background:"var(--left-sidebar-bg-color)" ~style_class:"left-sidebar-inner as-container"
        [row ~key:"ls-top" ~height:48 ~min_height:48 ~cross:`center
           ~style_class:"left-sidebar-top"
+          ~data_attrs:[ ("data-window-titlebar", "true") ]
           [ spacer ~key:"sidebar-leading" [] ]
        ; column ~key:"ls-wrap" ~grow:1. ~min_height:0 ~margin_top:4
           [column ~key:"ls-head" ~gap:4 ~margin_bottom:4 ~style_class:"sidebar-header-container"
@@ -371,7 +372,13 @@ let right_split (ms : Model.t Signal.signal) (st : Sidebar_state.t)
     ~sizing:
       (reactive
          (fun (m : Model.t) fraction viewport ->
-           Fraction (if m.Model.right_sidebar_open && viewport>=640. then 1. -. fraction else 1.))
+           if m.Model.right_sidebar_open && viewport>=640. then
+             let left =
+               if Sidebar_state.left_docked m.Model.left_sidebar_open viewport
+               then Runtime.signal_get st.Sidebar_state.left_width else 0. in
+             let max_fraction = Float.max 0. ((viewport -. left -. 180.) /. viewport) in
+             Fraction (1. -. Float.min fraction max_fraction)
+           else Fraction 1.)
          ms (Signal.value st.Sidebar_state.right_fraction) (Signal.value st.Sidebar_state.viewport_w))
     ~motion:{duration_ms=300; easing=`standard; origin=None}
     ~on_resize:(Sidebar_state.on_right_split_resize st)
@@ -530,14 +537,14 @@ let shell_contents (ms : Model.t Signal.signal) : t =
  fun context parent ->
   let st = Sidebar_state.ensure ms in
   stack ~key:"shell-content"
-    [ Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.height_viewport 1.]
+    [ leading_overlay ms
+    ; Ui_components.with_props [Ui_components.Prop.width_viewport 1.;Ui_components.Prop.height_viewport 1.]
         (column ~key:"app" ~accessibility_identifier:"app-container" ~grow:1. ~min_height:0 ~gap:0
            [ row ~key:"panes" ~grow:1. ~min_height:0 ~cross:`stretch
                [right_split ms st (left_split ms st (detail_column ms)) (right_sidebar ms);
                 Pdf.container_el ~key:"asc" ~id:"app-single-container";
                 Host_metrics.panel ()]
            ; performance_bar () ])
-    ; leading_overlay ms
     ; overlays ms
     ; help_area ms
     ; reactive ~equal:(fun (a : Model.t) (b : Model.t) ->
