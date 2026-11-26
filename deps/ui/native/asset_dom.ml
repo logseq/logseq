@@ -199,7 +199,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
      click event carry the native asset-resolution contract — the
      attrs could ride ~data_attrs but the extension tag itself has no
      kind equivalent *)
-  Logseq_el.el ~key:("asset-" ^ uuid) ~tag:"div"
+  Logseq_el.el ~tag:"div"
     ~style_class:
       "asset-container"
     ~attrs:
@@ -209,8 +209,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
       if name = "click" && is_pdf then
         Pdf_assets.open_pdf_file ~uuid ~ext ~b)
     [ (if is_pdf then
-         Lui_elements.text ~key:("asset-link-" ^ uuid)
-           ~value:(uuid ^ "." ^ ext) []
+         Lui_elements.text ~value:(uuid ^ "." ^ ext) []
        else
          let file = uuid ^ "." ^ ext in
          let source =
@@ -218,7 +217,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            | Some url when url <> "" -> url
            | _ -> asset_source file
          in
-         Lui_elements.image ~key:("asset-image-" ^ uuid) ~url:source
+         Lui_elements.image ~url:source
            ~alt:file ~max_height:800 []) ] context parent
 
 let content_view = block_view
