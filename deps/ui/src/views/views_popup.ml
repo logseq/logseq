@@ -367,9 +367,9 @@ let menu_level ~pid ~cls ~register items =
   menu_level_scoped ~scope:(Printf.sprintf "vp%d" pid) ~cls ~register ~on_back:None items
 
 let show_menu ~(anchor : U.el) ?(align_end = false) ?(cls_prefix = "")
-    items =
+    ?(toggle = false) items =
   let anchor_target = anchor_identifier anchor in
-  let toggled_closed = close_if_anchor_open anchor_target in
+  let toggled_closed = toggle && close_if_anchor_open anchor_target in
   if not toggled_closed then begin
     close_all ();
     let id = !next_id + 1 in
@@ -406,9 +406,9 @@ let show_select ~(anchor : U.el) ~items ~placeholder ?(multiple = false)
     ?(width = 224) ?(fit_results = false)
     ?on_apply ?(extra : (unit -> t option) option)
     ?(wrap_cls = "") ?(align_end = false) ?(footer = [])
-    ?(custom_content = fun _ -> None) ~on_chosen () =
+    ?(custom_content = fun _ -> None) ?(toggle = false) ~on_chosen () =
   let anchor_target = anchor_identifier anchor in
-  let toggled_closed = close_if_anchor_open anchor_target in
+  let toggled_closed = toggle && close_if_anchor_open anchor_target in
   if not toggled_closed then close_all ();
   let id = !next_id + 1 in
   let view context parent =
@@ -651,22 +651,25 @@ let show_dialog ~headline ~(body : t list) ~on_confirm ?(confirm_label = (I.t "u
 (* escape hatch for callers that own their own content (filter pickers,
    rename boxes): renders [content] inside a caller-anchored popover so
    placement/dismissal stay consistent with the menu path. *)
-let show_custom ~(anchor : U.el) ?(align_end = false) ?owner_scope ~cls (content : t) =
+let show_custom ~(anchor : U.el) ?(align_end = false) ?owner_scope ?(toggle = false) ~cls (content : t) =
   let anchor_target = anchor_identifier anchor in
-  close_all ();
+  let toggled_closed = toggle && close_if_anchor_open anchor_target in
+  if not toggled_closed then close_all ();
   let id = !next_id + 1 in
-  ignore
-    (push ~anchor:anchor_target
-       (fun context parent ->
-         anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
-           ~id:(Printf.sprintf "vp-c-%d" id) ~anchor:(Target anchor_target) ~align_end ~cls ~card:true
-           ~on_dismiss:(fun _ -> close_entry id)
-           [ content ] context parent));
-  Option.iter (fun scope ->
-    Signal.on_dispose scope (fun () ->
-      ignore (U.timers_timeout (fun () ->
-        if List.exists (fun popup -> popup.p_id = id) !open_popups then
-          close_entry id) 0))) owner_scope
+  if not toggled_closed then begin
+    ignore
+      (push ~anchor:anchor_target
+         (fun context parent ->
+           anchored_popover ~key:(Printf.sprintf "vp-c-%d" id)
+             ~id:(Printf.sprintf "vp-c-%d" id) ~anchor:(Target anchor_target) ~align_end ~cls ~card:true
+             ~on_dismiss:(fun _ -> close_entry id)
+             [ content ] context parent));
+    Option.iter (fun scope ->
+      Signal.on_dispose scope (fun () ->
+        ignore (U.timers_timeout (fun () ->
+          if List.exists (fun popup -> popup.p_id = id) !open_popups then
+            close_entry id) 0))) owner_scope
+  end
 
 (* ---------- the mounted stack ----------
 

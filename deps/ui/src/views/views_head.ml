@@ -299,7 +299,7 @@ let sorting_popup inst anchor =
               | None -> ())
             0)
    | [] -> ());
-  P.show_custom ~anchor ~align_end:true ~cls:"ls-view-order-setting"
+  P.show_custom ~anchor ~align_end:true ~toggle:true ~cls:"ls-view-order-setting"
     (Ui_components.with_props [Ui_components.Prop.font_size "0.875rem"]
        (column ~gap:8 ~padding_vertical:8 ~width:270
           [ keyed
@@ -456,7 +456,7 @@ let filter_popup inst anchor =
           (filterable_columns state)) (sig_of inst))
   in
   ignore
-    (P.show_select ~anchor ~align_end:true ~items ~placeholder:(I.t "view.filter/filter")
+    (P.show_select ~anchor ~align_end:true ~toggle:true ~items ~placeholder:(I.t "view.filter/filter")
        ~on_chosen:(fun it _ _ ->
          let s = V.get inst in
          match
@@ -663,7 +663,7 @@ let rec show_more_menu inst =
               ]
           in
           ignore
-            (P.show_menu ~anchor ~align_end:true
+            (P.show_menu ~anchor ~align_end:true ~toggle:true
                (gallery_menu_items inst @ subs
                 @ [ P.MItem ((I.t "view/export-edn"), fun () -> (V.ops ()).V.o_export inst)
                   ]))
@@ -700,7 +700,7 @@ let display_type_el inst : toolbar_el =
             refresh inst
           in
           ignore
-            (P.show_select ~anchor ~surface:`popover
+            (P.show_select ~anchor ~surface:`popover ~toggle:true
                ~placeholder:(I.tf "property/set-placeholder" [ I.t "property.built-in/view-type" ])
                ~show_check:true ~selected_values:[(V.get inst).V.display_type]
                ~item_icon:(fun item -> Some (Icons.name_ref (match item.P.si_value with
