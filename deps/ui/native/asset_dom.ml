@@ -203,11 +203,20 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
     ~style_class:
       "asset-container"
     ~attrs:
-      [ ("data-asset-uuid", uuid); ("data-asset-type", ext) ]
+      ([ ("data-asset-uuid", uuid); ("data-asset-type", ext) ]
+       @ if is_pdf then [ ("data-keep-selection", "true") ] else [])
     ~events:(if is_pdf then "click" else "")
-    ~on_dom_event:(fun name _ ->
+    ~on_dom_event:(fun name payload ->
       if name = "click" && is_pdf then
-        Pdf_assets.open_pdf_file ~uuid ~ext ~b)
+        let mod_click =
+          match payload with
+          | Some event ->
+              if Ui_services.env_is_mac () then Ui_dom_native.jbool "metaKey" (Js.Json.parseExn event)
+              else Ui_dom_native.jbool "ctrlKey" (Js.Json.parseExn event)
+          | None -> false
+        in
+        if mod_click then Pdf_assets.open_pdf_file_in_new_window ~uuid ~ext ~b
+        else Pdf_assets.open_pdf_file ~uuid ~ext ~b)
     [ (if is_pdf then
          Lui_elements.text ~value:(uuid ^ "." ^ ext) []
        else

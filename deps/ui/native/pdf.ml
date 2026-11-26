@@ -223,6 +223,29 @@ let hash_with_graph_id hash =
     | _ -> hash
 
 
+let request_popout ~uuid ?dbid ?page ?external_url () =
+  let payload =
+    J.stringify
+      (J.object_list
+        ([ "uuid", J.string uuid
+         ; "hash", J.string (hash_with_graph_id (Platform.location_hash ())) ]
+         @ (match dbid with
+            | Some id when id > 0 -> [ "dbid", J.string (string_of_int id) ]
+            | _ -> [])
+         @ (match page with
+            | Some page when page > 0 -> [ "page", J.string (string_of_int page) ]
+            | _ -> [])
+         @ (match external_url with
+            | Some url when url <> "" -> [ "external_url", J.string url ]
+            | _ -> [])))
+  in
+  Platform.request_host "pdf-popout" payload
+
+let open_pdf_file_in_new_window ~uuid ~ext:_ ~(b : Model.block) =
+  request_popout ~uuid ?dbid:b.Model.block_db_id
+    ?external_url:b.Model.block_asset_url ()
+
+
 let attrs_of_view (v : view) : (string * string) list =
   [ "path", v.asset.Model.pdf_url
   ; "identity", v.asset.Model.pdf_identity
@@ -485,16 +508,8 @@ let on_dom_event name payload =
          | Some v ->
              (match asset_uuid v.asset with
               | Some uuid ->
-                  let payload =
-                    J.stringify
-                      (J.object_list
-                        [ "uuid", J.string uuid
-                        ; "hash", J.string (hash_with_graph_id (Platform.location_hash ()))
-                        ; "dbid", J.string (match v.asset.Model.pdf_block_db_id with Some id -> string_of_int id | None -> "")
-                        ; "page", J.string (string_of_int v.page)
-                        ; "external_url", J.string (Option.value v.asset.Model.pdf_block_external_url ~default:"") ])
-                  in
-                  Platform.request_host "pdf-popout" payload
+                  request_popout ~uuid ?dbid:v.asset.Model.pdf_block_db_id
+                    ~page:v.page ?external_url:v.asset.Model.pdf_block_external_url ()
               | None -> ())
          | None -> ())
   | "pdf-hl-add" -> add_hl (hl_of_json j)
@@ -669,6 +684,7 @@ let container_el ~key ~id : Lui_elements.t =
     context
 
 let install () =
+  Pdf_assets.set_open_pdf_file_in_new_window_hook open_pdf_file_in_new_window;
   Pdf_state.highlight_request :=
     (fun hl ->
       update_view (fun v ->
