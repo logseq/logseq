@@ -64,16 +64,35 @@
 (defn- <stream-starts-with-gzip?
   [^js stream]
   (let [reader (.getReader stream)]
-    (-> (.read reader)
-        (p/then (fn [result]
-                  (if (.-done result)
-                    false
-                    (gzip-bytes? (->uint8 (.-value result))))))
+    (-> (p/loop [first-byte nil]
+          (p/let [result (.read reader)]
+            (if (.-done result)
+              false
+              (let [payload (->uint8 (.-value result))
+                    len (.-byteLength payload)]
+                (cond
+                  (zero? len)
+                  (p/recur first-byte)
+
+                  (some? first-byte)
+                  (and (= 31 first-byte) (= 139 (aget payload 0)))
+
+                  (>= len 2)
+                  (gzip-bytes? payload)
+
+                  :else
+                  (p/recur (aget payload 0)))))))
         (p/catch (fn [_] false))
         (p/finally (fn []
                      (try
                        (.releaseLock reader)
-                       (catch :default _)))))))
+                       (catch :default _))
+                     (try
+                       (when (fn? (.-cancel stream))
+                         (-> (.cancel stream)
+                             (p/catch (fn [_] nil))))
+                       (catch :default _))
+                     nil)))))
 
 (defn- <response-body-stream
   [^js resp]
