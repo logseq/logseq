@@ -236,13 +236,15 @@ let () = begin
     let local=try Some (Host_icons.file_image path) with _ -> None in
     expect "Local file images use the same JPEG decoder"
       (match local with Some image -> image.Lui_scene.iw=16 && image.ih=8 | None -> false));
-  if Host_platform.is_macos then begin
-    let webp=bytes_of_hex "52494646220000005745425056503820160000003001009d012a010001000ec0fe25a400037000000000" in
-    expect "macOS ImageIO decodes formats outside the bundled codec set"
-      (match Host_image.decode webp with
-       | Ok image -> image.Lui_scene.iw=1 && image.ih=1 && Bytes.length image.ipix=4
-       | Error _ -> false)
-  end;
+  let webp=bytes_of_hex "52494646220000005745425056503820160000003001009d012a010001000ec0fe25a400037000000000" in
+  expect "platform decoder handles WebP outside the bundled codec set"
+    (match Host_image.decode webp with
+     | Ok image -> image.Lui_scene.iw=1 && image.ih=1 && Bytes.length image.ipix=4
+     | Error _ -> false);
+  expect "truncated WebP rejects without a bitmap"
+    (match Host_image.decode (Bytes.sub webp 0 (Bytes.length webp - 2)) with
+     | Ok _ -> false
+     | Error _ -> true);
   List.iter prerr_endline (List.rev !errors);
   check "Native JPEG decode, orientation, source ownership and local files" (!errors=[]);
   print_endline "native JPEG baseline/progressive, EXIF orientation, grayscale and local file: OK"

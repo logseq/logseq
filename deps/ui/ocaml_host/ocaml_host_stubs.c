@@ -3796,6 +3796,102 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
   free(state);
   return 0;
 }
+
+/* WebP is loaded at runtime so the Linux executable keeps its existing
+   dependency footprint on hosts without libwebp. Only still images are
+   accepted here; animated WebP remains an explicit unsupported case. */
+typedef int (*LogseqWebPGetInfo)(const uint8_t *, size_t, int *, int *);
+typedef uint8_t *(*LogseqWebPDecodeRGBAInto)(const uint8_t *, size_t, uint8_t *, size_t, int);
+
+static struct {
+  void *library;
+  LogseqWebPGetInfo get_info;
+  LogseqWebPDecodeRGBAInto decode_rgba_into;
+} logseq_webp;
+
+static void logseq_webp_load(void) {
+  const char *candidates[] = { "libwebp.so.7", "libwebp.so" };
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    logseq_webp.library = dlopen(candidates[i], RTLD_NOW | RTLD_LOCAL);
+    if (logseq_webp.library) break;
+  }
+  if (!logseq_webp.library) return;
+  logseq_webp.get_info = (LogseqWebPGetInfo)dlsym(logseq_webp.library, "WebPGetInfo");
+  logseq_webp.decode_rgba_into = (LogseqWebPDecodeRGBAInto)dlsym(logseq_webp.library, "WebPDecodeRGBAInto");
+}
+
+static pthread_once_t logseq_webp_once = PTHREAD_ONCE_INIT;
+
+static int logseq_is_webp(const unsigned char *data, size_t data_length) {
+  return data_length >= 12 && memcmp(data, "RIFF", 4) == 0 && memcmp(data + 8, "WEBP", 4) == 0;
+}
+
+static int logseq_webp_animated(const unsigned char *data, size_t data_length) {
+  return data_length >= 21 && memcmp(data + 12, "VP8X", 4) == 0 && (data[20] & 0x02) != 0;
+}
+
+static int logseq_decode_webp_linux(const unsigned char *data, size_t data_length,
+    unsigned char **pixels_out, size_t *width_out, size_t *height_out,
+    size_t *size_out, char *error_out, size_t error_size) {
+  if (pthread_once(&logseq_webp_once, logseq_webp_load) != 0 ||
+      !logseq_webp.get_info || !logseq_webp.decode_rgba_into) {
+    snprintf(error_out, error_size, "WebP decoding requires libwebp");
+    return -1;
+  }
+  if (logseq_webp_animated(data, data_length)) {
+    snprintf(error_out, error_size, "Animated WebP is unsupported");
+    return -1;
+  }
+  int encoded_width = 0, encoded_height = 0;
+  if (!logseq_webp.get_info(data, data_length, &encoded_width, &encoded_height) ||
+      encoded_width <= 0 || encoded_height <= 0) {
+    snprintf(error_out, error_size, "Malformed or corrupt WebP data");
+    return -1;
+  }
+  size_t width = (size_t)encoded_width;
+  size_t height = (size_t)encoded_height;
+  if (width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
+      width > Max_long || height > Max_long || width > INT_MAX / 4) {
+    snprintf(error_out, error_size, "WebP bitmap dimensions overflow");
+    return -1;
+  }
+  size_t size = width * height * 4;
+  if (size > Max_long) {
+    snprintf(error_out, error_size, "WebP bitmap size overflow");
+    return -1;
+  }
+  unsigned char *pixels = malloc(size);
+  if (!pixels) {
+    snprintf(error_out, error_size, "Cannot allocate WebP bitmap");
+    return -1;
+  }
+  if (!logseq_webp.decode_rgba_into(data, data_length, pixels, size, (int)(width * 4))) {
+    free(pixels);
+    snprintf(error_out, error_size, "Cannot decode WebP image data");
+    return -1;
+  }
+  for (size_t offset = 0; offset < size; offset += 4) {
+    unsigned int alpha = pixels[offset + 3];
+    pixels[offset] = (unsigned char)((pixels[offset] * alpha + 127) / 255);
+    pixels[offset + 1] = (unsigned char)((pixels[offset + 1] * alpha + 127) / 255);
+    pixels[offset + 2] = (unsigned char)((pixels[offset + 2] * alpha + 127) / 255);
+  }
+  *pixels_out = pixels;
+  *width_out = width;
+  *height_out = height;
+  *size_out = size;
+  return 0;
+}
+
+static int logseq_decode_platform_linux(const unsigned char *data, size_t data_length,
+    unsigned char **pixels_out, size_t *width_out, size_t *height_out,
+    size_t *size_out, char *error_out, size_t error_size) {
+  if (logseq_is_webp(data, data_length))
+    return logseq_decode_webp_linux(data, data_length, pixels_out, width_out, height_out,
+      size_out, error_out, error_size);
+  return logseq_decode_jpeg_linux(data, data_length, pixels_out, width_out, height_out,
+    size_out, error_out, error_size);
+}
 #endif
 
 /* Image I/O owns its input and decoding objects entirely within the worker
@@ -3898,12 +3994,12 @@ CAMLprim value logseq_native_decode_platform(value encoded_v) {
   char error[JMSG_LENGTH_MAX];
   error[0] = '\0';
   caml_enter_blocking_section();
-  int status = logseq_decode_jpeg_linux(
+  int status = logseq_decode_platform_linux(
     encoded, encoded_length,
     &pixels, &width, &height, &size, error, sizeof(error));
   caml_leave_blocking_section();
   free(encoded);
-  if (status != 0) caml_failwith(error[0] ? error : "Cannot decode JPEG");
+  if (status != 0) caml_failwith(error[0] ? error : "Cannot decode image");
   pixels_v = caml_alloc_initialized_string(size, (const char *)pixels);
   free(pixels);
   result_v = caml_alloc_tuple(3);
