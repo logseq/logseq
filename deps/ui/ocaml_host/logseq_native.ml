@@ -97,6 +97,7 @@ module Host_media = struct
     is_video : bool;
     handle : int;
     audio_player : Lui_media.player option;
+    video_player : Lui_media.video option;
     mutable image : image option;
     mutable generation : int;
     mutable playing : bool;
@@ -120,7 +121,8 @@ module Host_media = struct
 
   let close_state state =
     close_handle state.handle;
-    Option.iter (fun player -> try Lui_media.unload player with _ -> ()) state.audio_player
+    Option.iter (fun player -> try Lui_media.unload player with _ -> ()) state.audio_player;
+    Option.iter (fun video -> try Lui_media.video_close video with _ -> ()) state.video_player
 
   let state_for id source is_video =
     let now = Unix.gettimeofday () in
@@ -130,8 +132,8 @@ module Host_media = struct
       state
     | previous ->
       Option.iter close_state previous;
-      let audio_path =
-        if not is_video && String.length source > 7 && String.sub source 0 7 = "file://" then
+      let media_path =
+        if String.length source > 7 && String.sub source 0 7 = "file://" then
           try Uri.pct_decode (Uri.path (Uri.of_string source)) with _ -> source
         else source
       in
@@ -140,20 +142,27 @@ module Host_media = struct
           match Lui_media.player_create () with
           | Error _ -> None
           | Ok player ->
-            (match Lui_media.load player audio_path with
+            (match Lui_media.load player media_path with
              | Ok () -> Some player
              | Error _ -> None)
         else None
       in
+      let video_player =
+        if is_video && Lui_media.video_available () then
+          match Lui_media.video_open media_path with
+          | Ok video -> Some video
+          | Error _ -> None
+        else None
+      in
       let handle, error =
-        if Option.is_some audio_player then -2, ""
+        if Option.is_some audio_player || Option.is_some video_player then -2, ""
         else
           try media_open source is_video, ""
           with Failure message -> -1, message
       in
-      media_log "media open id=%d video=%b handle=%d audio=%b src=%s" id is_video handle (Option.is_some audio_player) source;
+      media_log "media open id=%d video=%b handle=%d audio=%b native-video=%b src=%s" id is_video handle (Option.is_some audio_player) (Option.is_some video_player) source;
       let state = {
-        source; is_video; handle; audio_player; image = None; generation = 0;
+        source; is_video; handle; audio_player; video_player; image = None; generation = 0;
         playing = false; position_ms = 0; duration_ms = 0; error;
         refresh_until = now +. 8.; last_seen = now; last_paint_log = 0.;
       } in
@@ -171,7 +180,7 @@ module Host_media = struct
       states
 
   let state_active now state =
-    (state.handle >= 0 || Option.is_some state.audio_player)
+    (state.handle >= 0 || Option.is_some state.audio_player || Option.is_some state.video_player)
     && (state.playing || now < state.refresh_until)
 
   let active () =
@@ -256,14 +265,24 @@ module Host_media = struct
       rect (frame.x +. ((frame.w -. w) /. 2.)) (frame.y +. ((frame.h -. h) /. 2.)) w h
 
   let refresh_state state =
-    match state.audio_player with
-    | Some player ->
+    match state.audio_player, state.video_player with
+    | Some player, None ->
       (try
         state.position_ms <- int_of_float (Lui_media.position player *. 1000.);
         state.duration_ms <- int_of_float (Lui_media.duration player *. 1000.);
         state.playing <- Lui_media.status player = Lui_media.Playing
       with _ -> ())
-    | None ->
+    | None, Some video ->
+      (try
+        state.position_ms <- int_of_float (Lui_media.video_position video *. 1000.);
+        state.duration_ms <- int_of_float (Lui_media.video_duration video *. 1000.);
+        state.playing <- Lui_media.video_status video = Lui_media.Playing;
+        match Lui_media.current_frame video with
+        | Some (Ok image) -> state.image <- Some image
+        | Some (Error message) -> state.error <- message
+        | None -> ()
+      with _ -> ())
+    | _ ->
       if state.handle >= 0 then begin
         (try
           let position, duration = media_position state.handle in
@@ -355,11 +374,14 @@ module Host_media = struct
 
   let toggle state =
     media_log "media toggle playing=%b pos=%d src=%s" state.playing state.position_ms state.source;
-    (match state.audio_player with
-     | Some player ->
+    (match state.audio_player, state.video_player with
+     | Some player, None ->
        if state.playing then Lui_media.pause player else Lui_media.play player;
        state.playing <- Lui_media.status player = Lui_media.Playing
-     | None ->
+     | None, Some video ->
+       if state.playing then Lui_media.video_pause video else Lui_media.video_play video;
+       state.playing <- Lui_media.video_status video = Lui_media.Playing
+     | _ ->
        if state.handle >= 0 then begin
          media_set_playing state.handle (not state.playing);
          state.playing <- media_playing state.handle
@@ -368,10 +390,12 @@ module Host_media = struct
 
   let seek state ratio =
     media_log "media seek ratio=%f pos=%d src=%s" ratio state.position_ms state.source;
-    (match state.audio_player with
-     | Some player ->
+    (match state.audio_player, state.video_player with
+     | Some player, None ->
        Lui_media.seek player (Lui_media.duration player *. Float.min 1. (Float.max 0. ratio))
-     | None ->
+     | None, Some video ->
+       Lui_media.video_seek video (Lui_media.video_duration video *. Float.min 1. (Float.max 0. ratio))
+     | _ ->
        if state.handle >= 0 then media_seek_ratio state.handle ratio);
     state.refresh_until <- Unix.gettimeofday () +. 3.
 
