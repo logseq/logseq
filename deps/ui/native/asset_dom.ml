@@ -160,7 +160,7 @@ let on_asset_write_finish ~repo':_ ~asset_id:_ = ()
 let retry_pending () = ()
 
 let asset_source file =
-  Asset_store.asset_path (Runtime.repo ()) file
+  Platform.resource_url (Asset_store.asset_path (Runtime.repo ()) file)
 
 let file_cell_el (w : Wire.t) : Lui_elements.t =
   let uuid = Option.value (Wire.map_get_uuid w "block/uuid") ~default:"" in
@@ -227,7 +227,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            | _ -> asset_source file
          in
          Lui_elements.image ~url:source
-           ~alt:file ~max_height:800 []) ] context parent
+           ~alt:file ~max_height:800 ~container_relative_frame:`horizontal []) ] context parent
 
 let content_view = block_view
 

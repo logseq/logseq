@@ -241,17 +241,22 @@ let snapshot_buffer t ~now =
 let snapshot t ~now = Buffer.contents (snapshot_buffer t ~now)
 let write_snapshot channel t ~now = Buffer.output_buffer channel (snapshot_buffer t ~now)
 
-let record_present t ~now ~work_ms =
-  (match t.input_at with
-   | None -> ()
-   | Some at -> t.input_latency_ms <- (now -. at) *. 1000.;
-     record_phase t Input_latency t.input_latency_ms; t.input_at <- None);
+let record_present_frame t ~now ~work_ms ~presented =
+  if presented then
+    (match t.input_at with
+     | None -> ()
+     | Some at -> t.input_latency_ms <- (now -. at) *. 1000.;
+       record_phase t Input_latency t.input_latency_ms; t.input_at <- None);
   t.samples.(t.cursor) <- work_ms;
   t.cursor <- (t.cursor + 1) mod Array.length t.samples;
   t.count <- min (t.count + 1) (Array.length t.samples);
   t.work_sorted <- false;
   t.frame_ms <- work_ms;
   if work_ms > frame_budget_ms then t.missed <- t.missed + 1
+
+let record_present t ~now ~work_ms =
+  record_present_frame t ~now ~work_ms ~presented:true
+
 let percentile t fraction =
   if t.count = 0 then 0.
   else begin
