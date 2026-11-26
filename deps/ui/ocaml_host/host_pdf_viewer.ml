@@ -16,6 +16,7 @@ type attrs = {
   area_mode : bool;
   colored : bool;
   dashed : bool;
+  popout : bool;
 }
 
 type geometry = {
@@ -94,6 +95,7 @@ let attrs_of store id =
             area_mode = bool_string (string_member json "area_mode");
             colored = bool_string (string_member json "colored");
             dashed = bool_string (string_member json "dashed");
+            popout = bool_string (string_member json "popout");
           }
 
 let state_for id attrs =
@@ -328,18 +330,20 @@ let button_rects ctx r =
   let y = r.y +. ((40. *. s -. size) /. 2.) in
   let right = r.x +. r.w -. (8. *. s) in
   let close = rect (right -. size) y size size in
-  let ann = rect (close.x -. gap -. size) y size size in
+  let popout = rect (close.x -. gap -. size) y size size in
+  let ann = rect (popout.x -. gap -. size) y size size in
   let area = rect (ann.x -. gap -. size) y size size in
   let highlight = rect (area.x -. gap -. size) y size size in
   let zoom_in = rect (highlight.x -. gap -. size) y size size in
   let zoom_out = rect (zoom_in.x -. gap -. size) y size size in
   let next = rect (zoom_out.x -. gap -. size) y size size in
   let prev = rect (next.x -. gap -. size) y size size in
-  [ ("close", close); ("annots", ann); ("area", area); ("highlight", highlight);
+  [ ("close", close); ("popout", popout); ("annots", ann); ("area", area); ("highlight", highlight);
     ("zoom-in", zoom_in); ("zoom-out", zoom_out); ("next", next); ("prev", prev) ]
 
 let button_label = function
   | "close" -> "×"
+  | "popout" -> "↗"
   | "annots" -> "≡"
   | "area" -> "▣"
   | "highlight" -> "H"
@@ -460,7 +464,9 @@ let paint ctx store node frame =
             in
             let bg = if active then color 59 130 246 90 else color 0 0 0 0 in
             rounded_fill bg (6. *. ctx.Lui_paint.scale) br alpha
-            :: label_ops ctx id br (button_label name) fg alpha)
+            :: label_ops ctx id br
+                 (if name = "popout" && attrs.popout then "↙" else button_label name)
+                 fg alpha)
           (button_rects ctx frame)
       in
       let page_label = Printf.sprintf "%d" attrs.page in
@@ -641,6 +647,43 @@ let area_png attrs geom state x0 y0 x1 y1 =
             Some (base64_encode (Buffer.to_bytes encoded))
     with _ -> None
 
+
+external native_menu_popup : string -> int = "logseq_native_menu_popup"
+
+let native_pdf_menu store node_id hl_id ~x ~y =
+  if not Host_platform.is_macos then false
+  else begin
+    let item tag label extra =
+      Printf.sprintf "{\"label\":\"%s\",\"tag\":%d%s}" label tag extra
+    in
+    let dot hex = Printf.sprintf ",\"dot\":\"%s\"" hex in
+    let items =
+      [ item 0 "Copy reference" ""
+      ; item 1 "Open reference" ""
+      ; item 2 "Delete" ""
+      ; item 3 "Yellow" (dot "#facc15")
+      ; item 4 "Red" (dot "#ef4444")
+      ; item 5 "Green" (dot "#22c55e")
+      ; item 6 "Blue" (dot "#3b82f6")
+      ; item 7 "Purple" (dot "#a855f7") ]
+    in
+    let spec =
+      Printf.sprintf
+        "{\"cx\":%.1f,\"cy\":%.1f,\"atop\":%.1f,\"flip\":false,\"max_h\":420,\"items\":[%s]}"
+        (x +. 72.) y y (String.concat "," items)
+    in
+    match native_menu_popup spec with
+    | 0 -> run_menu_action store node_id "copy" hl_id; true
+    | 1 -> run_menu_action store node_id "open" hl_id; true
+    | 2 -> run_menu_action store node_id "delete" hl_id; true
+    | 3 -> run_menu_action store node_id "yellow" hl_id; true
+    | 4 -> run_menu_action store node_id "red" hl_id; true
+    | 5 -> run_menu_action store node_id "green" hl_id; true
+    | 6 -> run_menu_action store node_id "blue" hl_id; true
+    | 7 -> run_menu_action store node_id "purple" hl_id; true
+    | _ -> true
+  end
+
 let handle_input store ~scale ~rect_of ~hit_path input =
   let find_pdf x y =
     let rec find = function
@@ -702,7 +745,8 @@ let handle_input store ~scale ~rect_of ~hit_path input =
               state.menu <-
                 (match hit with
                  | Some hl_id ->
-                     Some { node = id; hl_id; menu_x = x *. scale; menu_y = y *. scale }
+                     if native_pdf_menu store id hl_id ~x ~y then None
+                     else Some { node = id; hl_id; menu_x = x *. scale; menu_y = y *. scale }
                  | None -> None);
               true))
   | Lui_window.Input.Button_up (x, y, Lui_window.Input.Left, _) -> (
@@ -741,6 +785,7 @@ let handle_input store ~scale ~rect_of ~hit_path input =
                      let hit = hit_button host_ctx frame dx dy in
                      match hit with
                      | Some ("close", _) -> emit store id "pdf-close" []
+                     | Some ("popout", _) -> emit store id "pdf-popout" []
                      | Some ("annots", _) -> emit store id "pdf-annots" []
                      | Some ("highlight", _) ->
                          emit store id "pdf-mode"

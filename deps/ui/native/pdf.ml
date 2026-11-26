@@ -103,6 +103,68 @@ let hl_json image_paths (hl : Model.hl) : J.t =
 
 let bool_str b = if b then "true" else "false"
 
+let argv_value flag =
+  let rec scan index =
+    if index + 1 >= Array.length Sys.argv then None
+    else if Sys.argv.(index) = flag then Some Sys.argv.(index + 1)
+    else scan (index + 1)
+  in
+  scan 1
+
+let popout_uuid () = argv_value "--pdf-open"
+
+let popout_mode () = popout_uuid () <> None
+
+let open_popout_asset uuid =
+  let path =
+    Filename.concat
+      (Asset_store.asset_dir (Runtime.repo ()))
+      (uuid ^ ".pdf")
+  in
+  if not (Sys.file_exists path) then Js.Promise.resolve false
+  else begin
+    let db_id =
+      match argv_value "--pdf-dbid" with
+      | Some value -> int_of_string_opt value
+      | None -> None
+    in
+    Pdf_state.set_current
+      (Some
+         (Pdf_assets.inflate ~uuid:(Some uuid) ~db_id
+            ~external_url:(argv_value "--pdf-external-url") ~path));
+    Js.Promise.resolve true
+  end
+
+let schedule_popout_open uuid =
+  let rec retry attempts =
+    if attempts > 0 then
+      ignore
+        (Host.set_timeout
+           (fun () ->
+             if Runtime.repo () = "" then retry (attempts - 1)
+             else
+               ignore
+                 ((let* opened = open_popout_asset uuid in
+                   if not opened then retry (attempts - 1);
+                   Js.Promise.resolve ())
+                  |> Js.Promise.catch (fun _ ->
+                         retry (attempts - 1);
+                         Js.Promise.resolve ())))
+           250)
+  in
+  retry 80
+
+
+let asset_uuid (asset : Model.pdf_asset) =
+  match asset.Model.pdf_block_uuid with
+  | Some uuid -> Some uuid
+  | None ->
+      let base = Filename.basename asset.Model.pdf_url in
+      if Filename.check_suffix base ".pdf" then
+        Some (String.sub base 0 (String.length base - 4))
+      else None
+
+
 let attrs_of_view (v : view) : (string * string) list =
   [ "path", v.asset.Model.pdf_url
   ; "identity", v.asset.Model.pdf_identity
@@ -122,6 +184,7 @@ let attrs_of_view (v : view) : (string * string) list =
   ; "automenu", bool_str (Pdf_state.auto_open_ctx ())
   ; "hl_mode", bool_str !Pdf_state.highlight_mode
   ; "area_mode", bool_str !Pdf_state.area_mode
+  ; "popout", bool_str (popout_uuid () <> None)
   ; "labels", J.stringify (J.object_list
       (List.map (fun (key, value) -> key, J.string value)
         [ "close", I18n.t "ui/close"
@@ -334,7 +397,7 @@ let persist_scale s =
 let events =
   "pdf-close pdf-hl-add pdf-hl-area pdf-hl-del pdf-hl-color \
    pdf-hl-ref pdf-hl-link pdf-annots pdf-page pdf-scale pdf-flag \
-   pdf-mode"
+   pdf-mode pdf-popout"
 
 let on_dom_event name payload =
   let j =
@@ -352,7 +415,27 @@ let on_dom_event name payload =
     | None -> false
   in
   if current then match name with
-  | "pdf-close" -> Pdf_state.set_current None
+  | "pdf-close" ->
+      if popout_mode () then Host.request_window_close ()
+      else Pdf_state.set_current None
+  | "pdf-popout" ->
+      if popout_uuid () <> None then Host.request_window_close ()
+      else
+        (match get_view () with
+         | Some v ->
+             (match asset_uuid v.asset with
+              | Some uuid ->
+                  let payload =
+                    J.stringify
+                      (J.object_list
+                        [ "uuid", J.string uuid
+                        ; "hash", J.string (Platform.location_hash ())
+                        ; "dbid", J.string (match v.asset.Model.pdf_block_db_id with Some id -> string_of_int id | None -> "")
+                        ; "external_url", J.string (Option.value v.asset.Model.pdf_block_external_url ~default:"") ])
+                  in
+                  Platform.request_host "pdf-popout" payload
+              | None -> ())
+         | None -> ())
   | "pdf-hl-add" -> add_hl (hl_of_json j)
   | "pdf-hl-area" -> add_area_hl j
   | "pdf-hl-del" -> (
@@ -490,7 +573,7 @@ let viewer_el : Lui_elements.t =
 let container_el ~key ~id : Lui_elements.t =
  fun context ->
   (Lui_elements.column ~key ~accessibility_identifier:id
-     ~grow:(reactive (fun ao -> if Option.is_some ao then 1. else 0.)
+     ~grow:(reactive (fun ao -> if Option.is_some ao then (if popout_mode () then 1. else 0.72) else 0.)
               (asset_signal context))
      [ viewer_el ])
     context
@@ -514,4 +597,5 @@ let install () =
   Pdf_state.create_today_journal :=
     (fun () ->
       let* _ = Graph.create_today_journal (Runtime.repo ()) in
-      Js.Promise.resolve ())
+      Js.Promise.resolve ());
+  Option.iter schedule_popout_open (popout_uuid ())
