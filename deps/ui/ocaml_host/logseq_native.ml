@@ -104,6 +104,7 @@ module Host_media = struct
     mutable position_ms : int;
     mutable duration_ms : int;
     mutable error : string;
+    mutable pending_seek_ratio : float option;
     mutable refresh_until : float;
     mutable last_seen : float;
     mutable last_paint_log : float;
@@ -198,6 +199,7 @@ module Host_media = struct
         source; is_video; handle = -3; audio_player = None; video_player = None;
         image = None; generation = 0;
         playing = false; position_ms = 0; duration_ms = 0; error = "";
+        pending_seek_ratio = None;
         refresh_until = now +. 8.; last_seen = now; last_paint_log = 0.;
       } in
       Hashtbl.replace states id state;
@@ -409,9 +411,26 @@ module Host_media = struct
   let paint_video ctx store node frame = paint true ctx store node frame
   let paint_audio ctx store node frame = paint false ctx store node frame
 
+  let seek state ratio =
+    media_log "media seek ratio=%f pos=%d src=%s" ratio state.position_ms state.source;
+    if state.handle = -3 then state.pending_seek_ratio <- Some ratio
+    else (match state.audio_player, state.video_player with
+     | Some player, None ->
+       Lui_media.seek player (Lui_media.duration player *. Float.min 1. (Float.max 0. ratio))
+     | None, Some video ->
+       Lui_media.video_seek video (Lui_media.video_duration video *. Float.min 1. (Float.max 0. ratio))
+     | _ ->
+       if state.handle >= 0 then media_seek_ratio state.handle ratio);
+    state.refresh_until <- Unix.gettimeofday () +. 3.
+
   let toggle id state =
     media_log "media toggle playing=%b pos=%d src=%s" state.playing state.position_ms state.source;
     if state.handle = -3 then open_state id state;
+    (match state.pending_seek_ratio with
+     | Some ratio ->
+       state.pending_seek_ratio <- None;
+       seek state ratio
+     | None -> ());
     (match state.audio_player, state.video_player with
      | Some player, None ->
        if state.playing then Lui_media.pause player else Lui_media.play player;
@@ -425,17 +444,6 @@ module Host_media = struct
          state.playing <- media_playing state.handle
        end);
     state.refresh_until <- Unix.gettimeofday () +. 2.
-
-  let seek state ratio =
-    media_log "media seek ratio=%f pos=%d src=%s" ratio state.position_ms state.source;
-    (match state.audio_player, state.video_player with
-     | Some player, None ->
-       Lui_media.seek player (Lui_media.duration player *. Float.min 1. (Float.max 0. ratio))
-     | None, Some video ->
-       Lui_media.video_seek video (Lui_media.video_duration video *. Float.min 1. (Float.max 0. ratio))
-     | _ ->
-       if state.handle >= 0 then media_seek_ratio state.handle ratio);
-    state.refresh_until <- Unix.gettimeofday () +. 3.
 
   let handle_input store ~scale ~rect_of ~hit_path input =
     match input with
