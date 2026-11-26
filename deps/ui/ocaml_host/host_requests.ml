@@ -1500,10 +1500,11 @@ let handle (envelope : string) =
                     | _ -> ""
                   in
                   let command =
-                    Printf.sprintf "%s --initial-hash %s --pdf-open %s%s%s >/dev/null 2>&1 &"
+                    Printf.sprintf "%s --initial-hash %s --pdf-open %s%s%s%s >/dev/null 2>&1 &"
                       (Filename.quote executable) (Filename.quote hash)
                       (Filename.quote uuid)
                       (optional "--pdf-dbid" (jstr_opt "dbid" j))
+                      (optional "--pdf-page" (jstr_opt "page" j))
                       (optional "--pdf-external-url" (jstr_opt "external_url" j))
                   in
                   (match Sys.command command with

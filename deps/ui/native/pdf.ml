@@ -115,6 +115,37 @@ let popout_uuid () = argv_value "--pdf-open"
 
 let popout_mode () = popout_uuid () <> None
 
+let pending_writes = ref 0
+
+let close_after_writes = ref false
+
+let request_window_close () =
+  if popout_mode () && !pending_writes > 0 then close_after_writes := true
+  else Host.request_window_close ()
+
+let settle_write () =
+  if !pending_writes > 0 then decr pending_writes;
+  if !pending_writes = 0 && !close_after_writes then begin
+    close_after_writes := false;
+    Host.request_window_close ()
+  end
+
+let track_write p =
+  incr pending_writes;
+  ignore
+    (Js.Promise.then_
+       (fun _ -> settle_write (); Js.Promise.resolve ())
+       p
+     |> Js.Promise.catch (fun _ ->
+            settle_write ();
+            Js.Promise.resolve ()));
+  p
+
+let popout_page () =
+  match argv_value "--pdf-page" with
+  | Some value -> int_of_string_opt value
+  | None -> None
+
 let open_popout_asset uuid =
   let path =
     Filename.concat
@@ -163,6 +194,27 @@ let asset_uuid (asset : Model.pdf_asset) =
       if Filename.check_suffix base ".pdf" then
         Some (String.sub base 0 (String.length base - 4))
       else None
+
+let string_contains text needle =
+  let text_len = String.length text in
+  let needle_len = String.length needle in
+  let rec scan index =
+    if index + needle_len > text_len then false
+    else if String.sub text index needle_len = needle then true
+    else scan (index + 1)
+  in
+  needle_len = 0 || scan 0
+
+let hash_with_graph_id hash =
+  if not (String.starts_with ~prefix:"#/" hash)
+     || string_contains hash "graph-id="
+  then hash
+  else
+    match !Runtime.current_graph_uuid with
+    | Some uuid when uuid <> "" ->
+        hash ^ (if String.index_opt hash '?' = None then "?" else "&")
+        ^ "graph-id=" ^ uuid
+    | _ -> hash
 
 
 let attrs_of_view (v : view) : (string * string) list =
@@ -276,10 +328,11 @@ let view_current accepted () =
 
 let write_for accepted f =
   ignore
-    (let* context =
-       Pdf_assets.capture_write_context ~current:(view_current accepted) ()
-     in
-     f context)
+    (track_write
+       (let* context =
+          Pdf_assets.capture_write_context ~current:(view_current accepted) ()
+        in
+        f context))
 
 let copy_hl_ref accepted hl =
   write_for accepted (fun context ->
@@ -300,19 +353,20 @@ let add_area_hl (j : J.t) =
       in
       let hl = hl_of_json j in
       ignore
-        ((let* context = context in
-         let png = Bytes.of_string (Transit.base64_decode b64) in
-         let* db_id = Pdf_assets.save_area_png ~context png in
-         let hl =
-           { hl with
-             Model.hl_image = Some (Int64.of_int db_id) }
-         in
-         if context.current () then update_hls (fun hls -> hls @ [ hl ]);
-         let* () = Pdf_assets.copy_hl_ref_for context accepted.asset hl in
-         Js.Promise.resolve ())
-        |> Js.Promise.catch (fun e ->
-               Platform.console_error ("pdf area annotation write failed", e);
-               Js.Promise.resolve ()))
+        (track_write
+           (let* context = context in
+            let png = Bytes.of_string (Transit.base64_decode b64) in
+            let* db_id = Pdf_assets.save_area_png ~context png in
+            let hl =
+              { hl with
+                Model.hl_image = Some (Int64.of_int db_id) }
+            in
+            if context.current () then update_hls (fun hls -> hls @ [ hl ]);
+            let* () = Pdf_assets.copy_hl_ref_for context accepted.asset hl in
+            Js.Promise.resolve ())
+         |> Js.Promise.catch (fun e ->
+                Platform.console_error ("pdf area annotation write failed", e);
+                Js.Promise.resolve ()))
   | _ -> ()
 
 let del_hl id =
@@ -326,7 +380,7 @@ let del_hl id =
           update_hls
             (fun hls ->
               List.filter (fun (h : Model.hl) -> h.hl_id <> Some id) hls);
-          Pdf_assets.del_ref_block hl
+          ignore (track_write (Pdf_assets.del_ref_block hl))
       | None -> ())
 
 let color_hl id color =
@@ -416,10 +470,10 @@ let on_dom_event name payload =
   in
   if current then match name with
   | "pdf-close" ->
-      if popout_mode () then Host.request_window_close ()
+      if popout_mode () then request_window_close ()
       else Pdf_state.set_current None
   | "pdf-popout" ->
-      if popout_uuid () <> None then Host.request_window_close ()
+      if popout_uuid () <> None then request_window_close ()
       else
         (match get_view () with
          | Some v ->
@@ -429,8 +483,9 @@ let on_dom_event name payload =
                     J.stringify
                       (J.object_list
                         [ "uuid", J.string uuid
-                        ; "hash", J.string (Platform.location_hash ())
+                        ; "hash", J.string (hash_with_graph_id (Platform.location_hash ()))
                         ; "dbid", J.string (match v.asset.Model.pdf_block_db_id with Some id -> string_of_int id | None -> "")
+                        ; "page", J.string (string_of_int v.page)
                         ; "external_url", J.string (Option.value v.asset.Model.pdf_block_external_url ~default:"") ])
                   in
                   Platform.request_host "pdf-popout" payload
@@ -454,11 +509,14 @@ let on_dom_event name payload =
       match jstr j "id" with
       | Some id -> with_hl id (fun accepted hl ->
           write_for accepted (fun context ->
-              Pdf_assets.goto_block_ref_for context accepted.asset hl))
+              Pdf_assets.goto_block_ref_for ~close_after:(popout_mode ())
+                context accepted.asset hl))
       | None -> ())
   | "pdf-annots" -> (
       match get_view () with
-      | Some v -> Pdf_assets.goto_annotations_page v.asset
+      | Some v ->
+          Pdf_assets.goto_annotations_page v.asset;
+          if popout_mode () then Pdf_state.set_current None
       | None -> ())
   | "pdf-page" -> (
       match jnum j "page" with
@@ -525,7 +583,10 @@ let load_view (a : Model.pdf_asset) =
      let page =
        match !Pdf_state.ref_hl with
        | Some hl -> hl.hl_page
-       | None -> Option.value page_opt ~default:1
+       | None -> (
+           match popout_page () with
+           | Some page when popout_mode () && page > 0 -> page
+           | _ -> Option.value page_opt ~default:1)
      in
      set_view
        (Some
@@ -540,6 +601,28 @@ let load_view (a : Model.pdf_asset) =
           ; rev = 0
           }));
      Js.Promise.resolve ())
+
+let refresh_generation = ref 0
+
+let refresh_hls_from_worker () =
+  match get_view () with
+  | Some v when !pending_writes = 0 ->
+      incr refresh_generation;
+      let generation = !refresh_generation in
+      ignore
+        (let* hls, _, _ = Pdf_assets.load_hls_data v.asset in
+         let* image_paths =
+           if generation = !refresh_generation && view_current v () then
+             image_paths_of hls
+           else Js.Promise.resolve []
+         in
+         if generation = !refresh_generation && view_current v () then begin
+           Pdf_state.set_hls hls;
+           update_view (fun current ->
+               { current with hls; image_paths; rev = current.rev + 1 })
+         end;
+         Js.Promise.resolve ())
+  | _ -> ()
 
 let viewer_el : Lui_elements.t =
  fun context parent ->
@@ -598,4 +681,14 @@ let install () =
     (fun () ->
       let* _ = Graph.create_today_journal (Runtime.repo ()) in
       Js.Promise.resolve ());
+  let watch =
+    { Subs_state.w_all = false
+    ; w_tags = []
+    ; w_keys =
+        [ Subs_state.watch_key "attr" (W.Keyword "logseq.property.pdf/hl-value")
+        ; Subs_state.watch_key "attr" (W.Keyword "logseq.property.pdf/hl-color")
+        ; Subs_state.watch_key "attr" (W.Keyword "logseq.property/asset") ]
+    }
+  in
+  ignore (Subs_state.on_sync ~watch (fun _ -> refresh_hls_from_worker ()));
   Option.iter schedule_popout_open (popout_uuid ())

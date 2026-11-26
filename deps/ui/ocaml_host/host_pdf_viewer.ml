@@ -17,6 +17,7 @@ type attrs = {
   colored : bool;
   dashed : bool;
   popout : bool;
+  labels : (string * string) list;
 }
 
 type geometry = {
@@ -67,6 +68,20 @@ let string_member json key =
 
 let bool_string value = value = "true"
 
+let labels_of json =
+  match json_parse (string_member json "labels") with
+  | Some (`Assoc fields) ->
+      List.filter_map
+        (fun (key, value) ->
+          match value with
+          | `String label -> Some (key, label)
+          | _ -> None)
+        fields
+  | _ -> []
+
+let label_of attrs key fallback =
+  Option.value (List.assoc_opt key attrs.labels) ~default:fallback
+
 let attrs_of store id =
   match Option.bind (Lui_store.string_prop store id "attrs") json_parse with
   | None -> None
@@ -96,6 +111,7 @@ let attrs_of store id =
             colored = bool_string (string_member json "colored");
             dashed = bool_string (string_member json "dashed");
             popout = bool_string (string_member json "popout");
+            labels = labels_of json;
           }
 
 let state_for id attrs =
@@ -325,10 +341,11 @@ let highlight_at attrs geom x y =
 
 let button_rects ctx r =
   let s = ctx.Lui_paint.scale in
-  let size = 28. *. s in
-  let gap = 6. *. s in
+  let fit = Float.min 1. (r.w /. (342. *. s)) in
+  let size = 28. *. s *. fit in
+  let gap = 6. *. s *. fit in
   let y = r.y +. ((40. *. s -. size) /. 2.) in
-  let right = r.x +. r.w -. (8. *. s) in
+  let right = r.x +. r.w -. (8. *. s *. fit) in
   let close = rect (right -. size) y size size in
   let popout = rect (close.x -. gap -. size) y size size in
   let ann = rect (popout.x -. gap -. size) y size size in
@@ -650,22 +667,23 @@ let area_png attrs geom state x0 y0 x1 y1 =
 
 external native_menu_popup : string -> int = "logseq_native_menu_popup"
 
-let native_pdf_menu store node_id hl_id ~x ~y =
+let native_pdf_menu store node_id attrs hl_id ~x ~y =
   if not Host_platform.is_macos then false
   else begin
     let item tag label extra =
-      Printf.sprintf "{\"label\":\"%s\",\"tag\":%d%s}" label tag extra
+      Printf.sprintf "{\"label\":\"%s\",\"tag\":%d%s}"
+        (json_escape label) tag extra
     in
     let dot hex = Printf.sprintf ",\"dot\":\"%s\"" hex in
     let items =
-      [ item 0 "Copy reference" ""
-      ; item 1 "Open reference" ""
-      ; item 2 "Delete" ""
-      ; item 3 "Yellow" (dot "#facc15")
-      ; item 4 "Red" (dot "#ef4444")
-      ; item 5 "Green" (dot "#22c55e")
-      ; item 6 "Blue" (dot "#3b82f6")
-      ; item 7 "Purple" (dot "#a855f7") ]
+      [ item 0 (label_of attrs "copy-ref" "Copy reference") ""
+      ; item 1 (label_of attrs "linked-ref" "Open reference") ""
+      ; item 2 (label_of attrs "delete" "Delete") ""
+      ; item 3 (label_of attrs "yellow" "Yellow") (dot "#facc15")
+      ; item 4 (label_of attrs "red" "Red") (dot "#ef4444")
+      ; item 5 (label_of attrs "green" "Green") (dot "#22c55e")
+      ; item 6 (label_of attrs "blue" "Blue") (dot "#3b82f6")
+      ; item 7 (label_of attrs "purple" "Purple") (dot "#a855f7") ]
     in
     let spec =
       Printf.sprintf
@@ -745,7 +763,7 @@ let handle_input store ~scale ~rect_of ~hit_path input =
               state.menu <-
                 (match hit with
                  | Some hl_id ->
-                     if native_pdf_menu store id hl_id ~x ~y then None
+                     if native_pdf_menu store id attrs hl_id ~x ~y then None
                      else Some { node = id; hl_id; menu_x = x *. scale; menu_y = y *. scale }
                  | None -> None);
               true))
