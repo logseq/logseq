@@ -6,10 +6,23 @@ type t={cache:Lui_scene.image Resource.t;owners:(int,owner) Hashtbl.t;
   source:string -> Lui_resource_loaders.source;on_change:int -> unit;mutable disposed:bool}
 
 let source_of_url url =
-  let uri = Uri.of_string url in
-  match Uri.scheme uri, Uri.host uri with
-  | Some "file", (None | Some "" | Some "localhost") -> Loaders.Path (Uri.pct_decode (Uri.path uri))
-  | _ -> Loaders.url url
+  let math_prefix = "logseq-math:" in
+  if String.length url > String.length math_prefix &&
+     String.sub url 0 (String.length math_prefix) = math_prefix then
+    let rest = String.sub url (String.length math_prefix)
+      (String.length url - String.length math_prefix) in
+    match String.split_on_char ':' rest with
+    | [ display; dark; encoded ] -> (
+        let tex = Uri.pct_decode encoded in
+        match Host_math.png_bytes ~dark:(dark = "1") ~tex ~display:(display = "1") with
+        | Some bytes -> Loaders.Bytes bytes
+        | None -> Loaders.Bytes Bytes.empty)
+    | _ -> Loaders.Bytes Bytes.empty
+  else
+    let uri = Uri.of_string url in
+    match Uri.scheme uri, Uri.host uri with
+    | Some "file", (None | Some "" | Some "localhost") -> Loaders.Path (Uri.pct_decode (Uri.path uri))
+    | _ -> Loaders.url url
 
 let create ?(executor=Resource.executor_domain) ?(source=source_of_url) ~on_change () =
   let publish=ref (fun () -> invalid_arg "Image cache is not initialized") in

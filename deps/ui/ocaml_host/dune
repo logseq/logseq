@@ -79,7 +79,7 @@
 (library
  (name logseq_native_host_services)
  (wrapped false)
- (modules host_requests theme_vars host_builtin_icons host_icons host_image host_images text_engine)
+ (modules host_requests theme_vars host_builtin_icons host_icons host_image host_images host_math text_engine)
  (libraries logseq_ui_native logseq_ocaml_host_platform logseq_native_entry
    logseq_native_interaction lui.host lui.window lui.paint lui.scene lui.store
    lui.layout lui.text lui.svg lui.theme lui.ime lui.resource_loaders imagelib yojson str unix))
@@ -92,7 +92,7 @@
  (action
   (setenv LOGSEQ_ICON_DATA %{dep:../assets/tabler-children.json}
    (run %{test})))
- (libraries logseq_native_host_services))
+ (libraries logseq_native_host_services logseq_native_entry logseq_native_interaction))
 
 (test
  (name native_fetch_test)

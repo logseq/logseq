@@ -30,3 +30,7 @@
   (run python3 %{dep:icon_gen_test.py} %{exe:icon_gen.exe}
    %{ocamlc} %{dep:../src/contracts/json.ml} %{ocamlopt}
    %{dep:../src/shared/icon_tabler_data.ml} %{dep:../assets/tabler-children.json})))
+
+(executable
+ (name katex_gen)
+ (modes native))

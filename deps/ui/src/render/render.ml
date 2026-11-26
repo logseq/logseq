@@ -860,7 +860,7 @@ let title_block ?(self = "") ?resolved ?(annot = false) ?highlight
       let lang = Option.value b.Model.block_code_lang ~default:"" in
       [ code_block ~self lang s ]
   | Some "math" ->
-      [ box ~style_class:"math-block"
+      [ column ~grow:1. ~style_class:"math-block"
           [ Render_inline.katex_el ~block:true ~display:true s ] ]
   | _ -> (
       match src_eval_parts s with
