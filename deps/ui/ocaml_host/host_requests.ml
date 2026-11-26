@@ -1487,6 +1487,31 @@ let handle (envelope : string) =
                reply "native-menu-select"
                  (`Assoc [ "detail", `Assoc [ "tag", `Int tag ] ])
              | _ -> ())
+          | "pdf-popout" ->
+            (match J.from_string payload with
+             | `Assoc _ as j ->
+               (match jstr_opt "uuid" j, jstr_opt "hash" j with
+                | Some uuid, Some hash when String.starts_with ~prefix:"#/" hash ->
+                  let executable = Sys.executable_name in
+                  let optional name value =
+                    match value with
+                    | Some value when value <> "" ->
+                      " " ^ name ^ " " ^ Filename.quote value
+                    | _ -> ""
+                  in
+                  let command =
+                    Printf.sprintf "%s --initial-hash %s --pdf-open %s%s%s >/dev/null 2>&1 &"
+                      (Filename.quote executable) (Filename.quote hash)
+                      (Filename.quote uuid)
+                      (optional "--pdf-dbid" (jstr_opt "dbid" j))
+                      (optional "--pdf-external-url" (jstr_opt "external_url" j))
+                  in
+                  (match Sys.command command with
+                   | 0 -> ()
+                   | code -> filelog "pdf popout failed: exit=%d uuid=%s" code uuid)
+                | _ -> ())
+             | _ -> ())
+          | "window-close" -> Lui_sdl3.push_quit_event ()
           | "save-file" ->
             ignore (Lui_shell.save_dialog ())
           | "open-file-picker" ->
