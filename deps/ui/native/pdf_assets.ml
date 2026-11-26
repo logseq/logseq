@@ -27,7 +27,7 @@ let inflate ~uuid ~db_id ~external_url ~path : Model.pdf_asset =
   }
 
 (* cljs open_pdf_file — an asset block's open affordance *)
-let open_pdf_file ~uuid ~ext ~(b : Model.block) : unit =
+let open_pdf_file_direct ~uuid ~ext ~(b : Model.block) : unit =
   let path =
     Filename.concat
       (Asset_store.asset_dir (Runtime.repo ()))
@@ -37,6 +37,19 @@ let open_pdf_file ~uuid ~ext ~(b : Model.block) : unit =
     (Some
        (inflate ~uuid:b.Model.block_uuid ~db_id:b.block_db_id
           ~external_url:b.Model.block_asset_url ~path))
+
+let open_pdf_file ~uuid ~ext ~(b : Model.block) : unit =
+  open_pdf_file_direct ~uuid ~ext ~b
+
+let open_pdf_file_in_new_window_hook = ref None
+
+let set_open_pdf_file_in_new_window_hook hook =
+  open_pdf_file_in_new_window_hook := Some hook
+
+let open_pdf_file_in_new_window ~uuid ~ext ~(b : Model.block) : unit =
+  match !open_pdf_file_in_new_window_hook with
+  | Some hook -> hook ~uuid ~ext ~b
+  | None -> open_pdf_file_direct ~uuid ~ext ~b
 
 (* ---------- hl <-> wire ---------- *)
 
