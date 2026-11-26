@@ -298,7 +298,8 @@ let delete_graph repo ~remote =
   let finish () =
     Editor_actions.after_pending_input (fun () ->
     let* ok =
-      (let* w = Runtime.invoke1 "thread-api/unsafe-unlink-db" (Wire.String repo) in
+      (let* w = Runtime.invoke2 "thread-api/unsafe-unlink-db" (Wire.String repo)
+        (Wire.Map [ (Wire.kw "broadcast?", Wire.Bool true) ]) in
        if Rtc_error.is_error w then begin
          Rtc_error.report_outcome "unlink-db" w;
          Js.Promise.resolve false
