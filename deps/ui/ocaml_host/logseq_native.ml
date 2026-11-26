@@ -323,6 +323,7 @@ let () =
     else failwith
         (message ^ "; verify the graphics driver or select LUI_GPU=cpu")
   in
+  let software_presented = ref 0 in
   let cpu_renderer b =
     let rr = Lui_raster.Renderer.create () in
     { Lui_host.name = "lui_raster+blit";
@@ -343,6 +344,7 @@ let () =
                        ~stride))
                dirty;
            Lui_blit.present b;
+           incr software_presented;
            img.Lui_raster.Image.pix) }
   in
   let cocoa_tiles = if use_cocoa then Some (Lui_raster.Tile_renderer.create ()) else None in
@@ -350,6 +352,10 @@ let () =
     | Some tiles -> Lui_raster.Tile_renderer.background_domains tiles
     | None -> 0 in
   let metrics = Renderer_metrics.create ~now:(perf_s ()) in
+  (* Metal can report zero presentedTime on macOS even when frames reach the
+     screen. Count non-skipped submitted presentations as the fallback. *)
+  let metal_presented_fallback = ref 0 in
+  let metal_feedback_offset = ref None in
   let cocoa_renderer tiles =
     let id = Sdl.get_window_id !win in
     { Lui_host.name = "lui_raster+iosurface";
@@ -365,6 +371,7 @@ let () =
           upload_seconds := !upload_seconds +. (perf_s () -. before_upload));
         let raster_done = perf_s () in
         Native_window.software_present id;
+        incr software_presented;
         let presented = perf_s () in
         Renderer_metrics.record_phase metrics Raster ((raster_done -. started -. !upload_seconds) *. 1000.);
         Renderer_metrics.record_phase metrics Surface_upload (!upload_seconds *. 1000.);
@@ -372,6 +379,7 @@ let () =
         Bytes.empty) } in
   metrics.panel_open <- Sys.getenv_opt "LOGSEQ_NATIVE_METRICS_PANEL" = Some "1";
   let presentation = Host_interaction.presentation () in
+  let input_present_retry = ref false in
   let renderer, gl_live, blit =
     match metal with
     | Some m ->
@@ -390,7 +398,8 @@ let () =
                  Renderer_metrics.record_phase metrics Gpu_submit metrics.gpu_submit_ms;
                  metrics.gpu_submitted <- metrics.gpu_submitted + 1;
                  Lui_metal.present_async m) s in
-               if not submitted then metrics.gpu_busy_skips <- metrics.gpu_busy_skips + 1;
+               if submitted then incr metal_presented_fallback
+               else metrics.gpu_busy_skips <- metrics.gpu_busy_skips + 1;
                Bytes.empty) }
       , false, None )
     | None -> (
@@ -2131,7 +2140,10 @@ let () =
     let a11y_started = perf_s () in
     ignore (Lui_a11y.sync a11y);
     Renderer_metrics.record_phase metrics Accessibility ((perf_s () -. a11y_started) *. 1000.);
-    if !gl_live_cell then Sdl.gl_swap_window !win;
+    if !gl_live_cell then begin
+      Sdl.gl_swap_window !win;
+      incr software_presented
+    end;
     (* Re-assert after AppKit's end-of-frame titlebar layout. *)
     push_titlebar_insets ();
     Ui.frame_done ui;
@@ -2485,8 +2497,10 @@ let () =
     let retry = presentation.Host_interaction.pending in
     let frame_due = Renderer_metrics.frame_due ~vsync
       ~deadline:!frame_deadline ~now:(perf_s ()) in
-    if dirty && frame_due then begin
+    let input_frame_due = dirty && (frame_due || Option.is_some metrics.input_at) in
+    if input_frame_due then begin
       paint_frame ();
+      if presentation.Host_interaction.pending then input_present_retry := true;
       (* A caret blink must not keep the loop in its post-input fast poll. *)
       if ordinary_dirty then last_busy := t0;
       last_render := perf_s ();
@@ -2501,16 +2515,43 @@ let () =
         && (match metal with Some m -> Lui_metal.ready m | None -> true) then begin
       last_render := perf_s ();
       ignore (renderer_live.Lui_host.render (Lui_host.scene host));
-      if !gl_live_cell then Sdl.gl_swap_window !win
+      if !gl_live_cell then begin
+        Sdl.gl_swap_window !win;
+        incr software_presented
+      end
     end;
     (match metal with
-     | Some m -> Renderer_metrics.record_display_count metrics ~now:(perf_s ())
-         ~presented:(Lui_metal.presented_frames m)
-     | None -> ());
+     | Some m ->
+       let feedback = Lui_metal.presented_frames m in
+       let presented =
+         if feedback > 0 then begin
+           let offset = match !metal_feedback_offset with
+             | Some offset -> offset
+             | None ->
+               let offset = max 0 (!metal_presented_fallback - feedback) in
+               metal_feedback_offset := Some offset;
+               offset
+           in
+           feedback + offset
+         end
+         else !metal_presented_fallback
+       in
+       Renderer_metrics.record_display_count metrics ~now:(perf_s ()) ~presented
+     | None -> Renderer_metrics.record_display_count metrics ~now:(perf_s ())
+         ~presented:!software_presented);
     let work_ms = (perf_s () -. t0) *. 1000. in
     if dirty || had_events || had_mailbox || (retry && not presentation.pending)
     then Renderer_metrics.record_phase metrics Active_frame work_ms;
-    Renderer_metrics.record_present metrics ~now:(perf_s ()) ~work_ms;
+    let retry_presented_input =
+      !input_present_retry && not presentation.Host_interaction.pending
+    in
+    if retry_presented_input then input_present_retry := false;
+    let input_frame_presented =
+      (input_frame_due && not presentation.Host_interaction.pending)
+      || retry_presented_input
+    in
+    Renderer_metrics.record_present_frame metrics ~now:(perf_s ()) ~work_ms
+      ~presented:input_frame_presented;
     let now = perf_s () in
     (match memory_replay_duration with
      | Some duration when now -. memory_replay_started >= duration -> quit := true
