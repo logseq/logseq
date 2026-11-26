@@ -296,6 +296,13 @@ let () = begin
     Bytes.set sequence_avif 11 's';
     expect "Linux AVIF image sequences stay unsupported"
       (match Host_image.decode sequence_avif with Ok _ -> false | Error _ -> true);
+    let compatible_sequence_avif = Bytes.copy compatible_brand_avif in
+    Bytes.set compatible_sequence_avif 24 'a';
+    Bytes.set compatible_sequence_avif 25 'v';
+    Bytes.set compatible_sequence_avif 26 'i';
+    Bytes.set compatible_sequence_avif 27 's';
+    expect "Linux compatible-brand AVIF sequences stay unsupported"
+      (match Host_image.decode compatible_sequence_avif with Ok _ -> false | Error _ -> true);
     validate "Linux libheif decodes HEIC images" heic;
     expect "Linux libheif premultiplies AVIF alpha"
       (match Host_image.decode alpha_avif with

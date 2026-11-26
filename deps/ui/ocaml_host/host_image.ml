@@ -16,6 +16,11 @@ let heif_brand brand =
   | "avif" | "heic" | "heix" | "heim" | "heis" | "mif1" -> true
   | _ -> false
 
+let heif_sequence_brand brand =
+  match brand with
+  | "avis" | "msf1" | "hevc" | "hevx" | "hevm" | "hevs" -> true
+  | _ -> false
+
 let sniff_heif encoded =
   let length=Bytes.length encoded in
   let be32 position =
@@ -30,14 +35,15 @@ let sniff_heif encoded =
     if box_end < 16 || box_end > length then false
     else
       let major=Bytes.sub_string encoded 8 4 in
-      match major with
-      | "avis" | "msf1" | "hevc" | "hevx" | "hevm" | "hevs" -> false
-      | _ ->
-        heif_brand major ||
-        (let rec compatible position =
-           position + 4 <= box_end &&
-           (heif_brand (Bytes.sub_string encoded position 4) || compatible (position + 4)) in
-         compatible 16)
+      if heif_sequence_brand major then false
+      else
+        let rec compatible position still =
+          if position + 4 > box_end then still
+          else
+            let brand=Bytes.sub_string encoded position 4 in
+            if heif_sequence_brand brand then false
+            else compatible (position + 4) (still || heif_brand brand) in
+        compatible 16 (heif_brand major)
 
 
 let decode encoded =

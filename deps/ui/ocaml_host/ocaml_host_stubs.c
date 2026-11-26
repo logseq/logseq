@@ -4027,20 +4027,28 @@ static int logseq_is_heif_brand(const unsigned char *brand) {
     memcmp(brand, "mif1", 4) == 0;
 }
 
+static int logseq_is_heif_sequence_brand(const unsigned char *brand) {
+  return memcmp(brand, "avis", 4) == 0 ||
+    memcmp(brand, "msf1", 4) == 0 ||
+    memcmp(brand, "hevc", 4) == 0 ||
+    memcmp(brand, "hevx", 4) == 0 ||
+    memcmp(brand, "hevm", 4) == 0 ||
+    memcmp(brand, "hevs", 4) == 0;
+}
+
 static int logseq_is_heif(const unsigned char *data, size_t data_length) {
   if (data_length < 16 || memcmp(data + 4, "ftyp", 4) != 0) return 0;
   uint32_t box_size = ((uint32_t)data[0] << 24) | ((uint32_t)data[1] << 16) |
     ((uint32_t)data[2] << 8) | (uint32_t)data[3];
   size_t box_end = box_size == 0 ? data_length : (size_t)box_size;
   if (box_end < 16 || box_end > data_length) return 0;
-  if (memcmp(data + 8, "avis", 4) == 0 || memcmp(data + 8, "msf1", 4) == 0 ||
-      memcmp(data + 8, "hevc", 4) == 0 || memcmp(data + 8, "hevx", 4) == 0 ||
-      memcmp(data + 8, "hevm", 4) == 0 || memcmp(data + 8, "hevs", 4) == 0)
-    return 0;
-  if (logseq_is_heif_brand(data + 8)) return 1;
-  for (size_t position = 16; position + 4 <= box_end; position += 4)
-    if (logseq_is_heif_brand(data + position)) return 1;
-  return 0;
+  if (logseq_is_heif_sequence_brand(data + 8)) return 0;
+  int still = logseq_is_heif_brand(data + 8);
+  for (size_t position = 16; position + 4 <= box_end; position += 4) {
+    if (logseq_is_heif_sequence_brand(data + position)) return 0;
+    if (logseq_is_heif_brand(data + position)) still = 1;
+  }
+  return still;
 }
 
 static void logseq_heif_error(char *error_out, size_t error_size,
