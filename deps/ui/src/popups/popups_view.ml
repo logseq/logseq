@@ -483,10 +483,7 @@ let ac_popover (st : S.t) : t =
                                | _ ->
                                    "width:512px;max-width:calc(100vw \
                                     - 16px)")
-                              ^
-                              (match a.S.flip with
-                               | Some _ -> ";position:relative;top:-18px"
-                               | None -> "") ) ]
+                              ) ]
                       | None -> [])
                     vs))
             ~padding:6 ~border_width:1 ~border_color:"hsl(var(--border))"
