@@ -55,10 +55,14 @@ let copy_image_to_clipboard asset_uuid =
         (Asset_store.asset_dir (Runtime.repo ()))
         (asset_uuid ^ ".png")
     in
-    let ic = open_in_bin path in
-    let length = in_channel_length ic in
-    let png = Bytes.of_string (really_input_string ic length) in
-    close_in ic;
+    let png =
+      let ic = open_in_bin path in
+      Fun.protect
+        ~finally:(fun () -> close_in_noerr ic)
+        (fun () ->
+          let length = in_channel_length ic in
+          Bytes.of_string (really_input_string ic length))
+    in
     let task = Platform.clipboard_write_image_png png in
     ignore
       (Ui_task.catch
