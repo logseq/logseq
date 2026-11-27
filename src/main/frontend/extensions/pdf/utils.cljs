@@ -156,6 +156,120 @@
           (string/replace #"\|#\|([a-zA-Z_])" " $1")
           (string/replace sp "")))))
 
+;; Spacing modifier letters used as overlay accents in TeX/OT1 and similar PDF
+;; text. NFC/NFKC leave these untouched because they are not combining marks.
+(def ^:private spacing-diacritic->combining
+  {"\u02C7" "\u030C" ; caron ˇ
+   "\u00B4" "\u0301" ; acute ´
+   "\u02CB" "\u0300" ; modifier grave ˋ (not ASCII `)
+   "\u00A8" "\u0308" ; diaeresis ¨
+   "\u02D8" "\u0306" ; breve ˘
+   "\u02D9" "\u0307" ; dot above ˙
+   "\u02DA" "\u030A" ; ring above ˚
+   "\u02DB" "\u0328" ; ogonek ˛
+   "\u02DC" "\u0303" ; small tilde ˜
+   "\u02DD" "\u030B" ; double acute ˝
+   "\u00B8" "\u0327" ; cedilla ¸
+   "\u02C6" "\u0302" ; modifier circumflex ˆ (not ASCII ^)
+   "\u00AF" "\u0304"}) ; macron ¯
+
+(def ^:private unicode-letter-re (js/RegExp. "^\\p{L}$" "u"))
+(def ^:private whitespace-char-re (js/RegExp. "^\\s$" "u"))
+
+(defn- unicode-letter?
+  [ch]
+  (boolean (and ch (.test unicode-letter-re ch))))
+
+(defn- whitespace-char?
+  [ch]
+  (boolean (and ch (.test whitespace-char-re ch))))
+
+(defn- spacing-diacritic?
+  [ch]
+  (contains? spacing-diacritic->combining ch))
+
+(defn- composable-base-letter?
+  [ch]
+  (and (unicode-letter? ch)
+       (not (spacing-diacritic? ch))))
+
+(defn- compose-letter-and-spacing-diacritic
+  [letter spacing-diacritic]
+  (when (composable-base-letter? letter)
+    (when-let [combining (get spacing-diacritic->combining spacing-diacritic)]
+      (let [composed (.normalize (str letter combining) "NFC")]
+        (when (and (= 1 (.-length composed))
+                   (not= composed letter))
+          composed)))))
+
+(defn- try-compose-pair
+  [left right]
+  ;; Accent-before-letter first: U+02C7/U+02C6 are Unicode Lm.
+  (or (compose-letter-and-spacing-diacritic right left)
+      (compose-letter-and-spacing-diacritic left right)))
+
+(defn- codepoint-at
+  [^js codepoints idx]
+  (when (and (<= 0 idx) (< idx (alength codepoints)))
+    (aget codepoints idx)))
+
+(defn- whitespace-blocked-pair?
+  "Do not compose across a space when the accent already sits next to another letter."
+  [^js codepoints left-idx right-idx]
+  (boolean
+   (or (and (spacing-diacritic? (aget codepoints right-idx))
+            (composable-base-letter? (codepoint-at codepoints (inc right-idx))))
+       (and (spacing-diacritic? (aget codepoints left-idx))
+            (composable-base-letter? (codepoint-at codepoints (dec left-idx)))))))
+
+(defn compose-pdf-spacing-diacritics
+  "Compose overlay spacing accents from PDF text into precomposed letters.
+
+  PDFs (especially TeX) often draw š as s plus a spacing caron (U+02C7). pdf.js
+  exposes those as adjacent characters; NFC does not compose them. Convert a
+  spacing accent that directly follows or precedes a letter (optionally with one
+  text-layer space) into its combining mark and keep the NFC form only when that
+  yields a single precomposed character. Direct adjacency wins over a pair
+  across whitespace. Standalone accents, ASCII ^/`, and non-composing pairs
+  are left unchanged."
+  [text]
+  (if-not (string? text)
+    text
+    (let [^js codepoints (js/Array.from text)
+          n (alength codepoints)
+          ^js out (js/Array.)]
+      (loop [i 0]
+        (if (>= i n)
+          (.join out "")
+          (let [ch (aget codepoints i)
+                j (inc i)
+                next-ch (codepoint-at codepoints j)
+                adjacent (when (and next-ch (not (whitespace-char? next-ch)))
+                           (when-let [composed (try-compose-pair ch next-ch)]
+                             [composed (inc j)]))
+                across-space (when (and (nil? adjacent)
+                                        (whitespace-char? next-ch)
+                                        (< (inc j) n))
+                               (let [right-idx (inc j)
+                                     partner (aget codepoints right-idx)]
+                                 (when-not (whitespace-blocked-pair? codepoints i right-idx)
+                                   (when-let [composed (try-compose-pair ch partner)]
+                                     [composed (inc right-idx)]))))
+                composed-pair (or adjacent across-space)]
+            (if composed-pair
+              (let [[composed next-i] composed-pair]
+                (.push out composed)
+                (recur next-i))
+              (do (.push out ch)
+                  (recur (inc i))))))))))
+
+(defn normalize-pdf-selection-text
+  "Normalize PDF highlight/copy text: join wrapped lines, then compose overlay accents."
+  [text]
+  (some-> text
+          fix-selection-text-breakline
+          compose-pdf-spacing-diacritics))
+
 (defn fix-local-asset-pagename
   [filename]
   (if (and (string? filename) (not (string/blank? filename)))
@@ -197,4 +311,6 @@
   (fix-selection-text-breakline "he is 1\n8 years old")
   (fix-selection-text-breakline "这是一个\n\n段落")
   (fix-selection-text-breakline "これ\n\nは、段落")
-  (fix-selection-text-breakline "this is a te-\nst paragraph"))
+  (fix-selection-text-breakline "this is a te-\nst paragraph")
+  (normalize-pdf-selection-text "Pli s\u02C7 ka \u010D")
+  (normalize-pdf-selection-text "s\n\u02C7"))

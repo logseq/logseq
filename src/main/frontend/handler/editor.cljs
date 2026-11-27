@@ -3628,7 +3628,7 @@
       (and (state/get-current-pdf)
            (.closest (.. js/window getSelection -baseNode -parentElement)  ".pdfViewer"))
       (util/copy-to-clipboard!
-       (pdf-utils/fix-selection-text-breakline (.. js/window getSelection toString))
+       (pdf-utils/normalize-pdf-selection-text (.. js/window getSelection toString))
        nil))))
 
 (defn shortcut-copy-text

@@ -164,7 +164,7 @@
                            "copy"
                            (do
                              (util/copy-to-clipboard!
-                              (or (:text content) (pdf-utils/fix-selection-text-breakline (.toString selection)))
+                              (or (:text content) (pdf-utils/normalize-pdf-selection-text (.toString selection)))
                               :owner-window owner-win)
                              (pdf-utils/clear-all-selection))
 
@@ -715,7 +715,7 @@
                                               {:id         nil
                                                :page       page
                                                :position   sc-pos
-                                               :content    {:text (pdf-utils/fix-selection-text-breakline (.toString selection))}
+                                               :content    {:text (pdf-utils/normalize-pdf-selection-text (.toString selection))}
                                                :properties {}})))]
 
            ;; show ctx menu
