@@ -1793,7 +1793,7 @@ let run_views ~registry ~profile ~finish =
     ignore (Lui_app.dispose browser_link.S.app);
     restore_browser ()) [false;true];
   List.iter (fun code ->
-    let results = mount (fun _ -> Option.get (Render.calc_results_el code)) in
+    let results = mount (fun _ -> Render.calc_results_for code) in
     let lines = List.filter (fun node ->
       class_has node "extensions__code-calc-output-line") (nodes results) in
     check "Calculator results retain one single-height line per expression"
