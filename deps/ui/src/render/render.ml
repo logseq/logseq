@@ -214,8 +214,17 @@ let src_block_with_save s =
         in
         let body =
           let n = String.length body in
-          if n >= 3 && String.sub body (n - 3) 3 = "```" then
-            let b = String.sub body 0 (n - 3) in
+          let trailing_ticks =
+            let rec count i =
+              if i >= 0 && body.[i] = '`' then 1 + count (i - 1) else 0
+            in
+            count (n - 1)
+          in
+          let close_start = n - trailing_ticks in
+          if trailing_ticks >= 3
+             && (close_start = 0 || body.[close_start - 1] = '\n')
+          then
+            let b = String.sub body 0 close_start in
             if String.length b > 0 && b.[String.length b - 1] = '\n' then
               String.sub b 0 (String.length b - 1)
             else b

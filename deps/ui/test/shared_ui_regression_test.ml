@@ -6656,7 +6656,9 @@ let source_blocks () =
       ( "```calc\n1+1\n```", "1+1\n",
         "```calc\n1+1\n\n```" );
       ( "```calc\n1+1\n", "1+1\n",
-        "```calc\n1+1\n" ) ];
+        "```calc\n1+1\n" );
+      ( "```calc\n1+1\n````", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n````" ) ];
   let _, tags, hash =
     Title_refs.scan_title "#+begin_src calc\n1+1\n#+end_src"
   in
@@ -6669,6 +6671,10 @@ let source_blocks () =
   in
   check "Line-leading triple backticks follow mldoc fence semantics"
     (refs = [] && tags = [] && hash = []);
+  (match Render.src_block_with_save "```calc\nuse ```" with
+   | Some (_, body, _) ->
+       eqs "inline trailing backticks are preserved" "use ```" body
+   | None -> check "inline trailing backtick fixture did not parse" false);
   let resolved =
     [ { Title_refs.name = "Page"; uuid = "page-uuid"; is_tag = false;
         is_hash = false; fresh = false; entity = Wire.Nil } ]
