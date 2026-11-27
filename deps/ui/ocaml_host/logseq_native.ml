@@ -2086,6 +2086,8 @@ let () =
     &&
     (match Lui_store.string_prop store node "accessibility-identifier" with
      | Some ("block-context-menu" | "block-context-submenu") -> true
+     | _ when Lui_store.string_prop store node "data-popup-owner"
+              = Some "block-context-menu" -> true
      | _ ->
          (match Lui_store.parent store node with
           | Some parent -> in_block_context_menu ~depth:(depth + 1) parent
@@ -2093,12 +2095,13 @@ let () =
   in
   let block_context_menu_key_target () =
     in_block_context_menu (dom_key_target ())
+    || in_block_context_menu (Ui.overlay_top ui)
   in
   let block_context_menu_editable_focus () =
     block_context_menu_key_target ()
     &&
     match Lui_store.kind store (Ui.focused ui) with
-    | "input" | "textarea" -> true
+    | "input" | "textarea" | "search-field" -> true
     | _ -> false
   in
   let shared_keydown_first key mods =
