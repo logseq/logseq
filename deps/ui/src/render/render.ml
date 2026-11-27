@@ -696,9 +696,28 @@ let table_parts s =
          l
   in
   let cells line =
-    String.split_on_char '|' line
-    |> List.map String.trim
-    |> List.filter (fun c -> c <> "")
+    let length = String.length line in
+    let first = if length > 0 && line.[0] = '|' then 1 else 0 in
+    let stop =
+      if length > first && line.[length - 1] = '|' then length - 1
+      else length
+    in
+    let output = Buffer.create length in
+    let rec scan i acc =
+      if i >= stop then
+        List.rev (String.trim (Buffer.contents output) :: acc)
+      else if line.[i] = '\\' && i + 1 < stop && line.[i + 1] = '|' then (
+        Buffer.add_char output '|';
+        scan (i + 2) acc)
+      else if line.[i] = '|' then (
+        let acc = String.trim (Buffer.contents output) :: acc in
+        Buffer.clear output;
+        scan (i + 1) acc)
+      else (
+        Buffer.add_char output line.[i];
+        scan (i + 1) acc)
+    in
+    scan first []
   in
   match lines with
   | l0 :: l1 :: rest
