@@ -16,11 +16,12 @@ let hl_img_sigs : (string, hl_img option Signal.state) Hashtbl.t =
 
 let hl_img_sig (b : Model.block) context =
   let uuid = Option.value b.Model.block_uuid ~default:"" in
-  match Hashtbl.find_opt hl_img_sigs uuid with
+  let cache_key = Runtime.repo () ^ "\000" ^ uuid in
+  match Hashtbl.find_opt hl_img_sigs cache_key with
   | Some st -> st
   | None ->
       let st = Signal.state context.Lui_ui.ui_scheduler None in
-      Hashtbl.replace hl_img_sigs uuid st;
+      Hashtbl.replace hl_img_sigs cache_key st;
       (match b.Model.block_hl_image with
        | None -> ()
        | Some db_id ->
@@ -75,7 +76,7 @@ let area_display (b : Model.block) context : Lui_elements.t =
                       []
                   ]
               ; Lui_elements.image ~key:"hl-img" ~url:r.src
-                  ~alt:(r.asset_uuid ^ ".png")
+                  ?width:r.width ~alt:(r.asset_uuid ^ ".png")
                   ~accessibility_identifier:
                     ("hl-area-img-"
                     ^ Option.value b.Model.block_uuid ~default:"")
