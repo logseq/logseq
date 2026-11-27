@@ -1008,6 +1008,7 @@
  :import/failed "Import failed"
  :import/file-error "{1}: {2}"
  :import/file-finished "Import finished!"
+ :import/file-finished-with-warnings "Import finished with warnings. Some files or properties were skipped."
  :import/file-to-db-desc "Import a file-based Logseq graph or a plain Markdown folder into a new DB graph"
  :import/file-to-db-title "File to DB graph"
  :import/finishing "Finishing graph import"

@@ -1005,6 +1005,7 @@
  :import/failed "导入失败"
  :import/file-error "{1}：{2}"
  :import/file-finished "导入完成！"
+ :import/file-finished-with-warnings "导入已完成，但有警告。部分文件或属性已被跳过。"
  :import/file-to-db-desc "将基于文件的 Logseq 知识库或纯 Markdown 文件夹导入到新的 DB 知识库"
  :import/file-to-db-title "文件到 DB 知识库"
  :import/finishing "正在完成图谱导入"
