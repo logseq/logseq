@@ -2910,10 +2910,15 @@ let paste_into_editor ~clipboard ev =
   | Some e, _ when S.is_draft e ->
       ev.Ui_services.prevent_default ();
       ev.Ui_services.stop_immediate ();
-      let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
-      if clipboard = None
-         && not (markdown_blocks text || has_paragraph_break text) then
-        splice_clipboard_text e.uuid text
+      (* Draft surfaces are single-block text inputs: structured and
+         block-shaped clipboard content is flattened into the draft
+         instead of creating outliner children. *)
+      let text =
+        match clipboard with
+        | Some _ -> String.concat "" (String.split_on_char '\r' clip_text)
+        | None -> paste_editor_text e.S.model ~text:clip_text ~html:clip_html
+      in
+      if text <> "" then splice_clipboard_text e.uuid text
   | Some e, Some ((_, blocks) as copied) -> (
       match S.find e.uuid with
       | Some b ->
