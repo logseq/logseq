@@ -69,6 +69,30 @@ let () =
   Printf.printf "native image ownership, decoding and foreground publication: OK\n%!"
 
 let () =
+  let execute,pump=Lui_resource.executor_queued () in
+  let loads=ref 0 and visible=ref false in
+  let images=Host_images.create ~executor:execute ~visible:(fun _ -> !visible)
+    ~source:(fun _ -> incr loads;Lui_resource_loaders.Bytes (png ()))
+    ~on_change:(fun _ -> ()) () in
+  let store=Lui_store.create () in
+  let apply ops=let patch=batch ops in
+    Lui_store.apply_batch store patch;Host_images.sync_batch images store patch in
+  apply (add 1 "lazy" @ [SetProp (1,LoadingValue,StringValue "lazy")]);
+  check "lazy images do not load before approaching the viewport" (!loads=0 && pump ()=0);
+  Host_images.sync_visible images store;
+  check "an off-viewport lazy image stays pending" (!loads=0 && pump ()=0);
+  visible:=true;
+  Host_images.sync_visible images store;
+  check "an approaching lazy image starts loading" (!loads=1 && pump ()=1);
+  Host.drain ();
+  check "an approaching lazy image publishes its bitmap" (Option.is_some (Host_images.image_of images 1));
+  apply (add 2 "eager");
+  check "eager images still load immediately" (!loads=2);
+  Host.drain ();
+  Host_images.dispose images;
+  Printf.printf "native lazy image viewport loading: OK\n%!"
+
+let () =
   let executor,pump=Lui_resource.executor_queued () in
   let images=Host_images.create ~executor ~source:(fun _ -> Lui_resource_loaders.Bytes (png ()))
     ~on_change:(fun _ -> ()) () in

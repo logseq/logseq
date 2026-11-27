@@ -894,7 +894,8 @@ let () =
   in
   let host_cell = ref None in
   let host_req_repaint = ref false in
-  let images=Host_images.create ~on_change:(fun id ->
+  let image_visible = ref (fun _ -> false) in
+  let images=Host_images.create ~visible:(fun id -> !image_visible id) ~on_change:(fun id ->
     let host=Option.get !host_cell in
     Lui_host.invalidate_layout host;Lui_host.note_paint host id;
     host_req_repaint:=true) () in
@@ -1264,6 +1265,12 @@ let () =
     (Some (fun () ->
        Host_interaction.context_anchor store (Ui.open_menu ui) (Ui.pointer ui)));
   let win_w = ref width and win_h = ref height in
+  image_visible := (fun id ->
+    let r = shifted_rect id in
+    let vw = float !win_w *. !scale_cell and vh = float !win_h *. !scale_cell in
+    r.Lui_scene.w >= 1. && r.Lui_scene.h >= 1.
+    && r.Lui_scene.x < vw +. 256. && r.Lui_scene.x +. r.Lui_scene.w > -256.
+    && r.Lui_scene.y < vh +. 768. && r.Lui_scene.y +. r.Lui_scene.h > -256.);
   overlay_viewport := (fun () -> (!win_w, !win_h, !scale_cell));
   (* Content-space visible range for virtual-list nodes. Rects are
      published after this callback on the sync that creates the list,
@@ -2600,6 +2607,7 @@ let () =
       (max 0. (metrics.paint_ms -. layout_ms -. metrics.render_ms));
     let populate_started = perf_s () in
     populate_rects ();
+    Host_images.sync_visible images store;
     fire_viewport_events ();
     refresh_cursor ();
     metrics.populate_ms <- (perf_s () -. populate_started) *. 1000.;
