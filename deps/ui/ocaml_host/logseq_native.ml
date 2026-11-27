@@ -2320,14 +2320,18 @@ let () =
           let key = Input.key_of_sdl_scancode sc in
           let mods = Native_window.mods_of_keymod km in
           if down then Host_requests.drain_dom_focus ();
-          if down && not (Keyboard_capture.active ()) then
-            Host_requests.ensure_ed_focus ();
+          if down && not (Keyboard_capture.active ())
+             && not (block_context_menu_key_target ())
+          then Host_requests.ensure_ed_focus ();
           let pre_dispatched = down && shared_keydown_first key mods in
           if pre_dispatched then begin
             let menu_owned = block_context_menu_key_target () in
             on_dom_key ~before_default:true ~down:true ~scancode:sc ~keymod:km
               ~repeat:false ();
-            if menu_owned then on_component_input ()
+            if menu_owned then begin
+              on_component_input ();
+              Host_requests.drain_dom_focus ()
+            end
           end;
           if down && not !component_input then
             apply_actions (handle_input (Input.Key_down (key, mods, false)));
@@ -2470,7 +2474,8 @@ let () =
          | Some (Input.Key_down _) -> Host_requests.drain_dom_focus ()
          | _ -> ());
         (match input with
-         | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ()) -> Host_requests.ensure_ed_focus ()
+         | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ())
+             && not (block_context_menu_key_target ()) -> Host_requests.ensure_ed_focus ()
          | _ -> ());
         let key_pre_dispatched =
           match input, event.kind with
@@ -2480,7 +2485,10 @@ let () =
               on_dom_key ~before_default:true ~down:true
                 ~scancode:sdl_key.scancode
                 ~keymod:sdl_key.keymod ~repeat ();
-              if menu_owned then on_component_input ();
+              if menu_owned then begin
+                on_component_input ();
+                Host_requests.drain_dom_focus ()
+              end;
               true
           | _ -> false
         in
