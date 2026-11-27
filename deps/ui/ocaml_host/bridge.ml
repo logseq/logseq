@@ -23,6 +23,32 @@ let take_requests () =
   Mutex.unlock requests_lock;
   out
 
+let take_matching_requests pred =
+  Mutex.lock requests_lock;
+  match
+    let kept = Queue.create () in
+    let out =
+      Queue.fold
+        (fun acc s ->
+           if pred s then s :: acc
+           else begin
+             Queue.add s kept;
+             acc
+           end)
+        [] requests
+      |> List.rev
+    in
+    Queue.clear requests;
+    Queue.iter (fun s -> Queue.add s requests) kept;
+    out
+  with
+  | out ->
+    Mutex.unlock requests_lock;
+    out
+  | exception exn ->
+    Mutex.unlock requests_lock;
+    raise exn
+
 let () =
   Callback.register "ocaml_host_wakeup" wakeup;
   Callback.register "ocaml_host_platform_request" (fun (s : string) ->

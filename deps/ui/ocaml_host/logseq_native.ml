@@ -2077,22 +2077,57 @@ let () =
         | None -> None)
     | _ -> None
   in
-  let dom_key_target () =
-    let menu = Ui.open_menu ui in
-    if menu <> 0 then menu else Ui.focused ui
-  in
   let rec in_block_context_menu ?(depth = 0) node =
     node <> 0 && depth <= 64
     &&
     (match Lui_store.string_prop store node "accessibility-identifier" with
      | Some ("block-context-menu" | "block-context-submenu") -> true
+     | _ when Lui_query.data_attr store node "data-popup-owner"
+              = Some "block-context-menu" -> true
      | _ ->
          (match Lui_store.parent store node with
           | Some parent -> in_block_context_menu ~depth:(depth + 1) parent
           | None -> false))
   in
+  let dom_key_target () =
+    let menu = Ui.open_menu ui in
+    if menu <> 0 then menu
+    else
+      let overlay = Ui.overlay_top ui in
+      if in_block_context_menu overlay then overlay else Ui.focused ui
+  in
   let block_context_menu_key_target () =
     in_block_context_menu (dom_key_target ())
+    || in_block_context_menu (Ui.overlay_top ui)
+  in
+  let block_context_menu_editable_focus () =
+    block_context_menu_key_target ()
+    &&
+    match Lui_store.kind store (Ui.focused ui) with
+    | "input" | "textarea" | "search-field" -> true
+    | _ -> false
+  in
+  let shared_keydown_first key mods =
+    if mods.Input.ctrl || mods.Input.meta || mods.Input.alt
+       || Keyboard_capture.active ()
+       || block_context_menu_editable_focus ()
+    then false
+    else
+      match key with
+      | Input.Tab ->
+        (* Outliner Tab shortcuts can prevent focus traversal. Overlays
+           otherwise keep their own focus order; the custom block context
+           menu owns Tab itself in every case. *)
+        Ui.overlay_top ui = 0 || block_context_menu_key_target ()
+      | Input.Arrow_left | Input.Arrow_right | Input.Arrow_up
+      | Input.Arrow_down | Input.Home | Input.End | Input.Return
+      | Input.Space | Input.Escape ->
+        (* Logseq's custom context menu has nested submenu state that the
+           generic native menu gesture machine cannot know. Give the shared
+           DOM keydown first chance so cm.highlighted remains the single
+           semantic source instead of the parallel native gesture row. *)
+        block_context_menu_key_target ()
+      | _ -> false
   in
   let on_dom_key ?(before_default = false) ~down ~scancode ~keymod ~repeat () =
     let recording = Keyboard_capture.active () in
@@ -2278,21 +2313,34 @@ let () =
   let dispatch_input_line line =
     let nomods = Native_window.mods_of_keymod 0 in
     let btn_of_name = function "r" -> Input.Right | _ -> Input.Left in
-    let step = function
+    let step event =
+      component_input := false;
+      match event with
       | `key (down, sc, km) ->
-          if down then begin
-            if not (Keyboard_capture.active ()) then
-              Host_requests.ensure_ed_focus ();
-            apply_actions
-              (handle_input
-                 (Input.Key_down
-                    ( Input.key_of_sdl_scancode sc
-                    , Native_window.mods_of_keymod km, false )))
+          let key = Input.key_of_sdl_scancode sc in
+          let mods = Native_window.mods_of_keymod km in
+          if down then Host_requests.drain_dom_focus ();
+          if down && not (Keyboard_capture.active ())
+             && not (block_context_menu_key_target ())
+          then Host_requests.ensure_ed_focus ();
+          let pre_dispatched = down && shared_keydown_first key mods in
+          if pre_dispatched then begin
+            let menu_owned = block_context_menu_key_target () in
+            on_dom_key ~before_default:true ~down:true ~scancode:sc ~keymod:km
+              ~repeat:false ();
+            if menu_owned then begin
+              on_component_input ();
+              Host_requests.drain_dom_focus ()
+            end
           end;
-          on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
+          if down && not !component_input then
+            apply_actions (handle_input (Input.Key_down (key, mods, false)));
+          if not pre_dispatched && not !component_input then
+            on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
       | `text s ->
-          if not (Keyboard_capture.active ()) then
-            Host_requests.ensure_ed_focus ();
+          if not (Keyboard_capture.active ())
+             && not (block_context_menu_key_target ())
+          then Host_requests.ensure_ed_focus ();
           apply_actions (handle_input (Input.Text_input s));
           (* same insert emit as the SDL path — the logseq-editor
              extension reads commits as "insert" events *)
@@ -2322,7 +2370,6 @@ let () =
       | `wheel (dx, dy) ->
           apply_actions (handle_input (Input.Wheel (dx, dy)))
     in
-    component_input := false;
     match String.split_on_char ' ' (String.trim line) with
     | "key" :: [s; m] ->
         let s, m = int_of_string s, int_of_string m in
@@ -2425,19 +2472,24 @@ let () =
          | Some (Input.Button_up (_,_,Input.Left,_)) -> Native_window.hold_pointer text_input false
          | _ -> ());
         (match input with
-         | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ()) -> Host_requests.ensure_ed_focus ()
+         | Some (Input.Key_down _) -> Host_requests.drain_dom_focus ()
          | _ -> ());
-        (* Outliner Tab shortcuts can prevent focus traversal. Let overlays
-           keep their own focus order and dispatch other Tab keydowns once. *)
-        let tab_dispatched =
+        (match input with
+         | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ())
+             && not (block_context_menu_key_target ()) -> Host_requests.ensure_ed_focus ()
+         | _ -> ());
+        let key_pre_dispatched =
           match input, event.kind with
-          | Some (Input.Key_down (Input.Tab, mods, repeat)), Sdl.Event.Key_down key
-            when not (mods.Input.ctrl || mods.Input.meta || mods.Input.alt
-                      || Keyboard_capture.active ())
-                 && (Ui.overlay_top ui = 0 || block_context_menu_key_target ()) ->
+          | Some (Input.Key_down (key, mods, repeat)), Sdl.Event.Key_down sdl_key
+            when shared_keydown_first key mods ->
+              let menu_owned = block_context_menu_key_target () in
               on_dom_key ~before_default:true ~down:true
-                ~scancode:key.scancode
-                ~keymod:key.keymod ~repeat ();
+                ~scancode:sdl_key.scancode
+                ~keymod:sdl_key.keymod ~repeat ();
+              if menu_owned then begin
+                on_component_input ();
+                Host_requests.drain_dom_focus ()
+              end;
               true
           | _ -> false
         in
@@ -2503,7 +2555,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        if not !component_input && not tab_dispatched then emit_dom_event e
+        if not !component_input && not key_pre_dispatched then emit_dom_event e
       end
       else go := false
     done;

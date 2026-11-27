@@ -1385,7 +1385,7 @@ let menu_keydown st (ev : Ui_services.ev) =
           let idx, item = List.nth items i in
           focus_cm_item st ~sub idx item;
           true
-      | Some "Enter", _ :: _ -> (
+      | Some ("Enter" | " "), _ :: _ -> (
           match List.find_opt
               (fun (idx, _) -> cm.S.highlighted = Some (highlight idx))
               items with
