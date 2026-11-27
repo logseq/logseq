@@ -31,11 +31,6 @@ let find_close (s : string) i =
 (* Source fences are not prose: references and tags inside them are code,
    not outgoing block metadata. This is a small line-oriented recognizer for
    the fence forms rendered by Render.src_block, not a full Markdown parser. *)
-let count_backticks s i =
-  let n = String.length s in
-  let rec go j = if j < n && s.[j] = '`' then go (j + 1) else j in
-  go i - i
-
 let markdown_source_end lower i =
   if not (Str_util.starts_at lower i "```") then None
   else
@@ -51,7 +46,9 @@ let markdown_source_end lower i =
           in
           let ticks_start = skip_indent line in
           if Str_util.starts_at lower ticks_start "```" then
-            Some (ticks_start + count_backticks lower ticks_start)
+            match Str_util.index_from lower ticks_start "\n" with
+            | Some newline -> Some (newline + 1)
+            | None -> Some n
           else None
         in
         let rec find_close line =
@@ -65,9 +62,7 @@ let markdown_source_end lower i =
                  | None -> None)
         in
         (match find_close (line_end + 1) with
-         | Some after ->
-             Some
-               (if after < n && lower.[after] = '\n' then after + 1 else after)
+         | Some _ as finish -> finish
          | None -> Some n)
 
 let org_source_end lower i =

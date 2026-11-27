@@ -214,37 +214,34 @@ let src_block_with_save s =
         in
         let body =
           let n = String.length body in
-          let trailing_ticks =
-            let rec count i =
-              if i >= 0 && body.[i] = '`' then 1 + count (i - 1) else 0
-            in
-            count (n - 1)
-          in
-          let close_start = n - trailing_ticks in
-          let fence_line_start =
-            let rec start i =
-              if i < 0 then 0
-              else if body.[i] = '\n' then i + 1
-              else start (i - 1)
-            in
-            start (close_start - 1)
-          in
-          let closing_fence_line =
-            let rec only_indent i =
-              if i < fence_line_start then true
+          let closing_line_start =
+            let rec find line =
+              if line >= n then None
               else
-                match body.[i] with
-                | ' ' | '\t' -> only_indent (i - 1)
-                | _ -> false
+                let rec skip_indent i =
+                  if i < n && (body.[i] = ' ' || body.[i] = '\t') then
+                    skip_indent (i + 1)
+                  else i
+                in
+                let ticks_start = skip_indent line in
+                if ticks_start + 2 < n && body.[ticks_start] = '`'
+                   && body.[ticks_start + 1] = '`'
+                   && body.[ticks_start + 2] = '`'
+                then Some line
+                else
+                  match String.index_from_opt body line '\n' with
+                  | Some newline -> find (newline + 1)
+                  | None -> None
             in
-            only_indent (close_start - 1)
+            find 0
           in
-          if trailing_ticks >= 3 && closing_fence_line then
-            let b = String.sub body 0 fence_line_start in
-            if String.length b > 0 && b.[String.length b - 1] = '\n' then
-              String.sub b 0 (String.length b - 1)
-            else b
-          else body
+          match closing_line_start with
+          | None -> body
+          | Some line_start ->
+              let b = String.sub body 0 line_start in
+              if String.length b > 0 && b.[String.length b - 1] = '\n' then
+                String.sub b 0 (String.length b - 1)
+              else b
         in
         Some (lang, body, finish true body_start body s))
   else
