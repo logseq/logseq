@@ -188,9 +188,15 @@ and render_table context children =
   let first_row_has_header_cells =
     match html_rows with
     | Element (_, _, first_children) :: _ ->
-        List.exists
-          (function Element ("th", _, _) -> true | _ -> false)
-          first_children
+        let cells =
+          List.filter
+            (function Element (("td" | "th"), _, _) -> true | _ -> false)
+            first_children
+        in
+        cells <> []
+        && List.for_all
+             (function Element ("th", _, _) -> true | _ -> false)
+             cells
     | _ -> false
   in
   let row_count = List.length html_rows in
@@ -200,6 +206,9 @@ and render_table context children =
   | [] -> ""
   | first :: rest ->
       let width = List.fold_left (fun width row -> max width (List.length row)) 0 rows in
+      let pad row = row @ List.init (width - List.length row) (fun _ -> "") in
+      let first = pad first in
+      let rest = List.map pad rest in
       let separator = "| " ^ String.concat " | " (List.init width (fun _ -> "----")) ^ " |" in
       let header, body =
         if List.exists has_thead children || first_row_has_header_cells then first, rest
