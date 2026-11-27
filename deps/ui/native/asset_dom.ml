@@ -242,9 +242,11 @@ let image_lightbox_view ~source ~alt : Lui_elements.t =
                (Lui_elements.column ~key:"lb-backdrop"
                   ~container_relative_frame:`both ~main:`center ~cross:`center
                   ~padding:32
-                  [ Lui_elements.image ~key:"lb-image" ~url:source ~alt [] ])
-           ; Lui_elements.row ~key:"lb-chrome" ~container_relative_frame:`both
-               ~main:`end_ ~cross:`start ~padding:16
+                  [ Ui_parts.pressable ~on_press:(fun _ -> ())
+                      (Lui_elements.box ~key:"lb-image-box"
+                         [ Lui_elements.image ~key:"lb-image" ~url:source ~alt [] ]) ])
+           ; Lui_elements.overlay ~key:"lb-chrome" ~alignment:`top_trailing
+               ~padding:16
                [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
                    ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
                    ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
