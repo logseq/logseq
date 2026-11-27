@@ -1259,7 +1259,8 @@ let pv_dyn (st : S.t) : t =
    their own keyboard handlers and must not be intercepted here. *)
 let menu_keydown st (ev : Ui_services.ev) =
   if not (match ev.Ui_services.key with
-    | Some ("ArrowDown" | "ArrowUp" | "Home" | "End" | "Enter") -> true
+    | Some ("ArrowDown" | "ArrowUp" | "ArrowLeft" | "ArrowRight"
+           | "Home" | "End" | "Enter" | "Tab") -> true
     | _ -> false)
   then false
   else
@@ -1269,18 +1270,23 @@ let menu_keydown st (ev : Ui_services.ev) =
         && target.Ui_services.closest "#block-context-menu, #block-context-submenu" <> None ->
         let sub = cm.S.sub_open >= 0 in
         let entries =
-          if not sub then Some cm.S.entries else
+          if not sub then cm.S.entries else
           match S.cm_sub_at st cm.S.sub_open with
-          | Some (S.Sub_menu items) -> Some items
-          | _ -> None
+          | Some (S.Sub_menu items) -> items
+          | _ -> []
         in
-        Option.bind entries (fun entries ->
+        let surface_id =
+          if sub then
+            match S.cm_sub_at st cm.S.sub_open with
+            | Some (S.Sub_menu _) -> "block-context-submenu"
+            | _ -> "block-context-menu"
+          else "block-context-menu"
+        in
         Option.bind
-          (Ui_services.dom_by_id
-             (if sub then "block-context-submenu" else "block-context-menu"))
+          (Ui_services.dom_by_id surface_id)
           (fun menu -> let _,_,width,_ = menu.Ui_services.rect () in
             if width > 0. || menu.Ui_services.rect_pending ()
-            then Some (cm, sub, entries) else None))
+            then Some (cm, sub, entries) else None)
     | _ -> None
   in
   match menu with
@@ -1292,6 +1298,63 @@ let menu_keydown st (ev : Ui_services.ev) =
         |> List.filter (function _, (S.Ci_item _ | S.Ci_sub _) -> true | _ -> false)
       in
       match (ev.Ui_services.key, items) with
+      | Some "Tab", _ ->
+          (* Base UI closes the menu for Tab and Shift+Tab. The native
+             context menu has no retained root trigger element yet, so
+             root focus restoration remains a documented gap. *)
+          if ev.Ui_services.shift && sub then (
+            cm_close_sub st;
+            Option.iter (fun trigger -> trigger.Ui_services.focus ())
+              (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int cm.S.sub_open)))
+          else close_cm st;
+          true
+      | Some "ArrowRight", _ when not sub -> (
+          let target_idx =
+            match ev.Ui_services.target with
+            | Some target -> (
+                match target.Ui_services.closest "[data-cm-sub], [data-cm-item]" with
+                | Some row -> (
+                    match row.Ui_services.attr "data-cm-sub" with
+                    | Some value -> int_of_string_opt value
+                    | None ->
+                        Option.bind (row.Ui_services.attr "data-cm-item")
+                          int_of_string_opt)
+                | None -> None)
+            | None -> None
+          in
+          let current_idx =
+            match target_idx with
+            | Some _ as idx -> idx
+            | None ->
+                List.find_map
+                  (fun (idx, _) ->
+                    if cm.S.highlighted = Some (S.Main_item idx) then Some idx
+                    else None)
+                  items
+          in
+          match Option.bind current_idx (fun current ->
+            List.find_opt (fun (idx, _) -> idx = current) items) with
+          | Some (idx, (S.Ci_sub (_, subkind) as item)) ->
+              Option.iter (!cm_press_open_ref st)
+                (Ui_services.dom_by_id (cm_item_id ~sub:false idx item));
+              (match (S.get st).S.cm, subkind with
+               | Some opened, S.Sub_menu subitems when opened.S.sub_open = idx ->
+                   List.find_mapi
+                     (fun idx -> function
+                       | S.Ci_item _ | S.Ci_sub _ -> Some idx
+                       | _ -> None)
+                     subitems
+                   |> Option.iter (fun first ->
+                     S.highlight_cm st (Some (S.Sub_item first)))
+               | _ -> ());
+              true
+          | _ -> true)
+      | Some "ArrowLeft", _ when sub ->
+          cm_close_sub st;
+          Option.iter (fun trigger -> trigger.Ui_services.focus ())
+            (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int cm.S.sub_open));
+          true
+      | Some "ArrowLeft", _ -> true
       | Some (("ArrowDown" | "ArrowUp" | "Home" | "End") as k), _ :: _ ->
           let cur =
             match
