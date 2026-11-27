@@ -221,10 +221,26 @@ let src_block_with_save s =
             count (n - 1)
           in
           let close_start = n - trailing_ticks in
-          if trailing_ticks >= 3
-             && (close_start = 0 || body.[close_start - 1] = '\n')
-          then
-            let b = String.sub body 0 close_start in
+          let fence_line_start =
+            let rec start i =
+              if i < 0 then 0
+              else if body.[i] = '\n' then i + 1
+              else start (i - 1)
+            in
+            start (close_start - 1)
+          in
+          let closing_fence_line =
+            let rec only_indent i =
+              if i < fence_line_start then true
+              else
+                match body.[i] with
+                | ' ' | '\t' -> only_indent (i - 1)
+                | _ -> false
+            in
+            only_indent (close_start - 1)
+          in
+          if trailing_ticks >= 3 && closing_fence_line then
+            let b = String.sub body 0 fence_line_start in
             if String.length b > 0 && b.[String.length b - 1] = '\n' then
               String.sub b 0 (String.length b - 1)
             else b

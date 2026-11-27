@@ -42,15 +42,33 @@ let markdown_source_end lower i =
     match Str_util.index_from lower (i + 3) "\n" with
     | None -> None
     | Some line_end ->
-        (match Str_util.index_from lower line_end "\n```" with
-         | Some close ->
-             let ticks_start = close + 1 in
-             let after = ticks_start + count_backticks lower ticks_start in
+        let n = String.length lower in
+        let closing_end line =
+          let rec skip_indent j =
+            if j < n && (lower.[j] = ' ' || lower.[j] = '\t') then
+              skip_indent (j + 1)
+            else j
+          in
+          let ticks_start = skip_indent line in
+          if Str_util.starts_at lower ticks_start "```" then
+            Some (ticks_start + count_backticks lower ticks_start)
+          else None
+        in
+        let rec find_close line =
+          if line >= n then None
+          else
+            match closing_end line with
+            | Some _ as finish -> finish
+            | None ->
+                (match Str_util.index_from lower line "\n" with
+                 | Some newline -> find_close (newline + 1)
+                 | None -> None)
+        in
+        (match find_close (line_end + 1) with
+         | Some after ->
              Some
-               (if after < String.length lower && lower.[after] = '\n'
-                then after + 1
-                else after)
-         | None -> Some (String.length lower))
+               (if after < n && lower.[after] = '\n' then after + 1 else after)
+         | None -> Some n)
 
 let org_source_end lower i =
   if not (Str_util.starts_at lower i "#+begin_src") then None

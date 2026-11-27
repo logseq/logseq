@@ -6658,7 +6658,9 @@ let source_blocks () =
       ( "```calc\n1+1\n", "1+1\n",
         "```calc\n1+1\n" );
       ( "```calc\n1+1\n````", "1+1\n2+3",
-        "```calc\n1+1\n2+3\n````" ) ];
+        "```calc\n1+1\n2+3\n````" );
+      ( "```calc\n1+1\n  ```", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n  ```" ) ];
   let _, tags, hash =
     Title_refs.scan_title "#+begin_src calc\n1+1\n#+end_src"
   in
@@ -6679,6 +6681,11 @@ let source_blocks () =
     Title_refs.scan_title "````calc\n[[Inside]]\n```\n[[Outside]]"
   in
   check "Longer opening fences still close on a three-backtick fence line"
+    (refs = [ "Outside" ] && tags = [] && hash = []);
+  let refs, tags, hash =
+    Title_refs.scan_title "```calc\n[[Inside]]\n  ```\n[[Outside]]"
+  in
+  check "Indented closing fences end source scanning"
     (refs = [ "Outside" ] && tags = [] && hash = []);
   let resolved =
     [ { Title_refs.name = "Page"; uuid = "page-uuid"; is_tag = false;
