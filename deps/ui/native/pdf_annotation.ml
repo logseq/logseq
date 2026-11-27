@@ -1,9 +1,8 @@
 (* Native twin of src/render/pdf_annotation.ml — the cljs
    block.cljs annotation prefix (.prefix-link > .hl-page) +
    extensions/pdf/assets.cljs area-display. The area image resolves to
-   the on-disk assets/<uuid>.png; the image lightbox and
-   image-to-clipboard button are unported (no preview_images host op
-   natively — see NOTES.md). *)
+   the on-disk assets/<uuid>.png; image-to-clipboard remains unported
+   because native clipboard writes are text-only. *)
 
 open Promise_ext
 module D = Logseq_el
@@ -17,16 +16,18 @@ let hl_img_sigs : (string, hl_img option Signal.state) Hashtbl.t =
 
 let hl_img_sig (b : Model.block) context =
   let uuid = Option.value b.Model.block_uuid ~default:"" in
-  match Hashtbl.find_opt hl_img_sigs uuid with
+  let cache_key = Runtime.repo () ^ "\000" ^ uuid in
+  match Hashtbl.find_opt hl_img_sigs cache_key with
   | Some st -> st
   | None ->
       let st = Signal.state context.Lui_ui.ui_scheduler None in
-      Hashtbl.replace hl_img_sigs uuid st;
+      Hashtbl.replace hl_img_sigs cache_key st;
       (match b.Model.block_hl_image with
        | None -> ()
        | Some db_id ->
            ignore
              ((let* w = Properties_data.entity (W.Int db_id) in
+               let w = Properties_data.untag w in
                let width =
                  match W.get w "logseq.property.asset/resize-metadata" with
                  | Some m -> W.map_get_int m "width"
@@ -35,9 +36,10 @@ let hl_img_sig (b : Model.block) context =
                match W.map_get_uuid w "block/uuid" with
                | Some u ->
                    let src =
-                     Filename.concat
-                       (Asset_store.asset_dir (Runtime.repo ()))
-                       (u ^ ".png")
+                     Platform.resource_url
+                       (Filename.concat
+                          (Asset_store.asset_dir (Runtime.repo ()))
+                          (u ^ ".png"))
                    in
                    Runtime.signal_set st
                      (Some { src; width; asset_uuid = u });
@@ -54,39 +56,31 @@ let area_display (b : Model.block) context : Lui_elements.t =
       match r with
       | None -> Lui_elements.spacer ~key:"hla-none" []
       | Some r ->
-          let w_style =
-            match r.width with
-            | Some w -> "width:" ^ string_of_int w ^ "px"
-            | None -> ""
-          in
           D.el ~key:"hl-a" ~tag:"div" ~style_class:"hl-area"
-              ~attrs:
-                (if w_style = "" then [] else [ ("style", w_style) ])
-              [ D.el ~key:"hl-ac" ~tag:"div" ~style_class:"asset-container"
-                  ~attrs:
-                    [ ( "style"
-                      , "width:" ^ if w_style = "" then "auto" else "100%"
-                      ) ]
-                  [ D.el ~key:"hl-ab" ~tag:"span"
-                      ~style_class:"asset-action-bar"
-                      [ Lui_elements.icon_button ~key:"hl-ref"
-                          ~label:"ref-block"
-                          ~data_attrs:[ ("tabindex", "-1") ]
-                          ~icon:(`app "file-symlink")
-                          ~on_press:(fun _ ->
-                            Pdf_assets.goto_asset_block r.asset_uuid)
-                          []
-                      ]
-                  ; D.el ~key:"hl-img" ~tag:"img"
-                      ~attrs:
-                        [ ("style", "width:100%")
-                        ; ("src", r.src)
-                        ; ( "id"
-                          , "hl-area-img-"
-                            ^ Option.value b.Model.block_uuid
-                                ~default:"" ) ]
+              [ D.el ~key:"hl-ab" ~tag:"span"
+                  ~style_class:"asset-action-bar"
+                  [ Lui_elements.icon_button ~key:"hl-ref"
+                      ~label:(I18n.t "asset/ref-block")
+                      ~data_attrs:[ ("tabindex", "-1") ]
+                      ~icon:(`app "file-symlink")
+                      ~on_press:(fun _ ->
+                        Pdf_assets.goto_asset_block r.asset_uuid)
+                      []
+                  ; Lui_elements.icon_button ~key:"hl-max"
+                      ~label:(I18n.t "asset/maximize")
+                      ~data_attrs:[ ("tabindex", "-1") ]
+                      ~icon:(`app "maximize")
+                      ~on_press:(fun _ ->
+                        Asset_dom.open_image_lightbox ~source:r.src
+                          ~alt:(r.asset_uuid ^ ".png"))
                       []
                   ]
+              ; Lui_elements.image ~key:"hl-img" ~url:r.src
+                  ?width:r.width ~alt:(r.asset_uuid ^ ".png")
+                  ~accessibility_identifier:
+                    ("hl-area-img-"
+                    ^ Option.value b.Model.block_uuid ~default:"")
+                  []
               ]) (Signal.value (st))
 
 (* cljs hl-ref prefix-link — pointerdown opens the pdf at the hl

@@ -158,7 +158,9 @@ let apply_for context ?(opts = W.Map []) ops =
     Outliner_ops.refresh_via_delta result
   else Js.Promise.resolve ()
 
-let entity_of ref_wire = Properties_data.entity ref_wire
+let entity_of ref_wire =
+  let* w = Properties_data.entity ref_wire in
+  Js.Promise.resolve (Properties_data.untag w)
 
 let entity_uuid (w : W.t) = W.map_get_uuid w "block/uuid"
 
