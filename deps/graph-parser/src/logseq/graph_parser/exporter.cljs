@@ -1588,21 +1588,43 @@
         (when (pdf-file? path)
           path))))
 
+(defn- asset-link-regexes
+  "Markdown image/link syntax and org link-to-asset syntax for one asset key."
+  [asset-name]
+  (let [escaped (common-util/escape-regex-chars asset-name)]
+    {:markdown (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
+                               escaped
+                               "\\)(\\{[^}]*\\})?"))
+     ;; Local org [[path]] / [[path][label]]. Prefix is only ./ or ../ so a
+     ;; URL with the same suffix is left alone. Skip =verbatim= / ~code~.
+     ;; Trailing {..} stays in the title: org emits it as Plain, not link metadata.
+     :org (re-pattern (str "(?<![=~])\\[\\[(?:\\./|\\.\\./)*"
+                           escaped
+                           "\\](?:\\[(?:[^\\[\\]]|\\[[^\\[\\]]*\\])*\\])?\\](?![=~])"))}))
+
+(defn- replace-asset-link-in-title
+  "Replace file-graph asset links in a block title with a DB asset page-ref.
+   Handles markdown image/link syntax and org link-to-asset syntax."
+  [title asset-name asset-uuid]
+  (let [{:keys [markdown org]} (asset-link-regexes asset-name)
+        uuid-ref (page-ref/->page-ref asset-uuid)]
+    (-> title
+        (string/replace markdown uuid-ref)
+        (string/replace org uuid-ref))))
+
 (defn- update-asset-links-in-block-title [block-title asset-name-to-uuids ignored-assets]
   (reduce (fn [acc [asset-name asset-uuid]]
-            (let [new-title (string/replace acc
-                                            (re-pattern (str "!?\\[[^\\]]*?\\]\\([^\\)]*?"
-                                                             (common-util/escape-regex-chars asset-name)
-                                                             "\\)(\\{[^}]*\\})?"))
-                                            (page-ref/->page-ref asset-uuid))]
-              (when (string/includes? new-title asset-name)
+            (let [new-title (replace-asset-link-in-title acc asset-name asset-uuid)
+                  {:keys [markdown org]} (asset-link-regexes asset-name)]
+              (when (or (re-find markdown new-title) (re-find org new-title))
                 (swap! ignored-assets conj
                        {:reason "Some asset links were not updated to block references"
                         :path asset-name
                         :location {:block new-title}}))
               new-title))
           block-title
-          asset-name-to-uuids))
+          ;; Longer keys first so `assets/foo.png` cannot rewrite `.../my-assets/foo.png`.
+          (sort-by (comp - count key) asset-name-to-uuids)))
 
 (defn find-annotation-children-blocks
   "Given a list of blocks and a set of parent uuids, return all blocks that are
