@@ -54,15 +54,19 @@
 
 (defn- request-origin-opts
   "Returns a vector of {:scheme :host} maps for all configured base URLs.
-  DB_SYNC_BASE_URL may be a comma-separated list of URLs so the server accepts
+
+  `DB_SYNC_BASE_URL` may be a comma-separated list of URLs so the server accepts
   requests arriving via different addresses (e.g. LAN IP over HTTP and a
   Tailscale / reverse-proxy domain over HTTPS pointing at the same process).
-  The first entry is used as the default when the Host header does not match
-  any of the configured origins."
+  The entry whose :host matches the request's Host header is used to reconstruct
+  the URL; the first entry is used as a fallback when no match is found. When
+  `DB_SYNC_BASE_URL` is unset this is empty so the request is rebuilt from its
+  Host header and `X-Forwarded-Proto`. Forcing `http` here makes snapshot
+  download return an http URL, which the secure desktop context cannot fetch."
   [cfg]
   (if-let [base-urls (:base-urls cfg)]
     (mapv parse-url-origin base-urls)
-    [{:scheme "http"}]))
+    []))
 
 (defn- access-allowed?
   [env graph-id request]

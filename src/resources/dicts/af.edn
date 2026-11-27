@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Token vernieuwen: uitzonderlijke status"
  :account/reset-password "Herstel wagwoord"
  :account/sign-up "Registreer"
- :account/sync-assets-limit "Sinchroniseer bates tot 100MB per lêer"
+ :account/sync-assets-limit "Sinchroniseer bates tot 200MB per lêer"
  :account/synced-status "Gesinchroniseer"
  :account/unlimited-unsynced-graphs "Onbeperkte ongesinchroniseerde grafieke"
  :account/upcoming-cloud-features "Komende wolkgebaseerde kenmerke, insluitend Logseq Publish"
@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Wissel oop blokke"
  :command.editor/undo "Ontdoen"
  :command.editor/up "Op"
- :command.editor/zoom-in "Zoem in"
- :command.editor/zoom-out "Zoem uit"
+ :command.editor/zoom-in "Zoem in op die blok wat jy redigeer"
+ :command.editor/zoom-out "Zoem uit vanaf die blok wat jy redigeer"
 
  :command.go/all-graphs "Alle grafieke"
  :command.go/all-pages "Alle bladsye"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Ikone"
 
  :import/all-tags "Alle tags voer in"
- :import/asset-too-large-warning "Kopiëring van bate {1} is oorgeslaan omdat dit die limiet van 100 MB oorskry."
+ :import/asset-too-large-warning "Kopiëring van bate {1} is oorgeslaan omdat dit die limiet van 200 MB oorskry."
  :import/assets-import-partial "{1}/{2} lêers geïmporteerd. Details in console."
  :import/assets-imported "{1} lêers geïmporteerd."
  :import/assets-skipped "{1} lêers overgeslagen. Details in console."

@@ -6,6 +6,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.db.transact :as db-transact]
             [frontend.db.subs :as db-subs]
+            [frontend.error :as error]
             [frontend.handler.notification :as notification]
             [frontend.handler.worker :as worker-handler]
             [frontend.persist-db.browser :as browser]
@@ -427,7 +428,18 @@
   (cond
     (electron-runtime?)
     (if-let [repo (state/get-current-repo)]
-      (<ensure-remote! repo)
+      (-> (<ensure-remote! repo)
+          (p/catch (fn [err]
+                     (if (error/graph-absent-error? err)
+                       (do
+                         (log/warn :event :db-worker-start-graph-absent
+                                   :repo repo
+                                   :error err)
+                         (when (same-remote-repo? repo (state/get-current-repo))
+                           (state/set-current-repo! nil)
+                           (db-subs/reset-graph! nil))
+                         nil)
+                       (throw err)))))
       (p/resolved nil))
 
     :else
@@ -441,8 +453,16 @@
 (defn <list-db []
   (if (electron-runtime?)
     (if-let [repo (or @remote-repo (state/get-current-repo))]
-      (p/let [client (<ensure-remote! repo)]
-        (protocol/<list-db client))
+      (-> (p/let [client (<ensure-remote! repo)]
+            (protocol/<list-db client))
+          (p/catch (fn [err]
+                     (if (error/graph-absent-error? err)
+                       (do
+                         (log/warn :event :db-worker-list-graph-absent
+                                   :repo repo
+                                   :error err)
+                         [])
+                       (throw err)))))
       (p/resolved []))
     (protocol/<list-db (get-impl))))
 

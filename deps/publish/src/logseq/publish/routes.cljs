@@ -448,6 +448,31 @@
         graph-uuid (nth parts 2 nil)]
     (handle-list-graph-pages-by-uuid graph-uuid env)))
 
+(defn- storage-error [response]
+  (if (= 404 (.-status response))
+    (publish-common/not-found)
+    (publish-common/json-response {:error "publish storage request failed"} (.-status response))))
+
+(defn- delete-page-by-ids
+  [env claims graph-uuid page-uuid]
+  (let [^js do-ns (aget env "PUBLISH_META_DO")
+        page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
+        page-stub (.get do-ns page-id)
+        index-id (.idFromName do-ns "index")
+        index-stub (.get do-ns index-id)
+        url (str "https://publish/pages/" graph-uuid "/" page-uuid)]
+    (p/let [metadata (.fetch index-stub url #js {:method "GET"})]
+      (if-not (.-ok metadata)
+        (storage-error metadata)
+        (p/let [page (.json metadata)
+                owner (aget page "owner_sub")]
+          (if (or (string/blank? owner) (not= owner (aget claims "sub")))
+            (publish-common/forbidden)
+            (p/let [removed (.fetch page-stub url #js {:method "DELETE"})]
+              (if (.-ok removed)
+                (.fetch index-stub url #js {:method "DELETE"})
+                (storage-error removed)))))))))
+
 (defn handle-delete-page [request env]
   (let [url (js/URL. (.-url request))
         parts (string/split (.-pathname url) #"/")
@@ -458,28 +483,23 @@
       (p/let [{:keys [claims]} (auth-claims request env)]
         (if (nil? claims)
           (publish-common/unauthorized)
-          (let [^js do-ns (aget env "PUBLISH_META_DO")
-                page-id (.idFromName do-ns (str graph-uuid ":" page-uuid))
-                page-stub (.get do-ns page-id)
-                index-id (.idFromName do-ns "index")
-                index-stub (.get do-ns index-id)]
-            (p/let [meta-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                      #js {:method "GET"})]
-              (if-not (.-ok meta-resp)
-                (publish-common/not-found)
-                (p/let [meta (.json meta-resp)
-                        owner-sub (aget meta "owner_sub")
-                        subject (aget claims "sub")]
-                  (if (or (string/blank? owner-sub)
-                          (not= owner-sub subject))
-                    (publish-common/forbidden)
-                    (p/let [page-resp (.fetch page-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                              #js {:method "DELETE"})
-                            index-resp (.fetch index-stub (str "https://publish/pages/" graph-uuid "/" page-uuid)
-                                               #js {:method "DELETE"})]
-                      (if (or (not (.-ok page-resp)) (not (.-ok index-resp)))
-                        (publish-common/not-found)
-                        (publish-common/json-response {:ok true} 200)))))))))))))
+          (delete-page-by-ids env claims graph-uuid page-uuid))))))
+
+(defn- <with-short-page [env short-id handle-page]
+  (if (string/blank? short-id)
+    (publish-common/bad-request "missing short id")
+    (let [^js do-ns (aget env "PUBLISH_META_DO")
+          index (.get do-ns (.idFromName do-ns "index"))]
+      (p/let [response (.fetch index (str "https://publish/short/" short-id) #js {:method "GET"})]
+        (if-not (.-ok response)
+          (storage-error response)
+          (p/let [data (.json response)
+                  row (aget data "page")
+                  graph-id (some-> row (aget "graph_uuid"))
+                  page-id (some-> row (aget "page_uuid"))]
+            (if (or (string/blank? graph-id) (string/blank? page-id))
+              (publish-common/not-found)
+              (handle-page graph-id page-id))))))))
 
 (defn handle-delete-graph [request env]
   (let [url (js/URL. (.-url request))
@@ -716,29 +736,18 @@
                     (js/Response. (.-body object)
                                   #js {:headers headers}))))))))
 
-      (and (or (string/starts-with? path "/p/")
-               (string/starts-with? path "/s/"))
-           (= method "GET"))
-      (let [parts (string/split path #"/")
-            short-id (nth parts 2 nil)]
-        (if (string/blank? short-id)
-          (publish-common/bad-request "missing short id")
-          (let [^js do-ns (aget env "PUBLISH_META_DO")
-                do-id (.idFromName do-ns "index")
-                do-stub (.get do-ns do-id)]
-            (p/let [resp (.fetch do-stub (str "https://publish/short/" short-id)
-                                 #js {:method "GET"})]
-              (if-not (.-ok resp)
-                (publish-common/not-found)
-                (p/let [data (.json resp)
-                        row (aget data "page")]
-                  (if-not row
-                    (publish-common/not-found)
-                    (let [graph-uuid (aget row "graph_uuid")
-                          page-uuid (aget row "page_uuid")
-                          page-path (str "/page/" graph-uuid "/" page-uuid)
-                          page-request (rewrite-request-path request page-path)]
-                      (handle-page-html page-request env)))))))))
+      (and (or (string/starts-with? path "/p/") (string/starts-with? path "/s/"))
+           (contains? #{"GET" "DELETE"} method))
+      (let [short-id (subs path 3)]
+        (if (= method "DELETE")
+          (p/let [{:keys [claims]} (auth-claims request env)]
+            (if claims
+              (<with-short-page env short-id #(delete-page-by-ids env claims %1 %2))
+              (publish-common/unauthorized)))
+          (<with-short-page env short-id
+                            (fn [graph-id page-id]
+                              (handle-page-html
+                               (rewrite-request-path request (str "/page/" graph-id "/" page-id)) env)))))
 
       (and (string/starts-with? path "/u/") (= method "GET"))
       (let [parts (string/split path #"/")
@@ -779,6 +788,7 @@
       :else
       (js/Response.
        (publish-render/render-404-html)
-       #js {:headers (publish-common/merge-headers
+       #js {:status 404
+            :headers (publish-common/merge-headers
                       #js {"content-type" "text/html; charset=utf-8"}
                       (publish-common/cors-headers))}))))

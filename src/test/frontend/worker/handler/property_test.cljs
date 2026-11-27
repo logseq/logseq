@@ -6,6 +6,7 @@
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.schema :as db-schema]
             [logseq.db.sqlite.create-graph :as sqlite-create-graph]
+            [logseq.db :as ldb]
             [logseq.db.test.helper :as db-test]
             [logseq.outliner.property :as outliner-property]
             [promesa.core :as p]))
@@ -47,6 +48,51 @@
           (is false (str error))))
        (p/finally done)))))
 
+(deftest property-node-selector-hydrates-selected-out-of-scope-nodes
+  (doseq [cardinality [:db.cardinality/one :db.cardinality/many]
+          wrapped? [false true]]
+    (let [conn (d/create-conn
+                (assoc db-schema/schema :user.property/subjects
+                       {:db/valueType :db.type/ref :db/cardinality cardinality}))
+          reference-uuid #uuid "11111111-1111-1111-1111-111111111111"
+          selected-uuid #uuid "22222222-2222-2222-2222-222222222222"
+          host-uuid #uuid "33333333-3333-3333-3333-333333333333"]
+      (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+      (d/transact! conn [{:db/id -1 :db/ident :user.class/Subject
+                          :block/title "Subject" :block/tags :logseq.class/Tag}
+                         {:db/id -2 :db/ident :user.property/subjects
+                          :block/title "Subjects" :block/tags :logseq.class/Property
+                          :logseq.property/type :node :db/valueType :db.type/ref
+                          :db/cardinality cardinality :logseq.property/classes -1}
+                         {:db/id -3 :block/uuid reference-uuid
+                          :block/title "Named page" :block/name "named page"
+                          :block/tags :logseq.class/Page}
+                         {:db/id -4 :block/uuid selected-uuid
+                          :block/title (str "Read [[" reference-uuid "]]")
+                          :block/refs -3 :block/tags -1}
+                         {:db/id -5 :block/title (str selected-uuid)
+                          :logseq.property/created-from-property -2}
+                         {:db/id -6 :block/uuid host-uuid
+                          :block/title "Host" :block/name "host"
+                          :block/tags :logseq.class/Page
+                          :user.property/subjects (if wrapped? -5 -4)}])
+      (let [selected-id (:db/id (d/entity @conn [:block/uuid selected-uuid]))
+            host-id (:db/id (d/entity @conn [:block/uuid host-uuid]))
+            property {:db/ident :user.property/subjects
+                      :logseq.property/type :node
+                      :logseq.property/classes [(d/entity @conn :user.class/Subject)]}
+            load-choices #(worker-property/property-node-selector-data
+                           @conn {:property property :block {:db/id host-id}})]
+        (d/transact! conn [[:db/retract selected-id :block/tags :user.class/Subject]])
+        (let [choices (:selected-nodes (load-choices))]
+          (is (= [selected-id] (map #(get-in % [:value :db/id]) choices)))
+          (is (= ["Read [[Named page]]"] (map :label choices)))
+          (is (empty? (:initial-choices (load-choices)))))
+        (d/transact! conn [[:db.fn/retractAttribute host-id :user.property/subjects]])
+        (is (= [] (:selected-nodes (load-choices))))
+        (d/transact! conn [[:db/add host-id :user.property/subjects :logseq.property/empty-placeholder]])
+        (is (= [] (:selected-nodes (load-choices))))))))
+
 (deftest property-node-selector-data-extends-options-exclude-root-tag
   (let [conn (d/create-conn db-schema/schema)]
     (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
@@ -72,6 +118,7 @@
           "Other tags are still offered as parents")
       (is (not-any? #(= :logseq.class/Root (:db/ident %)) (:extends-class-options data))
           "Root Tag is the implicit parent and is not a choice in the Extends select"))))
+
 (defn- display-property-ids
   [result]
   {:full (set (map :property-id (:full-properties result)))
@@ -309,3 +356,33 @@
     (is (= :logseq.property/default-value
            (:db/ident (d/pull db '[*] :logseq.property/default-value)))
         "A wildcard pull still loads the built-in default-value property.")))
+
+(deftest get-all-classes-serializes-alias-titles
+  (let [conn (d/create-conn db-schema/schema)
+        class-uuid #uuid "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        alias-uuid #uuid "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]
+    (d/transact! conn (sqlite-create-graph/build-db-initial-data "{}"))
+    (d/transact! conn [{:db/id -1
+                        :db/ident :user.class/ExampleTag
+                        :block/title "Example Tag"
+                        :block/name "example tag"
+                        :block/uuid class-uuid
+                        :block/tags :logseq.class/Tag
+                        :block/alias [-2]}
+                       {:db/id -2
+                        :block/title "ET"
+                        :block/name "et"
+                        :block/uuid alias-uuid
+                        :block/tags :logseq.class/Page}])
+    (let [example (->> (worker-property/get-all-classes @conn {:except-root-class? true})
+                       (some #(when (= "Example Tag" (:block/title %)) %)))
+          alias (first (:block/alias example))
+          roundtrip (-> example
+                        ldb/write-transit-str
+                        ldb/read-transit-str
+                        :block/alias
+                        first)]
+      (is (= alias-uuid (:block/uuid alias)))
+      (is (= "ET" (:block/title alias)))
+      (is (= "ET" (:block/title roundtrip))
+          "Alias titles must survive worker transit so # completion can match them"))))

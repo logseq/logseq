@@ -70,6 +70,47 @@
               (is (not (ldb/asset? replayed)))
               (is (empty? (:block/_parent replayed))))))))))
 
+(deftest insert-history-replays-vector-tag-refs-across-databases
+  (let [tag-uuid (random-uuid)
+        other-tag-uuid (random-uuid)
+        tags [{:block/uuid tag-uuid :block/title "Finance Ledger"
+               :block/name "finance ledger" :block/tags :logseq.class/Tag}
+              {:block/uuid other-tag-uuid :block/title "Expense"
+               :block/name "expense" :block/tags :logseq.class/Tag}]
+        source (db-test/create-conn)
+        peer (db-test/create-conn)
+        _ (d/transact! source tags)
+        _ (d/transact! peer [{:block/uuid (random-uuid) :block/title "Peer-only entity"}])
+        _ (d/transact! peer tags)
+        task-uuid (:block/uuid (d/entity @source :logseq.class/Task))
+        tag-id (:db/id (d/entity @source [:block/uuid tag-uuid]))
+        other-tag-id (:db/id (d/entity @source [:block/uuid other-tag-uuid]))]
+    (doseq [[tag-refs expected-tags]
+            [[[tag-id] #{tag-uuid}]
+             [[tag-id other-tag-id] #{tag-uuid other-tag-uuid}]
+             [[:logseq.class/Task tag-id] #{task-uuid tag-uuid}]
+             [[[:block/uuid tag-uuid]] #{tag-uuid}]
+             [[:block/uuid tag-uuid] #{tag-uuid}]
+             [[] #{}]]]
+      (testing (str "tag refs " tag-refs)
+        (let [conn (d/conn-from-db @source)
+              replay-conn (d/conn-from-db @peer)
+              block-uuid (random-uuid)
+              reports (atom [])]
+          (d/listen! conn ::tag-history #(swap! reports conj %))
+          (outliner-core/insert-blocks!
+           conn [{:block/uuid block-uuid :block/title "" :block/tags tag-refs}]
+           (d/entity @conn [:block/uuid tag-uuid])
+           {:sibling? false :keep-uuid? true :replace-empty-target? false})
+          (let [{:keys [db-before db-after tx-data tx-meta]} (last @reports)
+                {:keys [forward-outliner-ops]}
+                (op-construct/derive-history-outliner-ops db-before db-after tx-data tx-meta)]
+            (outliner-op/apply-ops! replay-conn forward-outliner-ops {})
+            (let [block (d/entity @replay-conn [:block/uuid block-uuid])]
+              (is (= expected-tags (set (map :block/uuid (:block/tags block)))))
+              (is (= "" (:block/title block)))
+              (is (= tag-uuid (:block/uuid (:block/parent block)))))))))))
+
 (defn- run-direct-outdent
   [conn block]
   (let [{:keys [tx-data]}
@@ -326,6 +367,34 @@
            @conn (:db-after tx-report) (:tx-data tx-report) tx-meta)]
       (is (= #{[:block/uuid tag-uuid]}
              (get-in forward-outliner-ops [0 1 0 :block/tags]))))))
+
+(deftest derive-history-outliner-ops-preserves-unresolved-reference-creation-maps
+  (let [conn (db-test/create-conn-with-blocks
+              [{:page {:block/title "page"}
+                :blocks [{:block/title "child"}]}])
+        db @conn
+        child (db-test/find-block-by-content db "child")
+        ref-page {:block/uuid (random-uuid)
+                  :block/title "Referenced Page"
+                  :block/name "referenced page"
+                  :block/tags :logseq.class/Page}]
+    (doseq [refs [#{ref-page} (list ref-page)]]
+      (let [block {:block/uuid (:block/uuid child) :block/refs refs}
+            tx-meta {:outliner-op :save-block :outliner-ops [[:save-block [block nil]]]}
+            {:keys [forward-outliner-ops]} (op-construct/derive-history-outliner-ops db db [] tx-meta)]
+        (is (= #{ref-page} (get-in forward-outliner-ops [0 1 0 :block/refs])))))))
+
+(deftest rewrite-block-title-unlinks-only-known-missing-refs-test
+  (let [recovered-uuid (random-uuid)
+        deleted-uuid (random-uuid)
+        block {:block/uuid (random-uuid)
+               :block/title (str "See [[" recovered-uuid "]] and [[" deleted-uuid "]]")
+               :block/refs #{nil [:block/uuid deleted-uuid]}
+               op-construct/rebase-refs-key [{:block/uuid recovered-uuid :block/title "Keep"}
+                                             {:block/uuid deleted-uuid :block/title "Former"}]}]
+    (is (= (str "See [[" recovered-uuid "]] and Former")
+           (:block/title (op-construct/rewrite-block-title-with-retracted-refs
+                          @(db-test/create-conn) block))))))
 
 (deftest derive-history-outliner-ops-insert-blocks-resolves-retracted-ref-id-from-tx-data-test
   (testing "insert-blocks should canonicalize block ref attrs when ref entity is retracted in current tx"

@@ -162,10 +162,6 @@
   {:commands ["doctor"]
    :options ["--dev-script"]}
 
-  :agent
-  {:commands ["agent bridge"]
-   :options []}
-
   :completion
   {:commands ["completion"]
    :options ["bash"

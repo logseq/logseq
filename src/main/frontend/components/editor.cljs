@@ -8,6 +8,7 @@
             [frontend.context.i18n :refer [t]]
             [frontend.date :as date]
             [frontend.db.async :as db-async]
+            [frontend.db.hooks :as db-hooks]
             [frontend.handler.block :as block-handler]
             [frontend.handler.editor :as editor-handler]
             [frontend.handler.editor.assets :as editor-assets]
@@ -39,6 +40,10 @@
   []
   (rfx/use-sub [:editor/content (:block/uuid (state/get-edit-block))]))
 
+(defn- block-heading-value
+  [block]
+  (pu/lookup block :logseq.property/heading))
+
 (defn filter-commands
   [page? has-heading? commands]
   (seq
@@ -54,14 +59,6 @@
      (if has-heading?
        commands
        (remove #(= (t :editor.slash/clear-heading) (first %)) commands)))))
-
-(defn slash-commands-search-filtered?
-  "True when the slash popup was narrowed by user search text.
-
-  Contextual filters such as hiding Clear heading on non-heading blocks
-  do not count as a search filter and must not hide group headings."
-  [search-matched initial-commands]
-  (not= search-matched initial-commands))
 
 (defn node-render
   [block q {:keys [db-tag?]}]
@@ -103,14 +100,20 @@
   [id format]
   (let [[matched'] (hooks/use-atom *matched-commands)
         edit-block (state/get-edit-block)
+        {:keys [status value error]} (db-hooks/use-block-projection-snapshot
+                                      (:block/uuid edit-block)
+                                      block-heading-value)
         page? (entity/page? edit-block)
-        has-heading? (boolean (pu/lookup edit-block :logseq.property/heading))
-        matched (or (filter-commands page? has-heading? matched') no-matched-commands)
-        filtered? (slash-commands-search-filtered? matched' @commands/*initial-commands)]
+        has-heading? (boolean
+                      (case status
+                        :ready value
+                        :loading (block-heading-value edit-block)
+                        :missing nil
+                        :error (throw error)))
+        matched (or (filter-commands page? has-heading? matched') no-matched-commands)]
     (ui/auto-complete
      matched
-     (cond->
-      {:item-render
+     {:item-render
        (fn [item]
          (let [command-name (first item)
                command-doc (get item 2)
@@ -152,12 +155,10 @@
                                              format
                                              {:restore? restore-slash?
                                               :command command}))))
-       :class
-       "cp__commands-slash"}
-       (not filtered?)
-       (assoc :get-group-name
-              (fn [item]
-                (when (= (count item) 5) (last item))))))))
+        :class
+        "cp__commands-slash"
+
+        :get-group-name commands/command-group-name})))
 
 (defn- page-on-chosen-handler
   [embed? input id q pos format]
@@ -207,10 +208,10 @@
   [q db-tag? set-matched-pages! set-exact-page!]
   (if (string/blank? q)
     (when db-tag?
-      (p/let [classes (db-async/<get-all-classes (state/get-current-repo)
-                                                 {:except-root-class? true})]
+      (p/let [repo (state/get-current-repo)
+              classes (db-async/<get-all-classes repo {:except-root-class? true})]
         (set-exact-page! nil)
-        (set-matched-pages! classes)))
+        (set-matched-pages! (editor-handler/classes-for-tag-completion repo classes))))
     (p/let [block (db-async/<get-block (state/get-current-repo) q {:children? false})
             result (if db-tag?
                      (p/let [classes (editor-handler/get-matched-classes q)]

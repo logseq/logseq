@@ -317,7 +317,10 @@
 
 (defn- start-pending-new-block!
   []
-  (state/set-state! :editor/pending-new-block {:typed-text ""}))
+  (state/set-state! :editor/pending-new-block
+                    {:id (random-uuid)
+                     :typed-text ""
+                     :source-uuid (:block/uuid (state/get-edit-block))}))
 
 (defn- pending-new-block
   []
@@ -339,15 +342,39 @@
     (state/update-state! :editor/pending-new-block
                          #(assoc % :tab-indent? indent?))))
 
+(defn- pending-new-block-delete-on-backspace?
+  "Backspace deletes the pending block only once the editor has moved off
+  the source block and the caret is at 0. Until then .-target is still the
+  source textarea (an empty source always reports caret 0), including
+  while a queued Tab indent is still in flight."
+  [pending current-edit-uuid e]
+  (boolean
+   (and (:source-uuid pending)
+        current-edit-uuid
+        (not= current-edit-uuid (:source-uuid pending))
+        (zero? (util/get-selection-start (.-target e))))))
+
+(defn- apply-pending-new-block-backspace
+  "Before landing, Backspace trims the last buffered character and is a no-op
+  when there is nothing to trim (it does not delete the in-flight block).
+  After landing, caret 0 still deletes the new block."
+  [pending delete-block?]
+  (cond
+    delete-block?
+    (assoc pending :delete? true)
+
+    (seq (:typed-text pending))
+    (assoc pending :typed-text (subs (:typed-text pending) 0 (dec (count (:typed-text pending)))))
+
+    :else
+    pending))
+
 (defn- backspace-pending-new-block!
   [delete-block?]
   (when (pending-new-block?)
     (state/update-state!
      :editor/pending-new-block
-     (fn [{:keys [typed-text] :as pending}]
-       (if (and (seq typed-text) (not delete-block?))
-         (assoc pending :typed-text (subs typed-text 0 (dec (count typed-text))))
-         (assoc pending :delete? true))))))
+     #(apply-pending-new-block-backspace % delete-block?))))
 
 (defn- clear-pending-new-block!
   []
@@ -1705,26 +1732,65 @@
 (def insert-command! editor-common-handler/insert-command!)
 
 
+(defn- titled-class-alias
+  [alias]
+  (when (and (map? alias)
+             (:db/id alias)
+             (not (string/blank? (:block/title alias))))
+    (cond-> {:db/id (:db/id alias)
+             :block/title (:block/title alias)}
+      (:block/uuid alias) (assoc :block/uuid (:block/uuid alias)))))
+
+(defn- class-search-choice
+  [class]
+  (select-keys class [:db/id :db/ident :block/uuid :block/title :block/tags]))
+
+(defn- class-alias-search-choice
+  [class alias]
+  (when-let [alias-summary (titled-class-alias alias)]
+    (assoc (class-search-choice class) :alias alias-summary)))
+
+(defn- class-search-text
+  [class]
+  (string/trim
+   (str (:block/title class)
+        " "
+        (get-in class [:alias :block/title]))))
+
+(defn classes-for-tag-completion
+  [repo classes]
+  (if (state/enable-flashcards? repo)
+    classes
+    (when classes
+      (into [] (remove (comp #{:logseq.class/Card :logseq.class/Cards} :db/ident)) classes))))
+
 (defn get-matched-classes
-  "Return matched classes except the root tag"
+  "Return matched classes except the root tag.
+
+  Alias titles are searchable, but the chosen item is always the source class
+  so `#<alias>` tags the tag, not the alias page."
   [q]
-  (let [editing-block (state/get-edit-block)
+  (let [repo (state/get-current-repo)
+        editing-block (state/get-edit-block)
         non-page-block? (and editing-block (not (entity/page? editing-block)))]
-    (p/let [all-classes (db-async/<get-all-classes (state/get-current-repo) {:except-root-class? true})
+    (p/let [all-classes (db-async/<get-all-classes repo {:except-root-class? true})
             private-classes (when non-page-block?
-                              (db-async/<get-all-classes (state/get-current-repo)
+                              (db-async/<get-all-classes repo
                                                          {:except-root-class? true
                                                           :except-private-tags? false}))]
       (let [page-class (some #(when (= :logseq.class/Page (:db/ident %)) %) private-classes)
             all-classes (cond-> all-classes
                           (and non-page-block? page-class)
                           (conj page-class))
-            classes (->> all-classes
-                         (mapcat (fn [class]
-                                   (conj (:block/alias class) class)))
-                         (common-util/distinct-by :db/id)
-                         (map (fn [e] (select-keys e [:db/id :db/ident :block/uuid :block/title]))))]
-        (search/fuzzy-search classes q {:extract-fn :block/title})))))
+            choices (mapcat (fn [class]
+                              (concat [(class-search-choice class)]
+                                      (keep #(class-alias-search-choice class %)
+                                            (:block/alias class))))
+                            (classes-for-tag-completion repo all-classes))]
+        (->> (search/fuzzy-search choices q {:extract-fn class-search-text
+                                           :limit (count choices)})
+             (common-util/distinct-by :db/id)
+             (take 20))))))
 
 (defn <get-matched-blocks
   "Return matched blocks, optionally including public built-ins"
@@ -2992,7 +3058,7 @@
                        (not root-block?)
                        (not single-block?)
                        (not custom-query?))
-              (if (own-order-number-list? block)
+              (if (own-order-number-list? (latest-renderer-block block))
                 (p/do!
                  (save-current-block!)
                  (remove-block-own-order-list-type! block))
@@ -3006,7 +3072,11 @@
       (pending-new-block?)
       (do
         (util/stop e)
-        (backspace-pending-new-block! (zero? (util/get-selection-start (.-target e)))))
+        (backspace-pending-new-block!
+         (pending-new-block-delete-on-backspace?
+          (pending-new-block)
+          (:block/uuid (state/get-edit-block))
+          e)))
 
       (= input element)
       (let [id (state/get-edit-input-id)
@@ -3136,6 +3206,44 @@
          (not= (nth value pos) sym)
          true)))
 
+(defn- last-backtick-runs
+  [value]
+  (let [pattern (js/RegExp. "`+" "g")]
+    (loop [positions {}]
+      (if-let [match (.exec pattern value)]
+        (recur (assoc positions (count (aget match 0)) (.-index match)))
+        positions))))
+
+(defn- closing-display-math-dollar?
+  "Check whether `pos` is on the second dollar of a display math closer."
+  [value pos]
+  (let [delimiters (js/RegExp. #"\\[\s\S]|`+|\$+" "g")
+        ticks (js/RegExp. "`+" "g")
+        last-backticks (delay (last-backtick-runs value))]
+    (loop [from 0 code-width nil display-math? false]
+      ;; Inside code, only a backtick run of the opening width can close it.
+      (let [pattern (if code-width ticks delimiters)]
+        (set! (.-lastIndex pattern) from)
+        (when-let [match (.exec pattern value)]
+          (let [token (aget match 0)
+                start (.-index match)
+                end (.-lastIndex pattern)
+                width (count token)]
+            (cond
+              (> start pos) false
+              code-width (recur end (when-not (= width code-width) code-width) false)
+              (= "`" (.charAt token 0))
+              (let [opens-code? (and (not display-math?) (< start (get @last-backticks width start)))]
+                (recur end (when opens-code? width) display-math?))
+              (= "$" (.charAt token 0))
+              (if (< pos end)
+                (and display-math? (= pos (inc start)))
+                (recur end nil (case width
+                                 1 display-math?
+                                 2 (not display-math?)
+                                 false)))
+              :else (recur end nil display-math?))))))))
+
 (defn ^:large-vars/cleanup-todo keydown-not-matched-handler
   "NOTE: Keydown cannot be used on Android platform"
   [format]
@@ -3185,7 +3293,12 @@
         (and (= "$" key) (string/blank? (util/get-selected-text)))
         (do
           (util/stop e)
-          (commands/simple-insert! input-id "$$" {:backward-pos 1}))
+          ;; Between two dollars, distinguish an empty pair from a display closer.
+          (if (and (= "$" (get-current-input-char input))
+                   (or (not= "$" (util/nth-safe value (dec pos)))
+                       (closing-display-math-dollar? value pos)))
+            (cursor/move-cursor-to input (inc pos))
+            (commands/simple-insert! input-id "$$" {:backward-pos 1})))
 
         (and (contains? (set/difference (set (keys editor-autopair/reversed-autopair-map))
                                         #{"`"})
@@ -4309,4 +4422,3 @@
          (when query-block
            (save-block-inner! query-block current-query {}))
          (save-block-inner! block "" {})))))))
-

@@ -26,7 +26,7 @@
  :account/refresh-token-warning "Odśwież token: wyjątkowy status"
  :account/reset-password "Zresetuj hasło"
  :account/sign-up "Zarejestruj się"
- :account/sync-assets-limit "Synchronizuj zasoby do 100MB na plik"
+ :account/sync-assets-limit "Synchronizuj zasoby do 200MB na plik"
  :account/synced-status "Zsynchronizowany"
  :account/unlimited-unsynced-graphs "Nieograniczona liczba niezsynchronizowanych grafów"
  :account/upcoming-cloud-features "Nadchodzące funkcje w chmurze, w tym Logseq Publish"
@@ -312,8 +312,8 @@
  :command.editor/toggle-open-blocks "Zwiń / Rozwiń otwarte bloki"
  :command.editor/undo "Cofnij"
  :command.editor/up "Przesuń kursor do góry / Zaznacz powyższą opcję"
- :command.editor/zoom-in "Wejdź do edytowanego bloku lub w przód"
- :command.editor/zoom-out "Wyjdź z edytowanego bloku lub wstecz"
+ :command.editor/zoom-in "Wejdź do edytowanego bloku"
+ :command.editor/zoom-out "Wyjdź z edytowanego bloku"
 
  :command.go/all-graphs "Idź do Wszystkich grafów"
  :command.go/all-pages "Idź do indeksu wszystkich stron"
@@ -813,7 +813,7 @@
  :icon/tab-icons "Ikony"
 
  :import/all-tags "Importuj wszystkie tagi"
- :import/asset-too-large-warning "Pominięto kopiowanie zasobu {1}, ponieważ przekracza limit 100 MB."
+ :import/asset-too-large-warning "Pominięto kopiowanie zasobu {1}, ponieważ przekracza limit 200 MB."
  :import/assets-import-partial "{1}/{2} zasobów zaimportowano. Szczegóły w konsoli."
  :import/assets-imported "{1} zasobów zaimportowano."
  :import/assets-skipped "{1} zasobów pominięto. Szczegóły w konsoli."

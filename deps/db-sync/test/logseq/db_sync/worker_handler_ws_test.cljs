@@ -1,10 +1,14 @@
 (ns logseq.db-sync.worker-handler-ws-test
-  (:require [cljs-bean.core :as bean]
+  (:require ["better-sqlite3" :as sqlite3]
+            ["node:fs" :as fs]
+            [cljs-bean.core :as bean]
             [cljs.test :refer [async deftest is]]
             [datascript.core :as d]
             [logseq.db-sync.protocol :as protocol]
             [logseq.db-sync.storage :as storage]
             [logseq.db-sync.test-sql :as test-sql]
+            [logseq.db-sync.worker.auth :as auth]
+            [logseq.db-sync.worker.handler.discussion-push :as discussion-push]
             [logseq.db-sync.worker.handler.sync :as sync-handler]
             [logseq.db-sync.worker.handler.ws :as ws-handler]
             [logseq.db-sync.worker.presence :as presence]
@@ -203,3 +207,131 @@
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
+
+(deftest tx-batch-from-hibernated-socket-keeps-its-graph
+  (let [attachment (atom nil)
+        ws #js {:serializeAttachment #(reset! attachment %)
+                :deserializeAttachment #(deref attachment)}
+        account (str (random-uuid))
+        graph (str (random-uuid))
+        original #js {:graph-id graph}
+        restored #js {}
+        context (atom nil)
+        raw (protocol/encode-message
+             {:type "tx/batch"
+              :t-before 0
+              :txs [{:tx (protocol/tx->transit [[:db/add -1 :block/title "reply"]])
+                     :outliner-op :save-block}]})]
+    (presence/add-presence! original ws {:user-id account})
+    (swap! (presence/presence* restored) assoc ws (presence/attachment->user @attachment))
+    (with-redefs [sync-handler/handle-tx-batch! (fn
+                                                 ([_ _ _ _] {:type "tx/batch/ok"})
+                                                 ([_ _ _ _ request-context]
+                                                  (reset! context request-context)
+                                                  {:type "tx/batch/ok"}))
+                  ws/send! (fn [_ _] nil)]
+      (ws-handler/handle-ws-message! restored ws raw))
+    (is (= {:graph-id graph :account account} @context))))
+
+(deftest discussion-push-finds-new-comments-and-reactions-in-a-transaction-report
+  (let [owner (random-uuid)
+        participant (random-uuid)
+        author (random-uuid)
+        page-owner (random-uuid)
+        later-participant (random-uuid)
+        target (random-uuid)
+        comment-id (random-uuid)
+        reaction (random-uuid)
+        conn (d/create-conn
+              {:block/uuid {:db/unique :db.unique/identity}
+               :block/tags {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+               :block/parent {:db/valueType :db.type/ref}
+               :logseq.property/created-by-ref {:db/valueType :db.type/ref}
+               :logseq.property.comments/blocks {:db/valueType :db.type/ref :db/cardinality :db.cardinality/many}
+               :logseq.property.reaction/target {:db/valueType :db.type/ref}})]
+    (d/transact! conn [{:db/id -1 :block/uuid owner}
+                       {:db/id -2 :block/uuid participant}
+                       {:db/id -3 :block/uuid author :logseq.property.user/name "Ada"}
+                       {:db/id -4 :block/uuid target :logseq.property/created-by-ref -1 :block/parent -9}
+                       {:db/id -5 :db/ident :logseq.class/Comments}
+                       {:db/id -6 :block/uuid (random-uuid) :block/tags [-5] :logseq.property.comments/blocks [-4]}
+                       {:db/id -7 :block/uuid (random-uuid) :block/parent -6 :logseq.property/created-by-ref -2
+                        :block/order "a0" :block/created-at 400}
+                       {:db/id -8 :block/uuid page-owner}
+                       {:db/id -9 :block/uuid (random-uuid) :logseq.property/created-by-ref -8}
+                       {:db/id -10 :block/uuid later-participant}
+                       {:db/id -11 :block/uuid (random-uuid) :block/parent -6 :logseq.property/created-by-ref -10
+                        :block/order "a2" :block/created-at 100}])
+    (let [thread (-> (d/entity @conn [:block/uuid target]) :logseq.property.comments/_blocks first :db/id)
+          {:keys [db-before db-after tx-data]}
+          (d/transact! conn [{:block/uuid comment-id :block/parent thread
+                              :block/order "a1" :block/created-at 200 :block/title "Thanks!\nLooks good."
+                              :logseq.property/created-by-ref [:block/uuid author]}
+                             {:block/uuid reaction :logseq.property.reaction/emoji-id "heart"
+                              :logseq.property.reaction/target [:block/uuid target]
+                              :logseq.property/created-by-ref [:block/uuid author]}])
+          routes (discussion-push/event-routes db-before db-after tx-data (str author))]
+      (is (= {(str comment-id) #{(str owner) (str participant)}
+              (str reaction) #{(str owner)}}
+             (into {} (map (juxt :event (comp set :recipients))) routes)))
+      (is (= {(str comment-id) "comment" (str reaction) "reaction"}
+             (into {} (map (juxt :event :kind)) routes)))
+      (is (= {"comment" ["Ada" "Thanks! Looks good." nil] "reaction" ["Ada" nil "❤️"]}
+             (into {} (map (juxt :kind (juxt :sender-name :comment-preview :reaction))) routes)))
+      (is (empty? (discussion-push/event-routes db-before db-after tx-data (str owner)))))))
+
+(deftest discussion-push-refresh-and-enqueue-respect-installation-preferences
+  (async done
+    (let [sqlite (new sqlite3 ":memory:")
+          db #js {:prepare (fn [query]
+                             #js {:bind (fn [& args]
+                                          #js {:run (fn []
+                                                      (let [stmt (.prepare sqlite query)]
+                                                        (.apply (.-run stmt) stmt (to-array args))))})})
+                  :batch (fn [statements]
+                           ((.transaction sqlite
+                                          (fn [] (doseq [stmt (array-seq statements)] (.run stmt))))))}
+          env #js {:DB db :DISCUSSION_PUSH_ENABLED "true"}
+          sender (str (random-uuid))
+          recipient (str (random-uuid))
+          graph (str (random-uuid))
+          installation (str (random-uuid))
+          disabled-installation (str (random-uuid))
+          token (apply str (repeat 32 "a"))
+          new-token (apply str (repeat 32 "b"))
+          request! (fn [method body]
+                     (p/with-redefs [auth/auth-claims (fn [_ _] (p/resolved #js {:sub recipient}))]
+                       (discussion-push/<register
+                        (js/Request. "https://example.com/mobile/push-device"
+                                     #js {:method method :body (js/JSON.stringify (clj->js body))})
+                        env)))
+          queue! (fn [id kind]
+                   (discussion-push/<queue-events! env graph sender
+                                                  [{:event id :kind kind :recipients [recipient]}]))]
+      (doseq [migration ["0001_init.sql" "0002_add_graph_e2ee.sql" "0008_add_discussion_push.sql"
+                         "0009_discussion_push_preferences.sql" "0010_discussion_push_previews.sql"]]
+        (.exec sqlite (fs/readFileSync (str "worker/migrations/" migration) "utf8")))
+      (.run (.prepare sqlite "INSERT INTO graphs (graph_id, user_id) VALUES (?, ?)") graph sender)
+      (.run (.prepare sqlite "INSERT INTO graph_members (graph_id, user_id, role) VALUES (?, ?, 'member')") graph recipient)
+      (-> (p/let [first-response (request! "PUT" {:installationId installation :platform "apns" :token token
+                                                  :comments false :reactions true})
+                  disabled (request! "PUT" {:installationId disabled-installation :platform "apns" :token (apply str (repeat 32 "c"))
+                                            :comments false :reactions false})]
+            (is (= 204 (.-status first-response) (.-status disabled)))
+            (p/let [refresh (request! "PUT" {:installationId installation :platform "apns" :token new-token})
+                    _ (queue! "comment-event" "comment")
+                    _ (queue! "reaction-event" "reaction")]
+              (is (= 204 (.-status refresh)))
+              (is (= new-token (.-token (.get (.prepare sqlite "SELECT token FROM discussion_push_devices WHERE installation_id = ?")
+                                              installation))))
+              (is (= 0 (.-comments (.get (.prepare sqlite "SELECT comments FROM discussion_push_devices WHERE installation_id = ?")
+                                                 installation))))
+              (is (= ["reaction-event"]
+                     (mapv #(.-event_id %) (array-seq (.all (.prepare sqlite "SELECT event_id FROM discussion_push_outbox"))))))
+              (p/let [unregistered (request! "DELETE" {:installationId installation})
+                      _ (queue! "only-opted-out" "reaction")]
+                (is (= 204 (.-status unregistered)))
+                (is (= ["reaction-event"]
+                       (mapv #(.-event_id %) (array-seq (.all (.prepare sqlite "SELECT event_id FROM discussion_push_outbox")))))))))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally (fn [] (.close sqlite) (done)))))))

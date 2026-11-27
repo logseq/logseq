@@ -466,13 +466,21 @@ let pull_entity config repo selector lookup =
     ~selector:(Edn_util.expect_vector_t "add pull selector" selector)
     ~lookup
 
-let apply_outliner_ops config repo ops =
+let apply_outliner_ops ?stress_uuids config repo ops =
+  let options =
+    if Vec.length ops > 1 then
+      Vec.singleton (kw "outliner-op", kw "apply-outliner-ops")
+    else Vec.empty
+  in
+  let options =
+    match stress_uuids with
+    | None -> options
+    | Some uuids ->
+        Vec.push_back options (kw "stress/create-tree-uuids", uuids)
+  in
   Transport.thread_api_apply_outliner_ops config ~repo
     ~ops:(Edn_util.vector_t_vec ops)
-    ~options:(Edn_util.map_t_vec
-      (if Vec.length ops > 1 then
-         Vec.singleton (kw "outliner-op", kw "apply-outliner-ops")
-       else Vec.empty))
+    ~options:(Edn_util.map_t_vec options)
 
 let create_page config repo name uuid =
   let op =
@@ -819,25 +827,73 @@ let resolve_properties invoke_config repo properties =
   if Vec.is_empty properties then Cli_effect.pure (Ok Vec.empty)
   else resolve_property_assignments invoke_config repo properties
 
-let resolve_created_ids config repo blocks =
+let block_uuid_lookup uuid =
+  vector_vec (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])
+
+let created_id_selector =
+  vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |])
+
+let create_tree_error_context ~target_uuid ~apply_snapshot ~uuids ~failed_uuid
+    lookup_result =
+  let from value key =
+    Edn_util.get value key |> Option.value ~default:Edn_util.nil
+  in
+  Edn_util.map_vec
+    (Vec.singleton
+       ( kw "create-tree-trace",
+         Edn_util.map_vec
+           (Vec.of_array
+              [|
+                (kw "requested-uuids", uuids);
+                ( kw "target-uuid",
+                  Option.fold ~none:Edn_util.nil ~some:Edn_util.uuid target_uuid );
+                (kw "failed-uuid", Edn_util.uuid failed_uuid);
+                ( kw "apply-returned-result",
+                  from apply_snapshot "stress/returned-result" );
+                (kw "present-after-apply", from apply_snapshot "stress/present");
+                (kw "present-at-lookup", from lookup_result "stress/present");
+                (kw "apply-at-ms", from apply_snapshot "stress/at-ms");
+                (kw "lookup-at-ms", from lookup_result "stress/at-ms");
+              |]) ))
+
+let resolve_created_ids ?stress_trace config repo uuids =
   let open Cli_effect in
-  let uuids = collect_action_block_uuids blocks in
   let rec loop acc remaining =
     match Vec.pop_front remaining with
     | None -> pure (Ok acc)
     | Some (uuid, rest) ->
-        bind
-          (pull_entity config repo
-             (vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-             (vector_vec
-                (Vec.of_array [| kw "block/uuid"; Edn_util.uuid uuid |])))
-          (fun entity ->
+        let lookup = block_uuid_lookup uuid in
+        let lookup =
+          match stress_trace with
+          | None -> lookup
+          | Some (requested, _, _) ->
+              Edn_util.map_vec
+                (Vec.of_array
+                   [| (kw "stress/lookup", lookup);
+                      (kw "stress/create-tree-uuids", requested) |])
+        in
+        bind (pull_entity config repo created_id_selector lookup)
+          (fun result ->
+            let entity =
+              match stress_trace with
+              | None -> result
+              | Some _ ->
+                  Edn_util.get result "stress/entity"
+                  |> Option.value ~default:Edn_util.nil
+            in
             match id_of_entity entity with
             | Some id -> loop (Vec.push_back acc id) rest
             | None ->
+                let context =
+                  Option.map
+                    (fun (uuids, target_uuid, apply_snapshot) ->
+                      create_tree_error_context ~target_uuid ~apply_snapshot
+                        ~uuids ~failed_uuid:uuid result)
+                    stress_trace
+                in
                 pure
                   (Error
-                     (Error.make Error.Add_id_resolution_failed
+                     (Error.make ?context Error.Add_id_resolution_failed
                         "unable to resolve created ids")))
   in
   loop Vec.empty uuids
@@ -845,20 +901,17 @@ let resolve_created_ids config repo blocks =
 let target_not_found_error () =
   Error.make Error.Target_not_found "target block not found"
 
-let resolve_created_ids_or_target_error config repo target_uuid blocks =
+let resolve_created_ids_or_target_error ?stress_trace config repo target_uuid uuids =
   let open Cli_effect in
-  bind (resolve_created_ids config repo blocks) (function
-    | Ok ids -> pure (Ok ids)
-    | Error err when err.Error.code = Error.Add_id_resolution_failed ->
-        bind
-          (pull_entity config repo
-             (vector_vec (Vec.of_array [| kw "db/id"; kw "block/uuid" |]))
-             (vector_vec
-                (Vec.of_array [| kw "block/uuid"; Edn_util.uuid target_uuid |])))
-          (fun target ->
-            if Option.is_some (id_of_entity target) then pure (Error err)
-            else pure (Error (target_not_found_error ())))
-    | Error err -> pure (Error err))
+  bind (resolve_created_ids ?stress_trace config repo uuids) (fun result ->
+      match (result, target_uuid) with
+      | Error err, Some uuid when err.Error.code = Error.Add_id_resolution_failed ->
+          bind
+            (pull_entity config repo created_id_selector (block_uuid_lookup uuid))
+            (fun target ->
+              if Option.is_some (id_of_entity target) then pure (Error err)
+              else pure (Error (target_not_found_error ())))
+      | _ -> pure result)
 
 let property_key_to_value = function
   | Property.Key_ident ident -> Edn_util.any ident
@@ -1438,9 +1491,16 @@ let execute_add_block_request ~extra_ops ?(dry_run = false) action config mode =
                                        ~command:Command_id.Upsert_block mode
                                        err)
                               | Ok ((ops, target_lookup), created_uuids) ->
+                              let uuids = collect_action_block_uuids action.blocks in
+                              let stress_uuids =
+                                if Vec.length uuids = 3
+                                   && Sys.getenv_opt "LOGSEQ_CLI_STRESS_CREATE_TREE_TRACE" = Some "1"
+                                then Some (Edn_util.vector_vec (Vec.map Edn_util.uuid uuids))
+                                else None
+                              in
                               bind
                                 (catch
-                                   (apply_outliner_ops invoke_config
+                                   (apply_outliner_ops ?stress_uuids invoke_config
                                       action.repo ops)
                                    (fun exn ->
                                      bind
@@ -1448,41 +1508,28 @@ let execute_add_block_request ~extra_ops ?(dry_run = false) action config mode =
                                           (rollback_pages invoke_config
                                              action.repo created_uuids)
                                           (fun _ -> pure ()))
-                                       (fun () -> Cli_effect.error exn))) (fun _apply_result ->
-                                match Edn_util.as_uuid target_lookup with
-                                | Some target_uuid ->
-                                    bind
-                                      (resolve_created_ids_or_target_error
-                                         invoke_config action.repo target_uuid
-                                         action.blocks) (function
-                                      | Error err ->
-                                          pure
-                                            (Cli_result.error
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               err)
-                                      | Ok ids ->
-                                          pure
-                                            (Cli_result.ok
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               (Raw (result_ids ids))))
-                                | None ->
-                                    bind
-                                      (resolve_created_ids invoke_config
-                                         action.repo action.blocks) (function
-                                      | Error err ->
-                                          pure
-                                            (Cli_result.error
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               err)
-                                      | Ok ids ->
-                                          pure
-                                            (Cli_result.ok
-                                               ~command:
-                                                 Command_id.Upsert_block mode
-                                               (Raw (result_ids ids))))))))))
+                                       (fun () -> Cli_effect.error exn))) (fun apply_result ->
+                                let target_uuid = Edn_util.as_uuid target_lookup in
+                                let stress_trace =
+                                  Option.bind stress_uuids (fun requested ->
+                                      Edn_util.get apply_result "stress/create-tree-apply"
+                                      |> Option.map (fun snapshot ->
+                                          (requested, target_uuid, snapshot)))
+                                in
+                                bind
+                                  (resolve_created_ids_or_target_error
+                                     ?stress_trace invoke_config action.repo
+                                     target_uuid uuids) (function
+                                  | Error err ->
+                                      pure
+                                        (Cli_result.error
+                                           ~command:Command_id.Upsert_block mode
+                                           err)
+                                  | Ok ids ->
+                                      pure
+                                        (Cli_result.ok
+                                           ~command:Command_id.Upsert_block mode
+                                           (Raw (result_ids ids))))))))))
 
 let execute_add_block ~extra_ops ?(dry_run = false) action config mode =
   Cli_effect.catch

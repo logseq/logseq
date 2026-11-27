@@ -704,10 +704,13 @@
       (swap! *client-ops-cleanup-timers assoc repo timer))
     nil))
 
-(defn- handle-migrate-result-local-txs!
+(defn- <handle-migrate-result-local-txs!
   [repo migrate-result]
-  (doseq [tx-report (:upgrade-result-coll migrate-result)]
-    (db-sync/handle-local-tx! repo tx-report)))
+  (p/all
+   (mapv (fn [tx-report]
+           (db-sync/handle-local-tx! repo tx-report)
+           (db-listener/listen-db-changes :search {:repo repo} tx-report))
+         (:upgrade-result-coll migrate-result))))
 
 (def ^:private built-in-sync-repair-tx-id
   #uuid "00000000-0000-4000-8000-652665286528")
@@ -863,18 +866,19 @@
             (when (nil? (client-op/get-local-tx repo))
               (client-op/update-local-tx repo 0)))
           (ensure-client-ops-cleanup-timer! repo)
-          (let [initial-tx-report (when-not (or initial-data-exists?
-                                                (seq datoms)
-                                                sync-download-graph?)
-                                    (let [config (resolve-initial-config config)
-                                          initial-data (sqlite-create-graph/build-db-initial-data
-                                                        config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
-                                      (bootstrap-transact! conn initial-data)))]
+          (p/let [initial-tx-report (when-not (or initial-data-exists?
+                                                 (seq datoms)
+                                                 sync-download-graph?)
+                                     (let [config (resolve-initial-config config)
+                                           initial-data (sqlite-create-graph/build-db-initial-data
+                                                         config (select-keys opts [:import-type :graph-git-sha :creating-remote-graph?]))]
+                                       (bootstrap-transact! conn initial-data)))
+                  _ (when-not sync-download-graph?
+                      (let [migrate-result (db-migrate/migrate conn)]
+                        (if migrate-result
+                          (<handle-migrate-result-local-txs! repo migrate-result)
+                          (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?))))]
             (when-not sync-download-graph?
-              (let [migrate-result (db-migrate/migrate conn)]
-                (if migrate-result
-                  (handle-migrate-result-local-txs! repo migrate-result)
-                  (maybe-enqueue-built-in-sync-repair! repo conn migrate-result initial-data-exists?)))
               (transaction-handler/maybe-run-recycle-gc! conn))
 
             (when initial-tx-report

@@ -5,6 +5,7 @@
 
             ["os" :as os]
             ["path" :as node-path]
+            ["url" :refer [fileURLToPath]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.cli-install :as cli-install]
@@ -27,6 +28,7 @@
              :as utils]
             [electron.window :as win]
             [lambdaisland.glogi :as log]
+            [logseq.common.config :as common-config]
             [logseq.publishing.export :as publish-export]
             [promesa.core :as p]))
 
@@ -77,24 +79,30 @@
    protocol FILE_ASSETS_SCHEME
    (fn [^js request callback]
      (let [url (.-url request)
-           url (decode-protected-assets-schema-path url)
-           ;; Query and fragment belong to the document URL, not the filename.
-           path (-> (first (string/split url #"[?#]" 2))
-                    (string/replace "assets://" "")
-                    (js/decodeURIComponent))]
-       (cond (or (string/starts-with? path "/")
-                 (re-find #"(?i)^/[a-zA-Z]:" path))
-             (callback #js {:path path})
+           resource-url (first (string/split url #"[?#]" 2))
+           file-prefix (str common-config/local-file-asset-prefix "/")]
+       (if (string/starts-with? resource-url file-prefix)
+         (if-let [path (try
+                         (fileURLToPath (js/decodeURIComponent (subs resource-url (count file-prefix))))
+                         (catch :default _ nil))]
+           (callback #js {:path path})
+           (callback -6)) ; net::ERR_FILE_NOT_FOUND
+         (let [path (-> resource-url
+                        (decode-protected-assets-schema-path)
+                        (string/replace "assets://" "")
+                        (js/decodeURIComponent))]
+           (cond (string/starts-with? path "/")
+                 (callback #js {:path path})
 
-             ;; assume windows unc path
-             utils/win32?
-             (do (logger/debug :resolve-assets-url url)
-                 (callback #js {:path (str "//" path)}))
+                 ;; assume windows unc path
+                 utils/win32?
+                 (do (logger/debug :resolve-assets-url url)
+                     (callback #js {:path (str "//" path)}))
 
-             :else
-             (do
-               (logger/warn ::resolve-assets-url "Unknown assets url" url)
-               (callback #js {:path path}))))))
+                 :else
+                 (do
+                   (logger/warn ::resolve-assets-url "Unknown assets url" url)
+                   (callback #js {:path path}))))))))
 
   (.registerFileProtocol
    protocol FILE_LSP_SCHEME

@@ -4,6 +4,7 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import { performance } from "node:perf_hooks";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 
@@ -12,6 +13,10 @@ const require = createRequire(import.meta.url);
 const transit = require(require.resolve("transit-js", { paths: [resolve(repoRoot, "cli")] }));
 const transitWriter = transit.writer("json");
 const transitReader = transit.reader("json");
+const volatilePropertyName = "cli-stress-volatile-prop";
+const volatilePropertyDeleteHistoryLimit = 64;
+const propertyReadbackCandidateLimit = 8;
+const readbackOrderingReason = "Harness sees command boundaries, not write/readback/remote-sync application times.";
 
 export function parseArgs(argv) {
   const opts = {
@@ -298,12 +303,9 @@ function logEvent(opts, event) {
   if (opts.runSummary) {
     recordStressOutcome(opts.runSummary, event);
   }
-  const payload = {
-    ts: new Date().toISOString(),
-    graph: opts.graph,
-    page: opts.page,
-    ...event,
-  };
+  const payload = event.event === "property-upsert-readback-diagnostic"
+    ? { ts: new Date().toISOString(), ...event }
+    : { ts: new Date().toISOString(), graph: opts.graph, page: opts.page, ...event };
   appendFileSync(opts.logFile, `${JSON.stringify(payload)}\n`, "utf8");
   if (event.level === "error" || event.level === "warn" || event.event === "summary" || event.event === "operation-summary") {
     console.log(JSON.stringify(payload));
@@ -325,6 +327,8 @@ function recordStressOutcome(summary, event) {
     counts.ok += 1;
   } else if (event.outcome === "race-conflict") {
     counts.expectedRace += 1;
+  } else if (event.outcome === "retried") {
+    counts.retried = (counts.retried || 0) + 1;
   } else {
     counts.unexpectedErrors += 1;
     summary.unexpectedErrors += 1;
@@ -364,6 +368,108 @@ export function classifyCliResult(result, parsed, context = {}) {
     level: ok || expectedRace ? "info" : "error",
     outcome: ok ? "ok" : expectedRace ? "race-conflict" : "failed",
     expectedRace,
+  };
+}
+
+export function createVolatilePropertyDeleteHistory() {
+  return { records: [], totalCount: 0, evictedCount: 0 };
+}
+
+export function startVolatilePropertyDelete(history, { clientIndex, workerId, seq, startMs }) {
+  const record = {
+    clientIndex,
+    workerId,
+    seq,
+    startMs,
+    endMs: null,
+    elapsedMs: null,
+    success: null,
+    outcome: null,
+  };
+  history.records.push(record);
+  history.totalCount += 1;
+  if (history.records.length > volatilePropertyDeleteHistoryLimit) {
+    history.records.shift();
+    history.evictedCount += 1;
+  }
+  return record;
+}
+
+export function completeVolatilePropertyDelete(record, { endMs, success, outcome }) {
+  record.endMs = endMs;
+  record.elapsedMs = endMs - record.startMs;
+  record.success = success;
+  record.outcome = outcome;
+}
+
+export function buildPropertyReadbackDiagnostic({ history, context, parsed, clientIndex, startMs, endMs }) {
+  const targetOperation =
+    context.op === "property-upsert" ||
+    (context.op === "property-delete-recreate" && context.phase === "recreate");
+  if (
+    !targetOperation ||
+    context.property !== volatilePropertyName ||
+    parsed?.status !== "error" ||
+    parsed?.error?.code !== "property-not-found" ||
+    parsed?.error?.message !== "property not found after upsert"
+  ) {
+    return null;
+  }
+
+  const records = history.records;
+  const candidateEntries = records
+    .map((record, index) => {
+      const effectiveEndMs = record.endMs ?? endMs;
+      return {
+        record,
+        index,
+        commandOverlap: record.startMs <= endMs && startMs <= effectiveEndMs,
+      };
+    })
+    .sort(
+      (left, right) =>
+        Number(right.commandOverlap) - Number(left.commandOverlap) || right.index - left.index,
+    );
+  const retainedDeleteOverlapCount = candidateEntries.filter((entry) => entry.commandOverlap).length;
+  const candidates = candidateEntries.slice(0, propertyReadbackCandidateLimit).map(({ record, commandOverlap }) => ({
+    clientIndex: record.clientIndex,
+    workerId: record.workerId,
+    seq: record.seq,
+    startMs: record.startMs,
+    endMs: record.endMs,
+    elapsedMs: record.elapsedMs,
+    success: record.success,
+    outcome: record.outcome,
+    inFlight: record.endMs == null,
+    commandOverlap,
+  }));
+  const totalCount = history.totalCount;
+
+  return {
+    clock: "performance.now",
+    timeUnit: "ms",
+    failedCommand: {
+      clientIndex,
+      workerId: context.workerId,
+      seq: context.seq,
+      startMs,
+      endMs,
+      elapsedMs: endMs - startMs,
+    },
+    deleteHistory: {
+      limit: volatilePropertyDeleteHistoryLimit,
+      retainedCount: records.length,
+      totalCount,
+      evictedCount: history.evictedCount,
+      truncated: history.evictedCount > 0,
+    },
+    deleteCandidateLimit: propertyReadbackCandidateLimit,
+    deleteCandidates: candidates,
+    retainedDeleteOverlapCount,
+    deleteCandidateOmittedCount: totalCount - candidates.length,
+    deleteCandidateListTruncated: totalCount > candidates.length,
+    readbackOrdering: "unknown",
+    readbackOrderingReason,
   };
 }
 
@@ -417,7 +523,83 @@ export function staleIdsFromContext(context = {}) {
   return ids;
 }
 
-function runProcess(command, args, opts) {
+const createTreeOverlapLimit = 16;
+const createTreeUuidCount = 3;
+
+function diagnosticUuid(value) {
+  return typeof value === "string" && /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i.test(value)
+    ? value
+    : undefined;
+}
+
+export function createStressInvocationTracker() {
+  const active = new Map();
+  return {
+    start(client, transport, context) {
+      if (!Number.isInteger(context.workerId)) return;
+      const { workerId, seq, op, phase, page } = context;
+      const entry = {
+        client, transport, workerId, seq, op, phase, page,
+        ids: staleIdsFromContext(context).slice(0, 8),
+        uuid: diagnosticUuid(context.uuid),
+        targetUuid: diagnosticUuid(context.targetUuid),
+        pageUuid: diagnosticUuid(context.pageUuid),
+        startedAtMs: Date.now(),
+      };
+      const overlapping = [];
+      let omitted = 0;
+      const watch = transport === "cli" && op === "create-tree"
+        ? (other) => {
+          if (overlapping.length < createTreeOverlapLimit) overlapping.push(other);
+          else omitted += 1;
+        }
+        : null;
+      for (const [other, observer] of active) {
+        observer?.(entry);
+        watch?.(other);
+      }
+      active.set(entry, watch);
+      return {
+        finish() {
+          entry.finishedAtMs = Date.now();
+          active.delete(entry);
+        },
+        overlaps() {
+          return {
+            overlapping: overlapping.map(({ page: otherPage, ...other }) => ({
+              ...other,
+              samePage: page && otherPage ? page === otherPage : undefined,
+            })),
+            overlappingOmitted: omitted,
+          };
+        },
+      };
+    },
+  };
+}
+
+function createTreeDiagnostics(trace, invocation) {
+  const uuids = trace?.["requested-uuids"];
+  const present = (key, index) => typeof trace?.[key]?.[index] === "boolean" ? trace[key][index] : null;
+  return {
+    targetUuid: diagnosticUuid(trace?.["target-uuid"]),
+    failedUuid: diagnosticUuid(trace?.["failed-uuid"]),
+    applyReturnedResult: typeof trace?.["apply-returned-result"] === "boolean" ? trace["apply-returned-result"] : null,
+    applyAtMs: Number.isSafeInteger(trace?.["apply-at-ms"]) ? trace["apply-at-ms"] : undefined,
+    lookupAtMs: Number.isSafeInteger(trace?.["lookup-at-ms"]) ? trace["lookup-at-ms"] : undefined,
+    requested: Array.isArray(uuids) ? uuids.slice(0, createTreeUuidCount).flatMap((value, index) => {
+      const uuid = diagnosticUuid(value);
+      return uuid ? [{
+        uuid,
+        presentAfterApply: present("present-after-apply", index),
+        presentAtLookup: present("present-at-lookup", index),
+      }] : [];
+    }) : [],
+    ...invocation?.overlaps(),
+  };
+}
+
+function runProcess(command, args, opts, extraEnv) {
   return new Promise((resolvePromise) => {
     const startedAt = Date.now();
     const child = spawn(command, args, {
@@ -425,6 +607,7 @@ function runProcess(command, args, opts) {
       env: {
         ...process.env,
         ...(opts.env || {}),
+        ...extraEnv,
         LOGSEQ_CLI_CONFIG: opts.config,
         LOGSEQ_CLI_GRAPH: opts.graph,
         LOGSEQ_CLI_TIMEOUT_MS: String(opts.timeoutMs),
@@ -461,13 +644,31 @@ function runProcess(command, args, opts) {
   });
 }
 
-async function runCli(opts, args, context = {}) {
+export async function runCli(opts, args, context = {}, { retryFetchFailure = false } = {}) {
   const cliBin =
     opts.clientIndex != null && opts.clientClis?.[opts.clientIndex]
       ? opts.clientClis[opts.clientIndex]
       : process.env.LOGSEQ_BIN;
   const command = cliCommand(cliBin);
-  const result = await runProcess(command.command, [...command.args, ...args], opts);
+  const startMs = performance.now();
+  const deleteRecord =
+    opts.volatilePropertyDeleteHistory &&
+    context.op === "property-delete-recreate" &&
+    context.phase === "delete" &&
+    context.property === volatilePropertyName
+      ? startVolatilePropertyDelete(opts.volatilePropertyDeleteHistory, {
+          clientIndex: opts.clientIndex,
+          workerId: context.workerId,
+          seq: context.seq,
+          startMs,
+        })
+      : null;
+  const traceCreateTree = context.op === "create-tree";
+  const invocation = opts.stressInvocations?.start(opts.clientName, "cli", context);
+  const result = await runProcess(command.command, [...command.args, ...args], opts, {
+    LOGSEQ_CLI_STRESS_CREATE_TREE_TRACE: traceCreateTree ? "1" : "",
+  }).finally(() => invocation?.finish());
+  const endMs = performance.now();
   let parsed = null;
   if (result.stdout) {
     try {
@@ -478,24 +679,56 @@ async function runCli(opts, args, context = {}) {
   }
 
   const classification = classifyCliResult(result, parsed, context);
+  if (retryFetchFailure && cliFetchFailed({ ...classification, parsed, result })) {
+    classification.outcome = "retried";
+    classification.level = "warn";
+  }
+  if (deleteRecord) {
+    completeVolatilePropertyDelete(deleteRecord, {
+      endMs,
+      success: classification.ok,
+      outcome: classification.outcome,
+    });
+  }
+  const traceFailure = traceCreateTree && !classification.ok && parsed?.error?.code === "add-id-resolution-failed";
   const event = {
     event: "cli",
     level: classification.level,
     outcome: classification.outcome,
-    context,
-    args,
+    context: traceFailure ? { op: context.op, workerId: context.workerId, seq: context.seq, client: opts.clientName } : context,
+    args: traceFailure ? undefined : args,
     code: result.code,
     signal: result.signal,
     elapsedMs: result.elapsedMs,
     status: parsed?.status,
-    error: parsed?.error,
-    stderr: result.stderr || undefined,
+    error: traceFailure ? { code: parsed.error.code, message: parsed.error.message } : parsed?.error,
+    stderr: traceFailure ? undefined : result.stderr || undefined,
     stdout: parsed ? undefined : result.stdout,
+    ...(traceFailure ? {
+      page: undefined,
+      createTreeDiagnostics: createTreeDiagnostics(parsed.error["create-tree-trace"], invocation),
+    } : {}),
   };
   logEvent(opts, event);
 
+  const diagnostic = buildPropertyReadbackDiagnostic({
+    history: opts.volatilePropertyDeleteHistory,
+    context,
+    parsed,
+    clientIndex: opts.clientIndex,
+    startMs,
+    endMs,
+  });
+  if (diagnostic) {
+    logEvent(opts, {
+      event: "property-upsert-readback-diagnostic",
+      level: "error",
+      ...diagnostic,
+    });
+  }
+
   if (!classification.ok && !classification.expectedRace && opts.failFast) {
-    throw new Error(`CLI command failed: logseq ${args.join(" ")}`);
+    throw new Error(traceFailure ? "CLI create-tree failed: add-id-resolution-failed" : `CLI command failed: logseq ${args.join(" ")}`);
   }
 
   return { ...classification, parsed, result };
@@ -518,8 +751,10 @@ function cliFetchFailed(response) {
   );
 }
 
-async function runSyncStart(opts, context = {}) {
-  let response = await runCli(opts, ["sync", "start", "--graph", opts.graph], context);
+export async function runSyncStart(opts, context = {}) {
+  let response = await runCli(opts, ["sync", "start", "--graph", opts.graph], context, {
+    retryFetchFailure: !opts.failFast,
+  });
   if (cliFetchFailed(response)) {
     await delay(500);
     await runCli(opts, ["server", "list"], { ...context, op: "server-list-before-sync-start-retry" });
@@ -541,6 +776,7 @@ async function invokeThreadApi(opts, state, method, args, context = {}) {
   const invokeOnce = async () => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), opts.timeoutMs + 3000);
+    const invocation = opts.stressInvocations?.start(opts.clientName, "http", context);
     try {
       const nextResponse = await fetch(`${state.workerBaseUrl}/v1/invoke`, {
         method: "POST",
@@ -567,6 +803,7 @@ async function invokeThreadApi(opts, state, method, args, context = {}) {
       return { response: null, text: "", parsed: null, error: caught };
     } finally {
       clearTimeout(timer);
+      invocation?.finish();
     }
   };
 
@@ -2907,7 +3144,7 @@ function createStressState(opts, runId) {
     stableTagIds: new Map(),
     stableProperties: ["cli-stress-prop-a", "cli-stress-prop-b"],
     volatileTag: "cli-stress-volatile-tag",
-    volatileProperty: "cli-stress-volatile-prop",
+    volatileProperty: volatilePropertyName,
     rawPropertyIdent: "user.property/cli-http-prop",
     rawPropertyName: "cli-http-prop",
     activeIds: new Set(),
@@ -2974,6 +3211,8 @@ async function buildStressClients(opts, runId) {
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
   opts.runSummary = { unexpectedErrors: 0, workerErrors: 0, operations: {} };
+  opts.stressInvocations = createStressInvocationTracker();
+  opts.volatilePropertyDeleteHistory = createVolatilePropertyDeleteHistory();
   mkdirSync(dirname(opts.logFile), { recursive: true });
   const runId = `stress-${Date.now()}`;
 

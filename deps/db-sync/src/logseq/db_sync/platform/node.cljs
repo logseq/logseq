@@ -8,6 +8,26 @@
     (.forEach headers (fn [value key] (aset out key value)))
     out))
 
+(defn- header-value [node-headers key]
+  (let [value (aget node-headers key)]
+    (cond
+      (string? value) value
+      (array? value) (aget value 0)
+      :else nil)))
+
+(defn- forwarded-proto
+  "Original client scheme from a reverse proxy. The left-most value is the one
+  the client used; later values are appended by downstream proxies."
+  [node-headers]
+  (when-let [value (header-value node-headers "x-forwarded-proto")]
+    (let [proto (-> value
+                    (string/split #",")
+                    first
+                    string/trim
+                    string/lower-case)]
+      (when (contains? #{"http" "https"} proto)
+        proto))))
+
 (defn request-from-node
   "Builds a platform Request from a Node.js IncomingMessage.
   `origins` is a vector of {:scheme :host} maps (as returned by
@@ -15,7 +35,10 @@
   Host header is used to reconstruct the full URL; the first entry is used as
   a fallback when no match is found. This allows the server to accept requests
   arriving via different addresses (e.g. LAN IP over HTTP and a Tailscale /
-  reverse-proxy domain over HTTPS) without any per-request configuration."
+  reverse-proxy domain over HTTPS) without any per-request configuration. When
+  no origin is configured the request keeps its Host header and
+  `X-Forwarded-Proto`, so a secure desktop context can fetch snapshot URLs
+  served behind a TLS reverse proxy."
   [^js req origins]
   (let [headers (js/Headers.)
         node-headers (.-headers req)
@@ -25,11 +48,12 @@
               (when (some? value)
                 (.set headers (string/lower-case k) value))))
         method (or (.-method req) "GET")
-        req-host (or (aget node-headers "host") "localhost")
+        req-host (or (header-value node-headers "host") "localhost")
         {:keys [scheme host]} (or (some #(when (= (:host %) req-host) %) origins)
-                                  (first origins)
-                                  {:scheme "http"})
-        url (str scheme "://" (or host req-host) (.-url req))
+                                  (first origins))
+        host (or host req-host)
+        scheme (or scheme (forwarded-proto node-headers) "http")
+        url (str scheme "://" host (.-url req))
         init #js {:method method
                   :headers headers}]
     (when-not (or (= method "GET") (= method "HEAD"))

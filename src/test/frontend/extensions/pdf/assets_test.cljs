@@ -49,3 +49,26 @@
                 (:url (pdf-assets/inflate-asset
                        "C:/Users/charlie/sicp.pdf"
                        {:href "assets:///C:/Users/charlie/sicp.pdf"}))))))
+
+(deftest inflate-asset-resolves-local-file-urls-for-desktop-viewer
+  (are [electron? original-path href expected]
+       (with-redefs [util/electron? (constantly electron?)]
+         (= expected (:url (pdf-assets/inflate-asset original-path {:href href}))))
+    true "file:///C:/docs/sample.pdf" nil
+    "assets://localhost/logseq__file/file%3A%2F%2F%2FC%3A%2Fdocs%2Fsample.pdf"
+
+    true "file://C:/docs/sample.pdf" nil
+    "assets://localhost/logseq__file/file%3A%2F%2F%2FC%3A%2Fdocs%2Fsample.pdf"
+
+    true "sample.pdf" "FILE:///Workspace/sample%2520%23name.pdf?download=1#page=2"
+    (str "assets://localhost/logseq__file/file%3A%2F%2F%2FWorkspace%2Fsample%252520%2523name.pdf"
+         "?download=1#page=2")
+
+    true "sample.pdf" "file://server/share/sample.pdf"
+    "assets://localhost/logseq__file/file%3A%2F%2Fserver%2Fshare%2Fsample.pdf"
+
+    true "sample.pdf" "https://example.com/sample.pdf"
+    "https://example.com/sample.pdf"
+
+    false "file:///tmp/sample.pdf" nil
+    "file:///tmp/sample.pdf"))

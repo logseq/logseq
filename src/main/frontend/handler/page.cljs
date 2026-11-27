@@ -200,6 +200,15 @@
                            [:db/id :block/title :block/name :block/uuid :block/tags]
                            [:block/name (util/page-name-sanity-lc page)]))
 
+(defn- <class-alias-source
+  "If `page` is an alias of a class, return that class. Resolve before
+   convert-to-tag so choosing `#<alias>` never converts the alias page."
+  [repo page]
+  (when (and (:db/id page) (not (entity/class? page)))
+    (p/let [source (db-async/<get-alias-source-page repo (:db/id page))]
+      (when (entity/class? source)
+        source))))
+
 (defn- tag-on-chosen-handler
   [input id pos format current-pos edit-content q]
   (fn [chosen-result ^js e]
@@ -208,6 +217,10 @@
     (p/let [repo (state/get-current-repo)
             convert-page-to-tag? (:convert-page-to-tag? chosen-result)
             chosen-result (<chosen-result repo chosen-result)
+            alias-source (<class-alias-source repo chosen-result)
+            class-alias-source? (boolean alias-source)
+            chosen-result (or alias-source chosen-result)
+            convert-page-to-tag? (and convert-page-to-tag? (not class-alias-source?))
             _ (when (and convert-page-to-tag?
                          (entity/page? chosen-result)
                          (not (entity/class? chosen-result)))
@@ -218,9 +231,6 @@
                             chosen-result)
             conversion-rejected? (and convert-page-to-tag?
                                       (not (entity/class? chosen-result)))
-            target (when (and (:db/id chosen-result) (not (entity/class? chosen-result)))
-                     (db-async/<get-alias-source-page repo (:db/id chosen-result)))
-            chosen-result (if (and target (not (entity/class? chosen-result)) (entity/class? target)) target chosen-result)
             chosen (:block/title chosen-result)
             class? (or (string/includes? chosen (str (t :editor/new-tag) " "))
                        (entity/class? chosen-result))

@@ -121,8 +121,9 @@
         block (common/entity-by-uuid! db :block-uuid block-uuid)
         groups (ldb/get-bidirectional-properties db (:db/id block))]
     [#{[:bidirectional block-uuid]}
-     (mapv (fn [{:keys [class entities]}]
+     (mapv (fn [{:keys [class title entities]}]
              {:class-uuid (common/require-uuid! :class-uuid (:block/uuid class))
+              :title title
               :entity-uuids (mapv #(common/require-uuid! :entity-uuid
                                                  (:block/uuid %))
                                   entities)})

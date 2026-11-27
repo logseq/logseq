@@ -29,8 +29,15 @@ def main():
         assert payload["status"] == "ok", payload
         return payload["data"]
 
-    def query(expression):
-        return run("query", "--query", expression)["result"]
+    def query(expression, *options):
+        return run("query", "--query", expression, *options)["result"]
+
+    def entities(ids, pattern="[*]"):
+        rows = query(f"[:find (pull ?e {pattern}) :in $ [?e ...] :where [?e :block/uuid]]",
+                     "--inputs", json.dumps([ids]))
+        by_id = {entity["db/id"]: entity for entity, in rows}
+        assert set(by_id) == set(ids), (ids, rows)
+        return by_id
 
     def entity(entity_id):
         value = run("query", "--query",
@@ -81,9 +88,14 @@ def main():
     property_ident = query('[:find ?ident . :where [?e :block/title "Result Note"] [?e :db/ident ?ident]]')
     property_key = property_ident.lstrip(":")
 
+    block_pattern = f"[* {{:{property_key} [:block/uuid :logseq.property/value]}}]"
+
     def property_value(created):
         value = created.get(property_key)
-        return entity(value["db/id"])["logseq.property/value"] if value else None
+        if value:
+            assert "block/uuid" in value, value
+            return value["logseq.property/value"]
+        return None
 
     run("upsert", "tag", "--name", "ResultTag")
     tag = query('[:find ?e . :where [?e :block/title "ResultTag"]]')
@@ -114,36 +126,43 @@ def main():
                              "--update-tags", '["ResultTag"]',
                              "--update-properties", '{"Result Note" 1}', output=output)
                 ids = result if output == "edn" else result["result"]
+                reference_after_create = entity(reference)
+                assert reference_after_create == before, "Command metadata changed the reference page"
+                reference_ids = [reference]
+                snapshots = [reference_after_create]
                 stored_titles = titles
                 if refs:
-                    existing_uuid = entity(reference)["block/uuid"]
-                    new_uuid = entity(title_id(new_page))["block/uuid"]
+                    new_page_id = title_id(new_page)
+                    new_page_after_create = entity(new_page_id)
+                    reference_ids.append(new_page_id)
+                    snapshots.append(new_page_after_create)
+                    existing_uuid = reference_after_create["block/uuid"]
+                    new_uuid = new_page_after_create["block/uuid"]
                     stored_titles = [title.replace("[[ExistingReference]]", f"[[{existing_uuid}]]")
                                      .replace(f"[[{new_page}]]", f"[[{new_uuid}]]") for title in titles]
-                expected = [query('[:find ?e . :where [?e :block/title ?title] '
-                                  f'[(clojure.string/starts-with? ?title {json.dumps(title.split(" [[", 1)[0])})]]')
-                            for title in titles]
+                prefixes = [title.split(" [[", 1)[0] for title in titles]
+                matches = query('[:find ?prefix ?e :in $ [?prefix ...] :where [?e :block/title ?title] '
+                                '[(clojure.string/starts-with? ?title ?prefix)]]',
+                                "--inputs", json.dumps([prefixes]))
+                by_prefix = dict(matches)
+                assert len(matches) == len(by_prefix) and set(by_prefix) == set(prefixes), matches
+                expected = [by_prefix[prefix] for prefix in prefixes]
+                created_blocks = entities(expected, block_pattern)
                 print(f"{args.case} {source} {output} refs={refs}: {ids}; expected {expected}", flush=True)
-                assert all(expected), expected
-                assert entity(reference) == before, "Command metadata changed the reference page"
                 for index, entity_id in enumerate(expected):
-                    created = entity(entity_id)
+                    created = created_blocks[entity_id]
                     assert created["block/title"] == stored_titles[index], created
                     is_root = index in (0, 3)
                     assert (property_value(created) == 1) == is_root, created
                     assert any(t["db/id"] == tag for t in created.get("block/tags", [])) == is_root, created
-                if args.case == "metadata":
-                    continue
                 assert ids == expected, (ids, expected)
-                reference_ids = [reference]
-                if refs:
-                    reference_ids.append(query(f'[:find ?e . :where [?e :block/title "{new_page}"]]'))
-                snapshots = [entity(i) for i in reference_ids]
                 for entity_id in ids:
                     run("upsert", "block", "--id", str(entity_id),
                         "--update-properties", f'{{:{property_key} 2}}')
-                assert all(property_value(entity(i)) == 2 for i in expected)
-                assert [entity(i) for i in reference_ids] == snapshots
+                updated_blocks = entities(expected, block_pattern)
+                assert all(property_value(updated_blocks[i]) == 2 for i in expected)
+                updated_references = entities(reference_ids)
+                assert [updated_references[i] for i in reference_ids] == snapshots
                 run("remove", "block", "--id", json.dumps([expected[0], reference]))
                 assert entity(reference) == before, "Mixed block deletion changed the page"
 

@@ -350,7 +350,7 @@ Security and data rules:
 - Property mutations use typed DB graph properties, not file-graph key:: text.
 - Task creation uses the Task class and typed status/priority/date properties,
   not Markdown TODO syntax.
-- Asset uploads are limited to 100 MB and require an exact size plus SHA-256
+- Asset uploads are limited to 200 MiB and require an exact size plus SHA-256
   checksum.
 - The generated /openapi.json is the detailed external contract.
 
