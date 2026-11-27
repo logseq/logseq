@@ -252,32 +252,24 @@ let local_storage_get k =
   if is_auth_token k then List.assoc_opt k !auth_tokens
   else Hashtbl.find_opt ls k
 
+(* Ordinary preferences persist whether or not OS credential storage is
+   available: auth-token keys never enter [ls] (writes below reject them
+   and [write_state_unlocked] excludes them from the file), so the locked
+   reload+write cannot leak credentials and need not wait for keychain
+   resolution. *)
 let local_storage_set k v =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain storage";
-  if !auth_managed then
-    with_state_lock (fun () ->
-        reload_state_unlocked ();
-        Hashtbl.replace ls k v;
-        write_state_unlocked ())
-  else begin
-    (* Without OS credential storage native preferences are intentionally
-       process-local memory. Reloading the shared file here would discard
-       earlier unpersisted changes made by this process. *)
-    load_state ();
-    Hashtbl.replace ls k v
-  end
+  with_state_lock (fun () ->
+      reload_state_unlocked ();
+      Hashtbl.replace ls k v;
+      write_state_unlocked ())
 
 let local_storage_remove k =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain removal";
-  if !auth_managed then
-    with_state_lock (fun () ->
-        reload_state_unlocked ();
-        Hashtbl.remove ls k;
-        write_state_unlocked ())
-  else begin
-    load_state ();
-    Hashtbl.remove ls k
-  end
+  with_state_lock (fun () ->
+      reload_state_unlocked ();
+      Hashtbl.remove ls k;
+      write_state_unlocked ())
 
 let session : (string, string) Hashtbl.t = Hashtbl.create 16
 
