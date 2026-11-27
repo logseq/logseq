@@ -5596,8 +5596,13 @@ let () = with_test_entry (fun () ->
           let rec bounds glyphs left top right =
             if glyphs==previous then left,top,right
             else match glyphs with
-              | g::rest -> bounds rest (min left g.Lui_scene.gx) (min top g.gy)
-                  (max right (g.gx+.g.gw))
+              | g::rest ->
+                (* LCD-filtered subpixel bitmaps carry one more device
+                   pixel of fringe than grayscale masks; logical text
+                   placement does not include that extra fringe. *)
+                let fringe = if g.Lui_scene.gsubpixel then 1. else 0. in
+                bounds rest (min left (g.Lui_scene.gx+.fringe)) (min top g.gy)
+                  (max right (g.gx+.g.gw-.fringe))
               | [] -> failwith "Text paint did not retain its glyph suffix" in
           let left,top,right = bounds scene.glyphs infinity infinity neg_infinity in
           labels:=(text,left,top,right,color)::!labels;
