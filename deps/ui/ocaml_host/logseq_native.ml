@@ -1145,6 +1145,29 @@ let () =
              let fg = Lui_paint.text_fg ctx store id in
              ctx.Lui_paint.hooks.Lui_paint.text_ops id r fg s
            | _ -> []) };
+  let paint_raw_text ctx store node r =
+    let id = Lui_store.node_id node in
+    match Lui_store.string_prop store id "text" with
+    | Some s when s <> "" ->
+      let warning =
+        match Lui_store.string_prop store id "style-class" with
+        | Some classes -> List.mem "warning" (String.split_on_char ' ' classes)
+        | None -> false
+      in
+      let inherited = Lui_paint.text_fg ctx store id in
+      let fg =
+        if warning then Option.value (Theme_vars.color_of "warning") ~default:inherited
+        else inherited
+      in
+      ctx.Lui_paint.hooks.Lui_paint.text_ops id r fg s
+    | _ -> []
+  in
+  List.iter
+    (fun tag ->
+      if not (List.mem tag [ "em-emoji"; "pdf"; "video"; "audio" ]) then
+        Lui_paint.register_extension ~identifier:("logseq-" ^ tag)
+          { Lui_paint.paint = paint_raw_text })
+    Logseq_el.tags;
   Lui_paint.register_extension ~identifier:"logseq-pdf"
     { Lui_paint.paint = Host_pdf_viewer.paint };
   Lui_paint.register_extension ~identifier:"logseq-video"

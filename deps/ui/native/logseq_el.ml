@@ -106,7 +106,8 @@ let schema_of tag =
         None
     ; (* typed layout/paint props a callsite may set alongside the
          attrs style string — the native layout/paint pipelines read
-         these names; the web twin ignores them *)
+         these names; the web twin lowers recognized static values into
+         inline CSS and ignores native-only property signals *)
       Lui_extension.property "font-size" Lui_extension.FloatScalar false
         None
     ; Lui_extension.property "font-weight" Lui_extension.FloatScalar false
@@ -443,9 +444,9 @@ let el ?key ?(tag = "div") ?(attrs = []) ?(events = "")
            List.iter (fun set -> set context n) setters;
            n) ]
   in
-  (* typed layout/paint props the callsite wants on the native node —
-     extension props are opaque to the web twin, which reads the same
-     values out of the attrs style string instead *)
+  (* typed layout/paint props the callsite wants on the native node.
+     The web twin lowers recognized static ext_props into inline CSS;
+     ext_prop_signals stay native-only. *)
   List.iter
     (fun (n, v) -> Lui_ui.extension_property context node n v)
     ext_props;
