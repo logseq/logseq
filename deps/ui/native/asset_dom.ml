@@ -228,12 +228,13 @@ let close_image_lightbox () =
    It intentionally keeps the first implementation scoped to the core
    desktop interaction: display the clicked asset fitted to the window,
    close on backdrop press, the close control, or Escape through the
-   cover popover. PhotoSwipe's multi-image navigation, pinch/zoom and
+   cover dialog. PhotoSwipe's multi-image navigation, pinch/zoom and
    sharing chrome remain documented parity gaps. *)
 let image_lightbox_view ~source ~alt : Lui_elements.t =
   let close () = close_image_lightbox () in
   Ui_parts.viewport_cover
-    (Lui_elements.popover ~key:lightbox_key ~role:`dialog
+    (Lui_elements.dialog ~key:lightbox_key
+       ~style_class:"pswp native-asset-lightbox"
        ~background:"rgba(0,0,0,0.92)" ~border_width:0 ~corner_radius:0
        ~padding:0
        ~on_dismiss:(fun _ -> close ())
@@ -249,6 +250,7 @@ let image_lightbox_view ~source ~alt : Lui_elements.t =
                ~padding:16
                [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
                    ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
+                   ~autofocus:true
                    ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
                    ~on_press:(fun _ -> close ()) [] ]
            ]
@@ -302,6 +304,7 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
              ~on_press:(fun _ -> open_image_lightbox ~source ~alt:file)
              (Lui_elements.row ~key:("asset-lb-open-" ^ uuid)
                 ~container_relative_frame:`horizontal
+                ~on_navigation_key:(fun _ -> ())
                 [ Lui_elements.image ~url:source
                     ~alt:file ~container_relative_frame:`horizontal [] ])
          else if audio_extension ext then
