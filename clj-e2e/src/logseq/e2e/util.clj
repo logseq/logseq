@@ -5,16 +5,15 @@
             [logseq.e2e.assert :as assert]
             [logseq.e2e.keyboard :as k]
             [logseq.e2e.locator :as loc]
-            [wally.main :as w]
-            [wally.repl :as repl])
+            [wally.main :as w])
   (:import [com.microsoft.playwright
             Locator$PressSequentiallyOptions
-            Locator$FilterOptions
             Locator$ClickOptions
             Page$GetByTextOptions
             TimeoutError]
            [com.microsoft.playwright.options
-            MouseButton]))
+            MouseButton]
+           [org.opentest4j AssertionFailedError]))
 
 (defn repeat-until-visible
   [n q repeat-fn]
@@ -22,9 +21,15 @@
     (loop [i n]
       (repeat-fn)
       (let [visible?
+            ;; assert-is-visible fails with AssertionFailedError, not TimeoutError:
+            ;; catching only TimeoutError let the first miss end the retries
             (try
               (assert/assert-is-visible q)
               (catch TimeoutError e
+                (if (zero? i)
+                  (throw e)
+                  false))
+              (catch AssertionFailedError e
                 (if (zero? i)
                   (throw e)
                   false)))]
