@@ -6654,14 +6654,29 @@ let source_blocks () =
       ( "#+begin_src calc\n1+1\n#+end_src", "1+1\n2+3",
         "#+begin_src calc\n1+1\n2+3\n#+end_src" );
       ( "```calc\n1+1\n```", "1+1\n",
-        "```calc\n1+1\n\n```" ) ];
+        "```calc\n1+1\n\n```" );
+      ( "```calc\n1+1\n", "1+1\n",
+        "```calc\n1+1\n" ) ];
   let _, tags, hash =
     Title_refs.scan_title "#+begin_src calc\n1+1\n#+end_src"
   in
   check "Org source fences are not saved as tags" (tags = [] && hash = []);
   let refs, tags, hash = Title_refs.scan_title "```calc\n[[Page]] #tag\n```" in
   check "Markdown source contents are not saved as references"
-    (refs = [] && tags = [] && hash = [])
+    (refs = [] && tags = [] && hash = []);
+  let refs, tags, hash =
+    Title_refs.scan_title "```inline` [[Page]] #tag\n```"
+  in
+  check "Inline triple-backtick prose still yields references"
+    (List.length refs = 2 && List.mem "Page" refs && List.mem "tag" refs
+     && tags = [ "tag" ] && hash = [ "tag" ]);
+  let resolved =
+    [ { Title_refs.name = "Page"; uuid = "page-uuid"; is_tag = false;
+        is_hash = false; fresh = false; entity = Wire.Nil } ]
+  in
+  eqs "source fences do not rewrite code links"
+    "[[page-uuid]]\n```calc\n[[Page]]\n```"
+    (Title_refs.rewrite_title "[[Page]]\n```calc\n[[Page]]\n```" resolved)
 
 let dates () =
   for month = 1 to 12 do
