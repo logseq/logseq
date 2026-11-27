@@ -1565,6 +1565,8 @@ let drain () =
     (Bridge.take_requests ())
 
 let drain_dom_focus () =
-  List.iter handle
-    (Bridge.take_matching_requests
-       (String.starts_with ~prefix:"dom-op\nfocus\n"))
+  let focus_request req =
+    String.starts_with ~prefix:"dom-op\nfocus\n" req
+    || String.starts_with ~prefix:"dom-op\nset-input-focus\n" req
+  in
+  List.iter handle (Bridge.take_matching_requests focus_request)
