@@ -389,8 +389,8 @@
                     route (atom {:data {:name :page}})
                     worker-result (p/deferred)
                     insert-id (random-uuid)
-                    newer-pending {:id (random-uuid) :typed-text "draft"}]
-                (state/set-state! :editor/pending-new-block {:id insert-id :typed-text ""})
+                    newer-pending {:id (random-uuid) :keys ["draft"]}]
+                (state/set-state! :editor/pending-new-block {:id insert-id :keys []})
                 (p/let [_ (p/with-redefs [util/node-test? false
                                           state/get-current-repo #(deref repo)
                                           state/get-route-match #(deref route)

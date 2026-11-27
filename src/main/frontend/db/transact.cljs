@@ -209,7 +209,7 @@
                                       (= request-route (state/get-route-match)))
                 ;; A route/repo change skips inserted-block-edit-fn. Clear only
                 ;; the buffer that still belongs to this request so a later
-                ;; insert's typed-ahead text is not dropped.
+                ;; insert's queued keys are not dropped.
                 _ (when (and (:editor/edit-block-fn opts')
                              (not current-context?)
                              (= request-pending-id

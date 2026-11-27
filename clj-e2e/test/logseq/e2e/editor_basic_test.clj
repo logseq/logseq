@@ -1125,11 +1125,17 @@
     }"
    (json/write-value-as-string keys)))
 
+(defn- page-block-shape
+  [block]
+  (let [title (or (get block "content") (get block "title") "")
+        children (get block "children")]
+    (if (seq children)
+      [title (mapv page-block-shape children)]
+      title)))
+
 (defn- page-block-titles
   [page-name]
-  (mapv (fn [block]
-          (or (get block "content") (get block "title") ""))
-        (ls-api-call! :editor.getPageBlocksTree page-name)))
+  (mapv page-block-shape (ls-api-call! :editor.getPageBlocksTree page-name)))
 
 (defn- fast-pending-insert-keys-leave-titles
   [keys]
@@ -1150,19 +1156,23 @@
     (is (= ["" "x"]
            (fast-pending-insert-keys-leave-titles ["Enter" "x" "y" "Backspace"])))))
 
-(deftest fast-enter-tab-backspace-keeps-the-indented-block-test
-  (testing "Enter, Tab, Backspace while insert and indent are pending keeps the new block nested"
-    (assert/assert-editor-mode)
-    (let [page-name (p/get-page-name)]
-      (press-keys-in-one-turn! ["Enter" "Tab" "Backspace"])
-      (util/wait-timeout 2500)
-      (util/exit-edit)
-      (let [tree (ls-api-call! :editor.getPageBlocksTree page-name)
-            child-titles (mapv (fn [block]
-                                 (or (get block "content") (get block "title") ""))
-                               (get (first tree) "children"))]
-        (is (= [""] (page-block-titles page-name)))
-        (is (= [""] child-titles))))))
+(deftest fast-enter-b-enter-c-enter-d-creates-sibling-blocks-test
+  (testing "Enter b Enter c Enter d while the first insert is pending keeps four blocks"
+    (b/save-block "a")
+    (is (= ["a" "b" "c" "d"]
+           (fast-pending-insert-keys-leave-titles ["Enter" "b" "Enter" "c" "Enter" "d"])))))
+
+(deftest fast-enter-backspace-joins-the-empty-block-test
+  (testing "Enter Backspace while the insert is pending joins the empty block into the source"
+    (b/save-block "x")
+    (is (= ["x"]
+           (fast-pending-insert-keys-leave-titles ["Enter" "Backspace"])))))
+
+(deftest fast-enter-tab-backspace-joins-the-indented-block-test
+  (testing "Enter, Tab, Backspace while insert is pending joins the empty child back into the source"
+    (b/save-block "a")
+    (is (= ["a"]
+           (fast-pending-insert-keys-leave-titles ["Enter" "Tab" "Backspace"])))))
 
 (deftest today-queries-render-without-resource-errors
   (let [page (ls-api-call! :editor.createJournalPage
