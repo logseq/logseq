@@ -28,6 +28,102 @@ let find_close (s : string) i =
   in
   go i
 
+(* Source fences are not prose: references and tags inside them are code,
+   not outgoing block metadata. This is a small line-oriented recognizer for
+   the fence forms rendered by Render.src_block, not a full Markdown parser. *)
+let markdown_source_end lower i =
+  if not (Str_util.starts_at lower i "```") then None
+  else
+    match Str_util.index_from lower (i + 3) "\n" with
+    | None -> None
+    | Some line_end ->
+        let n = String.length lower in
+        let closing_end line =
+          let rec skip_indent j =
+            if j < n && (lower.[j] = ' ' || lower.[j] = '\t') then
+              skip_indent (j + 1)
+            else j
+          in
+          let ticks_start = skip_indent line in
+          if Str_util.starts_at lower ticks_start "```" then
+            match Str_util.index_from lower ticks_start "\n" with
+            | Some newline -> Some (newline + 1)
+            | None -> Some n
+          else None
+        in
+        let rec find_close line =
+          if line >= n then None
+          else
+            match closing_end line with
+            | Some _ as finish -> finish
+            | None ->
+                (match Str_util.index_from lower line "\n" with
+                 | Some newline -> find_close (newline + 1)
+                 | None -> None)
+        in
+        (match find_close (line_end + 1) with
+         | Some _ as finish -> finish
+         | None -> Some n)
+
+let org_source_end lower i =
+  if not (Str_util.starts_at lower i "#+begin_src") then None
+  else
+    match Str_util.index_from lower (i + 1) "\n#+end_src" with
+    | Some close ->
+        let after = close + 10 in
+        Some
+          (if after < String.length lower && lower.[after] = '\n'
+           then after + 1
+           else after)
+    | None -> Some (String.length lower)
+
+let source_ranges title =
+  let n = String.length title in
+  let lower = String.lowercase_ascii title in
+  let source_end_at i =
+    if not (i = 0 || title.[i - 1] = '\n') then None
+    else
+      match markdown_source_end lower i with
+      | Some _ as finish -> finish
+      | None -> org_source_end lower i
+  in
+  let rec go i ranges =
+    if i >= n then List.rev ranges
+    else
+      match source_end_at i with
+      | Some finish -> go finish ((i, finish) :: ranges)
+      | None -> go (i + 1) ranges
+  in
+  go 0 []
+
+let source_end_containing ranges i =
+  match List.find_opt (fun (start, finish) -> i >= start && i < finish) ranges with
+  | Some (_, finish) -> Some finish
+  | None -> None
+
+let in_source ranges i = source_end_containing ranges i <> None
+
+let replace_all_outside ranges s ~pat ~rep =
+  let n = String.length s and m = String.length pat in
+  if m = 0 then s
+  else
+    let buf = Buffer.create n in
+    let rec go i =
+      match source_end_containing ranges i with
+      | Some finish ->
+          Buffer.add_substring buf s i (finish - i);
+          go finish
+      | None ->
+          if i + m <= n && Str_util.starts_at s i pat then (
+            Buffer.add_string buf rep;
+            go (i + m))
+          else if i < n then (
+            Buffer.add_char buf s.[i];
+            go (i + 1))
+    in
+    go 0;
+    Buffer.contents buf
+
 (* returns (ordered deduped ref names, tag names, hash names).
    `#name` lands in `hash` and `tags`: a bare hashtag creates the
    tag-class entity, joins block/refs AND block/tags, and the stored
@@ -37,44 +133,49 @@ let find_close (s : string) i =
    title). *)
 let scan_title (title : string) =
   let n = String.length title in
+  let ranges = source_ranges title in
   let dedupe xs =
     List.rev (List.fold_left (fun a x -> if List.mem x a then a else x :: a)
                 [] xs)
   in
   let rec go i refs tags hash =
     if i >= n then (refs, tags, hash)
-    else if i + 1 < n && title.[i] = '[' && title.[i + 1] = '[' then
-      match find_close title (i + 2) with
-      | Some j ->
-          let name = String.trim (String.sub title (i + 2) (j - i - 2)) in
-          go (j + 2)
-            (if name = "" then refs else name :: refs)
-            tags hash
-      | None -> go n refs tags hash
-    else if title.[i] = '#' && i + 1 < n
-            && (i = 0
-                || (title.[i - 1] <> '#' && is_name_end title.[i - 1]))
-    then
-      if i + 2 < n && title.[i + 1] = '[' && title.[i + 2] = '[' then
-        match find_close title (i + 3) with
+    else
+      match source_end_containing ranges i with
+      | Some finish -> go finish refs tags hash
+      | None ->
+      if i + 1 < n && title.[i] = '[' && title.[i + 1] = '[' then
+        match find_close title (i + 2) with
         | Some j ->
-            let name = String.trim (String.sub title (i + 3) (j - i - 3)) in
+            let name = String.trim (String.sub title (i + 2) (j - i - 2)) in
             go (j + 2)
               (if name = "" then refs else name :: refs)
-              (if name = "" then tags else name :: tags)
-              hash
+              tags hash
         | None -> go n refs tags hash
-      else
-        let j = ref (i + 1) in
-        while !j < n && not (is_name_end title.[!j]) do
-          incr j
-        done;
-        let name = String.sub title (i + 1) (!j - i - 1) in
-        go (max (i + 1) !j)
-          (if name = "" then refs else name :: refs)
-          (if name = "" then tags else name :: tags)
-          (if name = "" then hash else name :: hash)
-    else go (i + 1) refs tags hash
+      else if title.[i] = '#' && i + 1 < n
+              && (i = 0
+                  || (title.[i - 1] <> '#' && is_name_end title.[i - 1]))
+      then
+        if i + 2 < n && title.[i + 1] = '[' && title.[i + 2] = '[' then
+          match find_close title (i + 3) with
+          | Some j ->
+              let name = String.trim (String.sub title (i + 3) (j - i - 3)) in
+              go (j + 2)
+                (if name = "" then refs else name :: refs)
+                (if name = "" then tags else name :: tags)
+                hash
+          | None -> go n refs tags hash
+        else
+          let j = ref (i + 1) in
+          while !j < n && not (is_name_end title.[!j]) do
+            incr j
+          done;
+          let name = String.sub title (i + 1) (!j - i - 1) in
+          go (max (i + 1) !j)
+            (if name = "" then refs else name :: refs)
+            (if name = "" then tags else name :: tags)
+            (if name = "" then hash else name :: hash)
+      else go (i + 1) refs tags hash
   in
   let refs, tags, hash = go 0 [] [] [] in
   (dedupe refs, dedupe tags, dedupe hash)
@@ -235,11 +336,12 @@ let rewrite_title title resolved =
   let title =
     List.fold_left
       (fun t r ->
-        replace_all t
+        replace_all_outside (source_ranges t) t
           ~pat:("[[" ^ r.name ^ "]]")
           ~rep:("[[" ^ r.uuid ^ "]]"))
       title resolved
   in
+  let ranges = source_ranges title in
   (* #[[name]] -> #[[uuid]] via the pass above; a bare #name at a
      boundary rewrites to #[[uuid]] the same way (cljs
      title-ref->id-ref stores id-refs for inline tags) *)
@@ -249,6 +351,7 @@ let rewrite_title title resolved =
   let rec go i =
     if i < n then
       if title.[i] = '#' && i + 1 < n && title.[i + 1] <> '['
+         && not (in_source ranges i)
          && (i = 0
              || (title.[i - 1] <> '#' && is_name_end title.[i - 1]))
       then

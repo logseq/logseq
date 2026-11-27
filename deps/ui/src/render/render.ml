@@ -176,26 +176,83 @@ let deprecated_warning key =
 (* #+BEGIN_SRC lang\n...\n#+END_SRC or a markdown ```lang\n...\n``` fence —
    code block; plain pre.CodeMirror-line fallback (real CodeMirror mount
    is a separate editor concern). *)
-let src_block s =
+let src_block_with_save s =
+  let finish markdown_fence prefix_end body s =
+    let prefix = String.sub s 0 prefix_end in
+    let suffix_start = prefix_end + String.length body in
+    let suffix =
+      String.sub s suffix_start (String.length s - suffix_start)
+    in
+    let suffix =
+      if String.length suffix > 0 && suffix.[0] = '\n' then
+        String.sub suffix 1 (String.length suffix - 1)
+      else suffix
+    in
+    let save_source value =
+      let blank = String.trim value = "" in
+      let separator =
+        if blank then ""
+        else if suffix <> "" && markdown_fence then "\n"
+        else if suffix = ""
+             || (String.length value > 0 && value.[String.length value - 1] = '\n')
+        then ""
+        else "\n"
+      in
+      prefix ^ value ^ separator ^ suffix
+    in
+    save_source
+  in
   if String.length s >= 3 && String.sub s 0 3 = "```" then (
     let rest = String.sub s 3 (String.length s - 3) in
     match String.index_opt rest '\n' with
     | None -> None
     | Some nl ->
         let lang = String.trim (String.sub rest 0 nl) in
+        let body_start = 3 + nl + 1 in
         let body =
           String.sub rest (nl + 1) (String.length rest - nl - 1)
         in
-        let body =
+        let body, trailing =
           let n = String.length body in
-          if n >= 3 && String.sub body (n - 3) 3 = "```" then
-            let b = String.sub body 0 (n - 3) in
-            if String.length b > 0 && b.[String.length b - 1] = '\n' then
-              String.sub b 0 (String.length b - 1)
-            else b
-          else body
+          let closing_line_start =
+            let rec find line =
+              if line >= n then None
+              else
+                let rec skip_indent i =
+                  if i < n && (body.[i] = ' ' || body.[i] = '\t') then
+                    skip_indent (i + 1)
+                  else i
+                in
+                let ticks_start = skip_indent line in
+                if ticks_start + 2 < n && body.[ticks_start] = '`'
+                   && body.[ticks_start + 1] = '`'
+                   && body.[ticks_start + 2] = '`'
+                then Some line
+                else
+                  match String.index_from_opt body line '\n' with
+                  | Some newline -> find (newline + 1)
+                  | None -> None
+            in
+            find 0
+          in
+          match closing_line_start with
+          | None -> body, ""
+          | Some line_start ->
+              let trailing =
+                match String.index_from_opt body line_start '\n' with
+                | Some newline ->
+                    String.sub body (newline + 1) (n - newline - 1)
+                | None -> ""
+              in
+              let b = String.sub body 0 line_start in
+              let b =
+                if String.length b > 0 && b.[String.length b - 1] = '\n' then
+                  String.sub b 0 (String.length b - 1)
+                else b
+              in
+              b, trailing
         in
-        Some (lang, body))
+        Some (lang, body, finish true body_start body s, trailing))
   else
     let prefix = "#+begin_src" in
     if Str_util.starts_with_ci s prefix then (
@@ -220,8 +277,13 @@ let src_block s =
             then String.sub body 0 (n - m)
             else body
           in
-          Some (lang, body))
+          Some (lang, body, finish false body_start body s, ""))
     else None
+
+let src_block s =
+  match src_block_with_save s with
+  | Some (lang, body, _, _) -> Some (lang, body)
+  | None -> None
 
 (* blocks tagged logseq.class/Query (created by the /query commands)
    render the outer .custom-query-results + .ls-query-setting shell;
@@ -230,18 +292,10 @@ let src_block s =
 (* calc result lines for display-type=code + code/lang=calc — cljs
    extensions/calc.cljc results (.extensions__code-calc > per-line
    .extensions__code-calc-output-line), mounted inside .code-editor *)
-let calc_results_el code =
-  match Render_calc.results code with
-  | [] -> None
-  | lines ->
-      Some
-        (column ~style_class:"extensions__code-calc"
-           (List.map
-              (fun line ->
-                text ~style_class:"extensions__code-calc-output-line"
-                  ~white_space:`nowrap ~line_height:"1.45rem" ~min_height:23
-                  ~value:line [])
-              lines))
+(* Web CodeMirror owns its output DOM and update_calc mutates the mounted
+   container directly. Native block editors include the same output in the
+   textarea-backed code surface, so render no separate copy for them. *)
+let calc_results_for code = Render_calc.output_el code
 
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
@@ -275,7 +329,8 @@ let code_block_actions ~self lang =
    codemirror@5) —
    DOM structure matches cljs so both display and edit look identical.
    ~extra appends inside .extensions__code (the src-eval .results div). *)
-let code_block ?(self = "") ?(extra = []) lang code =
+let code_block ?(self = "") ?(extra = []) ?(editable = true)
+    ?(save_source = Fun.id) lang code =
   let lang =
     (* cljs src-cp aliases the fence's stored lang to clojure *)
     match lang with
@@ -299,18 +354,16 @@ let code_block ?(self = "") ?(extra = []) lang code =
                       mounts CM on it (editor/code_mirror.ml owns the
                       instance) *)
                    Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
-                     ~value:code ~read_only:(self = "" || Ui_services.env_publishing ())
-                     ~source_role:"block" ~on_event:(Code_mirror.on_native_event self) ()
-                 ; (if not calc then Logseq_el.fragment []
-                    else
-                      match calc_results_el code with
-                      | Some el -> el
-                      | None ->
-                          (* cljs mounts .extensions__code-calc for calc
-                             blocks even when empty —
-                             Code_mirror.update_calc fills it on change *)
-                          column ~key:"calc"
-                            ~style_class:"extensions__code-calc" [])
+                     ~value:code
+                     ~read_only:(not editable || self = "" || Ui_services.env_publishing ())
+                     ~source_role:"block"
+                     ~on_event:(fun ~name ~value ~key ->
+                       Code_mirror.on_native_event self ~name
+                         ~value:(Option.map save_source value) ~key)
+                     ()
+                 ; (if not calc || Code_mirror.calc_results_in_tree () then
+                      Logseq_el.fragment []
+                    else calc_results_for code)
                  ]
              ]
             @ extra)
@@ -329,8 +382,8 @@ let has_sub hay needle =
    option. Options only survive on raw #+BEGIN_SRC titles (saved
    display-type=code blocks drop the fence header). *)
 let src_eval_parts s =
-  match src_block s with
-  | Some (hdr, code) -> (
+  match src_block_with_save s with
+  | Some (hdr, code, save_source, _) -> (
       match String.index_opt hdr ' ' with
       | None -> None
       | Some i ->
@@ -338,7 +391,7 @@ let src_eval_parts s =
           let opts = String.sub hdr (i + 1) (String.length hdr - i - 1) in
           if String.lowercase_ascii lang = "clojure"
              && has_sub opts ":results"
-          then Some (lang, code)
+          then Some (lang, code, save_source)
           else None)
   | None -> None
 
@@ -794,7 +847,8 @@ let title_outer_kind (b : Model.block) =
    is_cards: class-Cards blocks append "Practice". *)
 let rec title ?heading ?(is_cards = false)
     ?(card_eid : int option = None) ?(self = "")
-    ?(wrap_attrs = []) ?(prefix : t option = None) ?highlight (s : string) : t list =
+    ?(wrap_attrs = []) ?(prefix : t option = None) ?highlight
+    ?(editable = true) (s : string) : t list =
   match html_body s with
   | Some frag -> Render_html.els_of_string frag
 
@@ -804,7 +858,7 @@ let rec title ?heading ?(is_cards = false)
         else footnote_parts s in
       if notes <> [] then
         (if body = "" then [] else
-           title ?heading ~card_eid ~self ~wrap_attrs ~prefix body)
+           title ?heading ~card_eid ~self ~wrap_attrs ~prefix ~editable body)
         @ List.mapi (fun index (name, definition) ->
             row ~key:("footnote-" ^ string_of_int index) ~display:`block
               ~data_attrs:["data-footnote-definition", name]
@@ -827,8 +881,11 @@ let rec title ?heading ?(is_cards = false)
            .block-body inside .block-content-inner) *)
         | Some body -> [ body ]
         | None -> (
-        match src_block s with
-        | Some (lang, code) -> [ code_block ~self lang code ]
+        match src_block_with_save s with
+        | Some (lang, code, save_source, trailing) ->
+            code_block ~self ~editable ~save_source lang code
+            :: (if String.trim trailing = "" then []
+                else [ content ~self ?highlight trailing ])
         | None -> (
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)
@@ -840,7 +897,7 @@ let rec title ?heading ?(is_cards = false)
    ~resolved: the caller's ref-resolved title (uuid refs rendered to page
    titles); code/math surfaces keep the raw block_title. *)
 let title_block ?(self = "") ?resolved ?(annot = false) ?highlight
-    (b : Model.block) : t list =
+    ?(editable = true) (b : Model.block) : t list =
   let s = b.Model.block_title in
   let heading = b.Model.block_heading in
   (* cljs block-title: Pdf-annotation ref blocks prepend .prefix-link
@@ -858,18 +915,18 @@ let title_block ?(self = "") ?resolved ?(annot = false) ?highlight
   match b.Model.block_display_type with
   | Some "code" ->
       let lang = Option.value b.Model.block_code_lang ~default:"" in
-      [ code_block ~self lang s ]
+      [ code_block ~self ~editable lang s ]
   | Some "math" ->
       [ column ~grow:1. ~style_class:"math-block"
           [ Render_inline.katex_el ~block:true ~display:true s ] ]
   | _ -> (
       match src_eval_parts s with
-      | Some (lang, code) ->
-          [ code_block ~self lang code
+      | Some (lang, code, save_source) ->
+          [ code_block ~self ~editable ~save_source lang code
               ~extra:
                 [ src_eval_el ~code
                     ~uuid:(Option.value b.Model.block_uuid ~default:"") ] ]
       | None ->
           title ?heading ~is_cards:(is_cards_block b)
             ~card_eid:b.Model.block_db_id ~self ~wrap_attrs ~prefix ?highlight
-            (Option.value resolved ~default:s))
+            ~editable (Option.value resolved ~default:s))

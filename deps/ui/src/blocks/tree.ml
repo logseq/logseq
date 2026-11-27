@@ -473,7 +473,7 @@ let block_bg_css = function
   | "gray" -> "var(--ls-highlight-color-gray, #e8e8e8)"
   | c -> c
 
-let content_el ?highlight uuid (b : Model.block) : t =
+let content_el ?highlight ~editable uuid (b : Model.block) : t =
   (* style width:100% — cljs parity (block.cljs): gives the inline element a
      nonzero box so empty blocks stay clickable. cursor:text in the style
      string is ignored by the native host; the cursor prop is what it
@@ -506,10 +506,12 @@ let content_el ?highlight uuid (b : Model.block) : t =
                | Some `block ->
                    [ column ~key:("bt-" ^ uuid) ~grow:1. ~min_width:0 ~cross:`stretch
                        (Render.title_block ~self:uuid ~annot:true ?highlight
+                          ~editable
                           ~resolved:(S.title_for uuid b.block_title) b) ]
                | Some `flex ->
                    [ row ~key:("bt-" ^ uuid) ~grow:1.
                        (Render.title_block ~self:uuid ~annot:true ?highlight
+                          ~editable
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
                    ]
@@ -520,7 +522,8 @@ let content_el ?highlight uuid (b : Model.block) : t =
                           else
                             Some
                               (row ~key:("bt-" ^ uuid)
-                                 (Render.title_block ~self:uuid ~annot:true ?highlight
+                                 (Render.title_block ~self:uuid ~annot:true
+                                    ?highlight ~editable
                                     ~resolved:(S.title_for uuid b.block_title)
                                     b)))
                    ]
@@ -528,12 +531,13 @@ let content_el ?highlight uuid (b : Model.block) : t =
                    [ row ~key:("bt-" ^ uuid)
                        ~grow:(if block_heading_lvl b <> None then 1. else 0.)
                        (Render.title_block ~self:uuid ~annot:true ?highlight
+                          ~editable
                           ~resolved:(S.title_for uuid b.block_title)
                           b)
                    ]
                | None ->
                    Render.title_block ~self:uuid ~annot:true ?highlight
-                     ~resolved:(S.title_for uuid b.block_title)
+                     ~editable ~resolved:(S.title_for uuid b.block_title)
                      b))       ]
     ])
 
@@ -547,7 +551,7 @@ let content_wrapper ?highlight ~scope ~editable uuid (b : Model.block) : t =
     ~data_attrs:[ ("style", "user-select:text;overflow-x:visible") ]
     [ Jump_state.target ~enabled:editable ~key:"content"
         ~owner:(Jump_state.owner ~scope ~container:uuid)
-        ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el ?highlight uuid b)
+        ~activate:(fun () -> Editor_actions.enter_edit ~scope uuid (-1)) (content_el ?highlight ~editable uuid b)
     ; row ~key:("bic-" ^ uuid) ~cross:`center []
     ]
 

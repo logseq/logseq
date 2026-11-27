@@ -1793,7 +1793,7 @@ let run_views ~registry ~profile ~finish =
     ignore (Lui_app.dispose browser_link.S.app);
     restore_browser ()) [false;true];
   List.iter (fun code ->
-    let results = mount (fun _ -> Option.get (Render.calc_results_el code)) in
+    let results = mount (fun _ -> Render.calc_results_for code) in
     let lines = List.filter (fun node ->
       class_has node "extensions__code-calc-output-line") (nodes results) in
     check "Calculator results retain one single-height line per expression"
@@ -6640,6 +6640,73 @@ let popup_press (ev : Ui_services.ev) =
   Editor_commands.active := None;
   Runtime.editor_popup_open := false;
   Editor_state.set (fun _ -> state_before)
+
+let source_blocks () =
+  List.iter
+    (fun (source, edited, expected) ->
+       match Render.src_block_with_save source with
+       | Some (_, _, save_source, _) ->
+           eqs "edited raw source blocks preserve their fences" expected
+             (save_source edited)
+       | None -> check "source block fixture did not parse" false)
+    [ ( "```calc\n1+1\n```", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n```" );
+      ( "#+begin_src calc\n1+1\n#+end_src", "1+1\n2+3",
+        "#+begin_src calc\n1+1\n2+3\n#+end_src" );
+      ( "```calc\n1+1\n```", "1+1\n",
+        "```calc\n1+1\n\n```" );
+      ( "```calc\n1+1\n", "1+1\n",
+        "```calc\n1+1\n" );
+      ( "```calc\n1+1\n````", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n````" );
+      ( "```calc\n1+1\n  ```", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n  ```" );
+      ( "```calc\n1+1\n  ``` trailing", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n  ``` trailing" ) ];
+  let _, tags, hash =
+    Title_refs.scan_title "#+begin_src calc\n1+1\n#+end_src"
+  in
+  check "Org source fences are not saved as tags" (tags = [] && hash = []);
+  let refs, tags, hash = Title_refs.scan_title "```calc\n[[Page]] #tag\n```" in
+  check "Markdown source contents are not saved as references"
+    (refs = [] && tags = [] && hash = []);
+  let refs, tags, hash =
+    Title_refs.scan_title "```inline` [[Page]] #tag\n```"
+  in
+  check "Line-leading triple backticks follow mldoc fence semantics"
+    (refs = [] && tags = [] && hash = []);
+  (match Render.src_block_with_save "```calc\nuse ```" with
+   | Some (_, body, _, _) ->
+       eqs "inline trailing backticks are preserved" "use ```" body
+   | None -> check "inline trailing backtick fixture did not parse" false);
+  (match Render.src_block_with_save "```calc\n1+1\n```\nafter" with
+   | Some (_, body, _, trailing) ->
+       check "content after a closing fence remains visible"
+         (body = "1+1" && trailing = "after")
+   | None -> check "closed fence with trailing content did not parse" false);
+  let refs, tags, hash =
+    Title_refs.scan_title "````calc\n[[Inside]]\n```\n[[Outside]]"
+  in
+  check "Longer opening fences still close on a three-backtick fence line"
+    (refs = [ "Outside" ] && tags = [] && hash = []);
+  let refs, tags, hash =
+    Title_refs.scan_title "```calc\n[[Inside]]\n  ```\n[[Outside]]"
+  in
+  check "Indented closing fences end source scanning"
+    (refs = [ "Outside" ] && tags = [] && hash = []);
+  let refs, tags, hash =
+    Title_refs.scan_title
+      "```calc\n[[Inside]]\n  ``` [[Page]] #tag\n[[Outside]]"
+  in
+  check "Closing fence trailing text is not scanned as prose"
+    (refs = [ "Outside" ] && tags = [] && hash = []);
+  let resolved =
+    [ { Title_refs.name = "Page"; uuid = "page-uuid"; is_tag = false;
+        is_hash = false; fresh = false; entity = Wire.Nil } ]
+  in
+  eqs "source fences do not rewrite code links"
+    "[[page-uuid]]\n```calc\n[[Page]]\n```"
+    (Title_refs.rewrite_title "[[Page]]\n```calc\n[[Page]]\n```" resolved)
 
 let dates () =
   for month = 1 to 12 do

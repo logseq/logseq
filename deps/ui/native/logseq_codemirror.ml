@@ -12,6 +12,7 @@
      cm-event {name: string (required), value/key: string (optional)} *)
 
 open Lui_protocol
+open Lui_elements
 
 let identifier = "logseq-codemirror"
 
@@ -63,12 +64,16 @@ let register registry =
 let string_of_wire = function StringValue s -> s | _ -> ""
 
 (* [cm ~source_role ...] — source_role is "block" or "query". on_event
-   receives the decoded cm-event fields: ~name, ~value, ~key. source-role
-   is emitted last so the web adapter can materialize its interior DOM
-   once every build prop has landed. *)
-let cm ?key ?(uuid = "") ?(lang = "") ?(value = "") ?(read_only = false)
-    ?(source_role = "block") ?(id = "") ?(style_class = "") ?on_event ()
-    : Lui_elements.t =
+   receives the decoded cm-event fields: ~name, ~value, ~key.
+
+   The OCaml host has no vendored CodeMirror instance. Block sources use
+   the host's real multiline textarea primitive instead of an unimplemented
+   extension shell; calc output is a sibling in the same retained tree and
+   follows the textarea's local edit signal. Query sources keep the
+   extension contract for hosts that implement it. *)
+let extension_cm ?key ?(uuid = "") ?(lang = "") ?(value = "")
+    ?(read_only = false) ?(source_role = "block") ?(id = "")
+    ?(style_class = "") ?on_event () : Lui_elements.t =
  fun context parent ->
   let node = Lui_ui.extension context identifier in
   Option.iter (Lui_ui.key context node) key;
@@ -103,3 +108,44 @@ let cm ?key ?(uuid = "") ?(lang = "") ?(value = "") ?(read_only = false)
    | Some p -> Lui_ui.append context p node
    | None -> ());
   node
+
+let cm ?key ?(uuid = "") ?(lang = "") ?(value = "") ?(read_only = false)
+    ?(source_role = "block") ?(id = "") ?(style_class = "") ?on_event ()
+    : Lui_elements.t =
+ fun context parent ->
+  if source_role <> "block" then
+    extension_cm ?key ~uuid ~lang ~value ~read_only ~source_role ~id
+      ~style_class ?on_event () context parent
+  else
+    let source = Signal.state context.Lui_ui.ui_scheduler value in
+    let accessibility_identifier =
+      if id <> "" then Some id
+      else if uuid <> "" then Some ("edit-block-" ^ uuid)
+      else None
+    in
+    let style_class = if style_class = "" then None else Some style_class in
+    let editor =
+      Lui_elements.textarea ?key ~grow:1.0 ~text:value ~read_only
+        ?accessibility_identifier ?style_class
+        ~data_attrs:[ ("data-lang", lang) ]
+        ~on_input:(fun next ->
+          Signal.set source next;
+          match on_event with
+          | Some handler ->
+              handler ~name:"input" ~value:(Some next) ~key:None
+          | None -> ())
+        []
+    in
+    match parent with
+    | Some p ->
+        ignore (editor context (Some p));
+        if lang = "calc" then begin
+          let output =
+            reactive
+              (fun source -> Render_calc.output_el source)
+              (Signal.value source)
+          in
+          ignore (output context (Some p))
+        end;
+        p
+    | None -> invalid_arg "logseq-codemirror block surface requires a parent"

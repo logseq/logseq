@@ -10611,7 +10611,7 @@ let () = with_test_entry (fun () ->
               Edit_view.view ~block_id:label ~cls:"" ~on_input:(fun _ -> ())
                 ~model:(Signal.constant context.Lui_ui.ui_scheduler (Edit_model.create source))
                 ~frame:(Signal.constant context.Lui_ui.ui_scheduler Edit_input.empty_frame)
-            else Tree.content_el label (Model.empty_block ~uuid:label ~title:source ~is_page:false) in
+            else Tree.content_el ~editable:true label (Model.empty_block ~uuid:label ~title:source ~is_page:false) in
           Lui_elements.row ~accessibility_identifier:label [view] in
         Ui_components.with_props [Ui_components.Prop.font_size "16px"; Ui_components.Prop.line_height "24px"]
           (Lui_elements.column [sample ~editing:false "empty-read" "";
@@ -12206,3 +12206,49 @@ let () =
       (not (List.mem "node_modules/page.md" paths));
     check "Readable directory import enumeration has no errors" (!errors = []));
   print_endline "native directory import path filtering: OK"
+
+let () = with_test_entry (fun () ->
+  let store = Lui_store.create () and errors = ref [] in
+  let expect message condition = if not condition then errors := message :: !errors in
+  let backend = { backend_profile = profile LinuxOS GenericHost
+                ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_katex.register registry;
+  Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
+  let uuid = "calc-live" in
+  let app = Lui_app.create_with_extensions backend registry Model.initial
+      (fun model _ -> model)
+      (fun context _ _ ->
+         Editor_state.ensure context;
+         Render.code_block ~self:uuid "calc" "1+1") in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let has text =
+      List.exists (fun id -> Lui_store.string_prop store id "text" = Some text)
+        (Lui_store.preorder store)
+    in
+    expect "Initial calc results did not render" (has "2");
+    let textarea =
+      List.find_opt
+        (fun id ->
+          Lui_store.kind store id = "textarea"
+          && Lui_store.string_prop store id "accessibility-identifier"
+             = Some ("edit-block-" ^ uuid))
+        (Lui_store.preorder store)
+    in
+    expect "Native calc block did not mount a textarea editing surface"
+      (textarea <> None);
+    (match textarea with
+     | Some textarea ->
+         ignore
+           (Lui_app.dispatch_event app
+              (TextChanged (textarea, "1+1\n2+3")));
+         ignore (Lui_app.flush app)
+     | None -> ());
+    expect "Editing the calc textarea did not refresh native results" (has "5");
+    List.iter prerr_endline (List.rev !errors);
+    check "Native live calc results" (!errors = []));
+  print_endline "native live calc results: OK")
