@@ -42,23 +42,31 @@
       (aset env "DB_SYNC_ADMIN_TOKEN" admin-token))
     env))
 
-(defn- request-origin-opts
-  "Origin embedded in URLs returned to clients.
+(defn- parse-url-origin
+  [base-url]
+  (let [url (js/URL. base-url)
+        protocol (.-protocol url)
+        scheme (if (string/ends-with? protocol ":")
+                 (subs protocol 0 (dec (count protocol)))
+                 protocol)]
+    {:scheme scheme
+     :host (.-host url)}))
 
-  `DB_SYNC_BASE_URL` wins when it is set. Otherwise leave scheme and host unset
-  so the request keeps the Host header and `X-Forwarded-Proto`. Forcing `http`
-  here makes snapshot download return an http URL, which the secure desktop
-  context cannot fetch."
+(defn- request-origin-opts
+  "Returns a vector of {:scheme :host} maps for all configured base URLs.
+
+  `DB_SYNC_BASE_URL` may be a comma-separated list of URLs so the server accepts
+  requests arriving via different addresses (e.g. LAN IP over HTTP and a
+  Tailscale / reverse-proxy domain over HTTPS pointing at the same process).
+  The entry whose :host matches the request's Host header is used to reconstruct
+  the URL; the first entry is used as a fallback when no match is found. When
+  `DB_SYNC_BASE_URL` is unset this is empty so the request is rebuilt from its
+  Host header and `X-Forwarded-Proto`. Forcing `http` here makes snapshot
+  download return an http URL, which the secure desktop context cannot fetch."
   [cfg]
-  (if-let [base-url (:base-url cfg)]
-    (let [url (js/URL. base-url)
-          protocol (.-protocol url)
-          scheme (if (string/ends-with? protocol ":")
-                   (subs protocol 0 (dec (count protocol)))
-                   protocol)]
-      {:scheme scheme
-       :host (.-host url)})
-    {}))
+  (if-let [base-urls (:base-urls cfg)]
+    (mapv parse-url-origin base-urls)
+    []))
 
 (defn- access-allowed?
   [env graph-id request]
