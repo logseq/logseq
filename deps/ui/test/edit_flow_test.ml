@@ -2344,11 +2344,25 @@ let test_calculator_exit_structure (h : host) =
   set_editing ~uuid:"b1" ~buffer:"1+2" ~caret:3 ~base:"1+2";
   S.code_buffer_of := (fun uuid -> if uuid="b1" then Some "1+2" else previous_buffer uuid);
   install_worker ~repo:h.repo h;
-  A.insert_sibling_after "b1";
+  A.insert_sibling_after ~force_sibling:true ~source:"1+2" "b1";
   let* () = h.wait_ms 25 in
   let* () = settle h 40 in
   check "The calculator Shift-Enter action explicitly appends exactly one empty sibling"
     (current_titles ()=["1+2";""] && List.exists (fun op -> op_name op="insert-blocks") !ops);
+  reset_editor ();
+  let child = Test_check.block "child" "child" in
+  stage_page h [{(Test_check.block "b1" "1+2") with Model.block_display_type=Some "code"; Model.block_children=[child]}];
+  install_worker ~repo:h.repo h;
+  A.insert_sibling_after ~force_sibling:true ~source:"1+2\n2+3" "b1";
+  let* () = h.wait_ms 25 in
+  let* () = settle h 40 in
+  check "Calculator Shift-Enter does not require prior edit state and forces a true sibling"
+    (current_titles ()=["1+2\n2+3";""]
+     && List.exists (function
+       | W.Array [W.Keyword "insert-blocks"; W.Array [_; _; opts]] ->
+           W.map_get opts "sibling?" = Some (W.Bool true)
+       | _ -> false) !ops
+     && (match S.editing () with Some e -> e.S.uuid <> "b1" | None -> false));
   S.code_buffer_of := previous_buffer;
   reset_editor ();
   install_worker ~repo:h.repo h;

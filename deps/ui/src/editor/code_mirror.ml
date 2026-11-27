@@ -349,7 +349,7 @@ let on_escape uuid =
 (* Shift-Enter (cljs wrapper keydown): save + insert a sibling block *)
 let on_shift_enter uuid =
   match block_instance uuid with
-  | Some st when st.composition = None -> A.insert_sibling_after uuid
+  | Some st when st.composition = None -> A.insert_sibling_after ~force_sibling:true ~source:st.committed uuid
   | _ -> ()
 
 (* Web CodeMirror owns its output DOM directly; calc output is not part of

@@ -12229,6 +12229,58 @@ let () = with_test_entry (fun () ->
   let backend = { backend_profile = profile LinuxOS GenericHost
                 ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
   let registry = Lui_extension.registry () in
+  Logseq_codemirror.register registry;
+  let events = ref [] in
+  let app = Lui_app.create_with_extensions backend registry Model.initial
+      (fun model _ -> model)
+      (fun _context _ _ ->
+         Lui_elements.row
+           [ Logseq_codemirror.cm ~uuid:"calc-key" ~lang:"calc"
+               ~value:"1+1" ~source_role:"block"
+               ~on_event:(fun ~name ~value ~key ->
+                 events := (name, value, key) :: !events)
+               () ])
+  in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let textarea =
+      List.find_opt
+        (fun id -> Lui_store.kind store id = "textarea")
+        (Lui_store.preorder store)
+    in
+    expect "Native Shift-Enter test did not mount a textarea" (textarea <> None);
+    (match textarea with
+     | Some textarea ->
+         ignore
+           (Lui_app.dispatch_event app
+              (TextChanged (textarea, "1+1\n2+3")));
+         ignore (Lui_app.flush app);
+         ignore
+           (Lui_app.dispatch_event app
+              (NavigationKey (textarea, "Enter", true)));
+         ignore (Lui_app.flush app)
+     | None -> ());
+    let shift_enter_events =
+      List.filter
+        (fun event ->
+          match event with
+          | "key", _, Some "Shift-Enter" -> true
+          | _ -> false)
+        !events
+    in
+    expect "Native textarea Shift-Enter did not emit exactly one cm key event"
+      (shift_enter_events = [ "key", Some "1+1\n2+3", Some "Shift-Enter" ]);
+    List.iter prerr_endline (List.rev !errors);
+    check "Native Shift-Enter cm-event mapping" (!errors = []));
+  print_endline "native Shift-Enter cm-event mapping: OK")
+
+let () = with_test_entry (fun () ->
+  let store = Lui_store.create () and errors = ref [] in
+  let expect message condition = if not condition then errors := message :: !errors in
+  let backend = { backend_profile = profile LinuxOS GenericHost
+                ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
+  let registry = Lui_extension.registry () in
   Logseq_el.register_all registry;
   Logseq_katex.register registry;
   Logseq_codemirror.register registry;

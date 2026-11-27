@@ -26,7 +26,7 @@ let on_native_event uuid ~name ~value ~key =
              Editor_actions.exit_edit ~select:true
          | Some "Shift-Enter" ->
              Editor_actions.sync_buffer uuid source;
-             Editor_actions.insert_sibling_after uuid
+             Editor_actions.insert_sibling_after ~force_sibling:true ~source uuid
          | _ -> ())
     | _ -> ()
 
