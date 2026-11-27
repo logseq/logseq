@@ -2035,13 +2035,27 @@ let () =
         | None -> None)
     | _ -> None
   in
+  let dom_key_target () =
+    let menu = Ui.open_menu ui in
+    if menu <> 0 then menu else Ui.focused ui
+  in
+  let rec in_block_context_menu ?(depth = 0) node =
+    node <> 0 && depth <= 64
+    &&
+    (match Lui_store.string_prop store node "accessibility-identifier" with
+     | Some ("block-context-menu" | "block-context-submenu") -> true
+     | _ ->
+         (match Lui_store.parent store node with
+          | Some parent -> in_block_context_menu ~depth:(depth + 1) parent
+          | None -> false))
+  in
+  let block_context_menu_key_target () =
+    in_block_context_menu (dom_key_target ())
+  in
   let on_dom_key ?(before_default = false) ~down ~scancode ~keymod ~repeat () =
     let recording = Keyboard_capture.active () in
     let mods = mods_of_keymod keymod in
-    let target =
-      let menu = Ui.open_menu ui in
-      if menu <> 0 then menu else Ui.focused ui
-    in
+    let target = dom_key_target () in
     dbg "dom key down=%b key=%s target=%d identifier=%s" down (dom_key scancode) target
       (Option.value (Lui_store.string_prop store target "accessibility-identifier") ~default:"-");
     let fields =
@@ -2377,7 +2391,7 @@ let () =
           | Some (Input.Key_down (Input.Tab, mods, repeat)), Sdl.Event.Key_down key
             when not (mods.Input.ctrl || mods.Input.meta || mods.Input.alt
                       || Keyboard_capture.active ())
-                 && Ui.overlay_top ui = 0 ->
+                 && (Ui.overlay_top ui = 0 || block_context_menu_key_target ()) ->
               on_dom_key ~before_default:true ~down:true
                 ~scancode:key.scancode
                 ~keymod:key.keymod ~repeat ();
