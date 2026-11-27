@@ -4191,7 +4191,9 @@ CAMLprim value logseq_native_clipboard_write_png(value bytes_v) {
   const char *mime_types[] = {"image/png"};
   bool ok = SDL_SetClipboardData(logseq_clipboard_png_data,
     logseq_clipboard_png_cleanup, payload, mime_types, 1);
-  if (!ok) logseq_clipboard_png_cleanup(payload);
+  /* SDL takes ownership before it negotiates with the platform backend:
+     even a false result can already have queued the cleanup callback, so
+     releasing payload here would double-free it. */
   CAMLreturn(Val_bool(ok));
 }
 
