@@ -6667,9 +6667,8 @@ let source_blocks () =
   let refs, tags, hash =
     Title_refs.scan_title "```inline` [[Page]] #tag\n```"
   in
-  check "Inline triple-backtick prose still yields references"
-    (List.length refs = 2 && List.mem "Page" refs && List.mem "tag" refs
-     && tags = [ "tag" ] && hash = [ "tag" ]);
+  check "Line-leading triple backticks follow mldoc fence semantics"
+    (refs = [] && tags = [] && hash = []);
   let resolved =
     [ { Title_refs.name = "Page"; uuid = "page-uuid"; is_tag = false;
         is_hash = false; fresh = false; entity = Wire.Nil } ]

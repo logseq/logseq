@@ -43,22 +43,15 @@ let markdown_source_end lower i =
     match Str_util.index_from lower (i + run) "\n" with
     | None -> None
     | Some line_end ->
-        let info_has_backtick =
-          match Str_util.index_from lower (i + run) "`" with
-          | Some tick -> tick < line_end
-          | None -> false
-        in
-        if info_has_backtick then None
-        else
-          let close_pat = "\n" ^ String.make run '`' in
-          match Str_util.index_from lower line_end close_pat with
-          | Some close ->
-              let after = close + String.length close_pat in
-              Some
-                (if after < String.length lower && lower.[after] = '\n'
-                 then after + 1
-                 else after)
-          | None -> Some (String.length lower)
+        let close_pat = "\n" ^ String.make run '`' in
+        match Str_util.index_from lower line_end close_pat with
+        | Some close ->
+            let after = close + String.length close_pat in
+            Some
+              (if after < String.length lower && lower.[after] = '\n'
+               then after + 1
+               else after)
+        | None -> Some (String.length lower)
 
 let org_source_end lower i =
   if not (Str_util.starts_at lower i "#+begin_src") then None
