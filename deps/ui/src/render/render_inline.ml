@@ -1052,9 +1052,10 @@ let video_embed_shell ~macro_name ~macro_id ?width inner =
   let w = max 160 (Option.value ~default:560 width) in
   let h = (w * 9) / 16 in
  fun context parent ->
-  let length value =
-    Signal.constant context.Lui_ui.ui_scheduler
-      (Lui_protocol.StringValue (string_of_int value ^ "px"))
+  let height_props =
+    if Lui_ui.host context = Lui_protocol.GenericHost then
+      [ ("height", Lui_protocol.StringValue (string_of_int h ^ "px")) ]
+    else []
   in
   (D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
      ~attrs:
@@ -1062,11 +1063,10 @@ let video_embed_shell ~macro_name ~macro_id ?width inner =
        ; ("data-video-macro-id", macro_id) ]
      [ D.el ~tag:"div" ~style_class:"video-embed-shell"
          [ D.el ~tag:"div" ~style_class:"video-embed-frame"
-             ~attrs:
-               [ ( "style"
-                 , "width:" ^ string_of_int w ^ "px;aspect-ratio:16 / 9" ) ]
-             ~ext_prop_signals:
-               [ ("width", length w); ("height", length h) ]
+             ~attrs:[("style", "aspect-ratio:16 / 9")]
+             ~ext_props:
+               (("width", Lui_protocol.StringValue (string_of_int w ^ "px"))
+                :: height_props)
              [ inner ] ] ])
     context parent
 

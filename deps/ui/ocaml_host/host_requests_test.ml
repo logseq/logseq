@@ -79,6 +79,62 @@ let () =
     (empty.Ui_services.clipboard_snapshot ()=Ui_services.empty_clipboard_snapshot);
   print_endline "native clipboard inspection metadata: OK"
 
+let () =
+  let failures = ref [] in
+  let expect label condition = if not condition then failures := label :: !failures in
+  List.iter
+    (fun (label, width, expected_w, expected_h) ->
+      let store = Lui_store.create () in
+      let backend =
+        { backend_profile = profile MacOS GenericHost
+        ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) }
+      in
+      let registry = Lui_extension.registry () in
+      Logseq_el.register_all registry;
+      Logseq_katex.register registry;
+      Logseq_codemirror.register registry;
+      Logseq_editor.register registry;
+      let app =
+        Lui_app.create_with_extensions backend registry () (fun () () -> ())
+          (fun _ _ _ ->
+            Lui_elements.column
+              [ Render_inline.video_embed_shell ~macro_name:"youtube"
+                  ~macro_id:"fixture" ?width (Logseq_el.el ~tag:"iframe" []) ])
+      in
+      Fun.protect
+        ~finally:(fun () -> ignore (Lui_app.dispose app))
+        (fun () ->
+          ignore (Lui_app.start app);
+          ignore (Lui_app.flush app);
+          let frame =
+            List.find
+              (fun id ->
+                match Lui_store.string_prop store id "style-class" with
+                | Some value ->
+                  List.mem "video-embed-frame" (String.split_on_char ' ' value)
+                | None -> false)
+              (Lui_store.preorder store)
+          in
+          expect (label ^ " width prop")
+            (Lui_store.string_prop store frame "width"
+             = Some (string_of_int expected_w ^ "px"));
+          expect (label ^ " height prop")
+            (Lui_store.string_prop store frame "height"
+             = Some (string_of_int expected_h ^ "px"));
+          let layout = Lui_layout.create () in
+          Lui_layout.sync ~scale:1. ~width:1440. ~height:900. layout store;
+          match Lui_layout.rect layout frame with
+          | Some rect ->
+            expect (label ^ " frame layout")
+              (abs_float (rect.Lui_scene.w -. float_of_int expected_w) < 0.01
+               && abs_float (rect.Lui_scene.h -. float_of_int expected_h) < 0.01)
+          | None -> expect (label ^ " frame rect") false))
+    [ "default video embed", None, 560, 315
+    ; "explicit-width video embed", Some 300, 300, 168 ];
+  List.iter prerr_endline (List.rev !failures);
+  check "Native video embed frame dimensions" (!failures = []);
+  print_endline "native video embed frame dimensions: OK"
+
 
 
 let () =
