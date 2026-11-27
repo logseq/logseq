@@ -219,6 +219,45 @@ let gallery_cover ~width ~height (value : W.t) : Lui_elements.t =
    inline via the asset extension tag — nothing to lightbox *)
 let preview_images (_items : Wire.t list) : unit = ()
 
+let lightbox_key = "native-asset-lightbox"
+
+let close_image_lightbox () =
+  Properties_state.remove_view_overlay lightbox_key
+
+(* Native retained-overlay approximation of the web PhotoSwipe surface.
+   It intentionally keeps the first implementation scoped to the core
+   desktop interaction: display the clicked asset fitted to the window,
+   close on backdrop press, the close control, or Escape through the
+   cover popover. PhotoSwipe's multi-image navigation, pinch/zoom and
+   sharing chrome remain documented parity gaps. *)
+let image_lightbox_view ~source ~alt : Lui_elements.t =
+  let close () = close_image_lightbox () in
+  Ui_parts.viewport_cover
+    (Lui_elements.popover ~key:lightbox_key ~role:`dialog
+       ~background:"rgba(0,0,0,0.92)" ~border_width:0 ~corner_radius:0
+       ~padding:0
+       ~on_dismiss:(fun _ -> close ())
+       [ Lui_elements.stack ~key:"lb-stack" ~container_relative_frame:`both
+           [ Ui_parts.pressable ~on_press:(fun _ -> close ())
+               (Lui_elements.column ~key:"lb-backdrop"
+                  ~container_relative_frame:`both ~main:`center ~cross:`center
+                  ~padding:32
+                  [ Lui_elements.image ~key:"lb-image" ~url:source ~alt [] ])
+           ; Lui_elements.row ~key:"lb-chrome" ~container_relative_frame:`both
+               ~main:`end_ ~cross:`start ~padding:16
+               [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
+                   ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
+                   ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
+                   ~on_press:(fun _ -> close ()) [] ]
+           ]
+       ])
+
+let open_image_lightbox ~source ~alt =
+  ignore
+    (Properties_state.push_view_overlay_ctxfree ~key:lightbox_key
+       ~view:(image_lightbox_view ~source ~alt)
+       ~on_escape:(fun () -> ()))
+
 (* minimal asset render — the asset extension tag carries the block
    uuid + stored file path so the Swift renderer can resolve it *)
 let block_view uuid (b : Model.block) : Lui_elements.t =
@@ -257,8 +296,12 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
            | _ -> asset_source file
          in
          if image_extension ext then
-           Lui_elements.image ~url:source
-             ~alt:file ~container_relative_frame:`horizontal []
+           Ui_parts.pressable
+             ~on_press:(fun _ -> open_image_lightbox ~source ~alt:file)
+             (Lui_elements.row ~key:("asset-lb-open-" ^ uuid)
+                ~container_relative_frame:`horizontal
+                [ Lui_elements.image ~url:source
+                    ~alt:file ~container_relative_frame:`horizontal [] ])
          else if audio_extension ext then
            Logseq_el.el ~key:("au-" ^ uuid) ~tag:"audio"
              ~ext_props:(( "src", Lui_protocol.StringValue source ) :: media_props b false)
