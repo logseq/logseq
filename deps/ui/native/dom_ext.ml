@@ -450,6 +450,8 @@ let subtree_elements_provider : (int -> Js.Json.t list) ref =
    event snapshot. The embedding app installs the authoritative predicate. *)
 let node_alive_provider : (int -> bool) ref = ref (fun _ -> false)
 
+let node_snapshot_provider : (int -> Js.Json.t option) ref = ref (fun _ -> None)
+
 let query_selector (el : element) (sel : string) : element option =
   match num_prop "node-id" el with
   | Some id ->
@@ -979,11 +981,7 @@ let note_active_node id =
 let active_element () : element option =
   match !active_node with
   | Some id when !node_alive_provider id -> (
-      match
-        List.find_opt
-          (fun el -> node_id_of el = Some id)
-          (!doc_elements_provider ())
-      with
+      match !node_snapshot_provider id with
       | Some _ as element -> element
       | None ->
           Some
