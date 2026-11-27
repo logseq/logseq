@@ -706,6 +706,7 @@
  :export.backup/set-folder-first "Set backup folder first"
  :export.backup/sqlite-desc "Primary way to backup graph's content to a single .sqlite file."
  :export.backup/unsupported-desc "Your browser doesn't support {{The File System Access API}}, please switch to a Chromium-based browser."
+ :export.backup/unsupported-native-desc "Scheduled backup folders are not available in the native app. Use an export action above to save a backup file."
  :export.backup/zip-desc "Primary way to backup graph's content and assets to a .zip file."
 
  :file/config-duplicate-keys "The file '{1}' has duplicate keys. The key '{2}' is assigned multiple times."
