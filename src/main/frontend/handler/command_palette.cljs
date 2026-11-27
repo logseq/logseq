@@ -26,11 +26,15 @@
         :shortcut.handler/global-non-editing-only]
        (mapcat shortcut-helper/shortcuts->commands)))
 
+(declare ensure-global-shortcut-commands!)
+
 (defn get-commands []
+  (ensure-global-shortcut-commands!)
   (->> (state/get-state :command-palette/commands)
        (sort-by :id)))
 
 (defn get-commands-unique []
+  (ensure-global-shortcut-commands!)
   (reduce #(assoc %1 (:id %2) %2) {}
           (state/get-state :command-palette/commands)))
 
@@ -106,9 +110,48 @@
       ;; clear history
       (history (filter #(not= (:id %) id) (history))))))
 
-(defn register-global-shortcut-commands []
-  (let [cmds (global-shortcut-commands)]
-    (doseq [cmd cmds] (register cmd))))
+(defonce ^:private *global-shortcut-commands-registered? (atom false))
+
+(defn- ensure-global-shortcut-commands!
+  "Registers the commands of the global shortcuts, once, in one state update.
+  Building them reads every shortcut's binding (~50 ms at startup), so app
+  startup schedules this for when the renderer is idle, and any read of the
+  commands before that (the palette, a plugin registering its own) runs it."
+  []
+  (when (compare-and-set! *global-shortcut-commands-registered? false true)
+    (let [existing (state/get-state :command-palette/commands)
+          new-cmds (reduce
+                    (fn [acc {:keys [id] :as cmd}]
+                      (try
+                        (spec/validate :command/command cmd)
+                        (if (contains? (:ids acc) id)
+                          (do (log/error :command/register {:msg "Failed to register command. Command with same id already exist"
+                                                            :id id})
+                              acc)
+                          (-> acc
+                              (update :ids conj id)
+                              (update :cmds conj cmd)))
+                        (catch :default e
+                          (log/error :command/register {:msg "Unexpectedly failed to register command"
+                                                        :id id
+                                                        :error (str e)})
+                          acc)))
+                    {:ids (set (map :id existing)) :cmds []}
+                    (global-shortcut-commands))]
+      (state/set-state! :command-palette/commands (into (vec existing) (:cmds new-cmds))))))
+
+(defn register-global-shortcut-commands
+  "Registers the global shortcuts' commands now (when not done yet)."
+  []
+  (ensure-global-shortcut-commands!))
+
+(defn schedule-global-shortcut-commands!
+  "Registers the global shortcuts' commands once the renderer is idle (at the
+  latest after 2 s), off the path to the first screen."
+  []
+  (if (exists? js/requestIdleCallback)
+    (js/requestIdleCallback ensure-global-shortcut-commands! #js {:timeout 2000})
+    (js/setTimeout ensure-global-shortcut-commands! 0)))
 
 (comment
   ;; register custom command example

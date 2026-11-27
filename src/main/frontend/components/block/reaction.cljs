@@ -35,6 +35,7 @@
                         {:align :start
                                  :content-props {:class "ls-icon-picker"}}))]
     (when (seq summary)
+      (ui/ensure-emoji-data!)
       [:div.ls-block-reactions.flex.flex-row.flex-wrap.items-center.mt-1
        (for [{:keys [emoji-id count reacted-by-me? usernames]} summary]
          (let [btn-classes (util/classnames
