@@ -18,6 +18,7 @@
             [frontend.error :as error]
             [frontend.handler.command-palette :as command-palette]
             [frontend.handler.e2ee]
+            [frontend.handler.editor :as editor-handler]
             [frontend.handler.events :as events]
             [frontend.handler.events.export]
             [frontend.handler.events.rtc]
@@ -218,6 +219,7 @@
       (instrument/init)
 
       (events/run!)
+      (editor-handler/install-unload-flush!)
 
       (log/info ::start-web-worker {})
 
