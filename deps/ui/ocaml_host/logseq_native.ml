@@ -2209,6 +2209,7 @@ let () =
         (Unix.create_process "open"
            [| "open"; "https://docs.logseq.com" |]
            Unix.stdin Unix.stdout Unix.stderr)
+    | 19 -> Native_embed.platform_event "menu-new-window\n{}"
     | _ -> ()
   in
   Callback.register "ocaml_host_menu_command" menu_command;

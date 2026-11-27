@@ -458,7 +458,8 @@ enum {
   kMenuMinimize,
   kMenuZoom,
   kMenuClose,
-  kMenuHelp
+  kMenuHelp,
+  kMenuNewWindow
 };
 
 static id logseq_menu_target = nil;
@@ -618,6 +619,8 @@ CAMLprim void logseq_native_install_menus(void) {
     menu_add_item(view, "Reload Page", "r", modCmd, kMenuReload);
 
     id winm = menu_add_submenu(main, "Window");
+    menu_add_item(winm, "New Window", "n", modCmd, kMenuNewWindow);
+    menu_add_sep(winm);
     menu_add_item(winm, "Minimize", "m", modCmd, kMenuMinimize);
     menu_add_item(winm, "Zoom", "", 0, kMenuZoom);
     menu_add_sep(winm);
