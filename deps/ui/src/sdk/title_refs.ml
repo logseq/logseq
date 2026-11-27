@@ -39,19 +39,18 @@ let count_backticks s i =
 let markdown_source_end lower i =
   if not (Str_util.starts_at lower i "```") then None
   else
-    let run = count_backticks lower i in
-    match Str_util.index_from lower (i + run) "\n" with
+    match Str_util.index_from lower (i + 3) "\n" with
     | None -> None
     | Some line_end ->
-        let close_pat = "\n" ^ String.make run '`' in
-        match Str_util.index_from lower line_end close_pat with
-        | Some close ->
-            let after = close + String.length close_pat in
-            Some
-              (if after < String.length lower && lower.[after] = '\n'
-               then after + 1
-               else after)
-        | None -> Some (String.length lower)
+        (match Str_util.index_from lower line_end "\n```" with
+         | Some close ->
+             let ticks_start = close + 1 in
+             let after = ticks_start + count_backticks lower ticks_start in
+             Some
+               (if after < String.length lower && lower.[after] = '\n'
+                then after + 1
+                else after)
+         | None -> Some (String.length lower))
 
 let org_source_end lower i =
   if not (Str_util.starts_at lower i "#+begin_src") then None

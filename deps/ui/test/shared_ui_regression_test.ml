@@ -6675,6 +6675,11 @@ let source_blocks () =
    | Some (_, body, _) ->
        eqs "inline trailing backticks are preserved" "use ```" body
    | None -> check "inline trailing backtick fixture did not parse" false);
+  let refs, tags, hash =
+    Title_refs.scan_title "````calc\n[[Inside]]\n```\n[[Outside]]"
+  in
+  check "Longer opening fences still close on a three-backtick fence line"
+    (refs = [ "Outside" ] && tags = [] && hash = []);
   let resolved =
     [ { Title_refs.name = "Page"; uuid = "page-uuid"; is_tag = false;
         is_hash = false; fresh = false; entity = Wire.Nil } ]
