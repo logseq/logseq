@@ -192,8 +192,9 @@ let src_block_with_save s =
       let blank = String.trim value = "" in
       let separator =
         if blank then ""
-        else if markdown_fence then "\n"
-        else if String.length value > 0 && value.[String.length value - 1] = '\n'
+        else if suffix <> "" && markdown_fence then "\n"
+        else if suffix = ""
+             || (String.length value > 0 && value.[String.length value - 1] = '\n')
         then ""
         else "\n"
       in
