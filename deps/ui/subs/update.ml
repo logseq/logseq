@@ -20,6 +20,7 @@ let effects (action : Action.t) : unit =
   | Action.Graph_closed ->
       !(Subs_state.on_navigate) ();
       Subs_state.current_repo := None;
+      Subs_state.current_graph_uuid := None;
       Subs_state.current_page := None;
       Subs_state.app_hooks.plugin_event "current-graph-changed"
         (Json.Object []);
