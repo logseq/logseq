@@ -23,6 +23,7 @@
             [frontend.util :as util]
             [frontend.util.entity :as entity]
             [logseq.api.block :as api-block]
+            [logseq.common.util :as common-util]
             [logseq.db :as ldb]
             [logseq.db.frontend.property :as db-property]
             [logseq.db.frontend.property.type :as db-property-type]
@@ -38,6 +39,21 @@
   (and (entity/internal-page? page)
        (:block/parent page)))
 
+(defn- <property-named
+  "The property whose title is `property-name` up to case, or nil. A name
+  lookup returns the oldest page of any kind with that name, so with a tag
+  \"Foo\" older than the property \"Foo\", typing \"foo\" found the tag and
+  created a second property titled \"Foo\" (db-test #1351)."
+  [repo property-name]
+  (if (and (string? property-name) (not (string/blank? property-name)))
+    (p/let [properties (db-async/<get-all-properties)
+            lc (common-util/page-name-sanity-lc property-name)
+            match (some #(when (= lc (some-> (:block/title %) common-util/page-name-sanity-lc)) %)
+                        properties)]
+      (when-let [ident (:db/ident match)]
+        (db-async/<get-block repo ident {:children? false})))
+    (p/resolved nil)))
+
 (defn- <add-property-from-dropdown
   "Adds an existing or new property from dropdown. Used from a block or page context."
   [entity id-or-name* schema {:keys [class-schema? block-uuid]}]
@@ -45,7 +61,10 @@
           id-or-name (or block-uuid id-or-name*)
           ;; Both conditions necessary so that a class can add its own page properties
           add-class-property? (and (entity/class? entity) class-schema?)
-          property (db-async/<get-block repo id-or-name {:children? false})
+          found (db-async/<get-block repo id-or-name {:children? false})
+          named (when-not (or block-uuid (entity/property? found))
+                  (<property-named repo id-or-name))
+          property (or named found)
           property? (entity/property? property)
           property-title (or (:block/title property) id-or-name)]
     ;; existing property selected or entered
@@ -91,12 +110,63 @@
                             (string/lower-case input)))]
       (sort-by (fn [item] (if (exact-title? item) 0 1)) results))))
 
+(defn- <on-property-type-change
+  "Handles choosing a type in property-type-select: adds the new property to `block` (or uses
+  `property`), sets the type and continues with its first value."
+  [v property property-name property-schema
+   {:keys [*property *property-schema block *show-new-property-config? *show-class-select? class-schema?]
+    :as opts}]
+  (let [type (keyword (string/lower-case v))
+        update-schema-fn #(assoc % :logseq.property/type type)]
+    (when *property-schema
+      (swap! *property-schema update-schema-fn))
+    (let [schema (or (and *property-schema @*property-schema)
+                     (update-schema-fn property-schema))]
+      (when *show-new-property-config?
+        (reset! *show-new-property-config? :adding-property))
+      (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
+              property (or property' property)
+              add-class-property? (and (entity/class? block) class-schema?)]
+        (when *property (reset! *property property))
+        (if-not (:db/ident property)
+          ;; Nothing was created (e.g. an invalid name, already reported by
+          ;; <add-property-from-dropdown): setting a type on no property would
+          ;; make the worker fail on a nil name.
+          (when *show-new-property-config?
+            (reset! *show-new-property-config? false))
+          (p/do!
+           (when *show-new-property-config?
+             (reset! *show-new-property-config? false))
+           (when (= (:logseq.property/type schema) :node) (reset! *show-class-select? true))
+           (db-property-handler/upsert-property!
+            (:db/ident property)
+            schema
+            {})
+
+           (cond
+             (and *show-class-select? @*show-class-select?)
+             nil
+             add-class-property?
+             (shui/popup-hide!)
+             (pv/batch-operation?)
+             nil
+             (and block (= type :checkbox))
+             (p/do!
+              (ui/hide-popups-until-preview-popup!)
+              (let [value (if-some [value (:logseq.property/scalar-default-value property)]
+                            value
+                            false)]
+                (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
+             (and block
+                  (contains? #{:default :url} type)
+                  (not (seq (:property/closed-values property))))
+             (pv/<create-new-block! block property "" {:batch-op? true}))))))))
+
 ;; TODO: This component should be cleaned up as it's only used for new properties and used to be used for existing properties
 (hsx/defc property-type-select
-  [property {:keys [*property *property-name *property-schema built-in? disabled?
-                    show-type-change-hints? block *show-new-property-config?
-                    *show-class-select?
-                    default-open? class-schema?]
+  [property {:keys [*property-name *property-schema built-in? disabled?
+                    show-type-change-hints?
+                    default-open?]
              :as opts}]
   (shortcut/use-disable-all-shortcuts!)
   (let [property-name (or (and *property-name @*property-name) (db-property/built-in-display-title property t))
@@ -115,45 +185,7 @@
           :disabled disabled?
           :on-value-change
           (fn [v]
-            (let [type (keyword (string/lower-case v))
-                  update-schema-fn #(assoc % :logseq.property/type type)]
-              (when *property-schema
-                (swap! *property-schema update-schema-fn))
-              (let [schema (or (and *property-schema @*property-schema)
-                               (update-schema-fn property-schema))]
-                (when *show-new-property-config?
-                  (reset! *show-new-property-config? :adding-property))
-                (p/let [property' (when block (<add-property-from-dropdown block property-name schema opts))
-                        property (or property' property)
-                        add-class-property? (and (entity/class? block) class-schema?)]
-                  (when *property (reset! *property property))
-                  (p/do!
-                   (when *show-new-property-config?
-                     (reset! *show-new-property-config? false))
-                   (when (= (:logseq.property/type schema) :node) (reset! *show-class-select? true))
-                   (db-property-handler/upsert-property!
-                    (:db/ident property)
-                    schema
-                    {})
-
-                   (cond
-                     (and *show-class-select? @*show-class-select?)
-                     nil
-                     add-class-property?
-                     (shui/popup-hide!)
-                     (pv/batch-operation?)
-                     nil
-                     (and block (= type :checkbox))
-                     (p/do!
-                      (ui/hide-popups-until-preview-popup!)
-                      (let [value (if-some [value (:logseq.property/scalar-default-value property)]
-                                    value
-                                    false)]
-                        (pv/<add-property! block (:db/ident property) value {:exit-edit? true})))
-                     (and block
-                          (contains? #{:default :url} type)
-                          (not (seq (:property/closed-values property))))
-                     (pv/<create-new-block! block property "" {:batch-op? true})))))))}
+            (<on-property-type-change v property property-name property-schema opts))}
 
          ;; only set when in property configure modal
          (and *property-name (:logseq.property/type property-schema))
