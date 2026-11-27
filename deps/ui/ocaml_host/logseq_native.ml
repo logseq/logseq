@@ -2338,8 +2338,9 @@ let () =
           if not pre_dispatched && not !component_input then
             on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
       | `text s ->
-          if not (Keyboard_capture.active ()) then
-            Host_requests.ensure_ed_focus ();
+          if not (Keyboard_capture.active ())
+             && not (block_context_menu_key_target ())
+          then Host_requests.ensure_ed_focus ();
           apply_actions (handle_input (Input.Text_input s));
           (* same insert emit as the SDL path — the logseq-editor
              extension reads commits as "insert" events *)
