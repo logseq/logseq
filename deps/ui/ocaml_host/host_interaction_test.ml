@@ -254,7 +254,7 @@ let pointer_hit_allocations () =
     Hashtbl.add rects id (Lui_scene.rect 0. (float (id - 2) *. 20.) 100. 20.)
   done;
   for id = 3001 to 3020 do
-    let owner = id - 2999 in
+    let owner = id - 1019 in
     Lui_store.apply_op store (CreateNode (id, Tooltip));
     Lui_store.apply_op store (InsertChild (owner, id, 0));
     Lui_store.apply_op store (SetProp (id, AnchorValue, StringValue "above"))
