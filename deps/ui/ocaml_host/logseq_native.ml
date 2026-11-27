@@ -2308,9 +2308,12 @@ let () =
           if down && not (Keyboard_capture.active ()) then
             Host_requests.ensure_ed_focus ();
           let pre_dispatched = down && shared_keydown_first key mods in
-          if pre_dispatched then
+          if pre_dispatched then begin
+            let menu_owned = block_context_menu_key_target () in
             on_dom_key ~before_default:true ~down:true ~scancode:sc ~keymod:km
               ~repeat:false ();
+            if menu_owned then on_component_input ()
+          end;
           if down && not !component_input then
             apply_actions (handle_input (Input.Key_down (key, mods, false)));
           if not pre_dispatched && not !component_input then
@@ -2455,9 +2458,11 @@ let () =
           match input, event.kind with
           | Some (Input.Key_down (key, mods, repeat)), Sdl.Event.Key_down sdl_key
             when shared_keydown_first key mods ->
+              let menu_owned = block_context_menu_key_target () in
               on_dom_key ~before_default:true ~down:true
                 ~scancode:sdl_key.scancode
                 ~keymod:sdl_key.keymod ~repeat ();
+              if menu_owned then on_component_input ();
               true
           | _ -> false
         in
