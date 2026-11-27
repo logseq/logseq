@@ -139,7 +139,7 @@ Follow-up runtime results:
 
 - Real IME composition for Chinese/Japanese/Korean. Direct Unicode injection is not IME proof; the follow-up host environment only had ABC input enabled.
 - Structured clipboard edge cases, cut/paste, paste types beyond the passing plain block copy/paste smoke.
-- Advanced query editor and actual query execution/filter completion.
+- Advanced query editor and query semantics beyond the tested insertion, operator/filter completion, Apply, popup dismissal, and compact geometry. `task: Todo` matching remains uncertain because both apps returned `No matched result` for a matching TODO block.
 - Image lightbox (PNG rendering failed before lightbox could be reached).
 - Custom user macros and built-in macro matrix beyond the tested YouTube embed macro.
 - Plugin marketplace installation/actions.
