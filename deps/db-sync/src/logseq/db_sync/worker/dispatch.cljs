@@ -10,6 +10,8 @@
             [logseq.db-sync.worker.handler.discussion-push :as discussion-push]
             [logseq.db-sync.worker.handler.e2ee :as e2ee-handler]
             [logseq.db-sync.worker.handler.index :as index-handler]
+            [logseq.db-sync.worker.handler.oauth :as oauth-handler]
+            [logseq.db-sync.worker.handler.oauth-app :as oauth-app-handler]
             [logseq.db-sync.worker.handler.personal-access-token :as pat-handler]
             [logseq.db-sync.worker.http :as http]
             [logseq.db-sync.worker.routes.semantic :as semantic-routes]
@@ -208,7 +210,13 @@
          (http/json-response :worker/health {:ok true})
 
          (= path "/openapi.json")
-         (http/json-response nil (semantic-routes/openapi-document (or (aget env "COGNITO_ISSUER") "")))
+         (http/json-response nil (semantic-routes/openapi-document (.-origin url)))
+
+         (oauth-handler/route? path)
+         (oauth-handler/handle request env)
+
+         (oauth-app-handler/route? path)
+         (oauth-app-handler/handle request env)
 
          (= path discussion-push/device-path)
          (discussion-push/<register request env)

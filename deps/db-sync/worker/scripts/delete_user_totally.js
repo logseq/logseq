@@ -216,6 +216,26 @@ async function main() {
     options,
     `delete from user_rsa_keys where user_id = '${escapedUserId}'`,
   );
+  const deletedOauthAccessTokens = runMutationQuery(
+    options,
+    `delete from oauth_access_tokens where user_id = '${escapedUserId}' or app_id in (select id from oauth_apps where owner_user_id = '${escapedUserId}')`,
+  );
+  const deletedOauthRefreshTokens = runMutationQuery(
+    options,
+    `delete from oauth_refresh_tokens where user_id = '${escapedUserId}' or app_id in (select id from oauth_apps where owner_user_id = '${escapedUserId}')`,
+  );
+  const deletedOauthCodes = runMutationQuery(
+    options,
+    `delete from oauth_authorization_codes where user_id = '${escapedUserId}' or app_id in (select id from oauth_apps where owner_user_id = '${escapedUserId}')`,
+  );
+  const deletedOauthSessions = runMutationQuery(
+    options,
+    `delete from oauth_login_sessions where user_id = '${escapedUserId}'`,
+  );
+  const deletedOauthApps = runMutationQuery(
+    options,
+    `delete from oauth_apps where owner_user_id = '${escapedUserId}'`,
+  );
   const deletedUsers = runMutationQuery(options, `delete from users where id = '${escapedUserId}'`);
 
   if (deletedUsers !== 1) {
@@ -236,6 +256,11 @@ async function main() {
     { step: "graph_members deleted", rows: deletedGraphMembers },
     { step: "graph_members invited_by cleared", rows: clearedInvitedBy },
     { step: "user_rsa_keys deleted", rows: deletedUserRsaKeys },
+    { step: "oauth_access_tokens deleted", rows: deletedOauthAccessTokens },
+    { step: "oauth_refresh_tokens deleted", rows: deletedOauthRefreshTokens },
+    { step: "oauth_authorization_codes deleted", rows: deletedOauthCodes },
+    { step: "oauth_login_sessions deleted", rows: deletedOauthSessions },
+    { step: "oauth_apps deleted", rows: deletedOauthApps },
     { step: "users deleted", rows: deletedUsers },
   ]);
   console.log(`Deleted user ${result.user.user_id} successfully.`);

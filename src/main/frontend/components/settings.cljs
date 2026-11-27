@@ -4,6 +4,7 @@
             [frontend.colors :as colors]
             [frontend.common.crypt :as crypt]
             [frontend.components.assets :as assets]
+            [frontend.components.developer-apps :as developer-apps]
             [frontend.components.e2ee :as e2ee]
             [frontend.components.email :as email-component]
             [frontend.components.shortcut :as shortcut]
@@ -1780,6 +1781,9 @@
                (when (and logged-in? (user-handler/rtc-group?))
                  [:personal-access-tokens (t :settings/personal-access-tokens) (ui/icon "key")])
 
+               (when (and logged-in? (user-handler/rtc-group?))
+                 [:developer (t :settings/developer) (ui/icon "code")])
+
                (when logged-in?
                  [:encryption (t :settings/encryption) (ui/icon "lock")])
 
@@ -1839,6 +1843,9 @@
 
         :personal-access-tokens
         (settings-personal-access-tokens)
+
+        :developer
+        (developer-apps/panel)
 
         :encryption
         (encryption)

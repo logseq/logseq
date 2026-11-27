@@ -14,6 +14,7 @@
             [logseq.db-sync.tx-sanitize-test]
             [logseq.db-sync.worker-auth-test]
             [logseq.db-sync.worker-dispatch-test]
+            [logseq.db-sync.worker-oauth-test]
             [logseq.db-sync.worker-handler-assets-test]
             [logseq.db-sync.worker-handler-index-test]
             [logseq.db-sync.worker-handler-sync-test]
