@@ -1023,6 +1023,7 @@
  :import/new-graph-name "新图谱名称"
  :import/notes "导入已有笔记"
  :import/org-files-imported "已将 {1} 个 org 文件导入为 Markdown。后续将添加对 org 文件的支持。"
+ :import/partial-import-warning "导入已完成，但有警告。部分内容可能未被导入。"
  :import/plain-markdown-notice "未找到 logseq/config.edn — 将按纯 Markdown 文件夹并使用默认 Logseq 配置导入。"
  :import/properties-case-insensitive-commas "属性名不区分大小写，以逗号分隔"
  :import/property-classes-placeholder "例如 type"

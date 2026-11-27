@@ -1026,6 +1026,7 @@
  :import/new-graph-name "New graph name"
  :import/notes "Import existing notes"
  :import/org-files-imported "Imported {1} org file(s) as markdown. Support for org files will be added later."
+ :import/partial-import-warning "Import finished with warnings. Some content may not have been imported."
  :import/plain-markdown-notice "No logseq/config.edn found — importing this folder as plain Markdown with the default Logseq config."
  :import/properties-case-insensitive-commas "Properties are case insensitive and separated by commas"
  :import/property-classes-placeholder "e.g. type"

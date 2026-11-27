@@ -190,19 +190,29 @@ let file_item (path, (file : Ui_services.file)) =
   in
   Js.Promise.resolve (Wire.Map ((Wire.kw "path", Wire.String path) :: modified @ payload))
 
-let import_completed result =
-  Wire.get result "status" = Some (Wire.Keyword "completed")
-  && Wire.get result "persisted?" = Some (Wire.Bool true)
-  && Wire.map_get_int result "issue-count" = Some 0
-  && match Wire.get result "validation" with
-     | Some validation ->
-         Wire.get validation "status" = Some (Wire.Keyword "passed")
-         && Wire.map_get_int validation "error-count" = Some 0
-     | None -> false
+type import_terminal = Import_success | Import_warning | Import_failure
+
+let import_terminal result =
+  let status_is s = Wire.get result "status" = Some (Wire.Keyword s) in
+  let persisted = Wire.get result "persisted?" = Some (Wire.Bool true) in
+  let validation_passed =
+    match Wire.get result "validation" with
+    | Some validation ->
+        Wire.get validation "status" = Some (Wire.Keyword "passed")
+        && Wire.map_get_int validation "error-count" = Some 0
+    | None -> false
+  in
+  if status_is "completed" && persisted && validation_passed
+     && Wire.map_get_int result "issue-count" = Some 0
+  then Import_success
+  else if status_is "completed-with-errors" && persisted && validation_passed
+  then Import_warning
+  else Import_failure
 
 let import_file_graph repo files =
   let previous_repo = (Runtime.model ()).Model.repo in
   let attaching = ref false in
+  let partial = ref false in
   let stage = ref "prepare files" in
   let run =
     let* () = Js.Promise.resolve () in
@@ -240,25 +250,29 @@ let import_file_graph repo files =
           Runtime.invoke "thread-api/import-file-graph"
             [ Wire.String repo; config; Wire.Array files; Wire.Map [] ]
         in
-        if not (import_completed result) then begin
-          let status map =
-            match Option.bind (Wire.get map "status") Wire.as_keyword with
-            | Some status -> status
-            | None -> "missing"
-          in
-          Ui_services.log_error_message
-            (Printf.sprintf "directory import terminal: status=%s persisted=%b issues=%s validation=%s"
-               (status result) (Wire.get result "persisted?" = Some (Wire.Bool true))
-               (match Wire.map_get_int result "issue-count" with
-                | Some n -> string_of_int n | None -> "missing")
-               (match Wire.get result "validation" with
-                | Some validation -> status validation | None -> "missing"));
-          import_error "Directory import did not complete without errors"
-        end;
+        (match import_terminal result with
+         | Import_success -> ()
+         | Import_warning ->
+             partial := true;
+             Toast.warning (T.t "import/partial-import-warning")
+         | Import_failure ->
+             let status map =
+               match Option.bind (Wire.get map "status") Wire.as_keyword with
+               | Some status -> status
+               | None -> "missing"
+             in
+             Ui_services.log_error_message
+               (Printf.sprintf "directory import terminal: status=%s persisted=%b issues=%s validation=%s"
+                  (status result) (Wire.get result "persisted?" = Some (Wire.Bool true))
+                  (match Wire.map_get_int result "issue-count" with
+                   | Some n -> string_of_int n | None -> "missing")
+                  (match Wire.get result "validation" with
+                   | Some validation -> status validation | None -> "missing"));
+             import_error "Directory import did not complete");
         stage := "restore imported graph";
         let* _ = Graphs_ops.refresh () in
         let* () = Graphs_ops.navigate_journal repo in
-        Js.Promise.resolve true
+        Js.Promise.resolve (not !partial)
     | _ ->
         Toast.error (T.t "import/logseq-config-missing");
         Js.Promise.resolve false
