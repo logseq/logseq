@@ -422,9 +422,12 @@ let auto_backup ctx =
                (* the dict text embeds a cljs {{component}} link slot —
                   native renders its inner caption plainly *)
                ~value:
-                 (T.t "export.backup/unsupported-desc"
-                  |> I18n.replace_all ~pat:"{{" ~rep:""
-                  |> I18n.replace_all ~pat:"}}" ~rep:"")
+                 (if String.starts_with ~prefix:"Logseq Native/" (Ui_services.env_user_agent ()) then
+                    T.t "export.backup/unsupported-native-desc"
+                  else
+                    T.t "export.backup/unsupported-desc"
+                    |> I18n.replace_all ~pat:"{{" ~rep:""
+                    |> I18n.replace_all ~pat:"}}" ~rep:"")
                [] ]
        else
          let folder_sig = Signal.value ((folder_st ctx)) in

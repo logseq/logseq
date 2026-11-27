@@ -706,6 +706,7 @@
  :export.backup/set-folder-first "请先设置备份文件夹"
  :export.backup/sqlite-desc "将知识库内容备份为单个 .sqlite 文件的主要方式。"
  :export.backup/unsupported-desc "你的浏览器不支持 {{File System Access API}}，请切换到基于 Chromium 的浏览器。"
+ :export.backup/unsupported-native-desc "原生应用暂不支持定时备份文件夹。你可以使用上方的导出操作保存备份文件。"
  :export.backup/zip-desc "将知识库内容和附件备份为 .zip 文件的主要方式。"
 
  :file/config-duplicate-keys "文件 '{1}' 存在重复键。键 '{2}' 被赋值了多次。"
