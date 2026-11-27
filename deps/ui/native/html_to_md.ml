@@ -109,18 +109,24 @@ and render_table context children =
         | _ -> [])
       nodes
   in
-  let int_attr attrs name =
+  let span_attr attrs name =
     match List.assoc_opt ("", name) attrs with
-    | Some value -> (try max 1 (int_of_string value) with _ -> 1)
+    | Some value -> (try max 0 (int_of_string value) with _ -> 1)
     | None -> 1
   in
-  let cells_in = function
+  let max_span = 64 in
+  let cells_in row_count row_index = function
     | Element (_, _, children) ->
         List.filter_map
           (function
             | Element (("td" | "th"), attrs, cell_children) ->
-                Some (int_attr attrs "colspan", int_attr attrs "rowspan",
-                      render_table_cell context cell_children)
+                let colspan = min max_span (max 1 (span_attr attrs "colspan")) in
+                let rowspan =
+                  match span_attr attrs "rowspan" with
+                  | 0 -> row_count - row_index
+                  | span -> min max_span span
+                in
+                Some (colspan, rowspan, render_table_cell context cell_children)
             | _ -> None)
           children
     | _ -> []
@@ -174,16 +180,26 @@ and render_table context children =
     output_rows
   in
   let format_row cells = "| " ^ String.concat " | " cells ^ " |" in
-  let rows = rows_in children |> List.map cells_in |> List.filter (( <> ) []) in
+  let rec has_thead = function
+    | Text _ -> false
+    | Element (tag, _, children) -> tag = "thead" || List.exists has_thead children
+  in
+  let source_rows = rows_in children in
+  let row_count = List.length source_rows in
+  let source_rows = List.mapi (fun index row -> cells_in row_count index row) source_rows in
+  let rows = layout source_rows |> List.filter (( <> ) []) in
   match rows with
   | [] -> ""
   | first :: rest ->
-      let rows = layout (first :: rest) in
       let width = List.fold_left (fun width row -> max width (List.length row)) 0 rows in
       let separator = "| " ^ String.concat " | " (List.init width (fun _ -> "----")) ^ " |" in
+      let header, body =
+        if List.exists has_thead children then first, rest
+        else List.init width (fun _ -> ""), first :: rest
+      in
       "\n\n"
       ^ String.concat "\n"
-          (format_row (List.hd rows) :: separator :: List.map format_row (List.tl rows))
+          (format_row header :: separator :: List.map format_row body)
       ^ "\n\n"
 
 and render_table_cell context children =

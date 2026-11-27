@@ -695,7 +695,8 @@ let table_parts s =
          (fun c -> c = '-' || c = '|' || c = ':' || c = ' ')
          l
   in
-  let cells line =
+  let cells source_line =
+    let line = String.trim source_line in
     let length = String.length line in
     let first = if length > 0 && line.[0] = '|' then 1 else 0 in
     let stop =
