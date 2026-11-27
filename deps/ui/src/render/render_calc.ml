@@ -386,3 +386,16 @@ let results (source : string) : string list =
          let line = String.trim line in
          if line = "" || line.[0] = '#' then ""
          else match eval ~env line with Some v -> Number.format v | None -> "?") lines
+
+
+(* Shared calculator output chrome. Web CodeMirror fills the mounted empty
+   container imperatively; native hosts bind the same rows to the textarea
+   signal inside the native code-editor surface. *)
+let output_el ?(key = "calc") (source : string) : Lui_elements.t =
+  let line_el line =
+    Lui_elements.text ~style_class:"extensions__code-calc-output-line"
+      ~white_space:`nowrap ~line_height:"1.45rem" ~min_height:23
+      ~value:line []
+  in
+  Lui_elements.column ~key ~style_class:"extensions__code-calc"
+    (List.map line_el (results source))

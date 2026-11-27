@@ -30,8 +30,8 @@ let on_native_event uuid ~name ~value ~key =
          | _ -> ())
     | _ -> ()
 
-(* Native hosts keep calc output inside the LUI tree rather than a
-   host-owned editor DOM, so Render derives it from the edit-session signal. *)
+(* Native block editors mount calc output inside the textarea-backed
+   code-surface tree rather than a host-owned editor DOM. *)
 let calc_results_in_tree () = true
 
 let update_calc (_ : 'a) = ()

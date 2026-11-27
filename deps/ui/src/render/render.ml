@@ -230,52 +230,10 @@ let src_block s =
 (* calc result lines for display-type=code + code/lang=calc — cljs
    extensions/calc.cljc results (.extensions__code-calc > per-line
    .extensions__code-calc-output-line), mounted inside .code-editor *)
-let calc_results_el code =
-  match Render_calc.results code with
-  | [] -> None
-  | lines ->
-      Some
-        (column ~style_class:"extensions__code-calc"
-           (List.map
-              (fun line ->
-                text ~style_class:"extensions__code-calc-output-line"
-                  ~white_space:`nowrap ~line_height:"1.45rem" ~min_height:23
-                  ~value:line [])
-              lines))
-
-let empty_calc_results_el () =
-  (* cljs mounts .extensions__code-calc for calc blocks even when empty —
-     Code_mirror.update_calc fills it on change *)
-  column ~key:"calc" ~style_class:"extensions__code-calc" []
-
-let calc_results_for code =
-  match calc_results_el code with
-  | Some el -> el
-  | None -> empty_calc_results_el ()
-
-(* Web CodeMirror owns its output DOM and update_calc mutates it directly.
-   Native hosts keep the output in the LUI tree, so derive it from the live
-   edit-session buffer; retain the latest typed source across blur exactly as
-   the mounted editor document does. *)
-let calc_results_live ~self code : t =
-  if not (Code_mirror.calc_results_in_tree ()) || self = "" then
-    calc_results_for code
-  else
-    let latest = ref code in
-    let relevant = function
-      | Some editing when editing.Editor_state.uuid = self ->
-          Some editing.Editor_state.buffer
-      | _ -> None
-    in
-    reactive
-      ~equal:(fun a b -> relevant a = relevant b)
-      (fun editing ->
-        match relevant editing with
-        | Some buffer ->
-            latest := buffer;
-            calc_results_for buffer
-        | None -> calc_results_for !latest)
-      (Editor_state.editing_sig ())
+(* Web CodeMirror owns its output DOM and update_calc mutates the mounted
+   container directly. Native block editors include the same output in the
+   textarea-backed code surface, so render no separate copy for them. *)
+let calc_results_for code = Render_calc.output_el code
 
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
@@ -335,8 +293,9 @@ let code_block ?(self = "") ?(extra = []) lang code =
                    Logseq_codemirror.cm ~key:"ta" ~uuid:self ~lang
                      ~value:code ~read_only:(self = "" || Ui_services.env_publishing ())
                      ~source_role:"block" ~on_event:(Code_mirror.on_native_event self) ()
-                 ; (if not calc then Logseq_el.fragment []
-                    else calc_results_live ~self code)
+                 ; (if not calc || Code_mirror.calc_results_in_tree () then
+                      Logseq_el.fragment []
+                    else calc_results_for code)
                  ]
              ]
             @ extra)

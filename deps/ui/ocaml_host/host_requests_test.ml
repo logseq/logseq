@@ -12231,15 +12231,24 @@ let () = with_test_entry (fun () ->
         (Lui_store.preorder store)
     in
     expect "Initial calc results did not render" (has "2");
-    Editor_state.set (fun state ->
-      { state with Editor_state.editing = Some
-          (Editor_state.mk_editing ~uuid ~buffer:"1+1" ~scope:"main" ~base:"1+1" ()) });
-    Code_mirror.on_native_event uuid ~name:"input" ~value:(Some "1+1\n2+3") ~key:None;
-    ignore (Lui_app.flush app);
-    expect "Editing the calc source did not refresh native results" (has "5");
-    Editor_state.set (fun state -> { state with Editor_state.editing = None });
-    ignore (Lui_app.flush app);
-    expect "Native calc results reverted to stale source on blur" (has "5");
+    let textarea =
+      List.find_opt
+        (fun id ->
+          Lui_store.kind store id = "textarea"
+          && Lui_store.string_prop store id "accessibility-identifier"
+             = Some ("edit-block-" ^ uuid))
+        (Lui_store.preorder store)
+    in
+    expect "Native calc block did not mount a textarea editing surface"
+      (textarea <> None);
+    (match textarea with
+     | Some textarea ->
+         ignore
+           (Lui_app.dispatch_event app
+              (TextChanged (textarea, "1+1\n2+3")));
+         ignore (Lui_app.flush app)
+     | None -> ());
+    expect "Editing the calc textarea did not refresh native results" (has "5");
     List.iter prerr_endline (List.rev !errors);
     check "Native live calc results" (!errors = []));
   print_endline "native live calc results: OK")
