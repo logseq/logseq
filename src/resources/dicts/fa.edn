@@ -1814,7 +1814,6 @@
  :window/minimize "کمینه"
  :window/restore "بازیابی"
 
- :youtube/embed-first-reminder-mobile "لطفاً ابتدا یک ویدیوی YouTube جاسازی کنید، سپس از این نماد استفاده کنید.\nیادآوری: می‌توانید یک URL خام YouTube را به عنوان ویدیو جاسازی‌شده بر روی موبایل جاسازی کنید."
  :youtube/player-not-ready "پخش‌کننده YouTube هنوز آماده نیست."
  :youtube/timestamps-not-available-mobile "مهرزمان‌های YouTube هنوز بر روی موبایل در دسترس نیستند."
 

@@ -1814,7 +1814,6 @@
  :window/minimize "Minimizza"
  :window/restore "Ripristina"
 
- :youtube/embed-first-reminder-mobile "Per favore, incrustra prima un video di YouTube, poi usa questa icona.\nRicorda: puoi incollare un URL YouTube diretto come video incorporato su mobile."
  :youtube/player-not-ready "Il player YouTube non è ancora pronto."
  :youtube/timestamps-not-available-mobile "Gli timestamp di YouTube non sono ancora disponibili su mobile."
 

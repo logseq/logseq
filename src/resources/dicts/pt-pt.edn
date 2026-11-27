@@ -1814,7 +1814,6 @@
  :window/minimize "Minimizar"
  :window/restore "Restaurar"
 
- :youtube/embed-first-reminder-mobile "Primeiro incorpore um vídeo do YouTube e, em seguida, utilize este ícone.\nLembre-se: pode colar um URL direto do YouTube como vídeo incorporado em dispositivos móveis."
  :youtube/player-not-ready "O leitor do YouTube ainda não está pronto."
  :youtube/timestamps-not-available-mobile "Os registos de tempo do YouTube ainda não estão disponíveis em dispositivos móveis."
 

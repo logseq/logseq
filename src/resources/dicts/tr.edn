@@ -2037,7 +2037,6 @@
  :window/minimize "Küçült"
  :window/restore "Geri yükle"
 
- :youtube/embed-first-reminder-mobile "Lütfen önce bir YouTube videosu gömün, ardından bu simgeyi kullanın.\nHatırlatma: Mobil cihazda ham YouTube URL'sini gömülü video olarak yapıştırabilirsiniz."
  :youtube/player-not-ready "YouTube oynatıcısı henüz hazır değildir."
  :youtube/timestamps-not-available-mobile "YouTube zaman damgaları henüz mobil cihazlarda kullanılamıyor."
 

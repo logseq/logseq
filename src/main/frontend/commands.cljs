@@ -736,9 +736,8 @@
         (util/insert-at-current-position! input (str macro " "))))))
 
 (defmethod handle-step :youtube/insert-timestamp [[_]]
-  (let [input-id (state/get-edit-input-id)
-        macro (youtube/gen-youtube-ts-macro)]
-    (insert! input-id macro {})))
+  (when-let [macro (youtube/gen-youtube-ts-macro)]
+    (insert! (state/get-edit-input-id) macro {})))
 
 (defmethod handle-step :editor/toggle-children-number-list [[_]]
   (when-let [block (state/get-edit-block)]

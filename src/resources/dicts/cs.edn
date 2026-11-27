@@ -1814,7 +1814,6 @@
  :window/minimize "Minimalizovat"
  :window/restore "Obnovit"
 
- :youtube/embed-first-reminder-mobile "Nejprve vložte video z YouTube, pak použijte tuto ikonu.\nPomůcka: Na mobilním zařízení můžete vložit nezpracovanou adresu URL z YouTube jako vložené video."
  :youtube/player-not-ready "Přehrávač YouTube ještě není připraven."
  :youtube/timestamps-not-available-mobile "Časové značky YouTube zatím nejsou na mobilních zařízeních dostupné."
 

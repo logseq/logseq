@@ -1814,7 +1814,6 @@
  :window/minimize "Minimer"
  :window/restore "Gjenopprett"
 
- :youtube/embed-first-reminder-mobile "Bygg inn en YouTube-video først, og bruk deretter dette ikonet.\nHusk: Du kan lime inn en vanlig YouTube-URL som innebygd video på mobil."
  :youtube/player-not-ready "YouTube-avspilleren er ikke klar ennå."
  :youtube/timestamps-not-available-mobile "YouTube-tidsstempel er ennå ikke tilgjengelige på mobil."
 

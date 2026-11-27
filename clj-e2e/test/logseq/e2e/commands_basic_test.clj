@@ -92,6 +92,22 @@
     (k/backspace)
     (w/wait-for-not-visible ".ui__popover-content")))
 
+(deftest youtube-timestamp-without-player-test
+  (let [command "a.menu-link.chosen:has-text('Embed YouTube timestamp')"
+        selection "() => [document.activeElement.selectionStart, document.activeElement.selectionEnd]"]
+    (b/new-block "Project notes after")
+    (util/move-cursor-to-end)
+    (dotimes [_ (count " after")]
+      (k/arrow-left))
+    (util/press-seq " /youtube timestamp" {:delay 20})
+    (w/wait-for command)
+    (let [caret (w/eval-js selection)]
+      (k/enter)
+      (w/wait-for-not-visible command)
+      (is (= "Project notes /youtube timestamp after" (util/get-edit-content)))
+      (is (= caret (w/eval-js selection)))
+      (assert/assert-is-visible (w/get-by-text "YouTube player isn't ready yet.")))))
+
 (deftest slash-command-group-headings-test
   (testing "unfiltered slash popup shows section headings"
     (b/new-block "slash-headings")

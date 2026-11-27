@@ -1814,7 +1814,6 @@
  :window/minimize "Minimaliseren"
  :window/restore "Herstellen"
 
- :youtube/embed-first-reminder-mobile "Voeg eerst een YouTube-video in en gebruik vervolgens dit pictogram.\nOnthoud: U kunt een rauwe YouTube-URL op mobiel als ingebedde video plakken."
  :youtube/player-not-ready "YouTube-speler is nog niet klaar."
  :youtube/timestamps-not-available-mobile "YouTube-tijdstempels zijn op mobiel nog niet beschikbaar."
 

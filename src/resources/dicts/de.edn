@@ -1814,7 +1814,6 @@
  :window/minimize "Minimieren"
  :window/restore "Wiederherstellen"
 
- :youtube/embed-first-reminder-mobile "Bitte betten Sie zunächst ein YouTube-Video ein und verwenden Sie dann dieses Symbol.\nDenken Sie daran: Sie können eine reine YouTube-URL auf dem Mobilgerät als eingebettetes Video einfügen."
  :youtube/player-not-ready "YouTube-Player ist noch nicht bereit."
  :youtube/timestamps-not-available-mobile "YouTube-Zeitstempel sind auf Mobilgeräten noch nicht verfügbar."
 

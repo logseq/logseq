@@ -1814,7 +1814,6 @@
  :window/minimize "Minimeer"
  :window/restore "Herstel"
 
- :youtube/embed-first-reminder-mobile "Voeg eers 'n YouTube-video in, gebruik dan hierdie ikoon.\nOnthou: U kan 'n rou YouTube-URL op mobiel as ingebedde video plak."
  :youtube/player-not-ready "YouTube-speler is nog nie gereed nie."
  :youtube/timestamps-not-available-mobile "YouTube-tydstewels is nog nie op mobiel beskikbaar nie."
 

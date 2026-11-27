@@ -1814,7 +1814,6 @@
  :window/minimize "Свернуть"
  :window/restore "Восстановить"
 
- :youtube/embed-first-reminder-mobile "Сначала встройте видео YouTube, а затем используйте этот значок.\nПомните: вы можете вставить исходный URL YouTube как встроенное видео на мобильное устройство."
  :youtube/player-not-ready "Проигрыватель YouTube еще не готов."
  :youtube/timestamps-not-available-mobile "Временные метки YouTube еще не доступны на мобильных устройствах."
 
