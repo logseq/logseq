@@ -1718,6 +1718,23 @@ let run_views ~registry ~profile ~finish =
     (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
       (nodes inline_image));
   ignore (Lui_app.dispose inline_image.S.app);
+  let native_inline_image =
+    S.mount ~registry
+      ~profile:(Lui_protocol.profile Lui_protocol.LinuxOS Lui_protocol.GenericHost)
+      ~initial:Model.initial ~reducer:(fun m () -> m)
+      ~view:(fun _ctx ms _send ->
+        ignore ms;
+        Lui_elements.column
+          (Render_inline.parse "![Fixture](https://example.invalid/fixture.png)"))
+      ()
+  in
+  check "Native Markdown images use the host-measured image kind"
+    (List.exists (fun node ->
+       node.M.kind = "image"
+       && M.string_prop node "url" = Some "https://example.invalid/fixture.png"
+       && M.string_prop node "alt" = Some "Fixture")
+      (nodes native_inline_image));
+  ignore (Lui_app.dispose native_inline_image.S.app);
   let install_file_host : (string -> unit Js.Promise.t) -> (unit -> unit) =
     [%mel.raw {|function (openPath) {
       const previous = window.apis;
@@ -1738,11 +1755,11 @@ let run_views ~registry ~profile ~finish =
   let local_image = mount (fun _ -> Lui_elements.column
     (Render_inline.parse "![Local](file:///tmp/image%2520.png)")) in
   check "Markdown file images load through Electron's local-file asset protocol"
-    (List.exists (fun node -> match M.string_prop node "attrs" with
-      | Some attrs -> let obj=Js.Json.decodeObject (Js.Json.parseExn attrs) in
-          Option.bind obj (fun o -> Option.bind (Js.Dict.get o "src") Js.Json.decodeString)
-            =Some "assets://localhost/logseq__file/file%3A%2F%2F%2Ftmp%2Fimage%252520.png"
-      | None -> false) (nodes local_image));
+    (List.exists (fun node ->
+       node.M.kind = "image"
+       && M.string_prop node "url"
+          = Some "assets://localhost/logseq__file/file%3A%2F%2F%2Ftmp%2Fimage%252520.png")
+      (nodes local_image));
   ignore (Lui_app.dispose local_image.S.app);
   let local_link = mount (fun _ -> Lui_elements.column
     (Render_inline.parse ("[Local PDF](" ^ file_pdf ^ ")"))) in

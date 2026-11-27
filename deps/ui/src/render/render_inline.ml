@@ -482,20 +482,17 @@ let block_ref uuid =
     ~attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
-(* cljs .as-plain-image-link / asset-container: a plain <img> sizes to
-   its intrinsic dimensions; the `image` kind is a fixed-frame element
-   (absolute-filled span) and collapses to 0x0 without explicit dims *)
+(* cljs .as-plain-image-link / asset-container sizes the image at its
+   natural dimensions, capped by the container. The image kind now has
+   that intrinsic behavior on both web and native; native additionally
+   uses the decoded bitmap as its layout measurement. *)
 let image_el ~src ~alt =
   let src = Platform.media_url src in
-  D.el ~tag:"div" ~style_class:"asset-container image normalize"
+  box ~style_class:"asset-container image normalize"
     [ Ui_components.with_props
         [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
         (row ~corner_radius:4 ~cross:`start
-        [D.el ~tag:"img"
-        ~attrs:
-          [ ("src", src); ("alt", alt); ("loading", "lazy")
-          ; ("referrerpolicy", "no-referrer") ]
-        []]) ]
+           [image ~url:src ~alt ~loading:`lazy_ ~referrer_policy:`no_referrer []]) ]
 
 (* cljs asset-link pdf branch: a ![alt](x.pdf) embed renders
    a.asset-ref.is-pdf whose click opens the in-app pdf viewer — an
