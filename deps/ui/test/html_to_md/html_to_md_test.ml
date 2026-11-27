@@ -23,7 +23,6 @@ let () =
     ; ("<pre><code>a\n  b</code></pre>", Some "```\na\n  b\n```")
     ; ("<pre><code>```md\n````\ntext</code></pre>",
        Some "`````\n```md\n````\ntext\n`````")
-    ; ("<table><tr><td>A1</td><td>B1</td></tr><tr><td>A2</td><td>B2</td></tr></table>",
-       Some "A1\tB1\nA2\tB2")
+    ; ("<table><tr><td>A1</td><td>B1</td></tr><tr><td>A2</td><td>B2</td></tr></table>", None)
     ; ("<p>A<p>B", Some "A\n\nB")
     ]

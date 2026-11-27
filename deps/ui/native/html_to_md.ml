@@ -91,29 +91,16 @@ let rec render context = function
         | "blockquote" ->
             let lines = String.split_on_char '\n' (String.trim (contents ())) in
             "\n\n" ^ String.concat "\n" (List.map (fun line -> "> " ^ line) lines) ^ "\n\n"
-        | "table" ->
-            let inner = String.trim (contents ()) in
-            if inner = "" then "" else "\n\n" ^ inner ^ "\n\n"
-        | "tr" ->
-            let inner =
-              String.concat ""
-                (List.filter_map
-                   (function
-                     | Text text when String.trim text = "" -> None
-                     | child -> Some (render context child))
-                   children)
-              |> String.trim
-            in
-            if inner = "" then "" else inner ^ "\n"
-        | "td" | "th" ->
-            let inner = String.trim (contents ()) in
-            if inner = "" then "" else inner ^ "\t"
         | "br" -> "\n"
         | "hr" -> "\n\n---\n\n"
         | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" ->
             "\n\n" ^ String.make (Char.code tag.[1] - Char.code '0') '#'
             ^ " " ^ String.trim (contents ()) ^ "\n\n"
         | _ -> contents ()
+
+let rec has_table = function
+  | Text _ -> false
+  | Element (tag, _, children) -> tag = "table" || List.exists has_table children
 
 let convert html =
   if String.trim html = "" then None
@@ -126,6 +113,8 @@ let convert html =
            ~element:(fun (_, tag) attrs children -> Element (tag, attrs, children))
       |> Markup.to_list
     in
+    if List.exists has_table nodes then None
+    else
     let text =
       String.concat "" (List.map (render { level = 0; pre = false }) nodes)
       |> String.trim
