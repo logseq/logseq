@@ -1241,6 +1241,7 @@ let test_cm_keynav st s =
   let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
   let menu_el = Stub_dom.make_element "div" in
   let item_el = Stub_dom.make_element "div" in
+  let picker_item_el = Stub_dom.make_element "div" in
   let sub_trigger_id = ref "" in
   let rect =
     Js.Json.object_
@@ -1257,6 +1258,7 @@ let test_cm_keynav st s =
   set_attr "id" "block-context-menu";
   Stub_dom.set_field menu_el "className" "ls-context-menu-content";
   ignore (Stub_dom.append_child (Stub_dom.get_field document "body") menu_el);
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") picker_item_el);
   Stub_dom.set_field document "getElementById" (fun id ->
       if id = "block-context-menu" then menu_el
       else if id = !sub_trigger_id then item_el
@@ -1268,6 +1270,7 @@ let test_cm_keynav st s =
     ~finally:(fun () ->
       Stub_dom.set_field document "getElementById" prev_byid;
       Stub_dom.detach menu_el;
+      Stub_dom.detach picker_item_el;
       Stub_dom.set_field document "activeElement" previous_focus)
     (fun () ->
       P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
@@ -1366,6 +1369,7 @@ let test_cm_keynav st s =
                        && Stub_dom.get_field document "activeElement" == item_el)
                 | None -> check "ArrowLeft keeps the root menu open" false);
                Popups_view.handle_keydown st (ev "ArrowRight");
+               Stub_dom.set_field document "activeElement" picker_item_el;
                Popups_view.handle_keydown st
                  ({ (ev "Tab") with Ui_services.shift = true });
                (match cm_of st with
