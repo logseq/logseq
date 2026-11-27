@@ -1306,14 +1306,16 @@ let menu_keydown st (ev : Ui_services.ev) =
       in
       match (ev.Ui_services.key, items) with
       | Some "Tab", _ ->
-          (* Base UI closes the menu for Tab and Shift+Tab. The native
-             context menu has no retained root trigger element yet, so
-             root focus restoration remains a documented gap. *)
+          (* Base UI closes the menu for Tab and Shift+Tab. Shift+Tab
+             from a submenu returns to its trigger; closing the root
+             menu restores the focus captured before the menu opened. *)
           if ev.Ui_services.shift && sub then (
             cm_close_sub st;
             Option.iter (fun trigger -> trigger.Ui_services.focus ())
               (Ui_services.dom_by_id ("cm-sub-" ^ string_of_int cm.S.sub_open)))
-          else close_cm st;
+          else (
+            S.restore_cm_focus ();
+            close_cm st);
           true
       | Some "ArrowRight", _ when not sub -> (
           let target_idx =

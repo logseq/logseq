@@ -334,6 +334,18 @@ let set_ac t ac =
   if Option.is_none ac then Outliner_ops.resume_pending_save ()
 let set_cm t cm = update t (fun v -> { v with cm })
 let set_pv t pv = update t (fun v -> { v with pv })
+
+let cm_focus_return = ref None
+
+let capture_cm_focus () =
+  cm_focus_return := Ui_services.dom_active_element ()
+
+let restore_cm_focus () =
+  let target = !cm_focus_return in
+  cm_focus_return := None;
+  match target with
+  | Some el when el.Ui_services.connected () -> el.Ui_services.focus ()
+  | _ -> ()
 let invalidate_ac t =
   incr t.gen;
   incr t.session
@@ -344,7 +356,9 @@ let close_ac t =
   Keymap_data.reset_chord ac_keys;
   invalidate_ac t;
   set_ac t None
-let close_cm t = set_cm t None
+let close_cm t =
+  cm_focus_return := None;
+  set_cm t None
 let next_cm_epoch t =
   incr t.cm_epoch;
   !(t.cm_epoch)
@@ -3087,6 +3101,7 @@ let selection_can_comment ~scope =
 ;;
 
 let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
+  capture_cm_focus ();
   let entries =
     (* cljs adds Developer tools only to the single-block menu *)
     let base =
@@ -3123,6 +3138,7 @@ let open_cm ?allow_cut ?allow_delete t ~scope ~ax ~atop ~abot ~block_id ~multi =
 ;;
 
 let open_cm_edit t ~scope ~ax ~atop ~abot ~block_id =
+  capture_cm_focus ();
   close_ac t;
   let flip = anchor_above atop abot in
   set_cm t (Some
@@ -3152,6 +3168,7 @@ let tag_entries ~title ~priv =
 
 let open_cm_tag t ~scope ~ax ~atop ~abot ~block_id ~tag_uuid ~tag_id ~tag_title
     ~priv =
+  capture_cm_focus ();
   close_ac t;
   let flip = anchor_above atop abot in
   set_cm t (Some
