@@ -104,15 +104,38 @@ let file_of_json (f : Js.Json.t) : Ui_services.file =
 
 let clipboard_data e = jfield "clipboardData" e
 
+let mime_clipboard_data items =
+  let text = match List.assoc_opt "text/plain" items with
+    | Some text -> text
+    | None -> "" in
+  let data_fields =
+    ("text", Js.Json.JString text)
+    :: List.filter_map
+         (fun (mime, value) ->
+           if mime = "text/plain" then None
+           else Some (mime, Js.Json.JString value))
+         items
+  in
+  Js.Json.JObject
+    (data_fields
+     @ [ "types", Js.Json.JArray
+           (Array.of_list (List.map (fun (mime, _) -> Js.Json.JString mime) items))
+       ; "items", Js.Json.JArray
+           (Array.of_list
+              (List.map
+                 (fun (mime, _) ->
+                   Js.Json.JObject
+                     [ "kind", Js.Json.JString "string"
+                     ; "type", Js.Json.JString mime ])
+                 items))
+       ; "files", Js.Json.JArray [||] ])
+
 let text_clipboard_data text =
-  Js.Json.JObject ["text",Js.Json.JString text;
-    "types",Js.Json.JArray [|Js.Json.JString "text/plain"|];
-    "items",Js.Json.JArray [|Js.Json.JObject
-      ["kind",Js.Json.JString "string";"type",Js.Json.JString "text/plain"]|];
-    "files",Js.Json.JArray [||]]
+  mime_clipboard_data ["text/plain", text]
 
 let clipboard_value data mime =
-  if mime="text/plain" then Option.value (jstr "text" data) ~default:"" else ""
+  if mime="text/plain" then Option.value (jstr "text" data) ~default:""
+  else Option.value (jstr mime data) ~default:""
 
 let empty_clipboard_snapshot () = Ui_services.empty_clipboard_snapshot
 

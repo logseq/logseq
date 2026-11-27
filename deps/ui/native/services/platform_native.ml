@@ -299,7 +299,7 @@ let clipboard_write_id = ref 0
 let clipboard_writes : (string, unit Ui_task.t * (unit -> unit) * (exn -> unit)) Hashtbl.t =
   Hashtbl.create 8
 
-let clipboard_write_text text =
+let clipboard_write_payload fields =
   if !clipboard_write_id = max_int then invalid_arg "Clipboard request identity exhausted";
   incr clipboard_write_id;
   let id = string_of_int !clipboard_write_id in
@@ -309,9 +309,18 @@ let clipboard_write_text text =
   let resolve,reject = Option.get !complete in
   Hashtbl.add clipboard_writes id (task,resolve,reject);
   (try Host.clipboard_write_request (Yojson.Safe.to_string
-    (`Assoc ["request-id",`String id;"text",`String text]))
+    (`Assoc (["request-id",`String id] @ fields)))
    with error -> Ui_task.cancel task; raise error);
   task
+
+let clipboard_write_text text =
+  clipboard_write_payload ["text",`String text]
+
+let clipboard_write_block_data (data : Ui_services.block_clipboard) =
+  clipboard_write_payload
+    [ "text",`String data.text
+    ; "html",`String data.html
+    ; "logseq",`String data.logseq ]
 
 let note_clipboard_write json =
   let invalid () = invalid_arg "Invalid native clipboard write result" in
@@ -349,11 +358,19 @@ let cancel_clipboard_writes () =
 
 (* "clipboard-read" requests are answered by a same-named platform
    event; one resolver per outstanding read, FIFO *)
-let clipboard_read_resolvers : ((string, exn) result -> unit) Queue.t = Queue.create ()
+type clipboard_read_result = { text : string; logseq : string option }
+
+let clipboard_read_resolvers : ((clipboard_read_result, exn) result -> unit) Queue.t = Queue.create ()
 
 let clipboard_read_text () : string Ui_task.t =
   Ui_task.create (fun ~resolve ~reject ->
-      Queue.add (function Ok text -> resolve text | Error error -> reject error)
+      Queue.add (function Ok result -> resolve result.text | Error error -> reject error)
+        clipboard_read_resolvers;
+      Host.clipboard_read ())
+
+let clipboard_read_blocks () : string option Ui_task.t =
+  Ui_task.create (fun ~resolve ~reject ->
+      Queue.add (function Ok result -> resolve result.logseq | Error error -> reject error)
         clipboard_read_resolvers;
       Host.clipboard_read ())
 
@@ -764,8 +781,8 @@ let install_ui_services ~paints_caret ~assert_owner ~request_flush ~dom ~timers 
         { copy = Host.clipboard_write
         ; write_text = clipboard_write_text
         ; write_blocks = (fun data ->
-            Ui_task.bind data (fun data -> clipboard_write_text data.Ui_services.text))
-        ; read_blocks = None
+            Ui_task.bind data clipboard_write_block_data)
+        ; read_blocks = Some clipboard_read_blocks
         ; read_text = clipboard_read_text
         }
     ; session =

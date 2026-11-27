@@ -1349,11 +1349,20 @@ let clipboard_write payload =
   let invalid () = invalid_arg "Invalid native clipboard write request" in
   if not (String.is_valid_utf_8 payload) then invalid ();
   let parsed = try J.from_string payload with Yojson.Json_error _ -> invalid () in
-  let id,text = match parsed with
-    | `Assoc fields when List.sort String.compare (List.map fst fields) =
-        ["request-id";"text"] ->
-        (match List.assoc "request-id" fields,List.assoc "text" fields with
-         | `String id,`String text -> id,text
+  let id,text,formats = match parsed with
+    | `Assoc fields ->
+        let keys = List.sort String.compare (List.map fst fields) in
+        let string_field name = match List.assoc_opt name fields with
+          | Some (`String value) -> value
+          | _ -> invalid () in
+        let id = string_field "request-id" and text = string_field "text" in
+        (match keys with
+         | ["request-id";"text"] -> id,text,None
+         | ["html";"logseq";"request-id";"text"] ->
+             id,text,Some
+               [ "text/plain",text
+               ; "text/html",string_field "html"
+               ; "application/logseq",string_field "logseq" ]
          | _ -> invalid ())
     | _ -> invalid () in
   let sequence = match int_of_string_opt id with
@@ -1365,7 +1374,9 @@ let clipboard_write payload =
     then invalid ();
     clipboard_write_id := sequence;
     if Hashtbl.mem Platform.clipboard_writes id then begin
-      let ok = Lui_shell.clipboard_write text in
+      let ok = match formats with
+        | Some formats -> Lui_shell.clipboard_write_formats formats
+        | None -> Lui_shell.clipboard_write text in
       let fields = ["request-id",`String id;"ok",`Bool ok] in
       let fields = if ok then fields else
         fields @ ["error",`String "Native clipboard ownership was refused"] in
@@ -1422,7 +1433,11 @@ let handle (envelope : string) =
             let text =
               Option.value (Lui_shell.clipboard_read ()) ~default:""
             in
-            reply "clipboard-read" (`Assoc [ ("text", `String text) ])
+            let fields = ["text", `String text] in
+            let fields = match Lui_shell.clipboard_read_format "application/logseq" with
+              | Some logseq -> fields @ ["logseq", `String logseq]
+              | None -> fields in
+            reply "clipboard-read" (`Assoc fields)
           | "open-url" ->
             let url =
               (* Host.open_url sends the URL itself; SDK/plugin bridges may
