@@ -1347,24 +1347,35 @@ let dom_op (e : env) (op : string) (body : string) =
 
 let clipboard_write_id = ref 0
 
+external clipboard_write_png_call : string -> bool
+  = "logseq_native_clipboard_write_png"
+
 let clipboard_write payload =
   let invalid () = invalid_arg "Invalid native clipboard write request" in
   if not (String.is_valid_utf_8 payload) then invalid ();
   let parsed = try J.from_string payload with Yojson.Json_error _ -> invalid () in
-  let id,text,formats = match parsed with
+  let id,text,formats,png = match parsed with
     | `Assoc fields ->
         let keys = List.sort String.compare (List.map fst fields) in
         let string_field name = match List.assoc_opt name fields with
           | Some (`String value) -> value
           | _ -> invalid () in
-        let id = string_field "request-id" and text = string_field "text" in
+        let id = string_field "request-id" in
         (match keys with
-         | ["request-id";"text"] -> id,text,None
+         | ["request-id";"text"] -> id,string_field "text",None,None
          | ["html";"logseq";"request-id";"text"] ->
+             let text = string_field "text" in
              id,text,Some
                [ "text/plain",text
                ; "text/html",string_field "html"
-               ; "application/logseq",string_field "logseq" ]
+               ; "application/logseq",string_field "logseq" ],None
+         | ["image-png";"request-id"] ->
+             let encoded = string_field "image-png" in
+             let data =
+               try Transit.base64_decode encoded
+               with _ -> invalid ()
+             in
+             id,"",None,Some data
          | _ -> invalid ())
     | _ -> invalid () in
   let sequence = match int_of_string_opt id with
@@ -1376,9 +1387,11 @@ let clipboard_write payload =
     then invalid ();
     clipboard_write_id := sequence;
     if Hashtbl.mem Platform.clipboard_writes id then begin
-      let ok = match formats with
-        | Some formats -> Lui_shell.clipboard_write_formats formats
-        | None -> Lui_shell.clipboard_write text in
+      let ok = match png, formats with
+        | Some data, None -> clipboard_write_png_call data
+        | None, Some formats -> Lui_shell.clipboard_write_formats formats
+        | None, None -> Lui_shell.clipboard_write text
+        | Some _, Some _ -> invalid () in
       let fields = ["request-id",`String id;"ok",`Bool ok] in
       let fields = if ok then fields else
         fields @ ["error",`String "Native clipboard ownership was refused"] in

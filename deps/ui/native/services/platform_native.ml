@@ -316,6 +316,27 @@ let clipboard_write_payload fields =
 let clipboard_write_text text =
   clipboard_write_payload ["text",`String text]
 
+let base64_encode input =
+  let alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/" in
+  let output = Buffer.create (((String.length input + 2) / 3) * 4) in
+  let byte index = if index < String.length input then Char.code input.[index] else 0 in
+  let rec loop index =
+    if index < String.length input then (
+      let b0 = byte index and b1 = byte (index + 1) and b2 = byte (index + 2) in
+      let remain = String.length input - index in
+      Buffer.add_char output alphabet.[b0 lsr 2];
+      Buffer.add_char output alphabet.[((b0 land 3) lsl 4) lor (b1 lsr 4)];
+      Buffer.add_char output (if remain > 1 then alphabet.[((b1 land 15) lsl 2) lor (b2 lsr 6)] else '=');
+      Buffer.add_char output (if remain > 2 then alphabet.[b2 land 63] else '=');
+      loop (index + 3))
+  in
+  loop 0;
+  Buffer.contents output
+
+let clipboard_write_image_png png =
+  clipboard_write_payload
+    [ "image-png", `String (base64_encode (Bytes.to_string png)) ]
+
 let clipboard_write_block_data (data : Ui_services.block_clipboard) =
   clipboard_write_payload
     [ "text",`String data.text
