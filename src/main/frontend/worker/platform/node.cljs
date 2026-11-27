@@ -671,29 +671,79 @@
     (<delete-secret-text! kv key)
     ((:set! kv) key nil)))
 
+(def ^:private file-lock-stale-ms
+  "A lock file older than this was left by a process that died while holding it.
+  Holders keep it for one read, write and rename of a small file."
+  5000)
+
+(def ^:private file-lock-timeout-ms 10000)
+
+(defn- <acquire-file-lock!
+  "Creates lock-path with O_EXCL, retrying with a short backoff while another
+  process holds it. Removes a stale lock. Rejects after file-lock-timeout-ms."
+  [lock-path]
+  (let [started (js/Date.now)]
+    (letfn [(<try! [attempt]
+              (-> (p/let [^js handle (fs/open lock-path "wx")]
+                    (.close handle))
+                  (p/catch
+                   (fn [error]
+                     (if (not= "EEXIST" (.-code error))
+                       (p/rejected error)
+                       (p/let [^js stat (-> (fs/stat lock-path) (p/catch (constantly nil)))
+                               stale? (and stat (> (- (js/Date.now) (.-mtimeMs stat)) file-lock-stale-ms))
+                               _ (when stale?
+                                   (log/warn :db-worker-node-stale-file-lock-removed {:lock-path lock-path})
+                                   (-> (fs/rm lock-path #js {:force true}) (p/catch (constantly nil))))]
+                         (cond
+                           stale? (<try! (inc attempt))
+                           (> (- (js/Date.now) started) file-lock-timeout-ms)
+                           (p/rejected (ex-info "Timed out waiting for file lock" {:lock-path lock-path}))
+                           :else (p/let [_ (p/delay (min 50 (* 2 (inc attempt))))]
+                                   (<try! (inc attempt))))))))))]
+      (<try! 0))))
+
+(defn- <with-file-lock
+  "Runs (<f) while this process holds lock-path, so that processes sharing a
+  file take turns at it"
+  [lock-path <f]
+  (let [release! #(-> (fs/rm lock-path #js {:force true}) (p/catch (constantly nil)))]
+    (p/let [_ (<acquire-file-lock! lock-path)]
+      (-> (p/do (<f))
+          (p/then (fn [result] (p/let [_ (release!)] result)))
+          (p/catch (fn [error] (p/let [_ (release!)] (p/rejected error))))))))
+
 (defn- kv-store
   [data-dir]
+  ;; The worker of every open graph has its own kv-store on this file, so each
+  ;; get reads the file and each set! merges its key into what the file holds
+  ;; then, under a lock file shared by all processes. A set! replaces the file
+  ;; by a rename, so an interrupted write leaves the previous file.
   (let [kv-path (node-path/join data-dir "kv-store.json")
-        state (atom nil)
-        <load! (fn []
-                 (if (some? @state)
-                   (p/resolved @state)
-                   (-> (fs/readFile kv-path "utf8")
-                       (p/then (fn [contents]
-                                 (let [data (parse-kv-state contents)]
-                                   (reset! state data)
-                                   @state)))
-                       (p/catch (fn [_]
-                                  (reset! state {})
-                                  @state)))))]
+        lock-path (str kv-path ".lock")
+        *last-write (atom (p/resolved nil))
+        <read-state (fn []
+                      (-> (fs/readFile kv-path "utf8")
+                          (p/then parse-kv-state)
+                          (p/catch (fn [_] {}))))
+        <write-key! (fn [k value]
+                      (let [tmp-path (node-path/join data-dir (str ".kv-store.json.tmp-" (random-uuid)))]
+                        (<with-file-lock
+                         lock-path
+                         (fn []
+                           (p/let [state (<read-state)
+                                   _ (fs/writeFile tmp-path (serialize-kv-state (assoc state k value)) "utf8")]
+                             (fs/rename tmp-path kv-path))))))]
     {:get (fn [k]
-            (p/let [_ (<load!)]
-              (get @state k)))
+            (p/let [state (<read-state)]
+              (get state k)))
+     ;; Writes in this process run one after another so none reads the file
+     ;; before the previous one replaced it
      :set! (fn [k value]
-             (p/let [_ (<load!)
-                     _ (swap! state assoc k value)
-                     payload (serialize-kv-state @state)]
-               (fs/writeFile kv-path payload "utf8")))}))
+             (swap! *last-write
+                    (fn [last-write]
+                      (p/then (p/catch last-write (constantly nil))
+                              (fn [_] (<write-key! k value))))))}))
 
 (defn- track-platform-writes
   [platform]
