@@ -224,6 +224,17 @@ let lightbox_key = "native-asset-lightbox"
 let close_image_lightbox () =
   Properties_state.remove_view_overlay lightbox_key
 
+(* Modal surfaces are positioned by the native host, so the generic
+   viewport_cover adapter's fixed/inset properties are invalid on a
+   dialog. Width/height viewport props still size the surface to the
+   window while the host centers it. *)
+let viewport_modal_cover (elem : Lui_elements.t) : Lui_elements.t =
+ fun context parent ->
+  let node = elem context parent in
+  Lui_ui.width_viewport context node 1.;
+  Lui_ui.height_viewport context node 1.;
+  node
+
 (* Native retained-overlay approximation of the web PhotoSwipe surface.
    It intentionally keeps the first implementation scoped to the core
    desktop interaction: display the clicked asset fitted to the window,
@@ -232,7 +243,7 @@ let close_image_lightbox () =
    sharing chrome remain documented parity gaps. *)
 let image_lightbox_view ~source ~alt : Lui_elements.t =
   let close () = close_image_lightbox () in
-  Ui_parts.viewport_cover
+  viewport_modal_cover
     (Lui_elements.dialog ~key:lightbox_key
        ~style_class:"pswp native-asset-lightbox"
        ~background:"rgba(0,0,0,0.92)" ~border_width:0 ~corner_radius:0
