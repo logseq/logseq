@@ -23,5 +23,17 @@ let () =
     ; ("<pre><code>a\n  b</code></pre>", Some "```\na\n  b\n```")
     ; ("<pre><code>```md\n````\ntext</code></pre>",
        Some "`````\n```md\n````\ntext\n`````")
+    ; ("<table><thead><tr><th>H1</th><th>H2</th></tr></thead><tbody><tr><td>A1</td><td></td></tr><tr><td>#A2</td><td>B2</td></tr></tbody></table>",
+       Some "| H1 | H2 |\n| ---- | ---- |\n| A1 |  |\n| #A2 | B2 |")
+    ; ("<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>",
+       Some "|  |  |\n| ---- | ---- |\n| A | B |\n| C | D |")
+    ; ("<table><tr><th>H1</th><th>H2</th></tr><tr><td>C</td><td>D</td></tr></table>",
+       Some "| H1 | H2 |\n| ---- | ---- |\n| C | D |")
+    ; ("<table><tr><th scope=\"row\">A</th><td>B</td></tr><tr><th scope=\"row\">C</th><td>D</td></tr></table>",
+       Some "|  |  |\n| ---- | ---- |\n| A | B |\n| C | D |")
+    ; ("<table>\n  <tr><td>A<br>B</td><td>x|y</td></tr>\n  <tr><td><p>New</p><p>York</p></td><td></td></tr>\n</table>",
+       Some "|  |  |\n| ---- | ---- |\n| A B | x\\|y |\n| New York |  |")
+    ; ("<table><tr><td>A</td><td>B</td><td>C</td></tr><tr><td colspan=\"2\" rowspan=\"2\">D</td><td>E</td></tr><tr><td>F</td></tr></table>",
+       Some "|  |  |  |\n| ---- | ---- | ---- |\n| A | B | C |\n| D |  | E |\n|  |  | F |")
     ; ("<p>A<p>B", Some "A\n\nB")
     ]

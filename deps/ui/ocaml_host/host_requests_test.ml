@@ -52,6 +52,22 @@ let () =
     (host_event.Ui_services.clipboard_snapshot ()=
       {Ui_services.clipboard_formats=["text/plain",value];
        clipboard_items=["string","text/plain"];clipboard_files=[]});
+  let structured_items =
+    [ "text/plain", "plain"
+    ; "text/html", "<b>plain</b>"
+    ; "application/logseq", "{:blocks []}" ]
+  in
+  let structured_event=Ui_dom_native.ev_of (Js.Json.JObject
+    ["clipboardData",Ui_dom_native.mime_clipboard_data structured_items]) in
+  check "The native host clipboard packet must round-trip structured MIME values"
+    (structured_event.Ui_services.clipboard_get "text/plain"="plain"
+     && structured_event.Ui_services.clipboard_get "text/html"="<b>plain</b>"
+     && structured_event.Ui_services.clipboard_get "application/logseq"="{:blocks []}"
+     && structured_event.Ui_services.clipboard_snapshot ()=
+       {Ui_services.clipboard_formats=structured_items;
+        clipboard_items=["string","text/plain";"string","text/html";
+          "string","application/logseq"];
+        clipboard_files=[]});
   let snapshot=event.Ui_services.clipboard_snapshot () in
   check "Native clipboard inspection must describe only the admitted text representation"
     (snapshot.Ui_services.clipboard_formats=["text/plain",value] &&
