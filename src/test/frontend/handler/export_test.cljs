@@ -433,6 +433,49 @@
             (is false (str error))
             (cleanup!)))))))
 
+(deftest-async backup-db-graph-retains-latest-versions-test
+  (let [repo "logseq_db_example"
+        current (atom "previous")
+        version-names (map #(str % ".db.sqlite") (range 1000 1014))
+        entries (atom (into #{"notes.txt"} version-names))
+        data (.encode (js/TextEncoder.) "updated")
+        backups #js {:name "backups"
+                     :values (fn []
+                               (->> @entries
+                                    (map (fn [name]
+                                           #js {:kind "file"
+                                                :name name
+                                                :getFile (fn []
+                                                           (js/Promise.resolve (js/File. #js [] name)))}))
+                                    into-array
+                                    .values))
+                     :removeEntry (fn [name]
+                                    (p/then (p/resolved nil)
+                                            (fn [_] (swap! entries disj name))))}
+        snapshot #js {:getFile (fn [] (js/File. #js [@current] "db.sqlite"))
+                      :move (fn [_ name]
+                              (swap! entries conj name)
+                              (reset! current ""))
+                      :createWritable (fn []
+                                        #js {:write (fn [contents]
+                                                      (reset! current (.decode (js/TextDecoder.) contents)))
+                                             :close (constantly nil)})}
+        directory #js {:getDirectoryHandle (constantly backups)
+                       :getFileHandle (constantly snapshot)}
+        root #js {:getDirectoryHandle (constantly directory)
+                  :queryPermission (constantly "granted")}]
+    (p/with-redefs [util/web-platform? true
+                    util/time-ms (constantly 1014)
+                    state/get-current-repo (constantly repo)
+                    state/<invoke-db-worker (constantly "backup")
+                    idb/get-item (constantly root)
+                    persist-db/<export-db (constantly data)]
+      (p/let [result (export/backup-db-graph repo)]
+        (is (true? result))
+        (is (= "updated" @current))
+        (is (= (into #{"notes.txt"} (map #(str % ".db.sqlite") (range 1003 1015)))
+               @entries))))))
+
 (deftest export-blocks-as-markdown-without-properties
   (async done
     (p/let [first-content (<export-blocks-as-markdown
