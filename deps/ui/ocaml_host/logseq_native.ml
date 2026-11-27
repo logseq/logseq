@@ -220,9 +220,11 @@ module Host_media = struct
     (state.handle >= 0 || Option.is_some state.audio_player || Option.is_some state.video_player)
     && (state.playing || now < state.refresh_until)
 
-  let active () =
+  let active_ids () =
     let now = Unix.gettimeofday () in
-    Hashtbl.fold (fun _ state acc -> acc || state_active now state) states false
+    Hashtbl.fold
+      (fun id state acc -> if state_active now state then id :: acc else acc)
+      states []
 
   let solid_fill fill_color r alpha =
     Lui_paint.fill r (0., 0., 0., 0.) ~paint:Solid ~c1:fill_color ~c2:fill_color
@@ -2959,7 +2961,8 @@ let () =
       host_req_repaint := true
     end;
     Host_media.sweep store;
-    let media_dirty = Host_media.active () in
+    let media_ids = Host_media.active_ids () in
+    let media_dirty = media_ids <> [] in
     let ordinary_dirty = Ui.want_frame ui host || !host_req_repaint || media_dirty in
     (match input_change with
      | Some id -> Lui_host.note_paint host id; host_req_repaint := true
@@ -2989,7 +2992,7 @@ let () =
       ~deadline:!frame_deadline ~now:(perf_s ()) in
     let input_frame_due = dirty && (frame_due || Option.is_some metrics.input_at) in
     if input_frame_due then begin
-      if media_dirty then Lui_host.invalidate_paint host;
+      if media_dirty then List.iter (Lui_host.note_paint host) media_ids;
       paint_frame ();
       if presentation.Host_interaction.pending then input_present_retry := true;
       (* A caret blink must not keep the loop in its post-input fast poll. *)
