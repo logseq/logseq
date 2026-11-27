@@ -258,28 +258,37 @@ let local_storage_get k =
    file), so the locked reload+write cannot leak credentials and need not
    wait for keychain resolution.
 
-   One exception: when the reloaded file still carries legacy plaintext
+   One exception: when the state file still carries legacy plaintext
    tokens that [Platform.restore_auth] could not migrate (for example
    because keychain access was denied), rewriting the file without them
    would destroy the only copy of the sign-in before migration had a
-   chance to run. In that case the write degrades to process-local memory,
-   exactly as all preference writes did before this path persisted. *)
+   chance to run. In that case writes degrade to process-local memory,
+   exactly as all preference writes behaved before this path persisted:
+   no reload, so earlier memory-only changes survive. Tokens only enter
+   [ls] by reloading the file, and migration or sign-out removes them, so
+   this check cannot be satisfied by a key the file no longer carries. *)
 let unmigrated_legacy_tokens () =
   List.exists (Hashtbl.mem ls) auth_token_keys
 
 let local_storage_set k v =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain storage";
-  with_state_lock (fun () ->
-      reload_state_unlocked ();
-      Hashtbl.replace ls k v;
-      if not (unmigrated_legacy_tokens ()) then write_state_unlocked ())
+  load_state ();
+  if unmigrated_legacy_tokens () then Hashtbl.replace ls k v
+  else
+    with_state_lock (fun () ->
+        reload_state_unlocked ();
+        Hashtbl.replace ls k v;
+        write_state_unlocked ())
 
 let local_storage_remove k =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain removal";
-  with_state_lock (fun () ->
-      reload_state_unlocked ();
-      Hashtbl.remove ls k;
-      if not (unmigrated_legacy_tokens ()) then write_state_unlocked ())
+  load_state ();
+  if unmigrated_legacy_tokens () then Hashtbl.remove ls k
+  else
+    with_state_lock (fun () ->
+        reload_state_unlocked ();
+        Hashtbl.remove ls k;
+        write_state_unlocked ())
 
 let session : (string, string) Hashtbl.t = Hashtbl.create 16
 
