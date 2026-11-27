@@ -13,7 +13,7 @@ Audit baseline: `refactor/lui` @ `a5dd20796628acacc0ac2467ffa31b8169b3ebaa` (`20
 - Fresh isolated graphs were used. No existing user graph was mutated. Exact content parity was impossible after interactive editing because the seeded text necessarily diverged.
 - Setup artifact only: the first web boot failed because `static/js/db-worker.js` had not been built. After `pnpm db-worker:build`, the web app booted normally. This is not counted as a parity finding.
 - Login and RTC were intentionally skipped in the follow-up pass.
-- The LUI pin in this branch uses `ea1b41253006288f587ba04f6b589a1a560af8ed`, which includes the compatibility backports through [lui#418](https://github.com/logseq/lui/pull/418) and the macOS video-audio transport from [lui#419](https://github.com/logseq/lui/pull/419).
+- The LUI pin in this branch uses `770a13a48fdc940cb2bd29d676c7abcf16b9c124`, which includes the compatibility backports through [lui#418](https://github.com/logseq/lui/pull/418), the macOS video-audio transport from [lui#419](https://github.com/logseq/lui/pull/419), and the audio-tail EOF correction from [lui#420](https://github.com/logseq/lui/pull/420).
 
 ## Intentional desktop differences
 
