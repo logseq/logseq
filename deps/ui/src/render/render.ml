@@ -262,13 +262,19 @@ let calc_results_live ~self code : t =
     calc_results_for code
   else
     let latest = ref code in
+    let relevant = function
+      | Some editing when editing.Editor_state.uuid = self ->
+          Some editing.Editor_state.buffer
+      | _ -> None
+    in
     reactive
+      ~equal:(fun a b -> relevant a = relevant b)
       (fun editing ->
-        match editing with
-        | Some editing when editing.Editor_state.uuid = self ->
-            latest := editing.Editor_state.buffer;
-            calc_results_for !latest
-        | _ -> calc_results_for !latest)
+        match relevant editing with
+        | Some buffer ->
+            latest := buffer;
+            calc_results_for buffer
+        | None -> calc_results_for !latest)
       (Editor_state.editing_sig ())
 
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
