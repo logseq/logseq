@@ -2077,21 +2077,24 @@ let () =
         | None -> None)
     | _ -> None
   in
-  let dom_key_target () =
-    let menu = Ui.open_menu ui in
-    if menu <> 0 then menu else Ui.focused ui
-  in
   let rec in_block_context_menu ?(depth = 0) node =
     node <> 0 && depth <= 64
     &&
     (match Lui_store.string_prop store node "accessibility-identifier" with
      | Some ("block-context-menu" | "block-context-submenu") -> true
-     | _ when Lui_store.string_prop store node "data-popup-owner"
+     | _ when Lui_query.data_attr store node "data-popup-owner"
               = Some "block-context-menu" -> true
      | _ ->
          (match Lui_store.parent store node with
           | Some parent -> in_block_context_menu ~depth:(depth + 1) parent
           | None -> false))
+  in
+  let dom_key_target () =
+    let menu = Ui.open_menu ui in
+    if menu <> 0 then menu
+    else
+      let overlay = Ui.overlay_top ui in
+      if in_block_context_menu overlay then overlay else Ui.focused ui
   in
   let block_context_menu_key_target () =
     in_block_context_menu (dom_key_target ())
