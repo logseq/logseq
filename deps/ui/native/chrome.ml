@@ -390,6 +390,8 @@ let main_scroll (ms : Model.t Signal.signal) : t =
  fun ctx parent ->
   let outline = Outline_viewport_state.ensure ctx ms in
   let st = Sidebar_state.ensure ms in
+  Settings_state.ensure ctx;
+  let preferences = Signal.value (Settings_state.state ()) in
   (scroll ~key:"main-content" ~orientation:`vertical ~grow:1. ~min_height:0
     ?virtual_owner:(Outline_viewport_state.owner outline)
     ~padding_horizontal:16 ~padding_vertical:32
@@ -402,10 +404,12 @@ let main_scroll (ms : Model.t Signal.signal) : t =
         [ column ~key:"main-inner" ~grow:1. ~min_width:0
             ~style_class:"cp__sidebar-main-content"
             ~max_width:(reactive
-              (fun (m : Model.t) viewport_width ->
+              (fun (m : Model.t) _preferences viewport_width ->
+                let wide_mode = Settings_state.storage_bool "wide-mode" ~default:false in
                 match m.route with
                 | Model.All_pages -> int_of_float viewport_width
-                | _ -> 960) ms (Signal.value st.Sidebar_state.viewport_w))
+                | _ -> if wide_mode then 1440 else 960)
+              ms preferences (Signal.value st.Sidebar_state.viewport_w))
             ~data_attrs:(reactive (fun (m : Model.t) ->
               [ ("data-is-margin-less-pages", "false");
                 ("data-is-full-width", string_of_bool (m.route = Model.All_pages)) ]) ms)
