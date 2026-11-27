@@ -422,7 +422,7 @@ let auto_backup ctx =
                (* the dict text embeds a cljs {{component}} link slot —
                   native renders its inner caption plainly *)
                ~value:
-                 (if Ui_services.env_paints_caret () then
+                 (if String.starts_with ~prefix:"Logseq Native/" (Ui_services.env_user_agent ()) then
                     T.t "export.backup/unsupported-native-desc"
                   else
                     T.t "export.backup/unsupported-desc"
