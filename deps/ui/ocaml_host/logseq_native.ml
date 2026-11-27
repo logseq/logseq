@@ -919,13 +919,20 @@ let () =
   let scroll_shift_of = Host_interaction.scroll_shifts ~store:store_of
     ~scroll_epoch:(fun () -> Ui.scroll_epoch ui)
     ~scroll_x:(Ui.scroll_offset_x ui) ~scroll_y:(Ui.scroll_offset ui) in
-  let shifted_rect id =
-    let r = engine_rect id in
-    let sx, sy = scroll_shift_of id in
-    { r with
-      Lui_scene.x = r.Lui_scene.x -. sx;
-      Lui_scene.y = r.Lui_scene.y -. sy }
+  let shifted_layout_rect id =
+    match !host_cell with
+    | Some host -> (
+      match Lui_host.layout_rect host id with
+      | Some r ->
+        let sx, sy = scroll_shift_of id in
+        Some
+          { r with
+            Lui_scene.x = r.Lui_scene.x -. sx;
+            Lui_scene.y = r.Lui_scene.y -. sy }
+      | None -> None)
+    | None -> None
   in
+  let shifted_rect id = Option.value ~default:Rects.zero (shifted_layout_rect id) in
   let content_bounds = Hashtbl.create 16 in
   let bounds_revision = ref (-1, -1) in
   let content_box id =
@@ -1266,11 +1273,12 @@ let () =
        Host_interaction.context_anchor store (Ui.open_menu ui) (Ui.pointer ui)));
   let win_w = ref width and win_h = ref height in
   image_visible := (fun id ->
-    let r = shifted_rect id in
-    let vw = float !win_w *. !scale_cell and vh = float !win_h *. !scale_cell in
-    r.Lui_scene.w >= 1. && r.Lui_scene.h >= 1.
-    && r.Lui_scene.x < vw +. 256. && r.Lui_scene.x +. r.Lui_scene.w > -256.
-    && r.Lui_scene.y < vh +. 768. && r.Lui_scene.y +. r.Lui_scene.h > -256.);
+    match shifted_layout_rect id with
+    | None -> false
+    | Some r ->
+      Host_interaction.rect_approaches_viewport
+        ~width:(float !win_w *. !scale_cell)
+        ~height:(float !win_h *. !scale_cell) r);
   overlay_viewport := (fun () -> (!win_w, !win_h, !scale_cell));
   (* Content-space visible range for virtual-list nodes. Rects are
      published after this callback on the sync that creates the list,

@@ -149,6 +149,13 @@ let measure_width width = if Float.is_finite width && width > 0. then width else
 let scroll_extent (viewport : Lui_scene.rect) ~right ~bottom =
   max 0. (right -. viewport.x -. viewport.w),
   max 0. (bottom -. viewport.y -. viewport.h)
+let rect_approaches_viewport ~width ~height (r : Lui_scene.rect) =
+  (* Zero-area elements still count when their position is inside the
+     preload band: an image without dimensions or alt text otherwise cannot
+     start loading and discover its intrinsic size. *)
+  r.x <= width +. 256. && r.x +. r.w >= -256.
+  && r.y <= height +. 768. && r.y +. r.h >= -256.
+
 type viewport_cache = {
   mutable viewport_store : Lui_store.t option;
   mutable viewport_revision : int;
