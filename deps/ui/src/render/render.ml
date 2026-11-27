@@ -243,6 +243,34 @@ let calc_results_el code =
                   ~value:line [])
               lines))
 
+let empty_calc_results_el () =
+  (* cljs mounts .extensions__code-calc for calc blocks even when empty —
+     Code_mirror.update_calc fills it on change *)
+  column ~key:"calc" ~style_class:"extensions__code-calc" []
+
+let calc_results_for code =
+  match calc_results_el code with
+  | Some el -> el
+  | None -> empty_calc_results_el ()
+
+(* Web CodeMirror owns its output DOM and update_calc mutates it directly.
+   Native hosts keep the output in the LUI tree, so derive it from the live
+   edit-session buffer; retain the latest typed source across blur exactly as
+   the mounted editor document does. *)
+let calc_results_live ~self code : t =
+  if not (Code_mirror.calc_results_in_tree ()) || self = "" then
+    calc_results_for code
+  else
+    let latest = ref code in
+    reactive
+      (fun editing ->
+        match editing with
+        | Some editing when editing.Editor_state.uuid = self ->
+            latest := editing.Editor_state.buffer;
+            calc_results_for !latest
+        | _ -> calc_results_for !latest)
+      (Editor_state.editing_sig ())
+
 (* cljs components/block.cljs src-cp actions bar — .code-block-actions
    with a language picker button + copy button. Handlers live in
    Code_mirror (open_lang_picker/copy_button). *)
@@ -302,15 +330,7 @@ let code_block ?(self = "") ?(extra = []) lang code =
                      ~value:code ~read_only:(self = "" || Ui_services.env_publishing ())
                      ~source_role:"block" ~on_event:(Code_mirror.on_native_event self) ()
                  ; (if not calc then Logseq_el.fragment []
-                    else
-                      match calc_results_el code with
-                      | Some el -> el
-                      | None ->
-                          (* cljs mounts .extensions__code-calc for calc
-                             blocks even when empty —
-                             Code_mirror.update_calc fills it on change *)
-                          column ~key:"calc"
-                            ~style_class:"extensions__code-calc" [])
+                    else calc_results_live ~self code)
                  ]
              ]
             @ extra)

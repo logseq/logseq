@@ -352,6 +352,10 @@ let on_shift_enter uuid =
   | Some st when st.composition = None -> A.insert_sibling_after uuid
   | _ -> ()
 
+(* Web CodeMirror owns its output DOM directly; calc output is not part of
+   the retained LUI tree. *)
+let calc_results_in_tree () = false
+
 let update_calc c =
   match D.el_closest (get_wrapper c) ".extensions__code" with
   | Some wrap -> (

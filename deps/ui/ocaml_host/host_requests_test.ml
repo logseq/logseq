@@ -12206,3 +12206,40 @@ let () =
       (not (List.mem "node_modules/page.md" paths));
     check "Readable directory import enumeration has no errors" (!errors = []));
   print_endline "native directory import path filtering: OK"
+
+let () = with_test_entry (fun () ->
+  let store = Lui_store.create () and errors = ref [] in
+  let expect message condition = if not condition then errors := message :: !errors in
+  let backend = { backend_profile = profile LinuxOS GenericHost
+                ; apply_batch = (fun batch -> Lui_store.apply_batch store batch; true) } in
+  let registry = Lui_extension.registry () in
+  Logseq_el.register_all registry;
+  Logseq_katex.register registry;
+  Logseq_codemirror.register registry;
+  Logseq_editor.register registry;
+  let uuid = "calc-live" in
+  let app = Lui_app.create_with_extensions backend registry Model.initial
+      (fun model _ -> model)
+      (fun context _ _ ->
+         Editor_state.ensure context;
+         Render.code_block ~self:uuid "calc" "1+1") in
+  Fun.protect ~finally:(fun () -> ignore (Lui_app.dispose app)) (fun () ->
+    ignore (Lui_app.start app);
+    ignore (Lui_app.flush app);
+    let has text =
+      List.exists (fun id -> Lui_store.string_prop store id "text" = Some text)
+        (Lui_store.preorder store)
+    in
+    expect "Initial calc results did not render" (has "2");
+    Editor_state.set (fun state ->
+      { state with Editor_state.editing = Some
+          (Editor_state.mk_editing ~uuid ~buffer:"1+1" ~scope:"main" ~base:"1+1" ()) });
+    Code_mirror.on_native_event uuid ~name:"input" ~value:(Some "1+1\n2+3") ~key:None;
+    ignore (Lui_app.flush app);
+    expect "Editing the calc source did not refresh native results" (has "5");
+    Editor_state.set (fun state -> { state with Editor_state.editing = None });
+    ignore (Lui_app.flush app);
+    expect "Native calc results reverted to stale source on blur" (has "5");
+    List.iter prerr_endline (List.rev !errors);
+    check "Native live calc results" (!errors = []));
+  print_endline "native live calc results: OK")
