@@ -212,7 +212,7 @@ let src_block_with_save s =
         let body =
           String.sub rest (nl + 1) (String.length rest - nl - 1)
         in
-        let body =
+        let body, trailing =
           let n = String.length body in
           let closing_line_start =
             let rec find line =
@@ -236,14 +236,23 @@ let src_block_with_save s =
             find 0
           in
           match closing_line_start with
-          | None -> body
+          | None -> body, ""
           | Some line_start ->
+              let trailing =
+                match String.index_from_opt body line_start '\n' with
+                | Some newline ->
+                    String.sub body (newline + 1) (n - newline - 1)
+                | None -> ""
+              in
               let b = String.sub body 0 line_start in
-              if String.length b > 0 && b.[String.length b - 1] = '\n' then
-                String.sub b 0 (String.length b - 1)
-              else b
+              let b =
+                if String.length b > 0 && b.[String.length b - 1] = '\n' then
+                  String.sub b 0 (String.length b - 1)
+                else b
+              in
+              b, trailing
         in
-        Some (lang, body, finish true body_start body s))
+        Some (lang, body, finish true body_start body s, trailing))
   else
     let prefix = "#+begin_src" in
     if Str_util.starts_with_ci s prefix then (
@@ -268,12 +277,12 @@ let src_block_with_save s =
             then String.sub body 0 (n - m)
             else body
           in
-          Some (lang, body, finish false body_start body s))
+          Some (lang, body, finish false body_start body s, ""))
     else None
 
 let src_block s =
   match src_block_with_save s with
-  | Some (lang, body, _) -> Some (lang, body)
+  | Some (lang, body, _, _) -> Some (lang, body)
   | None -> None
 
 (* blocks tagged logseq.class/Query (created by the /query commands)
@@ -374,7 +383,7 @@ let has_sub hay needle =
    display-type=code blocks drop the fence header). *)
 let src_eval_parts s =
   match src_block_with_save s with
-  | Some (hdr, code, save_source) -> (
+  | Some (hdr, code, save_source, _) -> (
       match String.index_opt hdr ' ' with
       | None -> None
       | Some i ->
@@ -873,8 +882,10 @@ let rec title ?heading ?(is_cards = false)
         | Some body -> [ body ]
         | None -> (
         match src_block_with_save s with
-        | Some (lang, code, save_source) ->
-            [ code_block ~self ~editable ~save_source lang code ]
+        | Some (lang, code, save_source, trailing) ->
+            code_block ~self ~editable ~save_source lang code
+            :: (if String.trim trailing = "" then []
+                else [ content ~self ?highlight trailing ])
         | None -> (
             (* {{query}} is a normal inline macro — macro_el renders the
                deprecation .warning inside .block-title-wrap like cljs *)

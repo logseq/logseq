@@ -6645,7 +6645,7 @@ let source_blocks () =
   List.iter
     (fun (source, edited, expected) ->
        match Render.src_block_with_save source with
-       | Some (_, _, save_source) ->
+       | Some (_, _, save_source, _) ->
            eqs "edited raw source blocks preserve their fences" expected
              (save_source edited)
        | None -> check "source block fixture did not parse" false)
@@ -6676,9 +6676,14 @@ let source_blocks () =
   check "Line-leading triple backticks follow mldoc fence semantics"
     (refs = [] && tags = [] && hash = []);
   (match Render.src_block_with_save "```calc\nuse ```" with
-   | Some (_, body, _) ->
+   | Some (_, body, _, _) ->
        eqs "inline trailing backticks are preserved" "use ```" body
    | None -> check "inline trailing backtick fixture did not parse" false);
+  (match Render.src_block_with_save "```calc\n1+1\n```\nafter" with
+   | Some (_, body, _, trailing) ->
+       check "content after a closing fence remains visible"
+         (body = "1+1" && trailing = "after")
+   | None -> check "closed fence with trailing content did not parse" false);
   let refs, tags, hash =
     Title_refs.scan_title "````calc\n[[Inside]]\n```\n[[Outside]]"
   in
