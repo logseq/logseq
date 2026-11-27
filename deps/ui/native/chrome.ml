@@ -405,11 +405,7 @@ let main_scroll (ms : Model.t Signal.signal) : t =
             ~style_class:"cp__sidebar-main-content"
             ~max_width:(reactive
               (fun (m : Model.t) _preferences viewport_width ->
-                let wide_mode =
-                  match Ui_services.storage_get "wide-mode" with
-                  | Some v -> Ui_services.storage_unquote v = "true" || v = "true"
-                  | None -> false
-                in
+                let wide_mode = Settings_state.storage_bool "wide-mode" ~default:false in
                 match m.route with
                 | Model.All_pages -> int_of_float viewport_width
                 | _ -> if wide_mode then 1440 else 960)
