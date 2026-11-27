@@ -71,10 +71,37 @@
   [key]
   (kv-set! key nil))
 
+(defn- access-handle-busy?
+  "True for the error OPFS gives when another context (the worker of the page before a reload) still holds a
+  file's sync access handle."
+  [e]
+  (boolean
+   (some (fn [^js x]
+           (and (= "NoModificationAllowedError" (some-> x .-name))
+                ;; Chrome: "Access Handles cannot be created if there is another open Access Handle or Writable
+                ;; stream associated with the same file."
+                (string/includes? (str (some-> x .-message)) "Access Handle")))
+         [e (some-> e .-cause)])))
+
+;; up to 80 attempts 250 ms apart (20 s): on a loaded machine the old page's worker can hold the handles for
+;; several seconds after a reload
+(defonce *opfs-pool-install-retry (atom {:attempts 80 :delay-ms 250}))
+
 (defn- install-opfs-pool
-  [sqlite pool-name]
-  (.installOpfsSAHPoolVfs ^js sqlite #js {:name pool-name
-                                          :initialCapacity 20}))
+  "A reload starts the new page's worker while the old page's worker may still hold the pool's sync access
+  handles; installOpfsSAHPoolVfs then fails, and caches that failure unless forceReinitIfPreviouslyFailed is
+  set. Retry while the handles are busy, see *opfs-pool-install-retry."
+  ([sqlite pool-name]
+   (install-opfs-pool sqlite pool-name 0))
+  ([sqlite pool-name attempt]
+   (-> (.installOpfsSAHPoolVfs ^js sqlite #js {:name pool-name
+                                               :initialCapacity 20
+                                               :forceReinitIfPreviouslyFailed (pos? attempt)})
+       (p/catch (fn [e]
+                  (if (and (< (inc attempt) (:attempts @*opfs-pool-install-retry)) (access-handle-busy? e))
+                    (p/let [_ (p/delay (:delay-ms @*opfs-pool-install-retry))]
+                      (install-opfs-pool sqlite pool-name (inc attempt)))
+                    (p/rejected e)))))))
 
 (defn- export-file
   [pool path]
