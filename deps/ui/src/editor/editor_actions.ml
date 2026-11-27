@@ -1307,14 +1307,31 @@ let split_at_cursor uuid =
 
 (* shift+Enter on a code surface (or any non-splitting editor) appends a
    fresh sibling after the block — cljs insert-new-block! *)
-let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ()) uuid =
-  match (S.editing (), S.find uuid) with
-  | Some e, Some b when e.uuid = uuid ->
-      let buf = Ops.trim_title uuid (live_buffer uuid) in
+let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ())
+    ?(force_sibling = false) ?source uuid =
+  let active =
+    match S.editing () with
+    | Some e when e.uuid = uuid -> Some e
+    | _ -> None
+  in
+  match active, source, S.find uuid with
+  | None, None, _ -> ()
+  | _, _, None -> ()
+  | active, source, Some b ->
+      (match S.editing () with
+       | Some current when current.S.uuid <> uuid -> save_if_dirty current.S.uuid
+       | _ -> ());
+      let source =
+        match source with Some source -> source | None -> live_buffer uuid
+      in
+      let scope =
+        match active with Some e -> e.S.scope | None -> scope_of_uuid uuid
+      in
+      let buf = Ops.trim_title uuid source in
       let new_uuid = Ui_services.env_random_uuid () in
       let library = library_context () in
       let sibling =
-        library || S.is_collapsed_in ~scope:e.S.scope uuid
+        force_sibling || library || S.is_collapsed_in ~scope uuid
         || b.Model.block_children = []
       in
       let p =
@@ -1344,10 +1361,10 @@ let insert_sibling_after ?(after_insert = fun _ -> Js.Promise.resolve ()) uuid =
           { st with
             S.editing =
               Some
-                (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope:e.scope
+                (S.mk_editing ~uuid:new_uuid ~buffer:"" ~scope
                    ~base:"" ())
           });
-      with_focus_after ~restore:(Some e) new_uuid 0 p  | _ -> ()
+      with_focus_after ~restore:active new_uuid 0 p
 
 let move_children_ops (b : Model.block) target_uuid =
   match

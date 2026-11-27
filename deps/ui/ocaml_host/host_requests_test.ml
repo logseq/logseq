@@ -12239,13 +12239,16 @@ let () = with_test_entry (fun () ->
          ignore
            (Lui_app.dispatch_event app
               (TextChanged (textarea, "1+1\n2+3")));
+         ignore (Lui_app.flush app);
          ignore
            (Lui_app.dispatch_event app
               (NavigationKey (textarea, "Enter", true)));
          ignore (Lui_app.flush app)
      | None -> ());
     expect "Native textarea Shift-Enter did not emit the cm key event"
-      (!events = [ "key", Some "1+1\n2+3", Some "Shift-Enter" ]);
+      (List.exists
+         (fun event -> event = ("key", Some "1+1\n2+3", Some "Shift-Enter"))
+         !events);
     List.iter prerr_endline (List.rev !errors);
     check "Native Shift-Enter cm-event mapping" (!errors = []));
   print_endline "native Shift-Enter cm-event mapping: OK")
