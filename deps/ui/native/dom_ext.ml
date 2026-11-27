@@ -450,6 +450,8 @@ let subtree_elements_provider : (int -> Js.Json.t list) ref =
    event snapshot. The embedding app installs the authoritative predicate. *)
 let node_alive_provider : (int -> bool) ref = ref (fun _ -> false)
 
+let node_snapshot_provider : (int -> Js.Json.t option) ref = ref (fun _ -> None)
+
 let query_selector (el : element) (sel : string) : element option =
   match num_prop "node-id" el with
   | Some id ->
@@ -967,21 +969,22 @@ let by_id (id : string) : element option =
       else
         None
 
-(* document.activeElement — focus/blur document events carry the
-   target's ref-id *)
-let last_active_id : string option ref = ref None
+(* document.activeElement — the SDL host owns focus as a retained node
+   id rather than emitting DOM focus/blur events. Host code reports every
+   LUI focus transition here so callers can restore the exact mounted
+   node later. *)
+let active_node : int option ref = ref None
 
-let () =
-  add_document_listener "focus"
-    (fun ev ->
-      last_active_id :=
-        (match prop "target" ev with
-         | Js.Json.JObject _ as t -> str_prop "ref-id" t
-         | _ -> None))
-    true;
-  add_document_listener "blur" (fun _ -> last_active_id := None) true
+let note_active_node id =
+  active_node := (if id = 0 then None else Some id)
 
 let active_element () : element option =
-  match !last_active_id with
-  | Some id -> by_id id
-  | None -> None
+  match !active_node with
+  | Some id when !node_alive_provider id -> (
+      match !node_snapshot_provider id with
+      | Some _ as element -> element
+      | None ->
+          Some
+            (Js.Json.JObject
+               [ ("node-id", Js.Json.JNumber (Float.of_int id)) ]))
+  | _ -> None

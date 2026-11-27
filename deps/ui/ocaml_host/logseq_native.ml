@@ -1701,7 +1701,9 @@ let () =
          as doubled text during live-resize. *)
       Lui_host.invalidate_paint host;
       push_window_size ()
-    | Focus_changed id -> focused_text_input id
+    | Focus_changed id ->
+      Dom_ext.note_active_node id;
+      focused_text_input id
     | Ime_rect r -> set_ime_rect r
     | Quit -> quit := true
   and apply_actions acts = List.iter apply_action acts
