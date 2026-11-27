@@ -686,6 +686,7 @@ let try_set_input_focus (e : env) (bid : string) (focused : bool) : bool =
   | Some ctx ->
     editor_focus_bid := (if focused then Some bid else None);
     pending_focus_reveal := (if focused then Some bid else None);
+    Dom_ext.note_active_node (if focused then ctx.sink else 0);
     (if focused then begin
        (* moving the text input onto the sink includes window focus —
           Ui.focused is what routes keydown dom-events to the editor *)
@@ -1067,6 +1068,7 @@ let dom_op (e : env) (op : string) (body : string) =
     (match target with
      | Some id when id <> 0 ->
        Ui.set_focused e.ui e.store id;
+       Dom_ext.note_active_node id;
        e.focused_text_input id
      | _ -> ())
   | "set-value" | "set-text" | "set-text-content" ->
