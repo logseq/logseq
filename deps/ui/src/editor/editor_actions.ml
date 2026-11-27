@@ -2913,7 +2913,11 @@ let paste_into_editor ~clipboard ev =
       (* Draft surfaces are single-block text inputs: structured and
          block-shaped clipboard content is flattened into the draft
          instead of creating outliner children. *)
-      let text = paste_editor_text e.S.model ~text:clip_text ~html:clip_html in
+      let text =
+        match clipboard with
+        | Some _ -> String.concat "" (String.split_on_char '\r' clip_text)
+        | None -> paste_editor_text e.S.model ~text:clip_text ~html:clip_html
+      in
       if String.trim text <> "" then splice_clipboard_text e.uuid text
   | Some e, Some ((_, blocks) as copied) -> (
       match S.find e.uuid with
