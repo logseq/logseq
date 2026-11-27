@@ -648,8 +648,9 @@ let content ?(heading : int option) ?(self = "") ?(wrap_attrs = [])
     | None ->
         if rest = "" then
           D.el ~key:"btw-empty" ~tag:"span"
-            ~style_class:"block-title-wrap"
-            [ text ~key:"btw-empty-line" ~value:{js|​|js} [] ]
+            ~style_class:"block-title-wrap" ~attrs:wrap_attrs
+            ((match prefix with Some p -> [ p ] | None -> [])
+             @ [ text ~key:"btw-empty-line" ~value:{js|​|js} [] ])
         else wrap ~self ~wrap_attrs ~prefix ?highlight rest
 
 
