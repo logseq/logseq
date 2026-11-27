@@ -252,32 +252,43 @@ let local_storage_get k =
   if is_auth_token k then List.assoc_opt k !auth_tokens
   else Hashtbl.find_opt ls k
 
+(* Ordinary preferences persist whether or not OS credential storage is
+   available: auth-token keys never enter [ls] through these writes (they
+   reject them below and [write_state_unlocked] excludes them from the
+   file), so the locked reload+write cannot leak credentials and need not
+   wait for keychain resolution.
+
+   One exception: when the state file still carries legacy plaintext
+   tokens that [Platform.restore_auth] could not migrate (for example
+   because keychain access was denied), rewriting the file without them
+   would destroy the only copy of the sign-in before migration had a
+   chance to run. In that case writes degrade to process-local memory,
+   exactly as all preference writes behaved before this path persisted:
+   no reload, so earlier memory-only changes survive. Tokens only enter
+   [ls] by reloading the file, and migration or sign-out removes them, so
+   this check cannot be satisfied by a key the file no longer carries. *)
+let unmigrated_legacy_tokens () =
+  List.exists (Hashtbl.mem ls) auth_token_keys
+
 let local_storage_set k v =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain storage";
-  if !auth_managed then
+  load_state ();
+  if unmigrated_legacy_tokens () then Hashtbl.replace ls k v
+  else
     with_state_lock (fun () ->
         reload_state_unlocked ();
         Hashtbl.replace ls k v;
         write_state_unlocked ())
-  else begin
-    (* Without OS credential storage native preferences are intentionally
-       process-local memory. Reloading the shared file here would discard
-       earlier unpersisted changes made by this process. *)
-    load_state ();
-    Hashtbl.replace ls k v
-  end
 
 let local_storage_remove k =
   if is_auth_token k then invalid_arg "Authentication requires OS keychain removal";
-  if !auth_managed then
+  load_state ();
+  if unmigrated_legacy_tokens () then Hashtbl.remove ls k
+  else
     with_state_lock (fun () ->
         reload_state_unlocked ();
         Hashtbl.remove ls k;
         write_state_unlocked ())
-  else begin
-    load_state ();
-    Hashtbl.remove ls k
-  end
 
 let session : (string, string) Hashtbl.t = Hashtbl.create 16
 
