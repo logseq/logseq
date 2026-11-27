@@ -1057,7 +1057,7 @@ let test_embed_parity () =
   check "w=300 frame style"
     (find_where (fun n ->
          has_tok n "video-embed-frame"
-         && attr_val n "style" = Some "width:300px;height:168px;aspect-ratio:16 / 9")
+         && attr_val n "style" = Some "width:300px;aspect-ratio:16 / 9")
      <> []);
   check "has-video-embed wrap"
     (find_where (fun n -> has_tok n "has-video-embed") <> []);

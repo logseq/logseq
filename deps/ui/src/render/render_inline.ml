@@ -1051,19 +1051,24 @@ let provider_iframe src =
 let video_embed_shell ~macro_name ~macro_id ?width inner =
   let w = max 160 (Option.value ~default:560 width) in
   let h = (w * 9) / 16 in
-  D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
-    ~attrs:
-      [ ("data-video-macro-name", macro_name)
-      ; ("data-video-macro-id", macro_id) ]
-    [ D.el ~tag:"div" ~style_class:"video-embed-shell"
-        [ D.el ~tag:"div" ~style_class:"video-embed-frame"
-            ~attrs:
-              [ ( "style"
-                , "aspect-ratio:16 / 9" ) ]
-            ~ext_props:
-              [ ("width", Lui_protocol.StringValue (string_of_int w ^ "px"))
-              ; ("height", Lui_protocol.StringValue (string_of_int h ^ "px")) ]
-            [ inner ] ] ]
+ fun context parent ->
+  let length value =
+    Signal.constant context.Lui_ui.ui_scheduler
+      (Lui_protocol.StringValue (string_of_int value ^ "px"))
+  in
+  (D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
+     ~attrs:
+       [ ("data-video-macro-name", macro_name)
+       ; ("data-video-macro-id", macro_id) ]
+     [ D.el ~tag:"div" ~style_class:"video-embed-shell"
+         [ D.el ~tag:"div" ~style_class:"video-embed-frame"
+             ~attrs:
+               [ ( "style"
+                 , "width:" ^ string_of_int w ^ "px;aspect-ratio:16 / 9" ) ]
+             ~ext_prop_signals:
+               [ ("width", length w); ("height", length h) ]
+             [ inner ] ] ])
+    context parent
 
 (* cljs macro-video-cp: provider-hint names accept bare ids; {{video}}
    requires a real URL — the warning text is literally "{{video …}}" *)
