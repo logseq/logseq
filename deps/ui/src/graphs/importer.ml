@@ -212,6 +212,7 @@ let import_terminal result =
 let import_file_graph repo files =
   let previous_repo = (Runtime.model ()).Model.repo in
   let attaching = ref false in
+  let partial = ref false in
   let stage = ref "prepare files" in
   let run =
     let* () = Js.Promise.resolve () in
@@ -252,7 +253,8 @@ let import_file_graph repo files =
         (match import_terminal result with
          | Import_success -> ()
          | Import_warning ->
-             Toast.warning (T.t "import/file-finished-with-warnings")
+             partial := true;
+             Toast.warning (T.t "import/partial-import-warning")
          | Import_failure ->
              let status map =
                match Option.bind (Wire.get map "status") Wire.as_keyword with
@@ -270,7 +272,7 @@ let import_file_graph repo files =
         stage := "restore imported graph";
         let* _ = Graphs_ops.refresh () in
         let* () = Graphs_ops.navigate_journal repo in
-        Js.Promise.resolve true
+        Js.Promise.resolve (not !partial)
     | _ ->
         Toast.error (T.t "import/logseq-config-missing");
         Js.Promise.resolve false
