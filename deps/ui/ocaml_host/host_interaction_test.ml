@@ -72,6 +72,14 @@ let interaction_repaints () =
   check "Focused control replayed stale paint fragments"
     ((Lui_host.scene host).Lui_scene.ops <> before)
 
+let image_visibility_geometry () =
+  let open Lui_scene in
+  let visible = Host_interaction.rect_approaches_viewport ~width:800. ~height:600. in
+  check "Zero-size image inside the viewport cannot start loading" (visible (rect 10. 10. 0. 0.));
+  check "Zero-size image in the preload band cannot start loading" (visible (rect 10. 1300. 0. 0.));
+  check "Zero-size image beyond the preload band loaded early" (not (visible (rect 10. 1400. 0. 0.)));
+  check "Zero-size image outside the horizontal viewport loaded early" (not (visible (rect 1200. 10. 0. 0.)))
+
 let viewport_attributes () =
   check "Unrelated attributes emitted lazy-mount events"
     (not (Host_interaction.has_attribute {|{"data-testid":"block"}|} "data-lazy-mount"));
@@ -321,7 +329,8 @@ let () =
       Printf.eprintf "%s: FAIL: %s\n%!" name message)
     [ "pointer layout", pointer_layout; "idle focus", idle_editor_scan;
       "editor caret", visible_caret;
-      "interaction paint", interaction_repaints; "viewport markers", viewport_attributes;
+      "interaction paint", interaction_repaints; "image visibility", image_visibility_geometry;
+      "viewport markers", viewport_attributes;
       "attribute allocation", attribute_scan_allocation;
       "cold viewport allocation", viewport_cold_scan_allocation;
       "hit geometry", geometry_refresh;
