@@ -25,9 +25,14 @@
       false)))
 
 (defn enable-when-editing-mode!
-  [f]
+  "Runs an editing-only shortcut while a block is being edited. `state/editing?` can stay true for a moment after
+  the editor's textarea has left the DOM (the block was deleted, the editor closed), and the shortcuts read that
+  textarea: they also need a live input, except the ones whose config says `:allow-without-input? true`
+  (escape-editing, which clears that state)."
+  [f s]
   (fn [e]
-    (when (state/editing?)
+    (when (and (state/editing?)
+               (or (:allow-without-input? s) (state/get-input)))
       (when-not (false? (f e))
         (if (mobile-util/native-ios?)
           (util/stop-propagation e)

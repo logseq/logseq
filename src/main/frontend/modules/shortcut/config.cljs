@@ -97,6 +97,8 @@
                                              :fn      srs/card-easy}
 
    :editor/escape-editing                   {:binding []
+                                             ;; clears an editing state whose textarea is already gone
+                                             :allow-without-input? true
                                              :fn      (fn [_ _]
                                                         (editor-handler/escape-editing))}
 
