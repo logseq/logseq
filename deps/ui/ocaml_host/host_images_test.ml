@@ -236,11 +236,39 @@ let () = begin
     let local=try Some (Host_icons.file_image path) with _ -> None in
     expect "Local file images use the same JPEG decoder"
       (match local with Some image -> image.Lui_scene.iw=16 && image.ih=8 | None -> false));
-  if Host_platform.is_macos then begin
-    let webp=bytes_of_hex "52494646220000005745425056503820160000003001009d012a010001000ec0fe25a400037000000000" in
-    expect "macOS ImageIO decodes formats outside the bundled codec set"
-      (match Host_image.decode webp with
-       | Ok image -> image.Lui_scene.iw=1 && image.ih=1 && Bytes.length image.ipix=4
+  let webp=bytes_of_hex "52494646220000005745425056503820160000003001009d012a010001000ec0fe25a400037000000000" in
+  expect "platform decoder handles WebP outside the bundled codec set"
+    (match Host_image.decode webp with
+     | Ok image -> image.Lui_scene.iw=1 && image.ih=1 && Bytes.length image.ipix=4
+     | Error _ -> false);
+  expect "truncated WebP rejects without a bitmap"
+    (match Host_image.decode (Bytes.sub webp 0 (Bytes.length webp - 2)) with
+     | Ok _ -> false
+     | Error _ -> true);
+  let oriented_webp=bytes_of_hex "524946465200000057454250565038580a000000080000000100000000005650384c110000002f010000000fb0fff31ff31f1532a2ff0100455849461a00000049492a0008000000010012010300010000000600000000000000" in
+  expect "WebP EXIF orientation rotates dimensions and pixels"
+    (match Host_image.decode oriented_webp with
+     | Ok image ->
+       let pixel offset channel = Bytes.get_uint8 image.Lui_scene.ipix (offset + channel) in
+       image.Lui_scene.iw=1 && image.ih=2 &&
+       pixel 0 0 > 200 && pixel 0 1 < 80 &&
+       pixel 4 1 > 200 && pixel 4 0 < 80
+     | Error _ -> false);
+  if not Host_platform.is_macos then begin
+    let without_exif_flag = Bytes.copy oriented_webp in
+    Bytes.set without_exif_flag 20 '\000';
+    expect "Linux WebP ignores EXIF without the VP8X feature flag"
+      (match Host_image.decode without_exif_flag with
+       | Ok image -> image.Lui_scene.iw=2 && image.ih=1
+       | Error _ -> false);
+    let exif_outside_riff = Bytes.copy oriented_webp in
+    Bytes.set exif_outside_riff 4 (Char.chr 48);
+    Bytes.set exif_outside_riff 5 '\000';
+    Bytes.set exif_outside_riff 6 '\000';
+    Bytes.set exif_outside_riff 7 '\000';
+    expect "Linux WebP ignores EXIF outside the RIFF boundary"
+      (match Host_image.decode exif_outside_riff with
+       | Ok image -> image.Lui_scene.iw=2 && image.ih=1
        | Error _ -> false)
   end;
   List.iter prerr_endline (List.rev !errors);

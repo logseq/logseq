@@ -3134,6 +3134,105 @@ static uint32_t logseq_exif_u32(const unsigned char *at, int little) {
            ((uint32_t)at[2] << 8) | (uint32_t)at[3];
 }
 
+static int logseq_tiff_exif_orientation(const unsigned char *tiff, size_t tiff_length) {
+  if (tiff_length < 8) return 1;
+  int little;
+  if (tiff[0] == 'I' && tiff[1] == 'I') little = 1;
+  else if (tiff[0] == 'M' && tiff[1] == 'M') little = 0;
+  else return 1;
+  if (logseq_exif_u16(tiff + 2, little) != 42) return 1;
+  uint32_t ifd = logseq_exif_u32(tiff + 4, little);
+  if ((uint64_t)ifd + 2 > tiff_length) return 1;
+  uint16_t entries = logseq_exif_u16(tiff + ifd, little);
+  for (uint16_t index = 0; index < entries; index++) {
+    uint64_t entry_offset = (uint64_t)ifd + 2 + (uint64_t)index * 12;
+    if (entry_offset + 12 > tiff_length) break;
+    const unsigned char *entry = tiff + entry_offset;
+    if (logseq_exif_u16(entry, little) == 0x0112 &&
+        logseq_exif_u16(entry + 2, little) == 3 &&
+        logseq_exif_u32(entry + 4, little) == 1) {
+      int orientation = logseq_exif_u16(entry + 8, little);
+      return orientation >= 1 && orientation <= 8 ? orientation : 1;
+    }
+  }
+  return 1;
+}
+
+/* The WebP EXIF chunk contains a TIFF stream. Some encoders include the
+   JPEG-style Exif\0\0 prefix even though the container spec does not require
+   it, so accept both forms without trusting chunk sizes or TIFF offsets. */
+static int logseq_webp_exif_orientation(const unsigned char *data, size_t length) {
+  if (length < 12) return 1;
+  uint32_t riff_size = (uint32_t)data[4] | ((uint32_t)data[5] << 8) |
+    ((uint32_t)data[6] << 16) | ((uint32_t)data[7] << 24);
+  uint64_t declared_end = 8 + (uint64_t)riff_size;
+  size_t end = declared_end > length ? length : (size_t)declared_end;
+  size_t position = 12;
+  int exif_enabled = 0;
+  while (position + 8 <= end) {
+    size_t chunk_length = (size_t)data[position + 4] |
+      ((size_t)data[position + 5] << 8) |
+      ((size_t)data[position + 6] << 16) |
+      ((size_t)data[position + 7] << 24);
+    size_t payload_offset = position + 8;
+    if (chunk_length > end - payload_offset) break;
+    const unsigned char *payload = data + payload_offset;
+    if (memcmp(data + position, "VP8X", 4) == 0 && chunk_length >= 10)
+      exif_enabled = (payload[0] & 0x08) != 0;
+    else if (exif_enabled && memcmp(data + position, "EXIF", 4) == 0) {
+      size_t payload_length = chunk_length;
+      if (payload_length >= 6 && memcmp(payload, "Exif\0\0", 6) == 0) {
+        payload += 6;
+        payload_length -= 6;
+      }
+      return logseq_tiff_exif_orientation(payload, payload_length);
+    }
+    size_t padded_length = chunk_length + (chunk_length & 1);
+    if (padded_length > end - payload_offset) break;
+    position = payload_offset + padded_length;
+  }
+  return 1;
+}
+
+static int logseq_apply_rgba_orientation(unsigned char **pixels_io,
+    size_t *width_io, size_t *height_io, int orientation,
+    char *error_out, size_t error_size) {
+  if (orientation == 1) return 0;
+  size_t width = *width_io;
+  size_t height = *height_io;
+  size_t size = width * height * 4;
+  unsigned char *source = *pixels_io;
+  unsigned char *transformed = malloc(size);
+  if (!transformed) {
+    snprintf(error_out, error_size, "Cannot allocate oriented WebP bitmap");
+    return -1;
+  }
+  int transpose = orientation >= 5;
+  size_t output_width = transpose ? height : width;
+  for (size_t y = 0; y < height; y++) {
+    for (size_t x = 0; x < width; x++) {
+      size_t dx, dy;
+      switch (orientation) {
+      case 2: dx = width - 1 - x; dy = y; break;
+      case 3: dx = width - 1 - x; dy = height - 1 - y; break;
+      case 4: dx = x; dy = height - 1 - y; break;
+      case 5: dx = y; dy = x; break;
+      case 6: dx = height - 1 - y; dy = x; break;
+      case 7: dx = height - 1 - y; dy = width - 1 - x; break;
+      case 8: dx = y; dy = width - 1 - x; break;
+      default: dx = x; dy = y; break;
+      }
+      memcpy(transformed + (dy * output_width + dx) * 4,
+        source + (y * width + x) * 4, 4);
+    }
+  }
+  free(source);
+  *pixels_io = transformed;
+  *width_io = transpose ? height : width;
+  *height_io = transpose ? width : height;
+  return 0;
+}
+
 /* Read EXIF orientation without trusting marker or TIFF offsets. Invalid or
    absent metadata means orientation 1, matching browser/Image I/O behavior. */
 static int logseq_jpeg_exif_orientation(const unsigned char *data, size_t length) {
@@ -3153,28 +3252,7 @@ static int logseq_jpeg_exif_orientation(const unsigned char *data, size_t length
     size_t payload_length = segment_length - 2;
     if (marker == 0xe1 && payload_length >= 14 &&
         memcmp(payload, "Exif\0\0", 6) == 0) {
-      const unsigned char *tiff = payload + 6;
-      size_t tiff_length = payload_length - 6;
-      int little;
-      if (tiff[0] == 'I' && tiff[1] == 'I') little = 1;
-      else if (tiff[0] == 'M' && tiff[1] == 'M') little = 0;
-      else return 1;
-      if (logseq_exif_u16(tiff + 2, little) != 42) return 1;
-      uint32_t ifd = logseq_exif_u32(tiff + 4, little);
-      if ((uint64_t)ifd + 2 > tiff_length) return 1;
-      uint16_t entries = logseq_exif_u16(tiff + ifd, little);
-      for (uint16_t index = 0; index < entries; index++) {
-        uint64_t entry_offset = (uint64_t)ifd + 2 + (uint64_t)index * 12;
-        if (entry_offset + 12 > tiff_length) break;
-        const unsigned char *entry = tiff + entry_offset;
-        if (logseq_exif_u16(entry, little) == 0x0112 &&
-            logseq_exif_u16(entry + 2, little) == 3 &&
-            logseq_exif_u32(entry + 4, little) == 1) {
-          int orientation = logseq_exif_u16(entry + 8, little);
-          return orientation >= 1 && orientation <= 8 ? orientation : 1;
-        }
-      }
-      return 1;
+      return logseq_tiff_exif_orientation(payload + 6, payload_length - 6);
     }
     position += segment_length;
   }
@@ -3186,7 +3264,6 @@ static void logseq_jpeg_fail(struct logseq_jpeg_error *error, const char *messag
   longjmp(error->jump, 1);
 }
 
-#if defined(__linux__)
 /* Runtime-loaded GStreamer media backend. GStreamer is optional at start-up:
    the native host links no development package, and opening media either finds
    the platform libraries or fails the one player with a clear error. */
@@ -3679,21 +3756,6 @@ CAMLprim value logseq_native_media_error(value handle_v) {
   CAMLreturn(error_v);
 }
 
-#else
-
-CAMLprim value logseq_native_media_open(value source_v, value video_v) {
-  caml_failwith("Native media playback is unsupported on this platform");
-}
-
-CAMLprim value logseq_native_media_close(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) { CAMLparam2(handle_v, playing_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_playing(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_bool(0)); }
-CAMLprim value logseq_native_media_position(value handle_v) { CAMLparam1(handle_v); CAMLlocal1(result_v); result_v = caml_alloc_tuple(2); Store_field(result_v, 0, Val_int(-1)); Store_field(result_v, 1, Val_int(-1)); CAMLreturn(result_v); }
-CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) { CAMLparam2(handle_v, ratio_v); CAMLreturn(Val_unit); }
-CAMLprim value logseq_native_media_frame(value handle_v, value seen_generation_v) { caml_failwith("Native media playback is unsupported on this platform"); }
-CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v); CAMLreturn(caml_alloc_initialized_string(0, "")); }
-
-#endif
 
 /* Decode with the system libjpeg and transform to display orientation while
    copying rows. JPEG has no alpha channel, so opaque RGBA is already the
@@ -3796,6 +3858,124 @@ static int logseq_decode_jpeg_linux(const unsigned char *data, size_t data_lengt
   free(state);
   return 0;
 }
+
+/* WebP is loaded at runtime so the Linux executable keeps its existing
+   dependency footprint on hosts without libwebp. Only still images are
+   accepted here; animated WebP remains an explicit unsupported case. */
+typedef int (*LogseqWebPGetInfo)(const uint8_t *, size_t, int *, int *);
+typedef uint8_t *(*LogseqWebPDecodeRGBAInto)(const uint8_t *, size_t, uint8_t *, size_t, int);
+
+static struct {
+  void *library;
+  LogseqWebPGetInfo get_info;
+  LogseqWebPDecodeRGBAInto decode_rgba_into;
+} logseq_webp;
+
+static void logseq_webp_load(void) {
+  const char *candidates[] = { "libwebp.so.7", "libwebp.so" };
+  for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); i++) {
+    logseq_webp.library = dlopen(candidates[i], RTLD_NOW | RTLD_LOCAL);
+    if (logseq_webp.library) break;
+  }
+  if (!logseq_webp.library) return;
+  logseq_webp.get_info = (LogseqWebPGetInfo)dlsym(logseq_webp.library, "WebPGetInfo");
+  logseq_webp.decode_rgba_into = (LogseqWebPDecodeRGBAInto)dlsym(logseq_webp.library, "WebPDecodeRGBAInto");
+}
+
+static pthread_once_t logseq_webp_once = PTHREAD_ONCE_INIT;
+
+static int logseq_is_webp(const unsigned char *data, size_t data_length) {
+  return data_length >= 12 && memcmp(data, "RIFF", 4) == 0 && memcmp(data + 8, "WEBP", 4) == 0;
+}
+
+static int logseq_webp_animated(const unsigned char *data, size_t data_length) {
+  return data_length >= 21 && memcmp(data + 12, "VP8X", 4) == 0 && (data[20] & 0x02) != 0;
+}
+
+static int logseq_decode_webp_linux(const unsigned char *data, size_t data_length,
+    unsigned char **pixels_out, size_t *width_out, size_t *height_out,
+    size_t *size_out, char *error_out, size_t error_size) {
+  if (pthread_once(&logseq_webp_once, logseq_webp_load) != 0 ||
+      !logseq_webp.get_info || !logseq_webp.decode_rgba_into) {
+    snprintf(error_out, error_size, "WebP decoding requires libwebp");
+    return -1;
+  }
+  if (logseq_webp_animated(data, data_length)) {
+    snprintf(error_out, error_size, "Animated WebP is unsupported");
+    return -1;
+  }
+  int encoded_width = 0, encoded_height = 0;
+  if (!logseq_webp.get_info(data, data_length, &encoded_width, &encoded_height) ||
+      encoded_width <= 0 || encoded_height <= 0) {
+    snprintf(error_out, error_size, "Malformed or corrupt WebP data");
+    return -1;
+  }
+  size_t width = (size_t)encoded_width;
+  size_t height = (size_t)encoded_height;
+  if (width > SIZE_MAX / 4 || height > SIZE_MAX / (width * 4) ||
+      width > Max_long || height > Max_long || width > INT_MAX / 4) {
+    snprintf(error_out, error_size, "WebP bitmap dimensions overflow");
+    return -1;
+  }
+  size_t size = width * height * 4;
+  if (size > Max_long) {
+    snprintf(error_out, error_size, "WebP bitmap size overflow");
+    return -1;
+  }
+  unsigned char *pixels = malloc(size);
+  if (!pixels) {
+    snprintf(error_out, error_size, "Cannot allocate WebP bitmap");
+    return -1;
+  }
+  if (!logseq_webp.decode_rgba_into(data, data_length, pixels, size, (int)(width * 4))) {
+    free(pixels);
+    snprintf(error_out, error_size, "Cannot decode WebP image data");
+    return -1;
+  }
+  if (logseq_apply_rgba_orientation(&pixels, &width, &height,
+      logseq_webp_exif_orientation(data, data_length), error_out, error_size) != 0) {
+    free(pixels);
+    return -1;
+  }
+  for (size_t offset = 0; offset < size; offset += 4) {
+    unsigned int alpha = pixels[offset + 3];
+    pixels[offset] = (unsigned char)((pixels[offset] * alpha + 127) / 255);
+    pixels[offset + 1] = (unsigned char)((pixels[offset + 1] * alpha + 127) / 255);
+    pixels[offset + 2] = (unsigned char)((pixels[offset + 2] * alpha + 127) / 255);
+  }
+  *pixels_out = pixels;
+  *width_out = width;
+  *height_out = height;
+  *size_out = size;
+  return 0;
+}
+
+static int logseq_decode_platform_linux(const unsigned char *data, size_t data_length,
+    unsigned char **pixels_out, size_t *width_out, size_t *height_out,
+    size_t *size_out, char *error_out, size_t error_size) {
+  if (logseq_is_webp(data, data_length))
+    return logseq_decode_webp_linux(data, data_length, pixels_out, width_out, height_out,
+      size_out, error_out, error_size);
+  return logseq_decode_jpeg_linux(data, data_length, pixels_out, width_out, height_out,
+    size_out, error_out, error_size);
+}
+
+#endif
+
+#if !defined(__linux__)
+
+CAMLprim value logseq_native_media_open(value source_v, value video_v) {
+  caml_failwith("Native media playback is unsupported on this platform");
+}
+
+CAMLprim value logseq_native_media_close(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_set_playing(value handle_v, value playing_v) { CAMLparam2(handle_v, playing_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_playing(value handle_v) { CAMLparam1(handle_v); CAMLreturn(Val_bool(0)); }
+CAMLprim value logseq_native_media_position(value handle_v) { CAMLparam1(handle_v); CAMLlocal1(result_v); result_v = caml_alloc_tuple(2); Store_field(result_v, 0, Val_int(-1)); Store_field(result_v, 1, Val_int(-1)); CAMLreturn(result_v); }
+CAMLprim value logseq_native_media_seek_ratio(value handle_v, value ratio_v) { CAMLparam2(handle_v, ratio_v); CAMLreturn(Val_unit); }
+CAMLprim value logseq_native_media_frame(value handle_v, value seen_generation_v) { caml_failwith("Native media playback is unsupported on this platform"); }
+CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v); CAMLreturn(caml_alloc_initialized_string(0, "")); }
+
 #endif
 
 /* Image I/O owns its input and decoding objects entirely within the worker
@@ -3898,12 +4078,12 @@ CAMLprim value logseq_native_decode_platform(value encoded_v) {
   char error[JMSG_LENGTH_MAX];
   error[0] = '\0';
   caml_enter_blocking_section();
-  int status = logseq_decode_jpeg_linux(
+  int status = logseq_decode_platform_linux(
     encoded, encoded_length,
     &pixels, &width, &height, &size, error, sizeof(error));
   caml_leave_blocking_section();
   free(encoded);
-  if (status != 0) caml_failwith(error[0] ? error : "Cannot decode JPEG");
+  if (status != 0) caml_failwith(error[0] ? error : "Cannot decode image");
   pixels_v = caml_alloc_initialized_string(size, (const char *)pixels);
   free(pixels);
   result_v = caml_alloc_tuple(3);
