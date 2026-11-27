@@ -26,7 +26,7 @@ jobs:
       - name: Resolve APT package revisions
         id: apt-packages
         run: |
-          packages="pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libjpeg-dev libwebp7 libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev"
+          packages="pkg-config libsqlite3-dev libffi-dev libgmp-dev libpango1.0-dev libcairo2-dev libfontconfig1-dev fontconfig fonts-noto-cjk libjpeg-dev libwebp7 libheif1 libheif-plugin-libde265 libgl1-mesa-dev libegl1-mesa-dev libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxfixes-dev libxss-dev libxtst-dev libxkbcommon-dev xvfb xauth libwayland-dev wayland-protocols libasound2-dev libpulse-dev libudev-dev"
           printf '%s\n' $packages > "$RUNNER_TEMP/apt-packages"
           sudo apt-get update
           fingerprint=$(sudo apt-get --print-uris -y install $packages | sort | shasum -a 256 | awk '{print $1}')

@@ -205,7 +205,7 @@ let ref_meta_of_wire w =
 
 let is_inline_media = function
   | "gif" | "svg" | "jpeg" | "ico" | "png" | "jpg" | "bmp" | "webp"
-  | "avif" | "cr2" | "jxl" | "heic"
+  | "avif" | "cr2" | "jxl" | "heic" | "heif"
   | "mp3" | "ogg" | "mpeg" | "wav" | "m4a" | "flac" | "wma" | "aac"
   | "mp4" | "webm" | "mov" | "flv" | "avi" | "mkv" -> true
   | _ -> false

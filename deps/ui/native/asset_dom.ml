@@ -165,7 +165,7 @@ let asset_source file =
 let image_extension ext =
   List.mem (String.lowercase_ascii ext)
     [ "gif"; "svg"; "jpeg"; "jpe"; "jfif"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif";
-      "cr2"; "jxl"; "heic" ]
+      "cr2"; "jxl"; "heic"; "heif" ]
 
 let audio_extension ext =
   List.mem (String.lowercase_ascii ext)
