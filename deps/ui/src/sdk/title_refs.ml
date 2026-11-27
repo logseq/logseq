@@ -37,13 +37,34 @@ let find_close (s : string) i =
    title). *)
 let scan_title (title : string) =
   let n = String.length title in
+  let lower = String.lowercase_ascii title in
+  let source_block_end i =
+    let line_start = i = 0 || title.[i - 1] = '\n' in
+    if not line_start then None
+    else if Str_util.starts_at lower i "```" then
+      match Str_util.index_from lower (i + 3) "\n```" with
+      | Some close ->
+          let after = close + 4 in
+          Some (if after < n && title.[after] = '\n' then after + 1 else after)
+      | None -> Some n
+    else if Str_util.starts_at lower i "#+begin_src" then
+      match Str_util.index_from lower (i + 1) "\n#+end_src" with
+      | Some close ->
+          let after = close + 10 in
+          Some (if after < n && title.[after] = '\n' then after + 1 else after)
+      | None -> Some n
+    else None
+  in
   let dedupe xs =
     List.rev (List.fold_left (fun a x -> if List.mem x a then a else x :: a)
                 [] xs)
   in
   let rec go i refs tags hash =
     if i >= n then (refs, tags, hash)
-    else if i + 1 < n && title.[i] = '[' && title.[i + 1] = '[' then
+    else match source_block_end i with
+    | Some next -> go next refs tags hash
+    | None ->
+    if i + 1 < n && title.[i] = '[' && title.[i + 1] = '[' then
       match find_close title (i + 2) with
       | Some j ->
           let name = String.trim (String.sub title (i + 2) (j - i - 2)) in

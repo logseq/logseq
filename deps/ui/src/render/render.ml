@@ -177,7 +177,7 @@ let deprecated_warning key =
    code block; plain pre.CodeMirror-line fallback (real CodeMirror mount
    is a separate editor concern). *)
 let src_block_with_save s =
-  let finish prefix_end body s =
+  let finish markdown_fence prefix_end body s =
     let prefix = String.sub s 0 prefix_end in
     let suffix_start = prefix_end + String.length body in
     let suffix =
@@ -192,6 +192,7 @@ let src_block_with_save s =
       let blank = String.trim value = "" in
       let separator =
         if blank then ""
+        else if markdown_fence then "\n"
         else if String.length value > 0 && value.[String.length value - 1] = '\n'
         then ""
         else "\n"
@@ -219,7 +220,7 @@ let src_block_with_save s =
             else b
           else body
         in
-        Some (lang, body, finish body_start body s))
+        Some (lang, body, finish true body_start body s))
   else
     let prefix = "#+begin_src" in
     if Str_util.starts_with_ci s prefix then (
@@ -244,7 +245,7 @@ let src_block_with_save s =
             then String.sub body 0 (n - m)
             else body
           in
-          Some (lang, body, finish body_start body s))
+          Some (lang, body, finish false body_start body s))
     else None
 
 let src_block s =

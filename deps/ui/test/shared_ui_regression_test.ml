@@ -6652,7 +6652,16 @@ let source_blocks () =
     [ ( "```calc\n1+1\n```", "1+1\n2+3",
         "```calc\n1+1\n2+3\n```" );
       ( "#+begin_src calc\n1+1\n#+end_src", "1+1\n2+3",
-        "#+begin_src calc\n1+1\n2+3\n#+end_src" ) ]
+        "#+begin_src calc\n1+1\n2+3\n#+end_src" );
+      ( "```calc\n1+1\n```", "1+1\n",
+        "```calc\n1+1\n\n```" ) ];
+  let _, tags, hash =
+    Title_refs.scan_title "#+begin_src calc\n1+1\n#+end_src"
+  in
+  check "Org source fences are not saved as tags" (tags = [] && hash = []);
+  let refs, tags, hash = Title_refs.scan_title "```calc\n[[Page]] #tag\n```" in
+  check "Markdown source contents are not saved as references"
+    (refs = [] && tags = [] && hash = [])
 
 let dates () =
   for month = 1 to 12 do
