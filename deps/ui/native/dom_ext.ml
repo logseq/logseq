@@ -978,8 +978,15 @@ let note_active_node id =
 
 let active_element () : element option =
   match !active_node with
-  | Some id when !node_alive_provider id ->
-      Some
-        (Js.Json.JObject
-           [ ("node-id", Js.Json.JNumber (Float.of_int id)) ])
+  | Some id when !node_alive_provider id -> (
+      match
+        List.find_opt
+          (fun el -> node_id_of el = Some id)
+          (!doc_elements_provider ())
+      with
+      | Some _ as element -> element
+      | None ->
+          Some
+            (Js.Json.JObject
+               [ ("node-id", Js.Json.JNumber (Float.of_int id)) ]))
   | _ -> None
