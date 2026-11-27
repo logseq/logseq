@@ -338,7 +338,10 @@ let set_pv t pv = update t (fun v -> { v with pv })
 let cm_focus_return = ref None
 
 let capture_cm_focus () =
-  cm_focus_return := Ui_services.dom_active_element ()
+  cm_focus_return :=
+    (if Ui_services.env_native_block_controls ()
+     then Ui_services.dom_active_element ()
+     else None)
 
 let restore_cm_focus () =
   let target = !cm_focus_return in
