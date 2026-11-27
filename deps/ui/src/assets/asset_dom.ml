@@ -41,7 +41,7 @@ let qs_all = Web_dom.query_selector_all_arr
 
 let image_exts =
   [ "gif"; "svg"; "jpeg"; "ico"; "png"; "jpg"; "bmp"; "webp"; "avif"; "cr2"
-  ; "jxl"; "heic" ]
+  ; "jxl"; "heic"; "heif" ]
 
 let is_image ext = List.mem ext image_exts
 
@@ -55,6 +55,7 @@ let mime_of_ext = function
   | "ico" -> "image/x-icon"
   | "avif" -> "image/avif"
   | "heic" -> "image/heic"
+  | "heif" -> "image/heif"
   | "jxl" -> "image/jxl"
   | "cr2" -> "image/x-canon-cr2"
   | _ -> "application/octet-stream"
