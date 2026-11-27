@@ -10611,7 +10611,7 @@ let () = with_test_entry (fun () ->
               Edit_view.view ~block_id:label ~cls:"" ~on_input:(fun _ -> ())
                 ~model:(Signal.constant context.Lui_ui.ui_scheduler (Edit_model.create source))
                 ~frame:(Signal.constant context.Lui_ui.ui_scheduler Edit_input.empty_frame)
-            else Tree.content_el label (Model.empty_block ~uuid:label ~title:source ~is_page:false) in
+            else Tree.content_el ~editable:true label (Model.empty_block ~uuid:label ~title:source ~is_page:false) in
           Lui_elements.row ~accessibility_identifier:label [view] in
         Ui_components.with_props [Ui_components.Prop.font_size "16px"; Ui_components.Prop.line_height "24px"]
           (Lui_elements.column [sample ~editing:false "empty-read" "";

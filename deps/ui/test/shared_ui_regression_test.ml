@@ -6641,6 +6641,19 @@ let popup_press (ev : Ui_services.ev) =
   Runtime.editor_popup_open := false;
   Editor_state.set (fun _ -> state_before)
 
+let source_blocks () =
+  List.iter
+    (fun (source, edited, expected) ->
+       match Render.src_block_with_save source with
+       | Some (_, _, save_source) ->
+           eqs "edited raw source blocks preserve their fences" expected
+             (save_source edited)
+       | None -> check "source block fixture did not parse" false)
+    [ ( "```calc\n1+1\n```", "1+1\n2+3",
+        "```calc\n1+1\n2+3\n```" );
+      ( "#+begin_src calc\n1+1\n#+end_src", "1+1\n2+3",
+        "#+begin_src calc\n1+1\n2+3\n#+end_src" ) ]
+
 let dates () =
   for month = 1 to 12 do
     let source = Printf.sprintf "2026-%02d-15T12:34:56" month in
