@@ -1241,6 +1241,7 @@ let test_cm_keynav st s =
   let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
   let menu_el = Stub_dom.make_element "div" in
   let item_el = Stub_dom.make_element "div" in
+  let sub_trigger_id = ref "" in
   let rect =
     Js.Json.object_
       (Js.Dict.fromList
@@ -1257,10 +1258,12 @@ let test_cm_keynav st s =
   Stub_dom.set_field menu_el "className" "ls-context-menu-content";
   ignore (Stub_dom.append_child (Stub_dom.get_field document "body") menu_el);
   Stub_dom.set_field document "getElementById" (fun id ->
-      if id = "block-context-menu"
-         || Str_util.starts_with id "cm-item-"
-         || Str_util.starts_with id "cm-sub-"
-      then menu_el else prev_byid id);
+      if id = "block-context-menu" then menu_el
+      else if id = !sub_trigger_id then item_el
+      else if Str_util.starts_with id "cm-item-"
+           || Str_util.starts_with id "cm-sub-"
+      then menu_el
+      else prev_byid id);
   Fun.protect
     ~finally:(fun () ->
       Stub_dom.set_field document "getElementById" prev_byid;
@@ -1292,9 +1295,11 @@ let test_cm_keynav st s =
           (-1)
           (List.mapi (fun i it -> (i, it)) entries)
       in
-      let ev key =
+      let ev ?(consumed = ref false) key =
         { (key_event key) with
-          Ui_services.target = Some (Ui_dom_web.el_of item_el) }
+          Ui_services.target = Some (Ui_dom_web.el_of item_el)
+        ; prevent_default = (fun () -> consumed := true)
+        ; stop_immediate = (fun () -> consumed := true) }
       in
       Popups_view.handle_keydown st (ev "ArrowDown");
       (match cm_of st with
@@ -1336,7 +1341,9 @@ let test_cm_keynav st s =
                cm.P.entries
            with
            | Some sub_idx ->
+               sub_trigger_id := "cm-sub-" ^ string_of_int sub_idx;
                set_attr "data-cm-sub" (string_of_int sub_idx);
+               set_item_attr "id" !sub_trigger_id;
                set_item_attr "data-cm-sub" (string_of_int sub_idx);
                Popups_view.handle_keydown st (ev "ArrowRight");
                (match cm_of st with
@@ -1344,21 +1351,29 @@ let test_cm_keynav st s =
                     check "ArrowRight opens the focused submenu row"
                       (cm.P.sub_open = sub_idx)
                 | None -> check "ArrowRight keeps the menu open" false);
+               let alt_left_consumed = ref false in
+               Popups_view.handle_keydown st
+                 { (ev ~consumed:alt_left_consumed "ArrowLeft") with
+                   Ui_services.alt = true };
+               check "Alt+Left is not consumed as submenu navigation"
+                 (not !alt_left_consumed);
                Popups_view.handle_keydown st (ev "ArrowLeft");
                (match cm_of st with
                 | Some cm ->
-                    check "ArrowLeft closes the submenu and keeps the root menu"
+                    check "ArrowLeft closes the submenu and refocuses its trigger"
                       (cm.P.sub_open = -1
-                       && cm.P.highlighted = Some (P.Main_item sub_idx))
+                       && cm.P.highlighted = Some (P.Main_item sub_idx)
+                       && Stub_dom.get_field document "activeElement" == item_el)
                 | None -> check "ArrowLeft keeps the root menu open" false);
                Popups_view.handle_keydown st (ev "ArrowRight");
                Popups_view.handle_keydown st
                  ({ (ev "Tab") with Ui_services.shift = true });
                (match cm_of st with
                 | Some cm ->
-                    check "Shift+Tab closes only the open submenu"
+                    check "Shift+Tab closes only the submenu and refocuses its trigger"
                       (cm.P.sub_open = -1
-                       && cm.P.highlighted = Some (P.Main_item sub_idx))
+                       && cm.P.highlighted = Some (P.Main_item sub_idx)
+                       && Stub_dom.get_field document "activeElement" == item_el)
                 | None -> check "Shift+Tab keeps the root menu open" false)
            | None -> check "block context menu fixture has a submenu" false)
        | None -> check "menu stays open for submenu keys" false);
