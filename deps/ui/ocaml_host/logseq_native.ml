@@ -2094,6 +2094,27 @@ let () =
   let block_context_menu_key_target () =
     in_block_context_menu (dom_key_target ())
   in
+  let shared_keydown_first key mods =
+    if mods.Input.ctrl || mods.Input.meta || mods.Input.alt
+       || Keyboard_capture.active ()
+    then false
+    else
+      match key with
+      | Input.Tab ->
+        (* Outliner Tab shortcuts can prevent focus traversal. Overlays
+           otherwise keep their own focus order; the custom block context
+           menu owns Tab itself in every case. *)
+        Ui.overlay_top ui = 0 || block_context_menu_key_target ()
+      | Input.Arrow_left | Input.Arrow_right | Input.Arrow_up
+      | Input.Arrow_down | Input.Home | Input.End | Input.Return
+      | Input.Space | Input.Escape ->
+        (* Logseq's custom context menu has nested submenu state that the
+           generic native menu gesture machine cannot know. Give the shared
+           DOM keydown first chance so cm.highlighted remains the single
+           semantic source instead of the parallel native gesture row. *)
+        block_context_menu_key_target ()
+      | _ -> false
+  in
   let on_dom_key ?(before_default = false) ~down ~scancode ~keymod ~repeat () =
     let recording = Keyboard_capture.active () in
     let mods = mods_of_keymod keymod in
@@ -2278,18 +2299,23 @@ let () =
   let dispatch_input_line line =
     let nomods = Native_window.mods_of_keymod 0 in
     let btn_of_name = function "r" -> Input.Right | _ -> Input.Left in
-    let step = function
+    let step event =
+      component_input := false;
+      match event with
       | `key (down, sc, km) ->
-          if down then begin
+          let key = Input.key_of_sdl_scancode sc in
+          let mods = Native_window.mods_of_keymod km in
+          let pre_dispatched = down && shared_keydown_first key mods in
+          if pre_dispatched then
+            on_dom_key ~before_default:true ~down:true ~scancode:sc ~keymod:km
+              ~repeat:false ();
+          if down && not !component_input then begin
             if not (Keyboard_capture.active ()) then
               Host_requests.ensure_ed_focus ();
-            apply_actions
-              (handle_input
-                 (Input.Key_down
-                    ( Input.key_of_sdl_scancode sc
-                    , Native_window.mods_of_keymod km, false )))
+            apply_actions (handle_input (Input.Key_down (key, mods, false)))
           end;
-          on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
+          if not pre_dispatched && not !component_input then
+            on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
       | `text s ->
           if not (Keyboard_capture.active ()) then
             Host_requests.ensure_ed_focus ();
@@ -2322,7 +2348,6 @@ let () =
       | `wheel (dx, dy) ->
           apply_actions (handle_input (Input.Wheel (dx, dy)))
     in
-    component_input := false;
     match String.split_on_char ' ' (String.trim line) with
     | "key" :: [s; m] ->
         let s, m = int_of_string s, int_of_string m in
@@ -2427,17 +2452,13 @@ let () =
         (match input with
          | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ()) -> Host_requests.ensure_ed_focus ()
          | _ -> ());
-        (* Outliner Tab shortcuts can prevent focus traversal. Let overlays
-           keep their own focus order and dispatch other Tab keydowns once. *)
-        let tab_dispatched =
+        let key_pre_dispatched =
           match input, event.kind with
-          | Some (Input.Key_down (Input.Tab, mods, repeat)), Sdl.Event.Key_down key
-            when not (mods.Input.ctrl || mods.Input.meta || mods.Input.alt
-                      || Keyboard_capture.active ())
-                 && (Ui.overlay_top ui = 0 || block_context_menu_key_target ()) ->
+          | Some (Input.Key_down (key, mods, repeat)), Sdl.Event.Key_down sdl_key
+            when shared_keydown_first key mods ->
               on_dom_key ~before_default:true ~down:true
-                ~scancode:key.scancode
-                ~keymod:key.keymod ~repeat ();
+                ~scancode:sdl_key.scancode
+                ~keymod:sdl_key.keymod ~repeat ();
               true
           | _ -> false
         in
@@ -2503,7 +2524,7 @@ let () =
                      (Printf.sprintf {|{"text":%s}|} (jstr s)))
             | _ -> ())
          | None -> ());
-        if not !component_input && not tab_dispatched then emit_dom_event e
+        if not !component_input && not key_pre_dispatched then emit_dom_event e
       end
       else go := false
     done;
