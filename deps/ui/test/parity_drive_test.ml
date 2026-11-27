@@ -1241,6 +1241,8 @@ let test_cm_keynav st s =
   let previous_focus : Js.Json.t = Stub_dom.get_field document "activeElement" in
   let menu_el = Stub_dom.make_element "div" in
   let item_el = Stub_dom.make_element "div" in
+  let picker_item_el = Stub_dom.make_element "div" in
+  let sub_trigger_id = ref "" in
   let rect =
     Js.Json.object_
       (Js.Dict.fromList
@@ -1251,18 +1253,24 @@ let test_cm_keynav st s =
   ignore (Stub_dom.append_child menu_el item_el);
   let set_attr : string -> string -> unit =
     Stub_dom.get_field menu_el "setAttribute" in
+  let set_item_attr : string -> string -> unit =
+    Stub_dom.get_field item_el "setAttribute" in
   set_attr "id" "block-context-menu";
   Stub_dom.set_field menu_el "className" "ls-context-menu-content";
   ignore (Stub_dom.append_child (Stub_dom.get_field document "body") menu_el);
+  ignore (Stub_dom.append_child (Stub_dom.get_field document "body") picker_item_el);
   Stub_dom.set_field document "getElementById" (fun id ->
-      if id = "block-context-menu"
-         || Str_util.starts_with id "cm-item-"
-         || Str_util.starts_with id "cm-sub-"
-      then menu_el else prev_byid id);
+      if id = "block-context-menu" then menu_el
+      else if id = !sub_trigger_id then item_el
+      else if Str_util.starts_with id "cm-item-"
+           || Str_util.starts_with id "cm-sub-"
+      then menu_el
+      else prev_byid id);
   Fun.protect
     ~finally:(fun () ->
       Stub_dom.set_field document "getElementById" prev_byid;
       Stub_dom.detach menu_el;
+      Stub_dom.detach picker_item_el;
       Stub_dom.set_field document "activeElement" previous_focus)
     (fun () ->
       P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
@@ -1290,9 +1298,11 @@ let test_cm_keynav st s =
           (-1)
           (List.mapi (fun i it -> (i, it)) entries)
       in
-      let ev key =
+      let ev ?(consumed = ref false) key =
         { (key_event key) with
-          Ui_services.target = Some (Ui_dom_web.el_of item_el) }
+          Ui_services.target = Some (Ui_dom_web.el_of item_el)
+        ; prevent_default = (fun () -> consumed := true)
+        ; stop_immediate = (fun () -> consumed := true) }
       in
       Popups_view.handle_keydown st (ev "ArrowDown");
       (match cm_of st with
@@ -1326,6 +1336,61 @@ let test_cm_keynav st s =
               = Some
                   (P.Main_item (first_interactive_idx cm.P.entries)))
        | None -> check "menu stays open" false);
+      (match cm_of st with
+       | Some cm -> (
+           match
+             List.find_mapi
+               (fun i -> function P.Ci_sub _ -> Some i | _ -> None)
+               cm.P.entries
+           with
+           | Some sub_idx ->
+               sub_trigger_id := "cm-sub-" ^ string_of_int sub_idx;
+               set_attr "data-cm-sub" (string_of_int sub_idx);
+               set_item_attr "id" !sub_trigger_id;
+               set_item_attr "data-cm-sub" (string_of_int sub_idx);
+               Popups_view.handle_keydown st (ev "ArrowRight");
+               (match cm_of st with
+                | Some cm ->
+                    check "ArrowRight opens the focused submenu row"
+                      (cm.P.sub_open = sub_idx)
+                | None -> check "ArrowRight keeps the menu open" false);
+               let alt_left_consumed = ref false in
+               Popups_view.handle_keydown st
+                 { (ev ~consumed:alt_left_consumed "ArrowLeft") with
+                   Ui_services.alt = true };
+               check "Alt+Left is not consumed as submenu navigation"
+                 (not !alt_left_consumed);
+               Popups_view.handle_keydown st (ev "ArrowLeft");
+               (match cm_of st with
+                | Some cm ->
+                    check "ArrowLeft closes the submenu and refocuses its trigger"
+                      (cm.P.sub_open = -1
+                       && cm.P.highlighted = Some (P.Main_item sub_idx)
+                       && Stub_dom.get_field document "activeElement" == item_el)
+                | None -> check "ArrowLeft keeps the root menu open" false);
+               Popups_view.handle_keydown st (ev "ArrowRight");
+               Stub_dom.set_field document "activeElement" picker_item_el;
+               Popups_view.handle_keydown st
+                 ({ (ev "Tab") with Ui_services.shift = true });
+               (match cm_of st with
+                | Some cm ->
+                    check "Shift+Tab closes only the submenu and refocuses its trigger"
+                      (cm.P.sub_open = -1
+                       && cm.P.highlighted = Some (P.Main_item sub_idx)
+                       && Stub_dom.get_field document "activeElement" == item_el)
+                | None -> check "Shift+Tab keeps the root menu open" false)
+           | None -> check "block context menu fixture has a submenu" false)
+       | None -> check "menu stays open for submenu keys" false);
+      Popups_view.handle_keydown st (ev "Tab");
+      check "Tab closes the block context menu" (cm_of st = None);
+      P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      S.flush s;
+      Popups_view.handle_keydown st
+        ({ (ev "Tab") with Ui_services.shift = true });
+      check "Shift+Tab closes the block context menu" (cm_of st = None);
+      P.open_cm ~scope:"main" st ~ax:10. ~atop:10. ~abot:10. ~block_id:"b1" ~multi:false;
+      S.flush s;
+      Popups_view.handle_keydown st (ev "Home");
       (* Enter on the highlighted row runs it and closes the menu;
          commands land on the document's ls:editor-command channel *)
       let prev_dispatch : Js.Json.t -> bool =
