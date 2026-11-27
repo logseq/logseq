@@ -580,8 +580,8 @@ let timestamp_el seconds : t =
         , "display:inline-flex;align-items:center;gap:0.25em;\
            width:fit-content;white-space:nowrap;line-height:1" )
       ]
-    [ text ~key:"yti" ~style_class:"youtube-timestamp-icon"
-        [ icon ~name:(`app "youtube-timestamp-icon") [] ]
+    [ icon ~key:"yti" ~style_class:"youtube-timestamp-icon"
+        ~name:(`app "youtube-timestamp-icon") ~point_size:20 []
     ; text ~key:"ytl" ~style_class:"youtube-timestamp-label"
         ~value:(seconds_display seconds)
         [] ])
@@ -1050,6 +1050,7 @@ let provider_iframe src =
    no editing-surface write path for it yet *)
 let video_embed_shell ~macro_name ~macro_id ?width inner =
   let w = max 160 (Option.value ~default:560 width) in
+  let h = (w * 9) / 16 in
   D.el ~tag:"div" ~style_class:"video-embed-block embed-block"
     ~attrs:
       [ ("data-video-macro-name", macro_name)
@@ -1058,7 +1059,10 @@ let video_embed_shell ~macro_name ~macro_id ?width inner =
         [ D.el ~tag:"div" ~style_class:"video-embed-frame"
             ~attrs:
               [ ( "style"
-                , "width:" ^ string_of_int w ^ "px;aspect-ratio:16 / 9" ) ]
+                , "aspect-ratio:16 / 9" ) ]
+            ~ext_props:
+              [ ("width", Lui_protocol.StringValue (string_of_int w ^ "px"))
+              ; ("height", Lui_protocol.StringValue (string_of_int h ^ "px")) ]
             [ inner ] ] ]
 
 (* cljs macro-video-cp: provider-hint names accept bare ids; {{video}}
