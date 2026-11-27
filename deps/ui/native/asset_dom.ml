@@ -304,7 +304,11 @@ let block_view uuid (b : Model.block) : Lui_elements.t =
              ~on_press:(fun _ -> open_image_lightbox ~source ~alt:file)
              (Lui_elements.row ~key:("asset-lb-open-" ^ uuid)
                 ~container_relative_frame:`horizontal
-                ~on_navigation_key:(fun _ -> ())
+                ~on_navigation_key:(fun nav ->
+                  match nav.Lui_elements.key with
+                  | "Enter" | " " ->
+                      open_image_lightbox ~source ~alt:file
+                  | _ -> ())
                 [ Lui_elements.image ~url:source
                     ~alt:file ~container_relative_frame:`horizontal [] ])
          else if audio_extension ext then
