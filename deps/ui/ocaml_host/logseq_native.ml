@@ -2305,15 +2305,14 @@ let () =
       | `key (down, sc, km) ->
           let key = Input.key_of_sdl_scancode sc in
           let mods = Native_window.mods_of_keymod km in
+          if down && not (Keyboard_capture.active ()) then
+            Host_requests.ensure_ed_focus ();
           let pre_dispatched = down && shared_keydown_first key mods in
           if pre_dispatched then
             on_dom_key ~before_default:true ~down:true ~scancode:sc ~keymod:km
               ~repeat:false ();
-          if down && not !component_input then begin
-            if not (Keyboard_capture.active ()) then
-              Host_requests.ensure_ed_focus ();
-            apply_actions (handle_input (Input.Key_down (key, mods, false)))
-          end;
+          if down && not !component_input then
+            apply_actions (handle_input (Input.Key_down (key, mods, false)));
           if not pre_dispatched && not !component_input then
             on_dom_key ~down ~scancode:sc ~keymod:km ~repeat:false ()
       | `text s ->
