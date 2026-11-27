@@ -116,7 +116,7 @@ let confirm_view (c : Dialogs_state.confirm) =
            `div[role='alertdialog'] button:text('Confirm')` *)
         ~data_attrs:
           ([ ("role", "alertdialog"); ("aria-modal", "true") ]
-           @ if c.title = "" then []
+           @ if c.title = "" then [ ("aria-label", c.desc) ]
                else [ ("aria-labelledby", "ls-confirm-title") ])
         ( (if c.title = "" then
              (if c.desc = "" then []

@@ -642,35 +642,13 @@ let () =
         let* () = open_recycle env in
         let root = recycle_root env page_name in
         let* _ = Assert.is_visible_l root in
-        let dialog_seen = ref ("", "") in
-        let handler d =
-          dialog_seen :=
-            ( Playwright.dialog_type d
-            , Playwright.dialog_message d );
-          ignore (Playwright.dialog_accept d)
-        in
-        Playwright.on_event (Env.page env) "dialog" handler;
         let* () =
-          Js.Promise.then_
-            (fun () -> Js.Promise.resolve ())
-            (let* () =
-               Pw.click_l
-                 (Playwright.locator_locator root "button:text('Delete')")
-             in
-             Js.Promise.resolve ())
+          Pw.click_l
+            (Playwright.locator_locator root "button:text('Delete')")
         in
-        Playwright.off_event (Env.page env) "dialog" handler;
-        let dtype, dmsg = !dialog_seen in
-        Fest.deep_equal dtype "confirm" Fest.expect;
-        (* message includes "cannot be undone" *)
-        let sub = "cannot be undone" in
-        let n = String.length sub and h = String.length dmsg in
-        let rec go i =
-          if i + n > h then false
-          else if String.sub dmsg i n = sub then true
-          else go (i + 1)
-        in
-        Fest.deep_equal (go 0) true Fest.expect;
+        let dialog = Loc.filter env "div[role='alertdialog']" ~has_text:"cannot be undone" in
+        let* _ = Assert.is_visible_l dialog in
+        let* () = Pw.click env "div[role='alertdialog'] button:text('Confirm')" in
         let* _ = Assert.have_count_l root 0 in
         let* _ = Assert.have_count_l recent_item 0 in
         Pw.wait_for_hidden_l
