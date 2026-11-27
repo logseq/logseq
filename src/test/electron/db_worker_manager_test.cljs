@@ -604,6 +604,37 @@
           (p/catch (fn [error] (is false (str error))))
           (p/finally done)))))
 
+(deftest shutdown-drains-starts-and-rejects-runtime-requests
+  (async done
+    (let [entered (p/deferred)
+          starting (p/deferred)
+          active (atom #{})
+          manager (db-worker/create-manager
+                   {:start-daemon! (fn [repo _opts]
+                                     (p/let [_ (when (= "opening" repo)
+                                                 (p/resolve! entered true)
+                                                 starting)]
+                                       (swap! active conj repo)
+                                       (runtime repo)))
+                    :stop-daemon! (fn [{:keys [repo]}]
+                                    (swap! active disj repo)
+                                    (p/resolved true))})
+          opening (db-worker/ensure-started! manager "opening" 1)]
+      (-> (p/let [_ entered
+                  stopped (let [stopped (db-worker/shutdown! manager)
+                                request (-> (db-worker/ensure-started! manager "recovering" 2)
+                                            (p/then (constantly :started))
+                                            (p/catch (comp :code ex-data)))]
+                            (p/resolve! starting true)
+                            (p/let [result request]
+                              (is (= :app-stopping result))
+                              stopped))
+                  _ opening]
+            (is (true? stopped))
+            (is (empty? @active)))
+          (p/catch (fn [error] (is false (str error))))
+          (p/finally done)))))
+
 (deftest stop-all-preserves-failed-runtime-and-closes-successful-observers
   (async done
     (let [active (atom #{})

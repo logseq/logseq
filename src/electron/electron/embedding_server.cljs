@@ -13,17 +13,25 @@
 (def ^:private dependencies ["sentence-transformers" "httpx[socks]"])
 (def ^:private deps-stamp-name "deps-v2.ok")
 (def ^:private log-file-name "embedding-server.log")
+(def ^:private pid-file-name "embedding-server.pid")
 (def ^:private ready-timeout-ms 120000)
 (def ^:private ready-poll-ms 100)
+(def ^:private default-kill-timeout-ms 5000)
 
 (defonce ^:private *server-process (atom nil))
 (defonce ^:private *startup-promise (atom nil))
+(defonce ^:private *queued-start (atom nil))
 (defonce ^:private *endpoint-promise (atom nil))
 (defonce ^:private *endpoint (atom nil))
 (defonce ^:private *endpoint-ready? (atom false))
 (defonce ^:private *endpoint-env-published? (atom false))
+(defonce ^:private *stop-requested? (atom false))
+(defonce ^:private *stop-promise (atom nil))
+(defonce ^:private *abort-controller (atom nil))
+(defonce ^:private *active-cfg (atom nil))
+(defonce ^:private *setup-processes (atom #{}))
 
-(declare find-port! run-command! spawn-server! wait-ready! stop!)
+(declare find-port! run-command! spawn-server! <wait-ready! stop!)
 
 (defn- default-logger
   []
@@ -42,6 +50,157 @@
   (if packaged?
     (node-path/join resources-path "sidecar")
     (node-path/join dirname ".." "sidecar")))
+
+(defn- abort-signal
+  []
+  (some-> @*abort-controller .-signal))
+
+(defn- request-stop!
+  []
+  (reset! *stop-requested? true)
+  (when-let [controller @*abort-controller]
+    (reset! *abort-controller nil)
+    (let [signal (.-signal controller)]
+      (when-not (.-aborted signal)
+        (.abort controller)))))
+
+(defn- throw-if-stopped!
+  []
+  (when @*stop-requested?
+    (throw (ex-info "Embedding server start aborted"
+                    {:aborted true}))))
+
+(defn- aborted-error?
+  [error]
+  (or (boolean (:aborted (ex-data error)))
+      (= "AbortError" (some-> error .-name))
+      (string/includes? (str error) "Embedding server start aborted")))
+
+(defn- process-exited?
+  [^js proc]
+  (or (nil? proc)
+      (some? (.-exitCode proc))
+      (some? (.-signalCode proc))))
+
+(defn- default-kill-pid-group!
+  [pid signal]
+  (when (and (not= "win32" (.-platform js/process))
+             (number? pid)
+             (pos? pid))
+    (try
+      (.kill js/process (- pid) signal)
+      true
+      (catch :default _
+        false))))
+
+(defn- send-signal!
+  [^js proc signal]
+  (let [kill-group! (or (:kill-pid-group! @*active-cfg) default-kill-pid-group!)]
+    (when-not (or (process-exited? proc)
+                  (when-let [pid (.-pid proc)]
+                    (kill-group! pid signal)))
+      (try
+        (.kill proc signal)
+        (catch :default _)))))
+
+(defn- <wait-for-process!
+  [^js proc event done? timeout-ms]
+  (js/Promise.
+   (fn [resolve]
+     (if (done?)
+       (resolve nil)
+       (let [timer (atom nil)]
+         (letfn [(finish [& _]
+                   (js/clearTimeout @timer)
+                   (when (fn? (.-removeListener proc))
+                     (.removeListener proc event finish))
+                   (resolve nil))]
+           (reset! timer (js/setTimeout finish timeout-ms))
+           (.once proc event finish)))))))
+
+(defn- <kill-and-wait!
+  [^js proc]
+  (if (or (nil? proc) (process-exited? proc))
+    (p/resolved nil)
+    (let [timeout-ms (or (:kill-timeout-ms @*active-cfg) default-kill-timeout-ms)
+          exited? #(process-exited? proc)
+          <signal-and-wait! (fn [signal]
+                              (let [exited (<wait-for-process! proc "exit" exited? timeout-ms)]
+                                (send-signal! proc signal)
+                                exited))]
+      (p/let [_ (<signal-and-wait! "SIGTERM")
+              _ (when-not (exited?) (<signal-and-wait! "SIGKILL"))]
+        (when-not (exited?)
+          (throw (ex-info "Embedding server did not exit"
+                          {:code :sidecar-stop-timeout :pid (.-pid proc)})))))))
+
+(defn- <stop-setup-process!
+  [^js proc]
+  (let [timeout-ms (or (:kill-timeout-ms @*active-cfg) default-kill-timeout-ms)
+        closed? #(not (contains? @*setup-processes proc))
+        closed (<wait-for-process! proc "close" closed? timeout-ms)]
+    (send-signal! proc "SIGKILL")
+    (p/then closed (fn [_]
+                     (when-not (closed?)
+                       (throw (ex-info "Embedding installer did not close"
+                                       {:code :sidecar-stop-timeout :pid (.-pid proc)})))))))
+
+(defn- parse-pid
+  [value]
+  (let [s (string/trim (str value))
+        n (js/Number s)]
+    (if (and (re-matches #"[1-9][0-9]*" s) (<= n 2147483647))
+      n
+      (throw (ex-info "Invalid embedding server PID record" {:code :invalid-sidecar-pid})))))
+
+(defn- pid-alive?
+  [pid]
+  (try
+    (.kill js/process pid 0)
+    true
+    (catch :default error
+      (if (= "ESRCH" (.-code error)) false (throw error)))))
+
+(defn- default-pid-owns-sidecar?
+  [pid log-file]
+  (when (pid-alive? pid)
+    (try
+      (let [command (.execFileSync child-process "ps" #js ["-p" (str pid) "-ww" "-o" "command="]
+                                   #js {:encoding "utf8"})
+            command (string/trim command)]
+        (when (string/blank? command)
+          (throw (js/Error. "Cannot inspect embedding server PID")))
+        (string/ends-with? command (str " --log-file " log-file)))
+      (catch :default error
+        (when (pid-alive? pid) (throw error))))))
+
+(defn- append-server-log!
+  [{:keys [log-file append-file!]} message]
+  (when (and log-file append-file!)
+    (try
+      (append-file! log-file (str (.toISOString (js/Date.)) " INFO " message "\n"))
+      (catch :default _))))
+
+(defn- write-pid-file!
+  [{:keys [pid-file write-file!]} ^js proc]
+  (when (and pid-file write-file! proc (.-pid proc))
+    (write-file! pid-file (str (.-pid proc) "\n"))))
+
+(defn- delete-pid-file!
+  [{:keys [pid-file delete-file!]}]
+  (when (and pid-file delete-file!)
+    (try
+      (delete-file! pid-file)
+      (catch :default _))))
+
+(defn- check-recorded-server!
+  [{:keys [pid-file exists? read-file pid-owns-sidecar? log-file]}]
+  (when (and pid-file exists? (exists? pid-file) read-file)
+    ;; A persisted PID can be reused between inspection and signal delivery.
+    (let [pid (parse-pid (read-file pid-file))]
+      (when (pid-owns-sidecar? pid log-file)
+        (throw (ex-info "Recorded embedding server is still running"
+                        {:code :sidecar-still-running :pid pid}))))))
 
 (defn- config
   [^js app' opts]
@@ -67,6 +226,7 @@
      :venv-python-candidates venv-python-candidates
      :deps-stamp (node-path/join runtime-dir deps-stamp-name)
      :log-file (node-path/join runtime-dir log-file-name)
+     :pid-file (node-path/join runtime-dir pid-file-name)
      :sidecar-dir sidecar-root
      :script-path script-path
      :python-command (or (:python-command opts)
@@ -77,17 +237,23 @@
      :model-id (or (:model-id opts)
                    (.-LOGSEQ_EMBEDDING_MODEL js/process.env)
                    default-model-id)
+     :kill-timeout-ms (or (:kill-timeout-ms opts) default-kill-timeout-ms)
      :exists? (or (:exists? opts) #(fs/existsSync %))
      :ensure-dir! (or (:ensure-dir! opts) #(fs/ensureDirSync %))
      :remove-dir! (or (:remove-dir! opts) #(fs/removeSync %))
      :delete-env! (or (:delete-env! opts) #(js-delete js/process.env %))
      :write-file! (or (:write-file! opts) #(.writeFileSync fs %1 %2 "utf8"))
+     :read-file (or (:read-file opts) #(.readFileSync fs % "utf8"))
+     :append-file! (or (:append-file! opts) #(.appendFileSync fs %1 %2))
+     :delete-file! (or (:delete-file! opts) #(fs/removeSync %))
      :logger (:logger opts)
      :find-port! (or (:find-port! opts) find-port!)
      :set-env! (or (:set-env! opts) #(aset js/process.env %1 %2))
      :run-command! (or (:run-command! opts) run-command!)
-     :wait-ready! (or (:wait-ready! opts) wait-ready!)
-     :spawn-server! (or (:spawn-server! opts) spawn-server!)}))
+     :wait-ready! (or (:wait-ready! opts) <wait-ready!)
+     :spawn-server! (or (:spawn-server! opts) spawn-server!)
+     :kill-pid-group! (or (:kill-pid-group! opts) default-kill-pid-group!)
+     :pid-owns-sidecar? (or (:pid-owns-sidecar? opts) default-pid-owns-sidecar?)}))
 
 (defn- log-stream!
   [^js stream log-fn label]
@@ -96,17 +262,27 @@
          (fn [data]
            (log-fn label (.toString data))))))
 
+(defn- spawn-opts
+  [cwd]
+  ;; The lifecycle owner signals spawned processes, including their descendants.
+  #js {:cwd cwd
+       :stdio "pipe"
+       :detached (not= "win32" (.-platform js/process))
+       :windowsHide true})
+
 (defn- run-command!
-  [cmd args {:keys [cwd logger]}]
+  [cmd args {:keys [cwd logger script-path]}]
   (js/Promise.
    (fn [resolve reject]
-     (let [proc (.spawn child-process cmd (clj->js args) #js {:cwd cwd
-                                                              :stdio "pipe"})]
+     (let [spawn-args (if script-path (into [script-path "--run-setup"] args) args)
+           proc (.spawn child-process cmd (clj->js spawn-args) (spawn-opts cwd))]
+       (swap! *setup-processes conj proc)
        (log-stream! (.-stdout proc) (:debug logger) :embedding-server/setup)
        (log-stream! (.-stderr proc) (:warn logger) :embedding-server/setup)
        (.on proc "error" reject)
        (.on proc "close"
             (fn [code]
+              (swap! *setup-processes disj proc)
               (if (zero? code)
                 (resolve nil)
                 (reject (js/Error. (str "Embedding server setup command failed: "
@@ -179,29 +355,50 @@
     (p/let [port (or port (find-port-fn host))]
       (assoc cfg :port port))))
 
-(defn- wait-ready!
+(defn- <wait-ready!
   [endpoint-url]
-  (let [deadline (+ (js/Date.now) ready-timeout-ms)]
+  (let [deadline (+ (js/Date.now) ready-timeout-ms)
+        signal (abort-signal)]
     (letfn [(poll! []
-              (-> (js/fetch endpoint-url)
+              (.throwIfAborted signal)
+              (-> (js/fetch endpoint-url #js {:signal signal})
                   (p/then (fn [resp]
+                            (.throwIfAborted signal)
                             (when-not (.-ok resp)
                               (throw (js/Error. (str "Embedding server health check failed: " (.-status resp)))))))
                   (p/catch (fn [error]
+                             (.throwIfAborted signal)
                              (if (< (js/Date.now) deadline)
                                (p/let [_ (p/delay ready-poll-ms)]
                                  (poll!))
                                (throw error))))))]
       (poll!))))
 
+(defn- <abort-when-stopped
+  [promise]
+  (js/Promise.
+   (fn [resolve reject]
+     (let [signal (abort-signal)
+           abort! (fn [_] (reject (.-reason signal)))
+           finish (fn [settle! value]
+                    (.removeEventListener signal "abort" abort!)
+                    (settle! value))]
+       (if (.-aborted signal)
+         (abort! nil)
+         (.addEventListener signal "abort" abort! #js {:once true}))
+       (-> promise
+           (p/then #(finish resolve %))
+           (p/catch #(finish reject %)))))))
+
 (defn- attach-exit-handler!
-  [^js proc {:keys [logger delete-env!]}]
+  [^js proc {:keys [logger delete-env!] :as cfg}]
   (when (and proc (fn? (.-on proc)))
     (.on proc "exit"
          (fn [code signal]
            (when (identical? proc @*server-process)
              (reset! *server-process nil)
-             (clear-endpoint! delete-env!))
+             (clear-endpoint! delete-env!)
+             (delete-pid-file! cfg))
            ((:info logger) :embedding-server/exited {:code code
                                                      :signal signal})))))
 
@@ -214,9 +411,9 @@
                                "--host" host
                                "--port" (str port)
                                "--model" model-id
+                               "--watch-parent"
                                "--log-file" log-file])
-                     #js {:cwd sidecar-root
-                          :stdio "pipe"})]
+                     (spawn-opts sidecar-root))]
     (log-stream! (.-stdout proc) (:info logger) :embedding-server)
     (log-stream! (.-stderr proc) (:warn logger) :embedding-server)
     (.on proc "error"
@@ -229,11 +426,16 @@
   (filterv #(exists? %) venv-python-candidates))
 
 (defn- validate-venv-python!
-  [{:keys [runtime-dir logger] :as cfg} venv-python]
-  (-> ((:run-command! cfg) venv-python ["-c" "import sys"] {:cwd runtime-dir
-                                                            :logger logger})
+  [{:keys [runtime-dir logger script-path] run-command-fn :run-command!} venv-python]
+  (throw-if-stopped!)
+  (-> (run-command-fn venv-python ["-c" "import sys"] {:cwd runtime-dir
+                                                       :logger logger
+                                                       :script-path script-path})
       (p/then (fn [_] venv-python))
-      (p/catch (fn [_error] nil))))
+      (p/catch (fn [error]
+                 (if (aborted-error? error)
+                   (p/rejected error)
+                   nil)))))
 
 (defn- usable-venv-python!
   [cfg]
@@ -248,18 +450,21 @@
 
 (defn- install-runtime!
   [{:keys [runtime-dir venv-dir deps-stamp python-command
-           ensure-dir! remove-dir! exists? write-file! logger] :as cfg}]
+           ensure-dir! remove-dir! exists? write-file! logger script-path]
+    run-command-fn :run-command! :as cfg}]
+  (throw-if-stopped!)
   (ensure-dir! runtime-dir)
-  (let [run-command-fn (:run-command! cfg)]
+  (let [command-opts {:cwd runtime-dir :logger logger :script-path script-path}]
     (p/let [venv-python (usable-venv-python! cfg)
+            _ (throw-if-stopped!)
             needs-venv? (nil? venv-python)
             needs-deps? (or needs-venv?
                             (not (exists? deps-stamp)))
             _ (when needs-venv?
-                (remove-dir! venv-dir))
-            _ (when needs-venv?
-                (run-command-fn python-command ["-m" "venv" venv-name] {:cwd runtime-dir
-                                                                         :logger logger}))
+                (throw-if-stopped!)
+                (remove-dir! venv-dir)
+                (run-command-fn python-command ["-m" "venv" venv-name] command-opts))
+            _ (throw-if-stopped!)
             venv-python (if needs-venv?
                           (usable-venv-python! cfg)
                           venv-python)
@@ -268,11 +473,94 @@
                                             {:venv-dir venv-dir
                                              :candidates (:venv-python-candidates cfg)})))
             _ (when needs-deps?
-                (run-command-fn venv-python (into ["-m" "pip" "install"] dependencies) {:cwd runtime-dir
-                                                                                        :logger logger}))]
+                (throw-if-stopped!)
+                (run-command-fn venv-python (into ["-m" "pip" "install"] dependencies) command-opts))]
+      (throw-if-stopped!)
       (when needs-deps?
         (write-file! deps-stamp (str (string/join "\n" dependencies) "\n")))
       (assoc cfg :venv-python venv-python))))
+
+(defn- <begin-start!
+  [cfg endpoint-promise]
+  (reset! *stop-requested? false)
+  (reset! *abort-controller (js/AbortController.))
+  (let [cfg (assoc cfg :logger (or (:logger cfg) (default-logger)))
+        _ (reset! *active-cfg cfg)
+        _ (reset! *endpoint-promise endpoint-promise)
+        startup (-> (p/let [cfg (allocate-port! cfg)
+                            _ (do
+                                (throw-if-stopped!)
+                                (check-recorded-server! cfg)
+                                (p/resolve! endpoint-promise (reserve-endpoint! cfg)))
+                            cfg (install-runtime! cfg)
+                            _ (do
+                                (throw-if-stopped!)
+                                (let [proc ((:spawn-server! cfg) cfg)]
+                                  (reset! *server-process proc)
+                                  (attach-exit-handler! proc cfg)
+                                  (write-pid-file! cfg proc)))
+                            _ (do
+                                (throw-if-stopped!)
+                                (<abort-when-stopped
+                                 ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))))]
+                      (throw-if-stopped!)
+                      (publish-endpoint! cfg)
+                      :started)
+                    (p/catch (fn [error]
+                               (p/resolve! endpoint-promise nil)
+                               (if (or @*stop-requested? (aborted-error? error))
+                                 :aborted
+                                 (do
+                                   (-> (stop!)
+                                       (p/catch (fn [stop-error]
+                                                  ((:error (:logger cfg)) :embedding-server/stop-failed stop-error))))
+                                   ((:error (:logger cfg)) :embedding-server/setup-failed error)
+                                   (throw error)))))
+                    (p/finally (fn []
+                                 (reset! *startup-promise nil))))]
+    (reset! *startup-promise startup)
+    startup))
+
+(defn- already-started-result
+  [cfg]
+  (if-let [endpoint-url @*endpoint]
+    (do
+      ((:set-env! cfg) embedding-url-env endpoint-url)
+      :already-started)
+    (throw (js/Error. "Embedding server endpoint is missing"))))
+
+(defn- <await-previous-lifecycle!
+  []
+  (let [stop-p @*stop-promise
+        prev-start (when @*stop-requested? @*startup-promise)]
+    (when (or stop-p prev-start)
+      (p/let [_ (or stop-p nil)
+              _ (when prev-start
+                  (-> prev-start
+                      (p/catch (fn [error]
+                                 (when-not (or (aborted-error? error)
+                                               @*stop-requested?)
+                                   (throw error))
+                                 :aborted))))]
+        nil))))
+
+(defn- <queue-start!
+  [cfg previous]
+  (let [endpoint (p/deferred)
+        queued? #(identical? endpoint (:endpoint @*queued-start))
+        startup (-> previous
+                    (p/then (fn [_]
+                              (if (queued?)
+                                (do
+                                  (reset! *queued-start nil)
+                                  (<begin-start! cfg endpoint))
+                                :aborted)))
+                    (p/finally (fn []
+                                 (when (queued?)
+                                   (reset! *queued-start nil))
+                                 (p/resolve! endpoint nil))))]
+    (reset! *queued-start {:endpoint endpoint :startup startup})
+    startup))
 
 (defn start!
   ([app'] (start! app' {}))
@@ -282,44 +570,27 @@
        (not (macos? (:platform cfg)))
        (p/resolved :skipped)
 
-       @*startup-promise
+       @*queued-start
+       (:startup @*queued-start)
+
+       (and @*stop-requested? (nil? @*stop-promise)
+            (or @*server-process (seq @*setup-processes)))
+       (p/rejected (ex-info "Previous embedding process has not stopped"
+                            {:code :sidecar-still-running}))
+
+       (and @*startup-promise (not @*stop-requested?))
        @*startup-promise
 
-       @*server-process
-       (if-let [endpoint-url @*endpoint]
-         (do
-           ((:set-env! cfg) embedding-url-env endpoint-url)
-           (p/resolved :already-started))
-         (p/rejected (js/Error. "Embedding server endpoint is missing")))
+       (and @*server-process (not @*stop-requested?))
+       (try
+         (p/resolved (already-started-result cfg))
+         (catch :default error
+           (p/rejected error)))
 
        :else
-       (let [cfg (assoc cfg :logger (or (:logger cfg) (default-logger)))
-             endpoint-resolve (atom nil)
-             endpoint-promise (js/Promise.
-                               (fn [resolve _reject]
-                                 (reset! endpoint-resolve resolve)))
-             _ (reset! *endpoint-promise endpoint-promise)
-             startup (-> (p/let [cfg (allocate-port! cfg)
-                                 endpoint-url (reserve-endpoint! cfg)
-                                 _ (@endpoint-resolve endpoint-url)
-                                 cfg (install-runtime! cfg)
-                                 proc ((:spawn-server! cfg) cfg)
-                                 _ (do
-                                     (reset! *server-process proc)
-                                     (attach-exit-handler! proc cfg))
-                                 _ ((:wait-ready! cfg) (embedding-health-endpoint (:host cfg) (:port cfg)))
-                                 _ (publish-endpoint! cfg)]
-                           :started)
-                         (p/catch (fn [error]
-                                    (when @endpoint-resolve
-                                      (@endpoint-resolve nil))
-                                    (stop!)
-                                    ((:error (:logger cfg)) :embedding-server/setup-failed error)
-                                    (throw error)))
-                         (p/finally (fn []
-                                      (reset! *startup-promise nil))))]
-         (reset! *startup-promise startup)
-         startup)))))
+       (if-let [wait (<await-previous-lifecycle!)]
+         (<queue-start! cfg wait)
+         (<begin-start! cfg (p/deferred)))))))
 
 (defn ensure-endpoint!
   ([app'] (ensure-endpoint! app' {}))
@@ -338,20 +609,46 @@
        @*endpoint-promise
        @*endpoint-promise
 
+       @*queued-start
+       (:endpoint @*queued-start)
+
        :else
-       (do
-         (p/catch (start! app' opts)
-                  (fn [_error] nil))
-         @*endpoint-promise)))))
+       (let [startup (start! app' opts)]
+         (if-let [endpoint (or (:endpoint @*queued-start) @*endpoint-promise)]
+           (do (p/catch startup (fn [_error] nil)) endpoint)
+           startup))))))
+
+(defn- <stop-now!
+  []
+  (request-stop!)
+  (let [cfg (or @*active-cfg {})
+        proc @*server-process
+        delete-env! (or (:delete-env! cfg)
+                        #(js-delete js/process.env %))]
+    (append-server-log! cfg "Embedding server shutdown requested")
+    (when-let [logger (:logger cfg)]
+      ((:info logger) :embedding-server/stop))
+    (clear-endpoint! delete-env!)
+    (-> (p/all (conj (mapv <stop-setup-process! @*setup-processes)
+                    (<kill-and-wait! proc)))
+        (p/then (fn []
+                  (when (and proc (identical? proc @*server-process))
+                    (reset! *server-process nil)
+                    (delete-pid-file! cfg))
+                  nil)))))
 
 (defn stop!
   []
-  (reset! *startup-promise nil)
-  (clear-endpoint! #(js-delete js/process.env %))
-  (when-let [^js proc @*server-process]
-    (reset! *server-process nil)
-    (when (fn? (.-kill proc))
-      (.kill proc))))
+  (when-let [{:keys [endpoint]} @*queued-start]
+    (reset! *queued-start nil)
+    (p/resolve! endpoint nil))
+  (if-let [in-flight @*stop-promise]
+    in-flight
+    (let [stop-p (-> (<stop-now!)
+                     (p/finally (fn []
+                                  (reset! *stop-promise nil))))]
+      (reset! *stop-promise stop-p)
+      stop-p)))
 
 (defn setup!
   [app']

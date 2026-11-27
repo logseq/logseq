@@ -49,6 +49,7 @@
 (defonce *lifecycle-op (volatile! (p/resolved nil)))
 (defonce *quit-dirty? (volatile! true))
 (defonce *pending-open-urls (atom []))
+(defonce *quit-state (atom :idle))
 
 (defn setup-updater! [^js win]
   ;; manual/auto updater
@@ -401,6 +402,32 @@
       :log-info! logger/info
       :log-warn! logger/warn})))
 
+(defn- <stop-db-workers!
+  [stop! warn-key]
+  (-> (p/do (stop!))
+      (p/catch (fn [error]
+                 (logger/warn warn-key error)
+                 nil))))
+
+(defn- register-before-quit!
+  [^js app']
+  (.on app' "before-quit"
+       (fn [e]
+         (reset! win/*quitting? true)
+         (lifecycle/<handle-before-quit!
+          {:event e
+           :quit-state *quit-state
+           :prevent-default! (fn [^js event]
+                               (.preventDefault event))
+           :on-error! (fn [error]
+                        (logger/warn :electron/quit-teardown-failed error))
+           :teardown! (fn []
+                        (-> (<stop-db-workers! db-worker/shutdown-managed! :electron/quit-stop-workers-failed)
+                            (p/then (fn [_]
+                                      (embedding-server/stop!)))))
+           :quit! (fn []
+                    (.quit app'))}))))
+
 (defn- on-app-ready!
   [^js app']
   (.on app' "ready"
@@ -447,11 +474,13 @@
                                    tt (exceptions/setup-exception-listeners!)]
 
                                (vreset! *teardown-fn
-                                        #(-> (handler/stop-all-db-workers!)
-                                             (p/finally
-                                               (fn []
-                                                 (doseq [f [t0 t1 t2 t3 t4 t5 tt]]
-                                                   (and f (f))))))))))
+                                        #(-> (<stop-db-workers! handler/stop-all-db-workers!
+                                                                :electron/teardown-stop-workers-failed)
+                                             (p/then
+                                              (fn [_]
+                                                (p/all (mapv (fn [f]
+                                                               (p/do (when f (f))))
+                                                             [t0 t1 t2 t3 t4 t5 tt])))))))))
 
                   ;; setup effects
                   (@*setup-fn)
@@ -479,12 +508,7 @@
                                                  (.hide win)))
                                            :else
                                            nil)))))
-                  (.on app' "before-quit" (fn [_e]
-                                            (reset! win/*quitting? true)
-                                            (-> (handler/stop-all-db-workers!)
-                                                (p/finally
-                                                  (fn []
-                                                    (embedding-server/stop!))))))
+                  (register-before-quit! app')
 
                   (.on app' "activate" #(when @*win (.show win))))))
              (p/catch (fn [error]
@@ -526,11 +550,7 @@
 
       (.on app "window-all-closed" (fn []
                                      (logger/debug "window-all-closed" "Quitting...")
-                                     (-> (handler/stop-all-db-workers!)
-                                         (p/finally
-                                           (fn []
-                                             (embedding-server/stop!)
-                                             (.quit app))))))
+                                     (.quit app)))
       (on-app-ready! app))))
 
 (defn- <run-current-teardown!

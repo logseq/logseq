@@ -134,66 +134,81 @@
                        (p/resolve! stopping false)
                        (throw error))))))))
 
+(defn- app-stopping-error
+  []
+  (ex-info "Application is stopping" {:code :app-stopping}))
+
+(defn- <ensure-started!
+  [{:keys [state start-daemon! stop-daemon! runtime-ready?] :as manager} repo window-id
+   {:keys [generation] :as opts}]
+  (let [key (repo-key repo)
+        epoch (get-in @state [:epochs key] 0)
+        assert-current! (fn []
+                          (when-not (= epoch (get-in @state [:epochs key] 0))
+                            (throw (ex-info "Graph lifecycle changed" {:code :graph-not-exists :repo repo}))))
+        start! (fn []
+                 (assert-current!)
+                 (when (:shutdown @state)
+                   (throw (app-stopping-error)))
+                 (start-daemon! repo opts))
+        install! (fn [runtime]
+                   (try
+                     (assert-current!)
+                     (let [previous (get-in @state [:repos key :runtime])]
+                       (when-not (identical? previous runtime)
+                         (when-let [close! (:close-observer! previous)] (close!))))
+                     (swap! state
+                            (fn [current]
+                              (let [current' (ensure-state current)
+                                    windows (get-in current' [:repos key :windows] #{})]
+                                (-> current'
+                                    (assoc-in [:repos key] {:runtime runtime
+                                                           :windows (conj windows window-id)})
+                                    (assoc-in [:window->repo window-id] key)))))
+                     runtime
+                     (catch :default error
+                       (when-let [close! (:close-observer! runtime)] (close!))
+                       (throw error))))]
+    (p/let [current-repo (get-in (ensure-state @state) [:window->repo window-id])
+            _ (when (and current-repo (not= current-repo key))
+                (ensure-window-stopped! manager window-id))]
+      (if-let [entry (get-in (ensure-state @state) [:repos key])]
+        (if-let [stopping (:stopping entry)]
+          (p/let [stopped? stopping]
+            (when-not stopped?
+              (throw (ex-info "Worker stop did not complete" {:code :server-stop-failed})))
+            (assert-current!)
+            (<ensure-started! manager repo window-id opts))
+          (p/let [runtime (:runtime entry)
+                  _ (when (and generation (not= generation (:generation runtime)))
+                      (throw (ex-info "Graph generation changed" {:code :graph-not-exists :repo repo})))
+                  ready? (runtime-ready? runtime)
+                  _ (assert-current!)]
+            (if ready?
+              (do
+                (swap! state (fn [current]
+                               (-> (ensure-state current)
+                                   (update-in [:repos key :windows] (fnil conj #{}) window-id)
+                                   (assoc-in [:window->repo window-id] key))))
+                runtime)
+              (do
+                (when-let [close! (:close-observer! runtime)] (close!))
+                (p/let [_ (when (owned-runtime? runtime)
+                            (-> (stop-daemon! runtime)
+                                (p/catch (fn [_] nil))))
+                        runtime' (start!)]
+                  (install! runtime'))))))
+        (p/let [runtime (start!)]
+          (install! runtime))))))
+
 (defn ensure-started!
   ([manager repo window-id] (ensure-started! manager repo window-id nil))
-  ([{:keys [state start-daemon! stop-daemon! runtime-ready?] :as manager} repo window-id
-    {:keys [generation] :as opts}]
-   (let [key (repo-key repo)
-         epoch (get-in @state [:epochs key] 0)
-         assert-current! (fn []
-                           (when-not (= epoch (get-in @state [:epochs key] 0))
-                             (throw (ex-info "Graph lifecycle changed" {:code :graph-not-exists :repo repo}))))
-         install! (fn [runtime]
-                    (try
-                      (assert-current!)
-                      (let [previous (get-in @state [:repos key :runtime])]
-                        (when-not (identical? previous runtime)
-                          (when-let [close! (:close-observer! previous)] (close!))))
-                      (swap! state
-                             (fn [current]
-                               (let [current' (ensure-state current)
-                                     windows (get-in current' [:repos key :windows] #{})]
-                                 (-> current'
-                                     (assoc-in [:repos key] {:runtime runtime
-                                                            :windows (conj windows window-id)})
-                                     (assoc-in [:window->repo window-id] key)))))
-                      runtime
-                      (catch :default error
-                        (when-let [close! (:close-observer! runtime)] (close!))
-                        (throw error))))]
-     (p/let [current-repo (get-in (ensure-state @state) [:window->repo window-id])
-             _ (when (and current-repo (not= current-repo key))
-                 (ensure-window-stopped! manager window-id))]
-       (if-let [entry (get-in (ensure-state @state) [:repos key])]
-         (if-let [stopping (:stopping entry)]
-           (p/let [stopped? stopping]
-             (when-not stopped?
-               (throw (ex-info "Worker stop did not complete" {:code :server-stop-failed})))
-             (assert-current!)
-             (ensure-started! manager repo window-id opts))
-           (p/let [runtime (:runtime entry)
-                   _ (when (and generation (not= generation (:generation runtime)))
-                       (throw (ex-info "Graph generation changed" {:code :graph-not-exists :repo repo})))
-                   ready? (runtime-ready? runtime)
-                   _ (assert-current!)]
-             (if ready?
-               (do
-                 (swap! state (fn [current]
-                                (-> (ensure-state current)
-                                    (update-in [:repos key :windows] (fnil conj #{}) window-id)
-                                    (assoc-in [:window->repo window-id] key))))
-                 runtime)
-               (do
-                 (when-let [close! (:close-observer! runtime)] (close!))
-                 (p/let [_ (when (owned-runtime? runtime)
-                             (-> (stop-daemon! runtime)
-                                 (p/catch (fn [_] nil))))
-                         _ (assert-current!)
-                         runtime' (start-daemon! repo opts)]
-                   (install! runtime'))))))
-         (p/let [_ (assert-current!)
-                 runtime (start-daemon! repo opts)]
-           (install! runtime)))))))
+  ([{:keys [state] :as manager} repo window-id opts]
+   (if (:shutdown @state)
+     (p/rejected (app-stopping-error))
+     (let [starting (<ensure-started! manager repo window-id opts)]
+       (swap! state update :starts (fnil conj #{}) starting)
+       (p/finally starting #(swap! state update :starts disj starting))))))
 
 (defn- parse-runtime-lock
   [{:keys [base-url]}]
@@ -248,6 +263,23 @@
   (-> (p/all (map #(ensure-repo-stopped! manager %)
                   (keys (:repos (ensure-state @state)))))
       (p/then (fn [_] true))))
+
+(defn shutdown!
+  [{:keys [state] :as manager}]
+  (or (:shutdown @state)
+      (let [shutdown
+            ;; A daemon that has already started must be installed before we take the stop snapshot.
+            (p/let [_ (p/all (map #(p/handle % (fn [_ _] nil)) (:starts @state)))
+                    errors (p/all (for [[repo entry] (:repos (ensure-state @state))]
+                                    (-> (p/let [stopped? (:stopping entry)]
+                                          (when-not stopped?
+                                            (ensure-repo-stopped! manager repo)))
+                                        (p/handle (fn [_ error] error)))))]
+              (when-let [error (some identity errors)]
+                (throw error))
+              true)]
+        (swap! state assoc :shutdown shutdown)
+        shutdown)))
 
 (defn invalidate-repo!
   [{:keys [state]} repo & {:keys [keep-observer?]}]
@@ -314,3 +346,7 @@
 (defn stop-all-managed!
   []
   (stop-all! manager))
+
+(defn shutdown-managed!
+  []
+  (shutdown! manager))
