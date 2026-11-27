@@ -12,7 +12,6 @@
             [datascript.core :as d]
             [logseq.common.util :as common-util]
             [logseq.common.uuid :as common-uuid]
-            [logseq.db :as ldb]
             [logseq.graph-parser.block :as gp-block]
             [logseq.graph-parser.mldoc :as gp-mldoc]
             [logseq.graph-parser.property :as gp-property]
@@ -106,7 +105,8 @@
                                           properties (zipmap (map (comp keyword string/lower-case first) properties-ast)
                                                              (map second properties-ast))]
                                       (:title properties))))
-                                ast)
+                                ;; Only page properties, which come before the first block, set the title
+                                (take-while (complement gp-block/heading-block?) ast))
             first-block-name (let [title (last (first (:title first-block)))]
                                (and first-block
                                     (string? title)
@@ -213,7 +213,7 @@
            (let [page-id (if-let [journal-day (:block/journal-day page)]
                            (common-uuid/gen-uuid :journal-page-uuid journal-day)
                            (or (when db
-                                 (:block/uuid (ldb/get-page db (:block/name page))))
+                                 (:block/uuid (gp-block/get-page db (:block/name page))))
                                (d/squuid)))]
              (assoc page :block/uuid page-id)))
          pages)))
