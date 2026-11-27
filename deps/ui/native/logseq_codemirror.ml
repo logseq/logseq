@@ -134,6 +134,13 @@ let cm ?key ?(uuid = "") ?(lang = "") ?(value = "") ?(read_only = false)
           | Some handler ->
               handler ~name:"input" ~value:(Some next) ~key:None
           | None -> ())
+        ~on_navigation_key:(fun nav ->
+          if nav.key = "Enter" && nav.shift then
+            match on_event with
+            | Some handler ->
+                handler ~name:"key" ~value:(Some (Signal.get_state source))
+                  ~key:(Some "Shift-Enter")
+            | None -> ())
         []
     in
     match parent with
