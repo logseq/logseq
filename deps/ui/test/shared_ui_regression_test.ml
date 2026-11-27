@@ -1718,6 +1718,23 @@ let run_views ~registry ~profile ~finish =
     (List.exists (fun node -> M.string_prop node "text"=Some "after-image-fixture")
       (nodes inline_image));
   ignore (Lui_app.dispose inline_image.S.app);
+  let native_inline_image =
+    S.mount ~registry
+      ~profile:(Lui_protocol.profile Lui_protocol.LinuxOS Lui_protocol.GenericHost)
+      ~initial:Model.initial ~reducer:(fun m () -> m)
+      ~view:(fun _ctx ms _send ->
+        ignore ms;
+        Lui_elements.column
+          (Render_inline.parse "![Fixture](https://example.invalid/fixture.png)"))
+      ()
+  in
+  check "Native Markdown images use the host-measured image kind"
+    (List.exists (fun node ->
+       node.M.kind = "image"
+       && M.string_prop node "url" = Some "https://example.invalid/fixture.png"
+       && M.string_prop node "alt" = Some "Fixture")
+      (nodes native_inline_image));
+  ignore (Lui_app.dispose native_inline_image.S.app);
   let install_file_host : (string -> unit Js.Promise.t) -> (unit -> unit) =
     [%mel.raw {|function (openPath) {
       const previous = window.apis;

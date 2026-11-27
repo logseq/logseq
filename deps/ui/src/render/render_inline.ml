@@ -482,20 +482,31 @@ let block_ref uuid =
     ~attrs:[ ("data-ref", uuid) ]
     [ block_ref_anchor uuid ]
 
-(* cljs .as-plain-image-link / asset-container: a plain <img> sizes to
-   its intrinsic dimensions; the `image` kind is a fixed-frame element
-   (absolute-filled span) and collapses to 0x0 without explicit dims *)
+(* cljs .as-plain-image-link / asset-container sizes the image at its
+   natural dimensions, capped by the container. Keep the browser's plain
+   img behavior on web; native uses the image kind so the host's decoded
+   bitmap can provide the same intrinsic measurement. *)
 let image_el ~src ~alt =
   let src = Platform.media_url src in
-  D.el ~tag:"div" ~style_class:"asset-container image normalize"
-    [ Ui_components.with_props
-        [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
-        (row ~corner_radius:4 ~cross:`start
-        [D.el ~tag:"img"
-        ~attrs:
-          [ ("src", src); ("alt", alt); ("loading", "lazy")
-          ; ("referrerpolicy", "no-referrer") ]
-        []]) ]
+ fun context parent ->
+  if Lui_ui.host context = Lui_protocol.GenericHost then
+    (box ~style_class:"asset-container image normalize"
+       [ Ui_components.with_props
+           [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
+           (row ~corner_radius:4 ~cross:`start
+              [image ~url:src ~alt ~loading:`lazy_ ~referrer_policy:`no_referrer []]) ])
+      context parent
+  else
+    (D.el ~tag:"div" ~style_class:"asset-container image normalize"
+       [ Ui_components.with_props
+           [Ui_components.Prop.display `inline_flex; Ui_components.Prop.overflow `hidden]
+           (row ~corner_radius:4 ~cross:`start
+              [D.el ~tag:"img"
+                 ~attrs:
+                   [ ("src", src); ("alt", alt); ("loading", "lazy")
+                   ; ("referrerpolicy", "no-referrer") ]
+                 []]) ])
+      context parent
 
 (* cljs asset-link pdf branch: a ![alt](x.pdf) embed renders
    a.asset-ref.is-pdf whose click opens the in-app pdf viewer — an
