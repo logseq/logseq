@@ -1,0 +1,21 @@
+services:
+  sync:
+    image: ghcr.io/${GHCR_OWNER}/logseq-selfhost-sync:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - "${SYNC_PORT:-8787}:8787"
+    environment:
+      DB_SYNC_PORT: "8787"
+      DB_SYNC_BASE_URL: "${DB_SYNC_BASE_URL}"
+      DB_SYNC_DATA_DIR: "${DB_SYNC_DATA_DIR:-/app/data}"
+      DB_SYNC_STORAGE_DRIVER: "${DB_SYNC_STORAGE_DRIVER:-sqlite}"
+      DB_SYNC_ASSETS_DRIVER: "${DB_SYNC_ASSETS_DRIVER:-filesystem}"
+      DB_SYNC_LOG_LEVEL: "${DB_SYNC_LOG_LEVEL:-info}"
+      COGNITO_ISSUER: "${COGNITO_ISSUER}"
+      COGNITO_CLIENT_ID: "${COGNITO_CLIENT_ID}"
+      COGNITO_JWKS_URL: "${COGNITO_JWKS_URL}"
+    volumes:
+      - sync-data:/app/data
+
+volumes:
+  sync-data:
