@@ -2319,6 +2319,7 @@ let () =
       | `key (down, sc, km) ->
           let key = Input.key_of_sdl_scancode sc in
           let mods = Native_window.mods_of_keymod km in
+          if down then Host_requests.drain ();
           if down && not (Keyboard_capture.active ()) then
             Host_requests.ensure_ed_focus ();
           let pre_dispatched = down && shared_keydown_first key mods in
@@ -2464,6 +2465,9 @@ let () =
         (match input with
          | Some (Input.Button_down (_,_,Input.Left,_,_)) -> Native_window.hold_pointer text_input true
          | Some (Input.Button_up (_,_,Input.Left,_)) -> Native_window.hold_pointer text_input false
+         | _ -> ());
+        (match input with
+         | Some (Input.Key_down _) -> Host_requests.drain ()
          | _ -> ());
         (match input with
          | Some (Input.Key_down _ | Input.Text_input _) when not (Keyboard_capture.active ()) -> Host_requests.ensure_ed_focus ()
