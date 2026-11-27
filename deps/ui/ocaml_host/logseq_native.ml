@@ -2094,9 +2094,17 @@ let () =
   let block_context_menu_key_target () =
     in_block_context_menu (dom_key_target ())
   in
+  let block_context_menu_editable_focus () =
+    block_context_menu_key_target ()
+    &&
+    match Lui_store.kind store (Ui.focused ui) with
+    | "input" | "textarea" -> true
+    | _ -> false
+  in
   let shared_keydown_first key mods =
     if mods.Input.ctrl || mods.Input.meta || mods.Input.alt
        || Keyboard_capture.active ()
+       || block_context_menu_editable_focus ()
     then false
     else
       match key with
