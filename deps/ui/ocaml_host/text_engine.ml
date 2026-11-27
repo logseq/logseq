@@ -35,6 +35,7 @@ type slot = {
   sl_left : int;
   sl_top : int;
   sl_colored : bool;
+  sl_subpixel : bool;
 }
 
 type flow_piece = { piece_node : int; piece_lo : int; piece_hi : int }
@@ -362,6 +363,7 @@ let slot_of t run_font gid sub shade scale scene =
       with
       | Some b when b.Lui_text.w > 0 && b.Lui_text.h > 0 ->
         let colored = b.Lui_text.color in
+        let subpixel = colored && not (Lui_text.is_color run_font) in
         let atlas =
           if colored then scene.color_atlas else scene.mask_atlas
         in
@@ -369,7 +371,9 @@ let slot_of t run_font gid sub shade scale scene =
          | Some (x, y) ->
            Some
              { sl_x = x; sl_y = y; sl_w = b.w; sl_h = b.h;
-               sl_left = b.left; sl_top = b.top; sl_colored = colored }
+               sl_left = b.left; sl_top = b.top;
+               sl_colored = colored && not subpixel;
+               sl_subpixel = subpixel }
          | None -> None)
       | _ -> None
     in
@@ -398,7 +402,7 @@ let emit_glyph t scene ~scale ~pen ~baseline ~font ~gid ~g_y ~fg =
         guw = s.sl_w; gvh = s.sl_h;
         gcolor = fg; gwide = 0;
         gcolored = s.sl_colored;
-        gsubpixel = false; gthin = false }
+        gsubpixel = s.sl_subpixel; gthin = false }
     in
     (* Lui_paint seals the frame by reversing this accumulator. *)
     scene.glyphs <- gl :: scene.glyphs;
