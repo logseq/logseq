@@ -4150,6 +4150,51 @@ CAMLprim value logseq_native_media_error(value handle_v) { CAMLparam1(handle_v);
 
 #endif
 
+/* Binary clipboard payloads are retained by SDL until another owner replaces
+   them. Each write gets an independent allocation so replacement cleanup can
+   never release memory still being served to a paste request. */
+typedef struct {
+  unsigned char *data;
+  size_t size;
+} logseq_clipboard_png;
+
+static const void *SDLCALL logseq_clipboard_png_data(void *userdata,
+    const char *mime_type, size_t *size) {
+  logseq_clipboard_png *payload = userdata;
+  if (!payload || !mime_type || strcmp(mime_type, "image/png") != 0) {
+    *size = 0;
+    return NULL;
+  }
+  *size = payload->size;
+  return payload->data;
+}
+
+static void SDLCALL logseq_clipboard_png_cleanup(void *userdata) {
+  logseq_clipboard_png *payload = userdata;
+  if (!payload) return;
+  free(payload->data);
+  free(payload);
+}
+
+CAMLprim value logseq_native_clipboard_write_png(value bytes_v) {
+  CAMLparam1(bytes_v);
+  size_t size = caml_string_length(bytes_v);
+  logseq_clipboard_png *payload = calloc(1, sizeof(*payload));
+  if (!payload) caml_raise_out_of_memory();
+  payload->data = malloc(size ? size : 1);
+  if (!payload->data) {
+    free(payload);
+    caml_raise_out_of_memory();
+  }
+  memcpy(payload->data, Bytes_val(bytes_v), size);
+  payload->size = size;
+  const char *mime_types[] = {"image/png"};
+  bool ok = SDL_SetClipboardData(logseq_clipboard_png_data,
+    logseq_clipboard_png_cleanup, payload, mime_types, 1);
+  if (!ok) logseq_clipboard_png_cleanup(payload);
+  CAMLreturn(Val_bool(ok));
+}
+
 /* Image I/O owns its input and decoding objects entirely within the worker
    call. Only a tightly packed, top-left RGBA bitmap crosses into OCaml. */
 CAMLprim value logseq_native_decode_platform(value encoded_v) {

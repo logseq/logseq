@@ -1,8 +1,8 @@
 (* Native twin of src/render/pdf_annotation.ml — the cljs
    block.cljs annotation prefix (.prefix-link > .hl-page) +
    extensions/pdf/assets.cljs area-display. The area image resolves to
-   the on-disk assets/<uuid>.png; image-to-clipboard remains unported
-   because native clipboard writes are text-only. *)
+   the on-disk assets/<uuid>.png and copies through the host's binary
+   image clipboard. *)
 
 open Promise_ext
 module D = Logseq_el
@@ -48,6 +48,26 @@ let hl_img_sig (b : Model.block) context =
               |> Js.Promise.catch (fun _ -> Js.Promise.resolve ())));
       st
 
+let copy_image_to_clipboard asset_uuid =
+  try
+    let path =
+      Filename.concat
+        (Asset_store.asset_dir (Runtime.repo ()))
+        (asset_uuid ^ ".png")
+    in
+    let ic = open_in_bin path in
+    let length = in_channel_length ic in
+    let png = Bytes.of_string (really_input_string ic length) in
+    close_in ic;
+    let task = Platform.clipboard_write_image_png png in
+    ignore
+      (Ui_task.catch
+         (Ui_task.bind task (fun () ->
+            Toast.success (I18n.t "notification/copied");
+            Ui_task.resolve ()))
+         (fun _ -> Ui_task.resolve ()))
+  with _ -> ()
+
 (* cljs area-display: .hl-area(style?) > .asset-container >
    .asset-action-bar + img.w-full *)
 let area_display (b : Model.block) context : Lui_elements.t =
@@ -65,6 +85,13 @@ let area_display (b : Model.block) context : Lui_elements.t =
                       ~icon:(`app "file-symlink")
                       ~on_press:(fun _ ->
                         Pdf_assets.goto_asset_block r.asset_uuid)
+                      []
+                  ; Lui_elements.icon_button ~key:"hl-cp"
+                      ~label:(I18n.t "asset/copy")
+                      ~data_attrs:[ ("tabindex", "-1") ]
+                      ~icon:(`app "copy")
+                      ~on_press:(fun _ ->
+                        copy_image_to_clipboard r.asset_uuid)
                       []
                   ; Lui_elements.icon_button ~key:"hl-max"
                       ~label:(I18n.t "asset/maximize")
