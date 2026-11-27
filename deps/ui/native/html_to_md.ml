@@ -2,7 +2,7 @@ type node =
   | Text of string
   | Element of string * (Markup.name * string) list * node list
 
-type context = { level : int; pre : bool }
+type context = { level : int; pre : bool; in_table : bool }
 
 let normalize_text text =
   let output = Buffer.create (String.length text) in
@@ -40,6 +40,7 @@ let rec render context = function
         | "fieldset" | "footer" | "header" ->
             let inner = String.trim (contents ()) in
             if inner = "" then ""
+            else if context.in_table then inner
             else if context.level > 0 then inner ^ "\n"
             else "\n\n" ^ inner ^ "\n\n"
         | "ul" | "ol" | "dl" ->
@@ -91,16 +92,50 @@ let rec render context = function
         | "blockquote" ->
             let lines = String.split_on_char '\n' (String.trim (contents ())) in
             "\n\n" ^ String.concat "\n" (List.map (fun line -> "> " ^ line) lines) ^ "\n\n"
+        | "table" ->
+            let inner = String.trim (contents ()) in
+            if inner = "" then "" else "\n\n" ^ inner ^ "\n\n"
+        | "thead" ->
+            let rows = contents () in
+            let columns =
+              match
+                List.find_opt
+                  (function Element ("tr", _, _) -> true | _ -> false)
+                  children
+              with
+              | Some (Element (_, _, cells)) ->
+                  List.length
+                    (List.filter
+                       (function Element (("td" | "th"), _, _) -> true | _ -> false)
+                       cells)
+              | _ -> 0
+            in
+            if columns = 0 then rows
+            else
+              rows ^ "| "
+              ^ String.concat " | " (List.init columns (fun _ -> "----"))
+              ^ " |\n"
+        | "tbody" | "tfoot" -> contents ()
+        | "tr" ->
+            let cells =
+              List.filter_map
+                (function
+                  | Text text when String.trim text = "" -> None
+                  | child -> Some (render context child))
+                children
+            in
+            if cells = [] then ""
+            else "| " ^ String.concat " | " cells ^ " |\n"
+        | "td" | "th" ->
+            String.concat ""
+              (List.map (render { context with in_table = true }) children)
+            |> String.trim
         | "br" -> "\n"
         | "hr" -> "\n\n---\n\n"
         | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" ->
             "\n\n" ^ String.make (Char.code tag.[1] - Char.code '0') '#'
             ^ " " ^ String.trim (contents ()) ^ "\n\n"
         | _ -> contents ()
-
-let rec has_table = function
-  | Text _ -> false
-  | Element (tag, _, children) -> tag = "table" || List.exists has_table children
 
 let convert html =
   if String.trim html = "" then None
@@ -113,10 +148,8 @@ let convert html =
            ~element:(fun (_, tag) attrs children -> Element (tag, attrs, children))
       |> Markup.to_list
     in
-    if List.exists has_table nodes then None
-    else
     let text =
-      String.concat "" (List.map (render { level = 0; pre = false }) nodes)
+      String.concat "" (List.map (render { level = 0; pre = false; in_table = false }) nodes)
       |> String.trim
     in
     let output = Buffer.create (String.length text) in

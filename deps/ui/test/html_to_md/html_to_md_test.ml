@@ -23,6 +23,7 @@ let () =
     ; ("<pre><code>a\n  b</code></pre>", Some "```\na\n  b\n```")
     ; ("<pre><code>```md\n````\ntext</code></pre>",
        Some "`````\n```md\n````\ntext\n`````")
-    ; ("<table><tr><td>A1</td><td>B1</td></tr><tr><td>A2</td><td>B2</td></tr></table>", None)
+    ; ("<table><thead><tr><th>H1</th><th>H2</th></tr></thead><tbody><tr><td>A1</td><td></td></tr><tr><td>#A2</td><td>B2</td></tr></tbody></table>",
+       Some "| H1 | H2 |\n| ---- | ---- |\n| A1 |  |\n| #A2 | B2 |")
     ; ("<p>A<p>B", Some "A\n\nB")
     ]
