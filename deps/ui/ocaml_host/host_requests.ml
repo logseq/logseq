@@ -1563,3 +1563,8 @@ let drain () =
            (Printf.sprintf "hostreq %.0fms %s" (dt *. 1000.)
               (name_of req)))
     (Bridge.take_requests ())
+
+let drain_dom_focus () =
+  List.iter handle
+    (Bridge.take_matching_requests
+       (String.starts_with ~prefix:"dom-op\nfocus\n"))
