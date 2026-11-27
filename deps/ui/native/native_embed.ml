@@ -807,10 +807,19 @@ let platform_event payload =
       then Logseq_editor.note_measurement name json
       else if name = "clipboard-read" then (
         match json with
-        | Js.Json.JObject [("text", Js.Json.JString text)] ->
-            Platform.note_clipboard_result (Ok text)
-        | Js.Json.JObject [("error", Js.Json.JString message)] ->
-            Platform.note_clipboard_result (Error (Failure message))
+        | Js.Json.JObject fields ->
+            let field name = List.assoc_opt name fields in
+            (match field "text", field "logseq", field "error" with
+             | Some (Js.Json.JString text), logseq, None ->
+                 let logseq = match logseq with
+                   | Some (Js.Json.JString logseq) -> Some logseq
+                   | None -> None
+                   | _ -> invalid_arg "Invalid clipboard-read result" in
+                 Platform.note_clipboard_result
+                   (Ok { Platform.text; logseq })
+             | None, None, Some (Js.Json.JString message) ->
+                 Platform.note_clipboard_result (Error (Failure message))
+             | _ -> invalid_arg "Invalid clipboard-read result")
         | _ -> invalid_arg "Invalid clipboard-read result")
       else Host.enqueue (fun () -> Platform.emit_event name json)
   | None -> ()

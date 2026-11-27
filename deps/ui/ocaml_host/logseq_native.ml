@@ -2096,8 +2096,15 @@ let () =
              let text =
                Option.value (Lui_shell.clipboard_read ()) ~default:""
              in
+             let items = ["text/plain", text] in
+             let items = match Lui_shell.clipboard_read_format "text/html" with
+               | Some html -> items @ ["text/html", html]
+               | None -> items in
+             let items = match Lui_shell.clipboard_read_format "application/logseq" with
+               | Some logseq -> items @ ["application/logseq", logseq]
+               | None -> items in
              emit_dom "paste" target
-               [ ("clipboardData", Js.Json.stringify (Ui_dom_native.text_clipboard_data text)) ]
+               [ ("clipboardData", Js.Json.stringify (Ui_dom_native.mime_clipboard_data items)) ]
          | _ -> ())
     end
   in
