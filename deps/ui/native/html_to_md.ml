@@ -114,17 +114,17 @@ and render_table context children =
     | Some value -> (try max 0 (int_of_string value) with _ -> 1)
     | None -> 1
   in
-  let max_span = 64 in
+  let max_span_expansion = 64 in
   let cells_in row_count row_index = function
     | Element (_, _, children) ->
         List.filter_map
           (function
             | Element (("td" | "th"), attrs, cell_children) ->
-                let colspan = min max_span (max 1 (span_attr attrs "colspan")) in
+                let colspan = min max_span_expansion (max 1 (span_attr attrs "colspan")) in
                 let rowspan =
                   match span_attr attrs "rowspan" with
                   | 0 -> row_count - row_index
-                  | span -> min max_span span
+                  | span -> min max_span_expansion span
                 in
                 Some (colspan, rowspan, render_table_cell context cell_children)
             | _ -> None)
@@ -161,10 +161,10 @@ and render_table context children =
                 done;
               col := start + colspan)
             row;
-          let max_span =
+          let max_covered_column =
             Hashtbl.fold (fun col _ acc -> max col acc) active (-1)
           in
-          while !col <= max_span do
+          while !col <= max_covered_column do
             add "";
             incr col
           done;
@@ -184,17 +184,25 @@ and render_table context children =
     | Text _ -> false
     | Element (tag, _, children) -> tag = "thead" || List.exists has_thead children
   in
-  let source_rows = rows_in children in
-  let row_count = List.length source_rows in
-  let source_rows = List.mapi (fun index row -> cells_in row_count index row) source_rows in
-  let rows = layout source_rows |> List.filter (( <> ) []) in
+  let html_rows = rows_in children in
+  let first_row_has_header_cells =
+    match html_rows with
+    | Element (_, _, first_children) :: _ ->
+        List.exists
+          (function Element ("th", _, _) -> true | _ -> false)
+          first_children
+    | _ -> false
+  in
+  let row_count = List.length html_rows in
+  let cell_rows = List.mapi (fun index row -> cells_in row_count index row) html_rows in
+  let rows = layout cell_rows |> List.filter (( <> ) []) in
   match rows with
   | [] -> ""
   | first :: rest ->
       let width = List.fold_left (fun width row -> max width (List.length row)) 0 rows in
       let separator = "| " ^ String.concat " | " (List.init width (fun _ -> "----")) ^ " |" in
       let header, body =
-        if List.exists has_thead children then first, rest
+        if List.exists has_thead children || first_row_has_header_cells then first, rest
         else List.init width (fun _ -> ""), first :: rest
       in
       "\n\n"

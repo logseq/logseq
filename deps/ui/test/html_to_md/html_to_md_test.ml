@@ -27,6 +27,8 @@ let () =
        Some "| H1 | H2 |\n| ---- | ---- |\n| A1 |  |\n| #A2 | B2 |")
     ; ("<table><tr><td>A</td><td>B</td></tr><tr><td>C</td><td>D</td></tr></table>",
        Some "|  |  |\n| ---- | ---- |\n| A | B |\n| C | D |")
+    ; ("<table><tr><th>H1</th><th>H2</th></tr><tr><td>C</td><td>D</td></tr></table>",
+       Some "| H1 | H2 |\n| ---- | ---- |\n| C | D |")
     ; ("<table>\n  <tr><td>A<br>B</td><td>x|y</td></tr>\n  <tr><td><p>New</p><p>York</p></td><td></td></tr>\n</table>",
        Some "|  |  |\n| ---- | ---- |\n| A B | x\\|y |\n| New York |  |")
     ; ("<table><tr><td>A</td><td>B</td><td>C</td></tr><tr><td colspan=\"2\" rowspan=\"2\">D</td><td>E</td></tr><tr><td>F</td></tr></table>",
