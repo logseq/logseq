@@ -253,6 +253,12 @@ let pointer_hit_allocations () =
     Lui_store.apply_op store (SetProp (id, PointerEnabled, BoolValue true));
     Hashtbl.add rects id (Lui_scene.rect 0. (float (id - 2) *. 20.) 100. 20.)
   done;
+  for id = 3001 to 3020 do
+    let owner = id - 1019 in
+    Lui_store.apply_op store (CreateNode (id, Tooltip));
+    Lui_store.apply_op store (InsertChild (owner, id, 0));
+    Lui_store.apply_op store (SetProp (id, AnchorValue, StringValue "above"))
+  done;
   let cache = Host_interaction.hit_cache () in
   let ui = Lui_window.Ui.create () in
   let raw_motion () =
@@ -275,7 +281,14 @@ let pointer_hit_allocations () =
   for _ = 1 to 100 do motion () done;
   let bytes = (Gc.allocated_bytes () -. before) /. 100. in
   Printf.printf "pointer motion allocated %.0f bytes/event\n%!" bytes;
-  check "Pointer hit testing exceeds 16 KiB per event" (bytes < 16384.)
+  check "Pointer hit testing exceeds 16 KiB per event" (bytes < 16384.);
+  let spatial = Host_interaction.hit_index cache ~store ~rects ~epoch:0 in
+  Lui_store.apply_op store (SetProp (1, WidthValue, IntValue 100));
+  let reindex_before = Gc.allocated_bytes () in
+  ignore (Lui_window.Ui.handle ~spatial ui store rects (Lui_window.Input.Move (10., 10.)));
+  let reindexed = Gc.allocated_bytes () -. reindex_before in
+  Printf.printf "tooltip reindex pointer motion allocated %.0f bytes\n%!" reindexed;
+  check "Tooltip reindexing exceeds 16 KiB in one pointer event" (reindexed < 16384.)
 
 let pointer_hit_invalidation () =
   let store = Lui_store.create () in
