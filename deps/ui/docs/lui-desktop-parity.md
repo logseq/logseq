@@ -68,7 +68,7 @@ These differences are deliberate desktop-host behavior. They should not be count
 | Medium | Accessibility tree | macOS accessibility inspection exposes only native window chrome and menu-bar items; application content is absent from the accessibility tree. | Confirmed architectural gap. No small parity patch was attempted. |
 | Medium | Code editing | Code blocks expose the native plain-text editing path rather than web CodeMirror behavior; runtime smoke did not show CodeMirror chrome or syntax highlighting. | Confirmed architectural/capability difference, although the exact editing hit-test UX remains uncertain. |
 | Medium | Query block layout | `/query` insertion, operator/filter completion, Apply, popup dismissal, and compact control geometry now match web closely; direct query-settings tooltips failed on web because the web backend resolved the trigger to inner icon content rather than the retained button. | Native tooltip behavior was fixed in [lui#422](https://github.com/logseq/lui/pull/422) and kept within the pointer-hit allocation budget in [lui#423](https://github.com/logseq/lui/pull/423); web direct-child trigger resolution is fixed in [lui#426](https://github.com/logseq/lui/pull/426). `task: Todo` still returns `No matched result` for a matching `TODO` block in both apps, so that is a shared query-semantics question rather than a native parity mismatch. |
-| Medium | Structured block clipboard | Native now transports `text/plain`, `text/html`, and `application/logseq` through the OS clipboard and prefers the structured payload on paste. | Fixed for platform transport and validated on Linux/macOS, including cross-process macOS pasteboard reads. Remaining editor-semantics follow-ups are mixed `th`/`td` first-row table behavior and structured paste inside comment drafts. |
+| Medium | Structured block clipboard | Native now transports `text/plain`, `text/html`, and `application/logseq` through the OS clipboard and prefers the structured payload on paste. | Fixed for platform transport and validated on Linux/macOS, including cross-process macOS pasteboard reads. Linux restart persistence depends on the desktop clipboard manager: in the validation environment the owner exit removed all formats. Remaining editor-semantics follow-ups are mixed `th`/`td` first-row table behavior and structured paste inside comment drafts. |
 | Medium | Plugin runtime beyond opening the dialog | Native reports no installed plugins, toolbar items, palette commands, marketplace actions/settings, or plugin README support. | Source-confirmed capability gap. Opening the Plugins dialog itself is fixed. |
 | Medium | Multi-window support | Native windows are process-isolated rather than multiple SDL windows inside one host process. All Graphs now exposes `Open in new window`, which launches another native host process with the target graph deep link; both windows share the per-graph db-worker daemon. Shared native preferences use a cross-process lock plus read-modify-write merge so concurrent windows do not overwrite each other's keys. Deleting a graph broadcasts `local-graph-gone` through the shared daemon so other attached windows remove that graph and navigate away instead of remaining editable. | Runtime pass on macOS: two native windows opened the same graph, edits from both windows appeared in the shared journal, closing one window left the other alive, and external HTTP links still used the system browser. Caveat: there is not yet a dedicated File → New Window menu command. |
 | Medium | Sidebar typography | Native sidebar row spacing and left alignment are close to web; the earlier unresolved-size mismatch was fixed in this branch. Font rasterization is closer to Apple native rendering after the gamma/dark-ink coverage fixes, but native is still bitmap glyph compositing rather than platform text rendering. | Mostly fixed; residual platform-raster differences are uncertain. |
@@ -83,6 +83,7 @@ These differences are deliberate desktop-host behavior. They should not be count
 | Low | CSS animation/transform behavior | Native disables CSS-transform icons and CSS animations. | Source-confirmed platform limitation; specific visual impact uncertain. |
 | Low | Comments | Native comments use raw textarea-style editing/input rather than the full editor surface; comment scrolling is stubbed. | Source-confirmed implementation difference; UX impact untested. |
 | Low | Content layout details | Native uses simplified hard-coded padding/margins and bottom spacing; web uses CSS container classes and bottom padding. Wide-mode max-width behavior itself is fixed in this branch. | Source-confirmed implementation difference; residual visual impact only partially verified. |
+| Medium | Block context-menu keyboard traversal | ArrowUp wrap, Home/End, Enter/Space activation, and single-Escape close pass. Repeated Tab moves focus to outer UI while the menu remains open; ArrowLeft/ArrowRight and Shift+Tab currently do not provide submenu/focus traversal. | Runtime-confirmed keyboard parity issue for Tab; submenu-key expectations need source comparison before implementation. |
 
 ## Additional runtime smoke results after the fixes
 
@@ -118,9 +119,12 @@ Follow-up runtime results:
 
 - Passed on Linux: MP4/H.264 poster/frame playback, WAV/MP3 playback, pause, and seek render through native media controls in an isolated graph. Remaining caveat: MP4 playback startup took about 2–3 seconds in the headless PulseAudio validation VM; the Windows platform backend remains unimplemented; macOS video plays visually through LUI media and its audio track is now routed through the merged AVPlayer-backed transport; physical audible output remains unverified on the headless validation host.
 - Failed: custom CSS text entry accepted `body { background: red !important; }`, but no visual change occurred.
-- Passed with caveat: block context-menu ArrowDown/Enter opened `Open in sidebar`; Escape required two presses.
+- Passed with caveat: block context-menu ArrowDown/Enter opened `Open in sidebar`. A later Linux keyboard pass validated ArrowUp initial/wrap behavior, Home/End, Enter/Space activation, and single-Escape close; ArrowLeft/ArrowRight and Shift+Tab do not provide submenu/focus traversal, and repeated Tab escaped to outer UI while the menu remained open.
 - Failed before later fixes: math remained raw `x^2` and calculator showed only a shell without evaluation; both results are superseded by the fixed rows above. `{{youtube abcdef12345}}` still rendered only `?`.
 - Passed: fixed caret placement, quick-add autocomplete/slash layering, compact context menu, open panels, and save-panel presentation remained working in the follow-up run.
+- Passed on macOS: Markdown directory import completed through the real native directory picker in an isolated graph. Imported journal/page content, nested blocks, page links, search results, and a copied image asset were visible; the copied asset exactly matched the fixture bytes. Caveat: immediately after the picker closed, the first automated graph-name typing did not land until the input was clicked, matching the existing focus-transition caveat.
+- Linux structured clipboard root cause: same-process structured nested copy/paste passed; while the source app stayed alive, X11 exposed `text/plain`, `text/html`, and `application/logseq`; after the source exited, the clipboard owner disappeared and all formats became unavailable because the validation environment lacked clipboard-manager/SAVE_TARGETS persistence. This is an environment/platform-persistence limitation, not a structured-payload publication or paste-parsing failure.
+- Linux table controls: native filter and grouping controls were exposed with the expected properties, but sorting direction, filter apply/clear, and actual grouping were not objectively validated because the automation fixture/input was unreliable. Treat these as partially tested rather than product failures.
 
 ## Surfaces that appeared parity-passing in runtime comparison
 
@@ -139,16 +143,16 @@ Follow-up runtime results:
 ## Surfaces not tested or only partially tested
 
 - Real IME composition for Chinese/Japanese/Korean. Direct Unicode injection is not IME proof; the follow-up host environment only had ABC input enabled.
-- Structured clipboard edge cases, cut/paste, paste types beyond the passing plain block copy/paste smoke.
+- Structured clipboard cut/paste and desktop-specific clipboard-manager persistence beyond the validated same-process/cross-process transport behavior.
 - Advanced query editor and query semantics beyond the tested insertion, operator/filter completion, Apply, popup dismissal, and compact geometry. `task: Todo` matching remains uncertain because both apps returned `No matched result` for a matching TODO block.
-- Image lightbox (PNG rendering failed before lightbox could be reached).
+- Image lightbox richness beyond basic open/close behavior; Linux validation before the native lightbox implementation showed PNG rendering passed but clicking only selected the block.
 - Custom user macros and built-in macro matrix beyond the tested YouTube embed macro.
 - Plugin marketplace installation/actions.
 - RTC/synced-graph status and login flow (explicitly skipped).
 - Full macOS native menu command coverage beyond smoke-tested commands.
-- Directory import completion. The host now recursively enumerates picked directories for root-relative files, but no valid directory-import fixture was run.
-- Broader table sorting/filtering/grouping beyond status-cell editing.
-- Block context-menu keyboard behavior beyond the verified ArrowDown highlight, Enter activation, and two-Escape close path; other keys/submenu traversal remain untested in the real host.
+- Directory import edge cases beyond the passing small Markdown fixture (large trees, invalid files, name collisions, and partial-import recovery).
+- Broader table sorting/filtering/grouping outcomes. Controls were exposed on Linux, but sort direction, filter apply/clear, and grouping application still need reliable fixture-based validation.
+- Block context-menu submenu semantics for ArrowLeft/ArrowRight and Shift+Tab still need source comparison; the confirmed Tab focus-escape issue is recorded above.
 
 ## Evidence inventory
 
