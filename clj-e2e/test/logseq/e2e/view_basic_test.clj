@@ -116,6 +116,45 @@
     (w/click (loc/filter ".ui__dialog-content button" :has-text "Cancel"))
     (assert/assert-is-hidden ".ui__dialog-content")))
 
+(deftest property-objects-delete-confirm-before-removing-row-test
+  (let [property-name "property-objects-delete-confirm"
+        target-title "property objects delete target"
+        click-opts (doto (Locator$ClickOptions.)
+                     (.setDelay 120))]
+    (b/new-block target-title)
+    (util/input-command "Add property")
+    (w/click "input[placeholder]")
+    (util/input property-name)
+    (w/click (w/get-by-text "New option:"))
+    (w/click (loc/and "span" (util/get-by-text "Text" true)))
+    (w/click (format ".property-pair:has-text('%s') > .ls-block" property-name))
+    (util/input "Initial value")
+    (k/esc)
+    (page/goto-page property-name)
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text target-title))
+    (let [row (loc/filter ".ls-view-body .ls-table-row" :has-text target-title)]
+      (w/click (.locator row "[data-table-row-select]")))
+    (assert/assert-is-visible ".ls-table-actions")
+    (let [trash (.first (.locator (w/get-page)
+                                  ".ls-table-actions button:has(.ls-icon-trash)"))]
+      (.click trash click-opts))
+    (assert/assert-is-visible "div[role='alertdialog']")
+    (assert/assert-is-visible
+     (loc/filter "div[role='alertdialog']" :has-text "Are you sure you want to delete the selected nodes?"))
+    (w/click "div[role='alertdialog'] button:text('Cancel')")
+    (assert/assert-is-hidden "div[role='alertdialog']")
+    (assert/assert-is-visible
+     (loc/filter ".ls-view-body .ls-table-row" :has-text target-title))
+    (let [trash (.first (.locator (w/get-page)
+                                  ".ls-table-actions button:has(.ls-icon-trash)"))]
+      (.click trash click-opts))
+    (w/click "div[role='alertdialog'] button:text('Confirm')")
+    (assert/assert-is-hidden "div[role='alertdialog']")
+    (assert/assert-have-count
+     (loc/filter ".ls-view-body .ls-table-row" :has-text target-title)
+     0)))
+
 (deftest view-lifecycle-and-display-type-persistence-test
   (let [tag-name "view-lifecycle"
         container-page (page/get-page-name)
