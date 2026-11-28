@@ -11219,6 +11219,47 @@ let () =
   check "Native input selection across theme accents" (!failures=[]);
   print_endline "native input selection across theme accents: OK"
 
+let () =
+  (* dom-op set-selection-range wiring: byte offsets reach the text
+     session, focusing the target and replacing the range on typing.
+     Guards the regression where only select-all was applied and every
+     other range was silently dropped. *)
+  let previous_env = !Host_requests.env in
+  let rects = Lui_window.Rects.create () in
+  let store = Lui_store.create () in
+  List.iter (Lui_store.apply_op store)
+    [ CreateNode (1, Root); CreateNode (2, TextField); InsertChild (1, 2, 0);
+      SetProp (2, TextValue, StringValue "abcdef") ];
+  let ui = Lui_window.Ui.create () in
+  let env : Host_requests.env = {
+    store; ui; rects;
+    rect_of = Lui_window.Rects.get rects; scale = (fun () -> 1.);
+    measure = (fun _ _ -> 0., 0.);
+    text_flow = (fun _ -> None);
+    text_layout = (fun _ _ -> failwith "Unexpected selection text layout");
+    apply_batch = (fun _ -> ());
+    apply_actions = (fun _ -> ());
+    set_ime_rect = (fun _ -> ());
+    focused_text_input = (fun _ -> ());
+    toggle_native_performance = (fun () -> ());
+    repaint = (fun () -> ());
+  } in
+  Fun.protect ~finally:(fun () -> Host_requests.env := previous_env) (fun () ->
+    Host_requests.env := Some env;
+    Host_requests.handle
+      "dom-op\nset-selection-range\n{\"ref\":{\"node-id\":2},\"start\":2,\"end\":4}";
+    check "set-selection-range focuses the target node"
+      (Lui_window.Ui.focused ui = 2);
+    check "set-selection-range anchors at the range start"
+      (Lui_window.Ui.sel_anchor ui = 2);
+    check "set-selection-range places the caret at the range end"
+      (Lui_window.Ui.caret ui = 4);
+    ignore (Lui_window.Ui.handle ui store rects
+      (Lui_window.Input.Text_input "X"));
+    check "typing replaces the selected range instead of appending"
+      (Lui_window.Ui.shadow ui = "abXef"));
+  print_endline "native set-selection-range dom-op wiring: OK"
+
 let () = with_test_entry (fun () ->
   let module A = Lui_window.Assembly in
   let module W = Lui_window in

@@ -1184,30 +1184,16 @@ let dom_op (e : env) (op : string) (body : string) =
      | Some id -> Ui.set_focused e.ui e.store id
      | None -> ())
   | "set-selection-range" ->
-    (* The host owns the text session's selection and exposes no
-       range setter; the select-all case (cmdk restoring its last
-       query so typing replaces it, el.select()) maps onto the
-       session's own primary+A accelerator. Other ranges stay with
-       the session (caret kept). *)
+    (* Shared callers compute offsets with native string semantics,
+       so start/end arrive as byte positions — the same units the
+       text session uses. Ui.set_selection clamps and rounds them to
+       UTF-8 boundaries like the browser clamps to the field length. *)
     (match target with
      | Some id when id <> 0 ->
-       let len =
-         match Lui_store.string_prop e.store id "text" with
-         | Some t -> String.length t
-         | None -> 0
-       in
        let s = int_of_float (jfloat "start" parsed)
        and en = int_of_float (jfloat "end" parsed) in
-       if s = 0 && en > 0 && en >= len then begin
-         e.apply_actions (Ui.store_changed e.ui e.store);
-         if Ui.focused e.ui <> id then Ui.set_focused e.ui e.store id;
-         e.apply_actions
-           (Ui.handle e.ui e.store e.rects
-              (Input.Key_down
-                 ( Input.Other 4
-                 , { Input.mods_none with Input.ctrl = true }
-                 , false )))
-       end
+       e.apply_actions (Ui.store_changed e.ui e.store);
+       e.apply_actions (Ui.set_selection e.ui e.store id ~anchor:s ~caret:en)
      | _ -> ())
   | "set-document-title" ->
     Option.iter
