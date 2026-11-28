@@ -4,6 +4,7 @@
             ["ws" :as ws]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
+            [logseq.db-sync.bots-access :as bots-access]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.logging :as logging]
             [logseq.db-sync.node.assets :as assets]
@@ -136,16 +137,7 @@
   (when (seq (some-> js/process .-env (aget "LOGSEQ_BOTS_DATABASE_URL")))
     (let [module-path (node-path/join js/__dirname ".." "bots" "index.cjs")
           service (js/require module-path)]
-      (.createBotService service (.-env js/process)
-                         #js {:graphsFor (fn [user-id]
-                                           (p/let [graphs (index/<index-list index-db user-id)]
-                                             (clj->js (mapv :graph-id graphs))))
-                              :canShareGraph (fn [user-id graph-id]
-                                               (p/let [manager? (index/<user-is-manager? index-db graph-id user-id)]
-                                                 (if manager?
-                                                   (p/let [members (index/<graph-members-list index-db graph-id)]
-                                                     (boolean (some #(not= user-id (:user-id %)) members)))
-                                                   false)))}))))
+      (.createBotService service (.-env js/process) (bots-access/graph-access index-db)))))
 
 (defn- dispatch-request [request env registry deps bots]
   (let [path (.-pathname (platform/request-url request))]
@@ -153,9 +145,8 @@
       (p/let [^js service bots]
         (if (string/starts-with? path "/bots/runner/")
           (.handleRunner service request)
-          (p/let [claims (auth/auth-claims request env)
-                  owner (when claims (aget claims "sub"))]
-            (if (and (string? owner) (seq owner))
+          (p/let [owner (bots-access/<subject request env)]
+            (if owner
               (.handle service owner request)
               (worker-http/error-response "unauthorized" 401)))))
       (dispatch/handle-node-fetch {:request request :env env :registry registry :deps deps}))))

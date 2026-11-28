@@ -147,4 +147,12 @@ ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS runner_id uuid REFERENCES bot_runn
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS lease_id uuid;
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS lease_until timestamptz;
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS result_hash bytea;
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS work_from text;
 CREATE INDEX IF NOT EXISTS bot_runs_lease ON bot_runs (lease_until) WHERE lease_until IS NOT NULL;
+
+-- Work started by versions without a durable lease has an unknown outcome.
+WITH unconfirmed AS (
+  UPDATE bot_runs SET state='attention'
+  WHERE state='working' AND runner_id IS NULL AND lease_until IS NULL RETURNING session_id
+) UPDATE sessions SET status='attention',updated_at=now()
+  WHERE id IN (SELECT session_id FROM unconfirmed);

@@ -142,12 +142,43 @@ node worker/dist/node-adapter.js
 
 #### Mobile Bots
 
-Set `LOGSEQ_BOTS_DATABASE_URL` to a PostgreSQL database for Bots. Set
+Run the Node adapter for self-hosting or the Cloudflare Worker for hosted
+service. Give each deployment its own PostgreSQL database and settings. Both
+entrypoints use the same authenticated Bots API, queue and device protocol.
+
+For the Node adapter, set `LOGSEQ_BOTS_DATABASE_URL` to its PostgreSQL database.
+The adapter applies `worker/bots/schema.sql` on startup. Set
 `LOGSEQ_BOTS_MOCK=1` for deterministic replies from all test Agents
 without using Agent credentials. Use this mode for local UI testing.
 
+For a Cloudflare deployment:
+
+1. Apply `worker/bots/schema.sql` to its PostgreSQL database before deploying a
+   Worker update. Use a migration role with DDL permissions and give the Worker
+   connection only the access required to read and write the Bots tables and
+   sequences.
+2. Configure a Hyperdrive binding named `LOGSEQ_BOTS_HYPERDRIVE` in the target
+   Wrangler environment. Disable Hyperdrive query caching so reads see fresh
+   queue and chat state. For a direct PostgreSQL connection, set
+   `LOGSEQ_BOTS_DATABASE_URL` as a Worker secret.
+3. Keep the one-minute Cron Trigger in that environment. A successful
+   dispatch or device completion can start one job without attachments
+   immediately. Cron processes due provider polls, attachments, Automations
+   and expired leases. Codex and Pi use paired desktop or CLI devices.
+
+For example, add a provisioned Hyperdrive configuration to the staging Worker
+with the following binding. Use the corresponding table under `env.prod` for
+production.
+
+```toml
+[[env.staging.hyperdrive]]
+binding = "LOGSEQ_BOTS_HYPERDRIVE"
+id = "<staging Hyperdrive configuration ID>"
+```
+
 To enable a live Agent, set `LOGSEQ_BOTS_AGENT_OWNER` to the authenticated
-Logseq account's Cognito subject. Local Agents use `LOGSEQ_BOTS_AGENT_ROOT`
+Logseq account's Cognito subject. Command adapters on a self-hosted Node server
+use `LOGSEQ_BOTS_AGENT_ROOT`
 and the configured executable in `LOGSEQ_BOTS_CODEX`, `LOGSEQ_BOTS_PI` or
 `LOGSEQ_BOTS_CIRCLE`. Map each permitted repository to its local checkout
 using `LOGSEQ_BOTS_REPOSITORIES`, a JSON object keyed by `owner/repo`.
@@ -171,7 +202,7 @@ under the Bot owner's configuration and existing usage limits.
 Live Devin requires `LOGSEQ_BOTS_DEVIN_ENABLED=1`, `DEVIN_ORG_ID`,
 `DEVIN_API_KEY`, `LOGSEQ_BOTS_DEVIN_MAX_ACU` and
 `LOGSEQ_BOTS_DEVIN_DAILY_STARTS`. The last two variables accept positive
-integers. The Node server reserves an attempt for each new Start request,
+integers. The Bots scheduler reserves an attempt for each new Start request,
 enforces the rolling 24-hour limit, and passes the per-session ACU limit
 to Devin. A timeout on creation counts as an attempt. Set
 `LOGSEQ_BOTS_DEVIN_AUTOMATIONS=1` to permit scheduled Devin sessions.
@@ -179,7 +210,8 @@ to Devin. A timeout on creation counts as an attempt. Set
 An optional Graph destination uses a scoped `logseq/write` token in
 `LOGSEQ_BOTS_GRAPH_TOKEN` plus `LOGSEQ_BOTS_GRAPH_OWNER` and
 `LOGSEQ_BOTS_GRAPH_ID`. Set the destination block UUID when creating the
-Bot. The worker writes completed replies through the local semantic API.
+Bot. Set `DB_SYNC_BASE_URL` to the semantic API origin of the same deployment.
+The worker writes completed replies through that API.
 
 ### Tests
 
@@ -189,6 +221,9 @@ Run db-sync tests (includes Node adapter tests):
 cd deps/db-sync
 pnpm test:node-adapter
 ```
+
+To exercise the hosted Bots routes, set `LOGSEQ_BOTS_WORKER_TEST_DATABASE_URL`
+to an isolated PostgreSQL test database and run `pnpm test:bots-worker`.
 
 ## Environment Variables
 

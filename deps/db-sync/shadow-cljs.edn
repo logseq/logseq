@@ -9,7 +9,9 @@
                                :warnings {:fn-deprecated false
                                           :redef false}}
             :modules {:main {:exports {default logseq.db-sync.worker/worker
-                                       SyncDO logseq.db-sync.worker/SyncDO}}}
+                                       SyncDO logseq.db-sync.worker/SyncDO
+                                       botsSubject logseq.db-sync.bots-access/<subject
+                                       botsGraphAccess logseq.db-sync.bots-access/graph-access}}}
             :js-options {:js-provider :import}
             :closure-defines {shadow.cljs.devtools.client.env/enabled false
                               goog.debug.LOGGING_ENABLED true}
