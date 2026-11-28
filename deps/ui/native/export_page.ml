@@ -230,8 +230,18 @@ let copy (st : S.t Signal.state) =
   | Some c -> copied_flash st (clipboard_write c)
   | None -> ()
 
-(* cljs ClipboardItem path for the png blob *)
-let copy_png (_st : S.t Signal.state) = png_unavailable ()
+(* same platform binary clipboard path as PDF area copy *)
+let copy_png (st : S.t Signal.state) =
+  match (S.cur st).S.png_bytes with
+  | Some payload ->
+      let task = Platform.clipboard_write_image_png (Bytes.of_string payload) in
+      ignore
+        (Ui_task.catch
+           (Ui_task.bind task (fun () ->
+              Toast.success (I18n.t "notification/copied");
+              Ui_task.resolve ()))
+           (fun _ -> Ui_task.resolve ()))
+  | None -> ()
 
 let save_to_file (st : S.t Signal.state) =
   let cur = S.cur st in
