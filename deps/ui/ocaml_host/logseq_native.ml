@@ -307,9 +307,18 @@ module Host_media = struct
     match state.audio_player, state.video_player with
     | Some player, None ->
       (try
-        state.position_ms <- int_of_float (Lui_media.position player *. 1000.);
-        state.duration_ms <- int_of_float (Lui_media.duration player *. 1000.);
-        state.playing <- Lui_media.status player = Lui_media.Playing
+        let status = Lui_media.status player in
+        let position_ms = int_of_float (Lui_media.position player *. 1000.) in
+        let duration_ms = int_of_float (Lui_media.duration player *. 1000.) in
+        (* End-of-stream zeroes the pipeline position/duration queries, so
+           keep the last known duration and park the position at it — the
+           same end state web media controls show. *)
+        if duration_ms > 0 then state.duration_ms <- duration_ms;
+        if status = Lui_media.Ended && state.duration_ms > 0 then
+          state.position_ms <- state.duration_ms
+        else
+          state.position_ms <- position_ms;
+        state.playing <- status = Lui_media.Playing
       with _ -> ())
     | None, Some video ->
       (try
