@@ -43,6 +43,22 @@ test("mock mode overrides live credentials and live Devin requires positive limi
   assert.match((await mock.devin({prompt: "Test", session_id: bot})).reply, /^Mock devin:/);
 });
 
+test("cloud requests reject redirects without following them", async t => {
+  const redirected = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    redirected.push(new URL(url).host);
+    assert.equal(options.redirect, "manual");
+    return new Response(null, {status: 307, headers: {location: "https://fixture.invalid"}});
+  });
+  const providers = makeAgents({LOGSEQ_BOTS_AGENT_OWNER: owner, LOGSEQ_BOTS_DEVIN_ENABLED: "1",
+    LOGSEQ_BOTS_DEVIN_MAX_ACU: "1", LOGSEQ_BOTS_DEVIN_DAILY_STARTS: "unlimited",
+    DEVIN_ORG_ID: "org-fixture", DEVIN_API_KEY: "test-placeholder", CURSOR_API_KEY: "test-placeholder"});
+  const job = {state: "queued", session_id: bot, prompt: "Check navigation"};
+  await assert.rejects(providers.devin(job), /redirect \(HTTP 307\)/);
+  await assert.rejects(providers.cursor(job), /redirect \(HTTP 307\)/);
+  assert.deepEqual(redirected, ["api.devin.ai", "api.cursor.com"]);
+});
+
 test("a Devin reply is read from session history and a follow-up uses the same run", async t => {
   const sent = [];
   t.mock.method(globalThis, "fetch", async (url, options) => {
@@ -175,6 +191,33 @@ test("provider receives the ACU cap and an ambiguous start consumes the rolling 
       assert.equal(starts.length, 1);
       assert.equal(starts[0].max_acu_limit, 2);
       assert.equal(starts[0].devin_mode, "normal");
+    } finally {
+      await service.close();
+    }
+  });
+
+test("unlimited daily starts accept new tasks and still deduplicate a repeated dispatch",
+  {skip: !database}, async t => {
+    const starts = [];
+    t.mock.method(globalThis, "fetch", async (_url, options) => {
+      starts.push(JSON.parse(options.body));
+      throw new Error("Mock connection loss after create");
+    });
+    const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database, LOGSEQ_BOTS_AGENT_OWNER: owner,
+      LOGSEQ_BOTS_DEVIN_ENABLED: "1", LOGSEQ_BOTS_DEVIN_DAILY_STARTS: "unlimited", LOGSEQ_BOTS_DEVIN_MAX_ACU: "1",
+      DEVIN_ORG_ID: "org-fixture", DEVIN_API_KEY: "test-placeholder"});
+    try {
+      const id = randomUUID();
+      const main = `/bots/${id}`;
+      await call(service, "/bots", {id, name: "Unlimited test", defaultAgent: "devin"});
+      for (const body of ["First task", "Second task"]) {
+        const request = {id: randomUUID(), body, agent: "devin"};
+        const started = (await call(service, main + "/messages", request)).body;
+        await waitFor(() => call(service, main + "/sessions/" + started.sessionId),
+          result => result.session?.status === "attention");
+        assert.equal((await call(service, main + "/messages", request)).body.sessionId, started.sessionId);
+      }
+      assert.deepEqual(starts.map(start => start.max_acu_limit), [1, 1]);
     } finally {
       await service.close();
     }

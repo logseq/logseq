@@ -10,17 +10,27 @@ function positiveInteger(value) {
 function devinLimits(env) {
   return {
     maxAcu: positiveInteger(env.LOGSEQ_BOTS_DEVIN_MAX_ACU),
-    dailyStarts: positiveInteger(env.LOGSEQ_BOTS_DEVIN_DAILY_STARTS),
+    dailyStarts: env.LOGSEQ_BOTS_DEVIN_DAILY_STARTS === "unlimited"
+      ? Infinity : positiveInteger(env.LOGSEQ_BOTS_DEVIN_DAILY_STARTS),
     allowAutomation: env.LOGSEQ_BOTS_DEVIN_AUTOMATIONS === "1",
   };
+}
+
+async function fetchProvider(url, options) {
+  // Workers support manual redirects. Reject them before credentials can be forwarded.
+  const response = await fetch(url, {...options, redirect: "manual"});
+  if (response.status >= 300 && response.status < 400) {
+    throw new Error(`Agent API returned a redirect (HTTP ${response.status})`);
+  }
+  return response;
 }
 
 function devin(env, limits) {
   const organization = `https://api.devin.ai/v3/organizations/${encodeURIComponent(env.DEVIN_ORG_ID)}`;
   const root = organization + "/sessions";
   const call = async (url, body = null) => {
-    const response = await fetch(url, {
-      method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(25000),
+    const response = await fetchProvider(url, {
+      method: body ? "POST" : "GET", signal: AbortSignal.timeout(25000),
       headers: {authorization: `Bearer ${env.DEVIN_API_KEY}`, "content-type": "application/json"},
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -42,9 +52,9 @@ function devin(env, limits) {
         for (const file of job.files) {
           const form = new FormData();
           form.append("file", new Blob([file.payload]), file.name);
-          const uploaded = await fetch(organization + "/attachments", {
+          const uploaded = await fetchProvider(organization + "/attachments", {
             method: "POST", headers: {authorization: `Bearer ${env.DEVIN_API_KEY}`},
-            body: form, redirect: "error", signal: AbortSignal.timeout(25000),
+            body: form, signal: AbortSignal.timeout(25000),
           });
           const data = await uploaded.json().catch(() => ({}));
           if (!uploaded.ok || typeof data.url !== "string") {
@@ -126,8 +136,8 @@ function cursorCloud(env) {
   const root = "https://api.cursor.com/v1/agents";
   const model = {id: env.LOGSEQ_BOTS_CURSOR_MODEL?.trim() || "grok-4.7"};
   const call = async (path, body) => {
-    const response = await fetch(root + path, {
-      method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(25000),
+    const response = await fetchProvider(root + path, {
+      method: body ? "POST" : "GET", signal: AbortSignal.timeout(25000),
       headers: {authorization: `Bearer ${env.CURSOR_API_KEY}`, "content-type": "application/json"},
       body: body ? JSON.stringify(body) : undefined,
     });

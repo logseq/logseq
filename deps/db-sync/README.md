@@ -204,10 +204,10 @@ under the Bot owner's configuration and existing usage limits.
 
 Live Devin requires `LOGSEQ_BOTS_DEVIN_ENABLED=1`, `DEVIN_ORG_ID`,
 `DEVIN_API_KEY`, `LOGSEQ_BOTS_DEVIN_MAX_ACU` and
-`LOGSEQ_BOTS_DEVIN_DAILY_STARTS`. The last two variables accept positive
-integers. The Bots scheduler reserves an attempt for each new Start request,
-enforces the rolling 24-hour limit, and passes the per-session ACU limit
-to Devin. A timeout on creation counts as an attempt. Set
+`LOGSEQ_BOTS_DEVIN_DAILY_STARTS`. Set a positive per-session ACU limit and
+either a positive rolling 24-hour limit or `unlimited` for daily starts.
+The Bots scheduler reserves each new start once and passes the per-session ACU
+limit to Devin. A timeout on creation counts toward a configured daily limit. Set
 `LOGSEQ_BOTS_DEVIN_AUTOMATIONS=1` to permit scheduled Devin sessions.
 
 An optional Graph destination uses a scoped `logseq/write` token in
