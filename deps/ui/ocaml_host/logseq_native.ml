@@ -2124,6 +2124,7 @@ let () =
     if mods.Input.ctrl || mods.Input.meta || mods.Input.alt
        || Keyboard_capture.active ()
        || block_context_menu_editable_focus ()
+       || (Ui.ime ui).Lui_ime.marked_text <> ""
     then false
     else
       match key with
@@ -2450,6 +2451,7 @@ let () =
     done;
     Mutex.unlock input_fifo_lock
   in
+  let pending_composition_cancel = ref None in
   let drain_events () =
     let n = ref 0 in
     let go = ref true in
@@ -2467,7 +2469,18 @@ let () =
           if backing_changed then
             let width, height = Sdl.get_window_size !win in
             Some (Input.Resize (width, height))
-          else Native_window.input_of_event input_state e in
+          else
+            match Native_window.input_of_event input_state e, event.kind with
+            | None, Sdl.Event.Window (Focus_lost, _, _)
+              when (Ui.ime ui).Lui_ime.marked_text <> "" ->
+              (* macOS does not reliably resume the IME candidate session
+                 after app switching: SDL can leave stale inline preedit that
+                 Enter no longer commits. Treat window blur as a canceled
+                 empty commit so both the host IME session and shared editor
+                 composition close cleanly. *)
+              Some (Input.Text_input "")
+            | converted, _ -> converted
+        in
         (if match event.kind with Sdl.Event.Window (Focus_lost, _, _) -> true | _ -> false
          then begin
            Host_requests.reset_editor_pointer editor_pointer;
@@ -2534,7 +2547,68 @@ let () =
              | _ -> 0.
            in
            let epoch0 = Ui.scroll_epoch ui in
+           let editor_target () =
+             let tgt = Ui.focused ui in
+             if tgt <> 0 && Lui_store.kind store tgt = "extension:logseq-editor"
+             then Some tgt
+             else None
+           in
+           let send_editor_event tgt name payload =
+             apply_patches
+               (Native_embed.extension_event tgt "logseq-editor" name payload)
+           in
+           let send_composition tgt state text =
+             send_editor_event tgt "composition"
+               (Printf.sprintf
+                  {|{"state":%s,"text":%s,"range":"0,%d"}|}
+                  (jstr state) (jstr text) (String.length text))
+           in
+           let ime_before = Ui.ime ui in
+           let marked_before = ime_before.Lui_ime.marked_text in
+           let composing_before = marked_before <> "" in
+           let target_before = editor_target () in
            apply_actions (handle_input input);
+           (match input with
+            | Input.Key_down _ when composing_before ->
+              (* SDL/LUI already gave the key to the IME. Do not leak the
+                 same key into the app's DOM-key path, where Enter or
+                 Backspace would act on the editor behind the composition. *)
+              on_component_input ()
+            | _ -> ());
+           let ime_after = Ui.ime ui in
+           let marked_after = ime_after.Lui_ime.marked_text in
+           (match input, target_before with
+            | Input.Text_editing _, Some tgt ->
+              (* SDL clears marked text immediately before both commits and
+                 cancellations. Defer the empty-preedit cancel until this
+                 event batch is drained: a following text-input event in the
+                 same batch is the commit payload, while no following commit
+                 means the composition really was canceled. *)
+              if marked_before = "" && marked_after <> "" then begin
+                (match !pending_composition_cancel with
+                 | Some old_tgt -> send_composition old_tgt "cancel" ""
+                 | None -> ());
+                pending_composition_cancel := None;
+                send_composition tgt "start" "";
+                send_composition tgt "update" marked_after
+              end
+              else if marked_before <> "" && marked_after = "" then
+                pending_composition_cancel := Some tgt
+              else if marked_after <> "" && marked_after <> marked_before then
+                send_composition tgt "update" marked_after
+            | _ -> ());
+           let composition_input =
+             match input with
+             | Input.Text_input _ | Input.Text_editing _ -> true
+             | _ -> false
+           in
+           (match target_before with
+            | Some tgt
+              when composing_before && marked_after = "" && not composition_input ->
+              (* Focus loss and other non-text transitions cancel host-side
+                 composition without producing a text commit. *)
+              send_composition tgt "cancel" ""
+            | _ -> ());
            if page_dir <> 0. && not !component_input && not (Keyboard_capture.active ())
               && Ui.scroll_epoch ui = epoch0 then begin
              let fid = Ui.focused ui in
@@ -2554,24 +2628,34 @@ let () =
                      (Ui.scroll_by ui store sc (page_dir *. 0.9 *. h))
                end
            end;
-           (match input with
-            | Input.Text_input s when not !component_input ->
-              (* the editor sink's conduit reads text commits as
-                 "insert" — Ui.handle's TextChanged path stays unused
-                 because the extension admits no such event *)
-              let tgt = Ui.focused ui in
-              if tgt <> 0
-                 && Lui_store.kind store tgt = "extension:logseq-editor"
-              then
-                apply_patches
-                  (Native_embed.extension_event tgt "logseq-editor" "insert"
-                     (Printf.sprintf {|{"text":%s}|} (jstr s)))
+           (match input, editor_target () with
+            | Input.Text_input s, Some tgt when not !component_input ->
+              (* Ordinary text still arrives as insert. SDL clears preedit
+                 before delivering the commit payload, so the deferred empty
+                 preedit state also counts as an open composition here. *)
+              let had_pending_composition =
+                !pending_composition_cancel = Some tgt
+              in
+              if had_pending_composition then pending_composition_cancel := None;
+              if composing_before || had_pending_composition then
+                if s = "" then send_composition tgt "cancel" ""
+                else send_composition tgt "end" s
+              else if s <> "" then
+                send_editor_event tgt "insert"
+                  (Printf.sprintf {|{"text":%s}|} (jstr s))
             | _ -> ())
          | None -> ());
         if not !component_input && not key_pre_dispatched then emit_dom_event e
       end
       else go := false
     done;
+    (match !pending_composition_cancel with
+     | Some tgt ->
+       pending_composition_cancel := None;
+       apply_patches
+         (Native_embed.extension_event tgt "logseq-editor" "composition"
+            {|{"state":"cancel","text":"","range":"0,0"}|})
+     | None -> ());
     !n
   in
   (* ---- boot the embedded app ---- *)
