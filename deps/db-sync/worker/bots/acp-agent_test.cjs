@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const {randomUUID} = require("node:crypto");
-const {mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} = require("node:fs");
+const {mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} = require("node:fs");
 const {createServer} = require("node:http");
 const {tmpdir} = require("node:os");
 const {join} = require("node:path");
@@ -10,6 +10,7 @@ const {WebSocketServer} = require("ws");
 const {createAccountEvents} = require("../account_events_node.cjs");
 const {runAcp} = require("./acp-agent.cjs");
 const {listen} = require("./runner-client.cjs");
+const {main: runnerCli} = require("./runner-cli.cjs");
 const {createBotService} = require("./index.cjs");
 
 const database = process.env.LOGSEQ_BOTS_ACP_TEST_DATABASE_URL;
@@ -31,6 +32,9 @@ function mockAdapter() {
   createInterface({input: process.stdin}).on("line", raw => {
     const {id, method, params, result: response} = JSON.parse(raw);
     appendFileSync(executable + ".log", (method ?? response?.outcome?.outcome ?? "response") + "\n");
+    if (method === "session/new" || method === "session/load") {
+      appendFileSync(executable + ".cwd.log", process.cwd() + "\n");
+    }
     if (method === "initialize") {
       result(id, {protocolVersion: name === "v2" ? 2 : 1, agentCapabilities: {loadSession: name !== "no-load"}});
     } else if (method === "session/new") {
@@ -116,6 +120,34 @@ test("ACP cancels permission-gated turns and rejects disconnected or aborted tur
   await assert.rejects(execute(path, cwd, "wait", {signal: AbortSignal.timeout(200)}), {name: "TimeoutError"});
 });
 
+test("CLI pairs multiple checkouts and keeps paths local", async t => {
+  const {cwd, launcher} = fixtures(t);
+  const previous = process.env.LOGSEQ_BOTS_CODEX;
+  process.env.LOGSEQ_BOTS_CODEX = launcher("codex");
+  t.after(() => {
+    if (previous === undefined) delete process.env.LOGSEQ_BOTS_CODEX;
+    else process.env.LOGSEQ_BOTS_CODEX = previous;
+  });
+  const auth = join(cwd, "auth.json"), config = join(cwd, "runner.json");
+  const mobile = join(cwd, "mobile"), desktop = join(cwd, "desktop=checkout");
+  mkdirSync(mobile);
+  mkdirSync(desktop);
+  writeFileSync(auth, JSON.stringify({"id-token": "fixture-account-token"}));
+  let registration;
+  t.mock.method(globalThis, "fetch", async (_url, options) => {
+    registration = JSON.parse(options.body);
+    return Response.json({credential: "fixture-runner"});
+  });
+  await runnerCli(["pair", "--config", config, "--auth-file", auth, "--agent", "codex",
+    "--repo-workspace", "logseq/mobile=" + mobile, "--repo-workspace", "logseq/logseq=" + desktop]);
+  assert.deepEqual(registration.workspaces, {repositories: ["logseq/mobile", "logseq/logseq"], hasDefaultWorkspace: false});
+  assert.ok(!JSON.stringify(registration).includes(cwd));
+  assert.deepEqual(JSON.parse(readFileSync(config, "utf8")).workspaces,
+    {"logseq/mobile": mobile, "logseq/logseq": desktop});
+  await assert.rejects(runnerCli(["listen", "--config", config, "--repo-workspace", "logseq/mobile=" + desktop]),
+    /already has a workspace/);
+});
+
 async function waitFor(read, condition) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const value = await read();
@@ -134,11 +166,14 @@ test("paired runner claims on wake, stays idle without polling, and resumes both
     t.after(() => { if (previous === undefined) delete process.env[key]; else process.env[key] = previous; });
     process.env[key] = path;
   }
-  const owner = randomUUID(), graph = randomUUID(), bot = randomUUID();
+  const owner = randomUUID(), graph = randomUUID(), secondGraph = randomUUID(), bot = randomUUID();
+  const desktop = join(cwd, "desktop");
+  mkdirSync(desktop);
   const events = createAccountEvents({});
   let wakes = 0;
   const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {
-    graphsFor: async () => [graph], hasGraphAccess: async (account, graphId) => account === owner && graphId === graph,
+    graphsFor: async () => [graph, secondGraph],
+    hasGraphAccess: async (account, graphId) => account === owner && [graph, secondGraph].includes(graphId),
     onlineRunners: events.onlineRunners,
     publish(account, event) {
       if (event.type === "runner.available") wakes++;
@@ -222,6 +257,30 @@ test("paired runner claims on wake, stays idle without polling, and resumes both
       assert.deepEqual(requests, ["initialize", "session/new", "session/prompt", "initialize", "session/load", "session/prompt"]);
     }
     assert.equal(endpoints.filter(path => path.endsWith("/complete")).length, 4);
+    await stop();
+    controller = new AbortController();
+    listener = listen({...config, workspaces: {"logseq/logseq": desktop}},
+      {reconnectMs: 20, pingMs: 50, signal: controller.signal});
+    const registrations = await waitFor(() => account("/bots/runners"),
+      result => result.runners[0].repositories.includes("logseq/logseq"));
+    assert.deepEqual(registrations.runners.map(runner => runner.id), [runnerId]);
+
+    const secondary = randomUUID(), standalone = randomUUID(), missing = randomUUID();
+    await account("/bots", {id: secondary, graphId: secondGraph, name: "Desktop", repository: "logseq/logseq"});
+    await account("/bots", {id: standalone, graphId: secondGraph, name: "No repository"});
+    await account("/bots", {id: missing, graphId: secondGraph, name: "Missing repository", repository: "logseq/unconfigured"});
+    assert.equal((await account("/bots/" + missing)).agents.find(agent => agent.name === "codex").available, false);
+    for (const [botId, body] of [[secondary, "Run in desktop"], [standalone, "Run in the default workspace"]]) {
+      const route = "/bots/" + botId;
+      const turn = await account(route + "/messages", {id: randomUUID(), agent: "codex", body});
+      await waitFor(() => account(route + "/sessions/" + turn.sessionId),
+        view => view.messages.some(message => message.author === "codex"));
+    }
+    await account(thread + "/messages", {id: randomUUID(), body: "Review the original mobile checkout"});
+    await waitFor(() => account(thread), view =>
+      view.messages.some(message => message.author === "codex" && message.body.includes("original mobile checkout")));
+    assert.deepEqual(readFileSync(acpCommands.codex + ".cwd.log", "utf8").trim().split("\n"),
+      [cwd, cwd, desktop, cwd, cwd]);
   } finally {
     await stop();
     sockets.close();

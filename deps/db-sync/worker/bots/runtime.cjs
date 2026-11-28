@@ -55,6 +55,18 @@ function repository(value) {
   return value;
 }
 
+function runnerWorkspaces(value) {
+  const {repositories, hasDefaultWorkspace} = value ?? {};
+  if (!Array.isArray(repositories) || repositories.length > 32 ||
+      typeof hasDefaultWorkspace !== "boolean" || (!hasDefaultWorkspace && !repositories.length)) {
+    fail(400, "Choose a default workspace or up to 32 repository workspaces");
+  }
+  if (repositories.some(name => !repository(name)) || new Set(repositories).size !== repositories.length) {
+    fail(400, "Choose distinct repositories");
+  }
+  return {repositories, hasDefaultWorkspace};
+}
+
 function cursor(value) {
   if (value !== null && !/^\d{1,18}$/.test(value)) fail(400, "Invalid cursor");
   return value;
@@ -455,7 +467,8 @@ async function retireRunner(db, runnerId, owner) {
 
 async function manageRunners(pool, owner, request, resource, itemKey, action, onlineRunners) {
   if (!resource && request.method === "GET") {
-    const {rows} = await pool.query(`SELECT id,name,agents,repository,seen_at,
+    const {rows} = await pool.query(`SELECT id,name,agents,repository,
+      COALESCE(repositories, array_remove(ARRAY[repository], '')) AS repositories,has_default_workspace,seen_at,
       seen_at>now()-interval '75 seconds' AS online FROM bot_runners
       WHERE owner=$1 AND revoked_at IS NULL ORDER BY created_at`, [owner]);
     const connected = new Set(await onlineRunners?.(owner));
@@ -469,9 +482,11 @@ async function manageRunners(pool, owner, request, resource, itemKey, action, on
     }
     const deviceId = randomUUID();
     const credential = deviceId + "." + randomBytes(32).toString("base64url");
-    await pool.query(`INSERT INTO bot_runners (id,owner,name,token_hash,agents,repository,seen_at)
-      VALUES ($1,$2,$3,$4,$5,$6,'-infinity')`,
-    [deviceId, owner, text(body.name, 120), hash(credential), body.agents, repository(body.repository)]);
+    const workspaces = body.workspaces == null ? null : runnerWorkspaces(body.workspaces);
+    await pool.query(`INSERT INTO bot_runners (id,owner,name,token_hash,agents,repository,repositories,has_default_workspace,seen_at)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'-infinity')`,
+    [deviceId, owner, text(body.name, 120), hash(credential), body.agents, repository(body.repository),
+      workspaces?.repositories ?? null, workspaces?.hasDefaultWorkspace ?? true]);
     return {id: deviceId, credential};
   }
   if (resource && itemKey === "revoke" && !action && request.method === "POST") {
@@ -505,7 +520,9 @@ async function lookupRunner(db, request, lock = false) {
   const credential = request.headers.get("authorization")?.match(/^Bearer ([a-f0-9-]{36}\.[A-Za-z0-9_-]{43})$/)?.[1];
   const runnerId = credential?.slice(0, 36);
   if (!runnerId || !uuid.test(runnerId)) return null;
-  const {rows: [runner]} = await db.query(`SELECT id,owner,agents,repository FROM bot_runners
+  const {rows: [runner]} = await db.query(`SELECT id,owner,agents,repository,
+    COALESCE(repositories, array_remove(ARRAY[repository], '')) AS repositories,
+    has_default_workspace AS "hasDefaultWorkspace" FROM bot_runners
     WHERE id=$1 AND token_hash=$2 AND revoked_at IS NULL ${lock ? "FOR UPDATE" : ""}`, [runnerId, hash(credential)]);
   return runner;
 }
@@ -531,15 +548,28 @@ async function runnerRoute(pool, request, canExport, notifyRevoked) {
       revoked = runner;
       return Response.json({revoked: true});
     }
+    if (path === "/bots/runner/workspaces" && request.method === "PUT") {
+      const {repositories, hasDefaultWorkspace} = runnerWorkspaces(await jsonBody(request));
+      await db.query(`UPDATE bot_runners SET repositories=$2,has_default_workspace=$3 WHERE id=$1
+        AND (repositories IS DISTINCT FROM $2 OR has_default_workspace IS DISTINCT FROM $3)`,
+      [runnerId, repositories, hasDefaultWorkspace]);
+      return Response.json({saved: true});
+    }
     if (path === "/bots/runner/claim" && request.method === "POST") {
-      const acpAgents = (await jsonBody(request, {allowEmpty: true})).acpAgents ?? [];
+      const body = await jsonBody(request, {allowEmpty: true});
+      const acpAgents = body.acpAgents ?? [];
       if (!validAcpAgents(runner, acpAgents)) {
         fail(400, "Invalid ACP capabilities");
       }
       const active = await db.query(`SELECT 1 FROM bot_runs WHERE runner_id=$1 AND lease_until>now()
         AND state IN ('leased','working') LIMIT 1`, [runnerId]);
       if (active.rowCount) return Response.json({job: null});
-      const job = await claim(db, {...runner, acpAgents}, []);
+      const workspace = body.workspaces == null
+        ? {repositories: runner.repository ? [runner.repository] : [], hasDefaultWorkspace: true}
+        : runnerWorkspaces(body.workspaces);
+      const repositories = workspace.repositories.filter(name => runner.repositories.includes(name));
+      const hasDefaultWorkspace = runner.hasDefaultWorkspace && workspace.hasDefaultWorkspace;
+      const job = await claim(db, {...runner, acpAgents, repositories, hasDefaultWorkspace}, []);
       if (!job) return Response.json({job: null});
       const context = await withThreadContext(db, job);
       const providerTransport = job.provider_transport ??
@@ -624,11 +654,13 @@ async function claim(db, runner, localProviders, localProviderOwner = null, {
              AND ($7::text IS NULL OR b.owner=$7)
              AND (binding.provider_session_id IS NOT NULL OR NOT EXISTS (
                SELECT 1 FROM bot_runners d WHERE d.owner=b.owner AND d.revoked_at IS NULL
-               AND (s.repository='' OR s.repository=d.repository) AND COALESCE(r.agent,s.agent)=ANY(d.agents)
+               AND ((s.repository='' AND d.has_default_workspace) OR
+                 (s.repository<>'' AND s.repository=ANY(COALESCE(d.repositories, ARRAY[d.repository]))))
+               AND COALESCE(r.agent,s.agent)=ANY(d.agents)
                AND (m.actor IS NULL OR m.actor=b.owner))))
          ELSE r.state='queued' AND b.owner=$4 AND (m.actor IS NULL OR m.actor=b.owner)
            AND COALESCE(r.agent,s.agent)=ANY($5::text[])
-           AND (s.repository='' OR s.repository=$6)
+           AND ((s.repository='' AND $9) OR (s.repository<>'' AND s.repository=ANY($6::text[])))
            AND (binding.runner_id=$1 OR binding.runner_id IS NULL AND binding.provider_session_id IS NULL)
            AND (binding.provider_transport IS DISTINCT FROM 'acp-v1' OR COALESCE(r.agent,s.agent)=ANY($8::text[]))
          END
@@ -638,7 +670,7 @@ async function claim(db, runner, localProviders, localProviderOwner = null, {
                AND (COALESCE(earlier_first.seq,earlier.seq),earlier.seq)<(COALESCE(first.seq,r.seq),r.seq))
        ORDER BY r.due_at,r.seq LIMIT 1 ${nextOnly ? "" : "FOR UPDATE OF r SKIP LOCKED"}`,
     [runner?.id ?? null, localAgentNames, localProviders, runner?.owner ?? null, runner?.agents ?? [],
-      runner?.repository ?? "", localProviderOwner, runner?.acpAgents ?? []]);
+      runner?.repositories ?? [], localProviderOwner, runner?.acpAgents ?? [], runner?.hasDefaultWorkspace ?? false]);
   if (!job) return null;
   if (nextOnly) return job.due_at;
   if (runner) {
@@ -828,7 +860,8 @@ function createBotRuntime(pool, env, options = {}) {
   const localProviderOwner = unrestricted ? null : env.LOGSEQ_BOTS_AGENT_OWNER ?? null;
   const availableAgents = async (owner, repo = null) => {
     const {rows} = await pool.query(`SELECT DISTINCT unnest(agents) AS agent FROM bot_runners
-      WHERE owner=$1 AND revoked_at IS NULL AND ($2::text IS NULL OR $2='' OR repository=$2)`, [owner, repo]);
+      WHERE owner=$1 AND revoked_at IS NULL AND ($2::text IS NULL OR ($2='' AND has_default_workspace) OR
+        ($2<>'' AND $2=ANY(COALESCE(repositories, ARRAY[repository]))))`, [owner, repo]);
     const paired = new Set(rows.map(row => row.agent));
     return builtInAgents(owner).map(item => ({...item, available: item.available || paired.has(item.name)}));
   };
@@ -898,7 +931,9 @@ function createBotRuntime(pool, env, options = {}) {
       ORDER BY r.session_id,COALESCE(first.seq,r.seq),r.seq
     ) SELECT head.session_id,head.agent,head.provider_transport='acp-v1' AS acp_only,array_agg(d.id) AS runner_ids
       FROM head JOIN bot_runners d ON d.owner=head.owner AND d.revoked_at IS NULL
-        AND (head.repository='' OR d.repository=head.repository) AND head.agent=ANY(d.agents)
+        AND ((head.repository='' AND d.has_default_workspace) OR
+          (head.repository<>'' AND head.repository=ANY(COALESCE(d.repositories, ARRAY[d.repository]))))
+        AND head.agent=ANY(d.agents)
         AND (head.runner_id=d.id OR head.runner_id IS NULL AND head.provider_session_id IS NULL)
       WHERE head.state='queued' AND head.due_at<=now() AND (head.actor IS NULL OR head.actor=head.owner)
         AND head.agent=ANY($2::text[])

@@ -131,9 +131,9 @@ function watchJobs(server, credential, acpAgents, signal, pingMs) {
   };
 }
 
-async function pair({server, accountToken, name = hostname(), agents, repository}) {
+async function pair({server, accountToken, name = hostname(), agents, repository, workspaces}) {
   const response = await request(serverOrigin(server), accountToken, "/bots/runners", {
-    body: {name, agents, repository},
+    body: {name, agents, repository, workspaces},
   });
   return response.json();
 }
@@ -156,11 +156,15 @@ function configuredAcpCommands(commands, env = process.env) {
   }));
 }
 
+function repositoryDirectories({root, repository, workspaces}) {
+  return {...workspaces, ...(repository && root ? {[repository]: root} : {})};
+}
+
 function providersFor(config, acpCommands) {
-  const {root, repository, commands} = config;
+  const {root, commands} = config;
   return localAgents({
     ...process.env, LOGSEQ_BOTS_AGENT_ROOT: root,
-    LOGSEQ_BOTS_REPOSITORIES: JSON.stringify(repository ? {[repository]: root} : {}),
+    LOGSEQ_BOTS_REPOSITORIES: JSON.stringify(repositoryDirectories(config)),
     LOGSEQ_BOTS_CODEX: commands.codex, LOGSEQ_BOTS_PI: commands.pi, LOGSEQ_BOTS_CIRCLE: undefined,
   }, acpCommands);
 }
@@ -174,6 +178,8 @@ async function listen(config, {
   const pause = (ms, stop = signal) => delay(ms, undefined, {signal: stop});
   const unavailable = error => [401, 403, 409].includes(error?.status);
   const acpAgents = Object.keys(acpCommands);
+  const directories = repositoryDirectories(config);
+  const workspaces = {repositories: Object.keys(directories), hasDefaultWorkspace: Boolean(config.root)};
 
   async function retry(action, stop = signal, attempts = 5) {
     for (let attempt = 1; ; attempt++) {
@@ -196,7 +202,7 @@ async function listen(config, {
     try {
       const agent = localNames.includes(job.agent) && providers[job.agent];
       await retry(() => call("start"), stop);
-      if (!agent || (job.repository && job.repository !== config.repository)) {
+      if (!agent || !(job.repository ? Object.hasOwn(directories, job.repository) : config.root)) {
         await retry(() => call("complete", {body: {state: "failed", reply: "This device no longer has the requested Agent or workspace."}}), stop);
         return;
       }
@@ -237,13 +243,19 @@ async function listen(config, {
   }
 
   let failures = 0;
+  let registered = false;
   while (!signal?.aborted) {
-    const events = watchJobs(server, config.credential, acpAgents, signal, pingMs);
+    let events;
     try {
+      if (!registered) {
+        await api("/workspaces", {method: "PUT", signal, body: workspaces});
+        registered = true;
+      }
+      events = watchJobs(server, config.credential, acpAgents, signal, pingMs);
       while (!signal?.aborted) {
         await events.next();
         while (events.connected && !signal?.aborted) {
-          const response = await api("/claim", {signal, body: {acpAgents}});
+          const response = await api("/claim", {signal, body: {acpAgents, workspaces}});
           const {job} = await response.json();
           failures = 0;
           onStatus(job ? "working" : "online");
@@ -258,15 +270,15 @@ async function listen(config, {
         return;
       }
       onStatus("reconnecting");
-      events.close();
+      events?.close();
       failures = Math.min(failures + 1, 5);
       const backoff = reconnectMs * 2 ** (failures - 1);
       try { await pause(Math.min(30000, backoff + Math.random() * reconnectMs)); }
       catch (abort) { if (!signal?.aborted) throw abort; }
     } finally {
-      events.close();
+      events?.close();
     }
   }
 }
 
-module.exports = {discoverAgents, listen, pair, revoke, serverOrigin};
+module.exports = {discoverAgents, listen, pair, repositoryDirectories, revoke, serverOrigin};

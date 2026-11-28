@@ -191,6 +191,25 @@ test("Worker arms only due work and drives device workflows and cloud recovery",
     assert.ok((await call("/bots/runners/" + runnerId + "/revoke", {}, {method: "POST"})).data.revoked);
     assert.equal(subscribers[0].socket.readyState, 3);
     assert.equal(await bots.runnerIdentity(wsRequest(credential, "pi"), env), null);
+
+    const workspaces = {repositories: ["logseq/mobile", "logseq/logseq"], hasDefaultWorkspace: false};
+    const multi = (await call("/bots/runners", {name: "Multiple workspaces", agents: ["pi"], workspaces})).data;
+    const multiIdentity = await bots.runnerIdentity(wsRequest(multi.credential, "pi"), env);
+    const multiEvents = [];
+    subscribe(multiIdentity, multiEvents);
+    const second = "/bots/" + randomUUID();
+    await call("/bots", {id: second.slice(6), name: "Repository Bot", graphId: graph, repository: "logseq/logseq"});
+    const dispatched = await call(second + "/messages", {id: randomUUID(), agent: "pi", body: "Use the desktop checkout"});
+    assert.equal(dispatched.status, 200);
+    await runAlarm();
+    assert.deepEqual(multiEvents, [{type: "runner.available"}]);
+
+    const claim = body => call("/bots/runner/claim", body, {sub: null, credential: multi.credential, method: "POST"});
+    const mobileOnly = {workspaces: {repositories: ["logseq/mobile"], hasDefaultWorkspace: false}, acpAgents: ["pi"]};
+    assert.equal((await claim(mobileOnly)).data.job, null, "A running process must advertise the target workspace");
+    assert.equal((await claim({acpAgents: ["pi"]})).data.job, null, "A legacy process cannot claim a newly mapped checkout");
+    const matched = (await claim({workspaces, acpAgents: ["pi"]})).data.job;
+    assert.equal(matched.repository, "logseq/logseq");
   } finally {
     subscribers.length = 0;
     await db.end();

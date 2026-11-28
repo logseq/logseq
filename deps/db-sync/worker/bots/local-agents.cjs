@@ -44,14 +44,13 @@ function events(output) {
 
 function localAgents(env, acpCommands = {}) {
   const cwd = env.LOGSEQ_BOTS_AGENT_ROOT;
-  if (!cwd) return {};
+  const repositories = JSON.parse(env.LOGSEQ_BOTS_REPOSITORIES || "{}");
+  if (!cwd && !Object.keys(repositories).length) return {};
   const childEnv = Object.fromEntries(Object.entries(env).filter(([name]) =>
     !/^(LOGSEQ_BOTS_|DEVIN_|CURSOR_API_KEY$|PG|DB_SYNC_|ASSET_LINK_SECRET)/.test(name)));
   const cwdFor = job => {
-    if (!job.repository) return cwd;
-    const directory = env.LOGSEQ_BOTS_REPOSITORIES
-      ? JSON.parse(env.LOGSEQ_BOTS_REPOSITORIES)[job.repository] : null;
-    if (!directory) throw new Error("The Agent repository is not configured");
+    const directory = job.repository ? repositories[job.repository] : cwd;
+    if (!directory) throw new Error("The Agent workspace is not configured");
     return directory;
   };
   const providers = {
