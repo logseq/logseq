@@ -423,12 +423,16 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
 
 let seek_youtube t id seconds =
   let seconds = max 0 seconds in
-  Hashtbl.replace t.pending_seeks id seconds;
   match Hashtbl.find_opt t.states id with
-  | Some { view = Some view; source; _ } when youtube_source source ->
+  | Some { view = Some view; source; player_ready = true; _ }
+    when youtube_source source ->
       log "youtube seek id=%d seconds=%d" id seconds;
       perform_seek view seconds
-  | _ -> ()
+  | Some { view = Some view; source; _ } when youtube_source source ->
+      Hashtbl.replace t.pending_seeks id seconds;
+      log "youtube seek id=%d seconds=%d" id seconds;
+      perform_seek view seconds
+  | _ -> Hashtbl.replace t.pending_seeks id seconds
 
 let playback_time t id =
   match Hashtbl.find_opt t.states id with
