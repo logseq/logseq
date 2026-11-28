@@ -278,15 +278,24 @@ let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
      focus without touching editor/input ownership — outside the lightbox
      nothing is registered and arrows keep their usual meaning *)
   let on_keydown _name payload =
-    let key =
+    let event =
       match payload with
-      | Some event -> Ui_dom_native.jstr "key" (Js.Json.parseExn event)
-      | None -> None
+      | Some event -> Js.Json.parseExn event
+      | None -> Js.Json.null
     in
-    match key with
-    | Some "ArrowLeft" -> step (-1)
-    | Some "ArrowRight" -> step 1
-    | _ -> ()
+    (* PhotoSwipe only steps on unmodified arrows — shifted or chorded
+       combinations keep their host/app meaning *)
+    let modified =
+      Ui_dom_native.jbool "shiftKey" event
+      || Ui_dom_native.jbool "ctrlKey" event
+      || Ui_dom_native.jbool "altKey" event
+      || Ui_dom_native.jbool "metaKey" event
+    in
+    if not modified then
+      match Ui_dom_native.jstr "key" event with
+      | Some "ArrowLeft" -> step (-1)
+      | Some "ArrowRight" -> step 1
+      | _ -> ()
   in
   viewport_modal_cover
     (Lui_elements.dialog ~key:lightbox_key
