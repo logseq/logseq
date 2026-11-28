@@ -960,7 +960,8 @@ let input_video input hint =
       Some
         (Ve_iframe
            ("https://www.youtube-nocookie.com/embed/" ^ id
-            ^ match start with Some s -> "?t=" ^ s | None -> ""))
+            ^ "?enablejsapi=1"
+            ^ match start with Some s -> "&t=" ^ s | None -> ""))
   | Some (Vp_bilibili page, id) ->
       Some
         (Ve_iframe
@@ -1031,6 +1032,9 @@ let youtube_iframe id start =
 (* cljs video-embed-cp :iframe attr set — shared by every non-youtube
    provider *)
 let provider_iframe src =
+  (* A generic iframe can still be a privacy-enhanced YouTube player;
+     install the shared timestamp bridge before one is first rendered. *)
+  Render_libs.ensure ();
   D.el ~tag:"iframe"
     ~attrs:
       [ ("allow-full-screen", "allowfullscreen")
