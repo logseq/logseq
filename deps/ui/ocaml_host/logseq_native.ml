@@ -2534,18 +2534,6 @@ let () =
              | _ -> 0.
            in
            let epoch0 = Ui.scroll_epoch ui in
-           let ime_before = Ui.ime ui in
-           let composition_before =
-             ime_before.Lui_ime.active || ime_before.Lui_ime.marked_text <> ""
-           in
-           apply_actions (handle_input input);
-           (match input with
-            | Input.Key_down _ when composition_before ->
-              (* SDL/LUI already gave the key to the IME. Do not leak the
-                 same key into the app's DOM-key path, where Enter or
-                 Backspace would act on the editor behind the composition. *)
-              on_component_input ()
-            | _ -> ());
            let editor_target () =
              let tgt = Ui.focused ui in
              if tgt <> 0 && Lui_store.kind store tgt = "extension:logseq-editor"
@@ -2562,16 +2550,49 @@ let () =
                   {|{"state":%s,"text":%s,"range":"0,%d"}|}
                   (jstr state) (jstr text) (String.length text))
            in
-           (match input, editor_target () with
+           let ime_before = Ui.ime ui in
+           let marked_before = ime_before.Lui_ime.marked_text in
+           let composing_before = marked_before <> "" in
+           let target_before = editor_target () in
+           apply_actions (handle_input input);
+           (match input with
+            | Input.Key_down _ when composing_before ->
+              (* SDL/LUI already gave the key to the IME. Do not leak the
+                 same key into the app's DOM-key path, where Enter or
+                 Backspace would act on the editor behind the composition. *)
+              on_component_input ()
+            | _ -> ());
+           let ime_after = Ui.ime ui in
+           let marked_after = ime_after.Lui_ime.marked_text in
+           (match input, target_before with
             | Input.Text_editing _, Some tgt ->
-              let ime_after = Ui.ime ui in
-              if composition_before || ime_after.Lui_ime.active
-                 || ime_after.Lui_ime.marked_text <> ""
-              then begin
-                if not composition_before && ime_after.Lui_ime.active then
-                  send_composition tgt "start" "";
-                send_composition tgt "update" ime_after.Lui_ime.marked_text
+              (* LUI keeps the host IME session open across empty editing
+                 reports so composition can resume. The shared editor model
+                 instead treats empty preedit as a canceled composition:
+                 otherwise a stale composition start survives cancellation
+                 and a later composition at another caret would splice into
+                 the old range. Restarting after empty preedit is equivalent
+                 at the same caret and correct at a moved caret. *)
+              if marked_before = "" && marked_after <> "" then begin
+                send_composition tgt "start" "";
+                send_composition tgt "update" marked_after
               end
+              else if marked_before <> "" && marked_after = "" then
+                send_composition tgt "cancel" ""
+              else if marked_after <> "" && marked_after <> marked_before then
+                send_composition tgt "update" marked_after
+            | _ -> ());
+           let composition_input =
+             match input with
+             | Input.Text_input _ | Input.Text_editing _ -> true
+             | _ -> false
+           in
+           (match target_before with
+            | Some tgt
+              when composing_before && marked_after = "" && not composition_input ->
+              (* Focus loss and other non-text transitions cancel host-side
+                 composition without producing a text commit. *)
+              send_composition tgt "cancel" ""
             | _ -> ());
            if page_dir <> 0. && not !component_input && not (Keyboard_capture.active ())
               && Ui.scroll_epoch ui = epoch0 then begin
@@ -2595,10 +2616,10 @@ let () =
            (match input, editor_target () with
             | Input.Text_input s, Some tgt when not !component_input ->
               (* Ordinary text still arrives as insert. A commit produced
-                 while the host IME session was active must close the
-                 shared editor composition instead: composition_commit is
-                 what splices the marked text into the model. *)
-              if composition_before then
+                 while preedit is visible must close the shared editor
+                 composition instead: composition_commit is what splices the
+                 marked text into the model. *)
+              if composing_before then
                 if s = "" then send_composition tgt "cancel" ""
                 else send_composition tgt "end" s
               else if s <> "" then
