@@ -3308,6 +3308,8 @@ typedef struct {
   int (*gst_element_query_duration)(void *, int, int64_t *);
   int (*gst_element_seek_simple)(void *, int, int, int64_t);
   void *(*gst_element_get_bus)(void *);
+  void (*gst_pipeline_use_clock)(void *, void *);
+  void *(*gst_system_clock_obtain)(void);
   void (*gst_object_unref)(void *);
   void (*gst_mini_object_unref)(void *);
   void *(*gst_caps_from_string)(const char *);
@@ -3382,6 +3384,8 @@ static int logseq_media_api_load(void) {
   LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_query_duration, core, "libgstreamer", "gst_element_query_duration", error, sizeof(error));
   LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_seek_simple, core, "libgstreamer", "gst_element_seek_simple", error, sizeof(error));
   LOGSEQ_MEDIA_SYM(logseq_gst.gst_element_get_bus, core, "libgstreamer", "gst_element_get_bus", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_pipeline_use_clock, core, "libgstreamer", "gst_pipeline_use_clock", error, sizeof(error));
+  LOGSEQ_MEDIA_SYM(logseq_gst.gst_system_clock_obtain, core, "libgstreamer", "gst_system_clock_obtain", error, sizeof(error));
   LOGSEQ_MEDIA_SYM(logseq_gst.gst_object_unref, core, "libgstreamer", "gst_object_unref", error, sizeof(error));
   LOGSEQ_MEDIA_SYM(logseq_gst.gst_mini_object_unref, core, "libgstreamer", "gst_mini_object_unref", error, sizeof(error));
   LOGSEQ_MEDIA_SYM(logseq_gst.gst_caps_from_string, core, "libgstreamer", "gst_caps_from_string", error, sizeof(error));
@@ -3642,6 +3646,14 @@ CAMLprim value logseq_native_media_open(value source_v, value video_v) {
   }
   logseq_gst.g_object_set(player->pipeline, "uri", source, NULL);
   free(source);
+  /* Slave the pipeline to the system clock instead of the audio sink
+     clock: when the audio device is missing or its clock freezes (no
+     hardware, headless or broken PulseAudio/PipeWire) the audio clock
+     stops advancing, which freezes the position and every synchronized
+     video frame even though decoding is healthy. Web playback stays
+     unaffected by audio output failures, so match that. */
+  logseq_gst.gst_pipeline_use_clock(player->pipeline,
+    logseq_gst.gst_system_clock_obtain());
   int state_result = logseq_gst.gst_element_set_state(player->pipeline,
     LOGSEQ_GST_STATE_PAUSED);
   if (state_result == 0) {
