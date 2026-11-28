@@ -208,8 +208,12 @@ async function handleMcp(request, env, ctx) {
 }
 
 export default {
-  scheduled(_controller, env, ctx) {
+  scheduled(controller, env, ctx) {
     ctx.waitUntil(processDiscussionPush(env));
+    // Reuse the discussion push trigger for the hourly Bots recovery check.
+    if (new Date(controller.scheduledTime).getUTCMinutes() === 0) {
+      ctx.waitUntil(bots.repair(env, controller.scheduledTime));
+    }
   },
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
@@ -237,9 +241,6 @@ export default {
       return worker.fetch(request, { ...env, SIGN_R2_ASSET_UPLOAD: r2AssetUploadSigner(env) }, ctx);
     }
     return worker.fetch(request, env, ctx);
-  },
-  scheduled(controller, env) {
-    return bots.repair(env, controller.scheduledTime);
   },
 };
 

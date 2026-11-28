@@ -18,6 +18,14 @@
           (string? username) (assoc :username username)
           (string? name) (assoc :name name))))))
 
+(defn attachment->user
+  [attachment]
+  (:presence/user (bean/->clj attachment)))
+
+(defn attachment->graph-id
+  [attachment]
+  (:presence/graph-id (bean/->clj attachment)))
+
 (defn- serialize-attachment!
   [^js self ^js ws user]
   (let [graph-id (aget self "graph-id")
