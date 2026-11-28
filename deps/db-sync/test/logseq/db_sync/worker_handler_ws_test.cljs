@@ -143,19 +143,17 @@
                                        (reset! attachment* attachment))
                 :deserializeAttachment (fn []
                                          @attachment*)}
-        self #js {}
+        self #js {"graph-id" "graph-1"}
         restored-self #js {}
         user {:user-id "user-1"
               :email "user@example.com"
               :username "alice"}
         sent (atom nil)]
     (presence/add-presence! self ws user)
-    (is (= {:presence/user user}
+    (is (= {:presence/user user :graph-id "graph-1"}
            (bean/->clj (.deserializeAttachment ws))))
-    (swap! (presence/presence* restored-self)
-           assoc
-           ws
-           (presence/attachment->user (.deserializeAttachment ws)))
+    (presence/restore-attachment! restored-self ws (.deserializeAttachment ws))
+    (is (= "graph-1" (aget restored-self "graph-id")))
     (with-redefs [ws/broadcast! (fn [_self _sender message]
                                   (reset! sent message))]
       (presence/broadcast-online-users! restored-self))

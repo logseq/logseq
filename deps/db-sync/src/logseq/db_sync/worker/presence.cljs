@@ -18,13 +18,13 @@
           (string? username) (assoc :username username)
           (string? name) (assoc :name name))))))
 
-(defn attachment->user
-  [attachment]
-  (:presence/user (bean/->clj attachment)))
-
 (defn- serialize-attachment!
-  [^js ws user]
-  (.serializeAttachment ws (bean/->js {:presence/user user})))
+  [^js self ^js ws user]
+  (let [graph-id (aget self "graph-id")
+        attachment (cond-> {}
+                     user (assoc :presence/user user)
+                     (string? graph-id) (assoc :graph-id graph-id))]
+    (.serializeAttachment ws (bean/->js attachment))))
 
 (defn presence*
   [^js self]
@@ -41,8 +41,17 @@
 
 (defn add-presence!
   [^js self ^js ws user]
-  (swap! (presence* self) assoc ws user)
-  (serialize-attachment! ws user))
+  (when user
+    (swap! (presence* self) assoc ws user))
+  (serialize-attachment! self ws user))
+
+(defn restore-attachment!
+  [^js self ws attachment]
+  (let [{:keys [graph-id] user :presence/user} (bean/->clj attachment)]
+    (when (string? graph-id)
+      (aset self "graph-id" graph-id))
+    (when user
+      (swap! (presence* self) assoc ws user))))
 
 (defn update-presence!
   [^js self ^js ws {:keys [editing-block-uuid] :as updates}]
@@ -55,7 +64,7 @@
                              (assoc user :editing-block-uuid editing-block-uuid)
                              (dissoc user :editing-block-uuid))
                            user)]
-               (serialize-attachment! ws user')
+               (serialize-attachment! self ws user')
                (assoc presence ws user'))
              presence))))
 
