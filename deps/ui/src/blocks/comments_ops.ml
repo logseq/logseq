@@ -53,6 +53,10 @@ let reveal uuid =
        | None -> Option.iter (fun placeholder -> placeholder.Ui_services.click ())
            (area.query ".ls-comment-reply-placeholder"))
 
+let request_reveal uuid =
+  let repo = Runtime.repo () in
+  if repo <> "" then reply_focus_request := Some (repo, uuid)
+
 let reveal_if_requested uuid =
   if !reply_focus_request = Some (Runtime.repo (), uuid) then reveal uuid
 

@@ -57,11 +57,26 @@ let ensure_for uuids = Comments_ops.ensure_for ~on_ready:reveal uuids
 let add_comment () =
   match S.editing () with
   | Some e when String.trim e.S.buffer = "" ->
+      let repo = Runtime.repo () in
       ignore
-        (Outliner_ops.apply_and_refresh
-           [ Outliner_ops.set_block_property e.S.uuid "block/tags"
-               (W.Keyword comments_area_ident)
-           ])
+        (let* () =
+           Outliner_ops.apply_and_refresh
+             [ Outliner_ops.set_block_property e.S.uuid "block/tags"
+                 (W.Keyword comments_area_ident)
+             ]
+         in
+         (match S.editing () with
+          | Some current when current.S.uuid = e.S.uuid
+                              && current.S.scope = e.S.scope
+                              && current.S.epoch == e.S.epoch ->
+              Editor_actions.exit_edit ~select:false
+          | _ -> ());
+         if Runtime.repo () = repo then begin
+           S.set_collapsed e.S.uuid false;
+           Comments_ops.request_reveal e.S.uuid;
+           Comments_ops.reveal_if_requested e.S.uuid
+         end;
+         Js.Promise.resolve ())
   | _ -> (
       Editor_actions.exit_edit ~select:false;
       let uuids =
