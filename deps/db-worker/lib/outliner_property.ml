@@ -1925,16 +1925,11 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
        in
        let ref_ = List.mem property_type Db_schema.all_ref_property_types in
        let extends_ = property_id = "logseq.property.class/extends" in
-       let many =
-         match property with
-         | Some p -> ent_many p
-         | None -> false
-       in
        let v' =
          if extends_ then normalize_extends_value db v
          else if ref_ then
-           convert_ref_property_values conn property_id v property_type
-             ~many ~entity_id:None ~block_id:(Some block_eid')
+           convert_ref_property_value conn property_id v property_type
+             ~entity_id:None (Some block_eid')
          else v
        in
        (match block, property with
@@ -1945,24 +1940,15 @@ let set_block_property conn (block_eid : Wire.t) (property_id : string)
          let block = Option.get block in
          if property_id = "block/tags" then
            (Outliner_validate.disallow_tagging_a_built_in_entity db [ block.id ];
-            let tags =
-              match v' with
-              | Wire.Array vs | Wire.List vs | Wire.Set vs ->
-                  List.filter_map (entity_of_wire db) vs
-              | _ -> (
-                  match entity_of_wire db v' with
-                  | Some tag -> [ tag ]
-                  | None -> [])
-            in
-            List.iter
-              (fun tag ->
-                 Outliner_validate.disallow_node_cant_tag_with_private_tags db
-                   [ block.id ] tag.id;
-                 Outliner_validate.validate_block_can_tag_with_page_tag db
-                   [ block.id ] tag.id;
-                 Outliner_validate.disallow_node_cant_tag_with_built_in_non_tags
-                   db tag.id)
-              tags);
+            match entity_of_wire db v' with
+            | Some tag ->
+                Outliner_validate.disallow_node_cant_tag_with_private_tags db
+                  [ block.id ] tag.id;
+                Outliner_validate.validate_block_can_tag_with_page_tag db
+                  [ block.id ] tag.id;
+                Outliner_validate.disallow_node_cant_tag_with_built_in_non_tags
+                  db tag.id
+            | None -> ());
          if extends_ then
            List.iter
              (fun parent_id ->

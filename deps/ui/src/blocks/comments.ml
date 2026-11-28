@@ -40,7 +40,7 @@ let add_comment () =
       ignore
         (Outliner_ops.apply_and_refresh
            [ Outliner_ops.set_block_property e.S.uuid "block/tags"
-               (W.Set [ W.Keyword comments_area_ident ])
+               (W.Keyword comments_area_ident)
            ])
   | _ -> (
       Editor_actions.exit_edit ~select:false;
