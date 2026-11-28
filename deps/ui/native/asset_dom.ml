@@ -259,14 +259,18 @@ let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
       Runtime.signal_set index ((i + d + count) mod count)
     end
   in
-  let nav key icon_label icon_name edge =
-    Lui_elements.overlay ~key ~alignment:edge ~padding:16
-      [ Lui_elements.icon_button ~variant:`ghost ~size:`icon
-          ~icon:(`app icon_name) ~label:icon_label
-          ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
-          ~on_press:(fun _ ->
-            step (if key = "lb-prev" then -1 else 1))
-          [] ]
+  (* prev/next flank the image inside the centered backdrop row. Each
+     control is wrapped in a no-op pressable so its press does not bubble
+     to the backdrop close — the same swallowing the image box uses. *)
+  let nav key icon_label icon_name d =
+    if count <= 1 then Lui_elements.spacer ~key []
+    else
+      Ui_parts.pressable ~on_press:(fun _ -> ())
+        (Lui_elements.box ~key ~padding:16
+           [ Lui_elements.icon_button ~variant:`ghost ~size:`icon
+               ~icon:(`app icon_name) ~label:icon_label
+               ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
+               ~on_press:(fun _ -> step d) [] ])
   in
   viewport_modal_cover
     (Lui_elements.dialog ~key:lightbox_key
@@ -275,29 +279,29 @@ let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
        ~padding:0
        ~on_dismiss:(fun _ -> close ())
        [ Lui_elements.stack ~key:"lb-stack" ~container_relative_frame:`both
-           ([ Ui_parts.pressable ~on_press:(fun _ -> close ())
-                (Lui_elements.column ~key:"lb-backdrop"
-                   ~container_relative_frame:`both ~main:`center ~cross:`center
-                   ~padding:32
-                   [ Ui_parts.pressable ~on_press:(fun _ -> ())
-                       (Lui_elements.box ~key:"lb-image-box"
-                          [ Lui_elements.image ~key:"lb-image"
-                              ~url:(reactive
-                                    (fun i ->
-                                      if count = 0 then "" else sources.(i))
-                                    (Signal.value index))
-                              ~alt [] ]) ]) ]
-           @ (if count > 1 then
-                [ nav "lb-prev" (I18n.t "ui/previous") "chevron-left" `leading
-                ; nav "lb-next" (I18n.t "ui/next") "chevron-right" `trailing ]
-              else [])
-           @ [ Lui_elements.overlay ~key:"lb-chrome" ~alignment:`top_trailing
-                 ~padding:16
-                 [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
-                     ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
-                     ~autofocus:true
-                     ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
-                     ~on_press:(fun _ -> close ()) [] ] ])
+           [ Ui_parts.pressable ~on_press:(fun _ -> close ())
+               (Lui_elements.column ~key:"lb-backdrop"
+                  ~container_relative_frame:`both ~main:`center ~cross:`center
+                  ~padding:32
+                  [ Lui_elements.row ~key:"lb-image-row" ~main:`center
+                      ~cross:`center
+                      [ nav "lb-prev" (I18n.t "ui/previous") "chevron-left" (-1)
+                      ; Ui_parts.pressable ~on_press:(fun _ -> ())
+                          (Lui_elements.box ~key:"lb-image-box"
+                             [ Lui_elements.image ~key:"lb-image"
+                                 ~url:(reactive
+                                       (fun i ->
+                                         if count = 0 then "" else sources.(i))
+                                       (Signal.value index))
+                                 ~alt [] ])
+                      ; nav "lb-next" (I18n.t "ui/next") "chevron-right" 1 ] ])
+           ; Lui_elements.overlay ~key:"lb-chrome" ~alignment:`top_trailing
+               ~padding:16
+               [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
+                   ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
+                   ~autofocus:true
+                   ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
+                   ~on_press:(fun _ -> close ()) [] ] ]
        ])
     context parent
 
