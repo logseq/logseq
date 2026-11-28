@@ -17,6 +17,7 @@ type env = {
 type state = {
   id : int;
   mutable source : string;
+  mutable sandbox : string option;
   mutable view : Lui_webview.t option;
   mutable error : string;
   mutable painted_frame : int;
@@ -26,9 +27,18 @@ type t = {
   env : env;
   states : (int, state) Hashtbl.t;
   mutable frame_index : int;
+  mutable backend_error : string;
+  mutable passive_paints : int;
 }
 
-let create env = { env; states = Hashtbl.create 8; frame_index = 0 }
+let create env =
+  { env; states = Hashtbl.create 8; frame_index = 0; backend_error = ""; passive_paints = 0 }
+
+let with_passive_paints t f =
+  t.passive_paints <- t.passive_paints + 1;
+  Fun.protect
+    ~finally:(fun () -> t.passive_paints <- t.passive_paints - 1)
+    f
 
 let debug =
   lazy
@@ -71,33 +81,53 @@ let http_source s =
    top-level embed with Error 153 because there is no embedding referrer;
    the wrapper gives the real iframe the same document structure it has on
    the web and its base URL supplies the referrer. *)
-let wrapper_html source =
+let wrapper_html ?sandbox source =
+  let sandbox_attr =
+    match sandbox with
+    | Some value -> " sandbox=\"" ^ escape_html value ^ "\""
+    | None -> ""
+  in
   "<!doctype html><html><head><meta charset=\"utf-8\"><style>\
    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}\
    iframe{display:block;width:100%;height:100%;border:0}\
    </style></head><body><iframe src=\""
   ^ escape_html source
-  ^ "\" allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe></body></html>"
+  ^ "\""
+  ^ sandbox_attr
+  ^ " allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe></body></html>"
 
 let base_url = "https://logseq.com/"
 
-let json_string_member json key =
+let json_string_member_opt json key =
   match json with
   | `Assoc fields -> (
     match List.assoc_opt key fields with
-    | Some (`String value) -> value
-    | _ -> "")
-  | _ -> ""
+    | Some (`String value) -> Some value
+    | _ -> None)
+  | _ -> None
+
+let json_string_member json key =
+  match json_string_member_opt json key with
+  | Some value -> value
+  | None -> ""
+
+let attrs_json store id =
+  match Lui_store.string_prop store id "attrs" with
+  | Some text -> (try Some (Yojson.Safe.from_string text) with _ -> None)
+  | None -> None
 
 let source_of store id =
   match Lui_store.string_prop store id "src" with
   | Some source when source <> "" -> source
   | _ -> (
-    match Lui_store.string_prop store id "attrs" with
-    | Some text -> (
-      try json_string_member (Yojson.Safe.from_string text) "src"
-      with _ -> "")
+    match attrs_json store id with
+    | Some json -> json_string_member json "src"
     | None -> "")
+
+let sandbox_of store id =
+  match attrs_json store id with
+  | Some json -> json_string_member_opt json "sandbox"
+  | None -> None
 
 let logical_rect scale (r : rect) =
   Lui_webview.rect (r.x /. scale) (r.y /. scale) (r.w /. scale) (r.h /. scale)
@@ -109,15 +139,16 @@ let close_view state =
     (try Lui_webview.destroy view with _ -> ())
   | None -> ()
 
-let load view source =
-  Lui_webview.load_html view ~base_url (wrapper_html source)
+let load view source sandbox =
+  Lui_webview.load_html view ~base_url (wrapper_html ?sandbox source)
 
-let ensure t state source frame =
+let ensure t state source sandbox frame =
   match state.view with
   | Some view ->
-    if state.source <> source then begin
-      load view source;
+    if state.source <> source || state.sandbox <> sandbox then begin
+      load view source sandbox;
       state.source <- source;
+      state.sandbox <- sandbox;
       state.error <- "";
       log "webview reload id=%d src=%s" state.id source
     end;
@@ -129,25 +160,32 @@ let ensure t state source frame =
         state.id frame.x frame.y frame.w frame.h placed.x placed.y placed.w placed.h
     end
   | None ->
-    if state.error = "" || state.source <> source then
+    if t.backend_error <> "" then begin
+      state.source <- source;
+      state.error <- t.backend_error
+    end
+    else if state.error = "" || state.source <> source then
       (try
          let host = t.env.host_window () in
          let view =
            Lui_webview.create host frame
-             (Lui_webview.opts (Lui_webview.Html (wrapper_html source, base_url)))
+             (Lui_webview.opts (Lui_webview.Html (wrapper_html ?sandbox source, base_url)))
          in
          state.view <- Some view;
          state.source <- source;
+         state.sandbox <- sandbox;
          state.error <- "";
          log "webview create id=%d src=%s backend=%s frame=%.1f,%.1f %.1fx%.1f"
            state.id source (Lui_webview.backend_name ()) frame.x frame.y frame.w frame.h
        with
        | Failure message ->
          state.source <- source;
-         state.error <- message
+         state.error <- message;
+         t.backend_error <- message
        | Invalid_argument message ->
          state.source <- source;
-         state.error <- message)
+         state.error <- message;
+         t.backend_error <- message)
 
 let hide state =
   log "webview hide id=%d" state.id;
@@ -170,12 +208,13 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
       | Some state -> state
       | None ->
         let state =
-          { id; source = ""; view = None; error = ""; painted_frame = 0 }
+          { id; source = ""; sandbox = None; view = None; error = ""; painted_frame = 0 }
         in
         Hashtbl.replace t.states id state;
         state
     in
-    state.painted_frame <- t.frame_index;
+    let passive = t.passive_paints > 0 in
+    if not passive then state.painted_frame <- t.frame_index;
     (* Provider iframes are CSS-sized to fill their `.video-embed-frame`
        parent on the web. Native layout does not interpret that stylesheet,
        so the raw iframe can measure 560x0 while the typed parent carries
@@ -199,8 +238,10 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
         | None -> frame
     in
     let clipped = rect_intersect (t.env.clip_of id frame) ctx.viewport in
-    if rect_empty clipped then hide state
-    else ensure t state source (logical_rect ctx.scale clipped);
+    let logical = logical_rect ctx.scale clipped in
+    if passive then ()
+    else if rect_empty clipped || logical.w < 1. || logical.h < 1. then hide state
+    else ensure t state source (sandbox_of store id) logical;
     let base = [ solid_black frame ] in
     if state.error = "" then base
     else
