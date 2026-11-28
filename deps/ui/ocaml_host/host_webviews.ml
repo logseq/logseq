@@ -129,6 +129,21 @@ let sandbox_of store id =
   | Some json -> json_string_member_opt json "sandbox"
   | None -> None
 
+
+let has_prefix s prefix =
+  String.length s >= String.length prefix
+  && String.sub s 0 (String.length prefix) = prefix
+
+(* Backend/environment initialization failures are permanent for this host
+   window. Per-controller creation failures (notably WebView2) can be
+   transient and must not disable unrelated later embeds. *)
+let permanent_backend_error message =
+  List.exists (has_prefix message)
+    [ "cannot load "; "missing symbol "; "gtk_init_check failed"
+    ; "SDL3 window is not "; "SDL3 window is NULL"
+    ; "built without SDL3"; "host is not "; "host window has no contentView"
+    ; "no webview backend"; "WebView2Loader.dll not found" ]
+
 let logical_rect scale (r : rect) =
   Lui_webview.rect (r.x /. scale) (r.y /. scale) (r.w /. scale) (r.h /. scale)
 
@@ -181,11 +196,11 @@ let ensure t state source sandbox frame =
        | Failure message ->
          state.source <- source;
          state.error <- message;
-         t.backend_error <- message
+         if permanent_backend_error message then t.backend_error <- message
        | Invalid_argument message ->
          state.source <- source;
          state.error <- message;
-         t.backend_error <- message)
+         if permanent_backend_error message then t.backend_error <- message)
 
 let hide state =
   log "webview hide id=%d" state.id;
