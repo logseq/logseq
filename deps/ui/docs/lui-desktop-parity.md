@@ -104,7 +104,7 @@ Passed:
 - Shift-Tab outdent.
 - Multi-block selection and selection toolbar.
 - Plain multi-block copy/paste preserving nested structure.
-- Block drag/drop is validated on the Linux SDL host: 6/6 correctly aimed end-drop drags reordered — including the first attempt after page load, slow/fast variants, and direct jumps — with the drop indicator visible while held. The earlier end-drop failure is attributed to automation hit precision: a negative control starting on block text instead of the bullet/gutter produces selection rather than a drag (`editor_keys.ml` arms drags only from `.bullet-container`).
+- Block drag/drop is validated on the Linux SDL host: 6/6 correctly aimed end-drop drags reordered — including the first attempt after page load, slow/fast variants, and direct jumps — with the drop indicator visible while held. The earlier end-drop failure could not be reproduced and is most consistent with automation hit precision: a negative control starting on block text instead of the bullet/gutter produces selection rather than a drag (`editor_keys.ml` arms drags only from `.bullet-container`), though the original failed gesture was not itself captured.
 - Block zoom through bullet click.
 - Cmd+Enter TODO cycling.
 - Property picker/editing, with confusing intermediate commit/display feedback.
