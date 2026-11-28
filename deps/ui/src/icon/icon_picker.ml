@@ -432,6 +432,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let hd =
     Ui_components.with_props
       [ Ui_components.Prop.position `absolute
+      ; Ui_components.Prop.z_index 1
       ; Ui_components.Prop.inset_top 38.
       ; Ui_components.Prop.inset_left 0.
       ; Ui_components.Prop.inset_right 0.
@@ -468,6 +469,7 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
   let ft =
     Ui_components.with_props
       [ Ui_components.Prop.position `absolute
+      ; Ui_components.Prop.z_index 1
       ; Ui_components.Prop.inset_top 0.
       ; Ui_components.Prop.inset_left 0.
       ; Ui_components.Prop.inset_right 0. ]
@@ -541,12 +543,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
     (column ~style_class:"cp__emoji-icon-picker"
         ~width:380
         ~data_attrs:[ ("data-keep-selection", "true") ]
-        [ reactive
+        [ hd
+        ; reactive
             ~equal:(fun (a : pstate) b ->
               a.q = b.q && a.tab = b.tab && a.preset = b.preset
               && a.emoji_results = b.emoji_results)
             content_view sv
-        ; hd
         ; ft ])))
     context parent
 ;;
