@@ -541,12 +541,12 @@ let picker_view ~(del : bool) ~(emoji_only : bool)
     (column ~style_class:"cp__emoji-icon-picker"
         ~width:380
         ~data_attrs:[ ("data-keep-selection", "true") ]
-        [ hd
-        ; reactive
+        [ reactive
             ~equal:(fun (a : pstate) b ->
               a.q = b.q && a.tab = b.tab && a.preset = b.preset
               && a.emoji_results = b.emoji_results)
             content_view sv
+        ; hd
         ; ft ])))
     context parent
 ;;
