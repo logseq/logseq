@@ -1841,6 +1841,13 @@ let async_checks () =
          | [ _; W.Bool false; _ ] -> true
          | _ -> false)
        (ops_named "indent-outdent-blocks"));
+  check "blank editing block conversion sends a scalar Comments tag"
+    (List.exists
+       (function
+         | [ W.Uuid "bblank"; W.Keyword "block/tags"
+           ; W.Keyword "logseq.class/Comments" ] -> true
+         | _ -> false)
+       (ops_named "set-block-property"));
   (* Enter splits the block at the caret — cljs keydown-new-block.
      The split commits insert/save ops; editing moves to the sibling
      unless the canned worker reply trips the restore path *)
@@ -1883,6 +1890,15 @@ let test_add_comment_ctrl_space () =
      | _ -> false);
   clear_editing ();
   Runtime.worker := previous_worker
+
+(* cljs add-comment-to-current-context!: a blank editing block is tagged as
+   the comments area itself. Master sends the tag as one scalar keyword to
+   set-block-property, not a cardinality-many collection. *)
+let test_add_comment_blank_ctrl_space_scalar_tag () =
+  stage_main_session [ block "bblank" "" ];
+  set_editing "bblank" "" ~caret:0;
+  Comments.add_comment ();
+  clear_editing ()
 
 
 (* G4 go-back-fwd-clean: mod+[ / mod+] use KeyboardEvent.code when the
@@ -2156,6 +2172,7 @@ let run ~finish =
   test_cm_submenu st;
   test_cm_keynav st s;
   (* B. editor keys *)
+  test_add_comment_blank_ctrl_space_scalar_tag ();
   test_editor_shift_enter ();
   test_editor_format_wraps ();
   test_editor_word_nav ();
