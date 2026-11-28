@@ -1,6 +1,6 @@
 const {accessSync, constants, realpathSync, statSync} = require("node:fs");
 const {homedir, hostname} = require("node:os");
-const {delimiter, join} = require("node:path");
+const {delimiter, isAbsolute, join} = require("node:path");
 const {setTimeout: delay} = require("node:timers/promises");
 const {localAgents} = require("./local-agents.cjs");
 
@@ -69,22 +69,34 @@ async function revoke({server, credential}) {
   }
 }
 
-function providersFor(config) {
+function configuredAcpCommands(commands, env = process.env) {
+  return Object.fromEntries(localNames.flatMap(name => {
+    const executable = env[`LOGSEQ_BOTS_${name.toUpperCase()}_ACP`];
+    if (!commands[name] || !executable) return [];
+    if (!isAbsolute(executable) || !statSync(executable).isFile()) throw new Error("Choose an absolute ACP adapter executable");
+    accessSync(executable, constants.X_OK);
+    return [[name, realpathSync(executable)]];
+  }));
+}
+
+function providersFor(config, acpCommands) {
   const {root, repository, commands} = config;
   return localAgents({
     ...process.env, LOGSEQ_BOTS_AGENT_ROOT: root,
     LOGSEQ_BOTS_REPOSITORIES: JSON.stringify(repository ? {[repository]: root} : {}),
     LOGSEQ_BOTS_CODEX: commands.codex, LOGSEQ_BOTS_PI: commands.pi, LOGSEQ_BOTS_CIRCLE: undefined,
-  });
+  }, acpCommands);
 }
 
 async function listen(config, {
-  signal, onStatus = () => {}, providers = providersFor(config), pollMs = 3000, renewMs = 18000,
+  signal, onStatus = () => {}, acpCommands = configuredAcpCommands(config.commands),
+  providers = providersFor(config, acpCommands), pollMs = 3000, renewMs = 18000,
 } = {}) {
   const server = serverOrigin(config.server);
   const api = (path, options) => request(server, config.credential, "/bots/runner" + path, options);
   const pause = (ms, stop = signal) => delay(ms, undefined, {signal: stop});
   const unavailable = error => [401, 403, 409].includes(error?.status);
+  const acpAgents = Object.keys(acpCommands);
 
   async function retry(action, stop = signal, attempts = 5) {
     for (let attempt = 1; ; attempt++) {
@@ -131,8 +143,10 @@ async function listen(config, {
         result = await agent({...job, files, signal: stop});
         if (typeof result.reply !== "string" || result.reply.trim() === "") throw new Error("Empty Agent reply");
         result = {
-          state: "done", providerSessionId: result.providerSessionId,
-          reply: result.reply.trim().slice(0, 24000),
+          state: ["needs_input", "attention"].includes(result.state) ? result.state : "done",
+          providerSessionId: result.providerSessionId,
+          providerTransport: result.providerTransport,
+          reply: result.reply.trim().slice(0, 24000).toWellFormed(),
         };
       } catch {
         if (stop.aborted) return;
@@ -149,7 +163,7 @@ async function listen(config, {
   let idleDelay = pollMs;
   while (!signal?.aborted) {
     try {
-      const response = await api("/claim", {signal});
+      const response = await api("/claim", {signal, body: acpAgents.length ? {acpAgents} : undefined});
       const {job} = await response.json();
       failures = 0;
       onStatus(job ? "working" : "online");

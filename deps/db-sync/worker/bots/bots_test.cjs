@@ -567,8 +567,9 @@ test("paired devices claim only their own jobs and continue the same workflow an
 
     await callOwner(thread + "/messages", {id:randomUUID(), body:"Follow up"});
     assert.equal((await runner(firstDevice,"/claim")).body.job,null);
-    const {job:followup} = (await runner(secondDevice,"/claim")).body;
+    const {job:followup} = (await runner(secondDevice,"/claim", {body: {acpAgents: ["codex"]}})).body;
     assert.equal(followup.provider_session_id,"local-codex-thread");
+    assert.equal(followup.provider_transport, "cli");
     assert.equal((await runner(secondDevice,"/runs/" + followup.id + "/start",{lease:followup.lease})).status,200);
     await db.query("UPDATE bot_runs SET lease_until=now()-interval '1 second' WHERE message_id=$1", [followup.id]);
     await waitFor(() => callOwner(thread), value => value.session?.status === "attention");

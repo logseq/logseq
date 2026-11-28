@@ -156,6 +156,7 @@ Server commands:
 - `server start --graph <name>` - start db-worker-node for a graph
 - `agent runner pair --workspace <directory> [--agent codex] [--agent pi]` - pair this machine using the current CLI login. Set `--server` to use a local Bots server and `--repository owner/name` to receive jobs for that repository.
 - `agent runner listen` - accept Bot assignments and return results to the original thread. Run this command under your usual process supervisor on a headless machine.
+- For an opted-in ACP runner, set `LOGSEQ_BOTS_CODEX_ACP` or `LOGSEQ_BOTS_PI_ACP` in the listener's environment to the absolute path of a locally installed, pinned ACP v1 adapter launcher. These settings also apply to the desktop listener. The selected Agent must be enabled on the pairing. Configure Codex authentication on the device and run Pi through a launcher that confines writes to the paired workspace. The server must apply `worker/bots/schema.sql` before accepting ACP turns. Existing CLI threads continue with their original adapter.
 - `agent runner revoke` - unpair this machine. Use `--config` for a separate runner registration and `--auth-file` at pairing time for a custom CLI login.
 - `server stop --graph <name>` - stop db-worker-node for a graph
 - `server restart --graph <name>` - restart db-worker-node for a graph

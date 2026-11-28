@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS bot_runners (
 
 CREATE INDEX IF NOT EXISTS bot_runners_owner ON bot_runners (owner) WHERE revoked_at IS NULL;
 ALTER TABLE bot_thread_agents ADD COLUMN IF NOT EXISTS runner_id uuid REFERENCES bot_runners(id);
+ALTER TABLE bot_thread_agents ADD COLUMN IF NOT EXISTS provider_transport text;
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS runner_id uuid REFERENCES bot_runners(id);
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS lease_id uuid;
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS lease_until timestamptz;

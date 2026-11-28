@@ -96,14 +96,15 @@ test("Worker arms only due work and drives device workflows and cloud recovery",
     assert.equal(alarm, null, "An offline device does not cause repeated alarms");
     assert.equal((await call(thread)).data.session.status, "queued");
     assert.equal((await call(thread, null, {sub: owner + "-other"})).status, 404);
-    const {job} = (await device("claim")).data;
+    const {job} = (await device("claim", {acpAgents: ["pi"]})).data;
     assert.equal(job.agent, "pi");
+    assert.equal(job.provider_transport, "acp-v1");
     assert.equal(alarm, job.leaseExpiresAt);
     const previousWrites = writes;
     assert.equal((await device("claim")).data.job, null);
     assert.equal(writes, previousWrites);
     assert.equal((await device("runs/" + job.id + "/start", null, job.lease)).status, 200);
-    const complete = {state: "done", reply: "Desktop evidence", providerSessionId: "pi-thread"};
+    const complete = {state: "done", reply: "Desktop evidence", providerSessionId: "pi-thread", providerTransport: "acp-v1"};
     await Promise.all([device("runs/" + job.id + "/complete", complete, job.lease),
       device("runs/" + job.id + "/complete", complete, job.lease)]).then(results =>
       assert.ok(results.every(result => result.status === 200)));

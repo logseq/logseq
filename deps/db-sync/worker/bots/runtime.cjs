@@ -514,15 +514,23 @@ async function runnerRoute(pool, request, canExport) {
       return Response.json({revoked: true});
     }
     if (path === "/bots/runner/claim" && request.method === "POST") {
+      const acpAgents = request.body ? (await jsonBody(request)).acpAgents ?? [] : [];
+      if (!Array.isArray(acpAgents) || acpAgents.length > localAgentNames.length
+          || !acpAgents.every(agent => runner.agents.includes(agent) && localAgentNames.includes(agent))) {
+        fail(400, "Invalid ACP capabilities");
+      }
       const active = await db.query(`SELECT 1 FROM bot_runs WHERE runner_id=$1 AND lease_until>now()
         AND state IN ('leased','working') LIMIT 1`, [runnerId]);
       if (active.rowCount) return Response.json({job: null});
-      const job = await claim(db, runner, []);
+      const job = await claim(db, {...runner, acpAgents}, []);
       if (!job) return Response.json({job: null});
       const context = await withThreadContext(db, job);
+      const providerTransport = job.provider_transport ??
+        (job.provider_session_id || !acpAgents.includes(job.agent) ? "cli" : "acp-v1");
       return Response.json({job: {
         id: job.message_id, lease: job.lease_id, agent: job.agent, session_id: job.session_id,
         repository: job.repository, prompt: context.prompt, provider_session_id: job.provider_session_id,
+        provider_transport: providerTransport,
         previous_turn: job.previous_turn,
         attachments: job.attachments, graph_id: job.graph_id ?? job.shared_graph_id,
         leaseExpiresAt: job.lease_until.getTime(),
@@ -550,6 +558,10 @@ async function runnerRoute(pool, request, canExport) {
       if (!["done", "failed", "attention", "needs_input"].includes(body.state)) fail(400, "Invalid job result");
       const result = {state: body.state, reply: text(body.reply, 24000),
         providerSessionId: body.providerSessionId == null ? null : text(body.providerSessionId, 200)};
+      if (Object.hasOwn(body, "providerTransport")) {
+        if (body.providerTransport !== "acp-v1" || !result.providerSessionId) fail(400, "Invalid ACP session binding");
+        result.providerTransport = body.providerTransport;
+      }
       const digest = hash(JSON.stringify(result));
       if (job.result_hash?.equals(digest)) return Response.json({accepted: true});
       if (!job.lease_valid || job.state !== "working") fail(409, "The job lease expired");
@@ -574,7 +586,7 @@ async function claim(db, runner, localProviders, localProviderOwner = null, {
 } = {}) {
   const {rows: [job]} = await db.query(
     `SELECT ${nextOnly ? "r.due_at" : `r.*,COALESCE(r.agent,s.agent) AS agent,s.agent AS primary_agent,s.repository,s.bot_id,s.root_message_id,
-            binding.provider_session_id,binding.provider_url,binding.provider_cursor AS session_cursor,
+            binding.provider_session_id,binding.provider_transport,binding.provider_url,binding.provider_cursor AS session_cursor,
             COALESCE(root.body,m.body) AS prompt,m.seq AS message_seq,m.created_at AS message_created_at,
             COALESCE(root.attachments,m.attachments) AS attachments,m.actor,root.requested_agents AS workflow_agents,
             b.graph_id,b.graph_block_id,b.owner,b.shared_graph_id,
@@ -599,6 +611,7 @@ async function claim(db, runner, localProviders, localProviderOwner = null, {
            AND COALESCE(r.agent,s.agent)=ANY($5::text[])
            AND (s.repository='' OR s.repository=$6)
            AND (binding.runner_id=$1 OR binding.runner_id IS NULL AND binding.provider_session_id IS NULL)
+           AND (binding.provider_transport IS DISTINCT FROM 'acp-v1' OR COALESCE(r.agent,s.agent)=ANY($8::text[]))
          END
          AND NOT EXISTS (
            SELECT 1 FROM bot_runs earlier LEFT JOIN bot_runs earlier_first ON earlier_first.message_id=earlier.workflow_root_id
@@ -606,7 +619,7 @@ async function claim(db, runner, localProviders, localProviderOwner = null, {
                AND (COALESCE(earlier_first.seq,earlier.seq),earlier.seq)<(COALESCE(first.seq,r.seq),r.seq))
        ORDER BY r.due_at,r.seq LIMIT 1 ${nextOnly ? "" : "FOR UPDATE OF r SKIP LOCKED"}`,
     [runner?.id ?? null, localAgentNames, localProviders, runner?.owner ?? null, runner?.agents ?? [],
-      runner?.repository ?? "", localProviderOwner]);
+      runner?.repository ?? "", localProviderOwner, runner?.acpAgents ?? []]);
   if (!job) return null;
   if (nextOnly) return job.due_at;
   if (runner) {
@@ -705,13 +718,15 @@ async function settleJob(db, job, result, canExport) {
   }
   if (result.providerSessionId || result.url || result.cursor || job.runner_id && result.state === "done") {
     await db.query(
-      `INSERT INTO bot_thread_agents (session_id,agent,provider_session_id,provider_url,provider_cursor,runner_id)
-       VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (session_id,agent) DO UPDATE SET
+      `INSERT INTO bot_thread_agents (session_id,agent,provider_session_id,provider_url,provider_cursor,runner_id,provider_transport)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (session_id,agent) DO UPDATE SET
        provider_session_id=COALESCE(excluded.provider_session_id,bot_thread_agents.provider_session_id),
        provider_url=COALESCE(excluded.provider_url,bot_thread_agents.provider_url),
        provider_cursor=COALESCE(excluded.provider_cursor,bot_thread_agents.provider_cursor),
-       runner_id=COALESCE(excluded.runner_id,bot_thread_agents.runner_id)`,
-      [job.session_id, job.agent, result.providerSessionId ?? null, result.url ?? null, result.cursor ?? null, job.runner_id ?? null]);
+       runner_id=COALESCE(excluded.runner_id,bot_thread_agents.runner_id),
+       provider_transport=COALESCE(excluded.provider_transport,bot_thread_agents.provider_transport)`,
+      [job.session_id, job.agent, result.providerSessionId ?? null, result.url ?? null,
+        result.cursor ?? null, job.runner_id ?? null, result.providerTransport ?? null]);
   }
   const status = result.state === "done" ? "completed" : result.state === "poll" ? "running" : result.state;
   const primary = job.agent === job.primary_agent;

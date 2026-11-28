@@ -17,7 +17,7 @@ const rootPackage = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
 
-const runnerModules = ["local-agents.cjs", "runner-client.cjs", "runner-cli.cjs"];
+const runnerModules = ["acp-agent.cjs", "local-agents.cjs", "runner-client.cjs", "runner-cli.cjs"];
 const packageFiles = [
   "dist/logseq.js",
   "static/logseq-cli.js",

@@ -2,6 +2,7 @@ const {spawn} = require("node:child_process");
 const {readFileSync, writeFileSync, mkdtempSync, rmSync} = require("node:fs");
 const {basename, join} = require("node:path");
 const {tmpdir} = require("node:os");
+const {runAcp, transport} = require("./acp-agent.cjs");
 
 function agentPrompt(job) {
   return [
@@ -41,7 +42,7 @@ function events(output) {
   });
 }
 
-function localAgents(env) {
+function localAgents(env, acpCommands = {}) {
   const cwd = env.LOGSEQ_BOTS_AGENT_ROOT;
   if (!cwd) return {};
   const childEnv = Object.fromEntries(Object.entries(env).filter(([name]) =>
@@ -85,7 +86,24 @@ function localAgents(env) {
   };
   return Object.fromEntries(Object.entries(providers).map(([name, provider]) => [
     name, async job => {
-      if (!job.files?.length) return provider(job);
+      const acp = acpCommands[name];
+      if (job.provider_transport && !["cli", transport].includes(job.provider_transport)) {
+        throw new Error("Unknown local Agent transport");
+      }
+      const execute = job.provider_transport === transport ? async work => {
+        if (!acp) throw new Error("The paired device no longer has its ACP adapter");
+        const acpEnv = {...childEnv};
+        if (name === "codex") {
+          delete acpEnv.CODEX_CONFIG;
+          acpEnv.INITIAL_AGENT_MODE = "workspace-write";
+        }
+        return runAcp(acp, {cwd: cwdFor(work), env: acpEnv, prompt: agentPrompt(work),
+          sessionId: work.provider_session_id, signal: work.signal});
+      } : provider;
+      if (acp && !job.provider_transport && !job.provider_session_id) {
+        throw new Error("The server did not select a runner transport");
+      }
+      if (!job.files?.length) return execute(job);
       const directory = mkdtempSync(join(tmpdir(), "logseq-bot-files-"));
       try {
         const files = job.files.map((file, index) => {
@@ -93,7 +111,7 @@ function localAgents(env) {
           writeFileSync(path, file.payload, {mode: 0o600});
           return {name: file.name, path};
         });
-        return await provider({...job, prompt: job.prompt + "\n\nAttachments:\n" + JSON.stringify(files)});
+        return await execute({...job, prompt: job.prompt + "\n\nAttachments:\n" + JSON.stringify(files)});
       } finally { rmSync(directory, {recursive: true, force: true}); }
     },
   ]));
