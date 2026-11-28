@@ -233,8 +233,8 @@ let copy (st : S.t Signal.state) =
 (* same platform binary clipboard path as PDF area copy *)
 let copy_png (st : S.t Signal.state) =
   match (S.cur st).S.png_bytes with
-  | Some bytes ->
-      let task = Platform.clipboard_write_image_png (Bytes.of_string bytes) in
+  | Some payload ->
+      let task = Platform.clipboard_write_image_png (Bytes.of_string payload) in
       ignore
         (Ui_task.catch
            (Ui_task.bind task (fun () ->
