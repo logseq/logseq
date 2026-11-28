@@ -147,7 +147,10 @@ let export_png (st : S.t Signal.state) =
           (Filename.get_temp_dir_name ())
           (int_of_float (Js.Date.now ()))
       in
-      let oc = open_out_bin path in
+      let fd =
+        Unix.openfile path [ Unix.O_WRONLY; Unix.O_CREAT; Unix.O_TRUNC ] 0o600
+      in
+      let oc = Unix.out_channel_of_descr fd in
       output_string oc bytes;
       close_out oc;
       preview_path := path;
