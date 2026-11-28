@@ -26,12 +26,20 @@ let find_main_content store =
   if !found = 0 then None else Some !found
 
 let find_block_node store uuid =
+  let data_attr id name =
+    match Lui_store.string_prop store id "data-attrs" with
+    | Some raw -> (
+        match List.assoc_opt name (Lui_protocol.data_attrs_decode raw) with
+        | Some v when v <> "" -> Some v
+        | _ -> None)
+    | None -> None
+  in
   let matches id =
     (match Lui_store.prop store id "block-id" with
      | Some (Lui_protocol.StringValue v) -> v = uuid
      | _ -> false)
     ||
-    (match Lui_store.string_prop store id "data-blockid" with
+    (match data_attr id "data-blockid" with
      | Some v -> v = uuid
      | None -> false)
     ||
@@ -136,10 +144,15 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                 contrast = 0.;
                 subpixel_contrast = 0. };
             scene_cell := Some scene;
+            let target_entry_ops = ref (-1) in
             let rec hooks =
               Lui_paint.
                 { color_of = Theme_vars.color_of
-                ; layout = (fun id -> Lui_paint.placement_of_rect (rect_of id))
+                ; layout =
+                    (fun id ->
+                      if id = node_id && !target_entry_ops < 0 then
+                        target_entry_ops := List.length scene.Lui_scene.ops;
+                      Lui_paint.placement_of_rect (rect_of id))
                 ; state_of = (fun _ -> Lui_paint.state_neutral)
                 ; hidden =
                     (fun id -> popup_kind (Lui_store.kind store id))
@@ -179,6 +192,16 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
             in
             Lui_paint.paint hooks store scene
               ~width:scene_w ~height:scene_h ~scale ~clear;
+            (* ops are in forward paint order here; everything before
+               the target subtree's entry is ancestor/sibling chrome
+               that html2canvas never includes in an element snapshot *)
+            if !target_entry_ops > 0 then begin
+              let rec drop n xs =
+                if n <= 0 then xs
+                else match xs with [] -> [] | _ :: tl -> drop (n - 1) tl
+              in
+              scene.ops <- drop !target_entry_ops scene.ops
+            end;
             let image =
               Lui_raster.render ~scene ()
             in
