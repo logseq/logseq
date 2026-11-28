@@ -8,6 +8,7 @@
             ["url" :refer [fileURLToPath]]
             [cljs-bean.core :as bean]
             [clojure.string :as string]
+            [electron.bots-runner :as bots-runner]
             [electron.cli-install :as cli-install]
             [electron.configs :as cfgs]
             [electron.db :as db]
@@ -375,24 +376,28 @@
 (defn- cli-script-path
   []
   (if (.-isPackaged ^js app)
-    (node-path/join js/process.resourcesPath "app.asar" "js" "logseq-cli.js")
-    (node-path/join js/__dirname "logseq-cli.js")))
+    (node-path/join js/process.resourcesPath "app.asar" "js" "logseq.js")
+    (node-path/join js/__dirname ".." "dist" "logseq.js")))
 
 (defn- install-cli-launcher!
   []
-  (let [cli-path (cli-script-path)
+  (let [packaged? (.-isPackaged ^js app)
+        cli-path (cli-script-path)
+        runtime-dir (if packaged? (node-path/dirname cli-path) js/__dirname)
         cli-dir! #(if utils/win32?
                     (preferred-win-cli-dir)
                     (preferred-unix-cli-dir))]
     (cli-install/install-cli-launcher!
      {:windows? utils/win32?
-      :packaged? (.-isPackaged ^js app)
+      :packaged? packaged?
       :cli-path cli-path
       :cli-dir! cli-dir!
       :exe-path (.getPath app "exe")
       :appimage-path (.-APPIMAGE js/process.env)
       :path-join path-join
-      :exists? #(fs/existsSync %)
+      :exists? #(and (fs/existsSync %)
+                     (or (not= % cli-path)
+                         (fs/existsSync (node-path/join runtime-dir "logseq-cli.js"))))
       :read-file! #(.readFileSync fs % "utf8")
       :write-file! #(.writeFileSync fs %1 %2 "utf8")
       :chmod! #(fs/chmodSync %1 %2)
@@ -432,6 +437,7 @@
 
                   (db/ensure-graphs-dir!)
                   (install-cli-launcher!)
+                  (bots-runner/restore!)
 
                   (handle-deferred-deeplink! win startup-target remaining-urls)
                   (maybe-warn-wrong-release!)
@@ -481,6 +487,7 @@
                                            nil)))))
                   (.on app' "before-quit" (fn [_e]
                                             (reset! win/*quitting? true)
+                                            (bots-runner/stop!)
                                             (-> (handler/stop-all-db-workers!)
                                                 (p/finally
                                                   (fn []

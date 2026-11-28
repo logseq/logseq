@@ -36,7 +36,7 @@
 (defn- cli-bootstrap
   [packaged? cli-path]
   (let [cli-expression (if packaged?
-                         "require('node:path').join(process.resourcesPath,'app.asar','js','logseq-cli.js')"
+                         "require('node:path').join(process.resourcesPath,'app.asar','js','logseq.js')"
                          (str "Buffer.from('" (.toString (.from js/Buffer cli-path "utf8") "base64")
                               "','base64').toString('utf8')"))]
     (str "const cli=" cli-expression ";process.argv.splice(1,0,cli);require(cli);")))

@@ -150,12 +150,14 @@
 (defn- dispatch-request [request env registry deps bots]
   (let [path (.-pathname (platform/request-url request))]
     (if (and bots (or (= path "/bots") (string/starts-with? path "/bots/")))
-      (p/let [service bots
-              claims (auth/auth-claims request env)
-              owner (when claims (aget claims "sub"))]
-        (if (and (string? owner) (seq owner))
-          (.handle service owner request)
-          (worker-http/error-response "unauthorized" 401)))
+      (p/let [^js service bots]
+        (if (string/starts-with? path "/bots/runner/")
+          (.handleRunner service request)
+          (p/let [claims (auth/auth-claims request env)
+                  owner (when claims (aget claims "sub"))]
+            (if (and (string? owner) (seq owner))
+              (.handle service owner request)
+              (worker-http/error-response "unauthorized" 401)))))
       (dispatch/handle-node-fetch {:request request :env env :registry registry :deps deps}))))
 
 (defn start!

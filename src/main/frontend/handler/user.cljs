@@ -311,6 +311,9 @@
           {:id-token id-token :access-token access-token :refresh-token refresh-token})))))
 
 (defn logout []
+  (when (util/electron?)
+    (-> (ipc/ipc :bots-runner/disconnect)
+        (p/catch (fn [_] nil))))
   (clear-e2ee-password!)
   (clear-tokens)
   (.clear js/localStorage)

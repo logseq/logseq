@@ -483,6 +483,7 @@ assert.deepEqual(packageJson.files, [
   "static/js/db-worker-node.js",
   "static/js/db-worker-node-assets.json",
   ".agents/skills/logseq-cli/SKILL.md",
+  "static/bots-runner",
 ]);
 
 for (const relativePath of packageJson.files) {
@@ -492,6 +493,15 @@ for (const relativePath of packageJson.files) {
     `publish package should include ${relativePath}`,
   );
 }
+
+assert.match(
+  execFileSync(process.execPath, ["dist/logseq.js", "agent", "runner", "--help"], {
+    cwd: packageRoot,
+    encoding: "utf8",
+  }),
+  /logseq agent runner listen/,
+  "packaged CLI should load the runner entrypoint",
+);
 
 assertNoShadowRuntime(readText("static/logseq-cli.js"), "root CLI release artifact");
 assertNoShadowRuntime(

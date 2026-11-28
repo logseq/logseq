@@ -17,12 +17,14 @@ const rootPackage = JSON.parse(
   fs.readFileSync(path.join(repoRoot, "package.json"), "utf8"),
 );
 
+const runnerModules = ["local-agents.cjs", "runner-client.cjs", "runner-cli.cjs"];
 const packageFiles = [
   "dist/logseq.js",
   "static/logseq-cli.js",
   "static/js/db-worker-node.js",
   "static/js/db-worker-node-assets.json",
   ".agents/skills/logseq-cli/SKILL.md",
+  "static/bots-runner",
 ];
 
 const copyEntries = [
@@ -31,6 +33,7 @@ const copyEntries = [
   ["dist/db-worker-node.js", "static/js/db-worker-node.js"],
   ["dist/db-worker-node-assets.json", "static/js/db-worker-node-assets.json"],
   [".agents/skills/logseq-cli/SKILL.md", ".agents/skills/logseq-cli/SKILL.md"],
+  ...runnerModules.map(name => ["deps/db-sync/worker/bots/" + name, "static/bots-runner/" + name]),
 ];
 
 const assertReleaseEntrypoint = (content) => {

@@ -128,3 +128,23 @@ CREATE TABLE IF NOT EXISTS bot_thread_agents (
 INSERT INTO bot_thread_agents (session_id,agent,provider_session_id,provider_url,provider_cursor)
   SELECT id,agent,provider_session_id,provider_url,provider_cursor FROM sessions WHERE provider_session_id IS NOT NULL
   ON CONFLICT (session_id,agent) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS bot_runners (
+  id uuid PRIMARY KEY,
+  owner text NOT NULL,
+  name text NOT NULL,
+  token_hash bytea NOT NULL,
+  agents text[] NOT NULL,
+  repository text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  seen_at timestamptz NOT NULL DEFAULT now(),
+  revoked_at timestamptz
+);
+
+CREATE INDEX IF NOT EXISTS bot_runners_owner ON bot_runners (owner) WHERE revoked_at IS NULL;
+ALTER TABLE bot_thread_agents ADD COLUMN IF NOT EXISTS runner_id uuid REFERENCES bot_runners(id);
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS runner_id uuid REFERENCES bot_runners(id);
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS lease_id uuid;
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS lease_until timestamptz;
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS result_hash bytea;
+CREATE INDEX IF NOT EXISTS bot_runs_lease ON bot_runs (lease_until) WHERE lease_until IS NOT NULL;

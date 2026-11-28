@@ -1729,11 +1729,92 @@
               [:span.text-sm.opacity-50
                (t :settings.ai/enable-mcp-server-desc)]))))
 
+(hsx/defc bots-runner-row
+  []
+  (let [signed-in? (boolean (rfx/use-sub [:auth/id-token]))
+        [runner set-runner!] (hooks/use-state {})
+        [agents set-agents!] (hooks/use-state #{})
+        [repository set-repository!] (hooks/use-state "")
+        [busy? set-busy!] (hooks/use-state false)
+        [error set-error!] (hooks/use-state nil)
+        installed (set (:installed runner))
+        paired? (some? (:workspace runner))
+        refresh! (fn []
+                   (-> (ipc/ipc :bots-runner/status)
+                       (p/then set-runner!)
+                       (p/catch (fn [_] nil))))
+        apply-action! (fn [action]
+                        (set-busy! true)
+                        (set-error! nil)
+                        (-> (action)
+                            (p/then set-runner!)
+                            (p/catch (fn [_] (set-error! (t :settings.ai/local-bot-action-error))))
+                            (p/finally #(set-busy! false))))]
+    (hooks/use-effect!
+     (fn []
+       (refresh!)
+       (let [timer (js/setInterval refresh! 2000)]
+         #(js/clearInterval timer)))
+     [])
+    [:div.it.flex.flex-col.gap-3
+     [:div
+      [:div.text-sm.font-medium (t :settings.ai/local-bot-agents)]
+      [:p.text-sm.opacity-70 (t :settings.ai/local-bot-agents-desc)]]
+     (if paired?
+       [:div.flex.flex-col.gap-2
+        [:p.text-sm {:role "status"}
+         (case (:status runner)
+           "working" (t :settings.ai/local-bot-working)
+           "online" (t :settings.ai/local-bot-online)
+           "revoked" (t :settings.ai/local-bot-revoked)
+           "offline" (t :settings.ai/local-bot-offline)
+           "error" (t :settings.ai/local-bot-offline)
+           (t :settings.ai/local-bot-connecting))]
+        [:p.text-sm.opacity-70.break-all
+         (string/join " · " (conj (vec (:agents runner)) (:workspace runner)))]
+        (shui/button {:variant "outline" :disabled busy?
+                      :on-click #(apply-action! (fn [] (ipc/ipc :bots-runner/disconnect)))}
+                     (t :settings.ai/local-bot-disconnect))]
+       [:div.flex.flex-col.gap-2
+        (if-not signed-in?
+          [:p.text-sm (t :settings.ai/local-bot-sign-in)]
+          [:<>
+           (if (empty? installed)
+             [:p.text-sm (t :settings.ai/local-bot-install)]
+             [:div.flex.gap-4
+              (for [[agent label] [["codex" "Codex"] ["pi" "Pi"]]
+                    :when (contains? installed agent)]
+                [:label.flex.gap-2 {:key agent}
+                 [:input {:type "checkbox" :checked (contains? agents agent) :disabled busy?
+                          :on-change (fn [_] (set-agents! (if (contains? agents agent)
+                                                           (disj agents agent)
+                                                           (conj agents agent))))}]
+                 label])])
+           (when (seq installed)
+             [:<>
+              [:label.flex.flex-col.gap-1.text-sm
+               (t :settings.ai/local-bot-repository)
+               [:input.form-input {:placeholder (t :settings.ai/local-bot-repository-placeholder)
+                                   :value repository :disabled busy?
+                                   :on-change #(set-repository! (.. % -target -value))}]]
+              (shui/button
+               {:variant "outline" :disabled (or busy? (empty? agents))
+                :on-click #(apply-action!
+                            (fn []
+                              (p/do! (user-handler/<ensure-id&access-token!)
+                                     (ipc/ipc :bots-runner/pair (config/db-sync-http-base)
+                                              (state/get-auth-id-token) (vec (sort agents))
+                                              (string/trim repository)))))}
+               (t :settings.ai/local-bot-pair))])])])
+     (when error [:p.text-sm.text-red-600 {:role "alert"} error])]))
+
 (hsx/defc settings-ai
   []
   [:div.panel-wrap
    (when (util/electron?)
-     (mcp-server-row t))])
+     [:<>
+      (mcp-server-row t)
+      (bots-runner-row)])])
 
 (hsx/defc ^:large-vars/cleanup-todo settings
   [_active-tab]

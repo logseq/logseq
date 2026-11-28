@@ -391,3 +391,88 @@ test("Cursor replies with a readable usage-limit message", async t => {
   const result = await cursor({state: "queued", session_id: randomUUID(), prompt: "Check the configuration"});
   assert.deepEqual(result, {state: "failed", reply: "Cursor Cloud usage limit reached."});
 });
+
+test("paired devices claim only their own jobs and continue the same workflow and provider session", {skip: !database}, async () => {
+  const localOwner = randomUUID();
+  const outsider = randomUUID();
+  const botId = randomUUID();
+  const seen = [];
+  const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {providers: {
+    codex: async () => { assert.fail("A paired offline device must retain the queued job"); },
+    cursor: async job => {
+      seen.push(job.prompt);
+      return {state: "done", reply: "Reviewed"};
+    },
+  }});
+  const db = new Client({connectionString: database});
+  await db.connect();
+  const main = "/bots/" + botId;
+  const callOwner = (path, body, subject = localOwner) => call(service, path, body, subject);
+  async function runner(device, path, {lease, body} = {}) {
+    const response = await service.handleRunner(new Request("http://127.0.0.1/bots/runner" + path, {
+      method: "POST", headers: {authorization: "Bearer " + device.credential, ...(lease ? {"x-logseq-lease": lease} : {})},
+      body: body ? JSON.stringify(body) : undefined,
+    }));
+    return {status: response.status, body: await response.json()};
+  }
+  async function pair(subject = localOwner, repository = "logseq/mobile") {
+    const response = await callOwner("/bots/runners", {name:"Device", agents:["codex"], repository}, subject);
+    assert.equal(response.status, 200);
+    return response.body;
+  }
+  try {
+    const firstDevice = await pair();
+    const secondDevice = await pair();
+    const otherAccount = await pair(outsider);
+    const wrongRepo = await pair(localOwner, "logseq/other");
+    const devices = (await callOwner("/bots/runners")).body.runners;
+    assert.equal(devices.length, 3);
+    assert.ok(devices.every(device => !device.online && !("credential" in device)));
+    const available = (await callOwner("/bots")).body.agents;
+    assert.equal(available.find(item => item.name === "codex").available, true);
+    await callOwner("/bots", {id:botId, name:"Paired Bot", defaultAgent:"codex", repository:"logseq/mobile"});
+    const send = await callOwner(main + "/messages", {id:randomUUID(), agents:["codex","cursor"], body:"Deliver title search"});
+    const thread = main + "/sessions/" + send.body.sessionId;
+    await sleep(1200);
+    assert.equal((await callOwner(thread)).body.session.status, "queued");
+    assert.equal((await runner(otherAccount, "/claim")).body.job, null);
+    assert.equal((await runner(wrongRepo, "/claim")).body.job, null);
+    const {job: original} = (await runner(firstDevice, "/claim")).body;
+    assert.ok(original.lease);
+    assert.equal((await runner(secondDevice, "/claim")).body.job, null);
+    assert.equal((await runner(firstDevice, "/claim")).body.job, null);
+    assert.equal((await runner(secondDevice, "/runs/" + original.id + "/start", {lease:original.lease})).status, 409);
+    await db.query("UPDATE bot_runs SET lease_until=now()-interval '1 second' WHERE message_id=$1", [original.id]);
+    const reassigned = await waitFor(() => runner(secondDevice, "/claim"), value => value.job != null);
+    const job = reassigned.job;
+    assert.equal(job.id, original.id);
+    assert.notEqual(job.lease,original.lease);
+    const action = suffix => "/runs/" + job.id + "/" + suffix;
+    const result = {state:"done", reply:"Local change verified",providerSessionId:"local-codex-thread"};
+    assert.equal((await runner(secondDevice, action("complete"), {lease:job.lease,body:result})).status,409);
+    assert.equal((await runner(secondDevice, action("start"), {lease:job.lease})).status,200);
+    assert.equal((await runner(secondDevice, action("renew"), {lease:job.lease})).status,200);
+    assert.equal((await runner(secondDevice, action("complete"), {lease:job.lease,body:result})).status,200);
+    assert.equal((await runner(secondDevice, action("complete"), {lease:job.lease,body:result})).status,200);
+    assert.equal((await runner(secondDevice, action("complete"), {lease:job.lease,body:{...result,reply:"Different"}})).status,409);
+    const completed = await waitFor(() => callOwner(thread), value => value.session?.status === "completed");
+    assert.deepEqual(completed.participants,["codex","cursor"]);
+    assert.equal(completed.messages.filter(message => message.author === "codex").length,1);
+    assert.match(seen[0], /Local change verified/);
+
+    await callOwner(thread + "/messages", {id:randomUUID(), body:"Follow up"});
+    assert.equal((await runner(firstDevice,"/claim")).body.job,null);
+    const {job:followup} = (await runner(secondDevice,"/claim")).body;
+    assert.equal(followup.provider_session_id,"local-codex-thread");
+    assert.equal((await runner(secondDevice,"/runs/" + followup.id + "/start",{lease:followup.lease})).status,200);
+    await db.query("UPDATE bot_runs SET lease_until=now()-interval '1 second' WHERE message_id=$1", [followup.id]);
+    await waitFor(() => callOwner(thread), value => value.session?.status === "attention");
+    assert.equal((await runner(secondDevice,"/claim")).body.job,null);
+    assert.equal((await callOwner("/bots/runners/" + secondDevice.id + "/revoke",{},outsider)).status,404);
+    assert.equal((await runner(secondDevice,"/revoke")).status,200);
+    assert.equal((await runner(secondDevice,"/claim")).status,401);
+  } finally {
+    await service.close();
+    await db.end();
+  }
+});
