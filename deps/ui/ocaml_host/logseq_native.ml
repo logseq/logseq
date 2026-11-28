@@ -2451,6 +2451,7 @@ let () =
     done;
     Mutex.unlock input_fifo_lock
   in
+  let pending_composition_cancel = ref None in
   let drain_events () =
     let n = ref 0 in
     let go = ref true in
@@ -2567,19 +2568,21 @@ let () =
            let marked_after = ime_after.Lui_ime.marked_text in
            (match input, target_before with
             | Input.Text_editing _, Some tgt ->
-              (* LUI keeps the host IME session open across empty editing
-                 reports so composition can resume. The shared editor model
-                 instead treats empty preedit as a canceled composition:
-                 otherwise a stale composition start survives cancellation
-                 and a later composition at another caret would splice into
-                 the old range. Restarting after empty preedit is equivalent
-                 at the same caret and correct at a moved caret. *)
+              (* SDL clears marked text immediately before both commits and
+                 cancellations. Defer the empty-preedit cancel until this
+                 event batch is drained: a following text-input event in the
+                 same batch is the commit payload, while no following commit
+                 means the composition really was canceled. *)
               if marked_before = "" && marked_after <> "" then begin
+                (match !pending_composition_cancel with
+                 | Some old_tgt -> send_composition old_tgt "cancel" ""
+                 | None -> ());
+                pending_composition_cancel := None;
                 send_composition tgt "start" "";
                 send_composition tgt "update" marked_after
               end
               else if marked_before <> "" && marked_after = "" then
-                send_composition tgt "cancel" ""
+                pending_composition_cancel := Some tgt
               else if marked_after <> "" && marked_after <> marked_before then
                 send_composition tgt "update" marked_after
             | _ -> ());
@@ -2616,11 +2619,14 @@ let () =
            end;
            (match input, editor_target () with
             | Input.Text_input s, Some tgt when not !component_input ->
-              (* Ordinary text still arrives as insert. A commit produced
-                 while preedit is visible must close the shared editor
-                 composition instead: composition_commit is what splices the
-                 marked text into the model. *)
-              if composing_before then
+              (* Ordinary text still arrives as insert. SDL clears preedit
+                 before delivering the commit payload, so the deferred empty
+                 preedit state also counts as an open composition here. *)
+              let had_pending_composition =
+                !pending_composition_cancel = Some tgt
+              in
+              if had_pending_composition then pending_composition_cancel := None;
+              if composing_before || had_pending_composition then
                 if s = "" then send_composition tgt "cancel" ""
                 else send_composition tgt "end" s
               else if s <> "" then
@@ -2632,6 +2638,13 @@ let () =
       end
       else go := false
     done;
+    (match !pending_composition_cancel with
+     | Some tgt ->
+       pending_composition_cancel := None;
+       apply_patches
+         (Native_embed.extension_event tgt "logseq-editor" "composition"
+            {|{"state":"cancel","text":"","range":"0,0"}|})
+     | None -> ());
     !n
   in
   (* ---- boot the embedded app ---- *)
