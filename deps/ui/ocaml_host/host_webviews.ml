@@ -21,6 +21,9 @@ type state = {
   mutable view : Lui_webview.t option;
   mutable error : string;
   mutable painted_frame : int;
+  mutable player_ready : bool;
+  mutable playback_seconds : float;
+  mutable player_poll_at : float;
 }
 
 type t = {
@@ -56,7 +59,56 @@ let ids t = Hashtbl.fold (fun id _ acc -> id :: acc) t.states []
 
 let begin_frame t = t.frame_index <- t.frame_index + 1
 
-let pump t = if Hashtbl.length t.states > 0 then Lui_webview.pump ()
+let string_contains needle haystack =
+  let n = String.length needle and h = String.length haystack in
+  let rec loop i =
+    i + n <= h
+    && (String.sub haystack i n = needle || loop (i + 1))
+  in
+  n = 0 || loop 0
+
+let youtube_source source =
+  string_contains "youtube.com" source || string_contains "youtube-nocookie.com" source
+
+let player_poll_interval = 0.5
+
+let reset_player state =
+  state.player_ready <- false;
+  state.playback_seconds <- 0.;
+  state.player_poll_at <- 0.
+
+let poll_player state view =
+  if youtube_source state.source then begin
+    let now = Unix.gettimeofday () in
+    if now -. state.player_poll_at >= player_poll_interval then begin
+      state.player_poll_at <- now;
+      try
+        Lui_webview.call_async view
+          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? window.logseqPlayer.getCurrentTime() : -1"
+          (fun result ->
+            match float_of_string_opt result with
+            | Some seconds when seconds >= 0. ->
+              if not state.player_ready then
+                log "youtube player ready id=%d seconds=%.1f" state.id seconds;
+              state.player_ready <- true;
+              state.playback_seconds <- seconds
+            | _ ->
+              state.player_ready <- false;
+              state.playback_seconds <- 0.)
+      with _ -> ()
+    end
+  end
+
+let pump t =
+  if Hashtbl.length t.states > 0 then begin
+    Hashtbl.iter
+      (fun _ state ->
+        match state.view with
+        | Some view -> poll_player state view
+        | None -> ())
+      t.states;
+    Lui_webview.pump ()
+  end
 
 let escape_html s =
   let b = Buffer.create (String.length s + 16) in
@@ -81,6 +133,21 @@ let http_source s =
    top-level embed with Error 153 because there is no embedding referrer;
    the wrapper gives the real iframe the same document structure it has on
    the web and its base URL supplies the referrer. *)
+let youtube_driver_script source =
+  if not (youtube_source source) then ""
+  else
+    "<script>(function(){\
+     window.logseqPlayerReady=false;window.logseqPlayer=null;\
+     window.onYouTubeIframeAPIReady=function(){\
+     var frame=document.getElementById('logseq-embed-player');\
+     if(frame&&window.YT&&YT.Player){\
+     window.logseqPlayer=new YT.Player(frame,{events:{onReady:function(){window.logseqPlayerReady=true}}});\
+     }};\
+     var tag=document.createElement('script');\
+     tag.src='https://www.youtube.com/iframe_api';\
+     document.head.appendChild(tag);\
+     })();</script>"
+
 let wrapper_html ?sandbox source =
   let sandbox_attr =
     match sandbox with
@@ -90,11 +157,13 @@ let wrapper_html ?sandbox source =
   "<!doctype html><html><head><meta charset=\"utf-8\"><style>\
    html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000}\
    iframe{display:block;width:100%;height:100%;border:0}\
-   </style></head><body><iframe src=\""
+   </style></head><body><iframe id=\"logseq-embed-player\" src=\""
   ^ escape_html source
   ^ "\""
   ^ sandbox_attr
-  ^ " allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe></body></html>"
+  ^ " allow=\"accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share\" allowfullscreen referrerpolicy=\"strict-origin-when-cross-origin\"></iframe>"
+  ^ youtube_driver_script source
+  ^ "</body></html>"
 
 let base_url = "https://logseq.com/"
 
@@ -172,6 +241,7 @@ let ensure t state source sandbox frame =
       state.source <- source;
       state.sandbox <- sandbox;
       state.error <- "";
+      reset_player state;
       log "webview reload id=%d src=%s" state.id source
     end;
     Lui_webview.layout_webview view frame;
@@ -197,6 +267,7 @@ let ensure t state source sandbox frame =
          state.source <- source;
          state.sandbox <- sandbox;
          state.error <- "";
+         reset_player state;
          log "webview create id=%d src=%s backend=%s frame=%.1f,%.1f %.1fx%.1f"
            state.id source (Lui_webview.backend_name ()) frame.x frame.y frame.w frame.h
        with
@@ -230,7 +301,8 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
       | Some state -> state
       | None ->
         let state =
-          { id; source = ""; sandbox = None; view = None; error = ""; painted_frame = 0 }
+          { id; source = ""; sandbox = None; view = None; error = ""; painted_frame = 0
+        ; player_ready = false; playback_seconds = 0.; player_poll_at = 0. }
         in
         Hashtbl.replace t.states id state;
         state
@@ -270,6 +342,25 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
       base
       @ ctx.hooks.text_ops id frame (color 252 165 165 255) state.error
   end
+
+let seek_youtube t id seconds =
+  match Hashtbl.find_opt t.states id with
+  | Some { view = Some view; source; _ } when youtube_source source ->
+      log "youtube seek id=%d seconds=%d" id seconds;
+      let js =
+        Printf.sprintf
+          "(function(){var sec=%d;var frame=document.getElementById('logseq-embed-player');if(window.logseqPlayer&&window.logseqPlayer.seekTo){window.logseqPlayer.seekTo(sec,true);return}if(frame&&frame.contentWindow){frame.contentWindow.postMessage(JSON.stringify({event:'command',func:'seekTo',args:[sec,true]}),'*')}})()"
+          (max 0 seconds)
+      in
+      (try Lui_webview.eval view js with _ -> ())
+  | _ -> ()
+
+let playback_time t id =
+  match Hashtbl.find_opt t.states id with
+  | Some state when youtube_source state.source ->
+      if not state.player_ready then Runtime.Player_pending
+      else Runtime.Playback_time (max 0 (int_of_float (floor state.playback_seconds)))
+  | _ -> Runtime.No_video
 
 let drain_state state =
   match state.view with

@@ -973,6 +973,8 @@ let () =
       { Host_webviews.host_window = (fun () -> Lazy.force webview_host_window)
       ; clip_of = clip_webview_frame }
   in
+  Render_libs.youtube_seek_hook := Host_webviews.seek_youtube webviews;
+  Render_libs.youtube_time_hook := Host_webviews.playback_time webviews;
   let content_bounds = Hashtbl.create 16 in
   let bounds_revision = ref (-1, -1) in
   let content_box id =
