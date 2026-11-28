@@ -3646,14 +3646,21 @@ CAMLprim value logseq_native_media_open(value source_v, value video_v) {
   }
   logseq_gst.g_object_set(player->pipeline, "uri", source, NULL);
   free(source);
-  /* Slave the pipeline to the system clock instead of the audio sink
+  /* Slave video pipelines to the system clock instead of the audio sink
      clock: when the audio device is missing or its clock freezes (no
      hardware, headless or broken PulseAudio/PipeWire) the audio clock
      stops advancing, which freezes the position and every synchronized
      video frame even though decoding is healthy. Web playback stays
-     unaffected by audio output failures, so match that. */
-  logseq_gst.gst_pipeline_use_clock(player->pipeline,
-    logseq_gst.gst_system_clock_obtain());
+     unaffected by audio output failures, so match that. Audio-only
+     players keep the audio clock, which is the right master for sound. */
+  if (player->is_video) {
+    void *clock = logseq_gst.gst_system_clock_obtain();
+    if (clock) {
+      /* use_clock takes its own reference; release ours */
+      logseq_gst.gst_pipeline_use_clock(player->pipeline, clock);
+      logseq_gst.gst_object_unref(clock);
+    }
+  }
   int state_result = logseq_gst.gst_element_set_state(player->pipeline,
     LOGSEQ_GST_STATE_PAUSED);
   if (state_result == 0) {
