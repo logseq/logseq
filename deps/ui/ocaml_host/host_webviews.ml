@@ -24,6 +24,7 @@ type state = {
   mutable player_ready : bool;
   mutable playback_seconds : float;
   mutable playback_state : int;
+  mutable playback_rate : float;
   mutable playback_wall_at : float;
   mutable player_poll_at : float;
 }
@@ -113,6 +114,7 @@ let reset_player state =
   state.player_ready <- false;
   state.playback_seconds <- 0.;
   state.playback_state <- -1;
+  state.playback_rate <- 1.;
   state.playback_wall_at <- 0.;
   state.player_poll_at <- 0.
 
@@ -132,12 +134,12 @@ let poll_player t state view =
       state.player_poll_at <- now;
       try
         Lui_webview.call_async view
-          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? [window.logseqPlayer.getCurrentTime(), window.logseqPlayer.getPlayerState()] : [-1, -1]"
+          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? [window.logseqPlayer.getCurrentTime(), window.logseqPlayer.getPlayerState(), (typeof window.logseqPlayer.getPlaybackRate === 'function' ? window.logseqPlayer.getPlaybackRate() : 1)] : [-1, -1, 1]"
           (fun result ->
             let sample =
               try
                 match Yojson.Safe.from_string result with
-                | `List [time; player_state] ->
+                | `List [time; player_state; playback_rate] ->
                     let number = function
                       | `Float value -> Some value
                       | `Int value -> Some (float_of_int value)
@@ -148,19 +150,22 @@ let poll_player t state view =
                       | `Float value -> Some (int_of_float value)
                       | _ -> None
                     in
-                    (match number time, integer player_state with
-                     | Some seconds, Some player_state -> Some (seconds, player_state)
+                    (match number time, integer player_state, number playback_rate with
+                     | Some seconds, Some player_state, Some playback_rate
+                       when playback_rate > 0. ->
+                         Some (seconds, player_state, playback_rate)
                      | _ -> None)
                 | _ -> None
               with _ -> None
             in
             match sample with
-            | Some (seconds, player_state) when seconds >= 0. ->
+            | Some (seconds, player_state, playback_rate) when seconds >= 0. ->
               if not state.player_ready then
                 log "youtube player ready id=%d seconds=%.1f" state.id seconds;
               state.player_ready <- true;
               state.playback_seconds <- seconds;
               state.playback_state <- player_state;
+              state.playback_rate <- playback_rate;
               state.playback_wall_at <- Unix.gettimeofday ();
               (match Hashtbl.find_opt t.pending_seeks state.id with
                | Some pending ->
@@ -172,6 +177,7 @@ let poll_player t state view =
               state.player_ready <- false;
               state.playback_seconds <- 0.;
               state.playback_state <- -1;
+              state.playback_rate <- 1.;
               state.playback_wall_at <- 0.)
       with exn -> log "youtube playback poll failed: %s" (Printexc.to_string exn)
     end
@@ -380,7 +386,7 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
       | None ->
         let state =
           { id; source = ""; sandbox = None; view = None; error = ""; painted_frame = 0
-        ; player_ready = false; playback_seconds = 0.; playback_state = -1; playback_wall_at = 0.; player_poll_at = 0. }
+        ; player_ready = false; playback_seconds = 0.; playback_state = -1; playback_rate = 1.; playback_wall_at = 0.; player_poll_at = 0. }
         in
         Hashtbl.replace t.states id state;
         state
@@ -441,7 +447,8 @@ let playback_time t id =
       else
         let seconds =
           if state.playback_state = 1 then
-            state.playback_seconds +. (Unix.gettimeofday () -. state.playback_wall_at)
+            state.playback_seconds
+            +. ((Unix.gettimeofday () -. state.playback_wall_at) *. state.playback_rate)
           else state.playback_seconds
         in
         Runtime.Playback_time (max 0 (int_of_float (floor seconds)))
@@ -466,10 +473,15 @@ let drain_state state =
 
 let end_frame t store =
   Hashtbl.filter_map_inplace
+    (fun id seconds ->
+      if Lui_store.mem store id then Some seconds else None)
+    t.pending_seeks;
+  Hashtbl.filter_map_inplace
     (fun id state ->
       if not (Lui_store.mem store id) then begin
         log "webview destroy detached id=%d src=%s" id state.source;
         close_view state;
+        Hashtbl.remove t.pending_seeks id;
         None
       end else begin
         if state.painted_frame <> t.frame_index then begin
@@ -483,4 +495,5 @@ let end_frame t store =
 
 let destroy_all t =
   Hashtbl.iter (fun _ state -> close_view state) t.states;
-  Hashtbl.reset t.states
+  Hashtbl.reset t.states;
+  Hashtbl.reset t.pending_seeks

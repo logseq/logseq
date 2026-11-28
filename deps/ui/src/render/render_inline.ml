@@ -1032,6 +1032,9 @@ let youtube_iframe id start =
 (* cljs video-embed-cp :iframe attr set — shared by every non-youtube
    provider *)
 let provider_iframe src =
+  (* A generic iframe can still be a privacy-enhanced YouTube player;
+     install the shared timestamp bridge before one is first rendered. *)
+  Render_libs.ensure ();
   D.el ~tag:"iframe"
     ~attrs:
       [ ("allow-full-screen", "allowfullscreen")
