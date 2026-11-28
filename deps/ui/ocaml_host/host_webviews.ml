@@ -12,7 +12,7 @@ open Lui_scene
 type env = {
   host_window : unit -> Lui_webview.host_window;
   clip_of : int -> rect -> rect;
-  occluded : rect -> bool;
+  occluded : int -> rect -> bool;
 }
 
 type state = {
@@ -418,7 +418,7 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
     in
     let clipped = rect_intersect (t.env.clip_of id frame) ctx.viewport in
     let logical = logical_rect ctx.scale clipped in
-    let occluded = t.env.occluded clipped in
+    let occluded = t.env.occluded id clipped in
     if passive then ()
     else if rect_empty clipped || logical.w < 1. || logical.h < 1. then hide state
     else if occluded then hide state
