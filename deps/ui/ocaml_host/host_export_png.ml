@@ -26,20 +26,31 @@ let find_main_content store =
   if !found = 0 then None else Some !found
 
 let find_block_node store uuid =
+  let matches id =
+    (match Lui_store.prop store id "block-id" with
+     | Some (Lui_protocol.StringValue v) -> v = uuid
+     | _ -> false)
+    ||
+    (match Lui_store.string_prop store id "data-blockid" with
+     | Some v -> v = uuid
+     | None -> false)
+    ||
+    (match Lui_store.string_prop store id "block-id" with
+     | Some v -> v = uuid
+     | None -> false)
+  in
   let found = ref 0 in
   Lui_store.iter_preorder store (fun id ->
-      if !found = 0 then
-        match Lui_store.prop store id "block-id" with
-        | Some (Lui_protocol.StringValue v) when v = uuid -> found := id
-        | _ -> ());
-  if !found = 0 then (
-    (* fall back to the data-blockid attr mirrored on block rows *)
-    Lui_store.iter_preorder store (fun id ->
-        if !found = 0 then
-          match Lui_store.string_prop store id "data-blockid" with
-          | Some v when v = uuid -> found := id
-          | _ -> ()));
+      if !found = 0 && matches id then found := id);
   if !found = 0 then None else Some !found
+
+(* popup chrome — the export dialog itself included — must not
+   contaminate the snapshot, the same way html2canvas captures only the
+   target element *)
+let popup_kind = function
+  | "dialog" | "drawer" | "sheet" | "tooltip" | "toast"
+  | "dropdown-menu" | "context-menu" | "popover" | "alert" -> true
+  | _ -> false
 
 let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
     () : (string * int * int) option =
@@ -55,8 +66,10 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
       match env.live_rect node_id with
       | None -> None
       | Some live ->
-        let scale = env.scale () in
-        let logical_w = live.Lui_scene.w /. scale in
+        (* web parity: html2canvas runs at scale 1, so the export
+           resolution is logical px regardless of the window scale *)
+        let scale = 1. in
+        let logical_w = live.Lui_scene.w /. env.scale () in
         if logical_w < 1. then None
         else begin
           let width = logical_w in
@@ -87,8 +100,25 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
           in
           if target_r.Lui_scene.w < 1. || target_r.Lui_scene.h < 1. then None
           else begin
+            (* the container stretches to the export canvas; the real
+               content height is the bottom of its deepest descendant —
+               the html2canvas scrollHeight equivalent *)
+            let content_bottom = ref (target_r.Lui_scene.y +. target_r.Lui_scene.h) in
+            let inner_bottom = ref 0. in
+            Lui_store.iter_preorder ~root:node_id store (fun id ->
+                if id <> node_id then
+                  match Lui_layout.rect engine id with
+                  | Some r ->
+                      let b = r.Lui_scene.y +. r.Lui_scene.h in
+                      if b > !inner_bottom then inner_bottom := b
+                  | None -> ());
+            if !inner_bottom > target_r.Lui_scene.y
+               && !inner_bottom < !content_bottom
+            then content_bottom := !inner_bottom;
             let out_w = int_of_float (Float.ceil target_r.Lui_scene.w) in
-            let out_h = int_of_float (Float.ceil target_r.Lui_scene.h) in
+            let out_h =
+              int_of_float (Float.ceil (!content_bottom -. target_r.Lui_scene.y))
+            in
             let clear =
               if transparent then Lui_scene.color 0 0 0 0
               else
@@ -101,13 +131,18 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                 ~mask_atlas:(Lui_scene.Atlas.create ~bpp:1 ~w:512 ~h:512)
                 ~color_atlas:(Lui_scene.Atlas.create ~bpp:4 ~w:512 ~h:512)
             in
+            scene.Lui_scene.text <-
+              { Lui_scene.gamma_ratios = Lui_scene.gamma_ratios 2.2;
+                contrast = 0.;
+                subpixel_contrast = 0. };
             scene_cell := Some scene;
             let rec hooks =
               Lui_paint.
                 { color_of = Theme_vars.color_of
                 ; layout = (fun id -> Lui_paint.placement_of_rect (rect_of id))
                 ; state_of = (fun _ -> Lui_paint.state_neutral)
-                ; hidden = (fun _ -> false)
+                ; hidden =
+                    (fun id -> popup_kind (Lui_store.kind store id))
                 ; scroll_of = (fun _ -> None)
                 ; mounted_children = (fun _ -> None)
                 ; text_ops =
@@ -140,7 +175,7 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
             let scene_h =
               int_of_float
                 (Float.ceil
-                   (Float.min height (target_r.Lui_scene.y +. target_r.Lui_scene.h +. 2.)))
+                   (Float.min height (!content_bottom +. 2.)))
             in
             Lui_paint.paint hooks store scene
               ~width:scene_w ~height:scene_h ~scale ~clear;

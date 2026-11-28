@@ -121,7 +121,7 @@ let copy_save_row ctx =
     ~test:
       (Logseq_el.own ctx
          (Signal.map
-            (fun (st : S.t) -> st.content <> None || st.png <> None)
+            (fun (st : S.t) -> st.content <> None || st.png <> None || st.png_ready)
             (st_sig ctx)))
     (row ~key:"export-btns" ~gap:24 ~style_class:"export-btns"
       ~margin_top:4

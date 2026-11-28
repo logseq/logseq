@@ -152,7 +152,7 @@ let export_png (st : S.t Signal.state) =
       close_out oc;
       preview_path := path;
       S.mutate st (fun s ->
-          { s with png_url = Some path; png_ready = true; png_bytes = Some bytes });
+          { s with png_url = Some ("file://" ^ path); png_ready = true; png_bytes = Some bytes });
       Runtime.flush ()
   | None ->
       Toast.error (I18n.t1 "file/format-not-supported" "PNG")
