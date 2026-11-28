@@ -1360,6 +1360,18 @@ let test_cm_keynav st s =
                    Ui_services.alt = true };
                check "Alt+Left is not consumed as submenu navigation"
                  (not !alt_left_consumed);
+               let editable_item =
+                 { (Ui_dom_web.el_of item_el) with
+                   Ui_services.editable = (fun () -> true) }
+               in
+               Popups_view.handle_keydown st
+                 { (ev "ArrowLeft") with
+                   Ui_services.target = Some editable_item };
+               (match cm_of st with
+                | Some cm ->
+                    check "editable caret keys keep picker submenus open"
+                      (cm.P.sub_open = sub_idx)
+                | None -> check "editable ArrowLeft keeps the menu open" false);
                Popups_view.handle_keydown st (ev "ArrowLeft");
                (match cm_of st with
                 | Some cm ->
