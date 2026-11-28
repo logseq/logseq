@@ -929,7 +929,8 @@ let el_id (el : element) : string =
 
 let el_editable (el : element) : bool =
   let t = tag_name el in
-  t = "textarea" || t = "input" || t = "select"
+  t = "textarea" || t = "input" || t = "select" || t = "search-field"
+  || t = "text-field" || t = "secure-field"
   || get_attribute el "contenteditable" = Some "true"
 
 let el_checked (el : element) : bool =
