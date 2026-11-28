@@ -171,10 +171,10 @@ async function route(pool, owner, request, availableAgents) {
 
   if (!botKey && method === "GET") {
     const {rows: bots} = await pool.query(
-      `SELECT bots.*, preview.body AS preview FROM bots
-       LEFT JOIN LATERAL (SELECT body FROM messages WHERE bot_id=bots.id AND session_id IS NULL
+      `SELECT bots.*, left(preview.body,300) AS preview FROM bots
+       LEFT JOIN LATERAL (SELECT body,created_at FROM messages WHERE bot_id=bots.id
          ORDER BY seq DESC LIMIT 1) preview ON true
-       WHERE owner=$1 ORDER BY created_at DESC,id`, [owner]);
+       WHERE owner=$1 ORDER BY coalesce(preview.created_at,bots.created_at) DESC,bots.id`, [owner]);
     return {bots, agents: availableAgents};
   }
   if (!botKey && method === "POST") {
@@ -295,12 +295,15 @@ async function settle(pool, job, result, canExport) {
   await transaction(pool, async db => {
     if (result.reply) {
       await insertMessage(db, job.bot_id, job.session_id, randomUUID(), job.agent, result.reply);
-      if (job.automation && result.state === "done") {
-        await insertMessage(db, job.bot_id, null, randomUUID(), "bot", result.reply);
+    }
+    const summary = result.reply || job.last_reply;
+    if (result.state === "done" && summary) {
+      if (job.automation) {
+        await insertMessage(db, job.bot_id, null, randomUUID(), "bot", summary);
       }
-      if (result.state === "done" && canExport(job)) {
+      if (canExport(job)) {
         const url = result.url ?? job.provider_url;
-        const title = `${result.reply.slice(0, 6000)}${url ? "\n" + url : ""}`;
+        const title = `${summary.slice(0, 6000)}${url ? "\n" + url : ""}`;
         await db.query(`INSERT INTO bot_graph_exports (id,owner,graph_id,block_id,title)
           VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING`,
           [job.message_id, job.owner, job.graph_id, job.graph_block_id, title]);
@@ -312,8 +315,9 @@ async function settle(pool, job, result, canExport) {
        updated_at=now() WHERE id=$4`,
       [result.state === "done" ? "completed" : result.state === "poll" ? "running" : result.state,
         result.providerSessionId ?? null, result.url ?? null, job.session_id, result.cursor ?? null]);
-    await db.query("UPDATE bot_runs SET state=$1,due_at=now()+make_interval(secs=>$4),provider_cursor=$2 WHERE message_id=$3",
-      [result.state, result.cursor ?? job.provider_cursor, job.message_id, result.pollDelay ?? 3]);
+    await db.query(`UPDATE bot_runs SET state=$1,due_at=now()+make_interval(secs=>$4),provider_cursor=$2,
+      last_reply=COALESCE($5,last_reply) WHERE message_id=$3`,
+      [result.state, result.cursor ?? job.provider_cursor, job.message_id, result.pollDelay ?? 3, result.reply || null]);
   });
 }
 

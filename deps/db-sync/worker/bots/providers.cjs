@@ -38,7 +38,7 @@ function devin(env, limits) {
       const prompt = agentPrompt(job);
       const request = job.provider_session_id ? {message: prompt} : {
         title: job.prompt.slice(0, 96), prompt, devin_mode: "normal",
-        max_acu_limit: limits.maxAcu,
+        max_acu_limit: limits.maxAcu, resumable: true,
         repos: job.repository ? [job.repository] : undefined,
       };
       const response = await call(job.provider_session_id ? `${path}/messages` : path, request);

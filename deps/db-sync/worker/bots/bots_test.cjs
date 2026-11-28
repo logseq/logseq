@@ -35,6 +35,38 @@ test("mock mode overrides live credentials and live Devin requires positive limi
   assert.match((await mock.devin({prompt: "Test", session_id: bot})).reply, /^Mock devin:/);
 });
 
+test("a Devin reply is read from session history and a follow-up uses the same run", async t => {
+  const sent = [];
+  t.mock.method(globalThis, "fetch", async (url, options) => {
+    const request = new URL(url);
+    if (options.method === "POST") {
+      sent.push([request.pathname, JSON.parse(options.body)]);
+      return Response.json({session_id: "devin-fixture"});
+    }
+    if (request.pathname.endsWith("/messages")) {
+      assert.equal(request.searchParams.get("after"), "event-0");
+      return Response.json({items: [{event_id: "event-1", source: "devin", message: "Which platform?"}],
+        end_cursor: "event-1"});
+    }
+    assert.match(request.pathname, /\/sessions\/devin-fixture$/);
+    return Response.json({status: "running", status_detail: "waiting_for_user"});
+  });
+  const devin = makeAgents({LOGSEQ_BOTS_AGENT_OWNER: owner, LOGSEQ_BOTS_DEVIN_ENABLED: "1",
+    LOGSEQ_BOTS_DEVIN_DAILY_STARTS: "1", LOGSEQ_BOTS_DEVIN_MAX_ACU: "2",
+    DEVIN_ORG_ID: "org-fixture", DEVIN_API_KEY: "test-placeholder"}).devin;
+  const started = await devin({state: "queued", prompt: "Check navigation"});
+  const run = {provider_session_id: started.providerSessionId, provider_cursor: "event-0"};
+  const reply = await devin({...run, state: "poll"});
+  assert.equal(reply.state, "needs_input");
+  assert.equal(reply.reply, "Which platform?");
+  assert.equal(reply.cursor, "event-1");
+  const continued = await devin({...run, state: "queued", prompt: "Android"});
+  assert.equal(continued.providerSessionId, started.providerSessionId);
+  assert.match(sent[0][0], /\/sessions$/);
+  assert.equal(sent[0][1].resumable, true);
+  assert.match(sent[1][0], /\/sessions\/devin-fixture\/messages$/);
+});
+
 test("deduplicates dispatches and continues the same session with incremental history",
   {skip: !database}, async () => {
     const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database, LOGSEQ_BOTS_MOCK: "1"});
@@ -57,6 +89,7 @@ test("deduplicates dispatches and continues the same session with incremental hi
       assert.equal(delta.session.provider_session_id, first.session.provider_session_id);
       assert.deepEqual(delta.messages.map(item => item.body), ["Include Android", "Mock devin: Include Android"]);
       assert.equal((await call(service, main)).body.sessions.length, 1);
+      assert.equal((await call(service, "/bots")).body.bots[0].preview, "Mock devin: Include Android");
     } finally {
       await service.close();
     }
@@ -64,7 +97,12 @@ test("deduplicates dispatches and continues the same session with incremental hi
 
 test("a confirmed weekly automation creates one new thread and posts its summary",
   {skip: !database}, async () => {
-    const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database, LOGSEQ_BOTS_MOCK: "1"});
+    const providers = {
+      circle: async job => job.state === "poll" ? {state: "done"} : {
+        state: "poll", pollDelay: 0, reply: `Mock circle: ${job.prompt}`,
+      },
+    };
+    const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {providers});
     const db = new Client({connectionString: database});
     try {
       await db.connect();

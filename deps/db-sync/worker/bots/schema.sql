@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 
 CREATE INDEX IF NOT EXISTS messages_bot_order ON messages (bot_id, seq DESC) WHERE session_id IS NULL;
+CREATE INDEX IF NOT EXISTS messages_bot_activity ON messages (bot_id, seq DESC);
 CREATE INDEX IF NOT EXISTS messages_session_order ON messages (session_id, seq DESC) WHERE session_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS bot_runs (
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS bot_automations (
 
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS reply_count integer NOT NULL DEFAULT 0;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS provider_cursor text;
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS last_reply text;
 
 CREATE TABLE IF NOT EXISTS bot_graph_exports (
   id uuid PRIMARY KEY REFERENCES bot_runs(message_id) ON DELETE CASCADE,
