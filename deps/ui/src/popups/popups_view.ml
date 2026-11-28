@@ -1264,7 +1264,13 @@ let menu_keydown st (ev : Ui_services.ev) =
         | Some ("ArrowDown" | "ArrowUp" | "ArrowLeft" | "ArrowRight") -> true
         | _ -> false)
   in
-  if modified_arrow
+  let editable_caret_key =
+    match ev.Ui_services.key, ev.Ui_services.target with
+    | Some ("ArrowLeft" | "ArrowRight" | "Home" | "End"), Some target ->
+        target.Ui_services.editable ()
+    | _ -> false
+  in
+  if modified_arrow || editable_caret_key
      || not (match ev.Ui_services.key with
         | Some ("ArrowDown" | "ArrowUp" | "ArrowLeft" | "ArrowRight"
                | "Home" | "End" | "Enter" | "Tab") -> true
