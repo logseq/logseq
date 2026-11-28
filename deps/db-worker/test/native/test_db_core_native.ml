@@ -800,6 +800,44 @@ let test_ensure_comments_area_for_blocks () =
   check "area under target block"
     (match parent with Some p -> p.id = block_ent.id | None -> false)
 
+
+(* Converting an editing blank block into a comments area sends the tag as a
+   collection because block/tags is cardinality-many. The worker must resolve
+   each class reference instead of treating the collection itself as a text
+   property value. *)
+let test_apply_outliner_ops_set_block_tags_from_collection () =
+  let buuid = "eeeeeeee-0000-0000-0000-0000000000c1" in
+  let conn =
+    create_conn_with_blocks
+      ~pages_and_blocks:
+        [ { page = { default_page with pg_title = Some "p1" }
+          ; blocks =
+              [ { default_block with
+                  b_uuid = Some buuid
+                ; b_title = Some "" } ] } ]
+      ()
+  in
+  register_conn conn;
+  let r =
+    api "apply-outliner-ops"
+      [ Wire.String test_repo
+      ; Wire.Array
+          [ Wire.Array
+              [ kw "set-block-property"
+              ; Wire.Array
+                  [ Wire.Uuid buuid
+                  ; kw "block/tags"
+                  ; Wire.Set [ kw "logseq.class/Comments" ] ] ] ]
+      ; Wire.Map [] ]
+  in
+  (match r with
+   | Wire.Tagged ("worker/error", _) ->
+       Alcotest.fail "apply-outliner-ops errored"
+   | _ -> ());
+  let block = Option.get (entity_at_uuid (db_of conn) buuid) in
+  check "blank block tagged Comments"
+    (Ldb.has_tag block "logseq.class/Comments")
+
 (* (deftest apply-outliner-ops-rejects-missing-indent-parent-original ...) *)
 let test_apply_outliner_ops_rejects_missing_indent_parent_original () =
   let u1 = "cccccccc-0000-0000-0000-000000000001"
@@ -3509,6 +3547,8 @@ let cases =
       test_apply_outliner_ops_dead_uuid_ref_no_stub_page
   ; Alcotest.test_case "ensure-comments-area-for-blocks" `Quick
       test_ensure_comments_area_for_blocks
+  ; Alcotest.test_case "apply-outliner-ops-set-block-tags-from-collection" `Quick
+      test_apply_outliner_ops_set_block_tags_from_collection
   ; Alcotest.test_case "get-block-sibling" `Quick test_get_block_sibling
   ; Alcotest.test_case "set-db-sync-config-keeps-only-non-auth-fields-test" `Quick
       test_set_db_sync_config_keeps_only_non_auth_fields
