@@ -138,6 +138,13 @@ let has_prefix s prefix =
    window. Per-controller creation failures (notably WebView2) can be
    transient and must not disable unrelated later embeds. *)
 let permanent_backend_error message =
+  let prefix = "lui_webview: " in
+  let message =
+    if has_prefix message prefix then
+      String.sub message (String.length prefix)
+        (String.length message - String.length prefix)
+    else message
+  in
   List.exists (has_prefix message)
     [ "cannot load "; "missing symbol "; "gtk_init_check failed"
     ; "SDL3 window is not "; "SDL3 window is NULL"
