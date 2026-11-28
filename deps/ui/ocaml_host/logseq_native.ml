@@ -965,13 +965,73 @@ let () =
     in
     walk id frame
   in
+  let win_w = ref width and win_h = ref height in
+  let webview_overlay_epoch = ref 0 in
+  let webview_overlay_cache = ref (-1, [], []) in
+  (* OS webviews always sit above the self-drawn scene. A presented modal
+     covers the page even when its own panel rect is small; light overlays,
+     including host-drawn tooltips, occlude only where their rectangles
+     intersect. Hiding the embed keeps
+     input and paint ownership truthful, at the cost of a rectangular
+     occlusion approximation. *)
+  let presented_overlay_state () =
+    let cached_epoch, _, _ = !webview_overlay_cache in
+    if cached_epoch <> !webview_overlay_epoch then begin
+      let current_store = store_of () in
+      let modal_ids = ref [] in
+      let light_overlays = ref [] in
+      Lui_store.iter_preorder current_store (fun id ->
+        let tooltip = Lui_store.kind current_store id = "tooltip" in
+        if (tooltip || Lui_query.presented_overlay current_store id)
+           && not (Ui.hidden ui current_store id)
+           && not (Lui_store.inert_in_chain current_store id)
+           && Lui_focus.chain_visible current_store id then
+          match
+            if tooltip then `light else Lui_overlay.overlay_class current_store id
+          with
+          | `modal -> modal_ids := id :: !modal_ids
+          | `light -> (
+            match shifted_layout_rect id with
+            | Some r when not (Lui_scene.rect_empty r) ->
+                light_overlays := (id, r) :: !light_overlays
+            | _ -> ())
+          | `none -> ());
+      webview_overlay_cache := (!webview_overlay_epoch, !modal_ids, !light_overlays)
+    end;
+    let _, modal_ids, light_overlays = !webview_overlay_cache in
+    modal_ids, light_overlays
+  in
+  let overlay_contains_embed store overlay_id embed_id =
+    let rec walk node =
+      node = overlay_id
+      ||
+      match Lui_store.parent store node with
+      | Some parent -> walk parent
+      | None -> false
+    in
+    walk embed_id
+  in
+  let webview_occluded embed_id frame =
+    let modal_ids, overlay_rects = presented_overlay_state () in
+    let current_store = store_of () in
+    let separate_overlay overlay_id =
+      not (overlay_contains_embed current_store overlay_id embed_id)
+    in
+    List.exists separate_overlay modal_ids
+    || List.exists
+         (fun (overlay_id, overlay) ->
+           separate_overlay overlay_id
+           && not (Lui_scene.rect_empty (Lui_scene.rect_intersect frame overlay)))
+         overlay_rects
+  in
   let webview_host_window =
     lazy (Lui_webview.host_of_sdl_window (Sdl.unsafe_ptr_of_window !win))
   in
   let webviews =
     Host_webviews.create
       { Host_webviews.host_window = (fun () -> Lazy.force webview_host_window)
-      ; clip_of = clip_webview_frame }
+      ; clip_of = clip_webview_frame
+      ; occluded = webview_occluded }
   in
   Render_libs.youtube_seek_hook := Host_webviews.seek_youtube webviews;
   Render_libs.youtube_time_hook := Host_webviews.playback_time webviews;
@@ -1324,7 +1384,6 @@ let () =
   Lui_host.set_ctx_anchor host
     (Some (fun () ->
        Host_interaction.context_anchor store (Ui.open_menu ui) (Ui.pointer ui)));
-  let win_w = ref width and win_h = ref height in
   image_visible := (fun id ->
     match shifted_layout_rect id with
     | None -> false
@@ -2808,6 +2867,7 @@ let () =
     let paint_started = perf_s () in
     let layout_before = metrics.layout_count in
     Host_interaction.prepare_paint ui host;
+    incr webview_overlay_epoch;
     List.iter (Lui_host.note_paint host) (Host_webviews.ids webviews);
     Host_webviews.begin_frame webviews;
     ignore (Lui_host.repaint host);
