@@ -132,11 +132,20 @@
 (defn- unlimited-limiter []
   #js {:limit (fn [_opts] (p/resolved #js {:success true}))})
 
-(defn- open-bot-service []
+(defn- open-bot-service [index-db]
   (when (seq (some-> js/process .-env (aget "LOGSEQ_BOTS_DATABASE_URL")))
     (let [module-path (node-path/join js/__dirname ".." "bots" "index.cjs")
           service (js/require module-path)]
-      (.createBotService service))))
+      (.createBotService service (.-env js/process)
+                         #js {:graphsFor (fn [user-id]
+                                           (p/let [graphs (index/<index-list index-db user-id)]
+                                             (clj->js (mapv :graph-id graphs))))
+                              :canShareGraph (fn [user-id graph-id]
+                                               (p/let [manager? (index/<user-is-manager? index-db graph-id user-id)]
+                                                 (if manager?
+                                                   (p/let [members (index/<graph-members-list index-db graph-id)]
+                                                     (boolean (some #(not= user-id (:user-id %)) members)))
+                                                   false)))}))))
 
 (defn- dispatch-request [request env registry deps bots]
   (let [path (.-pathname (platform/request-url request))]
@@ -154,8 +163,8 @@
   (let [cfg (config/normalize-config overrides)
         _ (logging/set-root-level! (:log-level cfg))
         request-origin (request-origin-opts cfg)
-        bots (open-bot-service)
         index-db (storage/open-index-db (:data-dir cfg))
+        bots (open-bot-service index-db)
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
         registry (atom {})
         deps {:config cfg

@@ -87,3 +87,24 @@ CREATE TABLE IF NOT EXISTS bot_graph_exports (
   state text NOT NULL DEFAULT 'queued',
   due_at timestamptz NOT NULL DEFAULT now()
 );
+
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments jsonb NOT NULL DEFAULT '[]';
+
+CREATE TABLE IF NOT EXISTS bot_uploads (
+  id uuid PRIMARY KEY,
+  bot_id uuid NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  owner text NOT NULL,
+  payload bytea NOT NULL,
+  message_id uuid REFERENCES messages(id) ON DELETE CASCADE,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS bot_uploads_message ON bot_uploads (message_id) WHERE message_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS bot_uploads_unclaimed ON bot_uploads (created_at) WHERE message_id IS NULL;
+
+ALTER TABLE bots ADD COLUMN IF NOT EXISTS shared_graph_id uuid;
+CREATE INDEX IF NOT EXISTS bots_shared_graph ON bots (shared_graph_id) WHERE shared_graph_id IS NOT NULL;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS handoff jsonb;
+
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS actor text;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS requested_agent text;

@@ -143,7 +143,7 @@ node worker/dist/node-adapter.js
 #### Mobile Bots
 
 Set `LOGSEQ_BOTS_DATABASE_URL` to a PostgreSQL database for Bots. Set
-`LOGSEQ_BOTS_MOCK=1` for deterministic replies from all four Agent choices
+`LOGSEQ_BOTS_MOCK=1` for deterministic replies from all test Agents
 without using Agent credentials. Use this mode for local UI testing.
 
 To enable a live Agent, set `LOGSEQ_BOTS_AGENT_OWNER` to the authenticated
@@ -153,6 +153,18 @@ and the configured executable in `LOGSEQ_BOTS_CODEX`, `LOGSEQ_BOTS_PI` or
 using `LOGSEQ_BOTS_REPOSITORIES`, a JSON object keyed by `owner/repo`.
 Circle consumes one JSON object on stdin with `prompt` and `sessionId`,
 and returns JSON with `reply`, `sessionId` and an optional `url`.
+
+Cursor uses the Cloud Agents v1 API with `CURSOR_API_KEY`. A Bot with no
+repository can start a standalone cloud session. To send tasks on a GitHub
+repository, set `LOGSEQ_BOTS_CURSOR_PUBLISH_REPOS=1`. Cursor can then push its
+generated branch without opening a pull request. Cursor accepts image
+attachments through its API.
+
+Bot owners can share a Bot with a collaborative Graph they manage. Current
+Graph members can open its conversations and use Bot mentions to forward
+messages within the Graph. Dispatch for members is opt-in via the
+comma-separated `LOGSEQ_BOTS_SHARED_AGENTS` allowlist. Listed providers run
+under the Bot owner's configuration and existing usage limits.
 
 Live Devin requires `LOGSEQ_BOTS_DEVIN_ENABLED=1`, `DEVIN_ORG_ID`,
 `DEVIN_API_KEY`, `LOGSEQ_BOTS_DEVIN_MAX_ACU` and
