@@ -3693,7 +3693,7 @@ CAMLprim value logseq_native_media_position(value handle_v) {
   if (!logseq_gst.gst_element_query_duration(player->pipeline,
         LOGSEQ_GST_FORMAT_TIME, &duration))
     duration = -1;
-  if (duration >= 0)
+  if (duration > 0)
     player->last_duration_ms = (int)(duration / 1000000);
   /* At end-of-stream playbin position/duration queries can fail or reset,
      which zeroed the control; web media keeps showing duration at the end
