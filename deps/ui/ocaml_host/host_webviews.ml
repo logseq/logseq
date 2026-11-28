@@ -134,7 +134,7 @@ let poll_player t state view =
       state.player_poll_at <- now;
       try
         Lui_webview.call_async view
-          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? [window.logseqPlayer.getCurrentTime(), window.logseqPlayer.getPlayerState(), (typeof window.logseqPlayer.getPlaybackRate === 'function' ? window.logseqPlayer.getPlaybackRate() : 1)] : [-1, -1, 1]"
+          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? [window.logseqPlayer.getCurrentTime(), window.logseqPlayer.getPlayerState(), (typeof window.logseqPlayer.getPlaybackRate === 'function' ? window.logseqPlayer.getPlaybackRate() : null)] : [-1, -1, 1]"
           (fun result ->
             let sample =
               try
