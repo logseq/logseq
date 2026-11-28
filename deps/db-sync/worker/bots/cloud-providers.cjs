@@ -28,9 +28,9 @@ async function fetchProvider(url, options) {
 function devin(env, limits) {
   const organization = `https://api.devin.ai/v3/organizations/${encodeURIComponent(env.DEVIN_ORG_ID)}`;
   const root = organization + "/sessions";
-  const call = async (url, body = null) => {
+  const call = async (url, body = null, timeout = 25000) => {
     const response = await fetchProvider(url, {
-      method: body ? "POST" : "GET", signal: AbortSignal.timeout(25000),
+      method: body ? "POST" : "GET", signal: AbortSignal.timeout(timeout),
       headers: {authorization: `Bearer ${env.DEVIN_API_KEY}`, "content-type": "application/json"},
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -79,6 +79,7 @@ function devin(env, limits) {
         ? {event: job.provider_cursor} : {after: job.provider_cursor};
     }
     if (watermark.after) history.searchParams.set("after", watermark.after);
+    const readOnly = job.readOnly === true;
     const retry = () => {
       if (Date.now() - new Date(job.message_created_at).getTime() < 60 * 60 * 1000) {
         return {state: "poll", pollDelay: 15};
@@ -87,17 +88,19 @@ function devin(env, limits) {
     };
     let session, page;
     try {
-      [session, page] = await Promise.all([call(path), call(history)]);
-    } catch {
+      [session, page] = readOnly
+        ? [null, await call(history, null, 2500)]
+        : await Promise.all([call(path), call(history)]);
+    } catch (error) {
+      if (readOnly) throw error;
       return retry();
     }
-    if ([session.status, page.status].some(status => status === 404 || status === 429 || status >= 500)) {
+    if (!readOnly && [session.status, page.status].some(status => status === 404 || status === 429 || status >= 500)) {
       return retry();
     }
-    if (session.status >= 400 || page.status >= 400 || !Array.isArray(page.data.items)) {
+    if ((session && session.status >= 400) || page.status >= 400 || !Array.isArray(page.data.items)) {
       throw new Error("Devin session could not be read");
     }
-    const data = session.data;
     // The terminal page has no end cursor. Revisit that page and deduplicate by event ID.
     const items = page.data.items;
     const seen = watermark.event ? items.findIndex(item => item.event_id === watermark.event) : -1;
@@ -105,10 +108,17 @@ function devin(env, limits) {
     const cursor = JSON.stringify(next ? {after: next} : {
       after: watermark.after, event: items.at(-1)?.event_id ?? watermark.event,
     });
-    const reply = items.slice(seen + 1).filter(item => item.source === "devin")
-      .map(item => item.message).filter(message => typeof message === "string").join("\n\n");
+    const messages = items.slice(seen + 1).flatMap(item => {
+      if (typeof item.message !== "string" || !item.message.trim()) return [];
+      if (item.source === "devin") return [{author: "devin", body: item.message}];
+      if (item.source === "user" && item.origin === "web") return [{author: "user", body: item.message}];
+      return [];
+    });
+    if (readOnly) return {cursor, messages};
+    const data = session.data;
+    const reply = messages.filter(message => message.author === "devin").map(message => message.body).join("\n\n");
     const detail = data.status_detail;
-    const result = {cursor, reply, url: data.url, pollDelay: 15};
+    const result = {cursor, reply, messages, url: data.url, pollDelay: 15};
     if (next) return {...result, state: "poll"};
     if (detail === "waiting_for_user" || detail === "waiting_for_approval" || detail === "inactivity") {
       return {...result, state: "needs_input", reply: reply || (job.provider_cursor ? null : "Devin is waiting for your input.")};

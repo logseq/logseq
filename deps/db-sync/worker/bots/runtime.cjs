@@ -368,8 +368,11 @@ async function route(pool, owner, request, access) {
     return sendMessage(pool, owner, bot, null, await jsonBody(request), access);
   }
   if (resource === "sessions" && itemKey) {
-    const session = await sessionById(pool, bot.id, id(itemKey));
+    let session = await sessionById(pool, bot.id, id(itemKey));
     if (!action && method === "GET") {
+      if (!url.searchParams.has("before") && await access.refreshThread(bot, session)) {
+        session = await sessionById(pool, bot.id, session.id);
+      }
       const {rows: [root]} = await pool.query("SELECT * FROM messages WHERE id=$1", [session.root_message_id]);
       const {rows: engaged} = await pool.query(
         `SELECT COALESCE(agent,$2) AS name FROM bot_runs WHERE session_id=$1 GROUP BY 1 ORDER BY min(seq)`,
@@ -669,7 +672,12 @@ async function settle(pool, job, result, canExport) {
 }
 
 async function settleJob(db, job, result, canExport) {
-  if (result.reply) {
+  if (result.messages?.length) {
+    for (const message of result.messages) {
+      await insertMessage(db, job.bot_id, job.session_id, randomUUID(), message.author, message.body,
+        {replyTo: job.message_id});
+    }
+  } else if (result.reply) {
     await insertMessage(db, job.bot_id, job.session_id, randomUUID(), job.agent, result.reply, {replyTo: job.message_id});
   }
   const summary = result.reply || job.last_reply;
@@ -718,6 +726,34 @@ async function settleJob(db, job, result, canExport) {
   await db.query(`UPDATE bot_runs SET state=$1,due_at=now()+make_interval(secs=>$4),provider_cursor=$2,
     last_reply=COALESCE($5,last_reply) WHERE message_id=$3`,
     [result.state, result.cursor ?? job.provider_cursor, job.message_id, result.pollDelay ?? 3, result.reply || null]);
+}
+
+const idleThread = `NOT EXISTS (SELECT 1 FROM bot_runs WHERE session_id=$1
+  AND state IN ('queued','working','leased','poll'))`;
+
+async function refreshDevinThread(pool, readDevin, bot, session) {
+  const {rows: [binding]} = await pool.query(`SELECT provider_session_id,provider_cursor FROM bot_thread_agents
+    WHERE session_id=$1 AND agent='devin' AND provider_session_id IS NOT NULL AND ${idleThread}`, [session.id]);
+  if (!binding) return false;
+  const result = await readDevin({...binding, state: "poll", readOnly: true});
+  if (result.cursor === binding.provider_cursor) return false;
+  return transaction(pool, async db => {
+    await db.query("SELECT id FROM bots WHERE id=$1 FOR NO KEY UPDATE", [bot.id]);
+    const update = await db.query(`UPDATE bot_thread_agents SET provider_cursor=$2
+      WHERE session_id=$1 AND agent='devin' AND provider_session_id=$3
+        AND provider_cursor IS NOT DISTINCT FROM $4 AND ${idleThread}`,
+    [session.id, result.cursor, binding.provider_session_id, binding.provider_cursor]);
+    if (!update.rowCount) return false;
+    for (const message of result.messages) {
+      await insertMessage(db, bot.id, session.id, randomUUID(), message.author, message.body);
+    }
+    if (session.agent === "devin" || result.messages.length) {
+      await db.query(`UPDATE sessions SET provider_cursor=CASE WHEN agent='devin' THEN $2 ELSE provider_cursor END,
+        updated_at=CASE WHEN $3 THEN now() ELSE updated_at END WHERE id=$1`,
+      [session.id, result.cursor, result.messages.length > 0]);
+    }
+    return result.messages.length > 0;
+  });
 }
 
 async function exportGraph(pool, env, graphFetch = fetch) {
@@ -837,11 +873,19 @@ function createBotRuntime(pool, env, options = {}) {
     recoverServerWork: () => expireLeases(pool, true),
     async handle(owner, request) {
       try {
+        let imported = false;
         const memberships = await options.graphsFor?.(owner) ?? [];
         const access = {memberships, canShare: graph => options.canShareGraph?.(owner, graph) ?? false,
           available: bot => !bot || bot.owner === owner ? availableAgents(owner, bot?.repository) :
-            builtInAgents(bot.owner).map(item => ({...item, available: item.available && sharedAgents.has(item.name)}))};
-        return Response.json(await route(pool, owner, request, access));
+            builtInAgents(bot.owner).map(item => ({...item, available: item.available && sharedAgents.has(item.name)})),
+          refreshThread: async (bot, session) => {
+            if (!liveDevin || !permitted(owner) || bot.owner !== owner) return false;
+            try { imported = await refreshDevinThread(pool, providers.devin, bot, session); }
+            catch (error) { console.error("Bots history refresh failed", error.code ?? error.name); }
+            return imported;
+          }};
+        const result = await route(pool, owner, request, access);
+        return Response.json(result, imported ? {headers: {"x-logseq-bots-changed": "1"}} : undefined);
       }
       catch (error) {
         if (error instanceof RequestError) return Response.json({error: error.message}, {status: error.status});

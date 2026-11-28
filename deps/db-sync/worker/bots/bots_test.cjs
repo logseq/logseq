@@ -223,6 +223,56 @@ test("unlimited daily starts accept new tasks and still deduplicate a repeated d
     }
   });
 
+test("opening an idle thread imports Devin web messages once without sending another task",
+  {skip: !database}, async t => {
+    const items = [
+      {event_id: "event-0", source: "user", origin: "api", message: "Original task"},
+      {event_id: "event-1", source: "devin", message: "Initial reply"},
+    ];
+    let starts = 0;
+    let historyReads = 0;
+    t.mock.method(globalThis, "fetch", async (url, options) => {
+      if (options.method === "POST") {
+        starts++;
+        return Response.json({session_id: "devin-web-fixture"});
+      }
+      if (new URL(url).pathname.endsWith("/messages")) {
+        historyReads++;
+        return Response.json({items, has_next_page: false});
+      }
+      return Response.json({status: "running", status_detail: "waiting_for_user"});
+    });
+    const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database, LOGSEQ_BOTS_AGENT_OWNER: owner,
+      LOGSEQ_BOTS_DEVIN_ENABLED: "1", LOGSEQ_BOTS_DEVIN_DAILY_STARTS: "unlimited", LOGSEQ_BOTS_DEVIN_MAX_ACU: "1",
+      DEVIN_ORG_ID: "org-fixture", DEVIN_API_KEY: "mock-only"});
+    try {
+      const id = randomUUID();
+      const main = `/bots/${id}`;
+      await call(service, "/bots", {id, name: "Devin web sync"});
+      const started = (await call(service, main + "/messages", {id: randomUUID(), body: "Original task", agent: "devin"})).body;
+      const thread = `${main}/sessions/${started.sessionId}`;
+      const initial = await waitFor(() => call(service, thread), result => result.session?.status === "needs_input");
+      assert.deepEqual(initial.messages.map(message => message.body), ["Initial reply"]);
+      const last = initial.messages[0].seq;
+      items.push(
+        {event_id: "event-2", source: "user", origin: "web", message: "Web follow-up"},
+        {event_id: "event-3", source: "devin", message: "Web reply"},
+      );
+      const reads = historyReads;
+      await call(service, thread + "?before=" + last);
+      assert.equal(historyReads, reads);
+      await Promise.all([call(service, thread), call(service, thread)]);
+      const delta = (await call(service, thread + "?after=" + last)).body;
+      assert.deepEqual(delta.messages.map(message => [message.author, message.body]), [
+        ["user", "Web follow-up"], ["devin", "Web reply"],
+      ]);
+      assert.equal(delta.session.status, "needs_input");
+      assert.equal(starts, 1);
+    } finally {
+      await service.close();
+    }
+  });
+
 
 test("checks provider configuration after resolving replay", {skip: !database}, async () => {
   const bot = randomUUID();

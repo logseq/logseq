@@ -18,6 +18,7 @@ async function wakeScheduler(env, time) {
 
 async function deadline(request, path, response, publishes) {
   if (!response.ok) return null;
+  if (publishes && response.headers.has("x-logseq-bots-changed")) return Date.now();
   if (publishes && ((request.method === "PATCH" && /^\/bots\/[^/]+$/.test(path)) ||
       (request.method === "POST" && (path === "/bots" || path.endsWith("/start"))))) return Date.now();
   if (request.method === "PATCH" && /\/automations\/[^/]+$/.test(path)) return Date.now();
