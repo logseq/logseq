@@ -965,13 +965,43 @@ let () =
     in
     walk id frame
   in
+  let win_w = ref width and win_h = ref height in
+  let webview_overlay_epoch = ref 0 in
+  let webview_overlay_cache = ref (-1, []) in
+  (* OS webviews always sit above the self-drawn scene. When a presented
+     popover/dialog/menu intersects one, hide that overlay entirely: input
+     and paint ownership stay truthful, at the cost of a rectangular
+     occlusion approximation. *)
+  let presented_overlay_rects () =
+    if fst !webview_overlay_cache <> !webview_overlay_epoch then begin
+      let current_store = store_of () in
+      let rects = ref [] in
+      Lui_store.iter_preorder current_store (fun id ->
+        if Lui_query.presented_overlay current_store id
+           && not (Ui.hidden ui current_store id)
+           && not (Lui_store.inert_in_chain current_store id)
+           && Lui_focus.chain_visible current_store id then
+          match shifted_layout_rect id with
+          | Some r when not (Lui_scene.rect_empty r) -> rects := r :: !rects
+          | _ -> ());
+      webview_overlay_cache := (!webview_overlay_epoch, !rects)
+    end;
+    snd !webview_overlay_cache
+  in
+  let webview_occluded frame =
+    List.exists
+      (fun overlay ->
+        not (Lui_scene.rect_empty (Lui_scene.rect_intersect frame overlay)))
+      (presented_overlay_rects ())
+  in
   let webview_host_window =
     lazy (Lui_webview.host_of_sdl_window (Sdl.unsafe_ptr_of_window !win))
   in
   let webviews =
     Host_webviews.create
       { Host_webviews.host_window = (fun () -> Lazy.force webview_host_window)
-      ; clip_of = clip_webview_frame }
+      ; clip_of = clip_webview_frame
+      ; occluded = webview_occluded }
   in
   Render_libs.youtube_seek_hook := Host_webviews.seek_youtube webviews;
   Render_libs.youtube_time_hook := Host_webviews.playback_time webviews;
@@ -1324,7 +1354,6 @@ let () =
   Lui_host.set_ctx_anchor host
     (Some (fun () ->
        Host_interaction.context_anchor store (Ui.open_menu ui) (Ui.pointer ui)));
-  let win_w = ref width and win_h = ref height in
   image_visible := (fun id ->
     match shifted_layout_rect id with
     | None -> false
@@ -2808,6 +2837,7 @@ let () =
     let paint_started = perf_s () in
     let layout_before = metrics.layout_count in
     Host_interaction.prepare_paint ui host;
+    incr webview_overlay_epoch;
     List.iter (Lui_host.note_paint host) (Host_webviews.ids webviews);
     Host_webviews.begin_frame webviews;
     ignore (Lui_host.repaint host);
