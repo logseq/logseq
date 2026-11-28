@@ -133,15 +133,29 @@
 (defn- unlimited-limiter []
   #js {:limit (fn [_opts] (p/resolved #js {:success true}))})
 
-(defn- open-bot-service [index-db]
+(defn- open-bot-service [index-db publish]
   (when (seq (some-> js/process .-env (aget "LOGSEQ_BOTS_DATABASE_URL")))
     (let [module-path (node-path/join js/__dirname ".." "bots" "index.cjs")
           service (js/require module-path)]
-      (.createBotService service (.-env js/process) (bots-access/graph-access index-db)))))
+      (.createBotService service (.-env js/process)
+                         (doto (bots-access/graph-access index-db)
+                           (aset "publish" publish))))))
+
+(defn- open-account-events [index-db registry deps]
+  (let [module-path (node-path/join js/__dirname ".." "account_events_node.cjs")
+        service (js/require module-path)
+        access (bots-access/graph-access index-db)]
+    (.createAccountEvents service
+                          #js {:hasAccess (aget access "hasGraphAccess")
+                               :graphContext #(graph/get-or-create-graph registry deps %)
+                               :relayReady ws-handler/<relay-ready?
+                               :relayFrame ws-handler/relay-frame!})))
 
 (defn- dispatch-request [request env registry deps bots]
   (let [path (.-pathname (platform/request-url request))]
-    (if (and bots (or (= path "/bots") (string/starts-with? path "/bots/")))
+    (cond
+      (= path "/events") (js/Response. nil #js {:status 426})
+      (and bots (or (= path "/bots") (string/starts-with? path "/bots/")))
       (p/let [^js service bots]
         (if (string/starts-with? path "/bots/runner/")
           (.handleRunner service request)
@@ -149,7 +163,7 @@
             (if owner
               (.handle service owner request)
               (worker-http/error-response "unauthorized" 401)))))
-      (dispatch/handle-node-fetch {:request request :env env :registry registry :deps deps}))))
+      :else (dispatch/handle-node-fetch {:request request :env env :registry registry :deps deps}))))
 
 (defn start!
   [overrides]
@@ -157,12 +171,13 @@
         _ (logging/set-root-level! (:log-level cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
-        bots (open-bot-service index-db)
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
         registry (atom {})
         deps {:config cfg
               :index-db index-db
               :assets-bucket assets-bucket}
+        events (open-account-events index-db registry deps)
+        bots (open-bot-service index-db (aget events "publish"))
         env (doto (make-env cfg index-db assets-bucket)
               (aset "DB_SYNC_DELETE_GRAPH"
                     (fn [graph-id]
@@ -193,7 +208,16 @@
                    path (.-pathname url)
                    parsed (node-routes/parse-sync-path path)
                    graph-id (:graph-id parsed)]
-               (if (and graph-id (seq graph-id))
+               (cond
+                 (= path "/events")
+                 (p/let [identity (when (string/starts-with? (or (.get (.-headers request) "authorization") "") "Bearer ")
+                                    (bots-access/<identity request env))]
+                   (if identity
+                     (.handleUpgrade wss req socket head
+                                     (fn [ws-socket] (.attach events ws-socket identity)))
+                     (reject-ws-upgrade! socket 401 "unauthorized")))
+
+                 (and graph-id (seq graph-id))
                  (p/let [allowed? (access-allowed? env graph-id request)]
                    (if allowed?
                      (let [ctx (graph/get-or-create-graph registry deps graph-id)]
@@ -205,6 +229,7 @@
                                              (handle-ws-connection ctx env request ws-socket)))
                            (reject-ws-upgrade! socket 409 "graph not ready"))))
                      (.destroy socket)))
+                 :else
                  (.destroy socket)))))
       (p/let [_ (js/Promise.
                  (fn [resolve]
@@ -220,6 +245,7 @@
          :port port
          :base-url base-url
          :stop! (fn []
+                  (.close events)
                   (graph/close-graphs! registry)
                   (when-let [close (.-close index-db)]
                     (close))

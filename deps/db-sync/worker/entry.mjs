@@ -21,11 +21,13 @@ import { registerSemanticApiTools } from "./semantic_api_tools.mjs";
 import { r2AssetUploadSigner } from "./r2_asset_upload.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
 import { createWorkerBots, scheduleEarlier } from "./bots/worker.mjs";
+import { AccountEvents, accountEventPublisher, upgradeAccountEvents, withAccountEvents } from "./account_events_worker.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
-import worker, { SyncDO, botsSubject, botsGraphAccess } from "./dist/worker/main.js";
+import worker, { SyncDO as GraphSyncDO, botsSubject, botsGraphAccess } from "./dist/worker/main.js";
 
 const bots = createWorkerBots({
   subject: botsSubject, graphAccess: botsGraphAccess, graphFetch: worker.fetch.bind(worker),
+  publisher: accountEventPublisher,
 });
 
 export class BotsScheduler extends DurableObject {
@@ -217,6 +219,7 @@ export default {
   },
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    if (path === "/events") return upgradeAccountEvents(request, env);
     if (request.method !== "OPTIONS" && (path === "/bots" || path.startsWith("/bots/"))) {
       return bots.fetch(request, env, ctx, path);
     }
@@ -244,4 +247,5 @@ export default {
   },
 };
 
-export { SyncDO };
+const SyncDO = withAccountEvents(GraphSyncDO);
+export { AccountEvents, SyncDO };

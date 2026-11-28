@@ -10,6 +10,9 @@
                                           :redef false}}
             :modules {:main {:exports {default logseq.db-sync.worker/worker
                                        SyncDO logseq.db-sync.worker/SyncDO
+                                       eventsIdentity logseq.db-sync.bots-access/<identity
+                                       relayReady logseq.db-sync.worker.handler.ws/<relay-ready?
+                                       relayFrame logseq.db-sync.worker.handler.ws/relay-frame!
                                        botsSubject logseq.db-sync.bots-access/<subject
                                        botsGraphAccess logseq.db-sync.bots-access/graph-access}}}
             :js-options {:js-provider :import}

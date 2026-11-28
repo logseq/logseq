@@ -29,6 +29,7 @@ async function createBotService(env = process.env, options = {}) {
   let pending = null;
   const tick = async () => {
     await runtime.maintain();
+    await runtime.deliverEvents();
     if (running.size < 4) {
       const job = await runtime.claimNext();
       if (job) {

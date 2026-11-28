@@ -29,6 +29,10 @@ class_name = "SyncDO"
 name = "LOGSEQ_BOTS_SCHEDULER"
 class_name = "BotsScheduler"
 
+[[durable_objects.bindings]]
+name = "LOGSEQ_ACCOUNT_EVENTS"
+class_name = "AccountEvents"
+
 [[r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
 bucket_name = "logseq-sync-assets-prod"
@@ -45,6 +49,10 @@ new_sqlite_classes = [ "SyncDO" ]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = [ "BotsScheduler" ]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = [ "AccountEvents" ]
 
 [vars]
 R2_ASSET_UPLOAD_BUCKET = "logseq-sync-assets-prod"
@@ -95,6 +103,10 @@ class_name = "SyncDO"
 name = "LOGSEQ_BOTS_SCHEDULER"
 class_name = "BotsScheduler"
 
+[[env.staging.durable_objects.bindings]]
+name = "LOGSEQ_ACCOUNT_EVENTS"
+class_name = "AccountEvents"
+
 [[env.staging.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
@@ -102,6 +114,10 @@ new_sqlite_classes = [ "SyncDO" ]
 [[env.staging.migrations]]
 tag = "v2"
 new_sqlite_classes = [ "BotsScheduler" ]
+
+[[env.staging.migrations]]
+tag = "v3"
+new_sqlite_classes = [ "AccountEvents" ]
 
 [[env.staging.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"
@@ -159,6 +175,10 @@ class_name = "SyncDO"
 name = "LOGSEQ_BOTS_SCHEDULER"
 class_name = "BotsScheduler"
 
+[[env.prod.durable_objects.bindings]]
+name = "LOGSEQ_ACCOUNT_EVENTS"
+class_name = "AccountEvents"
+
 [[env.prod.migrations]]
 tag = "v1"
 new_sqlite_classes = [ "SyncDO" ]
@@ -166,6 +186,10 @@ new_sqlite_classes = [ "SyncDO" ]
 [[env.prod.migrations]]
 tag = "v2"
 new_sqlite_classes = [ "BotsScheduler" ]
+
+[[env.prod.migrations]]
+tag = "v3"
+new_sqlite_classes = [ "AccountEvents" ]
 
 [[env.prod.r2_buckets]]
 binding = "LOGSEQ_SYNC_ASSETS"

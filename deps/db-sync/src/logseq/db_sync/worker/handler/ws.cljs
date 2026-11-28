@@ -62,6 +62,24 @@
 
         (ws/send! ws {:type "error" :message "unknown type"})))))
 
+(defn <relay-ready? [^js self graph-id]
+  (aset self "graph-id" graph-id)
+  (sync-handler/<ready-for-sync? self graph-id))
+
+(defn relay-frame! [^js self graph-id user raw]
+  (if-not (sync-handler/snapshot-upload-finished? self)
+    (protocol/encode-message {:type "error" :message "Graph not ready"})
+    (let [reply (volatile! nil)
+          socket #js {:readyState 1 :send #(vreset! reply %)}]
+      (aset self "graph-id" graph-id)
+      ;; Use the same Graph protocol and transaction authorization as direct sockets.
+      (swap! (presence/presence* self) assoc socket (js->clj user :keywordize-keys true))
+      (try
+        (handle-ws-message! self socket raw)
+        @reply
+        (finally
+          (presence/remove-presence! self socket))))))
+
 (defn handle-ws [^js self request]
   (let [graph-id (sync-handler/graph-id-from-request request)]
     (p/let [ready-for-sync? (sync-handler/<ready-for-sync? self graph-id)]

@@ -28,6 +28,8 @@
         (.send ws (protocol/encode-message {:type "error" :message "server error"}))))))
 
 (defn broadcast! [^js self sender msg]
+  (when (and (= "changed" (:type msg)) (some? (aget self "accountEventsBroadcast")))
+    ((aget self "accountEventsBroadcast") (protocol/encode-message msg)))
   (when-let [state (some-> self .-state)]
     (when (fn? (.-getWebSockets state))
       (let [clients (.getWebSockets state)]

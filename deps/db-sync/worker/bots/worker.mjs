@@ -16,11 +16,14 @@ async function wakeScheduler(env, time) {
   return env.LOGSEQ_BOTS_SCHEDULER.getByName("queue").wake(time);
 }
 
-async function deadline(request, path, response) {
+async function deadline(request, path, response, publishes) {
   if (!response.ok) return null;
+  if (publishes && ((request.method === "PATCH" && /^\/bots\/[^/]+$/.test(path)) ||
+      (request.method === "POST" && (path === "/bots" || path.endsWith("/start"))))) return Date.now();
   if (request.method === "PATCH" && /\/automations\/[^/]+$/.test(path)) return Date.now();
   if (request.method !== "POST") return null;
   if (path.endsWith("/messages")) {
+    if (publishes) return Date.now();
     const {sessionId, message} = await response.clone().json();
     return sessionId || message?.requested_agent ? Date.now() : null;
   }
@@ -41,7 +44,7 @@ export function scheduleEarlier(state, time) {
   });
 }
 
-export function createWorkerBots({subject, graphAccess, graphFetch, wake = wakeScheduler}) {
+export function createWorkerBots({subject, graphAccess, graphFetch, publisher, wake = wakeScheduler}) {
   async function withRuntime(env, operation, ctx) {
     const client = new Client({connectionString: databaseUrl(env), connectionTimeoutMillis: 5000});
     let connected;
@@ -61,6 +64,7 @@ export function createWorkerBots({subject, graphAccess, graphFetch, wake = wakeS
       const connection = {query, release() {}};
       const runtime = createBotRuntime({query, connect: async () => connection}, env, {
         ...graphAccess(env.DB),
+        publish: publisher?.(env),
         graphFetch: graphFetch && ((url, init) => graphFetch(new Request(url, init), env, ctx)),
       });
       return await operation(runtime);
@@ -79,7 +83,7 @@ export function createWorkerBots({subject, graphAccess, graphFetch, wake = wakeS
         if (!runnerRequest && !owner) return Response.json({error: "unauthorized"}, {status: 401});
         const response = await withRuntime(env, runtime => runnerRequest
           ? runtime.handleRunner(request) : runtime.handle(owner, request));
-        const at = await deadline(request, path, response);
+        const at = await deadline(request, path, response, Boolean(publisher?.(env)));
         if (at !== null) ctx.waitUntil(wake(env, at).catch(error => logError("wake", error)));
         return response;
       } catch (error) {
@@ -101,6 +105,7 @@ export function createWorkerBots({subject, graphAccess, graphFetch, wake = wakeS
         for (let count = 0; count < 4 && Date.now() - start < 45_000; count++) {
           if (!await runtime.exportGraph()) break;
         }
+        if (Date.now() - start < 45_000) await runtime.deliverEvents();
         const next = await runtime.nextActionAt();
         return next === null ? null : Math.max(next, Date.now() + 500);
       }, ctx);

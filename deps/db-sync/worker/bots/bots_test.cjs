@@ -3,19 +3,27 @@ const {randomUUID} = require("node:crypto");
 const {test} = require("node:test");
 const {setTimeout: sleep} = require("node:timers/promises");
 const {Client} = require("pg");
-const {createBotService} = require("./index.cjs");
+const {createBotService: openBotService} = require("./index.cjs");
 const {makeAgents} = require("./providers.cjs");
 
 const database = process.env.LOGSEQ_BOTS_TEST_DATABASE_URL;
 const owner = randomUUID();
+const fixtureGraph = randomUUID();
 const bot = randomUUID();
 const threadPath = session => `/bots/${bot}/sessions/${session}`;
 
 async function call(service, path, body, subject = owner) {
+  if (path === "/bots" && body && !Object.hasOwn(body, "graphId")) {
+    body = {...body, graphId: body.sharedGraphId ?? fixtureGraph};
+  }
   const response = await service.handle(subject, new Request(`http://127.0.0.1${path}`, {
     method: body ? "POST" : "GET", body: body && JSON.stringify(body),
   }));
   return {status: response.status, body: await response.json()};
+}
+
+function createBotService(env, options) {
+  return openBotService(env, {graphsFor: async () => [fixtureGraph], ...options});
 }
 
 async function waitFor(operation, condition) {
@@ -214,7 +222,11 @@ test("checks team membership and forwards a message and file once", {skip: !data
     const path = id => `/bots/${id}`;
     assert.equal((await call(service, "/bots", {id: source, name: "Engineering", sharedGraphId: graph})).status, 200);
     assert.equal((await call(service, "/bots", {id: target, name: "Mobile QA", sharedGraphId: graph})).status, 200);
-    assert.equal((await call(service, "/bots", {id: privateBot, name: "Private"})).status, 200);
+    assert.equal((await call(service, "/bots", {id: privateBot, name: "Private", graphId: graph})).status, 200);
+    assert.equal((await call(service, "/bots", {id: randomUUID(), name: "Missing Graph", graphId: null})).status, 400);
+    assert.equal((await call(service, "/bots", {id: randomUUID(), name: "Foreign Graph", graphId: randomUUID()})).status, 403);
+    assert.equal((await call(service, "/bots", {id: randomUUID(), name: "Wrong share",
+      graphId: graph, sharedGraphId: randomUUID()})).status, 400);
     assert.equal((await call(service, "/bots", {id: randomUUID(), name: "Other", sharedGraphId: graph}, member)).status, 403);
     const main = (await call(service, path(source), null, member)).body;
     assert.equal(main.canManage, false);

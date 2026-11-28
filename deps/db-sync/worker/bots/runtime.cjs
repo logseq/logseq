@@ -132,15 +132,18 @@ async function ownedBot(db, owner, botId) {
 
 async function visibleBot(db, owner, botId, memberships) {
   const {rows: [bot]} = await db.query("SELECT * FROM bots WHERE id=$1", [botId]);
-  if (!bot || (bot.owner !== owner && !memberships.includes(bot.shared_graph_id))) fail(404, "Bot not found");
+  if (!bot || !memberships.includes(bot.graph_id) ||
+      (bot.owner !== owner && bot.shared_graph_id !== bot.graph_id)) fail(404, "Bot not found");
   return bot;
 }
 
 async function visibleBots(db, owner, memberships, bot = null) {
   const {rows} = await db.query(
-    `SELECT id,name,owner,shared_graph_id FROM bots WHERE (owner=$1 OR shared_graph_id=ANY($2::uuid[]))
-       AND id IS DISTINCT FROM $3::uuid AND ($4::uuid IS NULL OR shared_graph_id=$4)
-       ORDER BY name,id`, [owner, memberships, bot?.id ?? null, bot?.shared_graph_id ?? null]);
+    `SELECT id,name,owner,shared_graph_id FROM bots WHERE graph_id=ANY($2::uuid[])
+       AND (owner=$1 OR shared_graph_id=graph_id)
+       AND id IS DISTINCT FROM $3::uuid AND ($4::uuid IS NULL OR graph_id=$4)
+       AND ($5::uuid IS NULL OR shared_graph_id=$5)
+       ORDER BY name,id`, [owner, memberships, bot?.id ?? null, bot?.graph_id ?? null, bot?.shared_graph_id ?? null]);
   return rows;
 }
 
@@ -219,7 +222,8 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
       await db.query("SELECT id FROM bots WHERE id=ANY($1::uuid[]) ORDER BY id FOR NO KEY UPDATE", [[bot.id, targetId]]);
     }
     const target = targetId && await visibleBot(db, owner, targetId, access.memberships);
-    if (target && bot.shared_graph_id && target.shared_graph_id !== bot.shared_graph_id) fail(404, "Bot not found");
+    if (target && (target.graph_id !== bot.graph_id ||
+        bot.shared_graph_id && target.shared_graph_id !== bot.shared_graph_id)) fail(404, "Bot not found");
     const handoff = target ? {target_id: target.id, target_name: target.name} : null;
     const proposal = sessionId || files.length || target || requestedAgents ? null
       : weeklyProposal(prompt, body.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone, chosenAgent);
@@ -304,24 +308,35 @@ async function route(pool, owner, request, access) {
       `SELECT bots.*, left(preview.body,300) AS preview FROM bots
        LEFT JOIN LATERAL (SELECT body,created_at FROM messages WHERE bot_id=bots.id
          ORDER BY seq DESC LIMIT 1) preview ON true
-       WHERE (owner=$1 OR shared_graph_id=ANY($2::uuid[])) ORDER BY coalesce(preview.created_at,bots.created_at) DESC,bots.id`, [owner, access.memberships]);
+       WHERE graph_id=ANY($2::uuid[]) AND (owner=$1 OR shared_graph_id=graph_id)
+       ORDER BY coalesce(preview.created_at,bots.created_at) DESC,bots.id`, [owner, access.memberships]);
     const decisions = await Promise.all(access.memberships.map(graph => access.canShare(graph)));
-    return {bots, agents: await access.available(), shareableGraphs: access.memberships.filter((_, index) => decisions[index])};
+    return {bots, graphIds: access.memberships, agents: await access.available(),
+      shareableGraphs: access.memberships.filter((_, index) => decisions[index])};
   }
   if (!botKey && method === "POST") {
     const body = await jsonBody(request);
     const botId = id(body.id);
+    if (typeof body.graphId !== "string") fail(400, "Select a Graph for the Bot");
+    const graph = id(body.graphId);
+    if (!access.memberships.includes(graph)) fail(403, "You do not have access to this Graph");
     const {rows: [existing]} = await pool.query("SELECT * FROM bots WHERE id=$1 AND owner=$2", [botId, owner]);
-    if (existing) return {bot: existing};
+    if (existing) {
+      if (existing.graph_id !== graph) fail(409, "This Bot already belongs to another Graph");
+      return {bot: existing};
+    }
     const shared = body.sharedGraphId ? id(body.sharedGraphId) : null;
     const repo = repository(body.repository);
+    if (shared && shared !== graph) fail(400, "Share the Bot with its own Graph");
     if (shared && !await access.canShare(shared)) fail(403, "This Graph cannot be shared");
     const {rows: [bot]} = await pool.query(
       `INSERT INTO bots (id,owner,name,default_agent,repository,graph_id,graph_block_id,shared_graph_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (id) DO NOTHING RETURNING *`,
       [botId, owner, text(body.name, 120), defaultAgent(await access.available({owner, repository: repo}), body.defaultAgent), repo,
-        body.graphId ? id(body.graphId) : null, body.graphBlockId ? id(body.graphBlockId) : null, shared]);
-    return {bot: bot ?? await ownedBot(pool, owner, botId)};
+        graph, body.graphBlockId ? id(body.graphBlockId) : null, shared]);
+    const saved = bot ?? await ownedBot(pool, owner, botId);
+    if (saved.graph_id !== graph) fail(409, "This Bot already belongs to another Graph");
+    return {bot: saved};
   }
 
   const bot = await visibleBot(pool, owner, id(botKey), access.memberships);
@@ -341,6 +356,7 @@ async function route(pool, owner, request, access) {
     if (bot.owner !== owner) fail(403, "Only the Bot owner can change its settings");
     const shared = !Object.hasOwn(body, "sharedGraphId") ? bot.shared_graph_id
       : body.sharedGraphId ? id(body.sharedGraphId) : null;
+    if (shared && shared !== bot.graph_id) fail(400, "Share the Bot with its own Graph");
     if (shared && shared !== bot.shared_graph_id && !await access.canShare(shared)) fail(403, "This Graph cannot be shared");
     const chosen = Object.hasOwn(body, "defaultAgent") ? defaultAgent(availableAgents, body.defaultAgent) : bot.default_agent;
     const {rows: [updated]} = await pool.query(
@@ -791,6 +807,32 @@ function createBotRuntime(pool, env, options = {}) {
   };
   const cleanStaleUploads = () =>
     pool.query("DELETE FROM bot_uploads WHERE message_id IS NULL AND created_at < now() - interval '7 days'");
+  const publish = options.publish;
+  async function deliverEvents() {
+    if (!publish) return;
+    const {rows} = await pool.query(`WITH due AS (
+      SELECT version FROM bot_events WHERE due_at<=now()
+      ORDER BY due_at,version LIMIT 16 FOR UPDATE SKIP LOCKED
+    ) UPDATE bot_events e SET attempts=e.attempts+1,
+      due_at=now()+make_interval(secs=>LEAST(300, 5 * (2 ^ e.attempts)))
+      FROM due,bots b WHERE e.version=due.version AND e.bot_id=b.id
+      RETURNING e.version,e.bot_id,e.session_id,e.attempts,e.refresh_graph,b.owner,b.graph_id,b.shared_graph_id`);
+    for (const row of rows) {
+      try {
+        const recipients = new Set(row.shared_graph_id || row.refresh_graph
+          ? await options.graphMembers(row.graph_id) : []);
+        if (await options.hasGraphAccess(row.owner, row.graph_id)) recipients.add(row.owner);
+        const refresh = {type: "bots.changed", version: row.version};
+        const event = {...refresh, botId: row.bot_id, sessionId: row.session_id};
+        await Promise.all([...recipients].map(account =>
+          publish(account, row.shared_graph_id || account === row.owner ? event : refresh)));
+      } catch (error) {
+        console.error("Bots event delivery failed", error.code ?? error.name);
+        if (row.attempts < 8) continue;
+      }
+      await pool.query("DELETE FROM bot_events WHERE version=$1", [row.version]);
+    }
+  }
   return {
     recoverServerWork: () => expireLeases(pool, true),
     async handle(owner, request) {
@@ -831,12 +873,14 @@ function createBotRuntime(pool, env, options = {}) {
       const {rows: [next]} = await pool.query(`SELECT LEAST($1::timestamptz,
         (SELECT min(next_at) FROM bot_automations WHERE enabled),
         (SELECT min(lease_until) FROM bot_runs WHERE lease_until IS NOT NULL),
-        (SELECT min(due_at) FROM bot_graph_exports WHERE state='queued' AND owner=$2 AND graph_id::text=$3)
+        (SELECT min(due_at) FROM bot_graph_exports WHERE state='queued' AND owner=$2 AND graph_id::text=$3),
+        (SELECT min(due_at) FROM bot_events WHERE $4)
       ) AS due_at`, [jobDue, env.LOGSEQ_BOTS_GRAPH_TOKEN && env.DB_SYNC_BASE_URL ? env.LOGSEQ_BOTS_GRAPH_OWNER ?? "" : "",
-        env.LOGSEQ_BOTS_GRAPH_ID ?? ""]);
+        env.LOGSEQ_BOTS_GRAPH_ID ?? "", Boolean(publish)]);
       return next.due_at?.getTime() ?? null;
     },
     cleanStaleUploads,
+    deliverEvents,
     work,
     exportGraph: () => exportGraph(pool, env, options.graphFetch),
   };

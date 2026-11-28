@@ -20,7 +20,7 @@ const state = {
 };
 const bots = createWorkerBots({
   subject: request => request.headers.get("x-fixture-subject"),
-  graphAccess: () => ({graphsFor: async () => []}),
+  graphAccess: () => ({graphsFor: async account => account === owner ? [graph] : []}),
   wake: (_env, time) => scheduleEarlier(state, time),
   graphFetch: async request => {
     exports.push({path: new URL(request.url).pathname, body: await request.json()});

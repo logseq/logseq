@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS bots (
   name text NOT NULL,
   default_agent text NOT NULL,
   repository text NOT NULL DEFAULT '',
-  graph_id uuid,
+  graph_id uuid NOT NULL,
   graph_block_id uuid,
   created_at timestamptz NOT NULL DEFAULT now()
 );
@@ -105,6 +105,7 @@ CREATE INDEX IF NOT EXISTS bot_uploads_message ON bot_uploads (message_id) WHERE
 CREATE INDEX IF NOT EXISTS bot_uploads_unclaimed ON bot_uploads (created_at) WHERE message_id IS NULL;
 
 ALTER TABLE bots ADD COLUMN IF NOT EXISTS shared_graph_id uuid;
+ALTER TABLE bots ALTER COLUMN graph_id SET NOT NULL;
 CREATE INDEX IF NOT EXISTS bots_shared_graph ON bots (shared_graph_id) WHERE shared_graph_id IS NOT NULL;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS handoff jsonb;
 
@@ -158,3 +159,53 @@ WITH unconfirmed AS (
   WHERE state='working' AND runner_id IS NULL AND lease_until IS NULL RETURNING session_id
 ) UPDATE sessions SET status='attention',updated_at=now()
   WHERE id IN (SELECT session_id FROM unconfirmed);
+
+CREATE TABLE IF NOT EXISTS bot_events (
+  version bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  bot_id uuid NOT NULL REFERENCES bots(id) ON DELETE CASCADE,
+  session_id uuid,
+  due_at timestamptz NOT NULL DEFAULT now(),
+  attempts integer NOT NULL DEFAULT 0,
+  refresh_graph boolean NOT NULL DEFAULT false,
+  UNIQUE NULLS NOT DISTINCT (bot_id, session_id)
+);
+CREATE INDEX IF NOT EXISTS bot_events_due ON bot_events (due_at, version);
+
+CREATE OR REPLACE FUNCTION queue_bot_event() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  changed_bot uuid;
+  changed_session uuid;
+  refresh_graph_visibility boolean := false;
+BEGIN
+  IF TG_TABLE_NAME = 'bots' THEN
+    changed_bot := NEW.id;
+    IF TG_OP = 'UPDATE' THEN
+      refresh_graph_visibility := OLD.shared_graph_id IS DISTINCT FROM NEW.shared_graph_id;
+    END IF;
+  ELSE
+    changed_bot := NEW.bot_id;
+  END IF;
+  IF TG_TABLE_NAME = 'sessions' THEN
+    changed_session := NEW.id;
+  ELSIF TG_TABLE_NAME = 'messages' THEN
+    changed_session := NEW.session_id;
+  END IF;
+  INSERT INTO bot_events (bot_id, session_id, refresh_graph)
+  VALUES (changed_bot, changed_session, refresh_graph_visibility)
+  ON CONFLICT (bot_id, session_id) DO UPDATE SET version=DEFAULT, due_at=EXCLUDED.due_at,
+    attempts=0, refresh_graph=bot_events.refresh_graph OR EXCLUDED.refresh_graph;
+  RETURN NULL;
+END;
+$$;
+
+CREATE OR REPLACE TRIGGER bot_changed AFTER INSERT OR UPDATE ON bots
+  FOR EACH ROW EXECUTE FUNCTION queue_bot_event();
+CREATE OR REPLACE TRIGGER bot_session_created AFTER INSERT ON sessions
+  FOR EACH ROW EXECUTE FUNCTION queue_bot_event();
+CREATE OR REPLACE TRIGGER bot_session_status AFTER UPDATE ON sessions
+  FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status OR OLD.provider_url IS DISTINCT FROM NEW.provider_url)
+  EXECUTE FUNCTION queue_bot_event();
+CREATE OR REPLACE TRIGGER bot_message_added AFTER INSERT ON messages
+  FOR EACH ROW EXECUTE FUNCTION queue_bot_event();
+CREATE OR REPLACE TRIGGER bot_automation_changed AFTER INSERT OR UPDATE ON bot_automations
+  FOR EACH ROW EXECUTE FUNCTION queue_bot_event();
