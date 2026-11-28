@@ -226,6 +226,6 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                 done
             done;
             let straight = Host_png.unpremultiply cropped in
-            Some (Host_png.encode ~w:out_w ~h:out_h straight, out_w, out_h)
+            Some (Host_png.encode_compressed ~w:out_w ~h:out_h straight, out_w, out_h)
           end
         end)

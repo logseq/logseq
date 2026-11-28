@@ -113,3 +113,22 @@ let unpremultiply rgba =
       done
   done;
   out
+
+(* Compressed encoding through imagelib's deflate writer — the stored
+   encoder above is correct but produces raw-sized files. *)
+let encode_compressed ~w ~h rgba =
+  let img = Image.create_rgb ~alpha:true w h in
+  for y = 0 to h - 1 do
+    for x = 0 to w - 1 do
+      let i = ((y * w) + x) * 4 in
+      Image.write_rgba img x y
+        (Char.code (Bytes.get rgba i))
+        (Char.code (Bytes.get rgba (i + 1)))
+        (Char.code (Bytes.get rgba (i + 2)))
+        (Char.code (Bytes.get rgba (i + 3)))
+    done
+  done;
+  let buf = Buffer.create (w * h) in
+  ImageLib.writefile ~extension:"png"
+    (ImageUtil.chunk_writer_of_buffer buf) img;
+  Buffer.contents buf
