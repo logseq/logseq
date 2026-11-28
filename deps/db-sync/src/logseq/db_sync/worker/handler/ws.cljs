@@ -76,7 +76,6 @@
           (let [token (auth/token-from-request request)
                 claims (auth/unsafe-jwt-claims token)
                 user (presence/claims->user claims)]
-            (when user
-              (presence/add-presence! self server user))
+            (presence/add-presence! self server user)
             (presence/broadcast-online-users! self)
             (js/Response. nil #js {:status 101 :webSocket client})))))))

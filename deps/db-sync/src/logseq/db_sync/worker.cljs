@@ -36,14 +36,10 @@
                             :transaction (fn [f] (.transactionSync storage f))}))
                (set! (.-conn this) nil)
                (set! (.-schema-ready this) false)
-               (let [presence (presence/presence* this)
-                     sockets (.getWebSockets state)]
+               (let [sockets (.getWebSockets state)]
                  (doseq [^js ws sockets]
                    (when-let [attachment (.deserializeAttachment ws)]
-                     (when-let [graph-id (presence/attachment->graph-id attachment)]
-                       (aset this "graph-id" graph-id))
-                     (when-let [user (presence/attachment->user attachment)]
-                       (swap! presence assoc ws user))))
+                     (presence/restore-attachment! this ws attachment)))
                  (.setWebSocketAutoResponse
                   state
                   (js/WebSocketRequestResponsePair. "ping" "pong"))))

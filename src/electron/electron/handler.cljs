@@ -15,6 +15,7 @@
             [cljs-bean.core :as bean]
             [clojure.string :as string]
             [electron.backup-file :as backup-file]
+            [electron.bots-runner :as bots-runner]
             [electron.configs :as cfgs]
             [electron.db :as db]
             [electron.db-worker :as db-worker]
@@ -42,6 +43,15 @@
 
 (defmethod handle :mkdir [_window [_ dir]]
   (fs/mkdirSync dir))
+
+(defmethod handle :bots-runner/status [_window _]
+  (bots-runner/snapshot))
+
+(defmethod handle :bots-runner/pair [window [_ server token agents repository]]
+  (bots-runner/<pair! window server token agents repository))
+
+(defmethod handle :bots-runner/disconnect [_window _]
+  (bots-runner/<disconnect!))
 
 (defmethod handle :mkdir-recur [_window [_ dir]]
   (fs/mkdirSync dir #js {:recursive true}))

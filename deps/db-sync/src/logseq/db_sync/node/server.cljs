@@ -4,6 +4,7 @@
             ["ws" :as ws]
             [clojure.string :as string]
             [lambdaisland.glogi :as log]
+            [logseq.db-sync.bots-access :as bots-access]
             [logseq.db-sync.index :as index]
             [logseq.db-sync.logging :as logging]
             [logseq.db-sync.node.assets :as assets]
@@ -132,12 +133,31 @@
 (defn- unlimited-limiter []
   #js {:limit (fn [_opts] (p/resolved #js {:success true}))})
 
+(defn- open-bot-service [index-db]
+  (when (seq (some-> js/process .-env (aget "LOGSEQ_BOTS_DATABASE_URL")))
+    (let [module-path (node-path/join js/__dirname ".." "bots" "index.cjs")
+          service (js/require module-path)]
+      (.createBotService service (.-env js/process) (bots-access/graph-access index-db)))))
+
+(defn- dispatch-request [request env registry deps bots]
+  (let [path (.-pathname (platform/request-url request))]
+    (if (and bots (or (= path "/bots") (string/starts-with? path "/bots/")))
+      (p/let [^js service bots]
+        (if (string/starts-with? path "/bots/runner/")
+          (.handleRunner service request)
+          (p/let [owner (bots-access/<subject request env)]
+            (if owner
+              (.handle service owner request)
+              (worker-http/error-response "unauthorized" 401)))))
+      (dispatch/handle-node-fetch {:request request :env env :registry registry :deps deps}))))
+
 (defn start!
   [overrides]
   (let [cfg (config/normalize-config overrides)
         _ (logging/set-root-level! (:log-level cfg))
         request-origin (request-origin-opts cfg)
         index-db (storage/open-index-db (:data-dir cfg))
+        bots (open-bot-service index-db)
         assets-bucket (assets/make-bucket (node-path/join (:data-dir cfg) "assets"))
         registry (atom {})
         deps {:config cfg
@@ -153,10 +173,7 @@
         server (.createServer http
                               (fn [req res]
                                 (-> (p/let [request (platform-node/request-from-node req request-origin)
-                                            response (dispatch/handle-node-fetch {:request request
-                                                                                  :env env
-                                                                                  :registry registry
-                                                                                  :deps deps})]
+                                            response (dispatch-request request env registry deps bots)]
                                       (platform-node/send-response! res response))
                                     (p/catch
                                      (fn [e]
@@ -167,7 +184,8 @@
         ^js wss (new WSS #js {:noServer true})]
     (.on server "error" (fn [error] (log/error :db-sync/node-server-error {:error error})))
     (.on wss "error" (fn [error] (log/error :db-sync/node-ws-error {:error error})))
-    (p/let [_ (index/<index-init! index-db)]
+    (p/let [_ bots
+            _ (index/<index-init! index-db)]
       (.on server "upgrade"
            (fn [req ^js socket head]
              (let [request (platform-node/request-from-node req request-origin)
@@ -205,6 +223,7 @@
                   (graph/close-graphs! registry)
                   (when-let [close (.-close index-db)]
                     (close))
+                  (when bots (p/then bots (fn [service] (.close service))))
                   (js/Promise.
                    (fn [resolve]
                      (.close server (fn [] (resolve nil))))))}))))

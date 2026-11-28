@@ -1,4 +1,5 @@
 import { DynamicWorkerExecutor } from "@cloudflare/codemode";
+import { DurableObject } from "cloudflare:workers";
 import { openApiMcpServer } from "@cloudflare/codemode/mcp";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -19,8 +20,24 @@ import { openAiAppsChallengeResponse } from "./openai_app_challenge.mjs";
 import { registerSemanticApiTools } from "./semantic_api_tools.mjs";
 import { r2AssetUploadSigner } from "./r2_asset_upload.mjs";
 import { semanticRequestBody, semanticRequestUrl } from "./semantic_request.mjs";
+import { createWorkerBots, scheduleEarlier } from "./bots/worker.mjs";
 import apiDocsHtml from "./dist/api-docs.generated.mjs";
-import worker, { SyncDO } from "./dist/worker/main.js";
+import worker, { SyncDO, botsSubject, botsGraphAccess } from "./dist/worker/main.js";
+
+const bots = createWorkerBots({
+  subject: botsSubject, graphAccess: botsGraphAccess, graphFetch: worker.fetch.bind(worker),
+});
+
+export class BotsScheduler extends DurableObject {
+  wake(time) {
+    return scheduleEarlier(this.ctx, time);
+  }
+
+  async alarm() {
+    const next = await bots.runDue(this.env, this.ctx);
+    if (next !== null) await this.wake(next);
+  }
+}
 
 function protectedResourceMetadata(request, env) {
   const url = new URL(request.url);
@@ -196,6 +213,9 @@ export default {
   },
   async fetch(request, env, ctx) {
     const path = new URL(request.url).pathname;
+    if (request.method !== "OPTIONS" && (path === "/bots" || path.startsWith("/bots/"))) {
+      return bots.fetch(request, env, ctx, path);
+    }
     const challengeResponse = openAiAppsChallengeResponse(request, env);
     if (challengeResponse) return challengeResponse;
     const docsResponse = apiDocsResponse(path, apiDocsHtml);
@@ -217,6 +237,9 @@ export default {
       return worker.fetch(request, { ...env, SIGN_R2_ASSET_UPLOAD: r2AssetUploadSigner(env) }, ctx);
     }
     return worker.fetch(request, env, ctx);
+  },
+  scheduled(controller, env) {
+    return bots.repair(env, controller.scheduledTime);
   },
 };
 

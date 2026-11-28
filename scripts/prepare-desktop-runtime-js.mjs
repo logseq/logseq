@@ -20,6 +20,17 @@ const cliBundlePath = path.join(repoRoot, ...cliBundleRelativePath.split("/"));
 
 const copyPairs = [
   {
+    from: path.join(distDir, "logseq.js"),
+    to: path.join(staticJsDir, "logseq.js"),
+  },
+  ...["local-agents.cjs", "runner-client.cjs", "runner-cli.cjs"].flatMap(name => {
+    const from = path.join(repoRoot, "deps", "db-sync", "worker", "bots", name);
+    return [staticDir, staticJsDir].map(directory => ({
+      from,
+      to: path.join(directory, "bots-runner", name),
+    }));
+  }),
+  {
     from: path.join(repoRoot, ...stagedCliRelativePath.split("/")),
     to: path.join(repoRoot, ...desktopCliRelativePath.split("/")),
     generatedFrom: cliBundlePath,
