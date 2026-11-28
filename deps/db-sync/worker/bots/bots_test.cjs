@@ -340,6 +340,50 @@ test("multiple Agents share one Thread and resume their own upstream sessions", 
   }
 });
 
+test("an ordered Agent mention dispatches one workflow and stops at a blocked step", {skip: !database}, async () => {
+  const bot = randomUUID();
+  const seen = [];
+  const providers = Object.fromEntries(["pi", "codex", "cursor", "devin"].map(name => [name, async job => {
+    seen.push({name, prompt: job.prompt});
+    if (name === "codex" && job.prompt.includes("Blocked workflow")) {
+      return {state: "needs_input", reply: "Which platform?"};
+    }
+    return {state: "done", reply: "Reply from " + name};
+  }]));
+  const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {providers});
+  const main = `/bots/${bot}`;
+  try {
+    await call(service, "/bots", {id: bot, name: "Workflow", defaultAgent: "pi"});
+    const request = {id: randomUUID(), body: "Ship session search", agents: ["pi", "codex", "cursor", "devin"]};
+    const first = await call(service, main + "/messages", request);
+    assert.equal(first.status, 200);
+    assert.equal((await call(service, main + "/messages", request)).body.sessionId, first.body.sessionId);
+    assert.equal((await call(service, main + "/messages", {...request, agents: ["codex", "pi"]})).status, 409);
+    const thread = main + "/sessions/" + first.body.sessionId;
+    const finished = await waitFor(() => call(service, thread), data => data.session?.status === "completed");
+    assert.deepEqual(finished.root.requested_agents, request.agents);
+    assert.deepEqual(finished.participants, request.agents);
+    assert.deepEqual(finished.messages.filter(item => item.author !== "bot").map(item => item.author), request.agents);
+    assert.equal(finished.session.reply_count, 4);
+    assert.deepEqual(seen.map(item => item.name), request.agents);
+    assert.match(seen[3].prompt, /step 4 of 4/);
+    assert.match(seen[3].prompt, /Ship session search/);
+    for (const preceding of request.agents.slice(0, -1)) {
+      assert.ok(seen[3].prompt.includes("Reply from " + preceding));
+    }
+    assert.equal((await call(service, main)).body.sessions.length, 1);
+
+    const blocked = await call(service, main + "/messages",
+      {id: randomUUID(), body: "Blocked workflow", agents: ["pi", "codex", "cursor"]});
+    const paused = await waitFor(() => call(service, main + "/sessions/" + blocked.body.sessionId),
+      data => data.session?.status === "needs_input");
+    assert.deepEqual(paused.participants, ["pi", "codex"]);
+    assert.equal(paused.messages.at(-1).body, "Which platform?");
+  } finally {
+    await service.close();
+  }
+});
+
 test("Cursor replies with a readable usage-limit message", async t => {
   t.mock.method(globalThis, "fetch", async () =>
     Response.json({error: {code: "usage_limit_exceeded"}}, {status: 400}));

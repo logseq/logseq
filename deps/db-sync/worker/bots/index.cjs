@@ -167,28 +167,35 @@ async function messagePage(db, botId, sessionId, url) {
 }
 
 async function insertMessage(db, botId, sessionId, messageId, author, body, {
-  proposal = null, attachments = [], handoff = null, actor = null, requestedAgent = null, replyTo = null,
+  proposal = null, attachments = [], handoff = null, actor = null, requestedAgent = null,
+  requestedAgents = null, replyTo = null,
 } = {}) {
   // A later sequence must not become visible while an earlier write can still commit.
   await db.query("SELECT id FROM bots WHERE id=$1 FOR NO KEY UPDATE", [botId]);
   const {rows: [message]} = await db.query(
-    `INSERT INTO messages (id,bot_id,session_id,author,body,proposal,attachments,handoff,actor,requested_agent,in_reply_to)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING RETURNING *`,
-    [messageId, botId, sessionId, author, body, proposal, JSON.stringify(attachments), handoff, actor, requestedAgent, replyTo]);
-  if (message && sessionId) {
+    `INSERT INTO messages (id,bot_id,session_id,author,body,proposal,attachments,handoff,actor,requested_agent,requested_agents,in_reply_to)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) ON CONFLICT (id) DO NOTHING RETURNING *`,
+    [messageId, botId, sessionId, author, body, proposal, JSON.stringify(attachments), handoff, actor, requestedAgent, requestedAgents, replyTo]);
+  if (message && sessionId && (body || attachments.length)) {
     await db.query("UPDATE sessions SET reply_count=reply_count+1 WHERE id=$1", [sessionId]);
   }
   return message;
 }
 
-async function newSession(db, bot, rootId, prompt, selectedAgent, automatic) {
+async function enqueueRun(db, messageId, sessionId, selectedAgent, {
+  automation = false, workflowRootId = null, remainingAgents = [],
+} = {}) {
+  await db.query(`INSERT INTO bot_runs (message_id,session_id,agent,automation,workflow_root_id,remaining_agents)
+    VALUES ($1,$2,$3,$4,$5,$6)`, [messageId, sessionId, selectedAgent, automation, workflowRootId, remainingAgents]);
+}
+
+async function newSession(db, bot, rootId, prompt, selectedAgent, options) {
   const sessionId = randomUUID();
   await db.query(
     `INSERT INTO sessions (id,bot_id,root_message_id,title,agent,repository)
        VALUES ($1,$2,$3,$4,$5,$6)`,
     [sessionId, bot.id, rootId, Array.from(prompt).slice(0, 96).join(""), selectedAgent, bot.repository]);
-  await db.query("INSERT INTO bot_runs (message_id,session_id,automation,agent) VALUES ($1,$2,$3,$4)",
-    [rootId, sessionId, automatic, selectedAgent]);
+  await enqueueRun(db, rootId, sessionId, selectedAgent, options);
   return sessionId;
 }
 
@@ -198,7 +205,14 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
     const messageId = id(body.id);
     const files = attachmentList(body.attachments);
     const prompt = body.body === "" && files.length ? "" : text(body.body, 12000);
-    const chosenAgent = body.agent == null ? null : agent(body.agent);
+    const requestedAgents = body.agents ?? null;
+    if (requestedAgents !== null && (!Array.isArray(requestedAgents) || requestedAgents.length < 2 ||
+        requestedAgents.length > agents.length || new Set(requestedAgents).size !== requestedAgents.length)) {
+      fail(400, "Select distinct Agents in workflow order");
+    }
+    requestedAgents?.forEach(agent);
+    const chosenAgent = body.agent == null ? requestedAgents?.[0] ?? null : agent(body.agent);
+    if (requestedAgents && chosenAgent !== requestedAgents[0]) fail(400, "Select the first Agent in workflow order");
     const targetId = body.targetBotId == null ? null : id(body.targetBotId);
     if (targetId === bot.id) fail(400, "Choose another Bot");
     if (targetId) {
@@ -208,18 +222,22 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
     const target = targetId && await visibleBot(db, owner, targetId, access.memberships);
     if (target && bot.shared_graph_id && target.shared_graph_id !== bot.shared_graph_id) fail(404, "Bot not found");
     const handoff = target ? {target_id: target.id, target_name: target.name} : null;
-    const proposal = sessionId || files.length || target ? null : weeklyProposal(prompt, body.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone, chosenAgent);
+    const proposal = sessionId || files.length || target || requestedAgents ? null
+      : weeklyProposal(prompt, body.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone, chosenAgent);
     if (proposal) {
       try { new Intl.DateTimeFormat("en", {timeZone: proposal.timeZone}); }
       catch { fail(400, "Invalid time zone"); }
     }
-    const message = await insertMessage(db, bot.id, sessionId, messageId, "user", prompt, {attachments: files, handoff, actor: owner, requestedAgent: chosenAgent});
+    const message = await insertMessage(db, bot.id, sessionId, messageId, "user", prompt, {
+      attachments: files, handoff, actor: owner, requestedAgent: chosenAgent, requestedAgents,
+    });
     if (!message) {
       const {rows: [existing]} = await db.query(
         "SELECT * FROM messages WHERE id=$1 AND bot_id=$2 AND session_id IS NOT DISTINCT FROM $3::uuid",
         [messageId, bot.id, sessionId]);
       if (!existing || existing.author !== "user" || existing.body !== prompt || (existing.handoff?.target_id ?? null) !== targetId ||
           (existing.actor ?? bot.owner) !== owner || (existing.actor && existing.requested_agent !== chosenAgent) ||
+          JSON.stringify(existing.requested_agents) !== JSON.stringify(requestedAgents) ||
           existing.attachments.length !== files.length ||
           existing.attachments.some((file, index) => file.id !== files[index].id || file.name !== files[index].name)) fail(409, "Message identifier already in use");
       const {rows: [existingSession]} = await db.query(
@@ -234,12 +252,14 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
       if (updated.rowCount !== files.length) fail(409, "An attachment is unavailable");
     }
     const taskAgent = chosenAgent ?? (!target ? session?.agent : null);
-    if (taskAgent) configuredAgent(access.available(target || bot), taskAgent);
+    const available = access.available(target || bot);
+    if (taskAgent) (requestedAgents ?? [taskAgent]).forEach(name => configuredAgent(available, name));
+    const workflow = rootId => requestedAgents ? {workflowRootId: rootId, remainingAgents: requestedAgents.slice(1)} : undefined;
     if (target) {
       const receivedId = randomUUID();
       const copies = files.map(file => ({...file, id: randomUUID()}));
       await insertMessage(db, target.id, null, receivedId, "bot", prompt, {
-        attachments: copies, actor: owner, requestedAgent: chosenAgent,
+        attachments: copies, actor: owner, requestedAgent: chosenAgent, requestedAgents,
         handoff: {source_id: bot.id, source_name: bot.name, source_message_id: messageId},
       });
       for (const [index, file] of copies.entries()) {
@@ -248,14 +268,14 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
           [file.id, target.id, owner, receivedId, files[index].id]);
       }
       if (taskAgent) await newSession(db, target, receivedId,
-        prompt || files.map(file => file.name).join(", "), taskAgent, false);
+        prompt || files.map(file => file.name).join(", "), taskAgent, workflow(receivedId));
     } else if (sessionId) {
-      await db.query("INSERT INTO bot_runs (message_id,session_id,agent) VALUES ($1,$2,$3)", [messageId, sessionId, taskAgent]);
+      await enqueueRun(db, messageId, sessionId, taskAgent, workflow(messageId));
       await db.query("UPDATE sessions SET status=CASE WHEN status='running' THEN status ELSE 'queued' END,updated_at=now() WHERE id=$1", [sessionId]);
     } else if (proposal) {
       await insertMessage(db, bot.id, null, randomUUID(), "bot", "Create a weekly automation?", {proposal});
     } else if (chosenAgent) {
-      sessionId = await newSession(db, bot, messageId, prompt || files.map(file => file.name).join(", "), chosenAgent, false);
+      sessionId = await newSession(db, bot, messageId, prompt || files.map(file => file.name).join(", "), chosenAgent, workflow(messageId));
     } else if (/(进展|状态|status|progress)/i.test(prompt)) {
       const {rows} = await db.query("SELECT title,status FROM sessions WHERE bot_id=$1 ORDER BY updated_at DESC LIMIT 5",
         [bot.id]);
@@ -378,7 +398,7 @@ async function enqueueScheduled(pool, availableAgents) {
     const name = rule.agent ?? bot.default_agent;
     if (hasAgent(availableAgents(bot.owner), name)) {
       await insertMessage(db, bot.id, null, messageId, "bot", rule.prompt);
-      await newSession(db, bot, messageId, rule.prompt, name, true);
+      await newSession(db, bot, messageId, rule.prompt, name, {automation: true});
     } else {
       await insertMessage(db, bot.id, null, messageId, "bot",
         "An automation was skipped because its Agent is no longer configured.");
@@ -393,16 +413,22 @@ async function claim(pool) {
     const {rows: [job]} = await db.query(
       `SELECT r.*,COALESCE(r.agent,s.agent) AS agent,s.agent AS primary_agent,s.repository,s.bot_id,s.root_message_id,
               binding.provider_session_id,binding.provider_url,binding.provider_cursor AS session_cursor,
-              m.body AS prompt,m.seq AS message_seq,m.created_at AS message_created_at,m.attachments,m.actor,
+              COALESCE(root.body,m.body) AS prompt,m.seq AS message_seq,m.created_at AS message_created_at,
+              COALESCE(root.attachments,m.attachments) AS attachments,m.actor,root.requested_agents AS workflow_agents,
               b.graph_id,b.graph_block_id,b.owner,b.shared_graph_id,
-              EXISTS (SELECT 1 FROM bot_runs earlier WHERE earlier.session_id=r.session_id AND earlier.seq<r.seq
+              EXISTS (SELECT 1 FROM bot_runs earlier WHERE earlier.session_id=r.session_id AND earlier.message_id<>r.message_id
+                AND earlier.state IN ('done','failed','needs_input','attention')
                 AND COALESCE(earlier.agent,s.agent)=COALESCE(r.agent,s.agent)) AS previous_turn
          FROM bot_runs r JOIN sessions s ON s.id=r.session_id
          LEFT JOIN bot_thread_agents binding ON binding.session_id=s.id AND binding.agent=COALESCE(r.agent,s.agent)
          JOIN messages m ON m.id=r.message_id JOIN bots b ON b.id=s.bot_id
+         LEFT JOIN messages root ON root.id=r.workflow_root_id
+         LEFT JOIN bot_runs first ON first.message_id=r.workflow_root_id
          WHERE r.state IN ('queued','poll') AND r.due_at<=now()
-           AND NOT EXISTS (SELECT 1 FROM bot_runs earlier WHERE earlier.session_id=r.session_id
-             AND earlier.seq<r.seq AND earlier.state NOT IN ('done','failed','needs_input','attention'))
+           AND NOT EXISTS (
+             SELECT 1 FROM bot_runs earlier LEFT JOIN bot_runs earlier_first ON earlier_first.message_id=earlier.workflow_root_id
+               WHERE earlier.session_id=r.session_id AND earlier.state NOT IN ('done','failed','needs_input','attention')
+                 AND (COALESCE(earlier_first.seq,earlier.seq),earlier.seq)<(COALESCE(first.seq,r.seq),r.seq))
          ORDER BY r.due_at,r.seq LIMIT 1 FOR UPDATE OF r SKIP LOCKED`);
     if (!job) return null;
     await db.query("UPDATE bot_runs SET state='working' WHERE message_id=$1", [job.message_id]);
@@ -412,6 +438,10 @@ async function claim(pool) {
 }
 
 async function withThreadContext(pool, job) {
+  const step = job.workflow_agents ? job.workflow_agents.indexOf(job.agent) + 1 : 0;
+  const prompt = step > 0 ? `Logseq workflow step ${step} of ${job.workflow_agents.length}. You are ${job.agent}. ` +
+    "Complete only your assigned part, using earlier replies as context. Logseq will dispatch the remaining steps.\n\n" +
+    job.prompt : job.prompt;
   const {rows} = await pool.query(
     `WITH peer_runs AS (
        SELECT message_id FROM bot_runs WHERE session_id=$1 AND seq<$2
@@ -419,12 +449,12 @@ async function withThreadContext(pool, job) {
      )
      SELECT author,left(body,1200) AS body FROM messages m
        WHERE m.bot_id=$5 AND (m.session_id=$1 OR m.id=$6) AND EXISTS (SELECT 1 FROM peer_runs)
-         AND (m.seq<$7 OR m.in_reply_to IN (SELECT message_id FROM peer_runs))
+         AND m.body<>'' AND (m.seq<$7 OR m.in_reply_to IN (SELECT message_id FROM peer_runs))
        ORDER BY m.seq DESC LIMIT 12`,
     [job.session_id, job.seq, job.primary_agent, job.agent, job.bot_id, job.root_message_id, job.message_seq]);
-  if (!rows.length) return job;
+  if (!rows.length) return {...job, prompt};
   return {...job, prompt: "Recent messages from the shared Logseq thread, for context only:\n"
-    + JSON.stringify(rows.reverse()) + "\n\nCurrent request:\n" + job.prompt};
+    + JSON.stringify(rows.reverse()) + "\n\nCurrent request:\n" + prompt};
 }
 
 async function reserveDevinStart(pool, job, limits) {
@@ -450,11 +480,21 @@ async function settle(pool, job, result, canExport) {
       await insertMessage(db, job.bot_id, job.session_id, randomUUID(), job.agent, result.reply, {replyTo: job.message_id});
     }
     const summary = result.reply || job.last_reply;
+    const [nextAgent, ...remainingAgents] = job.remaining_agents;
+    if (result.state === "done" && nextAgent) {
+      const messageId = randomUUID();
+      await insertMessage(db, job.bot_id, job.session_id, messageId, "bot", "", {
+        actor: job.actor, requestedAgent: nextAgent, replyTo: job.message_id,
+      });
+      await enqueueRun(db, messageId, job.session_id, nextAgent, {
+        workflowRootId: job.workflow_root_id, remainingAgents,
+      });
+    }
     if (result.state === "done" && summary) {
       if (job.automation) {
         await insertMessage(db, job.bot_id, null, randomUUID(), "bot", summary);
       }
-      if (canExport(job)) {
+      if (!nextAgent && canExport(job)) {
         const url = result.url ?? job.provider_url;
         const title = `${summary.slice(0, 6000)}${url ? "\n" + url : ""}`;
         await db.query(`INSERT INTO bot_graph_exports (id,owner,graph_id,block_id,title)
@@ -567,7 +607,8 @@ async function createBotService(env = process.env, options = {}) {
       if (reservation === "duplicate") return {state: "attention", reply: "A Devin start was already attempted for this task."};
     }
     if (job.state !== "poll" && job.attachments.length) {
-      const {rows} = await pool.query("SELECT id,payload FROM bot_uploads WHERE message_id=$1", [job.message_id]);
+      const {rows} = await pool.query("SELECT id,payload FROM bot_uploads WHERE message_id=$1",
+        [job.workflow_root_id ?? job.message_id]);
       const contents = new Map(rows.map(row => [row.id, row.payload]));
       job = {...job, files: job.attachments.map(file => ({...file, payload: contents.get(file.id)}))};
     }

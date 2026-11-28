@@ -108,8 +108,11 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS handoff jsonb;
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS actor text;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS requested_agent text;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS requested_agents text[];
 
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS agent text;
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS workflow_root_id uuid REFERENCES messages(id) ON DELETE CASCADE;
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS remaining_agents text[] NOT NULL DEFAULT '{}';
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS in_reply_to uuid;
 CREATE INDEX IF NOT EXISTS bot_runs_thread_order ON bot_runs (session_id, seq);
 
