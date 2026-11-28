@@ -2216,15 +2216,20 @@ let on_click ev =
                          .ls-comment-row, [data-pressable]"
                         target
                     with
-                    | Some _ -> ()
-                    | None when readonly_block_target target -> ()
-                    | None -> (
+                    (* A comments-area label is a button, but activating it
+                       starts block editing rather than running a control action.
+                       Let it fall through to the delegated title-edit branch;
+                       doing so on click (not press) keeps the mousedown/blur
+                       ordering intact on native hosts. *)
+                    | Some el when closest ".ls-comments-label" (Some el) = None -> ()
+                    | _ when readonly_block_target target -> ()
+                    | _ -> (
                         match closest ".ls-comments-label" target with
                         | Some el -> (
                             match el.Ui_services.attr "data-area-uuid" with
                             | Some u ->
                                 (* edit-comments-area-title! *)
-                                A.enter_edit u
+                                A.enter_edit ~scope:(A.scope_of_el el) u
                                   (String.length (A.model_title u))
                             | None -> ())
                         | None -> (
