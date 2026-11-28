@@ -30,7 +30,7 @@ pin_git() {
 if [ -n "${LUI_SOURCE:-}" ]; then
   opam pin add --kind=git -y -n lui "$LUI_SOURCE"
 else
-  opam pin add -y -n lui git+https://github.com/logseq/lui.git#91e070b598fe2eb6825bdae9ca0dcf43bd924c8c
+  opam pin add -y -n lui git+https://github.com/logseq/lui.git#d4f67e39c028be53daf1c9567af4223682cdbffc
 fi
 opam pin add -y -n ocaml-signal git+https://github.com/logseq/ocaml-signal.git#02e18cdc5e0ad672aa223f638eaa3ba52fc9421e
 pin_git rrbvec git+https://github.com/logseq/rrbvec.git#main
