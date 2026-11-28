@@ -164,9 +164,9 @@ let dispose t =
 (* Export support: scan every image node in the store (virtualization
    only affects layout mounting, not store contents) and start loads
    honoring this instance's visible predicate. *)
-let sync_store t store =
+let sync_subtree t store root =
   let retired = ref [] in
-  Lui_store.iter_preorder store (fun id ->
+  Lui_store.iter_preorder ~root store (fun id ->
     if Lui_store.kind store id = "image" then sync_node t retired store id);
   List.iter Signal.dispose_scope !retired
 

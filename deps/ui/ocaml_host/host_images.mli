@@ -8,6 +8,6 @@ val image_of : t -> int -> Lui_scene.image option
 val owner_count : t -> int
 val resource_count : t -> int
 val dispose : t -> unit
-val sync_store : t -> Lui_store.t -> unit
+val sync_subtree : t -> Lui_store.t -> int -> unit
 val pump : t -> unit
 val loading_count : t -> int

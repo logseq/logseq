@@ -117,7 +117,7 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
               Host_images.create ~visible:(fun _ -> true)
                 ~on_change:(fun _ -> ()) ()
             in
-            Host_images.sync_store export_images store;
+            Host_images.sync_subtree export_images store node_id;
             let deadline = Unix.gettimeofday () +. 10. in
             while Host_images.loading_count export_images > 0
                   && Unix.gettimeofday () < deadline do
@@ -143,6 +143,7 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
             let out_h =
               int_of_float (Float.ceil (!content_bottom -. target_r.Lui_scene.y))
             in
+            let render_target () =
             let clear =
               if transparent then Lui_scene.color 0 0 0 0
               else
@@ -243,7 +244,9 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
             done;
             let straight = Host_png.unpremultiply cropped in
             let encoded = Host_png.encode_compressed ~w:out_w ~h:out_h straight in
-            Host_images.dispose export_images;
             Some (encoded, out_w, out_h)
+            in
+            Fun.protect ~finally:(fun () -> Host_images.dispose export_images)
+              render_target
           end
         end)
