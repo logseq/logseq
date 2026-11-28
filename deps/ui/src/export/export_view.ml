@@ -241,11 +241,12 @@ let body (_ms : Model.t Signal.signal) : t =
               ([ fmt_btn ctx "ft-text" (I18n.t "export/format-text") S.Text
                ; fmt_btn ctx "ft-opml" "OPML" S.Opml
                ; fmt_btn ctx "ft-html" "HTML" S.Html ]
-               (* cljs hides the PNG tab once the export has top-level
-                  uuids *)
-               @ (if (S.cur (S.st ctx)).S.has_top_level then
-                    []
-                  else [ fmt_btn ctx "ft-png" "PNG" S.Png ])
+               (* PNG snapshots one target: the page's content container
+                  or a single export block — only a multi-block selection
+                  has no single element to capture *)
+               @ (match (S.cur (S.st ctx)).S.block_uuids with
+                    | _ :: _ :: _ -> []
+                    | _ -> [ fmt_btn ctx "ft-png" "PNG" S.Png ])
                @ [ fmt_btn ctx "ft-edn" "EDN" S.Edn ])
           ; reactive
               (fun fmt ->
