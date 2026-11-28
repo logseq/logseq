@@ -8,7 +8,7 @@
             [frontend.components.repo :as repo]
             [frontend.components.svg :as svg]
             [frontend.config :as config]
-            [frontend.context.i18n :refer [t t-en]]
+            [frontend.context.i18n :refer [locale-format-date t t-en]]
             [frontend.db.subs :as db-subs]
             [frontend.handler.assets :as assets-handler]
             [frontend.handler.db-based.import :as db-import-handler]
@@ -195,6 +195,7 @@
                    {:defaultValues {:graph-name initial-name
                                     :extract-code-snippets? false
                                     :convert-all-tags? false
+                                    :import-clock-history? false
                                     :tag-classes ""
                                     :remove-inline-tags? true
                                     :property-classes ""
@@ -234,6 +235,11 @@
                                                  (t :import/all-tags-desc)
                                                  (fn [_]
                                                    (set-convert-all-tags-input! (not convert-all-tags-input))))
+
+                          (import-checkbox-field "import-clock-history?"
+                                                 (t :import/clock-history-option)
+                                                 (t :import/clock-history-desc)
+                                                 nil)
 
                           (shui/form-field {:name "tag-classes"}
                                            (fn [field _error]
@@ -275,7 +281,13 @@
 ;; Ignored items and validation errors are reported by the import report
 ;; dialog; this only covers org files, which are not part of that report.
 (defn- validate-imported-data
-  [{:keys [org-file-count]}]
+  [{:keys [org-file-count clock-history]}]
+  (when clock-history
+    (let [{:keys [tasks-imported tasks-skipped completed-sessions open-sessions adjusted-count]} clock-history]
+      (notification/show! (t :import/clock-history-summary tasks-imported completed-sessions open-sessions
+                             adjusted-count tasks-skipped)
+                          (if (pos? (+ tasks-skipped adjusted-count)) :warning :info)
+                          false)))
   (when (pos? (or org-file-count 0))
     (notification/show! (t :import/org-files-imported org-file-count)
                         :info false))
@@ -334,9 +346,52 @@
        (when dispatch-key (str " [" (name dispatch-key) "]"))
        " — " errors))
 
+(defn- clock-ms-text
+  [ms]
+  (when ms
+    (locale-format-date (js/Date. ms) {:dateStyle "medium" :timeStyle "medium"})))
+
+(defn- clock-range-text
+  [{:keys [start end]}]
+  (str (clock-ms-text start) " – " (clock-ms-text end)))
+
+(defn- clock-history-reason-text
+  [{:keys [type recorded-end effective-end printed-duration raw start starts] :as diagnostic}]
+  (case type
+    :duration-adjusted (t :import.clock-history/duration-adjusted printed-duration
+                          (clock-ms-text recorded-end) (clock-ms-text effective-end))
+    :boundary-adjusted (t :import.clock-history/boundary-adjusted)
+    :invalid-duration (t :import.clock-history/invalid-duration printed-duration)
+    :invalid-recorded-end (t :import.clock-history/invalid-recorded-end)
+    :invalid-range (t :import.clock-history/invalid-range)
+    :malformed-clock-line (t :import.clock-history/malformed-clock-line raw)
+    :malformed-logbook (t :import.clock-history/malformed-logbook)
+    :overlapping-clocks (t :import.clock-history/overlapping-clocks
+                           (clock-range-text (:first diagnostic))
+                           (clock-range-text (:second diagnostic)))
+    :multiple-open-clocks (t :import.clock-history/multiple-open-clocks
+                            (string/join ", " (map clock-ms-text starts)))
+    :open-clock-not-final (t :import.clock-history/open-clock-not-final (clock-ms-text start))
+    :open-clock-inconsistent (t :import.clock-history/open-clock-inconsistent (clock-ms-text start))
+    :zero-length-clock (t :import.clock-history/zero-length-clock)
+    (str type)))
+
+(defn- clock-history-item-md
+  [{:keys [title file] :as item}]
+  (str "`" (or (not-empty title) (t :import/report-untitled-task)) "`"
+       (when file (str " (" file ")"))
+       " — " (clock-history-reason-text item)))
+
+(defn- clock-history-item-view
+  [{:keys [title file] :as item}]
+  [:span
+   [:code (or (not-empty title) (t :import/report-untitled-task))]
+   (when file [:span.text-xs.text-muted-foreground.ml-1 (str "(" file ")")])
+   (str " — " (clock-history-reason-text item))])
+
 (defn- build-import-report-md
   [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
-           validation-errors-detail notifications]}]
+           validation-errors-detail clock-history-detail notifications]}]
   (str "# " (t :import/report-title) "\n\n"
        (when (seq ignored-files-detail)
          (str "## " (t :import/report-ignored-files) "\n\n"
@@ -350,6 +405,9 @@
        (when (seq validation-errors-detail)
          (str "## " (t :import/report-validation-errors) "\n\n"
               (import-report-items-md validation-errors-detail validation-error-md) "\n\n"))
+       (when (seq clock-history-detail)
+         (str "## " (t :import/report-clock-history) "\n\n"
+              (import-report-items-md clock-history-detail clock-history-item-md) "\n\n"))
        (when (seq notifications)
          (str "## " (t :import/report-errors) "\n\n"
               (import-report-items-md notifications :msg) "\n\n"))))
@@ -411,7 +469,7 @@
 (hsx/defc import-report-dialog
   [import-result]
   (let [{:keys [ignored-files-detail ignored-assets-detail ignored-properties-detail
-                validation-errors-detail notifications]} import-result]
+                validation-errors-detail clock-history-detail notifications]} import-result]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -430,6 +488,9 @@
       (import-report-section (t :import/report-validation-errors)
                              validation-errors-detail
                              validation-error-item-view)
+      (import-report-section (t :import/report-clock-history)
+                             clock-history-detail
+                             clock-history-item-view)
       (import-report-section (t :import/report-errors)
                              notifications
                              notification-item-view)]
@@ -443,9 +504,10 @@
 (defn- import-report-needed?
   [{:keys [ignored-files-count ignored-assets-count ignored-properties-count validation-error-count
            ignored-files-detail ignored-assets-detail ignored-properties-detail
-           validation-errors-detail notifications]}]
+           validation-errors-detail clock-history-detail notifications]}]
   (boolean (or (seq ignored-files-detail) (seq ignored-assets-detail)
                (seq ignored-properties-detail) (seq validation-errors-detail)
+               (seq clock-history-detail)
                (seq notifications)
                (pos? (or ignored-files-count 0)) (pos? (or ignored-assets-count 0))
                (pos? (or ignored-properties-count 0)) (pos? (or validation-error-count 0)))))
@@ -490,11 +552,16 @@
   (state/set-state! :graph/importing-state nil)
   (shui/dialog-close! :import-scan))
 
+(defn- clock-history-scan-blocked?
+  [scan-result]
+  (pos? (or (get-in scan-result [:clock-history :tasks-skipped]) 0)))
+
 (hsx/defc import-scan-preview-dialog
   [scan-result on-import on-cancel]
   (let [{:keys [page-count journal-count block-count org-file-count
                 ignored-files-detail ignored-assets-detail ignored-properties-detail
-                validation-errors-detail notifications]} (or scan-result {})]
+                validation-errors-detail clock-history-detail notifications]} (or scan-result {})
+        clock-history-blocked? (clock-history-scan-blocked? scan-result)]
     [:div.container
      [:div.sm:flex.sm:items-start
       [:div.mt-3.text-center.sm:mt-0.sm:text-left
@@ -508,8 +575,11 @@
         [:p.text-sm.mb-2 (t :import/scan-org-notice org-file-count)])
       (when (and (empty? ignored-files-detail) (empty? ignored-assets-detail)
                  (empty? ignored-properties-detail) (empty? validation-errors-detail)
+                 (empty? clock-history-detail)
                  (empty? notifications))
         [:p.text-sm.text-muted-foreground (t :import/scan-empty)])
+      (when clock-history-blocked?
+        [:p.text-sm.text-destructive.mb-2 (t :import/scan-clock-history-blocked)])
       (import-report-section (t :import/report-ignored-files)
                              ignored-files-detail
                              ignored-file-item-view)
@@ -522,12 +592,16 @@
       (import-report-section (t :import/report-validation-errors)
                              validation-errors-detail
                              validation-error-item-view)
+      (import-report-section (t :import/report-clock-history)
+                             clock-history-detail
+                             clock-history-item-view)
       (import-report-section (t :import/report-errors)
                              notifications
                              notification-item-view)]
      [:div.mt-5.sm:mt-4.flex.gap-2
-      (ui/button (t :import/title)
-                 {:on-click on-import})
+      (when-not clock-history-blocked?
+        (ui/button (t :import/title)
+                   {:on-click on-import}))
       (ui/button (t :ui/cancel)
                  {:on-click on-cancel})]]))
 

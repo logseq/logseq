@@ -3,6 +3,7 @@
             [clojure.string :as string]
             [frontend.components.imports :as imports]
             [frontend.config :as config]
+            [frontend.context.i18n :as i18n]
             [frontend.handler.file-graph-import :as file-graph-import]
             [frontend.handler.graph :as graph-handler]
             [frontend.handler.notification :as notification]
@@ -96,6 +97,27 @@
     (is (= :importing (:step initial-ui-state)))
     (is (= :import/loading (:label initial-ui-state))
         "Progress starts as Importing before the worker sends file names.")))
+
+(deftest import-scan-preview-blocks-skipped-clock-history-test
+  (let [blocked? (some-> (resolve 'frontend.components.imports/clock-history-scan-blocked?)
+                          deref)]
+    (is (fn? blocked?))
+    (when (fn? blocked?)
+      (is (true? (blocked? {:clock-history {:tasks-skipped 1}})))
+      (is (false? (blocked? {:clock-history {:tasks-skipped 0}})))
+      (is (false? (blocked? {}))))))
+
+(deftest clock-diagnostic-dates-use-logseq-locale-test
+  (let [clock-ms-text (some-> (resolve 'frontend.components.imports/clock-ms-text) deref)
+        seen (atom nil)]
+    (is (fn? clock-ms-text))
+    (when (fn? clock-ms-text)
+      (with-redefs [i18n/locale-format-date
+                    (fn [date opts]
+                      (reset! seen [(.getTime date) opts])
+                      "localized")]
+        (is (= "localized" (clock-ms-text 1704294000000)))
+        (is (= [1704294000000 {:dateStyle "medium" :timeStyle "medium"}] @seen))))))
 
 (deftest file-graph-import-file-descriptors-omit-file-contents-test
   (let [file-descriptor (some-> (resolve 'frontend.components.imports/import-file-descriptor)

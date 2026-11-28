@@ -266,6 +266,35 @@
    :dispatch-key dispatch-key
    :errors (truncate-import-text (pr-str errors) 500)})
 
+(def ^:private clock-history-adjusted-types
+  "Diagnostics for tasks whose history was imported with a changed value"
+  #{:duration-adjusted :boundary-adjusted :invalid-duration :invalid-recorded-end})
+
+(defn- adjusted-clock-count
+  [diagnostics]
+  (->> diagnostics
+       (filter #(and (:imported? %)
+                     (contains? clock-history-adjusted-types (:type %))))
+       (map (juxt :block-uuid :source-index))
+       set
+       count))
+
+(defn- clock-history-activity?
+  "The exporter always keeps a clock-history record, so only report it when the
+  option produced something to report"
+  [{:keys [tasks-imported tasks-skipped diagnostics]}]
+  (boolean (or (pos? (or tasks-imported 0)) (pos? (or tasks-skipped 0)) (seq diagnostics))))
+
+(defn- compact-clock-diagnostic
+  "Identify the task and the clock values involved. Free text is bounded."
+  [{:keys [file title raw] :as diagnostic}]
+  (cond-> (select-keys diagnostic [:type :recorded-start :recorded-end :effective-end
+                                   :printed-duration :boundary :start :starts
+                                   :first :second :source-index :source-indexes])
+    file (assoc :file (truncate-import-text file 300))
+    title (assoc :title (truncate-import-text title 200))
+    raw (assoc :raw (truncate-import-text (string/trim raw) 200))))
+
 (defn- compact-import-result
   "Counts plus bounded, value-free detail lists. File contents, asset bytes,
   property values, and import indexes must not leave the worker."
@@ -275,6 +304,7 @@
         ignored-files (deref-import-state-key import-state :ignored-files)
         ignored-assets (deref-import-state-key import-state :ignored-assets)
         ignored-props (deref-import-state-key import-state :ignored-properties)
+        clock-history (deref-import-state-key import-state :clock-history)
         error-notifications (filterv #(= :error (:level %)) notifications)]
     (when (seq ignored-files)
       (log/error :import-ignored-files {:count (count ignored-files)}))
@@ -284,7 +314,14 @@
       (log/error :import-ignored-properties {:count (count ignored-props)}))
     (when (seq (:errors validation))
       (log/error :import-validation-errors {:count (count (:errors validation))}))
-    {:org-file-count (count (filter org-file? files))
+    {:clock-history (when (clock-history-activity? clock-history)
+                      {:tasks-imported (:tasks-imported clock-history)
+                       :tasks-skipped (:tasks-skipped clock-history)
+                       :completed-sessions (:completed-sessions clock-history)
+                       :open-sessions (:open-sessions clock-history)
+                       :adjusted-count (adjusted-clock-count (:diagnostics clock-history))})
+     :clock-history-detail (mapv compact-clock-diagnostic (:diagnostics clock-history))
+     :org-file-count (count (filter org-file? files))
      :ignored-files-count (count ignored-files)
      :ignored-assets-count (count ignored-assets)
      :ignored-properties-count (count ignored-props)

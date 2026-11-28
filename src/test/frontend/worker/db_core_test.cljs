@@ -2288,6 +2288,8 @@
            conn (d/create-conn db-schema/schema)
            block-uuid #uuid "11111111-1111-1111-1111-111111111111"]
        (d/transact! conn [{:db/ident :logseq.property/status}
+                          {:db/ident :logseq.property/status.todo
+                           :block/title "Todo"}
                           {:db/ident :logseq.property/status.doing
                            :block/title "Doing"}
                           {:db/ident :logseq.property/status.done
@@ -2325,7 +2327,22 @@
                          :status-title (:logseq.property.history/ref-value-title item)})
                       history)))
          (is (not-any? #(contains? % :logseq.property.history/ref-value) history))
-         (is (not-any? #(contains? % :logseq.property.history/property) history))))))))
+         (is (not-any? #(contains? % :logseq.property.history/property) history)))
+       (d/transact! conn [{:block/uuid #uuid "22222222-2222-2222-2222-222222222222"
+                           :block/title "todo task"}])
+       (let [todo-block-id (ffirst (d/q '[:find ?b
+                                          :where [?b :block/title "todo task"]]
+                                        @conn))]
+         (d/transact! conn [{:block/created-at 1000
+                             :logseq.property.history/block todo-block-id
+                             :logseq.property.history/property :logseq.property/status
+                             :logseq.property.history/ref-value :logseq.property/status.todo}
+                            {:block/created-at 4000
+                             :logseq.property.history/block todo-block-id
+                             :logseq.property.history/property :logseq.property/status
+                             :logseq.property.history/ref-value :logseq.property/status.done}])
+         (is (= 0 (second (spent-time! test-repo todo-block-id)))
+             "Todo to Done does not track time")))))))
 
 (deftest get-display-properties-keeps-other-position-properties-for-page-properties
   (restoring-worker-state
@@ -2815,6 +2832,31 @@
     (is (= [{:property :rating :location {:page "Home"}}]
            (:ignored-properties-detail result)))
     (is (= 1 (:ignored-properties-count result)))))
+
+(deftest compact-import-result-counts-distinct-imported-clock-adjustments
+  (let [block-a (random-uuid)
+        block-b (random-uuid)
+        result (#'db-core/compact-import-result
+                {:files []
+                 :import-state
+                 {:clock-history
+                  (atom {:tasks-imported 2
+                         :tasks-skipped 1
+                         :completed-sessions 2
+                         :open-sessions 0
+                         :diagnostics [{:type :duration-adjusted :block-uuid block-a
+                                        :source-index 0 :imported? true}
+                                       {:type :boundary-adjusted :block-uuid block-a
+                                        :source-index 0 :imported? true}
+                                       {:type :invalid-duration :block-uuid block-b
+                                        :source-index 1 :imported? true}
+                                       {:type :duration-adjusted :block-uuid (random-uuid)
+                                        :source-index 0 :imported? false}]})}}
+                [] {:errors []})]
+    (is (= 2 (get-in result [:clock-history :adjusted-count]))
+        "One imported clock counts once even with multiple adjustment diagnostics")
+    (is (not-any? #(contains? % :imported?) (:clock-history-detail result)))
+    (is (not-any? #(contains? % :block-uuid) (:clock-history-detail result)))))
 
 (deftest import-file-graph-imports-documents-into-worker-conn
   (async done
