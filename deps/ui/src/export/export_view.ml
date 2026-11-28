@@ -121,7 +121,7 @@ let copy_save_row ctx =
     ~test:
       (Logseq_el.own ctx
          (Signal.map
-            (fun (st : S.t) -> st.content <> None || st.png <> None)
+            (fun (st : S.t) -> st.content <> None || st.png <> None || st.png_ready)
             (st_sig ctx)))
     (row ~key:"export-btns" ~gap:24 ~style_class:"export-btns"
       ~margin_top:4
@@ -198,7 +198,7 @@ let png_preview ctx =
       box ~key:"export-preview-wrap"
         ~opacity:
           (reactive
-             (fun (st : S.t) -> if st.png = None then 0. else 1.)
+             (fun (st : S.t) -> if st.S.png_ready then 1. else 0.)
              (st_sig ctx))
         [ image ~key:"export-preview-img"
             ~accessibility_identifier:"export-preview"
@@ -211,7 +211,7 @@ let png_preview ctx =
     ; if_
         ~test:
           (Logseq_el.own ctx
-             (Signal.map (fun (st : S.t) -> st.png = None) (st_sig ctx)))
+             (Signal.map (fun (st : S.t) -> not st.S.png_ready) (st_sig ctx)))
         (icon ~key:"png-loading" ~name:(`app "loader-2") []) ]
 
 (* cljs swaps the whole options block for the transparent-bg checkbox
@@ -241,10 +241,14 @@ let body (_ms : Model.t Signal.signal) : t =
               ([ fmt_btn ctx "ft-text" (I18n.t "export/format-text") S.Text
                ; fmt_btn ctx "ft-opml" "OPML" S.Opml
                ; fmt_btn ctx "ft-html" "HTML" S.Html ]
-               (* cljs hides the PNG tab once the export has top-level
-                  uuids *)
-               @ (if (S.cur (S.st ctx)).S.has_top_level then
-                    []
+               (* PNG snapshots one target through the host offscreen
+                  pipeline — web keeps the tab hidden because html2canvas
+                  cannot capture windowed-outliner content faithfully *)
+               @ (if P.png_export_supported then
+                    match (S.cur (S.st ctx)).S.block_uuids with
+                    | [] | [ _ ] -> [ fmt_btn ctx "ft-png" "PNG" S.Png ]
+                    | _ -> []
+                  else if (S.cur (S.st ctx)).S.has_top_level then []
                   else [ fmt_btn ctx "ft-png" "PNG" S.Png ])
                @ [ fmt_btn ctx "ft-edn" "EDN" S.Edn ])
           ; reactive

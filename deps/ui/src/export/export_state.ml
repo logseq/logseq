@@ -26,6 +26,8 @@ type t =
   ; png : Webapi.Blob.t option
   ; png_url : string option
   ; png_transparent : bool
+  ; png_ready : bool
+  ; png_bytes : string option
   }
 
 let get = (fun k -> Ui_services.storage_get k)
@@ -78,6 +80,8 @@ let defaults () =
   ; png = None
   ; png_url = None
   ; png_transparent = false
+  ; png_ready = false
+  ; png_bytes = None
   }
 
 let persist st =
@@ -154,5 +158,7 @@ let open_ ctx =
           ; copied = false
           ; png = None
           ; png_url = None
-          ; png_transparent = false });
+          ; png_transparent = false
+          ; png_ready = false
+          ; png_bytes = None });
       Runtime.flush ()

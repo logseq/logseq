@@ -142,8 +142,10 @@ let export_edn (st : S.t) =
 (* cljs get-image-blob — page export snapshots #main-content-container;
    a block export snapshots [blockid='<top-level-id>'] (windowHeight is
    page-only in cljs). *)
+let png_export_supported = false
+
 let export_png (st : S.t Signal.state) =
-  S.mutate st (fun s -> { s with png = None });
+  S.mutate st (fun s -> { s with png = None; png_ready = false });
   Runtime.flush ();
   let cur = S.cur st in
   let selector =
@@ -196,7 +198,7 @@ let export_png (st : S.t Signal.state) =
                  Web_dom.create_object_url blob
                in
                S.mutate st (fun s ->
-                   { s with png = Some blob; png_url = Some url });
+                   { s with png = Some blob; png_url = Some url; png_ready = true });
                Runtime.flush ();
                (* cljs sets img#export-preview .src imperatively — the id
                   now ids the .lui-image wrapper, the pixels img inside

@@ -160,3 +160,24 @@ let dispose t =
     Hashtbl.clear t.owners;Hashtbl.clear t.pending;
     Resource.clear t.cache;Resource.unregister t.cache
   end
+
+(* Export support: scan every image node in the store (virtualization
+   only affects layout mounting, not store contents) and start loads
+   honoring this instance's visible predicate. *)
+let sync_subtree t store root =
+  let retired = ref [] in
+  Lui_store.iter_preorder ~root store (fun id ->
+    if Lui_store.kind store id = "image" then sync_node t retired store id);
+  List.iter Signal.dispose_scope !retired
+
+(* Drive load completion without the host event queue so a synchronous
+   exporter can wait for images. *)
+let pump t = ignore (Resource.drain t.cache)
+
+let loading_count t =
+  Hashtbl.fold
+    (fun _ owner acc ->
+      match Resource.state owner.entry with
+      | Resource.Loading -> acc + 1
+      | _ -> acc)
+    t.owners 0

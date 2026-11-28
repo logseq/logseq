@@ -1263,6 +1263,14 @@ let () =
       subpixel_contrast = 0. };
   let store = Lui_host.store host in
   Lui_host.set_anchor_shift host (Ui.anchor_shift ui store);
+  Dom_ext.export_png_hook :=
+    (fun target ~transparent ->
+      Host_export_png.render
+        { Host_export_png.store = store_of
+        ; scale = (fun () -> !scale_cell)
+        ; images
+        ; live_rect = (fun id -> Lui_host.layout_rect host id) }
+        ~target ~transparent ());
   Daemon_client.boot_mark "host ready";
   List.iter (fun property ->
     Lui_store.set_extension_prop_mask store ~identifier:"logseq-editor" ~property
