@@ -2224,8 +2224,7 @@ let on_click ev =
                             match el.Ui_services.attr "data-area-uuid" with
                             | Some u ->
                                 (* edit-comments-area-title! *)
-                                A.enter_edit u
-                                  (String.length (A.model_title u))
+                                A.enter_edit u (-1)
                             | None -> ())
                         | None -> (
                             match closest ".ls-comment-submit" target with
@@ -2438,8 +2437,18 @@ let on_mousedown (ev : Ui_services.ev) =
         | Some el when Popups_state.inside el -> ()
         | _ ->
             if Editor_commands.click_guard () then ()
-            else if not (A.draft_contains_target ev.Ui_services.target) then
-              A.schedule_blur_commit ())
+            else if not (A.draft_contains_target ev.Ui_services.target) then begin
+              (* Native press activation can be applied before the originating
+                 mousedown reaches this document handler. That mousedown is the
+                 gesture which opened the comments title editor, not an outside
+                 click, so it must not immediately blur the editor it created. *)
+              let activating_comments_title =
+                match closest ".ls-comments-label" ev.Ui_services.target, S.editing () with
+                | Some el, Some e -> el.Ui_services.attr "data-area-uuid" = Some e.S.uuid
+                | _ -> false
+              in
+              if not activating_comments_title then A.schedule_blur_commit ()
+            end)
   end
 
 (* -- drag & drop (cljs components/block.cljs on-drag-start/

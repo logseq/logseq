@@ -449,9 +449,10 @@ let header ~scope st (block : Model.block) count : t =
             (Ui_components.button ~variant:`ghost ~style_class:"ls-comments-label"
               ~height:20 ~min_width:0 ~padding:0 ~label:(I.t "editor/click-to-edit")
               ~disabled:(Ui_services.env_publishing ())
+              ~data_attrs:[ ("data-area-uuid", uuid) ]
               ~text:(let title = String.trim block.block_title in
                 if title = "" then I.t "block.comments/label" else title)
-              ~on_press:(fun _ -> Editor_actions.enter_edit ~scope uuid 0) []))
+              ~on_press:(fun _ -> Editor_actions.enter_edit ~scope uuid (-1)) []))
         (Editor_state.editing_sig ())
     ; typography "0.75rem" 400
         (text ~style_class:"ls-comments-count" ~value:(string_of_int count) [])
