@@ -20,21 +20,51 @@ let attr_value (el : Dom_ext.element) name =
       | None -> None)
   | _ -> None
 
-let contains needle haystack =
-  let n = String.length needle and h = String.length haystack in
-  let rec loop i =
-    i + n <= h
-    && (String.sub haystack i n = needle || loop (i + 1))
+let url_host source =
+  let rest =
+    if String.length source > 8 && String.sub source 0 8 = "https://" then
+      Some (String.sub source 8 (String.length source - 8))
+    else if String.length source > 7 && String.sub source 0 7 = "http://" then
+      Some (String.sub source 7 (String.length source - 7))
+    else None
   in
-  n = 0 || loop 0
+  match rest with
+  | None -> None
+  | Some rest ->
+      let authority_end = ref (String.length rest) in
+      String.iteri
+        (fun i c ->
+          if (c = '/' || c = '?' || c = '#') && i < !authority_end then
+            authority_end := i)
+        rest;
+      let authority = String.sub rest 0 !authority_end in
+      let hostport =
+        match String.rindex_opt authority '@' with
+        | Some at ->
+            String.sub authority (at + 1) (String.length authority - at - 1)
+        | None -> authority
+      in
+      let host =
+        match String.index_opt hostport ':' with
+        | Some colon -> String.sub hostport 0 colon
+        | None -> hostport
+      in
+      Some (String.lowercase_ascii host)
+
+let domain_or_subdomain host domain = host = domain || Str_util.ends_with host ("." ^ domain)
+
+let youtube_source source =
+  match url_host source with
+  | Some host ->
+      domain_or_subdomain host "youtube.com"
+      || domain_or_subdomain host "youtube-nocookie.com"
+  | None -> false
 
 let youtube_iframe_id (el : Dom_ext.element) =
   if Dom_ext.tag_name el <> "iframe" then None
   else
     match attr_value el "src" with
-    | Some src
-      when contains "youtube.com" src || contains "youtube-nocookie.com" src ->
-        node_id el
+    | Some src when youtube_source src -> node_id el
     | _ -> None
 
 (* Mirror the web driver's document-order rule: use the last YouTube iframe

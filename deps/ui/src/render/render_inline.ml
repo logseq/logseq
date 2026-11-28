@@ -960,7 +960,8 @@ let input_video input hint =
       Some
         (Ve_iframe
            ("https://www.youtube-nocookie.com/embed/" ^ id
-            ^ match start with Some s -> "?t=" ^ s | None -> ""))
+            ^ "?enablejsapi=1"
+            ^ match start with Some s -> "&t=" ^ s | None -> ""))
   | Some (Vp_bilibili page, id) ->
       Some
         (Ve_iframe

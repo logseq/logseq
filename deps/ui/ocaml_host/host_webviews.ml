@@ -23,19 +23,23 @@ type state = {
   mutable painted_frame : int;
   mutable player_ready : bool;
   mutable playback_seconds : float;
+  mutable playback_state : int;
+  mutable playback_wall_at : float;
   mutable player_poll_at : float;
 }
 
 type t = {
   env : env;
   states : (int, state) Hashtbl.t;
+  pending_seeks : (int, int) Hashtbl.t;
   mutable frame_index : int;
   mutable backend_error : string;
   mutable passive_paints : int;
 }
 
 let create env =
-  { env; states = Hashtbl.create 8; frame_index = 0; backend_error = ""; passive_paints = 0 }
+  { env; states = Hashtbl.create 8; pending_seeks = Hashtbl.create 4
+  ; frame_index = 0; backend_error = ""; passive_paints = 0 }
 
 let with_passive_paints t f =
   t.passive_paints <- t.passive_paints + 1;
@@ -59,43 +63,117 @@ let ids t = Hashtbl.fold (fun id _ acc -> id :: acc) t.states []
 
 let begin_frame t = t.frame_index <- t.frame_index + 1
 
-let string_contains needle haystack =
-  let n = String.length needle and h = String.length haystack in
-  let rec loop i =
-    i + n <= h
-    && (String.sub haystack i n = needle || loop (i + 1))
+let url_host source =
+  let rest =
+    if String.length source > 8 && String.sub source 0 8 = "https://" then
+      Some (String.sub source 8 (String.length source - 8))
+    else if String.length source > 7 && String.sub source 0 7 = "http://" then
+      Some (String.sub source 7 (String.length source - 7))
+    else None
   in
-  n = 0 || loop 0
+  match rest with
+  | None -> None
+  | Some rest ->
+      let authority_end = ref (String.length rest) in
+      String.iteri
+        (fun i c ->
+          if (c = '/' || c = '?' || c = '#') && i < !authority_end then
+            authority_end := i)
+        rest;
+      let authority = String.sub rest 0 !authority_end in
+      let hostport =
+        match String.rindex_opt authority '@' with
+        | Some at ->
+            String.sub authority (at + 1) (String.length authority - at - 1)
+        | None -> authority
+      in
+      let host =
+        match String.index_opt hostport ':' with
+        | Some colon -> String.sub hostport 0 colon
+        | None -> hostport
+      in
+      Some (String.lowercase_ascii host)
+
+let ends_with s suf =
+  let n = String.length suf and h = String.length s in
+  h >= n && String.sub s (h - n) n = suf
+
+let domain_or_subdomain host domain = host = domain || ends_with host ("." ^ domain)
 
 let youtube_source source =
-  string_contains "youtube.com" source || string_contains "youtube-nocookie.com" source
+  match url_host source with
+  | Some host ->
+      domain_or_subdomain host "youtube.com"
+      || domain_or_subdomain host "youtube-nocookie.com"
+  | None -> false
 
 let player_poll_interval = 0.5
 
 let reset_player state =
   state.player_ready <- false;
   state.playback_seconds <- 0.;
+  state.playback_state <- -1;
+  state.playback_wall_at <- 0.;
   state.player_poll_at <- 0.
 
-let poll_player state view =
+let perform_seek view seconds =
+  let js =
+    Printf.sprintf
+      "(function(){var sec=%d;var frame=document.getElementById('logseq-embed-player');if(window.logseqPlayer&&window.logseqPlayer.seekTo){window.logseqPlayer.seekTo(sec,true);return}if(frame&&frame.contentWindow){frame.contentWindow.postMessage(JSON.stringify({event:'command',func:'seekTo',args:[sec,true]}),'*')}})()"
+      (max 0 seconds)
+  in
+  try Lui_webview.eval view js
+  with exn -> log "youtube seek eval failed: %s" (Printexc.to_string exn)
+
+let poll_player t state view =
   if youtube_source state.source then begin
     let now = Unix.gettimeofday () in
     if now -. state.player_poll_at >= player_poll_interval then begin
       state.player_poll_at <- now;
       try
         Lui_webview.call_async view
-          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? window.logseqPlayer.getCurrentTime() : -1"
+          "return (window.logseqPlayerReady && window.logseqPlayer && typeof window.logseqPlayer.getCurrentTime === 'function') ? [window.logseqPlayer.getCurrentTime(), window.logseqPlayer.getPlayerState()] : [-1, -1]"
           (fun result ->
-            match float_of_string_opt result with
-            | Some seconds when seconds >= 0. ->
+            let sample =
+              try
+                match Yojson.Safe.from_string result with
+                | `List [time; player_state] ->
+                    let number = function
+                      | `Float value -> Some value
+                      | `Int value -> Some (float_of_int value)
+                      | _ -> None
+                    in
+                    let integer = function
+                      | `Int value -> Some value
+                      | `Float value -> Some (int_of_float value)
+                      | _ -> None
+                    in
+                    (match number time, integer player_state with
+                     | Some seconds, Some player_state -> Some (seconds, player_state)
+                     | _ -> None)
+                | _ -> None
+              with _ -> None
+            in
+            match sample with
+            | Some (seconds, player_state) when seconds >= 0. ->
               if not state.player_ready then
                 log "youtube player ready id=%d seconds=%.1f" state.id seconds;
               state.player_ready <- true;
-              state.playback_seconds <- seconds
+              state.playback_seconds <- seconds;
+              state.playback_state <- player_state;
+              state.playback_wall_at <- Unix.gettimeofday ();
+              (match Hashtbl.find_opt t.pending_seeks state.id with
+               | Some pending ->
+                   Hashtbl.remove t.pending_seeks state.id;
+                   log "youtube apply pending seek id=%d seconds=%d" state.id pending;
+                   perform_seek view pending
+               | None -> ())
             | _ ->
               state.player_ready <- false;
-              state.playback_seconds <- 0.)
-      with _ -> ()
+              state.playback_seconds <- 0.;
+              state.playback_state <- -1;
+              state.playback_wall_at <- 0.)
+      with exn -> log "youtube playback poll failed: %s" (Printexc.to_string exn)
     end
   end
 
@@ -104,7 +182,7 @@ let pump t =
     Hashtbl.iter
       (fun _ state ->
         match state.view with
-        | Some view -> poll_player state view
+        | Some view -> poll_player t state view
         | None -> ())
       t.states;
     Lui_webview.pump ()
@@ -302,7 +380,7 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
       | None ->
         let state =
           { id; source = ""; sandbox = None; view = None; error = ""; painted_frame = 0
-        ; player_ready = false; playback_seconds = 0.; player_poll_at = 0. }
+        ; player_ready = false; playback_seconds = 0.; playback_state = -1; playback_wall_at = 0.; player_poll_at = 0. }
         in
         Hashtbl.replace t.states id state;
         state
@@ -344,22 +422,25 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
   end
 
 let seek_youtube t id seconds =
+  let seconds = max 0 seconds in
+  Hashtbl.replace t.pending_seeks id seconds;
   match Hashtbl.find_opt t.states id with
   | Some { view = Some view; source; _ } when youtube_source source ->
       log "youtube seek id=%d seconds=%d" id seconds;
-      let js =
-        Printf.sprintf
-          "(function(){var sec=%d;var frame=document.getElementById('logseq-embed-player');if(window.logseqPlayer&&window.logseqPlayer.seekTo){window.logseqPlayer.seekTo(sec,true);return}if(frame&&frame.contentWindow){frame.contentWindow.postMessage(JSON.stringify({event:'command',func:'seekTo',args:[sec,true]}),'*')}})()"
-          (max 0 seconds)
-      in
-      (try Lui_webview.eval view js with _ -> ())
+      perform_seek view seconds
   | _ -> ()
 
 let playback_time t id =
   match Hashtbl.find_opt t.states id with
   | Some state when youtube_source state.source ->
       if not state.player_ready then Runtime.Player_pending
-      else Runtime.Playback_time (max 0 (int_of_float (floor state.playback_seconds)))
+      else
+        let seconds =
+          if state.playback_state = 1 then
+            state.playback_seconds +. (Unix.gettimeofday () -. state.playback_wall_at)
+          else state.playback_seconds
+        in
+        Runtime.Playback_time (max 0 (int_of_float (floor seconds)))
   | _ -> Runtime.No_video
 
 let drain_state state =
