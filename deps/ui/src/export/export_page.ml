@@ -142,6 +142,8 @@ let export_edn (st : S.t) =
 (* cljs get-image-blob — page export snapshots #main-content-container;
    a block export snapshots [blockid='<top-level-id>'] (windowHeight is
    page-only in cljs). *)
+let png_export_supported = false
+
 let export_png (st : S.t Signal.state) =
   S.mutate st (fun s -> { s with png = None; png_ready = false });
   Runtime.flush ();

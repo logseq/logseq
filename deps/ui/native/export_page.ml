@@ -128,6 +128,8 @@ let preview_path = ref ""
    retained subtree offscreen at the target's live width with
    virtualization disabled, paints and rasterizes it, then crops the
    target rect — matching the html2canvas fresh-layout semantics. *)
+let png_export_supported = true
+
 let export_png (st : S.t Signal.state) =
   S.mutate st (fun s ->
       { s with png = None; png_url = None; png_ready = false; png_bytes = None });

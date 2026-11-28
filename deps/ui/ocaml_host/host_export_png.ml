@@ -108,6 +108,22 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
           in
           if target_r.Lui_scene.w < 1. || target_r.Lui_scene.h < 1. then None
           else begin
+            (* lazy images that never entered the live viewport have no
+               decoded pixels in the production cache — load the whole
+               store's images eagerly in an export-scoped cache and wait
+               for completion so the snapshot matches a fully scrolled
+               page *)
+            let export_images =
+              Host_images.create ~visible:(fun _ -> true)
+                ~on_change:(fun _ -> ()) ()
+            in
+            Host_images.sync_store export_images store;
+            let deadline = Unix.gettimeofday () +. 10. in
+            while Host_images.loading_count export_images > 0
+                  && Unix.gettimeofday () < deadline do
+              Host_images.pump export_images;
+              Unix.sleepf 0.01
+            done;
             (* the container stretches to the export canvas; the real
                content height is the bottom of its deepest descendant —
                the html2canvas scrollHeight equivalent *)
@@ -166,13 +182,13 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                 ; image_of =
                     (fun id ->
                       if Lui_store.kind store id = "image" then
-                        Host_images.image_of env.images id
+                        Host_images.image_of export_images id
                       else
                         Host_icons.image_of ~hooks store scale id (rect_of id))
                 ; image_in =
                     (fun id r ->
                       if Lui_store.kind store id = "image" then
-                        Host_images.image_of env.images id
+                        Host_images.image_of export_images id
                       else Host_icons.image_of ~hooks store scale id r)
                 ; shadow_of =
                     (fun name ->
@@ -226,6 +242,8 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                 done
             done;
             let straight = Host_png.unpremultiply cropped in
-            Some (Host_png.encode_compressed ~w:out_w ~h:out_h straight, out_w, out_h)
+            let encoded = Host_png.encode_compressed ~w:out_w ~h:out_h straight in
+            Host_images.dispose export_images;
+            Some (encoded, out_w, out_h)
           end
         end)
