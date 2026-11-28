@@ -2020,6 +2020,8 @@
  :ui/apply "Apply"
  :ui/cancel "Cancel"
  :ui/close "Close"
+ :ui/next "Next"
+ :ui/previous "Previous"
  :ui/configure "Configure"
  :ui/confirm "Confirm"
  :ui/copy "Copy"

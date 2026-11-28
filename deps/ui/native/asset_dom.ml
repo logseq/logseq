@@ -235,14 +235,39 @@ let viewport_modal_cover (elem : Lui_elements.t) : Lui_elements.t =
   Lui_ui.height_viewport context node 1.;
   node
 
+(* Collect the document's asset image sources in document order, the
+   native twin of web's query of ".asset-container img": the snapshot
+   exposes typed images as img with a src attr. *)
+let lightbox_sources () : string array =
+  Dom_ext.doc_query_selector_all ".asset-container img"
+  |> List.filter_map (fun el -> Dom_ext.get_attribute el "src")
+  |> Array.of_list
+
 (* Native retained-overlay approximation of the web PhotoSwipe surface.
-   It intentionally keeps the first implementation scoped to the core
-   desktop interaction: display the clicked asset fitted to the window,
-   close on backdrop press, the close control, or Escape through the
-   cover dialog. PhotoSwipe's multi-image navigation, pinch/zoom and
-   sharing chrome remain documented parity gaps. *)
-let image_lightbox_view ~source ~alt : Lui_elements.t =
+   Multi-image navigation follows the web semantics: the lightbox opens
+   on the clicked asset and previous/next step through the document's
+   images with wrap-around. Pinch/zoom and sharing chrome remain
+   documented parity gaps. *)
+let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
+ fun context parent ->
+  let count = Array.length sources in
+  let index = Signal.state context.Lui_ui.ui_scheduler start in
   let close () = close_image_lightbox () in
+  let step d =
+    if count > 0 then begin
+      let i = Runtime.signal_get index in
+      Runtime.signal_set index ((i + d + count) mod count)
+    end
+  in
+  let nav key icon_label icon_name edge =
+    Lui_elements.overlay ~key ~alignment:edge ~padding:16
+      [ Lui_elements.icon_button ~variant:`ghost ~size:`icon
+          ~icon:(`app icon_name) ~label:icon_label
+          ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
+          ~on_press:(fun _ ->
+            step (if key = "lb-prev" then -1 else 1))
+          [] ]
+  in
   viewport_modal_cover
     (Lui_elements.dialog ~key:lightbox_key
        ~style_class:"pswp native-asset-lightbox"
@@ -250,27 +275,48 @@ let image_lightbox_view ~source ~alt : Lui_elements.t =
        ~padding:0
        ~on_dismiss:(fun _ -> close ())
        [ Lui_elements.stack ~key:"lb-stack" ~container_relative_frame:`both
-           [ Ui_parts.pressable ~on_press:(fun _ -> close ())
-               (Lui_elements.column ~key:"lb-backdrop"
-                  ~container_relative_frame:`both ~main:`center ~cross:`center
-                  ~padding:32
-                  [ Ui_parts.pressable ~on_press:(fun _ -> ())
-                      (Lui_elements.box ~key:"lb-image-box"
-                         [ Lui_elements.image ~key:"lb-image" ~url:source ~alt [] ]) ])
-           ; Lui_elements.overlay ~key:"lb-chrome" ~alignment:`top_trailing
-               ~padding:16
-               [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
-                   ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
-                   ~autofocus:true
-                   ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
-                   ~on_press:(fun _ -> close ()) [] ]
-           ]
+           ([ Ui_parts.pressable ~on_press:(fun _ -> close ())
+                (Lui_elements.column ~key:"lb-backdrop"
+                   ~container_relative_frame:`both ~main:`center ~cross:`center
+                   ~padding:32
+                   [ Ui_parts.pressable ~on_press:(fun _ -> ())
+                       (Lui_elements.box ~key:"lb-image-box"
+                          [ Lui_elements.image ~key:"lb-image"
+                              ~url:(reactive
+                                    (fun i ->
+                                      if count = 0 then "" else sources.(i))
+                                    (Signal.value index))
+                              ~alt [] ]) ]) ]
+           @ (if count > 1 then
+                [ nav "lb-prev" (I18n.t "ui/previous") "chevron-left" `leading
+                ; nav "lb-next" (I18n.t "ui/next") "chevron-right" `trailing ]
+              else [])
+           @ [ Lui_elements.overlay ~key:"lb-chrome" ~alignment:`top_trailing
+                 ~padding:16
+                 [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
+                     ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
+                     ~autofocus:true
+                     ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
+                     ~on_press:(fun _ -> close ()) [] ] ])
        ])
+    context parent
 
 let open_image_lightbox ~source ~alt =
+  let sources = lightbox_sources () in
+  let start =
+    let rec find i =
+      if i >= Array.length sources then 0
+      else if sources.(i) = source then i
+      else find (i + 1)
+    in
+    find 0
+  in
+  let sources =
+    if Array.length sources = 0 then [| source |] else sources
+  in
   ignore
     (Properties_state.push_view_overlay_ctxfree ~key:lightbox_key
-       ~view:(image_lightbox_view ~source ~alt)
+       ~view:(image_lightbox_view ~sources ~start ~alt)
        ~on_escape:(fun () -> ()))
 
 (* minimal asset render — the asset extension tag carries the block
