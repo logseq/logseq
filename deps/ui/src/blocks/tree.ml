@@ -1108,11 +1108,16 @@ and block_row_sig
     (bs : Model.block Signal.signal) : t =
  fun ctx parent ->
   S.ensure ctx;
-  let b0 = Signal.get bs in
-  (if b0.Model.block_is_comments_area then
-     comments_row ?depth_signal ~flat ~scope ~depth ~editable ~library bs
-   else row_sig ?extras ?depth_signal ~flat ~depth
-     ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
+  (reactive
+     ~equal:(fun (a : Model.block) (b : Model.block) ->
+       a.Model.block_is_comments_area = b.Model.block_is_comments_area)
+     (fun (b : Model.block) ->
+       if b.Model.block_is_comments_area then
+         comments_row ?depth_signal ~flat ~scope ~depth ~editable ~library bs
+       else
+         row_sig ?extras ?depth_signal ~flat ~depth
+           ~editable:(editable && not (Ui_services.env_publishing ())) ~library ~virtualize scope bs)
+     bs)
     ctx parent
 
 (* rough rendered height of an unmounted subtree — cljs
