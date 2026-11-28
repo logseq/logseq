@@ -129,6 +129,7 @@ function cursorImageType(bytes) {
 
 function cursorCloud(env) {
   const root = "https://api.cursor.com/v1/agents";
+  const model = {id: env.LOGSEQ_BOTS_CURSOR_MODEL?.trim() || "grok-4.7"};
   const call = async (path, body) => {
     const response = await fetch(root + path, {
       method: body ? "POST" : "GET", redirect: "error", signal: AbortSignal.timeout(25000),
@@ -181,14 +182,15 @@ function cursorCloud(env) {
     }
     const prompt = {text: job.prompt || "Review the attached images.", ...(images.length ? {images} : {})};
     if (job.provider_session_id) {
-      const response = await call(agentPath(job.provider_session_id) + "/runs", {prompt});
+      const response = await call(agentPath(job.provider_session_id) + "/runs", {prompt, model});
       if (response.status >= 400) return rejected(response);
-      if (!response.data.id) throw new Error("Cursor did not return a run ID");
-      return {state: "poll", cursor: response.data.id, pollDelay: 5};
+      const runId = response.data.run?.id;
+      if (!runId) throw new Error("Cursor did not return a run ID");
+      return {state: "poll", cursor: runId, pollDelay: 5};
     }
 
     const agentId = "bc-" + job.session_id;
-    const request = {agentId, prompt, autoCreatePR: false, workOnCurrentBranch: false};
+    const request = {agentId, prompt, model, autoCreatePR: false, workOnCurrentBranch: false};
     if (job.repository) request.repos = [{url: "https://github.com/" + job.repository}];
     const response = await call("", request);
     if (response.status === 409) {

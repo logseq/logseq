@@ -266,6 +266,7 @@ test("Cursor uses the Cloud Agents API for creation, replies and follow-ups", as
     const agentPath = "/v1/agents/" + agentId;
     if (endpoint.pathname === "/v1/agents") {
       assert.equal(body.agentId, agentId);
+      assert.deepEqual(body.model, {id: "grok-4.7"});
       assert.equal(body.autoCreatePR, false);
       assert.equal(body.workOnCurrentBranch, false);
       assert.equal(body.repos, undefined);
@@ -275,7 +276,8 @@ test("Cursor uses the Cloud Agents API for creation, replies and follow-ups", as
     }
     if (endpoint.pathname === agentPath + "/runs") {
       assert.equal(body.prompt.text, "Refine it");
-      return Response.json({id: followup});
+      assert.deepEqual(body.model, {id: "grok-4.7"});
+      return Response.json({run: {id: followup}}, {status: 201});
     }
     assert.match(endpoint.pathname, new RegExp("^" + agentPath + "/runs/run-"));
     return Response.json({status: "FINISHED", result: "Review complete."});

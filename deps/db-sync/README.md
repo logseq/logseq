@@ -154,8 +154,10 @@ using `LOGSEQ_BOTS_REPOSITORIES`, a JSON object keyed by `owner/repo`.
 Circle consumes one JSON object on stdin with `prompt` and `sessionId`,
 and returns JSON with `reply`, `sessionId` and an optional `url`.
 
-Cursor uses the Cloud Agents v1 API with `CURSOR_API_KEY`. A Bot with no
-repository can start a standalone cloud session. To send tasks on a GitHub
+Cursor uses the Cloud Agents v1 API with `CURSOR_API_KEY`. It defaults to
+`grok-4.7` for new sessions and follow-ups. Set `LOGSEQ_BOTS_CURSOR_MODEL` to
+override the model. A Bot with no repository can start a standalone cloud
+session. To send tasks on a GitHub
 repository, set `LOGSEQ_BOTS_CURSOR_PUBLISH_REPOS=1`. Cursor can then push its
 generated branch without opening a pull request. Cursor accepts image
 attachments through its API.
