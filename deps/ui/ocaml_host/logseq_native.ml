@@ -2469,7 +2469,18 @@ let () =
           if backing_changed then
             let width, height = Sdl.get_window_size !win in
             Some (Input.Resize (width, height))
-          else Native_window.input_of_event input_state e in
+          else
+            match Native_window.input_of_event input_state e, event.kind with
+            | None, Sdl.Event.Window (Focus_lost, _, _)
+              when (Ui.ime ui).Lui_ime.marked_text <> "" ->
+              (* macOS does not reliably resume the IME candidate session
+                 after app switching: SDL can leave stale inline preedit that
+                 Enter no longer commits. Treat window blur as a canceled
+                 empty commit so both the host IME session and shared editor
+                 composition close cleanly. *)
+              Some (Input.Text_input "")
+            | converted, _ -> converted
+        in
         (if match event.kind with Sdl.Event.Window (Focus_lost, _, _) -> true | _ -> false
          then begin
            Host_requests.reset_editor_pointer editor_pointer;
