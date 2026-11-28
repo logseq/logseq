@@ -306,17 +306,19 @@ let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
     context parent
 
 let open_image_lightbox ~source ~alt =
-  let sources = lightbox_sources () in
-  let start =
-    let rec find i =
-      if i >= Array.length sources then 0
-      else if sources.(i) = source then i
-      else find (i + 1)
-    in
-    find 0
+  let collected = lightbox_sources () in
+  let rec find i =
+    if i >= Array.length collected then -1
+    else if collected.(i) = source then i
+    else find (i + 1)
   in
-  let sources =
-    if Array.length sources = 0 then [| source |] else sources
+  (* a clicked image outside .asset-container — a PDF area capture —
+     is not part of the document sequence; show it alone rather than
+     the first collected image *)
+  let sources, start =
+    match find 0 with
+    | -1 -> [| source |], 0
+    | i -> collected, i
   in
   ignore
     (Properties_state.push_view_overlay_ctxfree ~key:lightbox_key
