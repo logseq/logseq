@@ -139,7 +139,12 @@ function cursorCloud(env) {
     return {status: response.status, data: await response.json().catch(() => ({}))};
   };
   const agentPath = agentId => "/" + encodeURIComponent(agentId);
-  const rejected = response => ({state: "failed", reply: `Cursor rejected the request (HTTP ${response.status}).`});
+  const rejected = response => {
+    const code = response.data.error?.code ?? response.data.code ?? response.data.error;
+    const reply = code === "usage_limit_exceeded" ? "Cursor Cloud usage limit reached."
+      : `Cursor rejected the request (HTTP ${response.status}).`;
+    return {state: "failed", reply};
+  };
   return async job => {
     if (job.state === "poll") {
       if (!job.provider_session_id || !job.provider_cursor) throw new Error("Cursor run identity is missing");

@@ -108,3 +108,20 @@ ALTER TABLE messages ADD COLUMN IF NOT EXISTS handoff jsonb;
 
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS actor text;
 ALTER TABLE messages ADD COLUMN IF NOT EXISTS requested_agent text;
+
+ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS agent text;
+ALTER TABLE messages ADD COLUMN IF NOT EXISTS in_reply_to uuid;
+CREATE INDEX IF NOT EXISTS bot_runs_thread_order ON bot_runs (session_id, seq);
+
+CREATE TABLE IF NOT EXISTS bot_thread_agents (
+  session_id uuid NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+  agent text NOT NULL,
+  provider_session_id text,
+  provider_url text,
+  provider_cursor text,
+  PRIMARY KEY (session_id, agent)
+);
+
+INSERT INTO bot_thread_agents (session_id,agent,provider_session_id,provider_url,provider_cursor)
+  SELECT id,agent,provider_session_id,provider_url,provider_cursor FROM sessions WHERE provider_session_id IS NOT NULL
+  ON CONFLICT (session_id,agent) DO NOTHING;

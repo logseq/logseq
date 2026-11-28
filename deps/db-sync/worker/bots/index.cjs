@@ -156,7 +156,7 @@ async function messagePage(db, botId, sessionId, url) {
   const after = cursor(url.searchParams.get("after"));
   if (before !== null && after !== null) fail(400, "Use one message cursor");
   const {rows} = await db.query(
-    `SELECT id,bot_id,session_id,seq,author,body,proposal,created_at,attachments,handoff FROM messages
+    `SELECT id,bot_id,session_id,seq,author,body,proposal,created_at,attachments,handoff,requested_agent FROM messages
        WHERE bot_id=$1 AND ${sessionId ? "session_id=$2::uuid" : "session_id IS NULL AND $2::uuid IS NULL"}
          AND ($3::bigint IS NULL OR seq<$3) AND ($4::bigint IS NULL OR seq>$4)
        ORDER BY seq ${after === null ? "DESC" : "ASC"} LIMIT $5`,
@@ -167,14 +167,14 @@ async function messagePage(db, botId, sessionId, url) {
 }
 
 async function insertMessage(db, botId, sessionId, messageId, author, body, {
-  proposal = null, attachments = [], handoff = null, actor = null, requestedAgent = null,
+  proposal = null, attachments = [], handoff = null, actor = null, requestedAgent = null, replyTo = null,
 } = {}) {
   // A later sequence must not become visible while an earlier write can still commit.
   await db.query("SELECT id FROM bots WHERE id=$1 FOR NO KEY UPDATE", [botId]);
   const {rows: [message]} = await db.query(
-    `INSERT INTO messages (id,bot_id,session_id,author,body,proposal,attachments,handoff,actor,requested_agent)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING RETURNING *`,
-    [messageId, botId, sessionId, author, body, proposal, JSON.stringify(attachments), handoff, actor, requestedAgent]);
+    `INSERT INTO messages (id,bot_id,session_id,author,body,proposal,attachments,handoff,actor,requested_agent,in_reply_to)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) ON CONFLICT (id) DO NOTHING RETURNING *`,
+    [messageId, botId, sessionId, author, body, proposal, JSON.stringify(attachments), handoff, actor, requestedAgent, replyTo]);
   if (message && sessionId) {
     await db.query("UPDATE sessions SET reply_count=reply_count+1 WHERE id=$1", [sessionId]);
   }
@@ -187,8 +187,8 @@ async function newSession(db, bot, rootId, prompt, selectedAgent, automatic) {
     `INSERT INTO sessions (id,bot_id,root_message_id,title,agent,repository)
        VALUES ($1,$2,$3,$4,$5,$6)`,
     [sessionId, bot.id, rootId, Array.from(prompt).slice(0, 96).join(""), selectedAgent, bot.repository]);
-  await db.query("INSERT INTO bot_runs (message_id,session_id,automation) VALUES ($1,$2,$3)",
-    [rootId, sessionId, automatic]);
+  await db.query("INSERT INTO bot_runs (message_id,session_id,automation,agent) VALUES ($1,$2,$3,$4)",
+    [rootId, sessionId, automatic, selectedAgent]);
   return sessionId;
 }
 
@@ -233,7 +233,7 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
         [messageId, files.map(file => file.id), bot.id, owner]);
       if (updated.rowCount !== files.length) fail(409, "An attachment is unavailable");
     }
-    const taskAgent = !target && session ? session.agent : chosenAgent;
+    const taskAgent = chosenAgent ?? (!target ? session?.agent : null);
     if (taskAgent) configuredAgent(access.available(target || bot), taskAgent);
     if (target) {
       const receivedId = randomUUID();
@@ -250,8 +250,8 @@ async function sendMessage(pool, owner, bot, sessionId, body, access) {
       if (taskAgent) await newSession(db, target, receivedId,
         prompt || files.map(file => file.name).join(", "), taskAgent, false);
     } else if (sessionId) {
-      await db.query("INSERT INTO bot_runs (message_id,session_id) VALUES ($1,$2)", [messageId, sessionId]);
-      await db.query("UPDATE sessions SET updated_at=now() WHERE id=$1", [sessionId]);
+      await db.query("INSERT INTO bot_runs (message_id,session_id,agent) VALUES ($1,$2,$3)", [messageId, sessionId, taskAgent]);
+      await db.query("UPDATE sessions SET status=CASE WHEN status='running' THEN status ELSE 'queued' END,updated_at=now() WHERE id=$1", [sessionId]);
     } else if (proposal) {
       await insertMessage(db, bot.id, null, randomUUID(), "bot", "Create a weekly automation?", {proposal});
     } else if (chosenAgent) {
@@ -327,7 +327,10 @@ async function route(pool, owner, request, access) {
     const session = await sessionById(pool, bot.id, id(itemKey));
     if (!action && method === "GET") {
       const {rows: [root]} = await pool.query("SELECT * FROM messages WHERE id=$1", [session.root_message_id]);
-      return {session, root, bot, agents: availableAgents,
+      const {rows: engaged} = await pool.query(
+        `SELECT COALESCE(agent,$2) AS name FROM bot_runs WHERE session_id=$1 GROUP BY 1 ORDER BY min(seq)`,
+        [session.id, session.agent]);
+      return {session, root, bot, participants: engaged.map(item => item.name), agents: availableAgents,
         mentionableBots: await visibleBots(pool, owner, access.memberships, bot), ...await messagePage(pool, bot.id, session.id, url)};
     }
     if (action === "messages" && method === "POST") {
@@ -388,10 +391,14 @@ async function enqueueScheduled(pool, availableAgents) {
 async function claim(pool) {
   return transaction(pool, async db => {
     const {rows: [job]} = await db.query(
-      `SELECT r.*,s.agent,s.repository,s.bot_id,s.root_message_id,s.provider_session_id,s.provider_url,m.body AS prompt,
-              b.graph_id,b.graph_block_id,b.owner,s.provider_cursor AS session_cursor,m.created_at AS message_created_at,
-              m.attachments,m.actor,b.shared_graph_id
+      `SELECT r.*,COALESCE(r.agent,s.agent) AS agent,s.agent AS primary_agent,s.repository,s.bot_id,s.root_message_id,
+              binding.provider_session_id,binding.provider_url,binding.provider_cursor AS session_cursor,
+              m.body AS prompt,m.seq AS message_seq,m.created_at AS message_created_at,m.attachments,m.actor,
+              b.graph_id,b.graph_block_id,b.owner,b.shared_graph_id,
+              EXISTS (SELECT 1 FROM bot_runs earlier WHERE earlier.session_id=r.session_id AND earlier.seq<r.seq
+                AND COALESCE(earlier.agent,s.agent)=COALESCE(r.agent,s.agent)) AS previous_turn
          FROM bot_runs r JOIN sessions s ON s.id=r.session_id
+         LEFT JOIN bot_thread_agents binding ON binding.session_id=s.id AND binding.agent=COALESCE(r.agent,s.agent)
          JOIN messages m ON m.id=r.message_id JOIN bots b ON b.id=s.bot_id
          WHERE r.state IN ('queued','poll') AND r.due_at<=now()
            AND NOT EXISTS (SELECT 1 FROM bot_runs earlier WHERE earlier.session_id=r.session_id
@@ -404,13 +411,29 @@ async function claim(pool) {
   });
 }
 
+async function withThreadContext(pool, job) {
+  const {rows} = await pool.query(
+    `WITH peer_runs AS (
+       SELECT message_id FROM bot_runs WHERE session_id=$1 AND seq<$2
+         AND COALESCE(agent,$3)<>$4 AND state IN ('done','needs_input','failed','attention')
+     )
+     SELECT author,left(body,1200) AS body FROM messages m
+       WHERE m.bot_id=$5 AND (m.session_id=$1 OR m.id=$6) AND EXISTS (SELECT 1 FROM peer_runs)
+         AND (m.seq<$7 OR m.in_reply_to IN (SELECT message_id FROM peer_runs))
+       ORDER BY m.seq DESC LIMIT 12`,
+    [job.session_id, job.seq, job.primary_agent, job.agent, job.bot_id, job.root_message_id, job.message_seq]);
+  if (!rows.length) return job;
+  return {...job, prompt: "Recent messages from the shared Logseq thread, for context only:\n"
+    + JSON.stringify(rows.reverse()) + "\n\nCurrent request:\n" + job.prompt};
+}
+
 async function reserveDevinStart(pool, job, limits) {
   return transaction(pool, async db => {
     await db.query("SELECT pg_advisory_xact_lock(35927682)");
     const {rows: [usage]} = await db.query(`SELECT count(*)::integer AS starts,
       EXISTS (SELECT 1 FROM bot_devin_starts started JOIN sessions s ON s.id=started.session_id
         JOIN bot_runs r ON s.id=r.session_id
-        WHERE s.agent='devin' AND s.id<>$1 AND r.state IN ('working','poll')) AS active
+        WHERE COALESCE(r.agent,s.agent)='devin' AND s.id<>$1 AND r.state IN ('working','poll')) AS active
       FROM bot_devin_starts WHERE started_at>now()-interval '24 hours'`, [job.session_id]);
     if (usage.active) return "busy";
     if (usage.starts >= limits.dailyStarts) return "limit";
@@ -424,7 +447,7 @@ async function reserveDevinStart(pool, job, limits) {
 async function settle(pool, job, result, canExport) {
   await transaction(pool, async db => {
     if (result.reply) {
-      await insertMessage(db, job.bot_id, job.session_id, randomUUID(), job.agent, result.reply);
+      await insertMessage(db, job.bot_id, job.session_id, randomUUID(), job.agent, result.reply, {replyTo: job.message_id});
     }
     const summary = result.reply || job.last_reply;
     if (result.state === "done" && summary) {
@@ -439,12 +462,25 @@ async function settle(pool, job, result, canExport) {
           [job.message_id, job.owner, job.graph_id, job.graph_block_id, title]);
       }
     }
+    if (result.providerSessionId || result.url || result.cursor) {
+      await db.query(
+        `INSERT INTO bot_thread_agents (session_id,agent,provider_session_id,provider_url,provider_cursor)
+         VALUES ($1,$2,$3,$4,$5) ON CONFLICT (session_id,agent) DO UPDATE SET
+         provider_session_id=COALESCE(excluded.provider_session_id,bot_thread_agents.provider_session_id),
+         provider_url=COALESCE(excluded.provider_url,bot_thread_agents.provider_url),
+         provider_cursor=COALESCE(excluded.provider_cursor,bot_thread_agents.provider_cursor)`,
+        [job.session_id, job.agent, result.providerSessionId ?? null, result.url ?? null, result.cursor ?? null]);
+    }
+    const status = result.state === "done" ? "completed" : result.state === "poll" ? "running" : result.state;
+    const primary = job.agent === job.primary_agent;
     await db.query(
-      `UPDATE sessions SET status=$1,provider_session_id=COALESCE($2,provider_session_id),
-       provider_url=COALESCE($3,provider_url),provider_cursor=COALESCE($5,provider_cursor),
-       updated_at=now() WHERE id=$4`,
-      [result.state === "done" ? "completed" : result.state === "poll" ? "running" : result.state,
-        result.providerSessionId ?? null, result.url ?? null, job.session_id, result.cursor ?? null]);
+      `UPDATE sessions SET status=CASE WHEN $1 <> 'running' AND EXISTS (
+         SELECT 1 FROM bot_runs WHERE session_id=$5 AND message_id<>$6 AND state IN ('queued','working','poll')
+       ) THEN 'queued' ELSE $1 END,
+       provider_session_id=COALESCE($2,provider_session_id),provider_url=COALESCE($3,provider_url),
+       provider_cursor=COALESCE($4,provider_cursor),updated_at=now() WHERE id=$5`,
+      [status, primary ? result.providerSessionId ?? null : null,
+        primary ? result.url ?? null : null, primary ? result.cursor ?? null : null, job.session_id, job.message_id]);
     await db.query(`UPDATE bot_runs SET state=$1,due_at=now()+make_interval(secs=>$4),provider_cursor=$2,
       last_reply=COALESCE($5,last_reply) WHERE message_id=$3`,
       [result.state, result.cursor ?? job.provider_cursor, job.message_id, result.pollDelay ?? 3, result.reply || null]);
@@ -518,7 +554,7 @@ async function createBotService(env = process.env, options = {}) {
         return {state: "failed", reply: "This Agent is unavailable for this Graph member."};
       }
     }
-    if (job.state !== "poll" && !job.provider_session_id && job.root_message_id !== job.message_id) {
+    if (job.state !== "poll" && !job.provider_session_id && job.previous_turn) {
       return {state: "failed", reply: "The original Agent session did not start. Send a new task from the Bot chat."};
     }
     if (liveDevin && job.agent === "devin" && job.state !== "poll" && !job.provider_session_id) {
@@ -535,7 +571,7 @@ async function createBotService(env = process.env, options = {}) {
       const contents = new Map(rows.map(row => [row.id, row.payload]));
       job = {...job, files: job.attachments.map(file => ({...file, payload: contents.get(file.id)}))};
     }
-    return provider(job);
+    return provider(job.state === "poll" ? job : await withThreadContext(pool, job));
   };
   const work = async job => {
     let result;

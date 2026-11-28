@@ -299,3 +299,49 @@ test("Cursor uses the Cloud Agents API for creation, replies and follow-ups", as
   assert.equal((await cursor({...existing, state: "poll", provider_cursor: next.cursor})).state, "done");
   assert.deepEqual(calls.map(call => call[0]), ["POST", "GET", "POST", "GET"]);
 });
+
+
+test("multiple Agents share one Thread and resume their own upstream sessions", {skip: !database}, async () => {
+  const bot = randomUUID();
+  const seen = [];
+  const providers = Object.fromEntries(["cursor", "codex", "pi", "devin"].map(name => [name, async job => {
+    seen.push({name, prompt: job.prompt, providerId: job.provider_session_id});
+    return {state: "done", providerSessionId: job.provider_session_id ?? "external-" + name, reply: "Reply from " + name};
+  }]));
+  const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {providers});
+  const main = `/bots/${bot}`;
+  try {
+    await call(service, "/bots", {id: bot, name: "Agent workshop", defaultAgent: "cursor"});
+    const first = await call(service, main + "/messages", {id: randomUUID(), body: "Propose a title", agent: "cursor"});
+    assert.ok(first.body.sessionId);
+    const thread = main + "/sessions/" + first.body.sessionId;
+    const latest = () => call(service, thread);
+    const initial = await waitFor(latest, data => data.session?.status === "completed");
+    assert.deepEqual(initial.participants, ["cursor"]);
+    for (const [index, name] of ["codex", "pi", "devin", "cursor"].entries()) {
+      const result = await call(service, thread + "/messages",
+        {id: randomUUID(), body: "Build on the earlier turns", ...(name === "cursor" ? {} : {agent: name})});
+      assert.equal(result.body.sessionId, first.body.sessionId);
+      await waitFor(latest, data => data.session?.status === "completed" && data.messages.length === 3 + 2 * index);
+    }
+    assert.deepEqual(seen.map(job => job.name), ["cursor", "codex", "pi", "devin", "cursor"]);
+    assert.match(seen[1].prompt, /Reply from cursor/);
+    assert.match(seen[3].prompt, /Reply from pi/);
+    assert.equal(seen[4].providerId, "external-cursor");
+    assert.match(seen[4].prompt, /Reply from devin/);
+    const final = (await latest()).body;
+    assert.deepEqual(final.participants, ["cursor", "codex", "pi", "devin"]);
+    assert.equal(final.session.provider_session_id, "external-cursor");
+    assert.equal((await call(service, main)).body.sessions.length, 1);
+  } finally {
+    await service.close();
+  }
+});
+
+test("Cursor replies with a readable usage-limit message", async t => {
+  t.mock.method(globalThis, "fetch", async () =>
+    Response.json({error: {code: "usage_limit_exceeded"}}, {status: 400}));
+  const cursor = makeAgents({LOGSEQ_BOTS_AGENT_OWNER: owner, CURSOR_API_KEY: "local-fixture"}).cursor;
+  const result = await cursor({state: "queued", session_id: randomUUID(), prompt: "Check the configuration"});
+  assert.deepEqual(result, {state: "failed", reply: "Cursor Cloud usage limit reached."});
+});
