@@ -2091,10 +2091,15 @@ let () =
   in
   let dom_key_target () =
     let menu = Ui.open_menu ui in
-    if menu <> 0 then menu
-    else
-      let overlay = Ui.overlay_top ui in
-      if in_block_context_menu overlay then overlay else Ui.focused ui
+    let overlay = Ui.overlay_top ui in
+    let focused = Ui.focused ui in
+    if focused <> 0 && overlay <> 0
+       && text_entry (Lui_store.kind store focused)
+       && (focused = overlay || Lui_query.is_desc store focused overlay)
+    then focused
+    else if menu <> 0 then menu
+    else if in_block_context_menu overlay then overlay
+    else focused
   in
   let block_context_menu_key_target () =
     in_block_context_menu (dom_key_target ())
