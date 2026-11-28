@@ -425,7 +425,7 @@ let paint t (ctx : Lui_paint.ctx) store node frame =
     else ensure t state source (sandbox_of store id) logical;
     (* The black backing exists only behind a live overlay; when occlusion
        hides that overlay, leave the page background visible instead. *)
-    let base = if occluded then [] else [ solid_black frame ] in
+    let base = if occluded && not passive then [] else [ solid_black frame ] in
     if state.error = "" then base
     else
       base
