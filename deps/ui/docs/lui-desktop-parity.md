@@ -13,7 +13,7 @@ Audit baseline: `refactor/lui` @ `a5dd20796628acacc0ac2467ffa31b8169b3ebaa` (`20
 - Fresh isolated graphs were used. No existing user graph was mutated. Exact content parity was impossible after interactive editing because the seeded text necessarily diverged.
 - Setup artifact only: the first web boot failed because `static/js/db-worker.js` had not been built. After `pnpm db-worker:build`, the web app booted normally. This is not counted as a parity finding.
 - Login and RTC were intentionally skipped in the follow-up pass.
-- The LUI pin in this branch uses `4187074ff870821e26bcc928187afe9db1c8b6e9`, which includes the compatibility backports through [lui#426](https://github.com/logseq/lui/pull/426), the Linux horizontal-RGB subpixel glyph coverage pipeline from [lui#429](https://github.com/logseq/lui/pull/429), the programmatic native text-selection API from [lui#430](https://github.com/logseq/lui/pull/430), the modal-panel focus restoration from [lui#431](https://github.com/logseq/lui/pull/431), and the compact SVG arc-flag parser fix from [lui#432](https://github.com/logseq/lui/pull/432).
+- The LUI pin in this branch uses `baa3fb6143b813d7783cf34073b26ebe47de334b`, which includes the compatibility backports through [lui#426](https://github.com/logseq/lui/pull/426), the Linux horizontal-RGB subpixel glyph coverage pipeline from [lui#429](https://github.com/logseq/lui/pull/429), the programmatic native text-selection API from [lui#430](https://github.com/logseq/lui/pull/430), the modal-panel focus restoration from [lui#431](https://github.com/logseq/lui/pull/431), the compact SVG arc-flag parser fix from [lui#432](https://github.com/logseq/lui/pull/432), and direct textarea Enter newline insertion.
 
 ## Intentional desktop differences
 
