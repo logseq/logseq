@@ -3436,6 +3436,7 @@ typedef struct {
   int is_video;
   int playing;
   int eos;
+  int last_duration_ms;
   volatile int closing;
   int lock_initialized;
   pthread_mutex_t frame_lock;
@@ -3692,6 +3693,15 @@ CAMLprim value logseq_native_media_position(value handle_v) {
   if (!logseq_gst.gst_element_query_duration(player->pipeline,
         LOGSEQ_GST_FORMAT_TIME, &duration))
     duration = -1;
+  if (duration > 0)
+    player->last_duration_ms = (int)(duration / 1000000);
+  /* At end-of-stream playbin position/duration queries can fail or reset,
+     which zeroed the control; web media keeps showing duration at the end
+     position, so report the last known duration for both. */
+  if (player->eos && player->last_duration_ms > 0) {
+    position = (int64_t)player->last_duration_ms * 1000000;
+    duration = position;
+  }
   result_v = caml_alloc_tuple(2);
   Store_field(result_v, 0, Val_int(position >= 0 ? position / 1000000 : -1));
   Store_field(result_v, 1, Val_int(duration >= 0 ? duration / 1000000 : -1));
