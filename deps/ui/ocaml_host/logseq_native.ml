@@ -728,6 +728,12 @@ let () =
     else Sdl.get_window_size_in_pixels !win
   in
   let dw, dh = drawable () in
+  (* The CoreGraphics surface view is created lazily by the renderer. Create
+     it before the first scene paint so webview overlays added by extension
+     paint hooks stay above it in the content-view hierarchy. *)
+  if use_cocoa then
+    Native_window.software_begin (Sdl.get_window_id !win)
+      (dw, dh, Lui_raster.Tile_renderer.band_height);
   let scale = Float.max 0.01 (float dw /. float width) in
   let unavailable_renderer message =
     if Host_platform.is_macos then failwith message
@@ -944,6 +950,29 @@ let () =
     | None -> None
   in
   let shifted_rect id = Option.value ~default:Rects.zero (shifted_layout_rect id) in
+  let clip_webview_frame id frame =
+    let current_store = store_of () in
+    let rec walk node acc =
+      match Lui_store.parent current_store node with
+      | None -> acc
+      | Some parent ->
+        let acc =
+          if Ui.scrollable current_store parent then
+            Lui_scene.rect_intersect acc (shifted_rect parent)
+          else acc
+        in
+        walk parent acc
+    in
+    walk id frame
+  in
+  let webview_host_window =
+    lazy (Lui_webview.host_of_sdl_window (Sdl.unsafe_ptr_of_window !win))
+  in
+  let webviews =
+    Host_webviews.create
+      { Host_webviews.host_window = (fun () -> Lazy.force webview_host_window)
+      ; clip_of = clip_webview_frame }
+  in
   let content_bounds = Hashtbl.create 16 in
   let bounds_revision = ref (-1, -1) in
   let content_box id =
@@ -1183,7 +1212,7 @@ let () =
   in
   List.iter
     (fun tag ->
-      if not (List.mem tag [ "em-emoji"; "pdf"; "video"; "audio" ]) then
+      if not (List.mem tag [ "em-emoji"; "pdf"; "video"; "audio"; "iframe" ]) then
         Lui_paint.register_extension ~identifier:("logseq-" ^ tag)
           { Lui_paint.paint = paint_raw_text })
     Logseq_el.tags;
@@ -1193,6 +1222,8 @@ let () =
     { Lui_paint.paint = Host_media.paint_video };
   Lui_paint.register_extension ~identifier:"logseq-audio"
     { Lui_paint.paint = Host_media.paint_audio };
+  Lui_paint.register_extension ~identifier:"logseq-iframe"
+    { Lui_paint.paint = Host_webviews.paint webviews };
   let measure_memo : (int * string * float * float, (float * float) option) Hashtbl.t =
     Hashtbl.create 256
   in
@@ -2774,7 +2805,10 @@ let () =
     let paint_started = perf_s () in
     let layout_before = metrics.layout_count in
     Host_interaction.prepare_paint ui host;
+    List.iter (Lui_host.note_paint host) (Host_webviews.ids webviews);
+    Host_webviews.begin_frame webviews;
     ignore (Lui_host.repaint host);
+    Host_webviews.end_frame webviews store;
     metrics.paint_ms <- (perf_s () -. paint_started) *. 1000.;
     let layout_ms = if metrics.layout_count > layout_before then metrics.layout_ms else 0. in
     Renderer_metrics.record_phase metrics Scene_build
@@ -2976,6 +3010,7 @@ let () =
     let events_before = metrics.event_count in
     let events_started = perf_s () in
     drain_fifo_lines ();
+    Host_webviews.pump webviews;
     if drain_events () > 0 then last_busy := t0;
     metrics.event_ms <- (perf_s () -. events_started) *. 1000.;
     let had_events = metrics.event_count > events_before in
@@ -3322,6 +3357,7 @@ let () =
     | None -> ()
 
   done);
+  Host_webviews.destroy_all webviews;
   Host_images.dispose images;
   Option.iter close_out metrics_log;
   Native_window.dispose !win;
