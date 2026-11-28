@@ -667,6 +667,235 @@
                        :logseq.property/created-by-ref
                        :block/title)))))))
 
+(deftest undo-delete-block-restores-node-property-values-pointing-at-it-test
+  (testing "undoing delete-blocks should restore node property values on other blocks that pointed at the deleted block"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [child-uuid]} (seed-page-parent-child!)
+          target (db-test/find-block-by-content @conn "task")
+          target-uuid (:block/uuid target)
+          target-id (:db/id target)
+          one-property :user.property/related-one
+          many-property :user.property/related-many]
+      (apply-ops! conn
+                  [[:upsert-property [one-property {:logseq.property/type :node
+                                                    :db/cardinality :one} {}]]
+                   [:upsert-property [many-property {:logseq.property/type :node
+                                                     :db/cardinality :many} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [child-uuid one-property target-id]]
+                   [:set-block-property [child-uuid many-property target-id]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["task"] (property-value-titles (get (d/entity @conn [:block/uuid child-uuid]) one-property))))
+      (is (= ["task"] (property-value-titles (get (d/entity @conn [:block/uuid child-uuid]) many-property))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-blocks [[target-uuid] {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid target-uuid])))
+      (is (empty? (property-value-titles (get (d/entity @conn [:block/uuid child-uuid]) one-property))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (let [holder (d/entity @conn [:block/uuid child-uuid])]
+        (is (some? (d/entity @conn [:block/uuid target-uuid])))
+        (is (= ["task"] (property-value-titles (get holder one-property))))
+        (is (= ["task"] (property-value-titles (get holder many-property)))))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (is (nil? (d/entity @conn [:block/uuid target-uuid])))
+      (is (empty? (property-value-titles (get (d/entity @conn [:block/uuid child-uuid]) one-property)))))))
+
+(deftest undo-delete-property-on-built-in-class-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        attr :user.property/weight
+        tag :logseq.class/Task
+        class-uuid (:block/uuid (d/entity @conn tag))
+        attached? #(contains? (set (map :db/ident (:logseq.property.class/properties (d/entity @conn tag)))) attr)]
+    (apply-ops! conn [[:upsert-property [attr {:logseq.property/type :number} {}]]
+                      [:class-add-property [class-uuid attr]]] (local-tx-meta {}))
+    (is (attached?))
+    (worker-undo-redo/clear-history! test-repo)
+    (apply-ops! conn [[:delete-page [(:block/uuid (d/entity @conn attr)) {}]]] (local-tx-meta {}))
+    (is (not (attached?)))
+    (is (map? (worker-undo-redo/undo test-repo)))
+    (is (attached?))
+    (is (map? (worker-undo-redo/redo test-repo)))
+    (is (not (attached?)))))
+
+(deftest undo-delete-inline-reference-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        {:keys [child-uuid parent-uuid]} (seed-page-parent-child!)
+        target (db-test/find-block-by-content @conn "task")
+        target-uuid (:block/uuid target)
+        title (str "See [[" target-uuid "]]")
+        state (fn [id]
+                (let [e (d/entity @conn [:block/uuid id])]
+                  [(:v (first (d/datoms @conn :eavt (:db/id e) :block/title)))
+                   (contains? (set (map :block/uuid (:block/refs e))) target-uuid)]))]
+    (doseq [id [child-uuid parent-uuid]]
+      (d/transact! conn [[:db/add [:block/uuid id] :block/title title]
+                         [:db/add [:block/uuid id] :block/refs (:db/id target)]]))
+    (worker-undo-redo/clear-history! test-repo)
+    (apply-ops! conn [[:delete-blocks [[target-uuid] {}]]] (local-tx-meta {}))
+    (is (= ["See task" false] (state child-uuid)))
+    (d/transact! conn [[:db/add [:block/uuid parent-uuid] :block/title "Edited"]])
+    (is (map? (worker-undo-redo/undo test-repo)))
+    (is (= [title true] (state child-uuid)))
+    (is (= ["Edited" false] (state parent-uuid)))
+    (is (map? (worker-undo-redo/redo test-repo)))
+    (is (= ["See task" false] (state child-uuid)))
+    (is (= ["Edited" false] (state parent-uuid)))))
+
+(deftest undo-delete-preserves-intervening-node-property-changes-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        {:keys [page-uuid parent-uuid child-uuid]} (seed-page-parent-child!)
+        target (db-test/find-block-by-content @conn "task")
+        target-uuid (:block/uuid target)
+        holder [:block/uuid child-uuid]
+        previous [:block/uuid parent-uuid]
+        replacement [:block/uuid page-uuid]
+        single :user.property/single-node
+        multiple :user.property/multiple-nodes]
+    (apply-ops! conn
+                [[:upsert-property [single {:logseq.property/type :node
+                                            :db/cardinality :one} {}]]
+                 [:upsert-property [multiple {:logseq.property/type :node
+                                              :db/cardinality :many} {}]]]
+                (local-tx-meta {}))
+    (d/transact! conn [[:db/add holder single (:db/id target)]
+                      [:db/add holder multiple (:db/id target)]
+                      [:db/add holder multiple previous]])
+    (worker-undo-redo/clear-history! test-repo)
+    (apply-ops! conn [[:delete-blocks [[target-uuid] {}]]] (local-tx-meta {}))
+    (d/transact! conn [[:db/add holder single replacement]
+                      [:db/add holder multiple replacement]
+                      [:db/retract holder multiple previous]])
+    (is (map? (worker-undo-redo/undo test-repo)))
+    (let [entity (d/entity @conn holder)]
+      (is (= page-uuid (:block/uuid (get entity single))))
+      (is (= #{target-uuid page-uuid} (set (map :block/uuid (get entity multiple))))))))
+
+(deftest replay-ref-delta-preserves-cleared-single-value-test
+  (let [conn (worker-state/get-datascript-conn test-repo)
+        {:keys [page-uuid parent-uuid child-uuid]} (seed-page-parent-child!)
+        attr :user.property/single-node
+        holder [:block/uuid child-uuid]
+        replacement [:block/uuid page-uuid]]
+    (apply-ops! conn [[:upsert-property [attr {:logseq.property/type :node
+                                              :db/cardinality :one} {}]]] (local-tx-meta {}))
+    (d/transact! conn [[:db/add holder attr replacement]])
+    (d/transact! conn [[:db/retract holder attr replacement]])
+    (apply-ops! conn [[:save-block [{:block/uuid child-uuid}
+                                    {:ref-value-deltas {attr {:add [[:block/uuid parent-uuid]]
+                                                              :retract [replacement]}}}]]] (local-tx-meta {}))
+    (is (nil? (get (d/entity @conn holder) attr)))))
+
+(deftest undo-separate-deletes-restores-node-property-values-on-shared-holder-test
+  (testing "undoing one action with separate delete-blocks ops restores both blocks and the holder's values"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          {:keys [parent-uuid child-uuid]} (seed-page-parent-child!)
+          task (db-test/find-block-by-content @conn "task")
+          task-uuid (:block/uuid task)
+          child-id (:db/id (d/entity @conn [:block/uuid child-uuid]))
+          property :user.property/related-many]
+      (apply-ops! conn
+                  [[:upsert-property [property {:logseq.property/type :node
+                                                :db/cardinality :many} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [parent-uuid property (:db/id task)]]
+                   [:set-block-property [parent-uuid property child-id]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= #{"task" "child"} (set (property-value-titles (get (d/entity @conn [:block/uuid parent-uuid]) property)))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-blocks [[task-uuid] {}]]
+                   [:delete-blocks [[child-uuid] {}]]]
+                  (local-tx-meta {:client-id "test-client"
+                                  :outliner-op :delete-blocks}))
+      (is (nil? (d/entity @conn [:block/uuid task-uuid])))
+      (is (nil? (d/entity @conn [:block/uuid child-uuid])))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (some? (d/entity @conn [:block/uuid task-uuid])))
+      (is (some? (d/entity @conn [:block/uuid child-uuid])))
+      (is (= #{"task" "child"} (set (property-value-titles (get (d/entity @conn [:block/uuid parent-uuid]) property))))))))
+
+(deftest undo-delete-page-restores-node-property-values-pointing-at-its-blocks-test
+  (testing "undoing delete-page should restore node property values that pointed at the page's hard-deleted blocks"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          holder-uuid (:block/uuid (db-test/find-block-by-content @conn "task"))
+          property :user.property/related-today
+          today-day (date-time-util/ms->journal-day (js/Date.))
+          today-title (date-time-util/int->journal-title
+                       today-day
+                       (:logseq.property.journal/title-format
+                        (d/entity @conn :logseq.class/Journal)))
+          [_ today-page-uuid] (apply-ops! conn
+                                          [[:create-page [today-title
+                                                          {:today-journal? true
+                                                           :redirect? false
+                                                           :split-namespace? true
+                                                           :tags ()}]]]
+                                          (local-tx-meta {:client-id "test-client"}))
+          today-page-id (:db/id (d/entity @conn [:block/uuid today-page-uuid]))
+          target-uuid (random-uuid)]
+      (apply-ops! conn
+                  [[:insert-blocks [[{:block/uuid target-uuid
+                                      :block/title "today target"}]
+                                    today-page-id
+                                    {:sibling? false
+                                     :keep-uuid? true}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:upsert-property [property {:logseq.property/type :node
+                                                :db/cardinality :one} {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (apply-ops! conn
+                  [[:set-block-property [holder-uuid property (:db/id (d/entity @conn [:block/uuid target-uuid]))]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= ["today target"] (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property))))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [today-page-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (nil? (d/entity @conn [:block/uuid target-uuid])))
+      (is (empty? (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property))))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (some? (d/entity @conn [:block/uuid target-uuid])))
+      (is (= ["today target"] (property-value-titles (get (d/entity @conn [:block/uuid holder-uuid]) property)))))))
+
+(deftest undo-delete-class-page-restores-child-class-extends-test
+  (testing "undoing a parent class delete should restore the child's extends without the Root class it got on delete"
+    (worker-undo-redo/clear-history! test-repo)
+    (let [conn (worker-state/get-datascript-conn test-repo)
+          create-class! (fn [title]
+                          (second (apply-ops! conn
+                                              [[:create-page [title {:class? true
+                                                                     :redirect? false
+                                                                     :split-namespace? true
+                                                                     :tags ()}]]]
+                                              (local-tx-meta {:client-id "test-client"}))))
+          project-uuid (create-class! "undo project")
+          subtask-uuid (create-class! "undo subtask")
+          extends-titles #(set (map :block/title
+                                    (:logseq.property.class/extends (d/entity @conn [:block/uuid subtask-uuid]))))]
+      (apply-ops! conn
+                  [[:set-block-property [subtask-uuid
+                                         :logseq.property.class/extends
+                                         (:db/id (d/entity @conn [:block/uuid project-uuid]))]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (= #{"undo project"} (extends-titles)))
+      (worker-undo-redo/clear-history! test-repo)
+      (apply-ops! conn
+                  [[:delete-page [project-uuid {}]]]
+                  (local-tx-meta {:client-id "test-client"}))
+      (is (not (contains? (extends-titles) "undo project")))
+      (is (map? (worker-undo-redo/undo test-repo)))
+      (is (= #{"undo project"} (extends-titles)))
+      (is (map? (worker-undo-redo/redo test-repo)))
+      (is (not (contains? (extends-titles) "undo project"))))))
+
 (deftest undo-delete-page-restores-class-property-and-today-page-test
   (testing "undoing delete-page restores hard-retracted class/property pages and today page blocks"
     (let [conn (worker-state/get-datascript-conn test-repo)

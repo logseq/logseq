@@ -3,6 +3,7 @@
   (:require [clojure.string :as string]
             [datascript.core :as d]
             [datascript.impl.entity :as de]
+            [logseq.common.defkeywords :refer [defkeywords]]
             [logseq.common.util :as common-util]
             [logseq.common.util.date-time :as date-time-util]
             [logseq.common.uuid :as common-uuid]
@@ -919,6 +920,54 @@
     (-> (mapv #(to-insert-op db-before %) plans')
         (into save-ops))))
 
+(defkeywords
+  :outliner/ref-value-deltas {:doc "Reference changes to reverse when replaying a deletion from history."})
+
+(defn ref-value-deltas [opts]
+  (or (:outliner/ref-value-deltas opts) (:ref-value-deltas opts)))
+
+(defn- inbound-ref-restore-ops
+  "`:db/retractEntity` on a deleted block also retracts the ref values other
+  blocks hold on it, e.g. a node property value. Restore those values. They
+  can point at blocks from several delete ops, so run these after every
+  deleted block has been inserted again. `:delete-page` hard-deletes blocks
+  too, e.g. when it truncates today's journal page."
+  [db-before db-after tx-data]
+  (let [deleted-ids (into #{}
+                          (keep (fn [d]
+                                  (when (and (= :block/uuid (:a d))
+                                             (not (:added d)))
+                                    (:e d))))
+                          tx-data)
+        affected (into #{}
+                       (keep (fn [{:keys [e a v added]}]
+                               (when (and (not added)
+                                          (contains? deleted-ids v)
+                                          (not (contains? deleted-ids e))
+                                          (worker-ref-attr? db-before a))
+                                 [e a])))
+                       tx-data)]
+    (->> tx-data
+         (reduce (fn [holders {:keys [e a v added]}]
+                   (if-let [holder-uuid (when (and (contains? affected [e a])
+                                                   (= added (boolean (seq (d/datoms db-after :eavt e a v))))
+                                                   (not= added (boolean (seq (d/datoms db-before :eavt e a v)))))
+                                          (:block/uuid (d/entity db-before e)))]
+                     (let [entity-ref (stable-entity-ref (if added db-after db-before) v)]
+                       (if (or (vector? entity-ref) (qualified-keyword? entity-ref))
+                         (update-in holders [holder-uuid a (if added :retract :add)] (fnil conj []) entity-ref)
+                         holders))
+                     holders))
+                 {})
+         (map
+          (fn [[holder-uuid deltas]]
+            (let [holder [:block/uuid holder-uuid]
+                  title (fn [db] (:v (first (d/datoms db :eavt holder :block/title))))
+                  changes (cond-> deltas
+                            (contains? deltas :block/refs)
+                            (assoc-in [:block/refs :titles] [(title db-after) (title db-before)]))]
+              [:save-block [{:block/uuid holder-uuid} {:outliner/ref-value-deltas changes}]]))))))
+
 (defn- build-inverse-delete-blocks
   [db-before db-after ids]
   (let [{:keys [roots incomplete?]} (selected-block-roots db-before ids)
@@ -1208,7 +1257,10 @@
                         (case op
                           :save-block
                           (let [[block opts] args]
-                            (build-inverse-save-block db-before block opts))
+                            ;; Reference deltas are part of an undo replay.
+                            ;; Its explicit inverse is the original deletion.
+                            (when-not (ref-value-deltas opts)
+                              (build-inverse-save-block db-before block opts)))
 
                           :insert-blocks
                           (build-inverse-insert-like db-before db-after tx-data args)
@@ -1305,7 +1357,11 @@
       ;; Any missing inverse entry means the whole semantic inverse is incomplete.
       ;; Use raw reversed tx instead of partially replaying.
       (when (every? some? inverse-entries)
-        (some->> (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
+        (some->> (concat
+                  (reverse-inverse-entry-groups inverse-entries forward-op-group-sizes)
+                  (when-let [restore-ops (and (some #(contains? #{:delete-blocks :delete-page} (first %)) forward-ops)
+                                              (seq (inbound-ref-restore-ops db-before db-after tx-data)))]
+                    [restore-ops]))
                  (mapcat #(if (and (sequential? %)
                                    (sequential? (first %)))
                             %
