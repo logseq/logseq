@@ -2124,6 +2124,7 @@ let () =
     if mods.Input.ctrl || mods.Input.meta || mods.Input.alt
        || Keyboard_capture.active ()
        || block_context_menu_editable_focus ()
+       || (Ui.ime ui).Lui_ime.marked_text <> ""
     then false
     else
       match key with
