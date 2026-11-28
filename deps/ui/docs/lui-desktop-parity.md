@@ -87,6 +87,7 @@ These differences are deliberate desktop-host behavior. They should not be count
 | Medium | Custom CSS | Native custom-CSS functions are no-ops. | Source-confirmed capability gap. |
 | Low | Markdown-to-HTML conversion | Native `markdown_to_html` returns input unchanged. | Source-confirmed capability gap; visual impact uncertain. |
 | Low | Confirmation dialogs | Native `confirm` always returns false. | Source-confirmed capability gap; affected flows untested. |
+| High | macOS open-panel focus restoration | After a real `NSOpenPanel` closes, the previously focused prompt input can still draw a caret but the native window does not regain key/active status; even delayed real keyboard input is dropped until the user clicks. The first click is swallowed as window activation. | Runtime-confirmed product bug. Likely post-modal AppKit key-window/activation restoration is missing in the LUI shell panel path; not yet fixed. |
 | Medium | Remote-image redirect/private-network policy | Web/Electron uses ordinary browser image loading with no Logseq-level private-network or redirect restriction. Native libcurl validates only the initial URL against its documented public-host policy, then follows redirects internally without revalidating each hop. | Security/product decision required. Strictly revalidating every redirect closes the bypass but diverges from web for LAN/private images; matching web improves parity but weakens the existing native security boundary. Do not implement until that tradeoff is decided. |
 | Low | Online status | Native `online()` is hard-coded true. | Source-confirmed; runtime untested. |
 | Low | Share/public URLs | Native has no public origin/pathname, so generated share URLs degrade to graph fragments. | Source-confirmed; user impact depends on host/share design. |
@@ -116,7 +117,7 @@ Passed:
 
 Uncertain or caveated:
 
-- Keyboard-focus restoration after a macOS open panel: immediately after the picker closed, one automated typing attempt did not enter text even though the input looked focused; after explicitly clicking the input, typing worked. This is uncertain because automation timing may contribute.
+- Keyboard-focus restoration after a macOS open panel is now a confirmed product bug: the input can look focused while the window is not key/active, so real keyboard input is dropped until a click. See the remaining-gaps table.
 - Property value commit/display feedback is confusing; the value eventually appeared, but the exact commit timing/gesture needs product-level UX review.
 - Code-block hit testing/editing may be a UX issue beyond the known plain-text-vs-CodeMirror architecture difference.
 - Search palette footer text may differ because tips are randomized per mount; do not treat the original footer-text difference as a defect without a controlled comparison.
