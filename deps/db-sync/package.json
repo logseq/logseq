@@ -42,6 +42,7 @@
     "aws4fetch": "1.0.20",
     "better-sqlite3": "^12.8.0",
     "mldoc": "^1.5.9",
+    "pg": "^8.23.1",
     "shadow-cljs": "^3.4.4",
     "transit-js": "^0.8.874",
     "ws": "^8.19.0",

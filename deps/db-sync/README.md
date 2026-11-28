@@ -140,6 +140,33 @@ COGNITO_JWKS_URL=https://cognito-idp.us-east-1.amazonaws.com/us-east-1_dtagLnju8
 node worker/dist/node-adapter.js
 ```
 
+#### Mobile Bots
+
+Set `LOGSEQ_BOTS_DATABASE_URL` to a PostgreSQL database for Bots. Set
+`LOGSEQ_BOTS_MOCK=1` for deterministic replies from all four Agent choices
+without using Agent credentials. Use this mode for local UI testing.
+
+To enable a live Agent, set `LOGSEQ_BOTS_AGENT_OWNER` to the authenticated
+Logseq account's Cognito subject. Local Agents use `LOGSEQ_BOTS_AGENT_ROOT`
+and the configured executable in `LOGSEQ_BOTS_CODEX`, `LOGSEQ_BOTS_PI` or
+`LOGSEQ_BOTS_CIRCLE`. Map each permitted repository to its local checkout
+using `LOGSEQ_BOTS_REPOSITORIES`, a JSON object keyed by `owner/repo`.
+Circle consumes one JSON object on stdin with `prompt` and `sessionId`,
+and returns JSON with `reply`, `sessionId` and an optional `url`.
+
+Live Devin requires `LOGSEQ_BOTS_DEVIN_ENABLED=1`, `DEVIN_ORG_ID`,
+`DEVIN_API_KEY`, `LOGSEQ_BOTS_DEVIN_MAX_ACU` and
+`LOGSEQ_BOTS_DEVIN_DAILY_STARTS`. The last two variables accept positive
+integers. The Node server reserves an attempt for each new Start request,
+enforces the rolling 24-hour limit, and passes the per-session ACU limit
+to Devin. A timeout on creation counts as an attempt. Set
+`LOGSEQ_BOTS_DEVIN_AUTOMATIONS=1` to permit scheduled Devin sessions.
+
+An optional Graph destination uses a scoped `logseq/write` token in
+`LOGSEQ_BOTS_GRAPH_TOKEN` plus `LOGSEQ_BOTS_GRAPH_OWNER` and
+`LOGSEQ_BOTS_GRAPH_ID`. Set the destination block UUID when creating the
+Bot. The worker writes completed replies through the local semantic API.
+
 ### Tests
 
 Run db-sync tests (includes Node adapter tests):
