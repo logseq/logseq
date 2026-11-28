@@ -161,10 +161,13 @@ For a Cloudflare deployment:
    Wrangler environment. Disable Hyperdrive query caching so reads see fresh
    queue and chat state. For a direct PostgreSQL connection, set
    `LOGSEQ_BOTS_DATABASE_URL` as a Worker secret.
-3. Keep the one-minute Cron Trigger in that environment. A successful
-   dispatch or device completion can start one job without attachments
-   immediately. Cron processes due provider polls, attachments, Automations
-   and expired leases. Codex and Pi use paired desktop or CLI devices.
+3. Deploy the `BotsScheduler` Durable Object binding and its migration. One
+   scheduler per environment coalesces work into the nearest due alarm.
+   Dispatches and completions wake it promptly. It schedules future provider
+   polls, Automations and lease checks from PostgreSQL deadlines. An idle
+   queue has no alarm. The hourly Cron Trigger repairs lost wakeups for
+   overdue work and cleans up old unclaimed uploads once a day. Codex and Pi
+   use paired desktop or CLI devices.
 
 For example, add a provisioned Hyperdrive configuration to the staging Worker
 with the following binding. Use the corresponding table under `env.prod` for

@@ -74,6 +74,8 @@ CREATE TABLE IF NOT EXISTS bot_automations (
   enabled boolean NOT NULL DEFAULT true
 );
 
+CREATE INDEX IF NOT EXISTS bot_automations_due ON bot_automations (next_at, id) WHERE enabled;
+
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS reply_count integer NOT NULL DEFAULT 0;
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS provider_cursor text;
 ALTER TABLE bot_runs ADD COLUMN IF NOT EXISTS last_reply text;

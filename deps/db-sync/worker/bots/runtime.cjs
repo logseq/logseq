@@ -396,11 +396,11 @@ async function route(pool, owner, request, access) {
 }
 
 async function enqueueScheduled(pool, availableAgents) {
-  await transaction(pool, async db => {
+  return transaction(pool, async db => {
     const {rows: [rule]} = await db.query(
       `SELECT * FROM bot_automations WHERE enabled AND next_at<=now()
        ORDER BY next_at,id LIMIT 1 FOR UPDATE SKIP LOCKED`);
-    if (!rule) return;
+    if (!rule) return false;
     const {rows: [bot]} = await db.query("SELECT * FROM bots WHERE id=$1", [rule.bot_id]);
     const messageId = randomUUID();
     const name = rule.agent ?? bot.default_agent;
@@ -413,6 +413,7 @@ async function enqueueScheduled(pool, availableAgents) {
     }
     const next = nextWeekly({...rule, timeZone: rule.time_zone}, Math.max(Date.now(), Number(rule.next_at)));
     await db.query("UPDATE bot_automations SET next_at=$1 WHERE id=$2", [next, rule.id]);
+    return true;
   });
 }
 
@@ -434,7 +435,7 @@ async function retireRunner(db, runnerId, owner) {
 async function manageRunners(pool, owner, request, resource, itemKey, action) {
   if (!resource && request.method === "GET") {
     const {rows} = await pool.query(`SELECT id,name,agents,repository,seen_at,
-      seen_at>now()-interval '30 seconds' AS online FROM bot_runners
+      seen_at>now()-interval '75 seconds' AS online FROM bot_runners
       WHERE owner=$1 AND revoked_at IS NULL ORDER BY created_at`, [owner]);
     return {runners: rows};
   }
@@ -505,6 +506,7 @@ async function runnerRoute(pool, request, canExport) {
         repository: job.repository, prompt: context.prompt, provider_session_id: job.provider_session_id,
         previous_turn: job.previous_turn,
         attachments: job.attachments, graph_id: job.graph_id ?? job.shared_graph_id,
+        leaseExpiresAt: job.lease_until.getTime(),
       }});
     }
     if (!runPath) fail(404, "Not found");
@@ -549,24 +551,23 @@ async function runnerRoute(pool, request, canExport) {
 }
 
 async function claim(db, runner, localProviders, localProviderOwner = null, {
-  allowAttachments = true, workLeaseSeconds = 180,
+  nextOnly = false, workLeaseSeconds = 180,
 } = {}) {
   const {rows: [job]} = await db.query(
-    `SELECT r.*,COALESCE(r.agent,s.agent) AS agent,s.agent AS primary_agent,s.repository,s.bot_id,s.root_message_id,
+    `SELECT ${nextOnly ? "r.due_at" : `r.*,COALESCE(r.agent,s.agent) AS agent,s.agent AS primary_agent,s.repository,s.bot_id,s.root_message_id,
             binding.provider_session_id,binding.provider_url,binding.provider_cursor AS session_cursor,
             COALESCE(root.body,m.body) AS prompt,m.seq AS message_seq,m.created_at AS message_created_at,
             COALESCE(root.attachments,m.attachments) AS attachments,m.actor,root.requested_agents AS workflow_agents,
             b.graph_id,b.graph_block_id,b.owner,b.shared_graph_id,
             EXISTS (SELECT 1 FROM bot_runs earlier WHERE earlier.session_id=r.session_id AND earlier.message_id<>r.message_id
               AND earlier.state IN ('done','failed','needs_input','attention')
-              AND COALESCE(earlier.agent,s.agent)=COALESCE(r.agent,s.agent)) AS previous_turn
+              AND COALESCE(earlier.agent,s.agent)=COALESCE(r.agent,s.agent)) AS previous_turn`}
        FROM bot_runs r JOIN sessions s ON s.id=r.session_id
        LEFT JOIN bot_thread_agents binding ON binding.session_id=s.id AND binding.agent=COALESCE(r.agent,s.agent)
        JOIN messages m ON m.id=r.message_id JOIN bots b ON b.id=s.bot_id
        LEFT JOIN messages root ON root.id=r.workflow_root_id
        LEFT JOIN bot_runs first ON first.message_id=r.workflow_root_id
-       WHERE r.state IN ('queued','poll') AND r.due_at<=now()
-         AND ($8::boolean OR jsonb_array_length(COALESCE(root.attachments,m.attachments))=0)
+       WHERE r.state IN ('queued','poll') ${nextOnly ? "" : "AND r.due_at<=now()"}
          AND CASE WHEN $1::uuid IS NULL THEN
            NOT (COALESCE(r.agent,s.agent)=ANY($2::text[])) OR (
              COALESCE(r.agent,s.agent)=ANY($3::text[]) AND binding.runner_id IS NULL
@@ -584,15 +585,17 @@ async function claim(db, runner, localProviders, localProviderOwner = null, {
            SELECT 1 FROM bot_runs earlier LEFT JOIN bot_runs earlier_first ON earlier_first.message_id=earlier.workflow_root_id
              WHERE earlier.session_id=r.session_id AND earlier.state NOT IN ('done','failed','needs_input','attention')
                AND (COALESCE(earlier_first.seq,earlier.seq),earlier.seq)<(COALESCE(first.seq,r.seq),r.seq))
-       ORDER BY r.due_at,r.seq LIMIT 1 FOR UPDATE OF r SKIP LOCKED`,
+       ORDER BY r.due_at,r.seq LIMIT 1 ${nextOnly ? "" : "FOR UPDATE OF r SKIP LOCKED"}`,
     [runner?.id ?? null, localAgentNames, localProviders, runner?.owner ?? null, runner?.agents ?? [],
-      runner?.repository ?? "", localProviderOwner, allowAttachments]);
+      runner?.repository ?? "", localProviderOwner]);
   if (!job) return null;
+  if (nextOnly) return job.due_at;
   if (runner) {
     const lease = randomUUID();
-    await db.query(`UPDATE bot_runs SET state='leased',runner_id=$1,lease_id=$2,
-      lease_until=now()+make_interval(secs=>$3) WHERE message_id=$4`, [runner.id, lease, leaseSeconds, job.message_id]);
-    return {...job, runner_id: runner.id, lease_id: lease, provider_cursor: job.session_cursor};
+    const {rows: [updated]} = await db.query(`UPDATE bot_runs SET state='leased',runner_id=$1,lease_id=$2,
+      lease_until=now()+make_interval(secs=>$3) WHERE message_id=$4 RETURNING lease_until`,
+    [runner.id, lease, leaseSeconds, job.message_id]);
+    return {...job, ...updated, runner_id: runner.id, lease_id: lease, provider_cursor: job.session_cursor};
   }
   const lease = randomUUID();
   await db.query(`UPDATE bot_runs SET state='working',work_from=state,lease_id=$2,
@@ -702,14 +705,14 @@ async function settleJob(db, job, result, canExport) {
 }
 
 async function exportGraph(pool, env, graphFetch = fetch) {
-  if (!env.LOGSEQ_BOTS_GRAPH_TOKEN || !env.DB_SYNC_BASE_URL) return;
+  if (!env.LOGSEQ_BOTS_GRAPH_TOKEN || !env.DB_SYNC_BASE_URL) return false;
   const {rows: [item]} = await pool.query(
     `UPDATE bot_graph_exports SET due_at=now()+interval '30 seconds' WHERE id=(
       SELECT id FROM bot_graph_exports WHERE state='queued' AND due_at<=now()
         AND owner=$1 AND graph_id::text=$2 ORDER BY due_at LIMIT 1 FOR UPDATE SKIP LOCKED
     ) RETURNING *`,
     [env.LOGSEQ_BOTS_GRAPH_OWNER ?? "", env.LOGSEQ_BOTS_GRAPH_ID ?? ""]);
-  if (!item) return;
+  if (!item) return false;
   const path = `/api/v1/graphs/${item.graph_id}/blocks/${item.block_id}/children`;
   try {
     const response = await graphFetch(new URL(path, env.DB_SYNC_BASE_URL), {
@@ -727,6 +730,7 @@ async function exportGraph(pool, env, graphFetch = fetch) {
   } catch {
     await pool.query("UPDATE bot_graph_exports SET due_at=now()+interval '30 seconds' WHERE id=$1", [item.id]);
   }
+  return true;
 }
 
 function createBotRuntime(pool, env, options = {}) {
@@ -735,6 +739,7 @@ function createBotRuntime(pool, env, options = {}) {
   const permitted = owner => unrestricted || owner === env.LOGSEQ_BOTS_AGENT_OWNER;
   const builtInAgents = owner => agents.map(name => ({name, available: permitted(owner) && Boolean(providers[name])}));
   const localProviders = localAgentNames.filter(name => providers[name]);
+  const localProviderOwner = unrestricted ? null : env.LOGSEQ_BOTS_AGENT_OWNER ?? null;
   const availableAgents = async (owner, repo = null) => {
     const {rows} = await pool.query(`SELECT DISTINCT unnest(agents) AS agent FROM bot_runners
       WHERE owner=$1 AND revoked_at IS NULL AND ($2::text IS NULL OR $2='' OR repository=$2)`, [owner, repo]);
@@ -784,6 +789,8 @@ function createBotRuntime(pool, env, options = {}) {
     }
     await settle(pool, job, result, canExport);
   };
+  const cleanStaleUploads = () =>
+    pool.query("DELETE FROM bot_uploads WHERE message_id IS NULL AND created_at < now() - interval '7 days'");
   return {
     recoverServerWork: () => expireLeases(pool, true),
     async handle(owner, request) {
@@ -809,18 +816,27 @@ function createBotRuntime(pool, env, options = {}) {
         return Response.json({error: "The device request failed"}, {status: 500});
       }
     },
-    async maintain({cleanUploads = false} = {}) {
+    async maintain({automationLimit = 1} = {}) {
       await expireLeases(pool);
-      if (cleanUploads) {
-        await pool.query("DELETE FROM bot_uploads WHERE message_id IS NULL AND created_at < now() - interval '7 days'");
+      for (let count = 0; count < automationLimit; count++) {
+        if (!await enqueueScheduled(pool, availableAgents)) break;
       }
-      return enqueueScheduled(pool, availableAgents);
     },
-    async claimNext({allowAttachments = true} = {}) {
-      return transaction(pool, db => claim(db, null, localProviders,
-        unrestricted ? null : env.LOGSEQ_BOTS_AGENT_OWNER ?? null,
-        {allowAttachments, workLeaseSeconds: options.workLeaseSeconds ?? 180}));
+    claimNext() {
+      return transaction(pool, db => claim(db, null, localProviders, localProviderOwner,
+        {workLeaseSeconds: options.workLeaseSeconds ?? 180}));
     },
+    async nextActionAt() {
+      const jobDue = await claim(pool, null, localProviders, localProviderOwner, {nextOnly: true});
+      const {rows: [next]} = await pool.query(`SELECT LEAST($1::timestamptz,
+        (SELECT min(next_at) FROM bot_automations WHERE enabled),
+        (SELECT min(lease_until) FROM bot_runs WHERE lease_until IS NOT NULL),
+        (SELECT min(due_at) FROM bot_graph_exports WHERE state='queued' AND owner=$2 AND graph_id::text=$3)
+      ) AS due_at`, [jobDue, env.LOGSEQ_BOTS_GRAPH_TOKEN && env.DB_SYNC_BASE_URL ? env.LOGSEQ_BOTS_GRAPH_OWNER ?? "" : "",
+        env.LOGSEQ_BOTS_GRAPH_ID ?? ""]);
+      return next.due_at?.getTime() ?? null;
+    },
+    cleanStaleUploads,
     work,
     exportGraph: () => exportGraph(pool, env, options.graphFetch),
   };

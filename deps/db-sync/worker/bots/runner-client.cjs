@@ -146,6 +146,7 @@ async function listen(config, {
   }
 
   let failures = 0;
+  let idleDelay = pollMs;
   while (!signal?.aborted) {
     try {
       const response = await api("/claim", {signal});
@@ -153,6 +154,7 @@ async function listen(config, {
       failures = 0;
       onStatus(job ? "working" : "online");
       if (job) {
+        idleDelay = pollMs;
         try { await execute(job); }
         catch (error) {
           if (error.status === 401 || error.status === 403) throw error;
@@ -160,7 +162,8 @@ async function listen(config, {
           await pause(pollMs);
         }
       } else {
-        await pause(pollMs);
+        await pause(idleDelay);
+        idleDelay = Math.min(30000, 2 * idleDelay + Math.floor(Math.random() * pollMs));
       }
     } catch (error) {
       if (signal?.aborted) return;

@@ -16,7 +16,7 @@ async function createBotService(env = process.env, options = {}) {
     const {rows: [lock]} = await serviceLock.query("SELECT pg_try_advisory_lock(35927681) AS acquired");
     if (!lock.acquired) throw new Error("The Bots database already has a running Node worker");
     await pool.query(readFileSync(join(__dirname, "schema.sql"), "utf8"));
-    await pool.query("DELETE FROM bot_uploads WHERE message_id IS NULL AND created_at < now() - interval '7 days'");
+    await runtime.cleanStaleUploads();
     await runtime.recoverServerWork();
   } catch (error) {
     serviceLock?.release(true);

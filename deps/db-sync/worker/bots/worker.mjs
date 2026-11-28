@@ -12,7 +12,36 @@ function logError(operation, error) {
   console.error("Bots " + operation + " failed", error.code ?? error.name);
 }
 
-export function createWorkerBots({subject, graphAccess, graphFetch}) {
+async function wakeScheduler(env, time) {
+  return env.LOGSEQ_BOTS_SCHEDULER.getByName("queue").wake(time);
+}
+
+async function deadline(request, path, response) {
+  if (!response.ok) return null;
+  if (request.method === "PATCH" && /\/automations\/[^/]+$/.test(path)) return Date.now();
+  if (request.method !== "POST") return null;
+  if (path.endsWith("/messages")) {
+    const {sessionId, message} = await response.clone().json();
+    return sessionId || message?.requested_agent ? Date.now() : null;
+  }
+  if (path === "/bots/runner/claim") {
+    const {job} = await response.clone().json();
+    return job?.leaseExpiresAt ?? null;
+  }
+  if (path.endsWith("/automations") || path.endsWith("/complete") || path.endsWith("/revoke")) {
+    return Date.now();
+  }
+  return null;
+}
+
+export function scheduleEarlier(state, time) {
+  return state.blockConcurrencyWhile(async () => {
+    const alarm = await state.storage.getAlarm();
+    if (alarm === null || time < alarm) await state.storage.setAlarm(time);
+  });
+}
+
+export function createWorkerBots({subject, graphAccess, graphFetch, wake = wakeScheduler}) {
   async function withRuntime(env, operation, ctx) {
     const client = new Client({connectionString: databaseUrl(env), connectionTimeoutMillis: 5000});
     let connected;
@@ -50,14 +79,8 @@ export function createWorkerBots({subject, graphAccess, graphFetch}) {
         if (!runnerRequest && !owner) return Response.json({error: "unauthorized"}, {status: 401});
         const response = await withRuntime(env, runtime => runnerRequest
           ? runtime.handleRunner(request) : runtime.handle(owner, request));
-        if (response.ok && request.method === "POST" &&
-            (runnerRequest ? path.endsWith("/complete") : path.endsWith("/messages"))) {
-          // One short job can start immediately. Cron handles polling and uploads.
-          ctx.waitUntil(withRuntime(env, async runtime => {
-            const job = await runtime.claimNext({allowAttachments: false});
-            if (job) await runtime.work(job);
-          }).catch(error => logError("dispatch", error)));
-        }
+        const at = await deadline(request, path, response);
+        if (at !== null) ctx.waitUntil(wake(env, at).catch(error => logError("wake", error)));
         return response;
       } catch (error) {
         logError("request", error);
@@ -65,18 +88,32 @@ export function createWorkerBots({subject, graphAccess, graphFetch}) {
       }
     },
 
-    async scheduled(env, scheduledTime, ctx) {
-      if (!databaseUrl(env)) return;
+    async runDue(env, ctx) {
+      if (!databaseUrl(env)) return null;
       return withRuntime(env, async runtime => {
         const start = Date.now();
-        await runtime.maintain({cleanUploads: new Date(scheduledTime).getUTCMinutes() === 0});
+        await runtime.maintain({automationLimit: 8});
         for (let count = 0; count < 8 && Date.now() - start < 45_000; count++) {
           const job = await runtime.claimNext();
           if (!job) break;
           await runtime.work(job);
         }
-        await runtime.exportGraph();
+        for (let count = 0; count < 4 && Date.now() - start < 45_000; count++) {
+          if (!await runtime.exportGraph()) break;
+        }
+        const next = await runtime.nextActionAt();
+        return next === null ? null : Math.max(next, Date.now() + 500);
       }, ctx);
+    },
+
+    async repair(env, scheduledTime) {
+      if (!databaseUrl(env)) return;
+      const next = await withRuntime(env, async runtime => {
+        const date = new Date(scheduledTime);
+        if (date.getUTCHours() === 0 && date.getUTCMinutes() === 0) await runtime.cleanStaleUploads();
+        return runtime.nextActionAt();
+      });
+      if (next !== null && next <= Date.now()) await wake(env, next);
     },
   };
 }
