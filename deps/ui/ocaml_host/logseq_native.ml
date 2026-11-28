@@ -3115,8 +3115,13 @@ let () =
         r, !scale_cell, Lui_store.layout_rev store, Lui_host.invalidation_count host) in
       if key <> !caret_key then begin
         caret_key := key;
-        apply_actions
-          (handle_input (Input.Caret (caret_rect ())))
+        let r = caret_rect () in
+        (* Focus can arrive before the dialog's first layout. Feed SDL the
+           first real caret rect as soon as it exists; otherwise macOS keeps
+           the stale zero rect and anchors the candidate window at the window
+           edge before the IME state machine emits its own move action. *)
+        if not (Lui_scene.rect_empty r) then set_ime_rect r;
+        apply_actions (handle_input (Input.Caret r))
       end
     end;
     if !Theme_vars.generation <> !theme_gen_seen then begin

@@ -153,7 +153,7 @@ Follow-up runtime results:
 
 ## Surfaces not tested or only partially tested
 
-- Japanese/Korean IME composition and macOS input-source roundtrips remain unvalidated. Real macOS Pinyin composition is fixed for block editing, but switching Pinyin → ABC → Pinyin while one host process stays running once stopped IME delivery entirely; whether that is a host lifecycle bug or input-source setup artifact is uncertain. The macOS IME candidate window can also appear horizontally offset in search dialogs.
+- Japanese/Korean IME composition remains unvalidated. Real macOS Pinyin composition is fixed for block editing, including Pinyin → ABC → Pinyin input-source roundtrips and search-dialog candidate-window placement.
 - Structured clipboard cut/paste and desktop-specific clipboard-manager persistence beyond the validated same-process/cross-process transport behavior.
 - Advanced query editor and query semantics beyond the tested insertion, operator/filter completion, Apply, popup dismissal, and compact geometry. `task: Todo` matching remains uncertain because both apps returned `No matched result` for a matching TODO block.
 - Image lightbox richness beyond basic open/close behavior; Linux validation before the native lightbox implementation showed PNG rendering passed but clicking only selected the block.
