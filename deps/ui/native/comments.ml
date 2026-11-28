@@ -72,7 +72,7 @@ let add_comment () =
               Editor_actions.exit_edit ~select:false
           | _ -> ());
          if Runtime.repo () = repo then begin
-           S.set_collapsed e.S.uuid false;
+           S.set_collapsed ~scope:e.S.scope e.S.uuid false;
            Comments_ops.request_reveal e.S.uuid;
            Comments_ops.reveal_if_requested e.S.uuid
          end;
