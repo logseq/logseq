@@ -1589,7 +1589,11 @@ let () =
   let caret_rect () =
     let id = Ui.focused ui in
     let r = Rects.get rects id in
-    if Lui_scene.rect_empty r then r
+    if Lui_store.kind store id = "extension:logseq-editor" then
+      (match Host_requests.editor_caret_window_rect () with
+       | Some caret -> caret
+       | None -> r)
+    else if Lui_scene.rect_empty r then r
     else if Text_engine.ordinary_input store id then
       Text_engine.input_caret_rect text_engine ui id r
     else begin
@@ -3115,8 +3119,15 @@ let () =
         r, !scale_cell, Lui_store.layout_rev store, Lui_host.invalidation_count host) in
       if key <> !caret_key then begin
         caret_key := key;
-        apply_actions
-          (handle_input (Input.Caret (caret_rect ())))
+        let caret = caret_rect () in
+        (* Focus can arrive before the dialog's first layout. Feed SDL the
+           first real caret rect as soon as it exists; otherwise macOS keeps
+           the stale zero rect and anchors the candidate window at the window
+           edge before the IME state machine emits its own move action. *)
+        if caret.Lui_scene.x <> 0. || caret.Lui_scene.y <> 0.
+           || caret.Lui_scene.w <> 0. || caret.Lui_scene.h <> 0.
+        then set_ime_rect caret;
+        apply_actions (handle_input (Input.Caret caret))
       end
     end;
     if !Theme_vars.generation <> !theme_gen_seen then begin
