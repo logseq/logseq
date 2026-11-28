@@ -272,13 +272,32 @@ let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
                ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
                ~on_press:(fun _ -> step d) [] ])
   in
+  (* web parity: PhotoSwipe steps slides on ArrowLeft/ArrowRight.
+     Native keydown bubbles up the node ancestor chain, so a listener on
+     the lightbox container sees keys from whatever control inside holds
+     focus without touching editor/input ownership — outside the lightbox
+     nothing is registered and arrows keep their usual meaning *)
+  let on_keydown _name payload =
+    let key =
+      match payload with
+      | Some event -> Ui_dom_native.jstr "key" (Js.Json.parseExn event)
+      | None -> None
+    in
+    match key with
+    | Some "ArrowLeft" -> step (-1)
+    | Some "ArrowRight" -> step 1
+    | _ -> ()
+  in
   viewport_modal_cover
     (Lui_elements.dialog ~key:lightbox_key
        ~style_class:"pswp native-asset-lightbox"
        ~background:"rgba(0,0,0,0.92)" ~border_width:0 ~corner_radius:0
        ~padding:0
        ~on_dismiss:(fun _ -> close ())
-       [ Lui_elements.stack ~key:"lb-stack" ~container_relative_frame:`both
+       [ Logseq_el.el ~key:"lb-keys" ~tag:"div" ~events:"keydown"
+           ~style_class:"asset-lightbox-keys"
+           ~on_dom_event:on_keydown
+           [ Lui_elements.stack ~key:"lb-stack" ~container_relative_frame:`both
            [ Ui_parts.pressable ~on_press:(fun _ -> close ())
                (Lui_elements.column ~key:"lb-backdrop"
                   ~container_relative_frame:`both ~main:`center ~cross:`center
@@ -301,8 +320,7 @@ let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
                    ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
                    ~autofocus:true
                    ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
-                   ~on_press:(fun _ -> close ()) [] ] ]
-       ])
+                   ~on_press:(fun _ -> close ()) [] ] ] ] ])
     context parent
 
 let open_image_lightbox ~source ~alt =
