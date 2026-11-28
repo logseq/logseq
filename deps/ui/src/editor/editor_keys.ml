@@ -2216,21 +2216,15 @@ let on_click ev =
                          .ls-comment-row, [data-pressable]"
                         target
                     with
-                    (* A comments-area label is a button, but activating it
-                       starts block editing rather than running a control action.
-                       Let it fall through to the delegated title-edit branch;
-                       doing so on click (not press) keeps the mousedown/blur
-                       ordering intact on native hosts. *)
-                    | Some el when closest ".ls-comments-label" (Some el) = None -> ()
-                    | _ when readonly_block_target target -> ()
-                    | _ -> (
+                    | Some _ -> ()
+                    | None when readonly_block_target target -> ()
+                    | None -> (
                         match closest ".ls-comments-label" target with
                         | Some el -> (
                             match el.Ui_services.attr "data-area-uuid" with
                             | Some u ->
                                 (* edit-comments-area-title! *)
-                                A.enter_edit ~scope:(A.scope_of_el el) u
-                                  (String.length (A.model_title u))
+                                A.enter_edit u (-1)
                             | None -> ())
                         | None -> (
                             match closest ".ls-comment-submit" target with
@@ -2443,8 +2437,18 @@ let on_mousedown (ev : Ui_services.ev) =
         | Some el when Popups_state.inside el -> ()
         | _ ->
             if Editor_commands.click_guard () then ()
-            else if not (A.draft_contains_target ev.Ui_services.target) then
-              A.schedule_blur_commit ())
+            else if not (A.draft_contains_target ev.Ui_services.target) then begin
+              (* Native press activation can be applied before the originating
+                 mousedown reaches this document handler. That mousedown is the
+                 gesture which opened the comments title editor, not an outside
+                 click, so it must not immediately blur the editor it created. *)
+              let activating_comments_title =
+                match closest ".ls-comments-label" ev.Ui_services.target, S.editing () with
+                | Some el, Some e -> el.Ui_services.attr "data-area-uuid" = Some e.S.uuid
+                | _ -> false
+              in
+              if not activating_comments_title then A.schedule_blur_commit ()
+            end)
   end
 
 (* -- drag & drop (cljs components/block.cljs on-drag-start/

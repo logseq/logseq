@@ -452,7 +452,7 @@ let header ~scope st (block : Model.block) count : t =
               ~data_attrs:[ ("data-area-uuid", uuid) ]
               ~text:(let title = String.trim block.block_title in
                 if title = "" then I.t "block.comments/label" else title)
-              []))
+              ~on_press:(fun _ -> Editor_actions.enter_edit ~scope uuid (-1)) []))
         (Editor_state.editing_sig ())
     ; typography "0.75rem" 400
         (text ~style_class:"ls-comments-count" ~value:(string_of_int count) [])

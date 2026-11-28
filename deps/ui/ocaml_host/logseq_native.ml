@@ -1899,6 +1899,15 @@ let () =
       ^ "}"
   in
   let emit_dom name node fields =
+    let fields =
+      match node > 0, !Platform.event_target_of node with
+      | true, Some target ->
+          (* DOM targets are capture-time objects. The platform event queue can
+             run after press handlers have already replaced the target, so keep
+             the snapshot with the event instead of resolving a live node later. *)
+          fields @ [ ("target", Js.Json.stringify target) ]
+      | _ -> fields
+    in
     let body = dom_payload node fields in
     dbg "dom %s node=%d %s" name node body;
     Native_embed.platform_event (name ^ "\n" ^ body)
