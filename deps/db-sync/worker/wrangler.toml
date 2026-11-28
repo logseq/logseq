@@ -128,6 +128,10 @@ binding = "DB"
 database_name = "logseq-sync-graph-meta-staging"
 database_id = "00325aa2-c805-4693-b599-900a25dcde42"
 
+[[env.staging.hyperdrive]]
+binding = "LOGSEQ_BOTS_HYPERDRIVE"
+id = "d95d594097e148a390c55c2be164b34b"
+
 [env.staging.version_metadata]
 binding = "CF_VERSION_METADATA"
 
