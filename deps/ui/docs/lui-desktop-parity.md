@@ -13,7 +13,7 @@ Audit baseline: `refactor/lui` @ `a5dd20796628acacc0ac2467ffa31b8169b3ebaa` (`20
 - Fresh isolated graphs were used. No existing user graph was mutated. Exact content parity was impossible after interactive editing because the seeded text necessarily diverged.
 - Setup artifact only: the first web boot failed because `static/js/db-worker.js` had not been built. After `pnpm db-worker:build`, the web app booted normally. This is not counted as a parity finding.
 - Login and RTC were intentionally skipped in the follow-up pass.
-- The LUI pin in this branch uses `2bbee0e83acf8445f244659e6b98a0be59b03b46`, which includes the compatibility backports through [lui#426](https://github.com/logseq/lui/pull/426) the Linux horizontal-RGB subpixel glyph coverage pipeline from [lui#429](https://github.com/logseq/lui/pull/429), and the programmatic native text-selection API from [lui#430](https://github.com/logseq/lui/pull/430).
+- The LUI pin in this branch uses `7282585d52514bffad557b4a9f20c71a98482adb`, which includes the compatibility backports through [lui#426](https://github.com/logseq/lui/pull/426), the Linux horizontal-RGB subpixel glyph coverage pipeline from [lui#429](https://github.com/logseq/lui/pull/429), the programmatic native text-selection API from [lui#430](https://github.com/logseq/lui/pull/430), and the modal-panel focus restoration from [lui#431](https://github.com/logseq/lui/pull/431).
 
 ## Intentional desktop differences
 
