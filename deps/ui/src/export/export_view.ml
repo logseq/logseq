@@ -244,9 +244,12 @@ let body (_ms : Model.t Signal.signal) : t =
                (* PNG snapshots one target through the host offscreen
                   pipeline — web keeps the tab hidden because html2canvas
                   cannot capture windowed-outliner content faithfully *)
-               @ (match P.png_export_supported, (S.cur (S.st ctx)).S.block_uuids with
-                    | true, ([] | [ _ ]) -> [ fmt_btn ctx "ft-png" "PNG" S.Png ]
-                    | _ -> [])
+               @ (if P.png_export_supported then
+                    match (S.cur (S.st ctx)).S.block_uuids with
+                    | [] | [ _ ] -> [ fmt_btn ctx "ft-png" "PNG" S.Png ]
+                    | _ -> []
+                  else if (S.cur (S.st ctx)).S.has_top_level then []
+                  else [ fmt_btn ctx "ft-png" "PNG" S.Png ])
                @ [ fmt_btn ctx "ft-edn" "EDN" S.Edn ])
           ; reactive
               (fun fmt ->

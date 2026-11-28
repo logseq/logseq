@@ -114,8 +114,17 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                for completion so the snapshot matches a fully scrolled
                page *)
             let export_images =
-              Host_images.create ~visible:(fun _ -> true)
+              Host_images.create ~executor:(fun job -> job ())
+                ~visible:(fun _ -> true)
                 ~on_change:(fun _ -> ()) ()
+            in
+            (* prefer freshly preloaded bitmaps, fall back to whatever the
+               live page already decoded — offline exports keep images that
+               are on screen but no longer fetchable *)
+            let export_image_of id =
+              match Host_images.image_of export_images id with
+              | Some _ as hit -> hit
+              | None -> Host_images.image_of env.images id
             in
             Host_images.sync_subtree export_images store node_id;
             let deadline = Unix.gettimeofday () +. 10. in
@@ -124,6 +133,23 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
               Host_images.pump export_images;
               Unix.sleepf 0.01
             done;
+            (* intrinsic bitmap sizes only exist after decoding — re-run
+               layout so unsized images take their real dimensions instead
+               of the alt-text placeholder box *)
+            let image_measure id =
+              Option.map
+                (fun image ->
+                  (float_of_int image.Lui_scene.iw, float_of_int image.Lui_scene.ih))
+                (export_image_of id)
+            in
+            Lui_layout.sync ~scale ~measure ~image_measure
+              ~vport:(fun _ -> Some (0., height))
+              ~width ~height engine store;
+            let target_r =
+              match Lui_layout.rect engine node_id with
+              | Some r -> r
+              | None -> Lui_scene.rect 0. 0. 0. 0.
+            in
             (* the container stretches to the export canvas; the real
                content height is the bottom of its deepest descendant —
                the html2canvas scrollHeight equivalent *)
@@ -183,13 +209,13 @@ let render (env : env) ~(target : [ `Page | `Block of string ]) ~transparent
                 ; image_of =
                     (fun id ->
                       if Lui_store.kind store id = "image" then
-                        Host_images.image_of export_images id
+                        export_image_of id
                       else
                         Host_icons.image_of ~hooks store scale id (rect_of id))
                 ; image_in =
                     (fun id r ->
                       if Lui_store.kind store id = "image" then
-                        Host_images.image_of export_images id
+                        export_image_of id
                       else Host_icons.image_of ~hooks store scale id r)
                 ; shadow_of =
                     (fun name ->
