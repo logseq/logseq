@@ -442,6 +442,14 @@ let query_selector_all_scoped ~(scope : element) ~(els : element list)
    providers returning element snapshots (same shape the Swift
    LogseqDOMSnapshot emits: tag/class/id/attrs/node-id + ancestors) so the
    selector engine works unchanged. *)
+(* Injected by the native host at startup: render a page/block subtree
+   offscreen and return (png bytes, width, height). *)
+type export_target = [ `Page | `Block of string ]
+
+let export_png_hook
+    : (export_target -> transparent:bool -> (string * int * int) option) ref =
+  ref (fun _ ~transparent:_ -> None)
+
 let doc_elements_provider : (unit -> Js.Json.t list) ref =
   ref (fun () -> [])
 let subtree_elements_provider : (int -> Js.Json.t list) ref =

@@ -121,10 +121,41 @@ let export_edn (st : S.t) =
   in
   Js.Promise.resolve (Edn.to_string w)
 
+let preview_path = ref ""
+
+(* cljs get-image-blob — page export captures #main-content-container,
+   a block export its top-level block. The native host re-lays out the
+   retained subtree offscreen at the target's live width with
+   virtualization disabled, paints and rasterizes it, then crops the
+   target rect — matching the html2canvas fresh-layout semantics. *)
 let export_png (st : S.t Signal.state) =
-  S.mutate st (fun s -> { s with png = None; png_url = None });
+  S.mutate st (fun s ->
+      { s with png = None; png_url = None; png_ready = false; png_bytes = None });
   Runtime.flush ();
-  png_unavailable ()
+  let cur = S.cur st in
+  let target : Dom_ext.export_target =
+    match cur.S.block_uuids with
+    | u :: _ -> `Block u
+    | [] -> `Page
+  in
+  match
+    !Dom_ext.export_png_hook target ~transparent:cur.S.png_transparent
+  with
+  | Some (bytes, _w, _h) ->
+      let path =
+        Printf.sprintf "%s/logseq-export-preview-%d.png"
+          (Filename.get_temp_dir_name ())
+          (int_of_float (Js.Date.now ()))
+      in
+      let oc = open_out_bin path in
+      output_string oc bytes;
+      close_out oc;
+      preview_path := path;
+      S.mutate st (fun s ->
+          { s with png_url = Some path; png_ready = true; png_bytes = Some bytes });
+      Runtime.flush ()
+  | None ->
+      Toast.error (I18n.t1 "file/format-not-supported" "PNG")
 
 let set_png_transparent (st : S.t Signal.state) =
   S.mutate st (fun s ->
@@ -200,7 +231,12 @@ let copy_png (_st : S.t Signal.state) = png_unavailable ()
 let save_to_file (st : S.t Signal.state) =
   let cur = S.cur st in
   match cur.fmt, cur.content with
-  | S.Png, _ -> png_unavailable ()
+  | S.Png, _ -> (
+      match cur.S.png_bytes with
+      | Some bytes ->
+          let filename = F.filename (Ui_services.time_now ()) "png" in
+          Ui_services.files_download_binary ~filename ~mime:"image/png" bytes
+      | None -> ())
   | _, None -> ()
   | fmt, Some content ->
       let ext, mime =

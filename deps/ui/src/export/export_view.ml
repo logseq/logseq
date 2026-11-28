@@ -198,7 +198,7 @@ let png_preview ctx =
       box ~key:"export-preview-wrap"
         ~opacity:
           (reactive
-             (fun (st : S.t) -> if st.png = None then 0. else 1.)
+             (fun (st : S.t) -> if st.S.png_ready then 1. else 0.)
              (st_sig ctx))
         [ image ~key:"export-preview-img"
             ~accessibility_identifier:"export-preview"
@@ -211,7 +211,7 @@ let png_preview ctx =
     ; if_
         ~test:
           (Logseq_el.own ctx
-             (Signal.map (fun (st : S.t) -> st.png = None) (st_sig ctx)))
+             (Signal.map (fun (st : S.t) -> not st.S.png_ready) (st_sig ctx)))
         (icon ~key:"png-loading" ~name:(`app "loader-2") []) ]
 
 (* cljs swaps the whole options block for the transparent-bg checkbox
