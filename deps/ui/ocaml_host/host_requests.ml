@@ -745,6 +745,23 @@ let editor_caret_key () =
      | Some bid, Some off when off >= 0 && not (Editor_actions.initial_click_pending bid) -> Some (bid, off)
      | _ -> None)
 
+(* Window-space device-pixel rect of the model caret. The editor sink
+   itself is zero-height; the shaped text runs carry the real geometry. *)
+let editor_caret_window_rect () =
+  match !env with
+  | None -> None
+  | Some e ->
+    let sink = Ui.focused e.ui in
+    (match Lui_store.string_prop e.store sink "block-id",
+           Lui_store.int_prop e.store sink "caret" with
+     | Some bid, Some off when off >= 0 && not (Editor_actions.initial_click_pending bid) ->
+       (match ed_ctx e bid with
+        | None -> None
+        | Some ctx ->
+          let x, y, h = caret_rect e ctx off in
+          Some (Lui_scene.rect (ctx.ox +. x) (ctx.oy +. y) (e.scale ()) h))
+     | _ -> None)
+
 (* Draw the model caret using the same current glyph geometry used by
    caret-rect replies. The input sink itself has no visible bounds. *)
 let editor_caret_ops ~color =

@@ -1589,7 +1589,11 @@ let () =
   let caret_rect () =
     let id = Ui.focused ui in
     let r = Rects.get rects id in
-    if Lui_scene.rect_empty r then r
+    if Lui_store.kind store id = "extension:logseq-editor" then
+      (match Host_requests.editor_caret_window_rect () with
+       | Some caret -> caret
+       | None -> r)
+    else if Lui_scene.rect_empty r then r
     else if Text_engine.ordinary_input store id then
       Text_engine.input_caret_rect text_engine ui id r
     else begin
@@ -3120,7 +3124,9 @@ let () =
            first real caret rect as soon as it exists; otherwise macOS keeps
            the stale zero rect and anchors the candidate window at the window
            edge before the IME state machine emits its own move action. *)
-        if not (Lui_scene.rect_empty r) then set_ime_rect r;
+        if r.Lui_scene.x <> 0. || r.Lui_scene.y <> 0.
+           || r.Lui_scene.w <> 0. || r.Lui_scene.h <> 0.
+        then set_ime_rect r;
         apply_actions (handle_input (Input.Caret r))
       end
     end;
