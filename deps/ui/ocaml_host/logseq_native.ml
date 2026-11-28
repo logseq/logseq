@@ -967,32 +967,42 @@ let () =
   in
   let win_w = ref width and win_h = ref height in
   let webview_overlay_epoch = ref 0 in
-  let webview_overlay_cache = ref (-1, []) in
-  (* OS webviews always sit above the self-drawn scene. When a presented
-     popover/dialog/menu intersects one, hide that overlay entirely: input
-     and paint ownership stay truthful, at the cost of a rectangular
+  let webview_overlay_cache = ref (-1, false, []) in
+  (* OS webviews always sit above the self-drawn scene. A presented modal
+     covers the page even when its own panel rect is small; light overlays
+     occlude only where their rectangles intersect. Hiding the embed keeps
+     input and paint ownership truthful, at the cost of a rectangular
      occlusion approximation. *)
-  let presented_overlay_rects () =
-    if fst !webview_overlay_cache <> !webview_overlay_epoch then begin
+  let presented_overlay_state () =
+    let epoch, modal, rects = !webview_overlay_cache in
+    if epoch <> !webview_overlay_epoch then begin
       let current_store = store_of () in
+      let modal = ref false in
       let rects = ref [] in
       Lui_store.iter_preorder current_store (fun id ->
         if Lui_query.presented_overlay current_store id
            && not (Ui.hidden ui current_store id)
            && not (Lui_store.inert_in_chain current_store id)
            && Lui_focus.chain_visible current_store id then
-          match shifted_layout_rect id with
-          | Some r when not (Lui_scene.rect_empty r) -> rects := r :: !rects
-          | _ -> ());
-      webview_overlay_cache := (!webview_overlay_epoch, !rects)
+          match Lui_overlay.overlay_class current_store id with
+          | `modal -> modal := true
+          | `light -> (
+            match shifted_layout_rect id with
+            | Some r when not (Lui_scene.rect_empty r) -> rects := r :: !rects
+            | _ -> ())
+          | `none -> ());
+      webview_overlay_cache := (!webview_overlay_epoch, !modal, !rects)
     end;
-    snd !webview_overlay_cache
+    let _, modal, rects = !webview_overlay_cache in
+    modal, rects
   in
   let webview_occluded frame =
-    List.exists
-      (fun overlay ->
-        not (Lui_scene.rect_empty (Lui_scene.rect_intersect frame overlay)))
-      (presented_overlay_rects ())
+    let modal, overlay_rects = presented_overlay_state () in
+    modal
+    || List.exists
+         (fun overlay ->
+           not (Lui_scene.rect_empty (Lui_scene.rect_intersect frame overlay)))
+         overlay_rects
   in
   let webview_host_window =
     lazy (Lui_webview.host_of_sdl_window (Sdl.unsafe_ptr_of_window !win))
