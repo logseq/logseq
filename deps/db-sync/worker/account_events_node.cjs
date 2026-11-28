@@ -46,6 +46,7 @@ function createAccountEvents({hasAccess, graphContext, relayReady, relayFrame}) 
   };
 
   return {
+    runnerRequest: events.isRunnerRequest,
     attach(socket, identity) {
       const accountSockets = socketsFor(byAccount, identity.account);
       if (accountSockets.size >= 24) {
@@ -56,7 +57,12 @@ function createAccountEvents({hasAccess, graphContext, relayReady, relayFrame}) 
       accountSockets.add(socket);
       let pending = Promise.resolve();
       socket.on("message", data => {
-        pending = pending.then(() => events.receive(socket, data.toString(), context)).catch(() => socket.close(1011));
+        const raw = data.toString();
+        if (identity.runnerId && raw === "ping" && socket.readyState === 1) {
+          socket.send("pong");
+        } else {
+          pending = pending.then(() => events.receive(socket, raw, context)).catch(() => socket.close(1011));
+        }
       });
       const dispose = () => {
         const connection = connections.get(socket);
@@ -71,8 +77,12 @@ function createAccountEvents({hasAccess, graphContext, relayReady, relayFrame}) 
     },
     publish(account, event) {
       for (const socket of byAccount.get(account) ?? []) {
-        if (events.active(socket, connections.get(socket))) events.sendEvent(socket, event);
+        events.publishEvent(socket, connections.get(socket), event);
       }
+    },
+    onlineRunners(account) {
+      return Array.from(byAccount.get(account) ?? [], socket =>
+        socket.readyState === 1 ? connections.get(socket)?.runnerId : null).filter(Boolean);
     },
     close() {
       for (const socket of connections.keys()) socket.close(1001, "Logseq server shutting down");

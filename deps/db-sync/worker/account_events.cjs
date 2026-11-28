@@ -11,9 +11,27 @@ function sendEvent(socket, event) {
 
 function active(socket, connection) {
   if (!connection || socket.readyState !== 1) return false;
-  if (connection.expiresAt > Date.now()) return true;
+  if (connection.runnerId || connection.expiresAt > Date.now()) return true;
   socket.close(1008, "Logseq session expired");
   return false;
+}
+
+function isRunnerRequest(request) {
+  return request.headers.get("x-logseq-runner-events") === "1";
+}
+
+function publishEvent(socket, connection, event) {
+  if (!active(socket, connection)) return;
+  if (event.type === "runner.revoked") {
+    if (connection.runnerId === event.runnerId) socket.close(4001, "Device was unpaired");
+  } else if (event.type === "runner.available") {
+    if (event.runnerIds.includes(connection.runnerId) &&
+        (!event.acpOnly || connection.acpAgents.includes(event.agent))) {
+      sendEvent(socket, {type: event.type});
+    }
+  } else if (!connection.runnerId) {
+    sendEvent(socket, event);
+  }
 }
 
 function ready(socket, connection) {
@@ -27,7 +45,7 @@ async function unsubscribe(connection, graph) {
 async function receive(socket, raw, context) {
   const {graph, load, save} = context;
   const connection = load(socket);
-  if (!active(socket, connection)) return;
+  if (!active(socket, connection) || connection.runnerId) return;
   let event;
   try {
     if (typeof raw !== "string" || raw.length > 4 * 1024 * 1024) throw new Error("Frame too large");
@@ -87,4 +105,4 @@ function sendGraphChange(socket, connection, graphId, frame) {
   }
 }
 
-module.exports = {active, ready, receive, sendEvent, sendGraphChange, unsubscribe};
+module.exports = {active, isRunnerRequest, publishEvent, ready, receive, sendEvent, sendGraphChange, unsubscribe};

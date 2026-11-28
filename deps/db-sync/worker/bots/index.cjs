@@ -47,6 +47,7 @@ async function createBotService(env = process.env, options = {}) {
   return {
     handle: runtime.handle,
     handleRunner: runtime.handleRunner,
+    runnerIdentity: runtime.runnerIdentity,
     async close() {
       clearInterval(timer);
       await pending;

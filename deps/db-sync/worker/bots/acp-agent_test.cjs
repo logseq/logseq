@@ -1,10 +1,13 @@
 const assert = require("node:assert/strict");
 const {randomUUID} = require("node:crypto");
 const {mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync} = require("node:fs");
+const {createServer} = require("node:http");
 const {tmpdir} = require("node:os");
 const {join} = require("node:path");
 const {test} = require("node:test");
 const {setTimeout: sleep} = require("node:timers/promises");
+const {WebSocketServer} = require("ws");
+const {createAccountEvents} = require("../account_events_node.cjs");
 const {runAcp} = require("./acp-agent.cjs");
 const {listen} = require("./runner-client.cjs");
 const {createBotService} = require("./index.cjs");
@@ -122,7 +125,7 @@ async function waitFor(read, condition) {
   assert.fail("The mock Bot did not reach the expected state");
 }
 
-test("paired runner delivers a Codex to Pi workflow and resumes both bindings", {skip: !database}, async t => {
+test("paired runner claims on wake, stays idle without polling, and resumes both ACP bindings on reconnect", {skip: !database}, async t => {
   const {cwd, launcher} = fixtures(t);
   const acpCommands = {codex: launcher("codex"), pi: launcher("pi")};
   for (const [name, path] of Object.entries(acpCommands)) {
@@ -132,8 +135,30 @@ test("paired runner delivers a Codex to Pi workflow and resumes both bindings", 
     process.env[key] = path;
   }
   const owner = randomUUID(), graph = randomUUID(), bot = randomUUID();
-  const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {graphsFor: async () => [graph]});
-  const origin = "http://127.0.0.1";
+  const events = createAccountEvents({});
+  let wakes = 0;
+  const service = await createBotService({LOGSEQ_BOTS_DATABASE_URL: database}, {
+    graphsFor: async () => [graph], hasGraphAccess: async (account, graphId) => account === owner && graphId === graph,
+    onlineRunners: events.onlineRunners,
+    publish(account, event) {
+      if (event.type === "runner.available") wakes++;
+      events.publish(account, event);
+    },
+  });
+  const server = createServer();
+  const sockets = new WebSocketServer({noServer: true});
+  let acceptConnections = true;
+  let keepalives = 0;
+  server.on("upgrade", async (request, socket, head) => {
+    const identity = await service.runnerIdentity(new Request(origin + request.url, {headers: request.headers}));
+    if (!acceptConnections || !identity) { socket.end("HTTP/1.1 503 Service Unavailable\r\n\r\n"); return; }
+    sockets.handleUpgrade(request, socket, head, connection => {
+      connection.on("message", data => { if (data.toString() === "ping") keepalives++; });
+      events.attach(connection, identity);
+    });
+  });
+  await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+  const origin = "http://127.0.0.1:" + server.address().port;
   async function account(path, body) {
     const response = await service.handle(owner, new Request(origin + path, {
       method: body ? "POST" : "GET", body: body ? JSON.stringify(body) : undefined,
@@ -153,28 +178,41 @@ test("paired runner delivers a Codex to Pi workflow and resumes both bindings", 
     await listener;
   }
   try {
-    const {credential} = await account("/bots/runners", {name: "Mock runner", agents: ["codex", "pi"], repository: "logseq/mobile"});
+    const {id: runnerId, credential} = await account("/bots/runners",
+      {name: "Mock runner", agents: ["codex", "pi"], repository: "logseq/mobile"});
     const config = {credential, root: cwd, repository: "logseq/mobile", server: origin,
       commands: {codex: "/legacy-unusable", pi: "/legacy-unusable"}};
-    function start() {
-      controller = new AbortController();
-      listener = listen(config, {pollMs: 10, signal: controller.signal});
-    }
+    const claims = () => endpoints.filter(path => path.endsWith("/claim")).length;
+    controller = new AbortController();
+    listener = listen(config, {reconnectMs: 20, pingMs: 50, signal: controller.signal});
+    await waitFor(async () => claims(), value => value === 1);
+    await waitFor(async () => keepalives, value => value >= 4);
+    assert.equal(claims(), 1, "A healthy idle WebSocket can exchange heartbeats without claiming again");
+    assert.equal((await account("/bots/runners")).runners.find(runner => runner.id === runnerId).online, true);
     const main = "/bots/" + bot;
     await account("/bots", {id: bot, graphId: graph, name: "Fixture", defaultAgent: "codex", repository: "logseq/mobile"});
+    await sleep(1100);
+    assert.equal(claims(), 1, "Chat catalog changes do not wake the runner");
     const {sessionId} = await account(main + "/messages", {id: randomUUID(), agents: ["codex", "pi"], body: "Prepare the change"});
     const thread = main + "/sessions/" + sessionId;
-    start();
     const completed = await waitFor(() => account(thread), view => view.messages.some(message => message.author === "pi"));
     assert.deepEqual(completed.participants, ["codex", "pi"]);
     assert.match(completed.messages.find(message => message.author === "pi").body, /codex started/);
-    await stop();
+    acceptConnections = false;
+    for (const socket of sockets.clients) socket.terminate();
+    await waitFor(async () => events.onlineRunners(owner).length, value => value === 0);
+    await sleep(120);
+    const beforeReconnect = claims();
+    const previousWakes = wakes;
     await account(thread + "/messages", {id: randomUUID(), body: "Check the details"});
     const legacy = await service.handleRunner(new Request(origin + "/bots/runner/claim", {
-      method: "POST", headers: {authorization: "Bearer " + credential},
+      method: "POST", headers: {authorization: "Bearer " + credential}, body: "",
     }));
+    assert.equal(legacy.status, 200);
     assert.equal((await legacy.json()).job, null);
-    start();
+    await waitFor(async () => wakes, value => value > previousWakes);
+    assert.equal(claims(), beforeReconnect, "A disconnected runner does not poll");
+    acceptConnections = true;
     await waitFor(() => account(thread), view => view.messages.some(message => message.body.includes("codex resumed:")));
     await account(thread + "/messages", {id: randomUUID(), agent: "pi", body: "Review the follow-up"});
     const resumed = await waitFor(() => account(thread), view => view.messages.some(message => message.body.includes("pi resumed:")));
@@ -186,6 +224,8 @@ test("paired runner delivers a Codex to Pi workflow and resumes both bindings", 
     assert.equal(endpoints.filter(path => path.endsWith("/complete")).length, 4);
   } finally {
     await stop();
+    sockets.close();
+    await new Promise(resolve => server.close(resolve));
     await service.close();
   }
 });

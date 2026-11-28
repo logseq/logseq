@@ -183,6 +183,9 @@ BEGIN
     IF TG_OP = 'UPDATE' THEN
       refresh_graph_visibility := OLD.shared_graph_id IS DISTINCT FROM NEW.shared_graph_id;
     END IF;
+  ELSIF TG_TABLE_NAME = 'bot_runs' THEN
+    changed_session := NEW.session_id;
+    SELECT bot_id INTO changed_bot FROM sessions WHERE id=changed_session;
   ELSE
     changed_bot := NEW.bot_id;
   END IF;
@@ -210,3 +213,9 @@ CREATE OR REPLACE TRIGGER bot_message_added AFTER INSERT ON messages
   FOR EACH ROW EXECUTE FUNCTION queue_bot_event();
 CREATE OR REPLACE TRIGGER bot_automation_changed AFTER INSERT OR UPDATE ON bot_automations
   FOR EACH ROW EXECUTE FUNCTION queue_bot_event();
+CREATE OR REPLACE TRIGGER bot_run_ready AFTER INSERT ON bot_runs
+  FOR EACH ROW WHEN (NEW.state = 'queued') EXECUTE FUNCTION queue_bot_event();
+CREATE OR REPLACE TRIGGER bot_run_state_changed AFTER UPDATE OF state ON bot_runs
+  FOR EACH ROW WHEN (OLD.state IS DISTINCT FROM NEW.state AND
+    NEW.state IN ('queued', 'done', 'failed', 'needs_input', 'attention'))
+  EXECUTE FUNCTION queue_bot_event();

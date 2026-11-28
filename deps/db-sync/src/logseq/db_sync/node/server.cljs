@@ -133,13 +133,14 @@
 (defn- unlimited-limiter []
   #js {:limit (fn [_opts] (p/resolved #js {:success true}))})
 
-(defn- open-bot-service [index-db publish]
+(defn- open-bot-service [index-db events]
   (when (seq (some-> js/process .-env (aget "LOGSEQ_BOTS_DATABASE_URL")))
     (let [module-path (node-path/join js/__dirname ".." "bots" "index.cjs")
           service (js/require module-path)]
       (.createBotService service (.-env js/process)
                          (doto (bots-access/graph-access index-db)
-                           (aset "publish" publish))))))
+                           (aset "publish" (aget events "publish"))
+                           (aset "onlineRunners" (aget events "onlineRunners")))))))
 
 (defn- open-account-events [index-db registry deps]
   (let [module-path (node-path/join js/__dirname ".." "account_events_node.cjs")
@@ -177,7 +178,7 @@
               :index-db index-db
               :assets-bucket assets-bucket}
         events (open-account-events index-db registry deps)
-        bots (open-bot-service index-db (aget events "publish"))
+        bots (open-bot-service index-db events)
         env (doto (make-env cfg index-db assets-bucket)
               (aset "DB_SYNC_DELETE_GRAPH"
                     (fn [graph-id]
@@ -210,12 +211,17 @@
                    graph-id (:graph-id parsed)]
                (cond
                  (= path "/events")
-                 (p/let [identity (when (string/starts-with? (or (.get (.-headers request) "authorization") "") "Bearer ")
-                                    (bots-access/<identity request env))]
-                   (if identity
-                     (.handleUpgrade wss req socket head
-                                     (fn [ws-socket] (.attach events ws-socket identity)))
-                     (reject-ws-upgrade! socket 401 "unauthorized")))
+                 (-> (p/let [identity (if (.runnerRequest events request)
+                                        (when bots (p/let [^js service bots] (.runnerIdentity service request)))
+                                        (when (string/starts-with? (or (.get (.-headers request) "authorization") "") "Bearer ")
+                                          (bots-access/<identity request env)))]
+                       (if identity
+                         (.handleUpgrade wss req socket head
+                                         (fn [ws-socket] (.attach events ws-socket identity)))
+                         (reject-ws-upgrade! socket 401 "unauthorized")))
+                     (p/catch (fn [error]
+                                (log/warn :db-sync/node-events-upgrade-error {:error error})
+                                (reject-ws-upgrade! socket 503 "events unavailable"))))
 
                  (and graph-id (seq graph-id))
                  (p/let [allowed? (access-allowed? env graph-id request)]

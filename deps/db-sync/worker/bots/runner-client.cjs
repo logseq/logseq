@@ -2,6 +2,7 @@ const {accessSync, constants, realpathSync, statSync} = require("node:fs");
 const {homedir, hostname} = require("node:os");
 const {delimiter, isAbsolute, join} = require("node:path");
 const {setTimeout: delay} = require("node:timers/promises");
+const WebSocket = require("ws");
 const {localAgents} = require("./local-agents.cjs");
 
 const localNames = ["codex", "pi"];
@@ -39,7 +40,7 @@ class RequestError extends Error {
   }
 }
 
-async function request(server, credential, path, {signal, lease, body, method = "POST"} = {}) {
+async function request(server, credential, path, {signal, lease, body, method = "POST", runnerEvents} = {}) {
   const response = await fetch(server + path, {
     method, redirect: "error",
     signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(15000)]) : AbortSignal.timeout(15000),
@@ -47,11 +48,87 @@ async function request(server, credential, path, {signal, lease, body, method = 
       authorization: "Bearer " + credential,
       ...(lease ? {"x-logseq-lease": lease} : {}),
       ...(body ? {"content-type": "application/json"} : {}),
+      ...(runnerEvents ? {"x-logseq-runner-events": "1"} : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
   });
   if (!response.ok) throw new RequestError(response.status);
   return response;
+}
+
+function watchJobs(server, credential, acpAgents, signal, pingMs) {
+  const url = new URL("/events", server);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  const socket = new WebSocket(url, {
+    headers: {
+      authorization: "Bearer " + credential,
+      "x-logseq-runner-events": "1",
+      ...(acpAgents.length ? {"x-logseq-runner-acp": acpAgents.join(",")} : {}),
+    },
+    maxPayload: 4096, perMessageDeflate: false, followRedirects: false,
+  });
+  let pending = false;
+  let waiter;
+  let ready = false;
+  let awaitingPong = false;
+  let failure;
+
+  function wake() {
+    pending = true;
+    waiter?.();
+  }
+
+  function close(error = new Error("Logseq runner events disconnected")) {
+    if (failure) return;
+    failure = error;
+    clearTimeout(handshake);
+    clearInterval(heartbeat);
+    signal?.removeEventListener("abort", abort);
+    socket.terminate();
+    wake();
+  }
+
+  const abort = () => close(signal.reason);
+  const handshake = setTimeout(close, 10000);
+  const heartbeat = setInterval(() => {
+    if (!ready) return;
+    if (awaitingPong) { close(); return; }
+    awaitingPong = true;
+    socket.send("ping", error => { if (error) close(error); });
+  }, pingMs);
+  socket.on("error", close);
+  socket.on("close", code => close(code === 4001 ? new RequestError(401) : undefined));
+  socket.on("unexpected-response", (_request, response) => {
+    response.resume();
+    close(new RequestError(response.statusCode));
+  });
+  socket.on("message", raw => {
+    if (failure) return;
+    const frame = raw.toString();
+    if (frame === "pong") { awaitingPong = false; return; }
+    let event;
+    try { event = JSON.parse(frame); }
+    catch (error) { close(error); return; }
+    if (!ready && event?.type === "ready") {
+      ready = true;
+      clearTimeout(handshake);
+      wake();
+    } else if (ready && event?.type === "runner.available") {
+      wake();
+    }
+  });
+  signal?.addEventListener("abort", abort, {once: true});
+  if (signal?.aborted) abort();
+  return {
+    close,
+    get connected() { return ready && !failure; },
+    async next() {
+      if (!pending) await new Promise(resolve => { waiter = resolve; });
+      waiter = undefined;
+      pending = false;
+      if (failure) throw failure;
+    },
+  };
 }
 
 async function pair({server, accountToken, name = hostname(), agents, repository}) {
@@ -90,10 +167,10 @@ function providersFor(config, acpCommands) {
 
 async function listen(config, {
   signal, onStatus = () => {}, acpCommands = configuredAcpCommands(config.commands),
-  providers = providersFor(config, acpCommands), pollMs = 3000, renewMs = 18000,
+  providers = providersFor(config, acpCommands), reconnectMs = 1000, pingMs = 30000, renewMs = 18000,
 } = {}) {
   const server = serverOrigin(config.server);
-  const api = (path, options) => request(server, config.credential, "/bots/runner" + path, options);
+  const api = (path, options) => request(server, config.credential, "/bots/runner" + path, {...options, runnerEvents: true});
   const pause = (ms, stop = signal) => delay(ms, undefined, {signal: stop});
   const unavailable = error => [401, 403, 409].includes(error?.status);
   const acpAgents = Object.keys(acpCommands);
@@ -160,24 +237,19 @@ async function listen(config, {
   }
 
   let failures = 0;
-  let idleDelay = pollMs;
   while (!signal?.aborted) {
+    const events = watchJobs(server, config.credential, acpAgents, signal, pingMs);
     try {
-      const response = await api("/claim", {signal, body: acpAgents.length ? {acpAgents} : undefined});
-      const {job} = await response.json();
-      failures = 0;
-      onStatus(job ? "working" : "online");
-      if (job) {
-        idleDelay = pollMs;
-        try { await execute(job); }
-        catch (error) {
-          if (error.status === 401 || error.status === 403) throw error;
-          onStatus("reconnecting");
-          await pause(pollMs);
+      while (!signal?.aborted) {
+        await events.next();
+        while (events.connected && !signal?.aborted) {
+          const response = await api("/claim", {signal, body: {acpAgents}});
+          const {job} = await response.json();
+          failures = 0;
+          onStatus(job ? "working" : "online");
+          if (!job) break;
+          await execute(job);
         }
-      } else {
-        await pause(idleDelay);
-        idleDelay = Math.min(30000, 2 * idleDelay + Math.floor(Math.random() * pollMs));
       }
     } catch (error) {
       if (signal?.aborted) return;
@@ -186,9 +258,13 @@ async function listen(config, {
         return;
       }
       onStatus("reconnecting");
+      events.close();
       failures = Math.min(failures + 1, 5);
-      try { await pause(Math.min(30000, pollMs * 2 ** failures)); }
+      const backoff = reconnectMs * 2 ** (failures - 1);
+      try { await pause(Math.min(30000, backoff + Math.random() * reconnectMs)); }
       catch (abort) { if (!signal?.aborted) throw abort; }
+    } finally {
+      events.close();
     }
   }
 }

@@ -4,11 +4,13 @@ import {readFile} from "node:fs/promises";
 import test from "node:test";
 import pg from "pg";
 import {createWorkerBots, scheduleEarlier} from "./worker.mjs";
+import accountEvents from "../account_events.cjs";
 
 const url = process.env.LOGSEQ_BOTS_WORKER_TEST_DATABASE_URL;
 const owner = "worker-" + randomUUID();
 const graph = randomUUID(), block = randomUUID();
 const exports = [];
+const subscribers = [];
 let alarm = null;
 let writes = 0;
 const state = {
@@ -20,7 +22,15 @@ const state = {
 };
 const bots = createWorkerBots({
   subject: request => request.headers.get("x-fixture-subject"),
-  graphAccess: () => ({graphsFor: async account => account === owner ? [graph] : []}),
+  graphAccess: () => ({
+    graphsFor: async account => account === owner ? [graph] : [],
+    hasGraphAccess: async (account, graphId) => account === owner && graphId === graph,
+  }),
+  publisher: () => (account, event) => {
+    for (const {socket, identity} of subscribers) {
+      if (identity.account === account) accountEvents.publishEvent(socket, identity, event);
+    }
+  },
   wake: (_env, time) => scheduleEarlier(state, time),
   graphFetch: async request => {
     exports.push({path: new URL(request.url).pathname, body: await request.json()});
@@ -81,21 +91,45 @@ test("Worker arms only due work and drives device workflows and cloud recovery",
     assert.equal((await call("/bots", null, {sub: null})).status, 401);
     const paired = await call("/bots/runners", {name: "Test device", agents: ["pi"]});
     assert.equal(paired.status, 200);
-    const {credential} = paired.data;
+    const {id: runnerId, credential} = paired.data;
+    const wsRequest = (token, capable) => new Request("https://fixture.invalid/events", {headers: {
+      authorization: "Bearer " + token, "x-logseq-runner-events": "1", "x-logseq-runner-acp": capable,
+    }});
+    assert.equal(await bots.runnerIdentity(wsRequest("user-token", "pi"), env), null);
+    assert.equal(await bots.runnerIdentity(wsRequest(credential, "codex"), env), null);
+    const identity = await bots.runnerIdentity(wsRequest(credential, "pi"), env);
+    assert.deepEqual(identity, {account: owner, runnerId, acpAgents: ["pi"]});
+    const notifications = [], phoneEvents = [], otherDeviceEvents = [];
+    const subscribe = (identity, frames) => subscribers.push({identity, socket: {
+      readyState: 1, send: data => frames.push(JSON.parse(data)), close() { this.readyState = 3; },
+    }});
+    subscribe(identity, notifications);
+    subscribe({account: owner, expiresAt: Date.now() + 60000}, phoneEvents);
+    subscribe({...identity, runnerId: randomUUID()}, otherDeviceEvents);
     const device = (path, body, lease) => call("/bots/runner/" + path, body, {sub: null, credential, lease, method: "POST"});
     const main = "/bots/" + randomUUID();
     const created = await call("/bots", {id: main.slice(6), name: "Worker test", defaultAgent: "pi",
       graphId: graph, graphBlockId: block});
     assert.equal(created.status, 200);
     await call(main + "/messages", {id: randomUUID(), body: "Ordinary chat"});
+    await runAlarm();
     assert.equal(alarm, null);
+    assert.deepEqual(notifications, []);
     const started = await call(main + "/messages", {id: randomUUID(), agents: ["pi", "cursor"], body: "Ship Bots"});
     assert.equal(started.status, 200);
     const thread = main + "/sessions/" + started.data.sessionId;
     await runAlarm();
-    assert.equal(alarm, null, "An offline device does not cause repeated alarms");
+    assert.equal(alarm, null, "A waiting device turn does not cause repeated alarms");
+    assert.deepEqual(notifications, [{type: "runner.available"}]);
+    assert.deepEqual(otherDeviceEvents, []);
+    assert.ok(phoneEvents.length && phoneEvents.every(event => event.type === "bots.changed"));
     assert.equal((await call(thread)).data.session.status, "queued");
     assert.equal((await call(thread, null, {sub: owner + "-other"})).status, 404);
+    const abandoned = (await device("claim", {acpAgents: ["pi"]})).data.job;
+    await db.query("UPDATE bot_runs SET lease_until=now()-interval '1 second' WHERE message_id=$1", [abandoned.id]);
+    await runAlarm();
+    assert.equal(alarm, null);
+    assert.deepEqual(notifications, [{type: "runner.available"}, {type: "runner.available"}]);
     const {job} = (await device("claim", {acpAgents: ["pi"]})).data;
     assert.equal(job.agent, "pi");
     assert.equal(job.provider_transport, "acp-v1");
@@ -154,7 +188,11 @@ test("Worker arms only due work and drives device workflows and cloud recovery",
     assert.equal(versions[0].data.session.status, "attention");
     assert.equal(versions[1].data.session.status, "completed");
     assert.equal(versions[1].data.messages.at(-1).body, "Mock cursor: Interrupted poll");
+    assert.ok((await call("/bots/runners/" + runnerId + "/revoke", {}, {method: "POST"})).data.revoked);
+    assert.equal(subscribers[0].socket.readyState, 3);
+    assert.equal(await bots.runnerIdentity(wsRequest(credential, "pi"), env), null);
   } finally {
+    subscribers.length = 0;
     await db.end();
   }
 });

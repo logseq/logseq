@@ -45,7 +45,7 @@ export function scheduleEarlier(state, time) {
   });
 }
 
-export function createWorkerBots({subject, graphAccess, graphFetch, publisher, wake = wakeScheduler}) {
+export function createWorkerBots({subject, graphAccess, graphFetch, publisher, onlineRunners, wake = wakeScheduler}) {
   async function withRuntime(env, operation, ctx) {
     const client = new Client({connectionString: databaseUrl(env), connectionTimeoutMillis: 5000});
     let connected;
@@ -66,6 +66,7 @@ export function createWorkerBots({subject, graphAccess, graphFetch, publisher, w
       const runtime = createBotRuntime({query, connect: async () => connection}, env, {
         ...graphAccess(env.DB),
         publish: publisher?.(env),
+        onlineRunners: onlineRunners?.(env),
         graphFetch: graphFetch && ((url, init) => graphFetch(new Request(url, init), env, ctx)),
       });
       return await operation(runtime);
@@ -76,6 +77,9 @@ export function createWorkerBots({subject, graphAccess, graphFetch, publisher, w
   }
 
   return {
+    runnerIdentity(request, env) {
+      if (databaseUrl(env)) return withRuntime(env, runtime => runtime.runnerIdentity(request));
+    },
     async fetch(request, env, ctx, path = new URL(request.url).pathname) {
       if (!databaseUrl(env)) return Response.json({error: "Bots are unavailable"}, {status: 503});
       const runnerRequest = path.startsWith("/bots/runner/");
@@ -98,6 +102,7 @@ export function createWorkerBots({subject, graphAccess, graphFetch, publisher, w
       return withRuntime(env, async runtime => {
         const start = Date.now();
         await runtime.maintain({automationLimit: 8});
+        await runtime.deliverEvents();
         for (let count = 0; count < 8 && Date.now() - start < 45_000; count++) {
           const job = await runtime.claimNext();
           if (!job) break;

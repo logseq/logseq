@@ -1,4 +1,5 @@
 const {createHash, randomBytes, randomUUID} = require("node:crypto");
+const {isRunnerRequest} = require("../account_events.cjs");
 const {cloudAgents, devinLimits} = require("./cloud-providers.cjs");
 const {weeklyProposal, nextWeekly} = require("./schedule.cjs");
 
@@ -59,9 +60,10 @@ function cursor(value) {
   return value;
 }
 
-async function jsonBody(request) {
+async function jsonBody(request, {allowEmpty = false} = {}) {
   try {
     const value = await request.text();
+    if (allowEmpty && value === "") return {};
     if (value.length > 32000) fail(413, "Message is too long");
     const body = JSON.parse(value);
     if (!body || typeof body !== "object" || Array.isArray(body)) fail(400, "Invalid JSON");
@@ -301,7 +303,7 @@ async function route(pool, owner, request, access) {
   const [base, botKey, resource, itemKey, action, extra] = url.pathname.slice(1).split("/");
   const method = request.method;
   if (base !== "bots" || extra || !["GET", "POST", "PATCH", "PUT"].includes(method)) fail(404, "Not found");
-  if (botKey === "runners") return manageRunners(pool, owner, request, resource, itemKey, action);
+  if (botKey === "runners") return manageRunners(pool, owner, request, resource, itemKey, action, access.onlineRunners);
 
   if (!botKey && method === "GET") {
     const {rows: bots} = await pool.query(
@@ -451,12 +453,13 @@ async function retireRunner(db, runnerId, owner) {
     WHERE status='queued' AND id IN (SELECT session_id FROM unavailable)`, [runnerId]);
 }
 
-async function manageRunners(pool, owner, request, resource, itemKey, action) {
+async function manageRunners(pool, owner, request, resource, itemKey, action, onlineRunners) {
   if (!resource && request.method === "GET") {
     const {rows} = await pool.query(`SELECT id,name,agents,repository,seen_at,
       seen_at>now()-interval '75 seconds' AS online FROM bot_runners
       WHERE owner=$1 AND revoked_at IS NULL ORDER BY created_at`, [owner]);
-    return {runners: rows};
+    const connected = new Set(await onlineRunners?.(owner));
+    return {runners: rows.map(row => ({...row, online: row.online || connected.has(row.id)}))};
   }
   if (!resource && request.method === "POST") {
     const body = await jsonBody(request);
@@ -498,25 +501,39 @@ async function expireLeases(pool, recoverServerWork = false) {
     WHERE id IN (SELECT session_id FROM expired WHERE state='attention')`, [recoverServerWork]);
 }
 
-async function runnerRoute(pool, request, canExport) {
+async function lookupRunner(db, request, lock = false) {
   const credential = request.headers.get("authorization")?.match(/^Bearer ([a-f0-9-]{36}\.[A-Za-z0-9_-]{43})$/)?.[1];
-  if (!credential) fail(401, "Invalid device credential");
-  const runnerId = id(credential.split(".")[0]);
+  const runnerId = credential?.slice(0, 36);
+  if (!runnerId || !uuid.test(runnerId)) return null;
+  const {rows: [runner]} = await db.query(`SELECT id,owner,agents,repository FROM bot_runners
+    WHERE id=$1 AND token_hash=$2 AND revoked_at IS NULL ${lock ? "FOR UPDATE" : ""}`, [runnerId, hash(credential)]);
+  return runner;
+}
+
+function validAcpAgents(runner, agents) {
+  return Array.isArray(agents) && agents.length <= localAgentNames.length
+    && agents.every(agent => runner.agents.includes(agent) && localAgentNames.includes(agent));
+}
+
+async function runnerRoute(pool, request, canExport, notifyRevoked) {
   const path = new URL(request.url).pathname;
   const runPath = path.match(/^\/bots\/runner\/runs\/([^/]+)\/(start|renew|complete|attachments)(?:\/([^/]+))?$/);
-  return transaction(pool, async db => {
-    const {rows: [runner]} = await db.query(`SELECT id,owner,agents,repository FROM bot_runners
-      WHERE id=$1 AND token_hash=$2 AND revoked_at IS NULL FOR UPDATE`, [runnerId, hash(credential)]);
+  let revoked;
+  const response = await transaction(pool, async db => {
+    const runner = await lookupRunner(db, request, true);
     if (!runner) fail(401, "Invalid device credential");
-    await db.query("UPDATE bot_runners SET seen_at=now() WHERE id=$1 AND seen_at<now()-interval '10 seconds'", [runnerId]);
+    const runnerId = runner.id;
+    if (!isRunnerRequest(request)) {
+      await db.query("UPDATE bot_runners SET seen_at=now() WHERE id=$1 AND seen_at<now()-interval '10 seconds'", [runnerId]);
+    }
     if (path === "/bots/runner/revoke" && request.method === "POST") {
       await retireRunner(db, runnerId, runner.owner);
+      revoked = runner;
       return Response.json({revoked: true});
     }
     if (path === "/bots/runner/claim" && request.method === "POST") {
-      const acpAgents = request.body ? (await jsonBody(request)).acpAgents ?? [] : [];
-      if (!Array.isArray(acpAgents) || acpAgents.length > localAgentNames.length
-          || !acpAgents.every(agent => runner.agents.includes(agent) && localAgentNames.includes(agent))) {
+      const acpAgents = (await jsonBody(request, {allowEmpty: true})).acpAgents ?? [];
+      if (!validAcpAgents(runner, acpAgents)) {
         fail(400, "Invalid ACP capabilities");
       }
       const active = await db.query(`SELECT 1 FROM bot_runs WHERE runner_id=$1 AND lease_until>now()
@@ -579,6 +596,8 @@ async function runnerRoute(pool, request, canExport) {
     }
     return Response.json({accepted: true});
   });
+  if (revoked) await notifyRevoked(revoked.owner, revoked.id);
+  return response;
 }
 
 async function claim(db, runner, localProviders, localProviderOwner = null, {
@@ -859,6 +878,34 @@ function createBotRuntime(pool, env, options = {}) {
   const cleanStaleUploads = () =>
     pool.query("DELETE FROM bot_uploads WHERE message_id IS NULL AND created_at < now() - interval '7 days'");
   const publish = options.publish;
+  async function notifyRevoked(owner, runnerId) {
+    try { await publish?.(owner, {type: "runner.revoked", runnerId}); }
+    catch (error) { console.error("Bots device event failed", error.code ?? error.name); }
+  }
+
+  async function runnerWakes(sessions) {
+    if (!sessions.length) return new Map();
+    // Inspect the same head of each thread that claim can lease.
+    const {rows} = await pool.query(`WITH head AS (
+      SELECT DISTINCT ON (r.session_id) r.session_id,r.state,r.due_at,m.actor,
+        COALESCE(r.agent,s.agent) AS agent,b.owner,s.repository,
+        binding.runner_id,binding.provider_session_id,binding.provider_transport
+      FROM bot_runs r JOIN sessions s ON s.id=r.session_id
+      JOIN bots b ON b.id=s.bot_id JOIN messages m ON m.id=r.message_id
+      LEFT JOIN bot_runs first ON first.message_id=r.workflow_root_id
+      LEFT JOIN bot_thread_agents binding ON binding.session_id=r.session_id AND binding.agent=COALESCE(r.agent,s.agent)
+      WHERE r.session_id=ANY($1::uuid[]) AND r.state IN ('queued','poll','leased','working')
+      ORDER BY r.session_id,COALESCE(first.seq,r.seq),r.seq
+    ) SELECT head.session_id,head.agent,head.provider_transport='acp-v1' AS acp_only,array_agg(d.id) AS runner_ids
+      FROM head JOIN bot_runners d ON d.owner=head.owner AND d.revoked_at IS NULL
+        AND (head.repository='' OR d.repository=head.repository) AND head.agent=ANY(d.agents)
+        AND (head.runner_id=d.id OR head.runner_id IS NULL AND head.provider_session_id IS NULL)
+      WHERE head.state='queued' AND head.due_at<=now() AND (head.actor IS NULL OR head.actor=head.owner)
+        AND head.agent=ANY($2::text[])
+      GROUP BY head.session_id,head.agent,head.provider_transport`, [sessions, localAgentNames]);
+    return new Map(rows.map(row => [row.session_id, row]));
+  }
+
   async function deliverEvents() {
     if (!publish) return;
     const {rows} = await pool.query(`WITH due AS (
@@ -868,6 +915,7 @@ function createBotRuntime(pool, env, options = {}) {
       due_at=now()+make_interval(secs=>LEAST(300, 5 * (2 ^ e.attempts)))
       FROM due,bots b WHERE e.version=due.version AND e.bot_id=b.id
       RETURNING e.version,e.bot_id,e.session_id,e.attempts,e.refresh_graph,b.owner,b.graph_id,b.shared_graph_id`);
+    const wakes = await runnerWakes(rows.map(row => row.session_id).filter(Boolean));
     for (const row of rows) {
       try {
         const recipients = new Set(row.shared_graph_id || row.refresh_graph
@@ -877,6 +925,11 @@ function createBotRuntime(pool, env, options = {}) {
         const event = {...refresh, botId: row.bot_id, sessionId: row.session_id};
         await Promise.all([...recipients].map(account =>
           publish(account, row.shared_graph_id || account === row.owner ? event : refresh)));
+        const wake = wakes.get(row.session_id);
+        if (wake && recipients.has(row.owner)) {
+          await publish(row.owner, {type: "runner.available", runnerIds: wake.runner_ids,
+            agent: wake.agent, acpOnly: wake.acp_only === true});
+        }
       } catch (error) {
         console.error("Bots event delivery failed", error.code ?? error.name);
         if (row.attempts < 8) continue;
@@ -886,11 +939,19 @@ function createBotRuntime(pool, env, options = {}) {
   }
   return {
     recoverServerWork: () => expireLeases(pool, true),
+    async runnerIdentity(request) {
+      const runner = await lookupRunner(pool, request);
+      if (!runner) return null;
+      const acpAgents = request.headers.get("x-logseq-runner-acp")?.split(",") ?? [];
+      if (!validAcpAgents(runner, acpAgents)) return null;
+      return {account: runner.owner, runnerId: runner.id, acpAgents};
+    },
     async handle(owner, request) {
       try {
         let imported = false;
         const memberships = await options.graphsFor?.(owner) ?? [];
-        const access = {memberships, canShare: graph => options.canShareGraph?.(owner, graph) ?? false,
+        const access = {memberships, onlineRunners: options.onlineRunners,
+          canShare: graph => options.canShareGraph?.(owner, graph) ?? false,
           available: bot => !bot || bot.owner === owner ? availableAgents(owner, bot?.repository) :
             builtInAgents(bot.owner).map(item => ({...item, available: item.available && sharedAgents.has(item.name)})),
           refreshThread: async (bot, session) => {
@@ -900,6 +961,10 @@ function createBotRuntime(pool, env, options = {}) {
             return imported;
           }};
         const result = await route(pool, owner, request, access);
+        if (result.revoked) {
+          const runnerId = new URL(request.url).pathname.split("/")[3];
+          await notifyRevoked(owner, id(runnerId));
+        }
         return Response.json(result, imported ? {headers: {"x-logseq-bots-changed": "1"}} : undefined);
       }
       catch (error) {
@@ -910,7 +975,7 @@ function createBotRuntime(pool, env, options = {}) {
     },
     async handleRunner(request) {
       try {
-        return await runnerRoute(pool, request, canExport);
+        return await runnerRoute(pool, request, canExport, notifyRevoked);
       } catch (error) {
         if (error instanceof RequestError) return Response.json({error: error.message}, {status: error.status});
         console.error("Bots device request failed", error.code ?? error.name);

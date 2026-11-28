@@ -10,11 +10,16 @@ export function accountEventPublisher(env) {
   if (env.LOGSEQ_ACCOUNT_EVENTS) return (account, event) => accountStub(env, account).publish(event);
 }
 
-export async function upgradeAccountEvents(request, env) {
+export function onlineAccountRunners(env) {
+  if (env.LOGSEQ_ACCOUNT_EVENTS) return account => accountStub(env, account).onlineRunners();
+}
+
+export async function upgradeAccountEvents(request, env, runnerIdentity) {
   if (request.method !== "GET" || request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
     return new Response(null, {status: 426});
   }
-  const identity = await eventsIdentity(request, env);
+  const identity = events.isRunnerRequest(request)
+    ? await runnerIdentity(request, env) : await eventsIdentity(request, env);
   if (!identity || !request.headers.get("authorization")?.startsWith("Bearer ")) {
     return new Response(null, {status: 401});
   }
@@ -79,8 +84,13 @@ export class AccountEvents extends DurableObject {
 
   publish(event) {
     for (const socket of this.ctx.getWebSockets()) {
-      if (events.active(socket, this.connection.load(socket))) events.sendEvent(socket, event);
+      events.publishEvent(socket, this.connection.load(socket), event);
     }
+  }
+
+  onlineRunners() {
+    return this.ctx.getWebSockets().map(socket =>
+      socket.readyState === 1 ? this.connection.load(socket)?.runnerId : null).filter(Boolean);
   }
 
   async graphChanged(account, graphId, frame) {
