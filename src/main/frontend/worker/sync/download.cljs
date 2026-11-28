@@ -64,16 +64,35 @@
 (defn- <stream-starts-with-gzip?
   [^js stream]
   (let [reader (.getReader stream)]
-    (-> (.read reader)
-        (p/then (fn [result]
-                  (if (.-done result)
-                    false
-                    (gzip-bytes? (->uint8 (.-value result))))))
+    (-> (p/loop [first-byte nil]
+          (p/let [result (.read reader)]
+            (if (.-done result)
+              false
+              (let [payload (->uint8 (.-value result))
+                    len (.-byteLength payload)]
+                (cond
+                  (zero? len)
+                  (p/recur first-byte)
+
+                  (some? first-byte)
+                  (and (= 31 first-byte) (= 139 (aget payload 0)))
+
+                  (>= len 2)
+                  (gzip-bytes? payload)
+
+                  :else
+                  (p/recur (aget payload 0)))))))
         (p/catch (fn [_] false))
         (p/finally (fn []
                      (try
                        (.releaseLock reader)
-                       (catch :default _)))))))
+                       (catch :default _))
+                     (try
+                       (when (fn? (.-cancel stream))
+                         (-> (.cancel stream)
+                             (p/catch (fn [_] nil))))
+                       (catch :default _))
+                     nil)))))
 
 (defn- <response-body-stream
   [^js resp]
@@ -83,12 +102,16 @@
       (nil? body)
       (p/resolved nil)
 
-      ;; Never trust `content-encoding` alone.
+      ;; Never trust `content-encoding`, in either direction.
       ;; Some runtimes (e.g. Node/undici fetch) may auto-decompress body while
       ;; still exposing `content-encoding: gzip` in headers.
-      ;; We only stream-decompress when the first bytes are actual gzip magic.
-      (and (= "gzip" encoding)
-           (exists? js/DecompressionStream)
+      ;; A proxy that drops gzip from the request's `Accept-Encoding`, or strips
+      ;; the response header, leaves the snapshot gzip-compressed with no
+      ;; `content-encoding` at all.
+      ;; We stream-decompress whenever the first bytes are actual gzip magic.
+      ;; A frame starts with its 4-byte length, so a frame can only look like
+      ;; gzip if it is over 529MB.
+      (and (exists? js/DecompressionStream)
            (fn? (.-tee body)))
       (let [branches (.tee body)
             probe (aget branches 0)

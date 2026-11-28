@@ -16,12 +16,17 @@
     (.set out data 4)
     out))
 
-(defn- stream-from-payload
-  [^js payload]
+(defn- stream-from-chunks
+  [chunks]
   (js/ReadableStream.
    #js {:start (fn [controller]
-                 (.enqueue controller payload)
+                 (doseq [part chunks]
+                   (.enqueue controller part))
                  (.close controller))}))
+
+(defn- stream-from-payload
+  [^js payload]
+  (stream-from-chunks [payload]))
 
 (deftest stream-snapshot-row-batches-ignores-stale-gzip-header-test
   (async done
@@ -42,6 +47,109 @@
                (p/then (fn [_]
                          (is (= [rows] @batches*))
                          (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(defn- <gzip-bytes
+  [^js payload]
+  (-> (js/Response. (.pipeThrough (stream-from-payload payload)
+                                  (js/CompressionStream. "gzip")))
+      (.arrayBuffer)
+      (p/then (fn [buf] (js/Uint8Array. buf)))))
+
+(deftest stream-snapshot-row-batches-decompresses-gzip-without-header-test
+  (async done
+         (let [rows [[1 "row-1" nil]
+                     [2 "row-2" nil]]
+               payload (frame-bytes (snapshot/encode-rows rows))
+               batches* (atom [])]
+           ;; When gzip is missing from the request's `Accept-Encoding` (a proxy
+           ;; rewrote it), the sync server returns the snapshot still gzipped
+           ;; and without a `content-encoding` header.
+           (-> (p/let [gzipped (<gzip-bytes payload)
+                       resp (js/Response.
+                             (stream-from-payload gzipped)
+                             #js {:status 200})]
+                 (#'sync-download/<stream-snapshot-row-batches!
+                  resp
+                  1000
+                  (fn [batch]
+                    (swap! batches* conj batch)
+                    (p/resolved true))))
+               (p/then (fn [_]
+                         (is (= [rows] @batches*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest stream-snapshot-row-batches-decompresses-split-gzip-prefix-without-header-test
+  (async done
+         (let [rows [[1 "row-1" nil]
+                     [2 "row-2" nil]]
+               payload (frame-bytes (snapshot/encode-rows rows))
+               batches* (atom [])]
+           (-> (p/let [gzipped (<gzip-bytes payload)
+                       resp (js/Response.
+                             (stream-from-chunks [(.subarray gzipped 0 1)
+                                                  (js/Uint8Array. 0)
+                                                  (.subarray gzipped 1)])
+                             #js {:status 200})]
+                 (#'sync-download/<stream-snapshot-row-batches!
+                  resp
+                  1000
+                  (fn [batch]
+                    (swap! batches* conj batch)
+                    (p/resolved true))))
+               (p/then (fn [_]
+                         (is (= [rows] @batches*))
+                         (done)))
+               (p/catch (fn [error]
+                          (is false (str error))
+                          (done)))))))
+
+(deftest stream-snapshot-row-batches-cancels-probe-branch-on-uncompressed-body-test
+  (async done
+         (let [rows [[1 "row-1" nil]
+                     [2 "row-2" nil]]
+               payload (frame-bytes (snapshot/encode-rows rows))
+               resp (js/Response.
+                     (stream-from-chunks [(.subarray payload 0 8)
+                                          (.subarray payload 8)])
+                     #js {:status 200})
+               body (.-body resp)
+               orig-tee (.bind (.-tee body) body)
+               probe-cancelled* (atom 0)
+               probe-stream* (atom nil)
+               batches* (atom [])]
+           (set! (.-tee body)
+                 (fn []
+                   (let [branches (orig-tee)
+                         probe (aget branches 0)
+                         orig-cancel (.bind (.-cancel probe) probe)]
+                     (reset! probe-stream* probe)
+                     (set! (.-cancel probe)
+                           (fn
+                             ([]
+                              (swap! probe-cancelled* inc)
+                              (orig-cancel))
+                             ([reason]
+                              (swap! probe-cancelled* inc)
+                              (orig-cancel reason))))
+                     branches)))
+           (-> (#'sync-download/<stream-snapshot-row-batches!
+                resp
+                1000
+                (fn [batch]
+                  (swap! batches* conj batch)
+                  (p/resolved true)))
+               (p/then (fn [_]
+                         (p/let [probe-read (.read (.getReader @probe-stream*))]
+                           (is (= [rows] @batches*))
+                           (is (= 1 @probe-cancelled*))
+                           (is (true? (.-done probe-read)))
+                           (done))))
                (p/catch (fn [error]
                           (is false (str error))
                           (done)))))))
