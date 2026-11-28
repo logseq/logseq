@@ -170,6 +170,15 @@ let ext_shallow_snapshot (rt : Lui_runtime.application) node : Js.Json.t =
               kvs
               |> push "target" Lui_protocol.TargetValue
               |> push "href" Lui_protocol.UrlValue
+          | Some
+              ( Lui_protocol.Image | Lui_protocol.FileImage
+              | Lui_protocol.FilePreview ) -> (
+              (* the browser reads an img's source through its src
+                 attribute — delegated selectors and lightbox
+                 collection look for it there, not in the prop table *)
+              match std_prop_string rt node Lui_protocol.UrlValue with
+              | Some v -> ("src", Js.Json.JString v) :: kvs
+              | None -> kvs)
           | _ -> kvs
         in
         Js.Json.JObject kvs

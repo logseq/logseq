@@ -235,14 +235,43 @@ let viewport_modal_cover (elem : Lui_elements.t) : Lui_elements.t =
   Lui_ui.height_viewport context node 1.;
   node
 
+(* Collect the document's asset image sources in document order, the
+   native twin of web's query of ".asset-container img": the snapshot
+   exposes typed images as img with a src attr. *)
+let lightbox_sources () : string array =
+  Dom_ext.doc_query_selector_all ".asset-container img"
+  |> List.filter_map (fun el -> Dom_ext.get_attribute el "src")
+  |> Array.of_list
+
 (* Native retained-overlay approximation of the web PhotoSwipe surface.
-   It intentionally keeps the first implementation scoped to the core
-   desktop interaction: display the clicked asset fitted to the window,
-   close on backdrop press, the close control, or Escape through the
-   cover dialog. PhotoSwipe's multi-image navigation, pinch/zoom and
-   sharing chrome remain documented parity gaps. *)
-let image_lightbox_view ~source ~alt : Lui_elements.t =
+   Multi-image navigation follows the web semantics: the lightbox opens
+   on the clicked asset and previous/next step through the document's
+   images with wrap-around. Pinch/zoom and sharing chrome remain
+   documented parity gaps. *)
+let image_lightbox_view ~sources ~start ~alt : Lui_elements.t =
+ fun context parent ->
+  let count = Array.length sources in
+  let index = Signal.state context.Lui_ui.ui_scheduler start in
   let close () = close_image_lightbox () in
+  let step d =
+    if count > 0 then begin
+      let i = Runtime.signal_get index in
+      Runtime.signal_set index ((i + d + count) mod count)
+    end
+  in
+  (* prev/next flank the image inside the centered backdrop row. Each
+     control is wrapped in a no-op pressable so its press does not bubble
+     to the backdrop close — the same swallowing the image box uses. *)
+  let nav key icon_label icon_name d =
+    if count <= 1 then Lui_elements.spacer ~key []
+    else
+      Ui_parts.pressable ~on_press:(fun _ -> ())
+        (Lui_elements.box ~key ~padding:16
+           [ Lui_elements.icon_button ~variant:`ghost ~size:`icon
+               ~icon:(`app icon_name) ~label:icon_label
+               ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
+               ~on_press:(fun _ -> step d) [] ])
+  in
   viewport_modal_cover
     (Lui_elements.dialog ~key:lightbox_key
        ~style_class:"pswp native-asset-lightbox"
@@ -254,23 +283,46 @@ let image_lightbox_view ~source ~alt : Lui_elements.t =
                (Lui_elements.column ~key:"lb-backdrop"
                   ~container_relative_frame:`both ~main:`center ~cross:`center
                   ~padding:32
-                  [ Ui_parts.pressable ~on_press:(fun _ -> ())
-                      (Lui_elements.box ~key:"lb-image-box"
-                         [ Lui_elements.image ~key:"lb-image" ~url:source ~alt [] ]) ])
+                  [ Lui_elements.row ~key:"lb-image-row" ~main:`center
+                      ~cross:`center
+                      [ nav "lb-prev" (I18n.t "ui/previous") "chevron-left" (-1)
+                      ; Ui_parts.pressable ~on_press:(fun _ -> ())
+                          (Lui_elements.box ~key:"lb-image-box"
+                             [ Lui_elements.image ~key:"lb-image"
+                                 ~url:(reactive
+                                       (fun i ->
+                                         if count = 0 then "" else sources.(i))
+                                       (Signal.value index))
+                                 ~alt [] ])
+                      ; nav "lb-next" (I18n.t "ui/next") "chevron-right" 1 ] ])
            ; Lui_elements.overlay ~key:"lb-chrome" ~alignment:`top_trailing
                ~padding:16
                [ Lui_elements.icon_button ~key:"lb-close" ~variant:`ghost
                    ~size:`icon ~icon:(`app "x") ~label:(I18n.t "ui/close")
                    ~autofocus:true
                    ~foreground:"white" ~background:"rgba(0,0,0,0.35)"
-                   ~on_press:(fun _ -> close ()) [] ]
-           ]
+                   ~on_press:(fun _ -> close ()) [] ] ]
        ])
+    context parent
 
 let open_image_lightbox ~source ~alt =
+  let collected = lightbox_sources () in
+  let rec find i =
+    if i >= Array.length collected then -1
+    else if collected.(i) = source then i
+    else find (i + 1)
+  in
+  (* a clicked image outside .asset-container — a PDF area capture —
+     is not part of the document sequence; show it alone rather than
+     the first collected image *)
+  let sources, start =
+    match find 0 with
+    | -1 -> [| source |], 0
+    | i -> collected, i
+  in
   ignore
     (Properties_state.push_view_overlay_ctxfree ~key:lightbox_key
-       ~view:(image_lightbox_view ~source ~alt)
+       ~view:(image_lightbox_view ~sources ~start ~alt)
        ~on_escape:(fun () -> ()))
 
 (* minimal asset render — the asset extension tag carries the block
